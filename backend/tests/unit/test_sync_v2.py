@@ -3869,14 +3869,8 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    @pytest.mark.parametrize(
-        ('failure_key', 'status_code', 'code'),
-        [
-            ('invalid_audio', 400, 'sync_invalid_audio'),
-            ('persistent_persistence', 503, 'backfill_capacity'),
-        ],
-    )
-    def test_capped_content_stops_before_dispatch_and_keeps_client_audio(self, failure_key, status_code, code):
+    @pytest.mark.parametrize('failure_key', ['invalid_audio', 'persistent_persistence'])
+    def test_capped_content_returns_a_per_wal_retryable_job_without_dispatch(self, failure_key):
         saved, mock_sync_jobs, _ = self._build_test_app()
         try:
             sys.modules.pop('routers.sync', None)
@@ -3912,12 +3906,17 @@ class TestV2EndpointExecution:
 
             upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
             resp = asyncio.run(module.sync_local_files_v2(files=[upload], uid='test-uid'))
-            assert resp.status_code == status_code
-            assert json.loads(resp.body)['code'] == code
-            assert 'not consumed' in json.loads(resp.body)['detail']
-            if status_code == 503:
-                assert resp.headers['Retry-After'] == '123'
-            mock_sync_jobs.delete_sync_job.assert_called_once()
+            assert resp.status_code == 202
+            body = json.loads(resp.body)
+            assert body['status'] == 'failed'
+            assert body['job_id']
+            assert body['poll_after_ms'] == 0
+            assert 'X-Omi-Rate-Limit-Reason' not in resp.headers
+            assert 'Retry-After' not in resp.headers
+            mock_sync_jobs.mark_job_failed.assert_called_once_with(
+                body['job_id'], 'Repeated content failure paused', reason_code='sync_repeat_failure_paused'
+            )
+            mock_sync_jobs.delete_sync_job.assert_not_called()
             module.start_background_task.assert_not_called()
             module._cleanup_files.assert_called_once_with(['/tmp/fake.opus'])
         finally:

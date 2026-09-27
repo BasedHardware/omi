@@ -29,6 +29,7 @@ from database.sync_jobs import (
     get_sync_job,
     is_sync_job_stale,
     mark_job_completed,
+    mark_job_failed,
     mark_job_queued_for_retry,
     sync_job_uses_ledger_fence,
     try_acquire_sync_job_run_lock,
@@ -1113,7 +1114,16 @@ async def sync_local_files_v2(
                 },
             )
         if claim.get('outcome') == 'capped':
-            await run_blocking(db_executor, delete_sync_job, job_id)
+            # Keep the ordinary 202 -> failed-job contract: the shipped WAL
+            # reconciler retries this content with its per-file budget. An
+            # upload 400 strands it, while a scoped 503 pauses the whole account.
+            await run_blocking(
+                db_executor,
+                mark_job_failed,
+                job_id,
+                'Repeated content failure paused',
+                reason_code='sync_repeat_failure_paused',
+            )
             if backfill_slot_acquired:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                 backfill_slot_acquired = False
@@ -1124,23 +1134,15 @@ async def sync_local_files_v2(
                 failure_key if failure_key in {'invalid_audio', 'persistent_persistence'} else 'unknown',
                 client_device_context.client_device_id[-8:] if client_device_context.client_device_id else 'none',
             )
-            if failure_key == 'invalid_audio':
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        'code': 'sync_invalid_audio',
-                        'detail': 'This audio cannot be decoded; local audio was not consumed',
-                    },
-                )
             return JSONResponse(
-                status_code=503,
-                headers={
-                    'Retry-After': str(claim.get('retry_after', 86400)),
-                    'X-Omi-Rate-Limit-Reason': 'backfill_capacity',
-                },
+                status_code=202,
                 content={
-                    'code': 'backfill_capacity',
-                    'detail': 'Sync is paused for this audio; local audio was not consumed',
+                    'job_id': job_id,
+                    'status': 'failed',
+                    'total_files': len(files),
+                    'total_segments': 0,
+                    'poll_after_ms': 0,
+                    'lane': lane_decision.lane.value,
                 },
             )
         if claim.get('outcome') == 'busy':
@@ -1477,11 +1479,14 @@ def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
     """Carry a terminal job's strike through racing poll/task claim cleanup."""
     if job.get('status') != 'failed':
         return {}
-    if job.get('reason_code') in ('sync_invalid_audio', 'stt_invalid_input'):
+    if job.get('reason_code') == 'sync_invalid_audio':
         return {'failure_key': 'invalid_audio'}
     result = job.get('result')
     if isinstance(result, dict) and result.get('repeat_failure_key') == 'persistent_persistence':
-        return {'failure_key': 'persistent_persistence'}
+        return {
+            'failure_key': 'persistent_persistence',
+            'failure_fingerprint': result.get('repeat_failure_fingerprint'),
+        }
     return {}
 
 

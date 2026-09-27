@@ -96,6 +96,22 @@ SYNC_EXCEPTION_CLASSES = frozenset(
     }
 )
 
+# Only these bounded, data-shape exception types can identify a repeatable
+# persistence failure. Transport, contention, assignment conflicts, and
+# catch-all exception classes must never count against content.
+SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS = frozenset(
+    {
+        'AssertionError',
+        'AttributeError',
+        'IndexError',
+        'JSONDecodeError',
+        'KeyError',
+        'TypeError',
+        'UnicodeDecodeError',
+        'ValueError',
+    }
+)
+
 
 def bounded_sync_phase(phase: object) -> str:
     """A closed phase token, ``none`` when no failure context exists."""

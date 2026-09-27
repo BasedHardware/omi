@@ -77,21 +77,30 @@ speech-free jobs log `none`.
 ### Repeated content failures
 
 The 45-day content ledger counts only whole-job, same-content deterministic
-failures: undecodable audio or provider `stt_invalid_input`, and persistence
-failures whose exception chain has no known transient Firestore/network cause.
-Three matching failures within 24 hours pause that content for 24 hours. A
-different failure does not add a strike; an expired window starts at one.
+failures: `sync_invalid_audio` after decode finds no usable audio, or a
+persistence data-shape exception with the same bounded phase and subtype on
+each attempt (for example, `persistence:ValueError`). Unknown exceptions,
+provider invalid-input verdicts, assignment conflicts, and mixed segment
+failures do not count. Three consecutive matching failures within 24 hours
+pause that content for 24 hours. A different or unclassified failure resets
+the streak; an expired window starts at one.
 Firestore `Aborted` (including exhausted contention wrappers), timeouts,
 service outages, provider 5xx, and superseded/fenced jobs remain retryable.
 The first three attempts use the existing STT path unchanged. Successful
 content is still acknowledged through the normal completed ledger.
 
-Admission checks the ledger before dispatch. Capped invalid audio receives
-HTTP 400 `sync_invalid_audio`; shipped mobile treats 400 as a definitive
-upload refusal and retains the local file. Capped persistence receives HTTP
-503 `backfill_capacity` with `Retry-After` bounded by the remaining pause, which pauses upload while
-retaining the WAL. No capped job enters paid STT. The response uses only
-existing client status and reason codes.
+Admission checks the ledger before dispatch. Either cap creates a terminal
+`failed` job and returns the existing HTTP 202 job contract with
+`reason_code=sync_repeat_failure_paused` on the polled job. No capped job enters
+paid STT. Shipped mobile parses arbitrary reason-code strings and treats this
+one as a per-WAL retryable failure: it keeps the local file, consumes that
+WAL's retry budget, and does not set the account-wide rate limiter. The sync
+reconciler schedules subsequent attempts; exhausted WALs remain available for
+the UI's manual Retry. A
+plain upload 400 would mark the WAL `uploadRejected` and show only Delete in
+the current UI; a `backfill_capacity` 503 would pause unrelated uploads.
+First decode failures still use `sync_invalid_audio` and the existing terminal
+job semantics.
 
 Monitor `event=sync_repeat_failure_cap outcome=paused` grouped by the bounded
 `failure_key` and lane. The event includes only `device_hash`, never UID,

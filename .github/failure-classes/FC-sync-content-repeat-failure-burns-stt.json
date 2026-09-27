@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "id": "FC-sync-content-repeat-failure-burns-stt",
-  "violated_contract": "A failed upload of identical audio must not repeatedly enter paid transcription when the same content has a persistent deterministic failure. Terminal invalid audio must retain local retry material on shipped clients.",
-  "canonical_prevention": "Record owner-fenced deterministic failure strikes in the content ledger, pause repeat content before dispatch, keep transient failures retryable, and return existing client-safe terminal or paused responses.",
+  "violated_contract": "A failed upload of identical audio must not repeatedly enter paid transcription when the same content has a proven repeatable failure. A content-specific pause must retain local audio without pausing unrelated uploads.",
+  "canonical_prevention": "Record owner-fenced identical bounded failure fingerprints in the content ledger, pause repeat content before dispatch, exclude transient and unknown failures, and return a retryable failed job through the existing 202 client contract.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_sync_repeat_failure_cap.py"
   ],

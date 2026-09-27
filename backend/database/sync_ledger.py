@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional, cast
 
 from google.cloud import firestore
 
+from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
 from database._client import get_firestore_client
 
 LEDGER_RETENTION_DAYS = 45
@@ -16,7 +17,17 @@ CLAIM_STALE_SECONDS = 2 * 24 * 60 * 60
 REPEAT_FAILURE_LIMIT = 3
 REPEAT_FAILURE_WINDOW = timedelta(hours=24)
 REPEAT_FAILURE_PAUSE = timedelta(hours=24)
-_REPEAT_FAILURE_KEYS = frozenset({'invalid_audio', 'persistent_persistence'})
+_INVALID_AUDIO_FINGERPRINT = 'decode:sync_invalid_audio'
+
+
+def _validated_failure_fingerprint(key: str | None, fingerprint: str | None) -> str | None:
+    if key == 'invalid_audio':
+        return _INVALID_AUDIO_FINGERPRINT
+    if key == 'persistent_persistence' and fingerprint in {
+        f'persistence:{subtype}' for subtype in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
+    }:
+        return fingerprint
+    return None
 
 
 def _repeat_failure_capped(existing: Dict[str, Any], now: datetime) -> bool:
@@ -24,18 +35,29 @@ def _repeat_failure_capped(existing: Dict[str, Any], now: datetime) -> bool:
     return isinstance(until, datetime) and until > now
 
 
-def _repeat_failure_updates(existing: Dict[str, Any], key: str | None, now: datetime) -> Dict[str, Any]:
-    if key not in _REPEAT_FAILURE_KEYS:
-        return {}
+def _repeat_failure_updates(
+    existing: Dict[str, Any], key: str | None, fingerprint: str | None, now: datetime
+) -> Dict[str, Any]:
+    fingerprint = _validated_failure_fingerprint(key, fingerprint)
+    if fingerprint is None:
+        return {
+            'repeat_failure_key': firestore.DELETE_FIELD,
+            'repeat_failure_fingerprint': firestore.DELETE_FIELD,
+            'repeat_failure_count': firestore.DELETE_FIELD,
+            'repeat_failure_first_at': firestore.DELETE_FIELD,
+            'repeat_failure_pause_until': firestore.DELETE_FIELD,
+        }
     first = existing.get('repeat_failure_first_at')
     same_window = (
         existing.get('repeat_failure_key') == key
+        and existing.get('repeat_failure_fingerprint') == fingerprint
         and isinstance(first, datetime)
         and first <= now < first + REPEAT_FAILURE_WINDOW
     )
     count = min(REPEAT_FAILURE_LIMIT, int(existing.get('repeat_failure_count') or 0) + 1) if same_window else 1
     return {
         'repeat_failure_key': key,
+        'repeat_failure_fingerprint': fingerprint,
         'repeat_failure_count': count,
         'repeat_failure_first_at': first if same_window else now,
         'repeat_failure_pause_until': (
@@ -567,6 +589,7 @@ def _release_claim_transaction(
     run_token: str | None = None,
     run_epoch: int | None = None,
     failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
 ) -> bool:
     """Release only the claim that is still owned by ``job_id``.
 
@@ -588,7 +611,7 @@ def _release_claim_transaction(
             'ledger_run_epoch': firestore.DELETE_FIELD,
             'updated_at': now,
             'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
-            **_repeat_failure_updates(existing, failure_key, now),
+            **_repeat_failure_updates(existing, failure_key, failure_fingerprint, now),
         },
         merge=True,
     )
@@ -603,6 +626,7 @@ def release_sync_content_claim(
     run_token: str | None = None,
     run_epoch: int | None = None,
     failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
     firestore_client: Any = None,
 ) -> bool:
     """Atomically free the matching retry claim, returning whether it changed."""
@@ -615,6 +639,7 @@ def release_sync_content_claim(
         run_token,
         run_epoch,
         failure_key,
+        failure_fingerprint,
     )
 
 
@@ -625,6 +650,7 @@ def _release_claim_after_job_retired_transaction(
     job_id: str,
     now: datetime,
     failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
 ) -> bool:
     """Release a matching claim after Redis has proved its job is retired.
 
@@ -646,7 +672,7 @@ def _release_claim_after_job_retired_transaction(
             'ledger_run_epoch': firestore.DELETE_FIELD,
             'updated_at': now,
             'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
-            **_repeat_failure_updates(existing, failure_key, now),
+            **_repeat_failure_updates(existing, failure_key, failure_fingerprint, now),
         },
         merge=True,
     )
@@ -659,6 +685,7 @@ def release_sync_content_claim_after_job_retired(
     job_id: str,
     *,
     failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
     firestore_client: Any = None,
 ) -> bool:
     """Free an exact retired job claim without treating it as a live worker write."""
@@ -669,4 +696,5 @@ def release_sync_content_claim_after_job_retired(
         job_id,
         datetime.now(timezone.utc),
         failure_key,
+        failure_fingerprint,
     )
