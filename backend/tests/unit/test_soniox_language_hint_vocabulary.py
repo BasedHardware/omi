@@ -67,6 +67,7 @@ from utils.stt.soniox import (
     process_audio_soniox,
     soniox_death_reason,
 )
+from utils.stt.language_policy import LiveLanguageProfile
 
 API_KEY_ENV = {'SONIOX_API_KEY': 'test-key'}
 
@@ -79,11 +80,11 @@ def _connect_transport():
     return ws, connect, socket_ctor
 
 
-async def _sent_config(language: str) -> dict:
+async def _sent_config(language: str, profile: LiveLanguageProfile | None = None) -> dict:
     """Run the real config builder for a language; return the frame sent to the provider."""
     ws, connect, socket_ctor = _connect_transport()
     with connect, socket_ctor, patch.dict('os.environ', API_KEY_ENV):
-        await process_audio_soniox(lambda _s: None, 16000, language)
+        await process_audio_soniox(lambda _s: None, 16000, language, profile=profile)
     return json.loads(ws.send.await_args.args[0])
 
 
@@ -213,6 +214,43 @@ async def test_a_capitalized_sentinel_is_not_sent_as_a_hint():
     """The old raw-string guard compared the input; 'Multi' leaked a literal hint."""
     config = await _sent_config('Multi')
     assert 'language_hints' not in config
+
+
+@pytest.mark.asyncio
+async def test_multilingual_portuguese_connect_sends_two_hints_and_keeps_identification():
+    profile = LiveLanguageProfile.create('pt-BR', multi=True, uid='test-user')
+    config = await _sent_config('multi', profile)
+    assert config['language_hints'] == ['pt', 'en']
+    assert config['enable_language_identification'] is True
+
+
+@pytest.mark.asyncio
+async def test_multilingual_hint_flag_restores_no_hint(monkeypatch):
+    monkeypatch.setenv('STT_MULTI_LANGUAGE_HINTS', 'false')
+    profile = LiveLanguageProfile.create('pt', multi=True, uid='test-user')
+    config = await _sent_config('multi', profile)
+    assert 'language_hints' not in config
+
+
+@pytest.mark.asyncio
+async def test_flag_off_config_matches_the_previous_multi_frame(monkeypatch):
+    monkeypatch.setenv('STT_MULTI_LANGUAGE_HINTS', 'false')
+    profile = LiveLanguageProfile.create('pt', multi=True, uid='test-user')
+    assert await _sent_config('multi', profile) == await _sent_config('multi')
+
+
+@pytest.mark.asyncio
+async def test_out_of_scope_multi_session_keeps_the_previous_frame():
+    profile = LiveLanguageProfile.create('pt', multi=True, uid='test-user', in_scope=False)
+    assert await _sent_config('multi', profile) == await _sent_config('multi')
+
+
+@pytest.mark.asyncio
+async def test_unknown_and_english_multilingual_profiles_remain_unhinted():
+    for primary in ('en', 'multi', ''):
+        profile = LiveLanguageProfile.create(primary, multi=True, uid='test-user')
+        config = await _sent_config('multi', profile)
+        assert 'language_hints' not in config
 
 
 @pytest.mark.asyncio

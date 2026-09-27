@@ -15,6 +15,7 @@ import 'package:omi/pages/action_items/task_delete_undo.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/share_links.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/utils/share_sheet.dart';
 
@@ -183,11 +184,20 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
 
     if (result != null && result['url'] != null) {
       final url = result['url'] as String;
+      final sid = newShareId();
       OmiHaptics.light();
-      await Share.share(url, sharePositionOrigin: shareSheetOrigin());
+      final outcome = await SharePlus.instance.share(
+        ShareParams(text: tagShareUrl(url, sid: sid), sharePositionOrigin: shareSheetOrigin()),
+      );
+      final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
       PlatformManager.instance.analytics.track(
         'Action Item Shared',
-        properties: {'actionItemId': widget.actionItem!.id},
+        properties: {
+          'actionItemId': widget.actionItem!.id,
+          'share_id': sid,
+          'share_status': outcome.status.name,
+          if (targetApp != null) 'target_app': targetApp,
+        },
       );
     } else {
       OmiFeedback.error(context, context.l10n.failedToCreateShareLink);

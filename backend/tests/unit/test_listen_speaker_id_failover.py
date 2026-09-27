@@ -397,6 +397,7 @@ class FailoverStack:
             vocabulary=[],
             language='en',
             multi_lang_enabled=False,
+            language_profile=None,
             client_kind='test',
             onboarding_handler=None,
             transcript_send=None,
