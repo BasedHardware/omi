@@ -79,12 +79,6 @@ enum ViewExporter {
       ),
 
       (
-        "14-chat-sessions",
-        { AnyView(ChatSessionsSidebar(chatProvider: ChatProvider())) },
-        CGSize(width: 250, height: 500)
-      ),
-
-      (
         "15-settings",
         {
           AnyView(

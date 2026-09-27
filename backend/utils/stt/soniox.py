@@ -18,6 +18,7 @@ from config.stt_provider_policy import normalized_stt_language, soniox_accepts_l
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
+from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
 from utils.stt.stream_close import PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED, record_stt_stream_close
 
 logger = logging.getLogger(__name__)
@@ -121,7 +122,10 @@ class SafeSonioxSocket(STTSocket):
         # terminal-failure vocabulary; None until the socket dies.
         self._typed_death_reason: Optional[str] = None
         self._lock = threading.Lock()
-        self._send_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=2000)
+        self._send_queue: asyncio.Queue[bytes | str] = asyncio.Queue(maxsize=2000)
+        # A response can end in the middle of a word. Downstream joins distinct
+        # segments with spaces, so retain the last word until its boundary is known.
+        self._pending_segment: Optional[Dict[str, Any]] = None
         self._done_event = asyncio.Event()
         # Odd-length s16le frames would split a sample across messages; carry the
         # trailing byte rather than emit a half sample.
@@ -179,17 +183,52 @@ class SafeSonioxSocket(STTSocket):
         return True
 
     def finalize(self) -> None:
-        pass
+        def enqueue() -> None:
+            if self._dead or self._closed:
+                return
+            try:
+                self._send_queue.put_nowait(json.dumps({'type': 'finalize'}))
+            except asyncio.QueueFull:
+                self._mark_dead('send queue full')
+
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+        if current_loop is self._loop:
+            enqueue()
+        else:
+            try:
+                self._loop.call_soon_threadsafe(enqueue)
+            except RuntimeError:
+                self._mark_dead('finalize called after provider event loop closed')
 
     def finish(self) -> None:
         with self._lock:
             if self._closed:
                 return
             self._closed = True
+
+        def finish_on_loop() -> None:
+            try:
+                self._flush_pending()
+            finally:
+                try:
+                    self._send_queue.put_nowait(b'')
+                except asyncio.QueueFull:
+                    self._mark_dead('send queue full')
+
         try:
-            self._loop.call_soon_threadsafe(lambda: self._send_queue.put_nowait(b''))
-        except (RuntimeError, Exception):
-            pass
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+        if current_loop is self._loop:
+            finish_on_loop()
+        else:
+            try:
+                self._loop.call_soon_threadsafe(finish_on_loop)
+            except RuntimeError:
+                self._mark_dead('finish called after provider event loop closed')
 
     async def drain_and_close(self) -> None:
         try:
@@ -205,6 +244,10 @@ class SafeSonioxSocket(STTSocket):
         except Exception:
             pass
         self._recv_task.cancel()
+        self._send_task.cancel()
+        # Receive cleanup flushes the last committed word. Complete that callback
+        # before the owner tears down its transcript consumer, including timeout.
+        await asyncio.gather(self._recv_task, self._send_task, return_exceptions=True)
         try:
             await self._ws.close()
         except Exception:
@@ -274,17 +317,41 @@ class SafeSonioxSocket(STTSocket):
         except Exception as e:
             self._mark_dead(f'ws recv error: {e}')
         finally:
-            self._done_event.set()
+            try:
+                self._flush_pending()
+            finally:
+                self._done_event.set()
+
+    def _flush_pending(self, ready: Optional[List[Dict[str, Any]]] = None) -> None:
+        segment = self._pending_segment
+        self._pending_segment = None
+        if segment is not None and segment['text'].strip():
+            segment['text'] = segment['text'].strip()
+            segment.pop('_language_mixed', None)
+            if ready is not None:
+                ready.append(segment)
+            else:
+                self._stream_transcript([segment])
 
     def _handle_tokens(self, tokens: List[Any]) -> None:
-        segments: List[Dict[str, Any]] = []
+        ready: List[Dict[str, Any]] = []
         for token in tokens:
             if not isinstance(token, dict) or not token.get('is_final'):
                 continue
             text = str(token.get('text') or '')
+            if text in {'<end>', '<fin>'}:
+                self._flush_pending(ready)
+                continue
+            # Translation is a separate stream, not spoken transcript content.
+            if token.get('translation_status') == 'translation':
+                continue
+            if text and text[0].isspace():
+                self._flush_pending(ready)
             if not text.strip():
                 continue
-            start_ms = int(token.get('start_ms') or 0)
+            if token.get('start_ms') is None or token.get('end_ms') is None:
+                continue
+            start_ms = int(token['start_ms'])
             start = start_ms / 1000.0
             if self._preseconds and start < self._preseconds:
                 continue
@@ -294,18 +361,16 @@ class SafeSonioxSocket(STTSocket):
             except (TypeError, ValueError):
                 speaker_idx = 0
             speaker = f'SPEAKER_{speaker_idx:02d}'
-            # Live tokens arrive with duration_ms null, so a segment's end has to come
-            # from the next token's start; the last one falls back to its own start.
-            duration_ms = token.get('duration_ms')
-            end = (start_ms + int(duration_ms)) / 1000.0 if duration_ms else start
-            if segments:
-                segments[-1]['end'] = max(segments[-1]['end'], start - self._preseconds)
-            if segments and segments[-1]['speaker'] == speaker:
-                segments[-1]['text'] += text
-                segments[-1]['end'] = end
-                continue
-            segments.append(
-                {
+            end = max(start, int(token['end_ms']) / 1000.0)
+            pending = self._pending_segment
+            if pending is not None and (
+                pending['speaker'] != speaker
+                or start - self._preseconds - pending['end'] >= 3.0
+                or len(pending['text']) + len(text) > 4096
+            ):
+                self._flush_pending(ready)
+            if self._pending_segment is None:
+                self._pending_segment = {
                     'speaker': speaker,
                     'start': start - self._preseconds,
                     'end': end - self._preseconds,
@@ -313,12 +378,21 @@ class SafeSonioxSocket(STTSocket):
                     'is_user': False,
                     'person_id': None,
                 }
-            )
-        if not segments:
-            return
-        for segment in segments:
-            segment['text'] = segment['text'].strip()
-        self._stream_transcript([segment for segment in segments if segment['text']])
+                if token.get('language'):
+                    self._pending_segment['_provider_language'] = token['language']
+            else:
+                self._pending_segment['text'] += text
+                self._pending_segment['end'] = max(self._pending_segment['end'], end - self._preseconds)
+                token_language = token.get('language')
+                if not self._pending_segment.get('_language_mixed') and token_language != self._pending_segment.get(
+                    '_provider_language'
+                ):
+                    self._pending_segment.pop('_provider_language', None)
+                    self._pending_segment['_language_mixed'] = True
+            if text[-1].isspace():
+                self._flush_pending(ready)
+        if ready:
+            self._stream_transcript(ready)
 
 
 async def process_audio_soniox(
@@ -326,6 +400,8 @@ async def process_audio_soniox(
     sample_rate: int,
     language: str,
     preseconds: int = 0,
+    *,
+    profile: LiveLanguageProfile | None = None,
 ) -> SafeSonioxSocket:
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -349,26 +425,32 @@ async def process_audio_soniox(
     # ISO code, so it must send no hint; compare on the normalized base code so
     # a capitalized sentinel or a region-tagged locale ('Multi', 'ja-JP') cannot
     # smuggle a rejected entry past the raw-string guard.
-    normalized = normalized_stt_language(language)
-    if normalized and normalized != 'multi':
-        if soniox_accepts_language_hint(normalized):
-            config['language_hints'] = [normalized]
-        else:
-            # Auto-detect serves every language the model supports, so the
-            # session stays live; this is a mode change (hinted -> identified)
-            # and must be visible to ops, not silently healed.
-            record_fallback(
-                component='stt_selection',
-                from_mode='soniox_language_hint',
-                to_mode='soniox_language_identification',
-                reason='capability_mismatch',
-                outcome='degraded',
-            )
-            logger.warning(
-                'Soniox language hint dropped: language=%s is outside the documented hint vocabulary; '
-                'falling back to language identification',
-                language,
-            )
+    hints = soniox_hints(language, profile)
+    if hints:
+        config['language_hints'] = hints
+    rejected = (
+        profile.primary
+        if profile
+        and profile.in_scope
+        and profile.multi
+        and profile.primary_group == 'non_en'
+        and os.getenv('STT_MULTI_LANGUAGE_HINTS', 'true').lower() == 'true'
+        else normalized_stt_language(language)
+    )
+    if rejected and rejected != 'multi' and not soniox_accepts_language_hint(rejected):
+        # Invalid hints are dropped while identification remains enabled.
+        record_fallback(
+            component='stt_selection',
+            from_mode='soniox_language_hint',
+            to_mode='soniox_language_identification',
+            reason='capability_mismatch',
+            outcome='degraded',
+        )
+        logger.warning(
+            'Soniox language hint dropped: language=%s is outside the documented hint vocabulary; '
+            'falling back to language identification',
+            rejected,
+        )
 
     logger.info(f'Connecting to Soniox streaming sample_rate={sample_rate} language={language}')
     ws = await websockets.connect(SONIOX_WS_URL, ping_timeout=15, ping_interval=15)

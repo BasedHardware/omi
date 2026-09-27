@@ -612,6 +612,44 @@ async def test_vertex_provider_overflows_to_on_demand_when_dedicated_is_exhauste
 
 
 @pytest.mark.asyncio
+async def test_vertex_provider_origin_ceiling_skips_3_1_on_the_wire(monkeypatch):
+    """A flash-lite origin admitted to flash PT overflows to flash-lite, never 3.1."""
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
+    monkeypatch.setenv('GCP_LOCATION', 'us-central1')
+    monkeypatch.delenv('OMI_GEMINI_OVERFLOW_ENABLED', raising=False)
+    monkeypatch.delenv('OMI_GEMINI_OVERFLOW_MODEL', raising=False)
+    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if len(seen) == 1:
+            return httpx.Response(
+                429,
+                json={'error': {'message': 'Exceeded the Provisioned Throughput dedicated capacity'}},
+            )
+        return httpx.Response(200, json=_ok_vertex_response())
+
+    provider = _pt_provider(handler)
+    result = await provider.create_chat_completion(
+        {
+            'model': 'gemini-2.5-flash',
+            'messages': [{'role': 'user', 'content': 'hi'}],
+            provider_module.ptr.OVERFLOW_ORIGIN_OPTION: 'gemini-2.5-flash-lite',
+        },
+        provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-flash'),
+        credentials=_omi_credentials(),
+        timeout_ms=60_000,
+    )
+
+    assert result.response['choices'][0]['message']['content'] == 'ok'
+    models = [str(request.url.path).split('/models/')[-1] for request in seen]
+    assert models == ['gemini-2.5-flash:generateContent', 'gemini-2.5-flash-lite:generateContent']
+    assert seen[1].headers[provider_module.ptr.REQUEST_TYPE_HEADER] == 'shared'
+    assert provider_module.ptr.OVERFLOW_ORIGIN_OPTION.encode() not in seen[1].content
+
+
+@pytest.mark.asyncio
 async def test_vertex_provider_fails_closed_on_a_prohibited_pt_pin(monkeypatch):
     """SCA-481: a Pro/image operator pin must fail the request closed at
     resolution time — no provider dispatch, typed invalid-config failure."""

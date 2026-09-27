@@ -257,7 +257,6 @@ def test_sync_processor_links_only_after_successful_completion(harness, monkeypa
     monkeypatch.setattr(processor, '_enrich_meeting_context', MagicMock())
     monkeypatch.setattr(processor, '_get_structured', lambda *a, **kw: (conversation.structured, False))
     monkeypatch.setattr(processor, '_get_conversation_obj', lambda *a, **kw: conversation)
-    monkeypatch.setattr(processor, '_calendar_auto_link_enabled', lambda: False)
     monkeypatch.setattr(processor, 'conversation_apps_opt_in_only', lambda: False)
     monkeypatch.setattr(processor, 'trigger_conversation_apps', MagicMock())
     monkeypatch.setattr(processor, 'submit_with_context', MagicMock())
@@ -268,5 +267,7 @@ def test_sync_processor_links_only_after_successful_completion(harness, monkeypa
         return persisted
 
     monkeypatch.setattr(processor.lifecycle_service, 'persist_processed_conversation', persist)
-    processor.process_conversation(UID, 'en', conversation, is_reprocess=True, defer_memory_extraction=True)
+    processor.process_conversation(
+        UID, 'en', conversation, trigger=processor.ProcessingTrigger.USER_REPROCESS, defer_memory_extraction=True
+    )
     assert ('duplicate_capture_of' in harness.rows[path('desktop')]['external_data']) is persisted

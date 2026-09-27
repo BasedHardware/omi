@@ -173,6 +173,22 @@ class JourneyFixtureBackend {
         await req.response.close();
         return;
 
+      case 'POST /v1/action-items':
+        final body = jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>;
+        final now = DateTime.now().toUtc().toIso8601String();
+        final item = <String, dynamic>{
+          ...body,
+          'id': 'srv-task-${actionItems.length + 1}',
+          'created_at': now,
+          'updated_at': now,
+        };
+        actionItems.add(item);
+        req.response.statusCode = 200;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(item));
+        await req.response.close();
+        return;
+
       case 'GET /v1/action-items':
         req.response.statusCode = 200;
         req.response.headers.contentType = ContentType.json;

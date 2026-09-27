@@ -108,3 +108,25 @@ def test_dart_parameter_names_do_not_rename_legacy_wire_properties():
     assert registry.validate(doc) == [], 'a boolean preference is not an email address'
     event['properties']['enabled']['wire_name'] = 'git_sha'
     assert registry.validate(doc), 'provenance stays SDK-owned'
+
+
+def test_correlated_journeys_require_paired_vocabulary_and_random_ids():
+    doc = source()
+    assert registry.validate(doc) == []
+    outcome = next(e for e in doc['events'] if e['id'] == 'productJourneyOutcome')
+    outcome['correlation'] = {'type': 'user_id', 'field': 'correlation_id'}
+    assert registry.validate(doc)
+    doc = source()
+    outcome = next(e for e in doc['events'] if e['id'] == 'productJourneyOutcome')
+    outcome['properties']['journey']['values'].append('unpaired_journey')
+    assert registry.validate(doc)
+    doc = source()
+    doc['events'] = [e for e in doc['events'] if e['phase'] != 'attempt']
+    assert registry.validate(doc)
+
+
+def test_record_reference_cannot_be_repurposed_to_arbitrary_content():
+    doc = source()
+    event = next(e for e in doc['events'] if e['id'] == 'productValueEvent')
+    event['properties']['objectId']['wire_name'] = 'transcript'
+    assert registry.validate(doc)

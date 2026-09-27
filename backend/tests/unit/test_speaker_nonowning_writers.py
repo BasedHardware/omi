@@ -52,3 +52,26 @@ async def test_translation_does_not_publish_a_retired_segment(world):
     assert events == []
     assert [s['id'] for s in processor.cache.data['transcript_segments']] == ['s0']
     assert [s['id'] for s in read(world)['transcript_segments']] == ['s0']
+
+
+@pytest.mark.parametrize('manual', [False, True])
+def test_live_owner_retraction_persists_ambiguity_but_preserves_manual_receipt(world, manual):
+    store, path, old = world
+    if manual:
+        db.assign_conversation_speaker('u', 'c', is_user=True, speaker_id=old[0]['speaker_id'])
+    inferred = deepcopy(old)
+    for segment in inferred:
+        segment.update(
+            is_user=False, person_id=None, speaker_identity_status='ambiguous', speaker_match_source='live_embedding'
+        )
+    saved = db.update_conversation_segments(
+        'u',
+        'c',
+        inferred,
+        segment_update_fields=('person_id', 'is_user', 'speaker_identity_status', 'speaker_match_source'),
+        return_segments=True,
+    )
+    assert saved[0]['is_user'] is manual
+    assert saved[0]['speaker_identity_status'] == ('user' if manual else 'ambiguous')
+    assert saved[0]['speaker_match_source'] == (None if manual else 'live_embedding')
+    assert read(world)['transcript_segments'] == saved

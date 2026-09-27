@@ -62,7 +62,8 @@ void main() {
           home: Scaffold(body: TranscriptWidget(segments: [segment])),
         )));
     await tester.pumpAndSettle();
-    expect(find.text('Speaker 3'), findsOneWidget);
+    // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
+    expect(find.text('Speaker 1'), findsOneWidget);
     loaded = [Person(id: 'later', name: 'Alex', createdAt: DateTime(2026), updatedAt: DateTime(2026))];
     await people.setPeople();
     await tester.pumpAndSettle();
@@ -74,7 +75,8 @@ void main() {
     people.clearUserData();
     await tester.pumpAndSettle();
     expect(find.text('Sam'), findsNothing);
-    expect(find.text('Speaker 3'), findsOneWidget);
+    // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
+    expect(find.text('Speaker 1'), findsOneWidget);
   });
 
   group('Speaker label display', () {
@@ -140,6 +142,27 @@ void main() {
 
       // Should show Speaker X fallback
       expect(find.text('Speaker 1'), findsOneWidget);
+    });
+
+    testWidgets('unavailable resolution does not render chunk ids as distinct people', (tester) async {
+      final segments = [segmentFor('first', 27), segmentFor('second', 28)];
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: TranscriptWidget(segments: segments, unresolvedSpeakers: true)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Speaker ?'), findsNWidgets(2));
+      expect(find.text('Speaker 1'), findsNothing);
+      expect(find.text('Speaker 2'), findsNothing);
     });
 
     testWidgets('Tag button is removed from UI', (tester) async {

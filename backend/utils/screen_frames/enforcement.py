@@ -182,11 +182,15 @@ def build_frame_set_response(uid: str, conversation_id: str) -> ConversationScre
             strip.append(api_frame)
     strip.sort(key=lambda f: f.captured_at)
     adjudicated_at = screen_frames_db.get_conversation_screen_frames_adjudicated_at(uid, conversation_id)
+    selection_fingerprint = screen_frames_db.get_conversation_screen_frames_selection_fingerprint(uid, conversation_id)
+    if not isinstance(selection_fingerprint, str):
+        selection_fingerprint = None
     return ConversationScreenFrameSet(
         revision=revision,
         banner=banner,
         strip=strip[:STRIP_MAX],
         adjudicated_at=adjudicated_at,
+        selection_fingerprint=selection_fingerprint,
     )
 
 

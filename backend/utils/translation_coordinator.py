@@ -24,6 +24,9 @@ from utils.translation import (
     classify_translation_need,
     TranslationService,
 )
+from utils.translation_core.metrics import get_translation_metrics
+from config.translation import translation_profile_gate_enabled
+from utils.translation_language import detect_language_with_confidence, expected_foreign_language
 from utils.executors import db_executor, sync_executor, run_blocking
 from utils.translation_cache import ConversationLanguageState, should_persist_translation, _normalize_base_language  # type: ignore[reportPrivateUsage]  # internal helper, intentional cross-module use
 
@@ -130,6 +133,8 @@ class TranslationCoordinator:
         on_translation_ready: Callable[[str, str, str, str], Awaitable[None]],
         language_state: Optional[ConversationLanguageState] = None,
         source_language: str = "",
+        expected_languages: Tuple[str, ...] = (),
+        realtime_interpreter: bool = False,
     ):
         self.target_language = target_language
         self.target_base = _normalize_base_language(target_language) or ''
@@ -137,6 +142,10 @@ class TranslationCoordinator:
         self.on_translation_ready = on_translation_ready
         self.language_state = language_state or ConversationLanguageState(target_language)
         self.source_language = source_language
+        self.expected_languages = expected_languages
+        self.realtime_interpreter = realtime_interpreter
+        self._decision_metrics = get_translation_metrics()
+        self._conversation_id: Optional[str] = None
 
         self._segment_states: Dict[str, SegmentState] = {}
         self._version_counter = 0
@@ -182,6 +191,14 @@ class TranslationCoordinator:
         if not self._active and not self._flushing:
             return
 
+        if self._conversation_id is not None and self._conversation_id != conversation_id:
+            # Prior evidence is conversation-scoped, not socket-lifetime evidence.
+            self.language_state = ConversationLanguageState(self.target_language)
+            self._segment_states.clear()
+            self._batch_buffer.clear()
+            self._cancel_batch_timer()
+            self._last_speaker_id = None
+        self._conversation_id = conversation_id
         for seg_id in removed_ids:
             self._segment_states.pop(seg_id, None)
 
@@ -200,6 +217,13 @@ class TranslationCoordinator:
             return
 
         state = self._get_or_create_state(segment.id)
+        if not self.realtime_interpreter and not self.language_state.source_is_plausible(text, self.expected_languages):
+            self._invalidate_segment_work(segment.id, state)
+            state.latest_text = text
+            state.last_update_at = now
+            self.metrics['classify_defers'] += 1
+            self._decision_metrics.decision(self.target_language, 'defer', 'out_of_profile')
+            return
         if await self._reconcile_changed_prefix(segment.id, text, state, conversation_id, now):
             return
 
@@ -213,7 +237,16 @@ class TranslationCoordinator:
         state.latest_text = text
         state.last_update_at = now
 
-        skip_mono = self.language_state.observe(new_text, speaker_id=segment.speaker_id)
+        foreign_clause = (
+            expected_foreign_language(new_text, self.target_language, self.expected_languages)
+            if translation_profile_gate_enabled()
+            else None
+        )
+        skip_mono = (
+            self.language_state.observe_detection(foreign_clause, 1.0, speaker_id=segment.speaker_id)
+            if foreign_clause
+            else self.language_state.observe(new_text, speaker_id=segment.speaker_id)
+        )
         if skip_mono and not self.language_state.should_probe():
             await self._commit_target_language_text(state, text, 'mono_gate_skips')
             return
@@ -232,10 +265,13 @@ class TranslationCoordinator:
             is_stable=_is_text_stable(new_text, signals),
         )
 
+        if foreign_clause and _is_text_stable(new_text, signals):
+            need = TranslationNeed.TRANSLATE
         if need == TranslationNeed.SKIP:
             await self._commit_target_language_text(state, text, 'classify_skips')
         elif need == TranslationNeed.DEFER:
             self.metrics['classify_defers'] += 1
+            self._decision_metrics.decision(self.target_language, 'defer', 'uncertain')
         else:
             self._queue_translation(segment.id, text, conversation_id, state)
 
@@ -253,6 +289,7 @@ class TranslationCoordinator:
 
         # Invalidate before cache I/O so an in-flight result cannot win a stale write.
         self._invalidate_segment_work(segment_id, state)
+        version = state.version
         text_hash = hashlib.md5(text.encode()).hexdigest()
         cached = await run_blocking(
             db_executor,
@@ -260,6 +297,12 @@ class TranslationCoordinator:
             text_hash,
             self.target_language,
         )
+        if (
+            self._segment_states.get(segment_id) is not state
+            or state.version != version
+            or self._conversation_id != conversation_id
+        ):
+            return True
         if cached is None:
             state.committed_text = ''
             state.assembled_translation = None
@@ -269,15 +312,22 @@ class TranslationCoordinator:
 
         translated_text = cached['text']
         detected_lang = cached.get('detected_lang', '')
-        if detected_lang:
-            self.language_state.observe_detection(detected_lang, 1.0)
-
         if not should_persist_translation(text, translated_text, detected_lang, self.target_language):
-            # Cache I/O yielded; invalidate again in case newer work arrived meanwhile.
-            self._invalidate_segment_work(segment_id, state)
-            self._adopt_cached_prefix(state, text, translated_text, detected_lang, now)
+            self._decision_metrics.decision(self.target_language, 'rejected_by_guard', 'output_guard')
+            if ' '.join(text.split()) == ' '.join(translated_text.split()):
+                # A genuine no-op cache hit can commit this exact source prefix;
+                # it cannot publish a badge or establish a foreign prior.
+                self._invalidate_segment_work(segment_id, state)
+                self._adopt_cached_prefix(state, text, text, '', now)
+                self.metrics['prefix_resets'] += 1
+                return True
+            # Re-evaluate the current source. A rejected legacy cache value must
+            # not become the committed prefix of later transcript revisions.
+            state.committed_text = ''
+            state.assembled_translation = None
+            state.detected_lang = None
             self.metrics['prefix_resets'] += 1
-            return True
+            return False
 
         self._adopt_cached_prefix(state, text, translated_text, detected_lang, now)
         await self.on_translation_ready(segment_id, translated_text, detected_lang, conversation_id)
@@ -305,6 +355,7 @@ class TranslationCoordinator:
     ) -> None:
         """Commit a local skip and persist its shared negative-cache decision."""
         self.metrics[skip_metric] += 1
+        self._decision_metrics.decision(self.target_language, 'skip', 'target_language')
         state.committed_text = text
         text_hash = hashlib.md5(text.encode()).hexdigest()
         await run_blocking(
@@ -324,6 +375,7 @@ class TranslationCoordinator:
     ) -> None:
         """Queue full text for provider context; delta translation remains deferred by DD-008."""
         self.metrics['classify_translates'] += 1
+        self._decision_metrics.decision(self.target_language, 'translate', 'eligible')
         version = self._next_version()
         state.version = version
         self._batch_buffer.append((segment_id, text, conversation_id, version))
@@ -406,11 +458,20 @@ class TranslationCoordinator:
                     outcome.detected_language,
                     target_base,
                 ):
+                    if outcome.status != TranslationStatus.unchanged:
+                        self._decision_metrics.decision(self.target_language, 'rejected_by_guard', 'output_guard')
                     detected_base = _normalize_base_language(outcome.detected_language) or ''
                     if outcome.status == TranslationStatus.unchanged:
                         if outcome.detected_language:
+                            # Legacy no-op signal can exit mono mode, but cannot establish
+                            # an unexpected language in the source-admission prior.
                             self.language_state.observe_detection(outcome.detected_language, 1.0)
-                        if detected_base == target_base:
+                        local_language, local_confidence = detect_language_with_confidence(original_text)
+                        if (
+                            detected_base == target_base
+                            and _normalize_base_language(local_language) == target_base
+                            and local_confidence >= 0.90
+                        ):
                             # Only target-language no-ops belong in the negative cache.
                             text_hash = hashlib.md5(original_text.encode()).hexdigest()
                             await run_blocking(
@@ -427,10 +488,6 @@ class TranslationCoordinator:
                 state.committed_text = original_text
                 state.assembled_translation = outcome.text
                 state.detected_lang = outcome.detected_language
-
-                # Update language state from API response
-                if outcome.detected_language:
-                    self.language_state.observe_detection(outcome.detected_language, 1.0)
 
                 # Notify via callback
                 await self.on_translation_ready(

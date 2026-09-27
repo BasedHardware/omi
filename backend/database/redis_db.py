@@ -280,12 +280,29 @@ def set_app_money_made_cache(app_id: str, money: Dict[str, Any]) -> None:
     r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 10)  # 10 minutes
 
 
+# Two reviewers of the same app race on this one key: a plain GET-modify-SET lets
+# a write that lands between another writer's GET and SET vanish, silently
+# dropping that reviewer from everything the product reads. Do the read-modify-
+# write as a single atomic script instead, mirroring the rate-limit scripts
+# below. A legacy (pre-JSON) value that cjson can't parse is treated as empty
+# rather than raising, matching the fail-open behavior of the Python reader.
+_SET_APP_REVIEW_CACHE_LUA = r.register_script("""
+local raw = redis.call('GET', KEYS[1])
+local reviews = {}
+if raw then
+    local ok, decoded = pcall(cjson.decode, raw)
+    if ok and type(decoded) == 'table' then
+        reviews = decoded
+    end
+end
+reviews[ARGV[1]] = cjson.decode(ARGV[2])
+redis.call('SET', KEYS[1], cjson.encode(reviews))
+return 1
+""")
+
+
 def set_app_review_cache(app_id: str, uid: str, data: Dict[str, Any]) -> None:
-    raw = r.get(f'plugins:{app_id}:reviews')
-    loaded = _deserialize_cache_value(raw)
-    reviews: Dict[str, Any] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
-    reviews[uid] = data
-    r.set(f'plugins:{app_id}:reviews', _serialize_cache_value(reviews))
+    _SET_APP_REVIEW_CACHE_LUA(keys=[f'plugins:{app_id}:reviews'], args=[uid, _serialize_cache_value(data)])
 
 
 def get_specific_user_review(app_id: str, uid: str) -> Dict[str, Any]:
@@ -730,23 +747,30 @@ async def get_async_redis_client() -> Any:
     return _async_redis_client
 
 
-@try_catch_decorator
-def incr_daily_notification_count(uid: str) -> int:
-    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
+def _daily_notification_key(uid: str, tz: Optional[Any] = None) -> str:
+    """Bucket the count by the user's own calendar day, not UTC's.
+
+    A UTC bucket rolls over mid-afternoon west of UTC, which hands the user a
+    second full allotment inside one of their days.
+    """
     from datetime import datetime, timezone
 
-    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    return f'{uid}:daily_noti_count:{datetime.now(tz or timezone.utc).strftime("%Y-%m-%d")}'
+
+
+@try_catch_decorator
+def incr_daily_notification_count(uid: str, tz: Optional[Any] = None) -> int:
+    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
+    key = _daily_notification_key(uid, tz)
     count = r.incr(key)
-    r.expire(key, 90000)  # 25 hours TTL
+    r.expire(key, 172800)  # 48 hours TTL: a local day can start up to 14 hours before the UTC one
     return count
 
 
 @try_catch_decorator
-def get_daily_notification_count(uid: str) -> int:
+def get_daily_notification_count(uid: str, tz: Optional[Any] = None) -> int:
     """Get the current daily proactive-notification count for a user (mentor + third-party apps)."""
-    from datetime import datetime, timezone
-
-    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    key = _daily_notification_key(uid, tz)
     val = r.get(key)
     if not val:
         return 0

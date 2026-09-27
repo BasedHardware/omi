@@ -35,15 +35,60 @@ class EndpointResponseStub:
         self.error = error
 
 
+class ResponseStandIn:
+    """Minimal requests.Response stand-in used when requests is not installed."""
+
+    status_code = 0
+    text = ""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def json(self):
+        return {}
+
+    def raise_for_status(self):
+        return None
+
+
+def identity_retry(*args, **kwargs):
+    """Stand-in for tenacity.retry's decorating form when tenacity is absent."""
+
+    def decorate(func):
+        return func
+
+    return decorate
+
+
 def make_module(name, **attrs):
     mod = types.ModuleType(name)
     mod.__dict__.update(attrs)
     return mod
 
 
-# Framework stubs for hermetic execution without fastapi installed
+# Framework stubs for hermetic execution without fastapi/requests/tenacity installed
 stubs = {
-    "requests": make_module("requests", RequestException=OSError, post=lambda *a, **kw: None, get=lambda *a, **kw: None),
+    "requests": make_module(
+        "requests",
+        RequestException=OSError,
+        post=lambda *a, **kw: None,
+        get=lambda *a, **kw: None,
+        Response=ResponseStandIn,
+        # dropbox_client evaluates requests.exceptions.* at decoration time
+        exceptions=make_module(
+            "requests.exceptions",
+            RequestException=OSError,
+            Timeout=OSError,
+            ConnectionError=OSError,
+        ),
+    ),
+    "tenacity": make_module(
+        "tenacity",
+        retry=identity_retry,
+        stop_after_attempt=lambda *a, **kw: None,
+        wait_exponential=lambda *a, **kw: None,
+        retry_if_exception_type=lambda *a, **kw: None,
+    ),
     "dotenv": make_module("dotenv", load_dotenv=lambda *a, **kw: None),
     "fastapi": make_module(
         "fastapi",
@@ -82,8 +127,10 @@ spec = importlib.util.spec_from_file_location(
 dropbox_main = importlib.util.module_from_spec(spec)
 with patch.dict(sys.modules, active_stubs):
     spec.loader.exec_module(dropbox_main)
-
-from dropbox_client import DropboxClient
+    # dropbox_client imports requests/tenacity itself, so it must load inside the
+    # stubbed window too when those packages are absent.
+    import dropbox_client  # noqa: E402
+    from dropbox_client import DropboxClient  # noqa: E402
 
 
 class FakeRequest:
@@ -165,7 +212,7 @@ class TestDropboxTokenRefreshAndTools(unittest.TestCase):
             ]
         }
 
-        with patch("dropbox_client.requests.post", return_value=mock_resp):
+        with patch.object(dropbox_client.requests, "post", return_value=mock_resp):
             results, error = client.search_files("Report")
             self.assertIsNone(error)
             self.assertEqual(len(results), 1)

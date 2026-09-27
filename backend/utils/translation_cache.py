@@ -1,6 +1,10 @@
 import time
 from typing import Dict, Optional
 
+from config.translation import translation_profile_gate_enabled
+from utils.translation_core.quality import output_rejection_reason
+from utils.translation_language import expected_foreign_language
+
 from utils.translation import (
     detect_language,
     detect_language_with_confidence,
@@ -24,19 +28,7 @@ def should_persist_translation(
     This prevents no-op "translations" (for example English->English) from
     creating a translation badge in the UI.
     """
-    normalized_source = " ".join(source_text.split())
-    normalized_translated = " ".join((translated_text or "").split())
-    if normalized_source != normalized_translated:
-        return True
-
-    detected_base = _normalize_base_language(detected_lang)
-    target_base = _normalize_base_language(target_language)
-    # Explicit no-op when API confirms source is already in target language.
-    if detected_base and target_base and detected_base == target_base:
-        return False
-
-    # Conservative default for unchanged text: don't persist no-op translation.
-    return False
+    return output_rejection_reason(source_text, translated_text, target_language or '') is None
 
 
 class TranscriptSegmentLanguageCache:
@@ -107,6 +99,7 @@ class ConversationLanguageState:
         self.consecutive_target = 0
         self.monolingual = False
         self.last_probe_time = 0.0
+        self.established_languages: set[str] = set()
         # Per-speaker tracking for multi-speaker conversations
         self.speaker_state: Dict[int, bool] = {}  # speaker_id -> is_foreign
 
@@ -150,6 +143,41 @@ class ConversationLanguageState:
             return False
 
         # Low confidence — don't change gate state, but don't skip either
+        return False
+
+    def source_is_plausible(self, text: str, expected_languages: tuple[str, ...]) -> bool:
+        """A short fragment cannot teach its own prior or poison shared caches.
+
+        Expected languages are spoken-language hints, not reading preferences.
+        A substantial confident sample admits an unlisted language immediately.
+        Without a profile, require substantial Latin-script evidence or a clear
+        non-Latin script. Short ambiguous Latin fragments defer until a longer
+        sample establishes their language in this conversation.
+        """
+        if not translation_profile_gate_enabled():
+            return True
+        language, confidence = detect_language_with_confidence(text)
+        base = _normalize_base_language(language)
+        if expected_foreign_language(text, self.target_base, expected_languages):
+            return True
+        if not base:
+            return True  # the ordinary confidence/stability gate still defers
+        if base == self.target_base or base in self.established_languages:
+            return True
+        if base in {_normalize_base_language(code) for code in expected_languages}:
+            raw_language, raw_confidence = detect_language_with_confidence(text, remove_non_lexical=False)
+            return _normalize_base_language(raw_language) == base and raw_confidence >= CONFIDENCE_FOREIGN_TRANSLATE
+        alphabetic = [char for char in text if char.isalpha()]
+        if not expected_languages and alphabetic:
+            non_latin = sum(ord(char) > 0x024F for char in alphabetic)
+            if non_latin >= 6 and non_latin * 5 >= len(alphabetic) * 3 and confidence >= 0.95:
+                self.established_languages.add(base)
+                return True
+        if confidence >= 0.95 and len(alphabetic) >= 40:
+            raw_language, raw_confidence = detect_language_with_confidence(text, remove_non_lexical=False)
+            if _normalize_base_language(raw_language) == base and raw_confidence >= 0.95:
+                self.established_languages.add(base)
+                return True
         return False
 
     def should_probe(self) -> bool:

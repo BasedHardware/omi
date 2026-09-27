@@ -7,7 +7,7 @@ This package owns uploaded-audio sync admission, decoding, transcription orchest
 - `pipeline.py` coordinates job/run leases, segment processing, persistence fences, and terminal outcomes. `assignment_errors.py` distinguishes terminal user authority from corrupt/mismatched intake.
 - `files.py`, `content_id.py`, and `capture_manifest.py` normalize uploads and identities. Capture assignment never grants fresh-lane provenance.
 - `capture.py` derives retry-stable incoming IDs from the VAD-segment timestamp. VAD exports speech segments only; empty VAD/STT creates no conversation or bridge and bills no speech.
-- `lanes.py`, `backfill.py`, and `rate_limit.py` classify work and enforce admission policy.
+- `lanes.py`, `backfill.py`, and `rate_limit.py` classify work and enforce admission policy. `uid_sequencer.py` dispatches accepted backfill jobs through the Firestore owner/pending registry in `database/sync_backfill_sequencer.py`; it owns no STT or conversation writes. See `backend/docs/runbooks/sync-two-lane.md` for lease, cutover, and monitoring details.
 - `merge_audio.py` and `merge_dedupe.py` contain deterministic merge helpers; `playback.py` reconstructs audio artifacts.
 - `provenance.py` and `telemetry.py` provide bounded attribution and operational labels.
 
@@ -29,7 +29,7 @@ Bridge writes increment survivor and donor `sync_content_revision`. Processors r
 
 ## Relevance and remaining differences
 
-Short filler-only speech gets `sync_relevance=review`, remain visible with a deterministic title, and skip enrichment. Subsequent intake reassesses the complete transcript. Unknown content/language stays `keep`; speaker profiles and `is_user` never gate assignment or relevance.
+Speech the deterministic relevance rules (`utils/conversations/relevance_rules.py`) discard outright gets `sync_relevance=review` and skips enrichment; everything else is assessed by the relevance step as a `SYNC_UPDATE` when the pipeline processes it. Uncurated completed review fragments are stored `discarded=True`: hidden from default lists/search, retained with their transcript/audio, and recoverable through Show discarded. Readers trust that stored flag alone; `scripts/conversation_relevance_backfill.py` rewrites rows stored before intake did so. Explicit restoration of any row sets `sync_relevance_user_kept` so later intake and reassessment honor that choice. Curated, shared, photo-bearing, and live-target records are protected; a generated summary is not curation and protects nothing. Duration alone never discards meaningful speech. Subsequent intake reassesses the complete transcript. Unknown content/language stays `keep`; speaker profiles and `is_user` never gate assignment or relevance.
 
 Known limitation: WALs carrying different existing live target IDs can remain separate even during one continuous recording. Sync never bridges those live-owned targets because an open socket may still write to them; partial-flap intake does not guarantee partition parity. Realtime now remembers same-origin continuations inside the continuity window and reaps expired empty generations on reconnect. This prevents one source of new target proliferation; it does not redirect historical distinct explicit live targets. A lineage migration remains separate.
 
@@ -60,3 +60,11 @@ After duplicate removal, the transaction hydrates the surviving conversation's
 allocator and allocates incoming and donor identities. Legacy donors receive a
 stable conversation/speaker scope. Provider labels and recognized person IDs are
 preserved; equal provider numbers never establish that two voices are the same.
+Conversation-wide resolution uses stored private-cloud audio after each sync
+job's append and reprocess. If audio is unavailable or its timeline cannot be
+trusted, the resolver marks the cross-chunk IDs `unavailable` and logs the
+anonymous skip reason; clients must treat those labels as provisional. A sync
+bridge's redirect tombstone remains available to owner detail reads and manual
+speaker assignment: the assignment transaction follows the survivor chain and
+maps the donor's selected speaker number through stable segment IDs so it never
+labels a different survivor voice.

@@ -143,5 +143,25 @@ void main() {
       expect(mic.stopCalls, 1);
       expect(provider.state, VoiceRecorderState.idle);
     });
+
+    test('discarding an active recording stops the mic and removes PCM without transcription', () async {
+      final mic = _ContendedMic()..failStart = false;
+      var transcriptionCalls = 0;
+      final provider = VoiceRecorderProvider(
+          mic: mic,
+          transcriber: (_) async {
+            transcriptionCalls++;
+            return 'unexpected';
+          });
+      await provider.startRecording();
+      expect(recordingsDir().listSync().length, 1);
+
+      await provider.discardRecording();
+
+      expect(mic.stopCalls, 1);
+      expect(provider.state, VoiceRecorderState.idle);
+      expect(recordingsDir().listSync(), isEmpty);
+      expect(transcriptionCalls, 0);
+    });
   });
 }

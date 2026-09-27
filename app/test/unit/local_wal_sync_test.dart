@@ -272,12 +272,40 @@ void main() {
       expect(batch.map((wal) => wal.timerStart), [liveNewest.timerStart, liveOlder.timerStart]);
     });
 
-    test('only a conversation-bound recent WAL counts as live capture', () {
+    test('does not mix safety WALs from different recording sessions', () {
+      const now = 2000000000;
+      final newest = Wal(
+        timerStart: now - 30,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        recordingSessionId: 'recording-b',
+      );
+      final olderSame = Wal(
+        timerStart: now - 90,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        recordingSessionId: 'recording-b',
+      );
+      final otherRecording = Wal(
+        timerStart: now - 20,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        recordingSessionId: 'recording-a',
+      );
+
+      final batch = nextSyncUploadBatch([otherRecording, newest, olderSame], now);
+
+      expect(batch.map((wal) => wal.recordingSessionId), ['recording-a']);
+    });
+
+    test('recent ID-less WAL counts as live capture but cannot claim an existing manifest', () {
       const now = 2000000000;
       Wal at(int ageSeconds, {String? conversationId}) =>
           Wal(timerStart: now - ageSeconds, codec: BleAudioCodec.opus, seconds: 60, conversationId: conversationId);
 
-      expect(isLiveCaptureWal(at(60), now), isFalse);
+      final idLess = at(60);
+      expect(isLiveCaptureWal(idLess, now), isTrue);
+      expect(canClaimLiveCapture([idLess], [idLess], now), isFalse);
       expect(isLiveCaptureWal(at(60, conversationId: 'c'), now), isTrue);
       expect(isLiveCaptureWal(at(7 * 60 * 60, conversationId: 'c'), now), isFalse);
     });
@@ -350,6 +378,38 @@ void main() {
       expect(batch.length, 5);
       expect(canClaimLiveCapture(batch, oversized, now), isFalse);
       expect(canClaimLiveCapture(batch, oversized.take(5).toList(), now), isTrue);
+    });
+  });
+
+  group('bounded retained capture WALs', () {
+    Wal retained(int timerStart) => Wal(
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          storage: WalStorage.disk,
+          status: WalStatus.miss,
+        );
+
+    test('the documented count cap does not evict at the boundary', () async {
+      sync.testWals = List.generate(maxRetainedCaptureWalCount, retained);
+
+      final evicted = await sync.enforceRetentionPolicyForTesting();
+
+      expect(evicted, 0);
+      expect(sync.testWals, hasLength(maxRetainedCaptureWalCount));
+      expect(sync.retentionRisk, isNull);
+    });
+
+    test('dead-backend accumulation evicts oldest WALs and records storage risk', () async {
+      sync.testWals = List.generate(maxRetainedCaptureWalCount + 3, retained);
+
+      final evicted = await sync.enforceRetentionPolicyForTesting();
+
+      expect(evicted, 3);
+      expect(sync.testWals, hasLength(maxRetainedCaptureWalCount));
+      expect(sync.testWals.map((wal) => wal.timerStart), isNot(contains(anyOf(0, 1, 2))));
+      expect(sync.retentionRisk?.evictedCount, 3);
+      expect(sync.retentionRisk?.retainedCount, maxRetainedCaptureWalCount);
     });
   });
 
@@ -464,6 +524,49 @@ void main() {
       expect(sync.testWals[1].geolocation?.latitude, 40.7128);
     });
 
+    test('a finalized safety WAL carries the active recording session id', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      sync.setActiveRecordingSessionId('  recording-live  ');
+      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])));
+
+      await sync.finalizeCurrentSession();
+
+      expect(sync.testWals, hasLength(1));
+      expect(sync.testWals.single.recordingSessionId, 'recording-live');
+      final encoded = sync.testWals.single.toJson();
+      expect(encoded['recording_session_id'], 'recording-live');
+      final restored = Wal.fromJson({...encoded, 'codec': 'opus'});
+      expect(restored.recordingSessionId, 'recording-live');
+    });
+
+    test('stampConversationId follows the recording id when timerStart is before the session', () async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      sync.testWals = [
+        Wal(
+          timerStart: now - 200,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          recordingSessionId: 'recording-live',
+        ),
+        Wal(
+          timerStart: now - 180,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          recordingSessionId: 'recording-other',
+        ),
+      ];
+
+      sync.prepareConversationStamp('recording-live');
+      await sync.stampConversationId(now - 100, 'conv-live');
+
+      expect(sync.testWals[0].conversationId, 'conv-live');
+      expect(sync.testWals[1].conversationId, isNull);
+    });
+
     test('cleared session location is not inherited by external WALs', () async {
       sync.setSessionGeolocation(
         Geolocation(latitude: 40.7128, longitude: -74.006, time: DateTime.utc(2026, 8, 1, 12)),
@@ -561,6 +664,92 @@ void main() {
       await freshSync.addExternalWal(wal, admittedGeneration: freshSync.sessionGeneration);
 
       expect(freshSync.testWals.map((w) => w.id), contains(wal.id));
+    });
+  });
+
+  group('silent upload death recovery', () {
+    test('connectivity recovery re-arms only retry-exhausted transient disk WALs', () async {
+      var persisted = <Wal>[];
+      final local = LocalWalSyncImpl(
+        listener,
+        persistWals: (wals) async => persisted = List<Wal>.from(wals),
+        loadWals: () async => <Wal>[],
+      );
+      final exhausted = Wal(
+        timerStart: 100,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        retryCount: walMaxAutoRetries,
+        lastRetryAt: 99,
+      );
+      final stillBudgeted = Wal(
+        timerStart: 200,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        retryCount: 2,
+      );
+      final permanent = Wal(
+        timerStart: 300,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        storage: WalStorage.disk,
+        status: WalStatus.unsupportedAudio,
+        retryCount: walMaxAutoRetries,
+      );
+      local.testWals = [exhausted, stillBudgeted, permanent];
+
+      expect(await local.resetExhaustedAutoRetries(), 1);
+
+      expect(exhausted.retryCount, 0);
+      expect(exhausted.lastRetryAt, 0);
+      expect(stillBudgeted.retryCount, 2);
+      expect(permanent.retryCount, walMaxAutoRetries);
+      expect(persisted.map((wal) => wal.id), containsAll([exhausted.id, stillBudgeted.id, permanent.id]));
+    });
+
+    test('transcript confirmation prunes only WALs stamped to that conversation', () async {
+      var persisted = <Wal>[];
+      final now = DateTime.fromMillisecondsSinceEpoch(500 * 1000);
+      final local = LocalWalSyncImpl(
+        listener,
+        now: () => now,
+        persistWals: (wals) async => persisted = List<Wal>.from(wals),
+        loadWals: () async => <Wal>[],
+      );
+      final confirmed = Wal(
+        timerStart: 450,
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        conversationId: 'confirmed-conversation',
+      );
+      final unrelated = Wal(
+        timerStart: 460,
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        conversationId: 'other-conversation',
+      );
+      final unstamped = Wal(
+        timerStart: 470,
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+      );
+      local.testWals = [confirmed, unrelated, unstamped];
+
+      expect(await local.confirmSessionTranscription(400, 'confirmed-conversation'), 1);
+
+      expect(local.testWals.map((wal) => wal.id), isNot(contains(confirmed.id)));
+      expect(local.testWals.map((wal) => wal.id), containsAll([unrelated.id, unstamped.id]));
+      expect(persisted.map((wal) => wal.id), containsAll([unrelated.id, unstamped.id]));
     });
   });
 

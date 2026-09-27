@@ -8,98 +8,14 @@ requirements remain explicit here until their callers are migrated.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any
 
-
-@dataclass(frozen=True)
-class FirestoreIndexField:
-    field_path: str
-    order: str | None = None
-    array_config: str | None = None
-
-    def to_manifest(self) -> dict[str, str]:
-        if self.order is not None:
-            return {'fieldPath': self.field_path, 'order': self.order}
-        if self.array_config is not None:
-            return {'fieldPath': self.field_path, 'arrayConfig': self.array_config}
-        raise ValueError(f'Firestore index field {self.field_path!r} needs order or array_config')
-
-
-@dataclass(frozen=True)
-class FirestoreIndexRequirement:
-    identifier: str
-    collection_group: str
-    query_scope: str
-    fields: tuple[FirestoreIndexField, ...]
-
-    def to_manifest(self) -> dict[str, Any]:
-        return {
-            'collectionGroup': self.collection_group,
-            'queryScope': self.query_scope,
-            'fields': [field.to_manifest() for field in self.fields],
-        }
-
-    @property
-    def signature(self) -> tuple[str, str, tuple[tuple[str, str], ...]]:
-        return (
-            self.collection_group,
-            self.query_scope,
-            tuple((field.field_path, field.order or field.array_config or '') for field in self.fields),
-        )
-
-
-@dataclass(frozen=True)
-class FirestoreQueryFilter:
-    field_path: str
-    operator: str
-    value_name: str
-
-
-@dataclass(frozen=True)
-class FirestoreQuerySpec:
-    """A serving compound query and the index requirement derived from it."""
-
-    identifier: str
-    collection_group: str
-    query_scope: str
-    filters: tuple[FirestoreQueryFilter, ...]
-    index_fields: tuple[FirestoreIndexField, ...]
-
-    @property
-    def index_requirement(self) -> FirestoreIndexRequirement:
-        return FirestoreIndexRequirement(
-            identifier=self.identifier,
-            collection_group=self.collection_group,
-            query_scope=self.query_scope,
-            fields=self.index_fields,
-        )
-
-    @property
-    def query_signature(self) -> tuple[str, str, tuple[tuple[str, str], ...]]:
-        return (
-            self.collection_group,
-            self.query_scope,
-            tuple((query_filter.field_path, query_filter.operator) for query_filter in self.filters),
-        )
-
-    def build(
-        self,
-        collection: Any,
-        values: Mapping[str, Any],
-        *,
-        field_filter_factory: Callable[[str, str, Any], Any],
-    ) -> Any:
-        """Build the actual Firestore query from declared filters and values."""
-
-        query = collection
-        for query_filter in self.filters:
-            try:
-                value = values[query_filter.value_name]
-            except KeyError as exc:
-                raise ValueError(f'{self.identifier} requires {query_filter.value_name!r}') from exc
-            query = query.where(filter=field_filter_factory(query_filter.field_path, query_filter.operator, value))
-        return query
+from .firestore_query_types import (
+    FirestoreIndexField,
+    FirestoreIndexRequirement,
+    FirestoreQueryFilter,
+    FirestoreQuerySpec,
+)
 
 
 def _asc(field_path: str) -> FirestoreIndexField:
@@ -117,6 +33,18 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    FirestoreIndexRequirement(
+        'sync_backfill_pending_uid_sort',
+        'sync_backfill_pending',
+        'COLLECTION',
+        (_asc('uid'), _asc('sort_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'sync_backfill_pending_uid_accepted',
+        'sync_backfill_pending',
+        'COLLECTION',
+        (_asc('uid'), _asc('accepted_at'), _asc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'memory_items_collection_group_uid_generation_updated',
         'memory_items',
@@ -170,9 +98,9 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('discarded'), _asc('status'), _asc('structured.category'), _desc('created_at'), _desc('__name__')),
     ),
-    # `GET /v1/conversations?sources=...` retains the legacy
-    # `include_discarded=true` default, so this is distinct from the archive
-    # query below that explicitly excludes discarded captures.
+    # Explicit `GET /v1/conversations?sources=...&include_discarded=true`
+    # remains supported, so this is distinct from the default/archive query
+    # below that excludes discarded captures.
     FirestoreIndexRequirement(
         'conversations_source_status_created',
         'conversations',
@@ -193,8 +121,8 @@ INDEX_ONLY_REQUIREMENTS = (
     ),
     # Several conversations.py serving reads filter by `status` alone and sort by
     # `created_at` descending (get_in_progress_conversation, get_action_items,
-    # get_last_completed_conversation, and the default `GET /v1/conversations`
-    # call with include_discarded=True). Production has this index only because
+    # get_last_completed_conversation, and explicit `GET /v1/conversations`
+    # calls with include_discarded=True). Production has this index only because
     # it was created by hand; a fresh self-host 400s with FailedPrecondition the
     # first time any of those paths runs.
     FirestoreIndexRequirement(
@@ -1207,6 +1135,20 @@ HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+HOURLY_USAGE_UTC_DAY_QUERY = FirestoreQuerySpec(
+    identifier='hourly_usage_utc_day',
+    collection_group='hourly_usage',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('year', '==', 'year'),
+        FirestoreQueryFilter('month', '==', 'month'),
+        FirestoreQueryFilter('day', '==', 'day'),
+    ),
+    # Equality-only filters are served by Firestore's automatic index merging;
+    # the existing today path already runs this query without a composite.
+    index_fields=(),
+)
+
 FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
     identifier='conversation_finalization_jobs_oldest_nonterminal',
     collection_group='conversation_finalization_jobs',
@@ -1293,15 +1235,21 @@ MESSAGES_BY_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
 # range on a different field is a compound serving query, so automatic
 # single-field indexes do not cover it however the directions line up.
 DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY = FirestoreQuerySpec(
-    identifier='users_signup_platform_signup_at_range',
+    identifier='users_signup_platform_signup_os_signup_at_range',
     collection_group='users',
     query_scope='COLLECTION',
     filters=(
         FirestoreQueryFilter('signup_platform', '==', 'signup_platform'),
+        FirestoreQueryFilter('signup_os', 'in', 'signup_os_values'),
         FirestoreQueryFilter('signup_platform_at', '>=', 'start'),
         FirestoreQueryFilter('signup_platform_at', '<', 'end'),
     ),
-    index_fields=(_asc('signup_platform'), _asc('signup_platform_at'), _asc('__name__')),
+    index_fields=(
+        _asc('signup_platform'),
+        _asc('signup_os'),
+        _asc('signup_platform_at'),
+        _asc('__name__'),
+    ),
 )
 
 # EXP-001's day-0 output count: real conversations created inside the 24h after
@@ -1431,6 +1379,7 @@ QUERY_SPECS = (
     MEETING_RECEIPTS_DUE_QUERY,
     NEGATIVE_FEEDBACK_EVENTS_QUERY,
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
+    HOURLY_USAGE_UTC_DAY_QUERY,
     FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY,
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
@@ -1549,6 +1498,8 @@ INDEX_REQUIREMENTS = (
 # Exempting a field only removes single-field indexes — composite indexes declared above are
 # unaffected, so a field named in a composite index can still appear here.
 FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
+    ('sync_backfill_pending', 'payload'),
+    ('sync_backfill_sequencer', 'active_payload'),
     ('screen_activity', 'ocrText'),
     ('screen_activity', 'windowTitle'),
 )

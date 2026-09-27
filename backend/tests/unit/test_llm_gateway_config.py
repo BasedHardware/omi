@@ -7,7 +7,7 @@ import yaml
 
 from llm_gateway.gateway.config_loader import ConfigValidationError, load_gateway_config
 from llm_gateway.gateway.schemas import Capabilities, StructuredOutputMode, Surface
-from utils.llm.model_config import get_all_configured_features, get_model, get_provider
+from utils.llm.model_config import LUNA_MODEL, get_all_configured_features, get_model, get_provider
 
 LANE_ID = 'omi:auto:chat-structured'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
@@ -24,7 +24,7 @@ def test_loads_default_gateway_config():
     assert lane.last_known_good == LKG_ROUTE
     assert config.route_artifacts[ACTIVE_ROUTE].content_digest.startswith('sha256:')
     assert config.feature_bundles['chat_extraction.requires_context'].lane_id == LANE_ID
-    assert config.route_artifacts[ACTIVE_ROUTE].primary.model == 'gpt-5.6-luna'
+    assert config.route_artifacts[ACTIVE_ROUTE].primary.model == LUNA_MODEL
     assert config.route_artifacts[ACTIVE_ROUTE].provider_options['reasoning_effort'] == 'low'
 
 
@@ -32,15 +32,15 @@ def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     config = load_gateway_config(prod_mode=True)
 
     assert get_model('conv_discard') == 'gpt-5-nano'
-    assert get_model('memories') == 'gpt-5.6-luna'
-    assert get_model('fair_use') == 'gpt-5.6-luna'
-    assert get_model('chat_agent') == 'gpt-5.6-luna'
+    assert get_model('memories') == LUNA_MODEL
+    assert get_model('fair_use') == LUNA_MODEL
+    assert get_model('chat_agent') == LUNA_MODEL
 
     assert config.route_artifacts['route.conv_discard.model_config.001'].primary.model == 'gpt-5-nano'
-    assert config.route_artifacts['route.memories.model_config.001'].primary.model == 'gpt-5.6-luna'
-    assert config.route_artifacts['route.fair_use.model_config.001'].primary.model == 'gpt-5.6-luna'
+    assert config.route_artifacts['route.memories.model_config.001'].primary.model == LUNA_MODEL
+    assert config.route_artifacts['route.fair_use.model_config.001'].primary.model == LUNA_MODEL
     assert config.route_artifacts['route.chat_agent.model_config.001'].primary.provider == 'openai'
-    assert config.route_artifacts['route.chat_agent.model_config.001'].primary.model == 'gpt-5.6-luna'
+    assert config.route_artifacts['route.chat_agent.model_config.001'].primary.model == LUNA_MODEL
     assert config.route_artifacts['route.memory_l2.model_config.001'].provider_options['reasoning_effort'] == 'medium'
     assert config.route_artifacts['route.chat_agent.model_config.001'].provider_options == {'reasoning_effort': 'none'}
     assert config.route_artifacts['route.wake_word_adjudication.model_config.001'].provider_options == {
@@ -55,12 +55,12 @@ def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
 def test_memory_l2_gateway_lane_resolves_to_luna():
     config = load_gateway_config(prod_mode=True)
 
-    assert get_model('memory_l2') == 'gpt-5.6-luna'
+    assert get_model('memory_l2') == LUNA_MODEL
     assert get_provider('memory_l2') == 'openai'
     lane = config.lanes['omi:auto:memory-l2']
     route = config.route_artifacts[lane.active_route]
     assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
-    assert route.primary.model == 'gpt-5.6-luna'
+    assert route.primary.model == LUNA_MODEL
     assert route.primary.provider == 'openai'
 
 
@@ -79,7 +79,7 @@ def test_desktop_proactive_lanes_are_pinned_and_structured():
         'extra_body': {'prompt_cache_retention': '24h'},
         'reasoning_effort': 'minimal',
     }
-    assert reasoning_route.primary.model == 'gpt-5.6-luna'
+    assert reasoning_route.primary.model == LUNA_MODEL
     assert reasoning_route.provider_options == {'reasoning_effort': 'low'}
 
 

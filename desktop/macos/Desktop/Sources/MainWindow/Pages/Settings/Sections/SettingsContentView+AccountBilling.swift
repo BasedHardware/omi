@@ -41,7 +41,9 @@ extension SettingsContentView {
                   try? await AuthService.shared.signOut()
                 }
               }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+              // Secondary: signing out is reversible and is not what this page is for, so it is not
+              // the loudest control on it.
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               .disabled(isDeletingAccount)
             }
           }
@@ -86,17 +88,15 @@ extension SettingsContentView {
           }
         }
       }
-      .alert("Delete Account and Data?", isPresented: $showDeleteAccountAlert) {
-        Button("Cancel", role: .cancel) {
-          AnalyticsManager.shared.deleteAccountCancelled()
-        }
-        Button("Delete Permanently", role: .destructive) {
-          deleteAccountAndData()
-        }
-      } message: {
-        Text(
-          "This cannot be undone. Your account, chat history, and all server data will be permanently deleted. Local data for this account will be cleared and you'll return to onboarding."
-        )
+      .shellConfirmation(
+        isPresented: $showDeleteAccountAlert,
+        title: "Delete Account & Data?",
+        message: "This can't be undone. Your account, chat history, and all server data will be permanently "
+          + "deleted. Local data for this account will be cleared and you'll return to onboarding.",
+        confirmTitle: "Delete Permanently",
+        onCancel: { AnalyticsManager.shared.deleteAccountCancelled() }
+      ) {
+        deleteAccountAndData()
       }
 
       //            settingsCard {
@@ -457,12 +457,7 @@ extension SettingsContentView {
             .scaledFont(size: OmiType.heading, weight: .semibold)
             .foregroundColor(Ink.primary)
           Spacer()
-          Button(action: { showOverageExplainer = false }) {
-            Image(systemName: "xmark.circle.fill")
-              .scaledFont(size: OmiType.heading)
-              .foregroundColor(Ink.secondary)
-          }
-          .buttonStyle(.plain)
+          DismissButton(action: { showOverageExplainer = false })
         }
 
         Text(overageInfo?.explainerBody ?? "")
@@ -522,22 +517,18 @@ extension SettingsContentView {
             .scaledFont(size: OmiType.heading)
             .foregroundColor(Ink.secondary)
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-            Text(APIKeyService.isByokActive ? "Free plan active" : "Use Omi free forever")
+            Text(byokStatusTitle)
               .scaledFont(size: OmiType.subheading, weight: .semibold)
               .foregroundColor(Ink.primary)
-            Text(
-              APIKeyService.isByokActive
-                ? "You're using your own OpenAI, Anthropic, Gemini, and Deepgram keys. No subscription."
-                : "Provide your own OpenAI, Anthropic, Gemini, and Deepgram keys to skip the subscription entirely."
-            )
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
+            Text(byokUsageDescription)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
           }
           Spacer()
         }
 
         Button(action: openBYOKSettings) {
-          Text(APIKeyService.isByokActive ? "Manage your keys" : "Switch to your own keys")
+          Text(APIKeyService.isByokActive ? "Manage Keys" : "Add Keys")
             .scaledFont(size: OmiType.body, weight: .semibold)
         }
         .buttonStyle(OmiButtonStyle(.primary, size: .compact))

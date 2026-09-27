@@ -268,14 +268,22 @@ class AccountLevelLeakTests(unittest.TestCase):
 
 
 class ReleasePanelTests(unittest.TestCase):
-    def test_all_board_has_the_two_line_release_chart(self) -> None:
+    def test_all_board_has_the_three_series_release_chart(self) -> None:
         panel = next(p for p in load("omi-tv")["panels"]
                      if build_dashboards.base_title(p) == build_dashboards.RELEASES_CHART_TITLE)
         target = panel["targets"][0]
         self.assertIn("/api/omi/stats/releases", target["url"])
         self.assertIn("_tzdates=date", target["url"])
         names = [c["text"] for c in target["columns"]]
-        self.assertEqual(names, ["time", "macOS releases", "iOS releases"])
+        self.assertEqual(names, ["time", "macOS releases", "iOS releases", "Android releases"])
+        self.assertEqual([c["selector"] for c in target["columns"]],
+                         ["date", "macos", "ios", "android"])
+        self.assertIn("TestFlight/Play builds included", panel["description"])
+        colors = {o["matcher"]["options"]: o["properties"][0]["value"]["fixedColor"]
+                  for o in panel["fieldConfig"]["overrides"]}
+        self.assertEqual(set(colors), {"macOS releases", "iOS releases", "Android releases"})
+        self.assertEqual(len(set(colors.values())), 3)
+        self.assertNotIn(colors["Android releases"].lower(), {"#a855f7", "#9333ea"})
 
     def test_platform_boards_show_their_latest_release_stat(self) -> None:
         for uid, root, absent in [("omi-tv-macos", "latest.macos", "latest.ios"),

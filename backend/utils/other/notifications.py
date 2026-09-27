@@ -269,29 +269,6 @@ DAILY_SUMMARY_MAX_HISTORY_CHARS = _env_int('DAILY_SUMMARY_MAX_HISTORY_CHARS', su
 DAILY_SUMMARY_MAX_ABANDONED_USERS = _env_int('DAILY_SUMMARY_MAX_ABANDONED_USERS', 12)
 
 # --- Recipient selection for the hourly daily-summary tick (#13210) --------
-# Each execution used to read every user with a time_zone and filter preferences
-# in Python. After the backfill, Firestore can return only recipients. The
-# env knob stages that cutover; unknown values fall back to today's behaviour.
-#   legacy  — current full-pass query (default until the backfill has run)
-#   shadow  — legacy result is authoritative for sending; the indexed query also
-#             runs and one log line per hour group reports set diffs
-#   indexed — indexed query only
-_DAILY_SUMMARY_SELECTION_MODES = frozenset({'legacy', 'shadow', 'indexed'})
-
-
-def _selection_mode_from_env() -> str:
-    raw = os.getenv('DAILY_SUMMARY_SELECTION_MODE')
-    if raw is None:
-        return 'legacy'
-    mode = raw.strip().lower()
-    if mode in _DAILY_SUMMARY_SELECTION_MODES:
-        return mode
-    logger.warning('daily_summary_selection_mode_unknown value=%r falling_back=legacy', raw)
-    return 'legacy'
-
-
-DAILY_SUMMARY_SELECTION_MODE = _selection_mode_from_env()
-
 _BATCH_SIZE = 8
 
 _FALLBACK_COMPONENT = 'daily_summary'
@@ -581,27 +558,6 @@ def _reduce_daily_summary_chunks(
     return users, chunk_errors[0] if chunk_errors else None, every_chunk_read
 
 
-def _log_daily_summary_selection_shadow(
-    target_hour: int,
-    legacy_users: List[Tuple[str, List[str], Any]],
-    indexed_users: List[Tuple[str, List[str], Any]],
-) -> None:
-    legacy_uids = {uid for uid, _tokens, _tz in legacy_users}
-    indexed_uids = {uid for uid, _tokens, _tz in indexed_users}
-    only_legacy = sorted(legacy_uids - indexed_uids)
-    only_indexed = sorted(indexed_uids - legacy_uids)
-    logger.info(
-        'daily_summary_selection_shadow hour=%s legacy=%d indexed=%d only_legacy=%d only_indexed=%d sample_only_legacy=%s sample_only_indexed=%s',
-        target_hour,
-        len(legacy_uids),
-        len(indexed_uids),
-        len(only_legacy),
-        len(only_indexed),
-        only_legacy[:5],
-        only_indexed[:5],
-    )
-
-
 async def _get_users_for_daily_summary(
     timezones: List[str], target_hour: int
 ) -> Tuple[List[Tuple[str, List[str], Any]], Optional[BaseException], bool]:
@@ -617,32 +573,10 @@ async def _get_users_for_daily_summary(
     timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
     # return_exceptions: one failing timezone chunk degrades that chunk's users,
     # it does not throw away the chunks that did read successfully.
-    selector = notification_db.get_users_for_daily_summary
-    if DAILY_SUMMARY_SELECTION_MODE == 'indexed':
-        selector = notification_db.get_users_for_daily_summary_indexed
-    chunk_results = await _query_daily_summary_chunks(selector, timezone_chunks, target_hour)
-    users, query_error, every_chunk_read = _reduce_daily_summary_chunks(chunk_results, target_hour)
-
-    if DAILY_SUMMARY_SELECTION_MODE == 'shadow':
-        try:
-            indexed_results = await _query_daily_summary_chunks(
-                notification_db.get_users_for_daily_summary_indexed, timezone_chunks, target_hour
-            )
-            indexed_users: List[Tuple[str, List[str], Any]] = []
-            indexed_error: Optional[BaseException] = None
-            for indexed_chunk in indexed_results:
-                if isinstance(indexed_chunk, BaseException):
-                    indexed_error = indexed_chunk
-                    break
-                indexed_users.extend(indexed_chunk)
-            if indexed_error is not None:
-                logger.warning('daily_summary_selection_shadow_failed hour=%s error=%s', target_hour, indexed_error)
-            else:
-                _log_daily_summary_selection_shadow(target_hour, users, indexed_users)
-        except Exception as error:
-            logger.warning('daily_summary_selection_shadow_failed hour=%s error=%s', target_hour, error)
-
-    return users, query_error, every_chunk_read
+    chunk_results = await _query_daily_summary_chunks(
+        notification_db.get_users_for_daily_summary_indexed, timezone_chunks, target_hour
+    )
+    return _reduce_daily_summary_chunks(chunk_results, target_hour)
 
 
 def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
@@ -780,7 +714,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     try:
 
         # Backfill only for owners who are actually still recording. Dropping the FCM-token filter in
-        # get_users_for_daily_summary widened this fan-out to every user in the timezone, and an
+        # get_users_for_daily_summary_indexed widened this fan-out to every user in the timezone, and an
         # unconditional 7-day walk would spend 7 lock writes + 7 by-date reads + 7 conversation queries
         # per dormant account per day chasing holes it can never fill.
         #

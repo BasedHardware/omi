@@ -102,6 +102,48 @@ final class CaptureAttemptOutcomeTelemetryTests: XCTestCase {
     }
   }
 
+  // MARK: - SCA-526: forced terminations must not hide behind the idle bucket
+
+  func testForcedTerminationReasonsClassifyErrorEvenOnIdleMeetingsWait() {
+    // The heaviest stop/restart loop in the field terminated as
+    // `idle_waiting_meeting` because the stop reason never reached the funnel.
+    // A reason that names a forced termination must classify `error` even when
+    // the call site forgot `noteErrorTerminal()` and no audio ever flowed.
+    for reason in TranscriptionFinalizationReason.allCases where reason.isForcedTermination {
+      let disposition = CaptureAttemptOutcomeState.terminalReason(
+        finalizationReason: reason,
+        mode: AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue,
+        firstAudioFrame: false,
+        errorTerminal: false)
+      XCTAssertEqual(disposition, .error, "for \(reason.rawValue)")
+    }
+  }
+
+  func testNonForcedReasonsNeverClassifyErrorWithoutErrorTerminal() {
+    for reason in TranscriptionFinalizationReason.allCases where !reason.isForcedTermination {
+      let disposition = CaptureAttemptOutcomeState.terminalReason(
+        finalizationReason: reason,
+        mode: AssistantSettings.AudioRecordingMode.always.rawValue,
+        firstAudioFrame: true,
+        errorTerminal: false)
+      XCTAssertNotEqual(disposition, .error, "for \(reason.rawValue)")
+    }
+  }
+
+  func testRecordingStoppedPropertiesCarryFinalizationReason() {
+    let properties = PostHogManager.transcriptionStoppedProperties(
+      wordCount: 7, attemptId: "a1", reason: "rotation_failed")
+    XCTAssertEqual(
+      Set(properties.keys),
+      ["platform", "word_count", "attempt_id", "finalization_reason"])
+    XCTAssertEqual(properties["finalization_reason"] as? String, "rotation_failed")
+
+    // Absent reason must not add the key — bounded payload stays bounded.
+    XCTAssertEqual(
+      Set(PostHogManager.transcriptionStoppedProperties(wordCount: 0, attemptId: nil).keys),
+      ["platform", "word_count"])
+  }
+
   func testRotationOfCapturingAttemptIsCompleted() {
     let disposition = CaptureAttemptOutcomeState.terminalReason(
       finalizationReason: .maxDurationRotation,

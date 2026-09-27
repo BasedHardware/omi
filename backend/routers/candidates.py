@@ -26,11 +26,7 @@ from utils.other import endpoints as auth
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.capture_policy import MINIMUM_CAPTURE_CONFIDENCE
 from utils.task_intelligence.recommendations import candidate_recommendation_dedupe_key
-from utils.task_intelligence.rollout import (
-    effective_task_workflow_control,
-    resolve_chat_first_ui,
-    resolve_task_intelligence_for_user,
-)
+from utils.task_intelligence.chat_first_eligibility import resolve_task_intelligence_for_user
 from utils.task_intelligence import chat_first_e2e_fixture
 from utils.task_intelligence.task_links import TaskLinkValidationError
 from utils.task_intelligence.staged_migration import migrate_staged_tasks
@@ -245,7 +241,9 @@ def migrate_staged_candidates(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
     return migrate_staged_tasks(
         uid,
-        effective_task_workflow_control(control, rollout),
+        control.model_copy(
+            update={'workflow_mode': TaskWorkflowMode.read, 'chat_first_ui': rollout.intelligence_product_enabled}
+        ),
         after_id=request.after_id,
         limit=request.limit,
     )
@@ -271,7 +269,7 @@ def get_candidate_workflow_control(uid: str = Depends(auth.get_current_user_uid)
             workflow_mode=control.workflow_mode,
             account_generation=control.account_generation,
         )
-        chat_first_ui = resolve_chat_first_ui(rollout)
+        chat_first_ui = rollout.intelligence_product_enabled
     except Exception:
         # Control resolution is intentionally fail-closed: a backend outage or
         # malformed generation fence keeps this user in the existing shell.
@@ -285,8 +283,12 @@ def get_candidate_workflow_control(uid: str = Depends(auth.get_current_user_uid)
     # Desktop samples both fields as one generation-bound projection. Preserve
     # the raw generation, but never let a stale workflow record select the
     # legacy shell for a universally entitled account.
-    effective_control = effective_task_workflow_control(control, rollout)
-    return effective_control.model_copy(update={'chat_first_ui': chat_first_ui})
+    return control.model_copy(
+        update={
+            'workflow_mode': TaskWorkflowMode.read,
+            'chat_first_ui': chat_first_ui,
+        }
+    )
 
 
 @router.post('/v1/candidates/integrations/drain', tags=['candidates'])

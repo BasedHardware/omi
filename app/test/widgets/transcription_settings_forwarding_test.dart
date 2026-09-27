@@ -10,6 +10,8 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/ui/ui.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -31,9 +33,14 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    final homeProvider = HomeProvider();
+    addTearDown(homeProvider.dispose);
     await tester.pumpWidget(
-      ChangeNotifierProvider<CaptureProvider>.value(
-        value: captureProvider,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<CaptureProvider>.value(value: captureProvider),
+          ChangeNotifierProvider<HomeProvider>.value(value: homeProvider),
+        ],
         child: const MaterialApp(
           localizationsDelegates: [
             AppLocalizations.delegate,
@@ -48,8 +55,10 @@ void main() {
     );
     await tester.pump();
 
-    SwitchListTile forwardingTile() =>
-        tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'Send raw audio to Omi'));
+    OmiSwitch forwardingTile() => tester.widget<OmiSwitch>(
+          find.descendant(
+              of: find.widgetWithText(OmiSettingsRow, 'Send raw audio to Omi'), matching: find.byType(OmiSwitch)),
+        );
 
     expect(forwardingTile().value, isFalse);
 

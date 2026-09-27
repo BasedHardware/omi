@@ -77,10 +77,16 @@ ratio or for provider-budget PAGE.
 
 ## Provider budget exhausted
 
-`omi-stt-provider-budget` — **PAGE**. A vendor closing streams for
-budget/quota/payment is never transient. It needs a human with a credit card
-(or console access to raise a monthly cap). The cap is monthly and can trip
-again before month end.
+`omi-stt-provider-budget` — **PAGE**, per provider. A vendor closing streams
+for budget/quota/payment is never transient. It needs a human with a credit
+card (or console access to raise a monthly cap). The cap is monthly and can
+trip again before month end. The alert instance labels name the provider:
+top up that provider. Retired providers — intentionally unfunded legs,
+hosted Deepgram by default per the 2026-09 cost ruling — are excluded through
+`omi_stt_provider_retired{provider}` (exported from `STT_RETIRED_PROVIDERS`,
+default `deepgram`) so they cannot fire forever; an unfunded leg that starts
+getting real traffic again should be un-retired in the deployment env, not by
+editing the alert.
 
 | What it looks like | Where |
 |---|---|
@@ -95,8 +101,10 @@ because monthly budget was untyped as `connection_lost`). 5-minute samples:
 2026-09-20 07:30Z=0. Series `omi_stt_stream_close_total` is new: Prometheus
 evaluation of the exact `increase()` expression is still owed.
 
-**Safe next action:** confirm panel 18, raise the vendor cap, then confirm
-panel 16 that `to_mode` recovered share is no longer zero.
+**Safe next action:** confirm panel 18 (per provider), raise the named
+vendor's cap, then confirm panel 16 that `to_mode` recovered share is no
+longer zero — the alert clears about one window after the provider stops
+closing streams for budget reasons (i.e. once it serves again).
 
 ## Sync intake fragmentation
 
@@ -104,12 +112,15 @@ panel 16 that `to_mode` recovered share is no longer zero.
 
 `ingest_sync_conversation` increments `omi_sync_intake_total{outcome="created|merged"}`
 and logs `omi_sync_intake outcome=…`. Prometheus does not scrape Cloud Run
-`backend-sync` today (exporter allowlist is `backend` + `desktop-backend`),
-so the alert evaluates Cloud Logging counts of that line. Brand-new series:
-no production history. Expected created share ~1.0 in a per-chunk storm
-(2026-09-19: 107 shards / 121 conversations for one account) versus `1/N`
-for an N-chunk continuous recording. Assignment continuity is a separate PR;
-this alert only makes the symptom visible.
+`backend-sync` or `backend-sync-backfill` today (exporter allowlist is
+`backend` + `desktop-backend`), so the alert evaluates Cloud Logging counts of
+that line. Created is emitted by `backend-sync-backfill` only; merged by both
+`backend-sync-backfill` and `backend-sync`. Measured 2026-09-21 00:00-18:00Z:
+created 9626/9626 from backfill (backend-sync created=0); merged 21482 backfill
++ 757 backend-sync; fleet created share 0.302. Expected created share ~1.0 in a
+per-chunk storm (2026-09-19: 107 shards / 121 conversations for one account)
+versus `1/N` for an N-chunk continuous recording. Assignment continuity is a
+separate PR; this alert only makes the symptom visible.
 
 ## PostHog — desktop fallback insight
 

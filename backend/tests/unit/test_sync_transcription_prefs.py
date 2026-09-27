@@ -13,6 +13,7 @@ uses ``stub_modules`` + ``load_module_fresh``, so nothing leaks to ``sys.modules
 after the module's tests finish.
 """
 
+import importlib
 import io
 import os
 import re
@@ -186,6 +187,7 @@ def _build_fakes() -> dict:
     cloud_tasks.get_sync_tasks_max_attempts = MagicMock(return_value=5)
     cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
     cloud_tasks.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+    cloud_tasks.verify_audio_merge_cloud_tasks_oidc = MagicMock(return_value=0)
     cloud_tasks.verify_cloud_tasks_oidc = MagicMock(return_value=0)
     fakes['utils.cloud_tasks'] = cloud_tasks
 
@@ -912,17 +914,22 @@ def _make_transcript_segment(speaker_id, start, end, text='hello', seg_id=None):
 class TestBuildPersonEmbeddingsCache:
     """Verify build_person_embeddings_cache loads user + people embeddings."""
 
-    @patch('utils.sync.pipeline.users_db')
-    def test_loads_user_embedding(self, mock_users_db):
-        from utils.sync.pipeline import build_person_embeddings_cache
+    def test_loads_user_embedding(self, monkeypatch):
+        pipeline = importlib.import_module('utils.sync.pipeline')
+        mock_users_db = MagicMock()
+        monkeypatch.setattr(pipeline, 'users_db', mock_users_db)
+
+        resolved_name = MagicMock(return_value='David')
+        monkeypatch.setattr(pipeline, 'get_user_name', resolved_name)
 
         mock_users_db.get_user_speaker_embedding.return_value = [0.1] * 512
         mock_users_db.get_people.return_value = []
 
-        cache = build_person_embeddings_cache('uid1')
+        cache = pipeline.build_person_embeddings_cache('uid1')
 
         assert 'user' in cache
-        assert cache['user']['name'] == 'User'
+        assert cache['user']['name'] == 'David'
+        resolved_name.assert_called_once_with('uid1')
         assert cache['user']['embedding'].shape == (1, 512)
 
     @patch('utils.sync.pipeline.users_db')
@@ -968,13 +975,14 @@ class TestBuildPersonEmbeddingsCache:
 
 
 class TestExtractSpeakerClipWav:
-    """Verify _extract_speaker_clip_wav clips audio correctly."""
+    """Verify pooled WAV extraction preserves bounds and the total evidence floor."""
 
     def test_extracts_clip(self):
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=5.0)
-        clip = _extract_speaker_clip_wav(audio, 1.0, 3.0)
+        evidence = collect_speaker_audio(audio, [(1.0, 3.0)])
+        clip = evidence.clips[0][0] if evidence.clips else None
         assert clip is not None
         # Verify it's valid WAV
         with wave.open(io.BytesIO(clip), 'rb') as wf:
@@ -982,27 +990,30 @@ class TestExtractSpeakerClipWav:
             assert 1.8 < clip_duration < 2.2  # ~2 seconds
 
     def test_returns_none_for_short_clip(self):
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=5.0)
-        clip = _extract_speaker_clip_wav(audio, 1.0, 1.5)  # only 0.5s < 1.0s threshold
+        evidence = collect_speaker_audio(audio, [(1.0, 1.5)])
+        clip = evidence.clips[0][0] if evidence.clips else None  # only 0.5s < 1.0s threshold
         assert clip is None
 
     def test_caps_at_10_seconds(self):
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=20.0)
-        clip = _extract_speaker_clip_wav(audio, 0.0, 15.0)
+        evidence = collect_speaker_audio(audio, [(0.0, 15.0)])
+        clip = evidence.clips[0][0] if evidence.clips else None
         assert clip is not None
         with wave.open(io.BytesIO(clip), 'rb') as wf:
             clip_duration = wf.getnframes() / wf.getframerate()
             assert clip_duration <= 10.1  # should be capped at ~10s
 
     def test_clamps_to_audio_bounds(self):
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=3.0)
-        clip = _extract_speaker_clip_wav(audio, -1.0, 5.0)
+        evidence = collect_speaker_audio(audio, [(-1.0, 5.0)])
+        clip = evidence.clips[0][0] if evidence.clips else None
         assert clip is not None
         with wave.open(io.BytesIO(clip), 'rb') as wf:
             clip_duration = wf.getnframes() / wf.getframerate()
@@ -1030,9 +1041,13 @@ class TestIdentifySpeakersForSegments:
             _make_transcript_segment(speaker_id=2, start=6.0, end=11.0, text='hello', seg_id='s2'),
         ]
         sync_module.identify_speakers_for_segments(segments, _make_wav_bytes(duration_sec=12.0), cache, 'uid1')
-        assert segments[0].is_user
+        # Equal owner claims are now jointly rejected, rather than reserving
+        # the owner for whichever voice had the longest clip.
+        assert segments[0].is_user is (second_distances[0] != 0.10)
         assert not segments[1].is_user
         assert segments[1].person_id is None
+        if second_distances[0] == 0.10:
+            assert all(s.speaker_identity_status == 'ambiguous' for s in segments)
 
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')
     def test_voice_match_assigns_person(self, mock_extract):
@@ -1578,11 +1593,12 @@ class TestSpeakerIdBoundaries:
     """Verify boundary conditions for speaker identification."""
 
     def test_exact_threshold_clip_duration(self):
-        """Clip exactly at SPEAKER_ID_MIN_AUDIO (1.0s) should be extracted."""
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        """Clip exactly at the total evidence floor (1.0s) should be extracted."""
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=5.0)
-        clip = _extract_speaker_clip_wav(audio, 1.0, 2.0)  # exactly 1.0s
+        evidence = collect_speaker_audio(audio, [(1.0, 2.0)])
+        clip = evidence.clips[0][0] if evidence.clips else None  # exactly 1.0s
         assert clip is not None
         with wave.open(io.BytesIO(clip), 'rb') as wf:
             duration = wf.getnframes() / wf.getframerate()
@@ -1590,10 +1606,11 @@ class TestSpeakerIdBoundaries:
 
     def test_just_below_threshold_clip_duration(self):
         """Clip just below 1.0s threshold should return None."""
-        from utils.sync.pipeline import _extract_speaker_clip_wav
+        from utils.stt.sync_speaker_evidence import collect_speaker_audio
 
         audio = _make_wav_bytes(duration_sec=5.0)
-        clip = _extract_speaker_clip_wav(audio, 1.0, 1.99)  # 0.99s < 1.0s
+        evidence = collect_speaker_audio(audio, [(1.0, 1.99)])
+        clip = evidence.clips[0][0] if evidence.clips else None  # 0.99s < 1.0s
         assert clip is None
 
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')

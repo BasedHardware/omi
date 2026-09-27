@@ -45,6 +45,11 @@ assert json.loads(request.read_text()) == {
 result = run("permissions_snapshot")
 assert result.returncode == 0, result.stderr
 assert json.loads(request.read_text()) == {"name": "permissions_snapshot"}
+result = run("about_snapshot", "--read-only", "label=--read-only")
+assert result.returncode == 0, result.stderr
+assert json.loads(request.read_text()) == {
+    "name": "about_snapshot", "readOnly": True, "params": {"label": "--read-only"}
+}
 for argument in ("missing-separator", "=missing-key"):
     request.unlink(missing_ok=True)
     result = run("set_conversations_search", argument)

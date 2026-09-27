@@ -58,12 +58,16 @@ def rows_from(source):
     content = Path(source).read_bytes().decode("utf-8-sig")
     items = json.loads(content)
     if isinstance(items, dict):
-        items = (
-            items.get("action_items")
-            or items.get("items")
-            or items.get("data")
-            or [items]
-        )
+        # An empty list is falsy, so an `or` chain would mistake
+        # {"action_items": []} for an absent key and treat the wrapper
+        # itself as an action item. Match the first key that actually
+        # holds a list, in documented wrapper precedence order.
+        for key in ("action_items", "items", "data"):
+            if isinstance(items.get(key), list):
+                items = items[key]
+                break
+        else:
+            items = [items]
     if not isinstance(items, list):
         raise ValueError(f"{source}: expected a JSON array or object containing action items")
     rows = []
