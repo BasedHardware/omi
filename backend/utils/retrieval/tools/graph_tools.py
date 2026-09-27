@@ -79,3 +79,4 @@ def traverse_knowledge_graph_tool(
     except Exception as exc:
         logger.exception("traverse_knowledge_graph_tool failed uid=%s: %s", uid, sanitize(str(exc)))
         return "Error traversing knowledge graph: Unable to complete traversal."
+
