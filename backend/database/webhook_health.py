@@ -5,6 +5,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, cast
 
+from google.api_core.exceptions import NotFound
+
 from database._client import db
 from database.redis_db import r
 
@@ -36,15 +38,27 @@ _disabled_cache: dict[str, tuple[bool, float, int]] = {}  # (value, timestamp, g
 
 def _evict_oldest(d: Dict[str, Any]) -> None:
     """Drop the oldest 20% of entries by timestamp. Caller must hold _cache_lock."""
+    if not d:
+        return
     n = len(d) // 5
     if n < 1:
         n = 1
-    if d and isinstance(next(iter(d.values())), tuple):
-        oldest = sorted(d, key=lambda k: d[k][1])[:n]
-    else:
-        oldest = sorted(d, key=lambda k: d[k])[:n]
+
+    def _sort_key(k: str) -> float:
+        val = d.get(k)
+        if isinstance(val, (tuple, list)) and len(val) > 1:
+            try:
+                return float(val[1])
+            except (TypeError, ValueError):
+                return 0.0
+        try:
+            return float(val)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 0.0
+
+    oldest = sorted(d, key=_sort_key)[:n]
     for k in oldest:
-        del d[k]
+        d.pop(k, None)
 
 
 def _set_disabled_state(app_id: str, value: bool) -> None:
@@ -53,8 +67,13 @@ def _set_disabled_state(app_id: str, value: bool) -> None:
     The is_app_webhook_disabled read path already caps the cache; the record/re-enable write paths
     did not, so routing every write through here keeps the cache within _CACHE_MAX_SIZE on all paths.
     """
-    gen = _disabled_cache.get(app_id, (False, 0, 0))[2] + 1
-    _disabled_cache[app_id] = (value, time.monotonic(), gen)
+    if not app_id or not isinstance(app_id, str):
+        return
+    clean_app_id = app_id.strip()
+    if not clean_app_id:
+        return
+    gen = _disabled_cache.get(clean_app_id, (False, 0, 0))[2] + 1
+    _disabled_cache[clean_app_id] = (value, time.monotonic(), gen)
     if len(_disabled_cache) > _CACHE_MAX_SIZE:
         _evict_oldest(_disabled_cache)
 
@@ -153,23 +172,14 @@ def _get_failure_script():
 
 
 def _record_redirect_not_followed(app_id: str, status_code: int, endpoint: str) -> int:
-    """Record a 3xx delivery without advancing the auto-disable clock.
-
-    We send webhooks with ``follow_redirects=False`` so a redirect cannot escape
-    the pinned destination IP, so a 3xx does mean the payload was not delivered.
-    It does not mean the developer's host is down — the host answered — and the
-    fix is a one-line URL change the developer can only make if they are told.
-    Scoring it as an outage instead auto-disabled apps whose servers were up,
-    with the reason recorded as an opaque ``HTTP 307``.
-
-    So a redirect notifies, repeatedly if it persists, and never disables. The
-    accepted cost is that an app left permanently redirecting keeps failing
-    delivery instead of being switched off; that is the developer's endpoint to
-    fix, and it is recoverable, which the auto-disable was not.
-    """
+    """Record a 3xx delivery without advancing the auto-disable clock."""
+    if not app_id or not isinstance(app_id, str) or not app_id.strip():
+        return ACTION_NONE
+    clean_app_id = app_id.strip()
+    clean_endpoint = endpoint.strip() if isinstance(endpoint, str) and endpoint.strip() else ENDPOINT_REALTIME
     try:
-        notice_key = f'app_webhook_redirect_notice:{app_id}:{endpoint}'
-        health_key = f'app_webhook_health:{app_id}:{endpoint}'
+        notice_key = f'app_webhook_redirect_notice:{clean_app_id}:{clean_endpoint}'
+        health_key = f'app_webhook_health:{clean_app_id}:{clean_endpoint}'
         r.hset(
             health_key, mapping={'last_redirect_at': str(int(time.time())), 'last_redirect_status': str(status_code)}
         )
@@ -178,7 +188,7 @@ def _record_redirect_not_followed(app_id: str, status_code: int, endpoint: str) 
             return ACTION_NONE
         return ACTION_REDIRECT_NOT_FOLLOWED
     except Exception as e:
-        logger.warning(f'record_app_webhook_failure redirect path redis error app_id={app_id}: {e}')
+        logger.warning(f'record_app_webhook_failure redirect path redis error app_id={clean_app_id}: {e}')
         return ACTION_NONE
 
 
@@ -189,20 +199,24 @@ def record_app_webhook_failure(app_id: str, status_code: int, error: str, endpoi
     0 = no action, 1 = day1 warn, 2 = day2 warn, 3 = auto-disable,
     4 = redirect not followed (notify only, never disables)
     """
+    if not app_id or not isinstance(app_id, str) or not app_id.strip():
+        return 0
+    clean_app_id = app_id.strip()
+    clean_endpoint = endpoint.strip() if isinstance(endpoint, str) and endpoint.strip() else ENDPOINT_REALTIME
     if 300 <= status_code < 400:
-        return _record_redirect_not_followed(app_id, status_code, endpoint)
+        return _record_redirect_not_followed(clean_app_id, status_code, clean_endpoint)
     try:
-        key = f'app_webhook_health:{app_id}:{endpoint}'
+        key = f'app_webhook_health:{clean_app_id}:{clean_endpoint}'
         now_ts = int(time.time())
         script = _get_failure_script()
-        action = int(script(keys=[key], args=[now_ts, str(status_code), error[:200], _HEALTH_TTL]))
+        action = int(script(keys=[key], args=[now_ts, str(status_code), (error or '')[:200], _HEALTH_TTL]))
         if action == ACTION_DISABLE:
-            r.setex(f'app_webhook_disabled:{app_id}', _HEALTH_TTL, '1')
+            r.setex(f'app_webhook_disabled:{clean_app_id}', _HEALTH_TTL, '1')
             with _cache_lock:
-                _set_disabled_state(app_id, True)
+                _set_disabled_state(clean_app_id, True)
         return action
     except Exception as e:
-        logger.warning(f'record_app_webhook_failure redis error app_id={app_id}: {e}')
+        logger.warning(f'record_app_webhook_failure redis error app_id={clean_app_id}: {e}')
         return 0
 
 
@@ -255,50 +269,60 @@ def record_app_webhook_success(app_id: str, endpoint: str = ENDPOINT_REALTIME):
     Uses a Lua script that bypasses debounce when a failure exists without a newer
     success (recovery case). Works correctly across multiple pods.
     """
+    if not app_id or not isinstance(app_id, str) or not app_id.strip():
+        return
+    clean_app_id = app_id.strip()
+    clean_endpoint = endpoint.strip() if isinstance(endpoint, str) and endpoint.strip() else ENDPOINT_REALTIME
     try:
-        key = f'app_webhook_health:{app_id}:{endpoint}'
+        key = f'app_webhook_health:{clean_app_id}:{clean_endpoint}'
         now_ts = int(time.time())
         script = _get_success_script()
         script(keys=[key], args=[now_ts, _SUCCESS_DEBOUNCE, _HEALTH_TTL])
         r.hdel(key, 'last_redirect_at', 'last_redirect_status')
-        r.delete(f'app_webhook_redirect_notice:{app_id}:{endpoint}')
+        r.delete(f'app_webhook_redirect_notice:{clean_app_id}:{clean_endpoint}')
     except Exception as e:
-        logger.warning(f'record_app_webhook_success redis error app_id={app_id}: {e}')
+        logger.warning(f'record_app_webhook_success redis error app_id={clean_app_id}: {e}')
 
 
 def clear_app_webhook_health(app_id: str):
     """Clear all webhook health state for an app. Used on re-enable."""
+    if not app_id or not isinstance(app_id, str) or not app_id.strip():
+        return
+    clean_app_id = app_id.strip()
     with _cache_lock:
-        _set_disabled_state(app_id, False)
+        _set_disabled_state(clean_app_id, False)
     try:
-        keys_to_delete = [f'app_webhook_disabled:{app_id}']
+        keys_to_delete = [f'app_webhook_disabled:{clean_app_id}']
         for ep in _ALL_ENDPOINTS:
-            keys_to_delete.append(f'app_webhook_health:{app_id}:{ep}')
-            keys_to_delete.append(f'app_webhook_redirect_notice:{app_id}:{ep}')
+            keys_to_delete.append(f'app_webhook_health:{clean_app_id}:{ep}')
+            keys_to_delete.append(f'app_webhook_redirect_notice:{clean_app_id}:{ep}')
         r.delete(*keys_to_delete)
     except Exception as e:
-        logger.warning(f'clear_app_webhook_health redis error app_id={app_id}: {e}')
+        logger.warning(f'clear_app_webhook_health redis error app_id={clean_app_id}: {e}')
 
 
 def is_app_webhook_disabled(app_id: str) -> bool:
     """Check if an app's webhook has been auto-disabled. Cached in-memory for 60s."""
+    if not app_id or not isinstance(app_id, str) or not app_id.strip():
+        return False
+    clean_app_id = app_id.strip()
     now = time.monotonic()
     with _cache_lock:
-        cached = _disabled_cache.get(app_id)
+        cached = _disabled_cache.get(clean_app_id)
         if cached is not None:
             value, ts, _gen = cached
             if (now - ts) < _CACHE_TTL:
                 return value
         pre_gen = cached[2] if cached else 0
     try:
-        key = f'app_webhook_disabled:{app_id}'
+        key = f'app_webhook_disabled:{clean_app_id}'
         val = r.get(key)
         result = val == b'1'
         with _cache_lock:
-            cur = _disabled_cache.get(app_id)
+            cur = _disabled_cache.get(clean_app_id)
             cur_gen = cur[2] if cur else 0
             if cur_gen == pre_gen:
-                _disabled_cache[app_id] = (result, now, pre_gen)
+                _disabled_cache[clean_app_id] = (result, now, pre_gen)
                 if len(_disabled_cache) > _CACHE_MAX_SIZE:
                     _evict_oldest(_disabled_cache)
         return result
@@ -308,16 +332,20 @@ def is_app_webhook_disabled(app_id: str) -> bool:
 
 def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Get health state for an app's webhook endpoint(s). Returns None if no data."""
+    if not app_id or not isinstance(app_id, str) or not app_id.strip():
+        return None
+    clean_app_id = app_id.strip()
     try:
         if endpoint:
-            key = f'app_webhook_health:{app_id}:{endpoint}'
+            clean_endpoint = endpoint.strip() if isinstance(endpoint, str) and endpoint.strip() else endpoint
+            key = f'app_webhook_health:{clean_app_id}:{clean_endpoint}'
             data = cast(Dict[bytes, bytes], r.hgetall(key))
             if not data:
                 return None
             return {k.decode(): v.decode() for k, v in data.items()}
         result: Dict[str, Any] = {}
         for ep in _ALL_ENDPOINTS:
-            key = f'app_webhook_health:{app_id}:{ep}'
+            key = f'app_webhook_health:{clean_app_id}:{ep}'
             data = cast(Dict[bytes, bytes], r.hgetall(key))
             if data:
                 result[ep] = {k.decode(): v.decode() for k, v in data.items()}
@@ -328,23 +356,28 @@ def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optio
 
 def disable_app_in_firestore(app_id: str, error: str, failure_hours: int):
     """Mark an app as disabled in Firestore due to webhook failures."""
-    with _cache_lock:
-        _set_disabled_state(app_id, True)
+    if not app_id or not isinstance(app_id, str) or not app_id.strip():
+        return
+    clean_app_id = app_id.strip()
     try:
         apps_collection = 'plugins_data'
-        app_ref = db.collection(apps_collection).document(app_id)
+        app_ref = db.collection(apps_collection).document(clean_app_id)
         app_ref.update(
             {
                 'disabled': True,
                 'disabled_reason': 'webhook_failures',
                 'disabled_at': datetime.now(timezone.utc).isoformat(),
-                'disabled_error': error[:200],
+                'disabled_error': (error or '')[:200],
                 'disabled_failure_duration_hours': failure_hours,
             }
         )
-        logger.info(f'Auto-disabled app {app_id} in Firestore after {failure_hours}h of webhook failures')
+        with _cache_lock:
+            _set_disabled_state(clean_app_id, True)
+        logger.info(f'Auto-disabled app {clean_app_id} in Firestore after {failure_hours}h of webhook failures')
+    except NotFound:
+        logger.warning(f'App {clean_app_id} not found in Firestore when attempting to disable')
     except Exception as e:
-        logger.error(f'Failed to disable app {app_id} in Firestore: {e}')
+        logger.error(f'Failed to disable app {clean_app_id} in Firestore: {e}')
 
 
 # --- Developer webhook health (per-user, per-type) ---
@@ -431,35 +464,44 @@ def _record_dev_webhook_failure_fallback(uid: str, wtype_str: str, status_code: 
 
 def record_dev_webhook_failure(uid: str, wtype: object, status_code: int, error: str) -> bool:
     """Record a developer webhook failure. Returns True if threshold exceeded (should disable)."""
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return False
+    clean_uid = uid.strip()
     wtype_str = getattr(wtype, 'value') if hasattr(wtype, 'value') else str(wtype)
     try:
-        key = f'dev_webhook_health:{uid}:{wtype_str}'
+        key = f'dev_webhook_health:{clean_uid}:{wtype_str}'
         now_ts = int(time.time())
         script = _get_dev_failure_script()
         result = int(
-            script(keys=[key], args=[now_ts, str(status_code), error[:200], _HEALTH_TTL, _DEV_FAILURE_THRESHOLD])
+            script(
+                keys=[key],
+                args=[now_ts, str(status_code), (error or '')[:200], _HEALTH_TTL, _DEV_FAILURE_THRESHOLD],
+            )
         )
         return result == 1
     except Exception as e:
-        logger.warning(f'record_dev_webhook_failure redis error uid={uid} type={wtype}: {e}')
+        logger.warning(f'record_dev_webhook_failure redis error uid={clean_uid} type={wtype}: {e}')
         # fakeredis and some constrained Redis-compatible stores do not support
         # the Lua script API used in production. Fall back to the same state
         # transition with ordinary commands so hermetic tests and degraded Redis
         # deployments still record failures instead of silently resetting health.
         try:
-            return _record_dev_webhook_failure_fallback(uid, wtype_str, status_code, error)
+            return _record_dev_webhook_failure_fallback(clean_uid, wtype_str, status_code, (error or '')[:200])
         except Exception as fallback_error:
             logger.warning(
-                f'record_dev_webhook_failure redis error uid={uid} type={wtype}: {e}; fallback={fallback_error}'
+                f'record_dev_webhook_failure redis error uid={clean_uid} type={wtype}: {e}; fallback={fallback_error}'
             )
             return False
 
 
 def record_dev_webhook_success(uid: str, wtype: object):
     """Record a successful developer webhook delivery. Resets failure state."""
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return
+    clean_uid = uid.strip()
     try:
         wtype_str = getattr(wtype, 'value') if hasattr(wtype, 'value') else str(wtype)
-        key = f'dev_webhook_health:{uid}:{wtype_str}'
+        key = f'dev_webhook_health:{clean_uid}:{wtype_str}'
         now_ts = int(time.time())
         r.hset(
             key,
@@ -474,7 +516,7 @@ def record_dev_webhook_success(uid: str, wtype: object):
         )
         r.expire(key, _HEALTH_TTL)
     except Exception as e:
-        logger.warning(f'record_dev_webhook_success redis error uid={uid} type={wtype}: {e}')
+        logger.warning(f'record_dev_webhook_success redis error uid={clean_uid} type={wtype}: {e}')
 
 
 _DLQ_TTL = 7 * 86400
@@ -493,17 +535,18 @@ def enqueue_dev_webhook_dlq(
 ) -> None:
     """Store a failed developer webhook for manual replay after retries are exhausted (#5488)."""
     try:
-        key = f'dev_webhook_dlq:{uid or "unknown"}'
+        clean_uid = uid.strip() if isinstance(uid, str) and uid.strip() else 'unknown'
+        key = f'dev_webhook_dlq:{clean_uid}'
         entry = {
-            'webhook_name': webhook_name,
-            'webhook_url': webhook_url[:500],
+            'webhook_name': str(webhook_name or ''),
+            'webhook_url': (webhook_url or '')[:500],
             'status_code': status_code,
             'error': (error or '')[:500],
             'idempotency_key': idempotency_key,
             'payload': payload,
             'failed_at': datetime.now(timezone.utc).isoformat(),
         }
-        r.lpush(key, json.dumps(entry, separators=(',', ':')))
+        r.lpush(key, json.dumps(entry, separators=(',', ':'), default=str))
         r.ltrim(key, 0, _DLQ_MAX - 1)
         r.expire(key, _DLQ_TTL)
     except Exception as e:
