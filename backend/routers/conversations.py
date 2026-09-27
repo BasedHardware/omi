@@ -1513,7 +1513,7 @@ def _assign_manual_speaker(
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     conversation = deserialize_conversation(raw)
-    resolved_conversation_id = raw['id']
+    resolved_conversation_id = raw.get('id') or conversation_id
     _drop_display_projection(conversation)
     if background_tasks is not None:
         for path in removed:
