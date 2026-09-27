@@ -156,10 +156,12 @@ def test_get_voice_profile_settings_resolves_defaults():
 def test_get_voice_profile_context_resolves_speaker_embedding():
     fake_client = MagicMock()
     doc_ref = MagicMock()
-    doc_ref.get.return_value = _make_mock_snapshot({
-        "speaker_tag_prompts_enabled": False,
-        "speaker_embedding": [0.1, 0.2, 0.3],
-    })
+    doc_ref.get.return_value = _make_mock_snapshot(
+        {
+            "speaker_tag_prompts_enabled": False,
+            "speaker_embedding": [0.1, 0.2, 0.3],
+        }
+    )
     fake_client.collection.return_value.document.return_value = doc_ref
 
     settings, has_voiceprint = vp_db.get_voice_profile_context("u1", firestore_client=fake_client)
@@ -335,8 +337,7 @@ def test_add_owner_voice_confirmation_pools_and_enforces_max():
     fake_client.collection.return_value.document.return_value = user_ref
 
     existing = [
-        {"embedding": [0.1 * i], "conversation_id": f"conv_{i}", "at": datetime.now(timezone.utc)}
-        for i in range(5)
+        {"embedding": [0.1 * i], "conversation_id": f"conv_{i}", "at": datetime.now(timezone.utc)} for i in range(5)
     ]
     user_ref.get.return_value = _make_mock_snapshot(
         {
