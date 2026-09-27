@@ -8,8 +8,9 @@ enum SiriMemoryExpirySchema {
         table.add(column: "expiresAt", .datetime)
       }
     }
-    // Existing rows have no authoritative lock/visibility proof. Nullable
-    // columns keep them out of Siri until the next server refresh fills them.
+    // Existing rows have nil lock/visibility columns. The backend defaults
+    // omitted lock flags to false and omitted conversation visibility to
+    // private, so Siri applies those same defaults to legacy cache rows.
     migrator.registerMigration("addSiriEligibilityState") { db in
       if try !db.columns(in: "memories").contains(where: { $0.name == "isLocked" }) {
         try db.alter(table: "memories") { $0.add(column: "isLocked", .boolean) }

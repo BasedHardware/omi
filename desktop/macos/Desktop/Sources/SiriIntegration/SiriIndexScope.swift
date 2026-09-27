@@ -8,7 +8,7 @@ enum SiriIndexScope {
 
   static func conversation(_ record: TranscriptionSessionRecord, now: Date) -> Bool {
     record.backendSynced && record.backendId?.isEmpty == false && !record.deleted && !record.discarded
-      && !record.isLocked && ["private", "shared", "public"].contains(record.visibility)
+      && !record.isLocked && (record.visibility == nil || ["private", "shared", "public"].contains(record.visibility))
       && record.conversationStatus == .completed
       && record.startedAt > now.addingTimeInterval(-conversationAge)
   }
@@ -24,11 +24,11 @@ enum SiriIndexScope {
     } else {
       validInvalidAt = true
     }
-    return record.backendSynced && record.tierIsExplicit
+    return record.backendSynced
       && memory(
         backendId: record.backendId, deleted: record.deleted, dismissed: record.isDismissed,
         tier: record.tier, expiresAt: record.expiresAt, userReview: record.userReview,
-        visibility: record.visibility, unlocked: record.isLocked == false,
+        visibility: record.visibility, unlocked: record.isLocked != true,
         ledgerActive: status == nil || status == "active",
         unsuperseded: supersededBy == nil || supersededBy?.isEmpty == true,
         uninvalidated: validInvalidAt, now: now)
@@ -75,7 +75,7 @@ enum SiriIndexScope {
   }
 
   static func task(_ record: ActionItemRecord, now: Date) -> Bool {
-    record.backendSynced && record.isLocked == false
+    record.backendSynced && record.isLocked != true
       && task(
         backendId: record.backendId, deleted: record.deleted, completed: record.completed,
         completedAt: record.completedAt, taskStatus: record.taskStatus,

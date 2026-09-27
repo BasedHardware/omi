@@ -1070,7 +1070,7 @@ actor TranscriptionStorage {
         .filter(Column("backendSynced") == true && Column("backendId") != nil && Column("backendId") != "")
         .filter(Column("deleted") == false && Column("discarded") == false)
         .filter(Column("isLocked") == false)
-        .filter(["private", "shared", "public"].contains(Column("visibility")))
+        .filter(Column("visibility") == nil || ["private", "shared", "public"].contains(Column("visibility")))
         .filter(Column("conversationStatus") == LocalConversationStatus.completed.rawValue)
         .filter(Column("startedAt") > since)
         .order(Column("startedAt").desc)

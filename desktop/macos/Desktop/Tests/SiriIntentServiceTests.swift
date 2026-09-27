@@ -291,7 +291,7 @@ final class SiriIntentServiceTests: XCTestCase {
       ("processing", { $0.conversationStatus = .processing }, false),
       ("locked", { $0.isLocked = true }, false),
       ("hidden", { $0.visibility = "hidden" }, false),
-      ("unknown visibility", { $0.visibility = nil }, false),
+      ("omitted visibility", { $0.visibility = nil }, true),
       ("aged", { $0.startedAt = now.addingTimeInterval(-SiriIndexScope.conversationAge - 1) }, false),
     ]
     for (name, change, expected) in conversationCases {
@@ -307,13 +307,16 @@ final class SiriIntentServiceTests: XCTestCase {
       ("empty id", { $0.backendId = "" }, false),
       ("deleted", { $0.deleted = true }, false),
       ("archived", { $0.tier = MemoryLayer.archive.rawValue }, false),
-      ("unproven tier", { $0.tierIsExplicit = false }, false),
+      ("legacy omitted tier", { $0.tierIsExplicit = false }, true),
+      ("short term", { $0.tier = MemoryLayer.shortTerm.rawValue }, true),
+      ("long term", { $0.tier = MemoryLayer.longTerm.rawValue }, true),
+      ("unknown tier", { $0.tier = "future_tier" }, false),
       ("expired", { $0.expiresAt = now.addingTimeInterval(-1) }, false),
       ("rejected", { $0.userReview = false }, false),
       ("dismissed", { $0.isDismissed = true }, false),
       ("hidden", { $0.visibility = "hidden" }, false),
       ("locked", { $0.isLocked = true }, false),
-      ("unknown lock state", { $0.isLocked = nil }, false),
+      ("omitted lock state", { $0.isLocked = nil }, true),
       ("ledger closed", { $0.ledgerMetadataJson = "{\"status\":\"superseded\"}" }, false),
       ("ledger superseded", { $0.ledgerMetadataJson = "{\"superseded_by\":\"new-memory\"}" }, false),
       ("ledger invalidated", { $0.ledgerMetadataJson = "{\"invalid_at\":\"2000-01-01T00:00:00Z\"}" }, false),
@@ -333,7 +336,7 @@ final class SiriIntentServiceTests: XCTestCase {
       ("unknown status", { $0.taskStatus = "processing" }, false),
       ("superseded", { $0.supersededBy = "replacement" }, false),
       ("locked", { $0.isLocked = true }, false),
-      ("unknown lock state", { $0.isLocked = nil }, false),
+      ("omitted lock state", { $0.isLocked = nil }, true),
       (
         "old completion",
         {

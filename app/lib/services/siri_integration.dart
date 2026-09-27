@@ -63,8 +63,7 @@ bool siriMemoryIsIndexable(Memory row, DateTime now, {String? owner}) =>
     !row.isDismissed &&
     !row.isLocked &&
     row.visibility != MemoryVisibility.unknown &&
-    row.layerIsExplicit &&
-    (row.layer == MemoryLayer.shortTerm || row.layer == MemoryLayer.longTerm) &&
+    (row.layer == null || row.layer == MemoryLayer.shortTerm || row.layer == MemoryLayer.longTerm) &&
     (row.invalidAt == null || row.invalidAt!.isAfter(now)) &&
     (row.ledgerStatus == null || row.ledgerStatus == 'active') &&
     (row.supersededBy == null || row.supersededBy!.isEmpty) &&

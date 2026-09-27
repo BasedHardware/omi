@@ -75,6 +75,13 @@ final class ServerConversationDecodingTests: XCTestCase {
     XCTAssertTrue(conversation.shouldFetchDetailForTranscript)
   }
 
+  func testOmittedVisibilityUsesBackendPrivateDefaultForSiri() throws {
+    let legacy = try decodeConversation("")
+    let hidden = try decodeConversation(",\n\"visibility\": \"hidden\"")
+    XCTAssertEqual(legacy.visibility, "private")
+    XCTAssertEqual(hidden.visibility, "hidden")
+  }
+
   func testExplicitEmptyTranscriptIsIncludedEmpty() throws {
     let conversation = try decodeConversation(",\n\"transcript_segments\": []")
 

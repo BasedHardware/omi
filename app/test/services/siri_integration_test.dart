@@ -404,8 +404,8 @@ void main() {
     final memoryCases = <(String, Memory, bool)>[
       ('eligible', memory(), true),
       ('empty id', memory()..id = '', false),
-      ('missing tier', memory(layer: null), false),
-      ('unproven tier', memory(layerIsExplicit: false), false),
+      ('missing tier', memory(layer: null, layerIsExplicit: false), true),
+      ('unproven tier', memory(layerIsExplicit: false), true),
       ('deleted', memory(deleted: true), false),
       ('dismissed', memory(dismissed: true), false),
       ('locked', memory(locked: true), false),
@@ -473,6 +473,15 @@ void main() {
         );
     final taskCases = <(String, ActionItemWithMetadata, bool)>[
       ('eligible', task(), true),
+      (
+        'omitted status wire default',
+        ActionItemWithMetadata.fromJson({
+          'id': 'legacy-task',
+          'description': 'Legacy task',
+          'completed': false,
+        }),
+        true
+      ),
       ('empty id', task(id: ''), false),
       ('locked', task(locked: true), false),
       ('cancelled', task(status: 'cancelled'), false),

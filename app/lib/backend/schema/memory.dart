@@ -248,16 +248,20 @@ class Memory {
     final rawLayer = normalizedJson['layer'] as String?;
     final rawTier = normalizedJson['tier'] as String?;
     final rawMemoryTier = normalizedJson['memory_tier'] as String?;
-    normalizedJson['layer'] ??= rawTier ?? rawMemoryTier ?? MemoryLayer.longTerm.apiValue;
-    normalizedJson['memory_tier'] ??= rawTier ?? rawLayer ?? MemoryLayer.longTerm.apiValue;
-
-    final generated = wire.GeneratedMemoryDB.fromJson(normalizedJson);
-    final rawLayerValue = MemoryLayer.tryParse(rawLayer);
-    final layerValue = MemoryLayer.tryParse(generated.layer);
+    final layerValue = MemoryLayer.tryParse(rawLayer);
     final tierValue = MemoryLayer.tryParse(rawTier);
     final memoryTierValue = MemoryLayer.tryParse(rawMemoryTier);
-    final layerIsExplicit = rawLayerValue != null || tierValue != null || memoryTierValue != null;
-    final resolvedLayer = layerValue ?? tierValue ?? memoryTierValue ?? MemoryLayer.longTerm;
+    // MemoryDB validates memory_tier as an enum, but treats layer and tier as
+    // extra legacy aliases. Unknown values of those aliases carry no tier.
+    if (rawMemoryTier != null && memoryTierValue == null) {
+      throw FormatException('Unknown memory memory_tier: $rawMemoryTier');
+    }
+    normalizedJson['layer'] = (layerValue ?? tierValue ?? memoryTierValue ?? MemoryLayer.longTerm).apiValue;
+    normalizedJson['memory_tier'] = (memoryTierValue ?? tierValue ?? layerValue ?? MemoryLayer.longTerm).apiValue;
+
+    final generated = wire.GeneratedMemoryDB.fromJson(normalizedJson);
+    final layerIsExplicit = layerValue != null || tierValue != null || memoryTierValue != null;
+    final resolvedLayer = MemoryLayer.tryParse(generated.layer) ?? MemoryLayer.longTerm;
 
     return Memory(
       id: generated.id,

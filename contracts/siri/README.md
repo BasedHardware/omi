@@ -22,7 +22,7 @@ Each row below is an AND condition. A missing required ID, owner, or completion 
 | --- | --- | --- | --- |
 | Backend ID and account owner | Nonempty server ID, synced into the current account's cache | Nonempty server ID; `uid` (when supplied) equals the current account; current account cache | Nonempty server ID, current account cache |
 | Deleted / discarded | Neither deleted nor discarded | Not deleted | Not deleted |
-| Archived tier | N/A | Explicit `short_term` or `long_term` only; archive or unknown tier excluded | N/A |
+| Archived tier | N/A | Missing/null `memory_tier` is legacy active `long_term`; `short_term` and `long_term` are active; explicit `archive` excluded; unknown enum values fail decoding | N/A |
 | Expired / invalidated | N/A | `expires_at` and `invalid_at` absent or later than `now` | N/A |
 | User rejected / dismissed | N/A | `user_review != false`, not dismissed | N/A |
 | Visibility | Owner-visible `private`, `shared`, or `public`; no hidden/unknown value | Owner-visible `private`, `shared`, or `public`; no hidden/unknown value | No visibility field in task response |
@@ -31,6 +31,29 @@ Each row below is an AND condition. A missing required ID, owner, or completion 
 | Age window | Started (or created) later than `now - 180 days` | No creation-age limit | Open tasks have no age limit; completed_at later than `now - 30 days` |
 
 Source fields were checked against Dart `Memory`, `ServerConversation`, `GeneratedActionItemResponse`; macOS GRDB `MemoryRecord`, `TranscriptionSessionRecord`, `ActionItemRecord`; and backend `MemoryDB`, `Conversation`, `ActionItemResponse`. Beyond the reported fields, this table explicitly covers locked/paywalled rows, memory invalidation and supersession, task supersession, and unknown visibility. The backend account-scoped fetch and local owner fence establish ownership where a row has no UID.
+
+### Absent-value compatibility
+
+The backend models are the authority for old documents that omit newer fields. Do not require a field to be explicitly present when its backend default is an indexable state. Explicit out-of-scope values remain excluded. The macOS cache may carry `nil` in columns added after the original row was stored; apply the same default there. This table covers every eligibility input above and the auxiliary fields that were audited.
+
+| Field | Absent or null in a legacy payload | Siri decision on iOS and macOS |
+| --- | --- | --- |
+| Backend ID | Required by each response model; no default | Reject a missing or empty ID; local-only rows never enter the index. |
+| Account owner | Memory `uid` is required. Conversation and task responses are fetched by the signed-in account and carry no UID. | Reject a missing or mismatched memory UID; fence the account-scoped cache and index by current owner on both platforms. |
+| Sync provenance | No backend field; local cache state | Require an authoritative backend ID and current-account sync; no assumption from absent provenance. |
+| Deleted / discarded | Memory and task deletion is represented by removal or a local tombstone; conversation `discarded` defaults false. | Keep a present, non-tombstoned row; absent `discarded` is false. |
+| Memory `memory_tier` | `None`; backend reads existing documents as active, and the clients project them as `long_term`. | Include absent/null, `short_term`, and `long_term`; exclude explicit `archive`. Backend enum validation rejects an unknown `memory_tier`. Unknown extra `layer`/`tier` aliases do not establish a tier. |
+| Memory compatibility `expires_at` / `invalid_at` | `MemoryDB` has no `expires_at` field; the optional compatibility field is absent on normal responses. `invalid_at=None` means active. | Include until a present deadline passes; missing deadlines do not exclude. |
+| Memory `user_review` / `is_dismissed` | `None` / false | Include unless explicitly rejected (`false`) or dismissed (`true`). |
+| Memory visibility | `MemoryDB.visibility` defaults `public`; explicit null is allowed. | Include absent/null as owner-visible; exclude a present hidden or unknown value. iOS projects absent as public, macOS as private; both are owner-visible. |
+| Conversation visibility | `Conversation.visibility` defaults `private`; explicit null is invalid. | Include an omitted visibility as private, including `nil` in the older macOS cache; exclude hidden or unknown. |
+| Memory / conversation / task `is_locked` | false in all three backend response models | Include omitted/nil legacy lock flags as unlocked; exclude explicit true. |
+| Memory `ledger_status` / `superseded_by` | `None` / `None` means current | Include absent status and empty supersession; exclude non-active status or a replacement ID. |
+| Memory `kind` / `intent_backed` | `None` / false | Neither is a Siri eligibility prerequisite; old ordinary memories remain eligible. |
+| Conversation `status` | `completed` in the backend and client wire adapter | Include omitted status as completed; exclude processing, in-progress, merging, and failed. |
+| Task `status` / `superseded_by` | `active` / `None` in `ActionItemResponse` | Include omitted status as active; exclude cancelled, superseded, unknown explicit status, or a replacement ID. |
+| Task `completed` / `completed_at` | `completed` is required; `completed_at=None` | Open tasks have no date requirement. A completed task without a completion date cannot prove the 30-day window and is excluded. |
+| Conversation age | `started_at` is optional; `created_at` is required | Use `started_at`, falling back to `created_at`; include only within 180 days. |
 
 iOS refreshes its private snapshot from an owner-wide, bounded traversal independent of the visible UI page: open tasks and recent completed tasks, completed conversations in the 180-day window, and the unfiltered memory view. It defers the refresh after account binding and schedules it no more than once per owner per launch day; confirmed mutations remain incremental. A complete traversal may reconcile absent IDs in its covered scope. A failed, rate-limited, truncated, partially decoded, or cap-limited traversal only adds fetched rows. The conversation 429 path honors `Retry-After` before one retry. macOS queries eligible conversations before applying its 2,000-row limit. Both clients use the earliest applicable memory expiry or ledger `invalid_at`, conversation age, and completed-task age to schedule removal while running.
 
