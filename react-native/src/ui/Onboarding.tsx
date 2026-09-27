@@ -81,6 +81,8 @@ export function Onboarding({
   onCancelSignIn?: () => void;
   signingIn: boolean;
   setupRequired?: boolean;
+  /** Desktop: onboarding finished before; show Welcome-back sign-in only. */
+  returning?: boolean;
   completingSetup?: boolean;
   onCompleteSetup?: (connectDevice: boolean) => void;
   onSignOut?: () => void;

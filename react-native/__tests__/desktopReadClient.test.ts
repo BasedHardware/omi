@@ -120,7 +120,7 @@ test('macOS sign-out ignores environment tokens so the session stays empty', () 
     /if \(!OmiAuthEnvironmentCloudTokensIgnored\(\)\) \{[^]*OMI_CLOUD_API_TOKEN[^]*OMI_API_TOKEN/,
   );
   expect(gate).toMatch(
-    /const result = await auth\.signOut\(\);[^]*hasSession = await auth\.hasCloudSession\(\);[^]*setOnboardingRequired\(true\)/,
+    /const result = await auth\.signOut\(\);[^]*hasSession = await auth\.hasCloudSession\(\);[^]*setOnboardingRequired\(!completed\);[^]*setReturningUser\(completed\)/,
   );
   expect(auth).not.toContain('unsetenv');
   expect(auth).not.toContain('.zshrc');

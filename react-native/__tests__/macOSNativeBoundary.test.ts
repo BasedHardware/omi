@@ -512,7 +512,7 @@ test("mints a Firebase session from custom_token and never stores Google's id_to
   expect(finish).toContain('customToken.length == 0');
   expect(finish).toContain('Omi cloud did not return a usable session');
   expect(finish).toContain(
-    '[self finishWithFirebaseCustomToken:customToken attempt:attempt resolve:resolve reject:reject]',
+    '[self finishWithFirebaseCustomToken:customToken attempt:attempt pinPlane:@"old"\n                               resolve:resolve reject:reject]',
   );
   expect(finish).not.toContain('tokenResponse[@"id_token"]');
   expect(finish).not.toContain('tokenResponse[@"refresh_token"]');

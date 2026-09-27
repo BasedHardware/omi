@@ -83,7 +83,11 @@ export function MaterialIcon({
         {
           fontFamily: 'Material Symbols Rounded',
           fontSize: size,
-          lineHeight: size * 1.2,
+          // Icon glyphs carry no real descenders: a tight line box lets the
+          // flex centering in buttons/pills place the ink dead-center instead
+          // of riding 2–4px high the way extra leading pushes it.
+          lineHeight: size,
+          textAlign: 'center',
           color,
         },
         style,

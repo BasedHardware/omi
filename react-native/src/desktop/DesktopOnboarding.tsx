@@ -110,6 +110,7 @@ export function DesktopOnboarding({
   onCancelSignIn,
   signingIn,
   setupRequired = false,
+  returning = false,
   completingSetup = false,
   onCompleteSetup,
   onSignOut,
@@ -117,7 +118,9 @@ export function DesktopOnboarding({
 }: Props) {
   const styles = useDesktopStyleSheets(createStyles);
   const {tokens: token} = useDesktopTheme();
-  const [step, setStep] = useState<DesktopOnboardingStep>('welcome');
+  const [step, setStep] = useState<DesktopOnboardingStep>(
+    returning ? 'signIn' : 'welcome',
+  );
   const [statuses, setStatuses] = useState<
     Record<PermissionKind, PermissionState>
   >({
@@ -323,10 +326,12 @@ export function DesktopOnboarding({
               disabled={signingIn}
               key={option}
               onPress={() => {
-                if (plane !== option) {
-                  setPlane(option);
-                  void setDesktopPreference('softwarePlane', option);
-                }
+                // Always write through: the persisted pref and the local
+                // segment can desync (a pinned plane after sign-in, a
+                // snapshot that arrived late), and a guarded press would then
+                // silently no-op while the wrong backend stays active.
+                setPlane(option);
+                void setDesktopPreference('softwarePlane', option);
               }}
               style={({pressed}) => [
                 styles.planeOption,
@@ -458,6 +463,8 @@ export function DesktopOnboarding({
                   <Text style={styles.eyebrow}>
                     {welcome
                       ? 'Welcome to Omi'
+                      : returning
+                      ? 'Welcome back'
                       : `Step ${progressIndex + 1} of ${progress.length}  /  ${
                           stepLabels[step]
                         }`}
@@ -465,7 +472,9 @@ export function DesktopOnboarding({
                   <Text
                     accessibilityRole="header"
                     style={[styles.title, welcome && styles.welcomeTitle]}>
-                    {titles[step]}
+                    {returning && step === 'signIn'
+                      ? 'Good to see you again.'
+                      : titles[step]}
                   </Text>
                 </View>
               </View>
@@ -695,7 +704,7 @@ export function DesktopOnboarding({
           </ScrollView>
           <View style={styles.footer}>
             <View style={!welcome && styles.flex}>
-              {back !== null && !signingIn ? (
+              {back !== null && !signingIn && !returning ? (
                 <Button
                   variant="ghost"
                   style={styles.back}
@@ -725,11 +734,13 @@ export function DesktopOnboarding({
             </Button>
           </View>
           <View style={styles.bottomBar}>
-            <OnboardingProgress
-              index={progressIndex}
-              count={progress.length}
-              reduceMotion={reduceMotion}
-            />
+            {returning ? null : (
+              <OnboardingProgress
+                index={progressIndex}
+                count={progress.length}
+                reduceMotion={reduceMotion}
+              />
+            )}
             {setupRequired && onSignOut ? (
               <Button
                 variant="ghost"

@@ -642,7 +642,7 @@ describe('signed-out Settings and first-run', () => {
     expect(onboarding).toContain('Welcome to Omi');
     expect(gate).toContain('signOutAndRefresh');
     expect(gate).toMatch(
-      /const result = await auth\.signOut\(\);[^]*setOnboardingRequired\(true\)/,
+      /const result = await auth\.signOut\(\);[^]*setOnboardingRequired\(!completed\);[^]*setReturningUser\(completed\)/,
     );
     // A failed confirmation probe must not strand a signed-out session in
     // the product shell: the gate falls back to Welcome either way.

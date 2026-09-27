@@ -18,6 +18,7 @@
 		A10402000000000000000001 /* OmiDesktopCommandsModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10402000000000000000002 /* OmiDesktopCommandsModule.mm */; };
 		A10403000000000000000001 /* OmiGlassPanelView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10403000000000000000002 /* OmiGlassPanelView.mm */; };
 		A10404000000000000000001 /* OmiSFSymbolView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10404000000000000000002 /* OmiSFSymbolView.mm */; };
+		A1040F000000000000000001 /* OmiRewindFrameView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1040F000000000000000002 /* OmiRewindFrameView.mm */; };
 		A10405000000000000000001 /* OmiAuthModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10405000000000000000002 /* OmiAuthModule.mm */; };
 		A10406000000000000000001 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10406000000000000000002 /* AuthenticationServices.framework */; };
 		A10407000000000000000001 /* LocalAuthentication.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10407000000000000000002 /* LocalAuthentication.framework */; };
@@ -64,6 +65,8 @@
 		A10403000000000000000003 /* OmiGlassPanelView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiGlassPanelView.h; sourceTree = "<group>"; };
 		A10404000000000000000002 /* OmiSFSymbolView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiSFSymbolView.mm; sourceTree = "<group>"; };
 		A10404000000000000000003 /* OmiSFSymbolView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiSFSymbolView.h; sourceTree = "<group>"; };
+		A1040F000000000000000002 /* OmiRewindFrameView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiRewindFrameView.mm; sourceTree = "<group>"; };
+		A1040F000000000000000003 /* OmiRewindFrameView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiRewindFrameView.h; sourceTree = "<group>"; };
 		A10405000000000000000002 /* OmiAuthModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiAuthModule.mm; sourceTree = "<group>"; };
 		A10405000000000000000003 /* OmiAuthModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiAuthModule.h; sourceTree = "<group>"; };
 		A10406000000000000000002 /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
@@ -180,6 +183,8 @@
 				A10403000000000000000002 /* OmiGlassPanelView.mm */,
 				A10404000000000000000003 /* OmiSFSymbolView.h */,
 				A10404000000000000000002 /* OmiSFSymbolView.mm */,
+				A1040F000000000000000003 /* OmiRewindFrameView.h */,
+				A1040F000000000000000002 /* OmiRewindFrameView.mm */,
 				A10405000000000000000003 /* OmiAuthModule.h */,
 				A10405000000000000000002 /* OmiAuthModule.mm */,
 				A10408000000000000000003 /* OmiNativeModule.h */,
@@ -427,6 +432,7 @@
 				A10513000000000000000001 /* OmiAudioCapture.mm in Sources */,
 				A10403000000000000000001 /* OmiGlassPanelView.mm in Sources */,
 				A10404000000000000000001 /* OmiSFSymbolView.mm in Sources */,
+				A1040F000000000000000001 /* OmiRewindFrameView.mm in Sources */,
 				A10405000000000000000001 /* OmiAuthModule.mm in Sources */,
 				A10408000000000000000001 /* OmiNativeModule.mm in Sources */,
 			);

@@ -25,6 +25,11 @@ export function useOnboarding(
   const [onboardingRequired, setOnboardingRequired] = useState<boolean | null>(
     null,
   );
+  // True when onboarding finished before but the cloud session is gone. These
+  // users have data and must never be marched through first-run Get started
+  // again — they see a Welcome-back sign-in card inside the desktop shell.
+  const [returningUser, setReturningUser] = useState(false);
+  const completedOnboardingRef = useRef(false);
   const [desktopHandoff, setDesktopHandoff] =
     useState<OmiAuthDesktopHandoff | null>(null);
   const authOperationRef = useRef(0);
@@ -66,8 +71,12 @@ export function useOnboarding(
           return;
         }
         setAuthError(null);
+        completedOnboardingRef.current = completed;
         setSetupRequired(hasSession && !completed);
-        setOnboardingRequired(!hasSession || !completed);
+        // First-run Welcome is only for Macs that never finished setup; a
+        // returning user who lost the session signs back in from the shell.
+        setOnboardingRequired(!completed);
+        setReturningUser(completed && !hasSession);
       })
       .catch(() => {
         if (active && operation === authOperationRef.current) {
@@ -104,8 +113,10 @@ export function useOnboarding(
         if (operation !== authOperationRef.current) {
           return;
         }
+        completedOnboardingRef.current = completed;
         setSetupRequired(!completed);
         setOnboardingRequired(!completed);
+        setReturningUser(false);
         if (completed) {
           await refreshReads(false, {ignoreEnabled: true}).catch(
             () => undefined,
@@ -155,6 +166,7 @@ export function useOnboarding(
       }
       setSetupRequired(false);
       setOnboardingRequired(false);
+      setReturningUser(false);
       await refreshReads(false, {ignoreEnabled: true}).catch(() => undefined);
       return operation === authOperationRef.current;
     } catch {
@@ -192,9 +204,8 @@ export function useOnboarding(
     if (!result.signedOut) {
       throw new Error('Could not clear this app session.');
     }
-    // After the keychain session is gone the desktop gate must fall back to
-    // Welcome even if the confirmation probe itself fails, so a cleared
-    // session can never leave a signed-out Mac pinned in the product shell.
+    // After the keychain session is gone: a user who finished setup before is
+    // returning (Welcome-back sign-in card), not a first-run Get started.
     let hasSession = false;
     try {
       hasSession = await auth.hasCloudSession();
@@ -206,8 +217,13 @@ export function useOnboarding(
       nativeSessionRequired &&
       !hasSession
     ) {
+      const completed = await auth
+        .hasCompletedOnboarding()
+        .catch(() => completedOnboardingRef.current);
+      completedOnboardingRef.current = completed;
       setSetupRequired(false);
-      setOnboardingRequired(true);
+      setOnboardingRequired(!completed);
+      setReturningUser(completed);
     }
     // No refreshReads here: a signed-out Mac must not fire cloud reads, and
     // a late response must not overwrite the next session's fresh load.
@@ -234,7 +250,9 @@ export function useOnboarding(
       setCompletingSetup(false);
       setSigningIn(false);
       setSetupRequired(false);
-      setOnboardingRequired(true);
+      const completed = completedOnboardingRef.current;
+      setOnboardingRequired(!completed);
+      setReturningUser(completed);
     }
   }, [nativeSessionRequired]);
 
@@ -256,6 +274,7 @@ export function useOnboarding(
     cancelSignIn,
     completeFirstRun,
     onboardingRequired,
+    returningUser,
     revalidateSession,
     signInAndRefresh,
     signOutAndRefresh,

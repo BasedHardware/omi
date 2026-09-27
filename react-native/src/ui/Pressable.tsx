@@ -2,6 +2,7 @@ import React, {forwardRef, useState} from 'react';
 import {
   Platform,
   Pressable as NativePressable,
+  type GestureResponderEvent,
   type PressableProps,
   StyleSheet,
 } from 'react-native';
@@ -27,6 +28,16 @@ export const FocusPressable = forwardRef<
       ref={ref}
       {...blocksWindowDrag}
       {...props}
+      onAccessibilityTap={
+        props.onAccessibilityTap ??
+        (props.onPress
+          ? () => {
+              // The AX activation path carries no gesture payload; every
+              // press handler in this tree ignores the event argument.
+              props.onPress?.(undefined as unknown as GestureResponderEvent);
+            }
+          : undefined)
+      }
       aria-checked={props['aria-checked'] ?? props.accessibilityState?.checked}
       aria-selected={
         props['aria-selected'] ?? props.accessibilityState?.selected
