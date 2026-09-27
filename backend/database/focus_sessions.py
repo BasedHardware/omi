@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, cast
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -18,7 +19,10 @@ logger = logging.getLogger(__name__)
 
 def _user_col(uid: str, collection: str) -> Any:
     """Shorthand for users/{uid}/{collection}."""
-    return db.collection('users').document(uid).collection(collection)
+    clean_uid = uid.strip() if isinstance(uid, str) else ''
+    if not clean_uid:
+        raise ValueError('uid must be a non-empty string')
+    return db.collection('users').document(clean_uid).collection(collection)
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -27,18 +31,28 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
 
 
 def create_focus_session(uid: str, status: str, app_or_site: str, description: str, **kwargs: Any) -> Dict[str, Any]:
+    clean_uid = uid.strip() if isinstance(uid, str) else ''
+    if not clean_uid:
+        raise ValueError('uid must be a non-empty string')
+    raw_status = str(status).strip().lower() if status is not None else 'focused'
+    clean_status = raw_status if raw_status in ('focused', 'distracted') else 'focused'
+    clean_app = str(app_or_site).strip() if app_or_site is not None and str(app_or_site).strip() else 'Unknown'
+    clean_desc = str(description) if description is not None else ''
+    clean_msg = str(kwargs['message']) if kwargs.get('message') is not None else None
+    duration_seconds = _normalize_duration_seconds(kwargs.get('duration_seconds'))
+
     session_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     doc: Dict[str, Any] = {
         'id': session_id,
-        'status': status,
-        'app_or_site': app_or_site,
-        'description': description,
-        'message': kwargs.get('message'),
+        'status': clean_status,
+        'app_or_site': clean_app,
+        'description': clean_desc,
+        'message': clean_msg,
         'created_at': now,
-        'duration_seconds': kwargs.get('duration_seconds'),
+        'duration_seconds': duration_seconds,
     }
-    _user_col(uid, 'focus_sessions').document(session_id).set(doc)
+    _user_col(clean_uid, 'focus_sessions').document(session_id).set(doc)
     return doc
 
 
@@ -96,29 +110,56 @@ def _normalize_focus_session_doc(doc_id: str, data: Dict[str, Any]) -> Dict[str,
 
 
 def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
-    col = _user_col(uid, 'focus_sessions')
-    query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return []
+    clean_uid = uid.strip()
+    try:
+        col = _user_col(clean_uid, 'focus_sessions')
+        query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    if date:
-        day_start = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
-        day_end = day_start + timedelta(days=1)
-        query = query.where(filter=FieldFilter('created_at', '>=', day_start))
-        query = query.where(filter=FieldFilter('created_at', '<', day_end))
+        if date:
+            if not isinstance(date, str) or not date.strip():
+                return []
+            try:
+                day_start = datetime.strptime(date.strip(), '%Y-%m-%d').replace(tzinfo=timezone.utc)
+                day_end = day_start + timedelta(days=1)
+                query = query.where(filter=FieldFilter('created_at', '>=', day_start))
+                query = query.where(filter=FieldFilter('created_at', '<', day_end))
+            except (ValueError, TypeError) as e:
+                logger.warning(f'get_focus_sessions invalid date={date!r} for uid={clean_uid}: {e}')
+                return []
 
-    query = query.offset(offset).limit(limit)
-    items: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        data = _typed_doc(doc)
-        items.append(_normalize_focus_session_doc(doc.id, data))
-    return items
+        bounded_limit = max(1, min(limit if isinstance(limit, int) else 100, 5000))
+        bounded_offset = max(0, offset if isinstance(offset, int) else 0)
+        query = query.offset(bounded_offset).limit(bounded_limit)
+        items: List[Dict[str, Any]] = []
+        for doc in query.stream():
+            data = _typed_doc(doc)
+            items.append(_normalize_focus_session_doc(doc.id, data))
+        return items
+    except Exception as e:
+        logger.warning(f'get_focus_sessions failed for uid={clean_uid}: {e}')
+        return []
 
 
 def delete_focus_session(uid: str, session_id: str) -> bool:
-    ref = _user_col(uid, 'focus_sessions').document(session_id)
-    if not getattr(ref.get(), "exists", False):
+    if not uid or not isinstance(uid, str) or not uid.strip():
         return False
-    ref.delete()
-    return True
+    if not session_id or not isinstance(session_id, str) or not session_id.strip():
+        return False
+    clean_uid = uid.strip()
+    clean_session_id = session_id.strip()
+    try:
+        ref = _user_col(clean_uid, 'focus_sessions').document(clean_session_id)
+        if not getattr(ref.get(), "exists", False):
+            return False
+        ref.delete()
+        return True
+    except NotFound:
+        return False
+    except Exception as e:
+        logger.warning(f'delete_focus_session failed uid={clean_uid} session_id={clean_session_id}: {e}')
+        return False
 
 
 def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
@@ -128,8 +169,29 @@ def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     # cap -- and then labelled with a single date.  Anyone opening focus
     # stats without picking a day saw months of focus reported as today's.
     # get_daily_score resolves the same way: no date means today.
-    day = date or datetime.now(timezone.utc).strftime('%Y-%m-%d')
-    sessions = get_focus_sessions(uid, date=day, limit=5000, offset=0)
+    if isinstance(date, str) and date.strip():
+        clean_date = date.strip()
+        try:
+            datetime.strptime(clean_date, '%Y-%m-%d')
+            day = clean_date
+        except ValueError:
+            day = clean_date
+    else:
+        day = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return {
+            'date': day,
+            'focused_minutes': 0,
+            'distracted_minutes': 0,
+            'session_count': 0,
+            'focused_count': 0,
+            'distracted_count': 0,
+            'top_distractions': [],
+        }
+
+    clean_uid = uid.strip()
+    sessions = get_focus_sessions(clean_uid, date=day, limit=5000, offset=0)
     focused_count = 0
     distracted_count = 0
     total_focus_seconds = 0
