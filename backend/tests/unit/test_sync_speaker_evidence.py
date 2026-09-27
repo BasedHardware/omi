@@ -178,3 +178,32 @@ def test_existing_labels_never_gain_automatic_provenance(monkeypatch):
     )
     assert segment.person_id == 'existing'
     assert segment.speaker_match_source is None
+
+
+@pytest.mark.parametrize('distances,expected', [((0.631, 0.645), []), ((0.53, 0.645), [0]), ((0.645, 0.53), [1])])
+@pytest.mark.parametrize('previous_accept', [False, True])
+def test_sync_owner_competition_is_decided_before_longest_first_reservation(
+    monkeypatch, distances, expected, previous_accept
+):
+    monkeypatch.setattr(pipeline, 'speaker_embedding_configured', lambda: True)
+    monkeypatch.setattr(pipeline, 'detect_speaker_from_text', lambda *a, **k: None)
+    vectors = iter(np.array([[1 - d, (-1) ** i * np.sqrt(1 - (1 - d) ** 2)]]) for i, d in enumerate(distances))
+    monkeypatch.setattr(pipeline, 'extract_embedding_from_bytes', lambda *a: next(vectors))
+    segments = [
+        TranscriptSegment(id=str(i), text='synthetic speech', speaker_id=i, is_user=False, start=i * 6, end=i * 6 + 6)
+        for i in range(2)
+    ]
+    if previous_accept:
+        for segment in segments:
+            segment.is_user = True
+            segment.speaker_identity_status = 'user'
+            segment.speaker_match_source = 'sync_embedding'
+    pipeline.identify_speakers_for_segments(
+        segments,
+        wav(),
+        {'user': {'name': 'User', 'embedding': np.array([[1.0, 0.0]])}},
+        'test-user',
+    )
+    assert [s.speaker_id for s in segments if s.is_user] == expected
+    if not expected:
+        assert all(s.speaker_identity_status == 'ambiguous' and s.person_id is None for s in segments)

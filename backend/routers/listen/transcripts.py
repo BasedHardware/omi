@@ -424,7 +424,7 @@ class TranscriptProcessor:
             # transaction still clears a projection that is actually on the
             # document (a finalize overlapping capture).
             invalidate_client_processing=False,
-            segment_update_fields=('person_id', 'is_user', 'speaker_identity_status'),
+            segment_update_fields=('person_id', 'is_user', 'speaker_identity_status', 'speaker_match_source'),
             return_segments=True,
         )
         if not written:
@@ -457,9 +457,26 @@ class TranscriptProcessor:
                 segment.speaker_identity_status = (
                     SpeakerIdentityStatus.user if is_user_self_match(person_id) else SpeakerIdentityStatus.not_user
                 )
+                if segment.id not in speaker.segment_assignments and segment.speaker_id in getattr(
+                    speaker, 'voice_identity_status', {}
+                ):
+                    segment.speaker_match_source = 'live_embedding'
                 continue
-            status = speaker.segment_identity_status.get(cast(str, segment.id))
+            status = getattr(speaker, 'voice_identity_status', {}).get(segment.speaker_id)
+            if status is None:
+                status = speaker.segment_identity_status.get(cast(str, segment.id))
             if status is not None:
+                if status == SpeakerIdentityStatus.ambiguous:
+                    # Clear an earlier automatic accept on *every* segment of
+                    # this voice. Manual receipts are re-applied by the writer.
+                    if segment.speaker_match_source == 'live_embedding' or (
+                        not segment.is_user and not segment.person_id
+                    ):
+                        segment.is_user = False
+                        segment.person_id = None
+                        segment.speaker_match_source = 'live_embedding'
+                    else:
+                        continue
                 segment.speaker_identity_status = status
 
     async def _translate(self, segments: List[TranscriptSegment], conversation_id: str, removed: List[str]) -> None:

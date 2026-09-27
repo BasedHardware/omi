@@ -14,12 +14,12 @@ import numpy as np
 
 from database import users as users_db
 from database.auth import get_user_name
-from models.transcript_segment import TranscriptSegment
+from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes, speaker_embedding_configured
-from utils.stt.speaker_match import mean_embedding, select_speaker_match
+from utils.stt.speaker_match import arbitrate_owner_matches, mean_embedding, select_speaker_match
 from utils.stt.sync_speaker_evidence import collect_speaker_audio
 from utils.stt.voiceprints import usable_person_voiceprint
 
@@ -130,16 +130,17 @@ def identify_speakers_for_segments(
     matched_person_ids: set = set()
 
     if audio_bytes and person_embeddings_cache and speaker_embedding_configured():
-        # Preserve existing longest-segment priority for one-person/one-speaker dedup.
-        # Pooling changes evidence, not the order in which identities are reserved.
-        # Note: matched_person_ids assumes diarization is correct (one person = one speaker).
-        # If diarization fragments one person across speaker IDs, only the best match wins.
+        # Collect every voice before reserving the owner. Longest-first remains
+        # the ordering for named-person deduplication only.
         sorted_speakers = sorted(
             speaker_segments.items(),
             key=lambda kv: max(s.end - s.start for s in kv[1]),
             reverse=True,
         )
 
+        voice_distances = {}
+        voice_decisions = {}
+        voice_details = {}
         for speaker_id, segments in sorted_speakers:
             best_seg = max(segments, key=lambda s: s.end - s.start)
             seg_duration = best_seg.end - best_seg.start
@@ -187,9 +188,43 @@ def identify_speakers_for_segments(
                 person_id: compare_embeddings(query_embedding, data['embedding'])
                 for person_id, data in person_embeddings_cache.items()
             }
-            decision = select_speaker_match(distances)
+            voice_distances[speaker_id] = distances
+            voice_decisions[speaker_id] = select_speaker_match(distances)
+            voice_details[speaker_id] = (
+                seg_duration,
+                len(embeddings),
+                evidence_seconds,
+                evidence.available_seconds if evidence is not None else 0.0,
+                failed_clips,
+            )
+
+        decisions = arbitrate_owner_matches(voice_distances, voice_decisions)
+        for speaker_id, decision in decisions.items():
+            segments = speaker_segments[speaker_id]
+            best_seg = max(segments, key=lambda s: s.end - s.start)
+            seg_duration, clip_count, evidence_seconds, available_seconds, failed_clips = voice_details[speaker_id]
             accepted = decision.person_id is not None and decision.person_id not in matched_person_ids
-            outcome = 'accepted' if accepted else 'duplicate_person' if decision.accepted else 'no_match'
+            outcome = (
+                'ambiguous'
+                if decision.owner_contended
+                else 'accepted' if accepted else 'duplicate_person' if decision.accepted else 'no_match'
+            )
+            for segment in segments:
+                if segment.speaker_match_source == 'sync_embedding':
+                    # Reprocessing may revisit our own earlier automatic accept.
+                    # It must not survive a newly contended decision. Reviewed
+                    # labels have their provenance cleared by the manual writer.
+                    segment.is_user = False
+                    segment.person_id = None
+            if not accepted:
+                for segment in segments:
+                    if not segment.is_user and not segment.person_id:
+                        segment.speaker_identity_status = (
+                            SpeakerIdentityStatus.ambiguous
+                            if decision.owner_contended
+                            else SpeakerIdentityStatus.no_match
+                        )
+                        segment.speaker_match_source = 'sync_embedding'
             SYNC_SPEAKER_DECISIONS.labels(outcome=outcome).inc()
             logger.info(
                 'speaker_id_decision surface=sync speaker=%s clip_seconds=%.1f '
@@ -202,9 +237,9 @@ def identify_speakers_for_segments(
                 decision.runner_up_distance,
                 accepted,
                 len(segments),
-                len(embeddings),
+                clip_count,
                 evidence_seconds,
-                evidence.available_seconds if evidence is not None else 0.0,
+                available_seconds,
                 failed_clips,
                 outcome,
             )
@@ -253,3 +288,6 @@ def identify_speakers_for_segments(
     for segment, person_id in voice_assignments:
         if (person_id == USER_SELF_PERSON_ID and segment.is_user) or segment.person_id == person_id:
             segment.speaker_match_source = 'sync_embedding'
+            segment.speaker_identity_status = (
+                SpeakerIdentityStatus.user if person_id == USER_SELF_PERSON_ID else SpeakerIdentityStatus.not_user
+            )

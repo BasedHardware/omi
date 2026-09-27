@@ -347,3 +347,17 @@ def test_verification_attempts_are_bounded():
         max_verifications=4,
     )
     assert prompts == [] and len(attempts) == 4
+
+
+def test_contended_owner_is_an_unnamed_free_owner_check_even_with_a_stale_projection():
+    conversation = _conversation(
+        segments=[
+            _segment('a', 0, 0, 8, is_user=True, speaker_identity_status='ambiguous'),
+            _segment('b', 1, 8, 16, is_user=False, speaker_identity_status='ambiguous'),
+        ]
+    )
+    prompts = _select([conversation], named_allowed=False)
+    assert len(prompts) == 1
+    assert prompts[0].kind == SpeakerTagPromptKind.owner_check
+    assert prompts[0].origin == SpeakerTagPromptOrigin.unnamed
+    assert prompts[0].suggested_person_id is None

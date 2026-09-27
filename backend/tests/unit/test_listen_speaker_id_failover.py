@@ -761,3 +761,63 @@ async def test_diarization_completed_emitted_for_both_persistence_modes(monkeypa
     assert events, 'Diarization Completed must be emitted from the v2 batch path as from the legacy loop'
     assert events[-1]['properties']['conversation_id'] == CONV
     assert events[-1]['properties']['speaker_count'] >= 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('v2', [False, True])
+async def test_cold_start_contention_corrects_persisted_and_delivered_owner(monkeypatch, telemetry, v2):
+    """Real receive -> match -> transaction -> client correction, one enrolled print."""
+    import routers.listen.speakers as speakers_module
+
+    stack = FailoverStack(monkeypatch, v2=v2)
+
+    def measured_embedding(audio, filename):
+        voice = int(np.argmax(_fake_extract_embedding(audio, filename)))
+        distance, sign = (0.631, 1) if voice == 1 else (0.645, -1)
+        vector = np.zeros_like(np.asarray(_unit_vector(1), dtype=np.float32)).reshape(1, -1)
+        vector[0, 1] = 1 - distance
+        vector[0, 0] = sign * np.sqrt(1 - (1 - distance) ** 2)
+        return vector
+
+    monkeypatch.setattr(speakers_module, 'extract_embedding_from_bytes', measured_embedding)
+    loop_task = asyncio.create_task(stack.processor.process_loop())
+    matcher_task = asyncio.create_task(stack.host.speakers.load_and_run())
+    stack.tasks.extend([loop_task, matcher_task])
+    try:
+        await stack.host.speakers.refresh_for_conversation(CONV)
+        assert set(stack.host.speakers.person_embeddings) == {'user'}
+        assert await stack.receiver.initialize_stt()
+        first_socket = await stack.run_receive(_frames_for(_owner(6.0) + _tone(OTHER_FREQUENCY_HZ, 6.0)))
+        stack.provider(0)['callback']([_provider_segment('first', 0, 6, 'First voice speaking.')])
+        await _wait_for(lambda: any(s['is_user'] for s in stack.decode_segments()), message='initial owner label')
+        assert any(s['is_user'] for s in _delivered_items(first_socket.sent_json, 'First voice'))
+
+        second_socket = first_socket
+        second = _provider_segment('second', 6, 12, 'Second voice speaking.')
+        second.update(speaker='SPEAKER_01', speaker_id=1)
+        stack.provider(0)['callback']([second])
+
+        def corrected():
+            saved = stack.decode_segments()
+            return len(saved) == 2 and all(s.get('speaker_identity_status') == 'ambiguous' for s in saved)
+
+        await _wait_for(corrected, message='persisted ambiguity correction', stack=stack)
+        saved = stack.decode_segments()
+        assert all(not s['is_user'] and not s.get('person_id') for s in saved)
+        await _wait_for(
+            lambda: any(
+                s.get('speaker_identity_status') == 'ambiguous'
+                for s in _delivered_items(second_socket.sent_json, 'First voice')
+            ),
+            message='correction delivered for previously labelled owner',
+        )
+        corrections = _delivered_items(second_socket.sent_json, 'First voice')
+        assert not corrections[-1]['is_user']
+    finally:
+        stack.state.active = False
+        stack.state.shutdown_event.set()
+        await asyncio.wait_for(loop_task, timeout=30)
+        for task in stack.tasks:
+            task.cancel()
+        await asyncio.gather(*stack.tasks, return_exceptions=True)
+        stack.restore()

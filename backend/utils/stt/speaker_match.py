@@ -8,8 +8,9 @@ pulling in the embedding client. Distances are cosine distances as produced by
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence
+from dataclasses import dataclass, replace
+from math import isfinite
+from typing import Any, Mapping, Optional, Sequence, TypeVar
 
 import numpy as np
 
@@ -53,6 +54,7 @@ class SpeakerMatchDecision:
     best_id: Optional[str]
     best_distance: float
     runner_up_distance: float
+    owner_contended: bool = False
 
     @property
     def accepted(self) -> bool:
@@ -88,6 +90,54 @@ def select_speaker_match(
         best_distance=best,
         runner_up_distance=runner_up,
     )
+
+
+SpeakerKey = TypeVar('SpeakerKey')
+
+
+def arbitrate_owner_matches(
+    distances: Mapping[SpeakerKey, Mapping[str, float]],
+    decisions: Mapping[SpeakerKey, SpeakerMatchDecision],
+    *,
+    margin: float = SPEAKER_MATCH_MARGIN,
+    owner_reserved: bool = False,
+) -> dict[SpeakerKey, SpeakerMatchDecision]:
+    """Require an owner claim to beat the other *voices*, not just other prints.
+
+    The single-print cold start has no enrolled runner-up. Distinct voices measured
+    at 0.631/0.645 both passed 0.65 in production. Compare all evidenced voices,
+    including ones just outside the acceptance threshold, before publishing any
+    owner decision. A lone/uncontested owner retains the calibrated operating
+    point; a tie accepts neither. A manual owner reserves the identity outright.
+
+    Callers supply one row per diarized voice with sufficient audio, retain those
+    rows for live re-arbitration, and project withdrawn accepts onto old segments.
+    This never promotes a failed voiceprint decision or guesses a second identity.
+    """
+    ranked = sorted(
+        (
+            (scores['user'], key)
+            for key, scores in distances.items()
+            if isfinite(scores.get('user', float('inf')))
+            # A voice confidently identified as someone else cannot be the
+            # owner. Unidentified voices still compete, even just over threshold.
+            and decisions[key].person_id in (None, 'user')
+        ),
+        key=lambda item: item[0],
+    )
+    winner = None
+    if ranked and not owner_reserved:
+        best, key = ranked[0]
+        if len(ranked) == 1 or ranked[1][0] - best >= margin:
+            winner = key
+    return {
+        key: (
+            replace(decision, person_id=None, owner_contended=True)
+            if decision.person_id == 'user' and key != winner
+            else decision
+        )
+        for key, decision in decisions.items()
+    }
 
 
 def mean_embedding(embeddings: Sequence[np.ndarray[Any, Any]]) -> np.ndarray[Any, Any]:

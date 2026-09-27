@@ -21,6 +21,8 @@ from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_fr
 from utils.stt.speaker_match import (
     SPEAKER_MATCH_MAX_CLIPS,
     SPEAKER_MATCH_MIN_EVIDENCE_SECONDS,
+    SpeakerMatchDecision,
+    arbitrate_owner_matches,
     mean_embedding,
     select_speaker_match,
 )
@@ -63,6 +65,10 @@ class SpeakerMatcher:
         self.speaker_to_person: Dict[int, tuple[str, str]] = {}
         self.segment_assignments: Dict[str, str] = {}
         self.segment_identity_status: Dict[str, SpeakerIdentityStatus] = {}
+        self.voice_identity_status: Dict[int, SpeakerIdentityStatus] = {}
+        self._voice_distances: Dict[int, Dict[str, float]] = {}
+        self._voice_decisions: Dict[int, SpeakerMatchDecision] = {}
+        self._voice_segments: Dict[int, str] = {}
         # Recent (embedding, clip seconds) per diarized speaker. A decision is made on
         # the centroid once enough audio has accumulated, instead of letting the first
         # clip that happens to land under the threshold stick for the whole session.
@@ -356,10 +362,14 @@ class SpeakerMatcher:
                 person_id: compare_embeddings(centroid, value['embedding'])
                 for person_id, value in self.person_embeddings.items()
             }
-            decision = select_speaker_match(distances)
+            self._voice_distances[speaker_id] = distances
+            self._voice_decisions[speaker_id] = select_speaker_match(distances)
+            self._voice_segments[speaker_id] = segment['id']
+            decisions = arbitrate_owner_matches(self._voice_distances, self._voice_decisions)
+            decision = decisions[speaker_id]
             logger.info(
                 'speaker_id_decision surface=live speaker=%s clips=%d evidence_seconds=%.1f '
-                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s session=%s',
+                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s owner_contended=%s session=%s',
                 speaker_id,
                 len(evidence),
                 evidence_seconds,
@@ -367,24 +377,42 @@ class SpeakerMatcher:
                 decision.best_distance,
                 decision.runner_up_distance,
                 decision.accepted,
+                decision.owner_contended,
                 self._session_log_id(),
             )
             if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
                 self._record_exit(drop_reason, speaker_id)
                 return
-            if decision.person_id is not None:
-                best_id = decision.person_id
-                best_name = self.person_embeddings[best_id]['name']
-                self.speaker_to_person[speaker_id] = (best_id, best_name)
-                self.segment_assignments[segment['id']] = best_id
-                self.segment_identity_status[segment['id']] = (
-                    SpeakerIdentityStatus.user if best_id == USER_SELF_PERSON_ID else SpeakerIdentityStatus.not_user
-                )
-                self.host.state.speaker_map_dirty = True
-                self.host.emit_speaker_suggestion(speaker_id, best_id, best_name, segment['id'])
-            else:
-                self.segment_identity_status[segment['id']] = SpeakerIdentityStatus.no_match
-                self.host.state.speaker_map_dirty = True
+            # No awaits between arbitration and publishing the maps: another
+            # speaker may finish embedding concurrently, but cannot publish a
+            # decision based on a stale set of owner claims.
+            for voice, result in decisions.items():
+                segment_id = self._voice_segments[voice]
+                if result.person_id is not None:
+                    best_id = result.person_id
+                    best_name = self.person_embeddings[best_id]['name']
+                    changed = self.speaker_to_person.get(voice) != (best_id, best_name)
+                    self.speaker_to_person[voice] = (best_id, best_name)
+                    status = (
+                        SpeakerIdentityStatus.user if best_id == USER_SELF_PERSON_ID else SpeakerIdentityStatus.not_user
+                    )
+                    if changed:
+                        self.host.emit_speaker_suggestion(voice, best_id, best_name, segment_id)
+                else:
+                    if result.owner_contended:
+                        self.speaker_to_person.pop(voice, None)
+                        if self.voice_identity_status.get(voice) != SpeakerIdentityStatus.ambiguous:
+                            logger.info(
+                                'speaker_id_owner_contention surface=live speaker=%s session=%s',
+                                voice,
+                                self._session_log_id(),
+                            )
+                    status = (
+                        SpeakerIdentityStatus.ambiguous if result.owner_contended else SpeakerIdentityStatus.no_match
+                    )
+                self.voice_identity_status[voice] = status
+                self.segment_identity_status[segment_id] = status
+            self.host.state.speaker_map_dirty = True
         except Exception as error:
             logger.error(
                 'Speaker ID match failed speaker=%s type=%s session=%s',
@@ -406,3 +434,7 @@ class SpeakerMatcher:
         self.speaker_evidence.clear()
         self.segment_assignments.clear()
         self.segment_identity_status.clear()
+        self.voice_identity_status.clear()
+        self._voice_distances.clear()
+        self._voice_decisions.clear()
+        self._voice_segments.clear()
