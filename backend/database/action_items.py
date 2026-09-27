@@ -1011,32 +1011,45 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[s
     Returns:
         List of action items (only those that exist), in the same order as the input IDs
     """
+    if not uid or not str(uid).strip():
+        raise ValueError("uid cannot be empty or whitespace")
     if not action_item_ids:
+        return []
+
+    valid_ids: List[str] = [
+        str(item_id).strip()
+        for item_id in action_item_ids
+        if isinstance(item_id, str) and item_id.strip()
+    ]
+    if not valid_ids:
         return []
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
 
-    # Firestore batch get operation
-    doc_refs = [action_items_ref.document(item_id) for item_id in action_item_ids]
-    docs = db.get_all(doc_refs)
-
-    # Create a map to preserve order
+    unique_ids = list(dict.fromkeys(valid_ids))
     action_items_map: Dict[str, Dict[str, Any]] = {}
-    for doc in docs:
-        if doc.exists:
-            data: Dict[str, Any] = typed_doc(doc)
-            data['id'] = doc.id
-            action_item = prepare_action_item_for_read(data)
-            action_items_map[doc.id] = action_item
 
-    # Return in the same order as input IDs
+    for i in range(0, len(unique_ids), 500):
+        chunk_ids = unique_ids[i : i + 500]
+        doc_refs = [action_items_ref.document(item_id) for item_id in chunk_ids]
+        docs = db.get_all(doc_refs)
+        for doc in docs:
+            if doc is not None and getattr(doc, 'exists', False):
+                data: Dict[str, Any] = typed_doc(doc)
+                data['id'] = doc.id
+                action_item = prepare_action_item_for_read(data)
+                action_items_map[doc.id] = action_item
+
     action_items: List[Dict[str, Any]] = []
-    for item_id in action_item_ids:
-        if item_id in action_items_map:
+    seen: set[str] = set()
+    for item_id in valid_ids:
+        if item_id in action_items_map and item_id not in seen:
+            seen.add(item_id)
             action_items.append(action_items_map[item_id])
 
     return action_items
+
 
 
 # *****************************
@@ -1207,7 +1220,19 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     docs, and downstream vector + FCM cleanup are both idempotent for
     unknown ids.
     """
+    if not uid or not str(uid).strip():
+        raise ValueError("uid cannot be empty or whitespace")
     if not action_item_ids:
+        return []
+
+    # Clean, validate, and deduplicate IDs preserving order to prevent
+    # Firestore "Multiple operations on document in a single commit" crashes.
+    unique_ids: List[str] = list(
+        dict.fromkeys(
+            [str(item_id).strip() for item_id in action_item_ids if isinstance(item_id, str) and item_id.strip()]
+        )
+    )
+    if not unique_ids:
         return []
 
     user_ref = db.collection('users').document(uid)
@@ -1216,7 +1241,7 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     batch = db.batch()
     count = 0
 
-    for item_id in action_item_ids:
+    for item_id in unique_ids:
         batch.delete(action_items_ref.document(item_id))
         count += 1
         if count >= 499:  # Firestore batch limit is 500
@@ -1228,7 +1253,7 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
         batch.commit()
 
     bump_action_items_list_version(uid)
-    return list(action_item_ids)
+    return unique_ids
 
 
 def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
@@ -1242,6 +1267,11 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     Returns:
         Number of deleted items
     """
+    if not uid or not str(uid).strip():
+        raise ValueError("uid cannot be empty or whitespace")
+    if not conversation_id or not str(conversation_id).strip():
+        return 0
+
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(action_items_collection).where(
         filter=FieldFilter('conversation_id', '==', conversation_id)
@@ -1250,16 +1280,24 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     docs = query.stream()
     batch = db.batch()
     count = 0
+    total_deleted = 0
 
     for doc in docs:
         batch.delete(doc.reference)
         count += 1
+        total_deleted += 1
+        if count >= 499:
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
     if count > 0:
         batch.commit()
+
+    if total_deleted > 0:
         bump_action_items_list_version(uid)
 
-    return count
+    return total_deleted
 
 
 def retire_action_items_for_conversation(
@@ -1270,7 +1308,12 @@ def retire_action_items_for_conversation(
     replacements: Optional[Dict[str, str]] = None,
 ) -> int:
     """Soft-retire removed write-mode projections so accepted Candidate receipts keep a target."""
-    active_id_set = set(active_ids)
+    if not uid or not str(uid).strip():
+        raise ValueError("uid cannot be empty or whitespace")
+    if not conversation_id or not str(conversation_id).strip():
+        return 0
+
+    active_id_set = set(active_ids or [])
     replacement_map = replacements or {}
     query = (
         db.collection('users')
@@ -1280,6 +1323,7 @@ def retire_action_items_for_conversation(
     )
     batch = db.batch()
     count = 0
+    total_retired = 0
     now = datetime.now(timezone.utc)
     for doc in query.stream():
         if doc.id in active_id_set:
@@ -1297,10 +1341,18 @@ def retire_action_items_for_conversation(
             },
         )
         count += 1
-    if count:
+        total_retired += 1
+        if count >= 499:
+            batch.commit()
+            batch = db.batch()
+            count = 0
+
+    if count > 0:
         batch.commit()
+
+    if total_retired > 0:
         bump_action_items_list_version(uid)
-    return count
+    return total_retired
 
 
 # *****************************
@@ -1310,7 +1362,13 @@ def retire_action_items_for_conversation(
 
 def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
     """Mark multiple action items as sync_requested in a single batch write."""
-    if not item_ids:
+    if not uid or not str(uid).strip() or not item_ids:
+        return
+
+    unique_ids: List[str] = list(
+        dict.fromkeys([str(item_id).strip() for item_id in item_ids if isinstance(item_id, str) and item_id.strip()])
+    )
+    if not unique_ids:
         return
 
     user_ref = db.collection('users').document(uid)
@@ -1318,12 +1376,21 @@ def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
     now = datetime.now(timezone.utc)
 
     batch = db.batch()
-    for item_id in item_ids:
+    count = 0
+    for item_id in unique_ids:
         doc_ref = action_items_ref.document(item_id)
         batch.update(doc_ref, {'sync_requested': True, 'updated_at': now})
+        count += 1
+        if count >= 499:
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
-    batch.commit()
+    if count > 0:
+        batch.commit()
+
     bump_action_items_list_version(uid)
+
 
 
 def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
