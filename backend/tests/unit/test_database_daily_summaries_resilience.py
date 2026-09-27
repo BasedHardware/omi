@@ -1,4 +1,4 @@
-"""Contract and resilience tests for database.daily_summaries input guards, exception safety, and merge writes."""
+"""Contract and resilience tests for database.daily_summaries."""
 
 from unittest.mock import MagicMock
 import pytest
@@ -6,10 +6,10 @@ from google.api_core.exceptions import NotFound
 
 import database.daily_summaries as ds_db
 
-
 # ============================================================================
 # Input Validation & Sanitization Tests
 # ============================================================================
+
 
 @pytest.mark.parametrize(
     'uid,date,device_id',
@@ -135,6 +135,7 @@ def test_get_summaries_count_invalid_uid_returns_zero():
 # Resilience & Partial Payload Edge Case Tests
 # ============================================================================
 
+
 def test_upsert_desktop_daily_usage_partial_counters_safe(monkeypatch):
     fake_db = MagicMock()
     fake_user_doc = MagicMock()
@@ -156,10 +157,7 @@ def test_upsert_desktop_daily_usage_partial_counters_safe(monkeypatch):
     monkeypatch.setattr(ds_db.firestore, 'transactional', lambda fn: fn)
 
     # Calling with partial dictionary (e.g. only watching_seconds provided, others omitted)
-    ds_db.upsert_desktop_daily_usage(
-        'user-1', '2026-09-26', 'America/New_York', 'device-1',
-        {'watching_seconds': 100}
-    )
+    ds_db.upsert_desktop_daily_usage('user-1', '2026-09-26', 'America/New_York', 'device-1', {'watching_seconds': 100})
 
     fake_tx = fake_db.transaction.return_value
     fake_tx.set.assert_called_once()
@@ -171,7 +169,7 @@ def test_upsert_desktop_daily_usage_partial_counters_safe(monkeypatch):
     assert payload['ptt_turns'] == 0
 
 
-def test_create_daily_summary_merge_writes(monkeypatch):
+def test_create_daily_summary_replaces_stale_fields_on_reused_id(monkeypatch):
     fake_db = MagicMock()
     fake_user_doc = MagicMock()
     fake_summary_coll = MagicMock()
@@ -182,10 +180,18 @@ def test_create_daily_summary_merge_writes(monkeypatch):
     fake_summary_coll.document.return_value = fake_summary_doc
     monkeypatch.setattr(ds_db, 'db', fake_db)
 
+    stored = {'id': 'summary-123', 'headline': 'Old Day', 'stale_field': 'must disappear'}
+
+    def set_summary(payload, merge=False):
+        if not merge:
+            stored.clear()
+        stored.update(payload)
+
+    fake_summary_doc.set.side_effect = set_summary
     summary_payload = {'id': 'summary-123', 'headline': 'Great Day'}
     doc_id = ds_db.create_daily_summary('user-1', summary_payload)
     assert doc_id == 'summary-123'
-    fake_summary_doc.set.assert_called_once_with(summary_payload, merge=True)
+    assert stored == summary_payload
 
 
 def test_delete_daily_summary_catches_not_found(monkeypatch):
@@ -206,6 +212,17 @@ def test_delete_daily_summary_catches_not_found(monkeypatch):
     result = ds_db.delete_daily_summary('user-1', 'summary-123')
     assert result is True
     fake_redis.remove_daily_summary_to_uid.assert_called_once_with('summary-123')
+
+
+def test_delete_daily_summary_logs_redis_cleanup_failure(monkeypatch, caplog):
+    fake_db = MagicMock()
+    fake_redis = MagicMock()
+    fake_redis.remove_daily_summary_to_uid.side_effect = RuntimeError('redis unavailable')
+    monkeypatch.setattr(ds_db, 'db', fake_db)
+    monkeypatch.setattr(ds_db, 'redis_db', fake_redis)
+
+    assert ds_db.delete_daily_summary('user-1', 'summary-123') is True
+    assert 'Failed to remove daily summary Redis mapping' in caplog.text
 
 
 def test_set_daily_summary_visibility_catches_not_found(monkeypatch):

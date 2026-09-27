@@ -24,6 +24,7 @@ users/{uid}/desktop_daily_usage/{date}__{client_device_id}
     └── updated_at
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
@@ -53,9 +54,15 @@ def upsert_desktop_daily_usage(
 ) -> None:
     """Atomically merge one device's running daily counters by maximum value."""
     if (
-        not uid or not isinstance(uid, str) or not uid.strip()
-        or not date or not isinstance(date, str) or not date.strip()
-        or not client_device_id or not isinstance(client_device_id, str) or not client_device_id.strip()
+        not uid
+        or not isinstance(uid, str)
+        or not uid.strip()
+        or not date
+        or not isinstance(date, str)
+        or not date.strip()
+        or not client_device_id
+        or not isinstance(client_device_id, str)
+        or not client_device_id.strip()
     ):
         raise ValueError('uid, date, and client_device_id are required')
     uid = uid.strip()
@@ -94,7 +101,14 @@ def get_desktop_daily_usage(uid: str, date: str) -> Dict[str, int]:
 
     A date with no usage documents returns every counter as zero.
     """
-    if not uid or not isinstance(uid, str) or not uid.strip() or not date or not isinstance(date, str) or not date.strip():
+    if (
+        not uid
+        or not isinstance(uid, str)
+        or not uid.strip()
+        or not date
+        or not isinstance(date, str)
+        or not date.strip()
+    ):
         return {field: 0 for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS}
     uid = uid.strip()
     date = date.strip()
@@ -135,7 +149,7 @@ def create_daily_summary(uid: str, summary_data: Dict[str, Any]) -> str:
     summary_id = summary_id.strip()
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
-    summary_ref.set(summary_data, merge=True)
+    summary_ref.set(summary_data)
     return summary_id
 
 
@@ -150,7 +164,14 @@ def get_daily_summary(uid: str, summary_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Summary data dict or None if not found
     """
-    if not uid or not isinstance(uid, str) or not uid.strip() or not summary_id or not isinstance(summary_id, str) or not summary_id.strip():
+    if (
+        not uid
+        or not isinstance(uid, str)
+        or not uid.strip()
+        or not summary_id
+        or not isinstance(summary_id, str)
+        or not summary_id.strip()
+    ):
         return None
     uid = uid.strip()
     summary_id = summary_id.strip()
@@ -175,7 +196,14 @@ def get_daily_summary_by_date(uid: str, date: str) -> Optional[Dict[str, Any]]:
     Returns:
         Summary data dict or None if not found
     """
-    if not uid or not isinstance(uid, str) or not uid.strip() or not date or not isinstance(date, str) or not date.strip():
+    if (
+        not uid
+        or not isinstance(uid, str)
+        or not uid.strip()
+        or not date
+        or not isinstance(date, str)
+        or not date.strip()
+    ):
         return None
     uid = uid.strip()
     date = date.strip()
@@ -242,7 +270,14 @@ def update_daily_summary(uid: str, summary_id: str, summary_data: Dict[str, Any]
     contents of the summary the user is looking at instead of spawning a
     duplicate doc for the same date.
     """
-    if not uid or not isinstance(uid, str) or not uid.strip() or not summary_id or not isinstance(summary_id, str) or not summary_id.strip():
+    if (
+        not uid
+        or not isinstance(uid, str)
+        or not uid.strip()
+        or not summary_id
+        or not isinstance(summary_id, str)
+        or not summary_id.strip()
+    ):
         raise ValueError('uid and summary_id are required')
     if not isinstance(summary_data, dict):
         raise ValueError('summary_data must be a dictionary')
@@ -269,7 +304,14 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
     Returns:
         True if deleted successfully
     """
-    if not uid or not isinstance(uid, str) or not uid.strip() or not summary_id or not isinstance(summary_id, str) or not summary_id.strip():
+    if (
+        not uid
+        or not isinstance(uid, str)
+        or not uid.strip()
+        or not summary_id
+        or not isinstance(summary_id, str)
+        or not summary_id.strip()
+    ):
         return False
 
     uid = uid.strip()
@@ -283,12 +325,19 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
     try:
         redis_db.remove_daily_summary_to_uid(summary_id)
     except Exception:
-        pass
+        logging.getLogger(__name__).warning('Failed to remove daily summary Redis mapping', exc_info=True)
     return True
 
 
 def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> bool:
-    if not uid or not isinstance(uid, str) or not uid.strip() or not summary_id or not isinstance(summary_id, str) or not summary_id.strip():
+    if (
+        not uid
+        or not isinstance(uid, str)
+        or not uid.strip()
+        or not summary_id
+        or not isinstance(summary_id, str)
+        or not summary_id.strip()
+    ):
         raise ValueError('uid and summary_id are required')
     if not visibility or not isinstance(visibility, str) or not visibility.strip():
         raise ValueError('visibility is required')
