@@ -1,0 +1,7 @@
+{
+  "version": "0.12.342",
+  "date": "2026-09-12",
+  "changes": [
+    "Apps export rows (including Claude / Claude Code) now keep the integration name, status, and Connect control on one line"
+  ]
+}

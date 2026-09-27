@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 import database.x_posts as x_posts_db
 from utils import x_connector
-from utils.executors import start_background_task
+from utils.executors import db_executor, run_blocking, start_background_task
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -131,7 +131,7 @@ async def x_oauth_callback(
             x_user_id = str(me.get('id')) if me.get('id') else None
         except Exception as e:
             logger.info(f'x callback: fetch_me failed (non-fatal): {e}')
-        x_connector._store_tokens(uid, token_resp, handle=handle, x_user_id=x_user_id)
+        await run_blocking(db_executor, x_connector._store_tokens, uid, token_resp, handle=handle, x_user_id=x_user_id)
         # First ingest in the background so the browser redirect is instant.
         start_background_task(x_connector.sync_x_for_user(uid), name=f'x_initial_sync_{uid}')
         return _redirect_html(f'{deep_link}?status=success', True, 'X connected')

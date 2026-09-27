@@ -7,13 +7,14 @@ import 'package:version/version.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/services/devices/connectors/omiglass_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/other/temp.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/analytics/intercom.dart';
 import 'package:provider/provider.dart';
 
 class OmiGlassOtaUpdate extends StatefulWidget {
@@ -34,7 +35,11 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
   bool _isUpdating = false;
   bool _isSuccess = false;
   bool _isFailed = false;
-  String _statusMessage = '';
+
+  /// What the page says under the progress ring or in the failed state. Resolved to localized text
+  /// at build time ([_statusText]); raw exceptions are never shown.
+  _OtaMessage _status = _OtaMessage.checking;
+  OmiGlassOtaStatus? _lastOtaStatus;
   int _progress = 0;
   bool _obscurePassword = true;
 
@@ -87,7 +92,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
   Future<void> _initializeAndCheck() async {
     setState(() {
       _isLoading = true;
-      _statusMessage = 'Checking for updates...';
+      _status = _OtaMessage.checking;
     });
 
     try {
@@ -100,7 +105,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
           if (mounted) {
             setState(() {
               _isFailed = true;
-              _statusMessage = 'OTA updates are not supported on this firmware version.';
+              _status = _OtaMessage.notSupported;
               _isLoading = false;
             });
           }
@@ -109,8 +114,9 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
       } else {
         if (mounted) {
           setState(() {
+            Logger.debug('OmiGlassOtaUpdate: connection type mismatch: ${connection.runtimeType}');
             _isFailed = true;
-            _statusMessage = 'Device connection type mismatch: ${connection.runtimeType}';
+            _status = _OtaMessage.connectFailed;
             _isLoading = false;
           });
         }
@@ -143,7 +149,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
       if (mounted) {
         setState(() {
           _isFailed = true;
-          _statusMessage = 'Error connecting to device: $e';
+          _status = _OtaMessage.connectFailed;
         });
       }
     } finally {
@@ -160,17 +166,17 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     final password = _passwordController.text;
 
     if (ssid.isEmpty) {
-      _showError('Please enter WiFi network name (SSID)');
+      OmiFeedback.error(context, context.l10n.enterWifiNetworkName);
       return;
     }
 
     if (password.isEmpty) {
-      _showError('Please enter WiFi password');
+      OmiFeedback.error(context, context.l10n.enterWifiPassword);
       return;
     }
 
     if (_downloadUrl.isEmpty) {
-      _showError('No firmware download URL available');
+      OmiFeedback.error(context, context.l10n.otaUpdateUnavailable);
       return;
     }
 
@@ -180,7 +186,8 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
 
     setState(() {
       _isUpdating = true;
-      _statusMessage = 'Starting OTA update...';
+      _status = _OtaMessage.starting;
+      _lastOtaStatus = null;
       _progress = 0;
       _reachedHighProgress = false;
     });
@@ -195,7 +202,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
         _connection = connection;
       }
 
-      print('OmiGlassOtaUpdate: Calling performOtaUpdate...');
+      Logger.debug('OmiGlassOtaUpdate: Calling performOtaUpdate...');
       final success = await _connection!.performOtaUpdate(
         ssid: ssid,
         password: password,
@@ -209,7 +216,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
           setState(() {
             _isUpdating = false;
             _isFailed = true;
-            _statusMessage = 'Failed to start OTA update. Check WiFi credentials and try again.';
+            _status = _OtaMessage.startFailed;
           });
         }
       }
@@ -221,7 +228,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
         setState(() {
           _isUpdating = false;
           _isFailed = true;
-          _statusMessage = 'Error: ${e.toString()}';
+          _status = _OtaMessage.startFailed;
         });
       }
     }
@@ -232,7 +239,8 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     _successTimer?.cancel();
 
     setState(() {
-      _statusMessage = status.statusMessage;
+      _lastOtaStatus = status;
+      _status = _OtaMessage.device;
       _progress = status.progress;
 
       if (status.progress >= _highProgressThreshold || status.isInstallComplete || status.isRebooting) {
@@ -259,7 +267,6 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
         setState(() {
           _isUpdating = false;
           _isSuccess = true;
-          _statusMessage = 'Device is rebooting with new firmware';
         });
       }
     });
@@ -271,23 +278,50 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
       setState(() {
         _isUpdating = false;
         _isSuccess = true;
-        _statusMessage = 'Device is rebooting with new firmware';
       });
     }
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red.shade700));
   }
 
   Future<void> _cancelUpdate() async {
     if (_connection != null) {
       await _connection!.cancelOtaUpdate();
     }
-    setState(() {
-      _isUpdating = false;
-      _statusMessage = 'Update cancelled';
-    });
+    if (!mounted) return;
+    setState(() => _isUpdating = false);
+    OmiFeedback.info(context, context.l10n.otaUpdateCancelled);
+  }
+
+  String get _deviceName => widget.device?.name ?? 'OmiGlass';
+
+  /// Human, localized text for the current state; device status codes map to causes, never raw
+  /// exceptions (onboarding-home #18).
+  String _statusText(BuildContext context) {
+    final l10n = context.l10n;
+    switch (_status) {
+      case _OtaMessage.checking:
+        return l10n.checkingForUpdates;
+      case _OtaMessage.notSupported:
+        return l10n.otaNotSupported;
+      case _OtaMessage.connectFailed:
+        return l10n.otaConnectFailed(_deviceName);
+      case _OtaMessage.starting:
+        return l10n.otaStarting;
+      case _OtaMessage.startFailed:
+        return l10n.otaStartFailed;
+      case _OtaMessage.device:
+        final status = _lastOtaStatus;
+        if (status == null) return l10n.otaStarting;
+        if (status.isWifiConnecting) return l10n.otaWifiConnecting;
+        if (status.isWifiConnected) return l10n.otaWifiConnected;
+        if (status.isWifiFailed) return l10n.otaWifiFailed;
+        if (status.isDownloading) return l10n.downloadingFirmware;
+        if (status.isDownloadComplete || status.isInstalling) return l10n.installingFirmware;
+        if (status.isDownloadFailed) return l10n.otaDownloadFailed;
+        if (status.isInstallFailed) return l10n.otaInstallFailed;
+        if (status.isInstallComplete || status.isRebooting) return l10n.otaRebooting(_deviceName);
+        if (status.isError) return l10n.firmwareUpdateFailedMessage;
+        return l10n.otaStarting;
+    }
   }
 
   Widget _buildTextField({
@@ -297,69 +331,73 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     required FaIconData icon,
     bool obscureText = false,
     Widget? suffixIcon,
-    int maxLines = 1,
   }) {
     return Container(
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
+      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
       child: TextField(
         controller: controller,
         obscureText: obscureText,
-        maxLines: maxLines,
-        style: const TextStyle(color: Colors.white),
+        style: OmiType.body,
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey.shade600),
-          labelStyle: TextStyle(color: Colors.grey.shade400),
+          hintStyle: OmiType.body.copyWith(color: OmiColors.textTertiary),
+          labelStyle: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
           prefixIcon: SizedBox(
             width: 48,
-            child: Center(child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 18)),
+            child: Center(child: FaIcon(icon, color: OmiColors.textTertiary, size: 18)),
           ),
           prefixIconConstraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           suffixIcon: suffixIcon,
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 18),
         ),
       ),
     );
   }
 
-  Widget _buildVersionItem({
-    required FaIconData icon,
-    required String label,
-    required String version,
-    Color? iconColor,
-    Color? chipColor,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+  Widget _card({required Widget child, EdgeInsetsGeometry padding = EdgeInsets.zero}) {
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+      child: child,
+    );
+  }
+
+  Widget _warningCard(String text) {
+    return Container(
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      decoration: BoxDecoration(
+        color: OmiColors.warning.withValues(alpha: 0.12),
+        borderRadius: OmiRadius.mdAll,
+        border: Border.all(color: OmiColors.warning.withValues(alpha: 0.35)),
+      ),
       child: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 5),
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: FaIcon(icon, color: iconColor ?? const Color(0xFF8E8E93), size: 18),
-            ),
+          const ExcludeSemantics(
+            child: FaIcon(FontAwesomeIcons.triangleExclamation, color: OmiColors.warning, size: 18),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
-            ),
-          ),
+          const SizedBox(width: 14),
+          Expanded(child: Text(text, style: OmiType.subhead.copyWith(height: 1.4))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVersionItem(
+      {required FaIconData icon, required String label, required String version, Color? chipColor}) {
+    return Padding(
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      child: Row(
+        children: [
+          SizedBox(width: 24, height: 24, child: FaIcon(icon, color: OmiColors.textTertiary, size: 18)),
+          const SizedBox(width: OmiSpacing.md),
+          Expanded(child: Text(label, style: OmiType.body)),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: chipColor ?? const Color(0xFF2A2A2E),
-              borderRadius: BorderRadius.circular(100),
-            ),
-            child: Text(
-              version,
-              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
+            decoration: BoxDecoration(color: chipColor ?? OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+            child: Text(version, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500)),
           ),
         ],
       ),
@@ -368,26 +406,25 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
 
   Widget _buildUpdateSection() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Version cards
-        Container(
-          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+        _card(
           child: Column(
             children: [
               _buildVersionItem(
                 icon: FontAwesomeIcons.microchip,
                 label: context.l10n.currentVersion,
                 version: _currentVersion,
-                chipColor: _hasUpdate ? const Color(0xFF3D2A2A) : null,
+                chipColor: _hasUpdate ? OmiColors.dangerSurface : null,
               ),
               if (_hasUpdate) ...[
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                const Divider(height: 1, color: OmiColors.border),
                 _buildVersionItem(
                   icon: FontAwesomeIcons.cloudArrowDown,
                   label: context.l10n.latestVersion,
                   version: _latestVersion,
-                  chipColor: const Color(0xFF1A3D2E),
+                  chipColor: OmiColors.successSurface,
                 ),
               ],
             ],
@@ -396,14 +433,17 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
 
         // Up to date status line (only when not needing update)
         if (!_hasUpdate) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: OmiSpacing.md),
           Padding(
-            padding: const EdgeInsets.only(left: 4),
+            padding: const EdgeInsets.only(left: OmiSpacing.xxs),
             child: Row(
               children: [
-                Text(context.l10n.deviceUpToDate, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-                const SizedBox(width: 8),
-                const FaIcon(FontAwesomeIcons.circleCheck, color: Color(0xFF4ADE80), size: 14),
+                Flexible(
+                  child: Text(context.l10n.deviceUpToDate,
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                ),
+                const SizedBox(width: OmiSpacing.xs),
+                const FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.success, size: 14),
               ],
             ),
           ),
@@ -411,131 +451,78 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
 
         // Changelog
         if (_hasUpdate && _changelog.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
-            child: Text(
-              context.l10n.whatsNew,
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-            ),
-          ),
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: _changelog
-                    .split('\n')
-                    .where((line) => line.trim().isNotEmpty)
-                    .map(
-                      (change) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              margin: const EdgeInsets.only(top: 6),
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade500,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
+          const SizedBox(height: OmiSpacing.xl),
+          OmiSectionHeader(context.l10n.whatsNew),
+          _card(
+            padding: const EdgeInsets.all(OmiSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _changelog
+                  .split('\n')
+                  .where((line) => line.trim().isNotEmpty)
+                  .map(
+                    (change) => Padding(
+                      padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.only(top: 6),
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(color: OmiColors.textTertiary, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: OmiSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              change.trim(),
+                              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                change.trim(),
-                                style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.4),
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    )
-                    .toList(),
-              ),
+                    ),
+                  )
+                  .toList(),
             ),
           ),
         ],
 
         if (_hasUpdate) ...[
-          const SizedBox(height: 24),
+          const SizedBox(height: OmiSpacing.xl),
           // WiFi credentials section
-          _buildSectionHeader(context.l10n.wifiConfiguration, subtitle: context.l10n.wifiConfigurationSubtitle),
-          const SizedBox(height: 16),
+          OmiSectionHeader(context.l10n.wifiConfiguration, subtitle: context.l10n.wifiConfigurationSubtitle),
+          const SizedBox(height: OmiSpacing.xxs),
           _buildTextField(
             controller: _ssidController,
             label: context.l10n.networkNameSsid,
             hint: context.l10n.enterWifiNetworkName,
             icon: FontAwesomeIcons.wifi,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: OmiSpacing.sm),
           _buildTextField(
             controller: _passwordController,
             label: context.l10n.password,
             hint: context.l10n.enterWifiPassword,
             icon: FontAwesomeIcons.lock,
             obscureText: _obscurePassword,
-            suffixIcon: IconButton(
-              icon: FaIcon(
-                _obscurePassword ? FontAwesomeIcons.eye : FontAwesomeIcons.eyeSlash,
-                color: const Color(0xFF8E8E93),
-                size: 16,
-              ),
-              onPressed: () {
-                setState(() {
-                  _obscurePassword = !_obscurePassword;
-                });
-              },
+            suffixIcon: OmiIconButton(
+              icon: FaIcon(_obscurePassword ? FontAwesomeIcons.eye : FontAwesomeIcons.eyeSlash, size: 16),
+              label: _obscurePassword ? context.l10n.showPassword : context.l10n.hidePassword,
+              color: OmiColors.textTertiary,
+              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
             ),
           ),
-          const SizedBox(height: 24),
-          // Warning card
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A2215),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF4A3D1A)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  const FaIcon(FontAwesomeIcons.triangleExclamation, color: Color(0xFFFFB800), size: 18),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text(
-                      'Keep your device powered on and nearby during the update. Do not close the app.',
-                      style: TextStyle(color: Colors.orange.shade200, fontSize: 14, height: 1.4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          // Update button
-          GestureDetector(
-            onTap: _startOtaUpdate,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  FaIcon(FontAwesomeIcons.download, color: Colors.black, size: 16),
-                  SizedBox(width: 10),
-                  Text(
-                    'Install Update',
-                    style: TextStyle(color: Colors.black, fontSize: 17, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            ),
+          const SizedBox(height: OmiSpacing.xl),
+          // Before starting: what to do during the update.
+          _warningCard(context.l10n.otaKeepNearby),
+          const SizedBox(height: OmiSpacing.xl),
+          OmiButton(
+            key: const Key('omiglass_ota_install'),
+            label: context.l10n.installUpdate,
+            leading: const FaIcon(FontAwesomeIcons.download),
+            expand: true,
+            onPressed: _startOtaUpdate,
           ),
         ],
       ],
@@ -543,14 +530,16 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
   }
 
   Widget _buildProgressSection() {
+    final status = _statusText(context);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          width: double.infinity,
-          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: const EdgeInsets.all(32),
+        _card(
+          padding: const EdgeInsets.all(OmiSpacing.xxl),
+          child: Semantics(
+            liveRegion: true,
+            label: _progress > 0 ? '$status, $_progress%' : status,
+            excludeSemantics: true,
             child: Column(
               children: [
                 SizedBox(
@@ -562,78 +551,32 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
                         width: 120,
                         height: 120,
                         child: CircularProgressIndicator(
+                          // omi-ux-allow: raw-spinner -- progress ring (determinate once the device reports)
                           value: _progress > 0 ? _progress / 100 : null,
                           strokeWidth: 8,
-                          backgroundColor: const Color(0xFF2A2A2E),
-                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                          backgroundColor: OmiColors.surface2,
+                          valueColor: const AlwaysStoppedAnimation<Color>(OmiColors.textPrimary),
                         ),
                       ),
-                      if (_progress > 0)
-                        Center(
-                          child: Text(
-                            '$_progress%',
-                            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                        ),
+                      if (_progress > 0) Center(child: Text('$_progress%', style: OmiType.title1)),
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
-                Text(
-                  _statusMessage,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Colors.white),
-                ),
+                const SizedBox(height: OmiSpacing.xl),
+                Text(status, textAlign: TextAlign.center, style: OmiType.headline),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF2A2215),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF4A3D1A)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                const FaIcon(FontAwesomeIcons.triangleExclamation, color: Color(0xFFFFB800), size: 18),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    'Do not turn off your device or close the app during the update.',
-                    style: TextStyle(color: Colors.orange.shade200, fontSize: 14, height: 1.4),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        GestureDetector(
-          onTap: _cancelUpdate,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C1C1E),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                FaIcon(FontAwesomeIcons.xmark, color: Colors.red, size: 16),
-                SizedBox(width: 10),
-                Text(
-                  'Cancel Update',
-                  style: TextStyle(color: Colors.red, fontSize: 17, fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          ),
+        const SizedBox(height: OmiSpacing.md),
+        _warningCard(context.l10n.firmwareUpdateWarning),
+        const SizedBox(height: OmiSpacing.xl),
+        OmiButton.destructive(
+          key: const Key('omiglass_ota_cancel'),
+          label: context.l10n.cancelUpdate,
+          leading: const FaIcon(FontAwesomeIcons.xmark),
+          expand: true,
+          onPressed: _cancelUpdate,
         ),
       ],
     );
@@ -641,51 +584,35 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
 
   Widget _buildSuccessSection() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(color: const Color(0xFF1A3D2E), borderRadius: BorderRadius.circular(40)),
-                  child: const Center(child: FaIcon(FontAwesomeIcons.check, color: Color(0xFF4ADE80), size: 32)),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Firmware Updated!',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Your ${widget.device?.name ?? "OmiGlass"} has been updated successfully. The device will restart automatically.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 15, color: Colors.grey.shade400, height: 1.4),
-                ),
-              ],
-            ),
+        _card(
+          padding: const EdgeInsets.all(OmiSpacing.xxl),
+          child: Column(
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: const BoxDecoration(color: OmiColors.successSurface, shape: BoxShape.circle),
+                child: const Center(child: FaIcon(FontAwesomeIcons.check, color: OmiColors.success, size: 32)),
+              ),
+              const SizedBox(height: OmiSpacing.xl),
+              Semantics(header: true, child: Text(context.l10n.firmwareUpdated, style: OmiType.title3)),
+              const SizedBox(height: OmiSpacing.xs),
+              Text(
+                context.l10n.otaUpdatedMessage(_deviceName),
+                textAlign: TextAlign.center,
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 24),
-        GestureDetector(
-          onTap: () {
-            routeToPage(context, const HomePageWrapper(), replace: true);
-          },
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-            child: Center(
-              child: Text(
-                context.l10n.done,
-                style: const TextStyle(color: Colors.black, fontSize: 17, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ),
+        const SizedBox(height: OmiSpacing.xl),
+        OmiButton(
+          label: context.l10n.done,
+          expand: true,
+          // Back to the Home underneath, not a second Home on top of the stack.
+          onPressed: () => HomeNavigation.returnHome(context),
         ),
       ],
     );
@@ -693,123 +620,60 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
 
   Widget _buildFailedSection() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: const EdgeInsets.all(32),
+        _card(
+          padding: const EdgeInsets.all(OmiSpacing.xxl),
+          child: Semantics(
+            liveRegion: true,
             child: Column(
               children: [
                 Container(
                   width: 80,
                   height: 80,
-                  decoration: BoxDecoration(color: const Color(0xFF3D1A1A), borderRadius: BorderRadius.circular(40)),
-                  child: const Center(child: FaIcon(FontAwesomeIcons.xmark, color: Color(0xFFDE4A4A), size: 32)),
+                  decoration: const BoxDecoration(color: OmiColors.dangerSurface, shape: BoxShape.circle),
+                  child: const Center(child: FaIcon(FontAwesomeIcons.xmark, color: OmiColors.danger, size: 32)),
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Update Failed',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: OmiSpacing.xl),
+                Semantics(header: true, child: Text(context.l10n.firmwareUpdateFailedTitle, style: OmiType.title3)),
+                const SizedBox(height: OmiSpacing.xs),
                 Text(
-                  _statusMessage,
+                  _statusText(context),
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 15, color: Colors.grey.shade400, height: 1.4),
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
                 ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 24),
-        GestureDetector(
-          onTap: () {
+        const SizedBox(height: OmiSpacing.xl),
+        OmiButton(
+          label: context.l10n.tryAgain,
+          leading: const FaIcon(FontAwesomeIcons.arrowRotateLeft),
+          expand: true,
+          onPressed: () {
+            final wasConnectionProblem = _status == _OtaMessage.connectFailed;
             setState(() {
               _isFailed = false;
-              _statusMessage = '';
               _progress = 0;
             });
+            if (wasConnectionProblem) _initializeAndCheck();
           },
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                FaIcon(FontAwesomeIcons.arrowRotateLeft, color: Colors.black, size: 16),
-                SizedBox(width: 10),
-                Text(
-                  'Try Again',
-                  style: TextStyle(color: Colors.black, fontSize: 17, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
         ),
-        const SizedBox(height: 12),
-        GestureDetector(
-          onTap: () => Navigator.of(context).pop(),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-            child: Center(
-              child: Text(
-                'Go Back',
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 17, fontWeight: FontWeight.w500),
-              ),
-            ),
-          ),
+        const SizedBox(height: OmiSpacing.xs),
+        OmiButton.secondary(
+          label: context.l10n.contactSupportAction,
+          expand: true,
+          onPressed: () => IntercomManager.instance.intercom.displayMessenger(),
         ),
       ],
     );
   }
 
   Widget _buildLoadingSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: const EdgeInsets.all(48),
-            child: Center(
-              child: Column(
-                children: [
-                  const SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(_statusMessage, style: const TextStyle(color: Colors.white, fontSize: 15)),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSectionHeader(String title, {String? subtitle}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-        ),
-        if (subtitle != null) ...[
-          const SizedBox(height: 6),
-          Text(subtitle, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-        ],
-      ],
+    return _card(
+      padding: const EdgeInsets.all(48),
+      child: OmiSpinner(label: _statusText(context)),
     );
   }
 
@@ -826,25 +690,15 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     return PopScope(
       canPop: !_isUpdating,
       child: Scaffold(
-        backgroundColor: const Color(0xFF0D0D0D),
+        backgroundColor: OmiColors.surface0,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF0D0D0D),
-          elevation: 0,
-          leading: _isUpdating
-              ? const SizedBox()
-              : IconButton(
-                  icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-          title: const Text(
-            'Firmware Update',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          centerTitle: true,
+          automaticallyImplyLeading: false,
+          leading: _isUpdating ? null : const OmiBackButton(),
+          title: Text(context.l10n.firmwareUpdate),
         ),
         body: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.md),
             child: _buildContent(),
           ),
         ),
@@ -852,3 +706,5 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
     );
   }
 }
+
+enum _OtaMessage { checking, notSupported, connectFailed, starting, startFailed, device }

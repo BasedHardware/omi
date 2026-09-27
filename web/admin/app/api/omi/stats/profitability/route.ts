@@ -2,10 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { withRowLimit } from "@/lib/posthog";
 import { getOptionalStripe } from "@/lib/stripe";
-import { MRR_STATUSES, fetchOmiSubscriptions, monthlyAmount } from "@/lib/stripe-subscriptions";
+import {
+  MRR_STATUSES,
+  fetchOmiSubscriptions,
+  monthlyAmount,
+} from "@/lib/stripe-subscriptions";
 import { getAdminAuth, getDb } from "@/lib/firebase/admin";
-import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
-import { computeInfraCosts, type InfraCostsPayload } from "@/app/api/omi/stats/infra-costs/route";
+import {
+  MAX_PRECOMPUTED_AGE_MS,
+  getPayload,
+  setPayload,
+  withFreshness,
+} from "@/lib/payload-cache";
+import {
+  computeInfraCosts,
+  type InfraCostsPayload,
+} from "@/app/api/omi/stats/infra-costs/route";
 import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
@@ -99,7 +111,11 @@ export interface ProfitabilityPayload {
   generatedAt: number;
 }
 
-function cacheKey(days: number, desktopCost: number, mobileCost: number): string {
+function cacheKey(
+  days: number,
+  desktopCost: number,
+  mobileCost: number
+): string {
   return `profitability:v1:${days}:${desktopCost}:${mobileCost}`;
 }
 
@@ -122,7 +138,10 @@ function round2(v: number): number {
 }
 
 function formatDate(d: Date): string {
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
 function buildDayKeys(days: number): string[] {
@@ -150,11 +169,20 @@ type UserPlatformInfo = {
   hasMobile: boolean;
 };
 
-async function buildUserPlatformMapFromTokens(): Promise<Map<string, { desktop: Date | null; mobile: Date | null }> | null> {
+async function buildUserPlatformMapFromTokens(): Promise<Map<
+  string,
+  { desktop: Date | null; mobile: Date | null }
+> | null> {
   try {
     const db = getDb();
-    const snap = await db.collectionGroup("fcm_tokens").select("created_at").get();
-    const perUser = new Map<string, { desktop: Date | null; mobile: Date | null }>();
+    const snap = await db
+      .collectionGroup("fcm_tokens")
+      .select("created_at")
+      .get();
+    const perUser = new Map<
+      string,
+      { desktop: Date | null; mobile: Date | null }
+    >();
     for (const doc of snap.docs) {
       const parentUser = doc.ref.parent.parent;
       if (!parentUser) continue;
@@ -165,9 +193,11 @@ async function buildUserPlatformMapFromTokens(): Promise<Map<string, { desktop: 
       const createdAt = raw?.toDate ? raw.toDate() : raw ? new Date(raw) : null;
       const existing = perUser.get(uid) ?? { desktop: null, mobile: null };
       if (platform === "desktop") {
-        if (!existing.desktop || (createdAt && createdAt < existing.desktop)) existing.desktop = createdAt;
+        if (!existing.desktop || (createdAt && createdAt < existing.desktop))
+          existing.desktop = createdAt;
       } else {
-        if (!existing.mobile || (createdAt && createdAt < existing.mobile)) existing.mobile = createdAt;
+        if (!existing.mobile || (createdAt && createdAt < existing.mobile))
+          existing.mobile = createdAt;
       }
       perUser.set(uid, existing);
     }
@@ -179,7 +209,9 @@ async function buildUserPlatformMapFromTokens(): Promise<Map<string, { desktop: 
 }
 
 // PostHog distinct_ids are typically the Firebase uid (set via identify()).
-async function fetchDesktopUidsFromPostHog(days: number): Promise<Set<string> | null> {
+async function fetchDesktopUidsFromPostHog(
+  days: number
+): Promise<Set<string> | null> {
   const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
@@ -195,13 +227,22 @@ async function fetchDesktopUidsFromPostHog(days: number): Promise<Set<string> | 
   try {
     const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
       // Own fetch (bypasses lib/posthog's posthogFetch); apply the shared
       // row-limit guard directly so this can't silently truncate (#10190).
-      body: JSON.stringify({ query: { kind: "HogQLQuery", query: withRowLimit(query) } }),
+      body: JSON.stringify({
+        query: { kind: "HogQLQuery", query: withRowLimit(query) },
+      }),
     });
     if (!response.ok) {
-      console.error("PostHog desktop uids failed:", response.status, await response.text());
+      console.error(
+        "PostHog desktop uids failed:",
+        response.status,
+        await response.text()
+      );
       return null;
     }
     const raw = await response.json();
@@ -214,7 +255,9 @@ async function fetchDesktopUidsFromPostHog(days: number): Promise<Set<string> | 
 }
 
 // PostHog — active desktop users per day (unique distinct_ids with any event).
-async function fetchDesktopActivePerDay(days: number): Promise<Record<string, number> | null> {
+async function fetchDesktopActivePerDay(
+  days: number
+): Promise<Record<string, number> | null> {
   const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
@@ -231,16 +274,22 @@ async function fetchDesktopActivePerDay(days: number): Promise<Record<string, nu
   try {
     const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
       // Own fetch (bypasses lib/posthog's posthogFetch); apply the shared
       // row-limit guard directly so this can't silently truncate (#10190).
-      body: JSON.stringify({ query: { kind: "HogQLQuery", query: withRowLimit(query) } }),
+      body: JSON.stringify({
+        query: { kind: "HogQLQuery", query: withRowLimit(query) },
+      }),
     });
     if (!response.ok) return null;
     const raw = await response.json();
     const rows: [string, number][] = raw?.results ?? [];
     const out: Record<string, number> = {};
-    for (const [day, count] of rows) out[String(day).slice(0, 10)] = Number(count ?? 0);
+    for (const [day, count] of rows)
+      out[String(day).slice(0, 10)] = Number(count ?? 0);
     return out;
   } catch (err) {
     console.error("PostHog desktop active exception:", err);
@@ -249,7 +298,9 @@ async function fetchDesktopActivePerDay(days: number): Promise<Record<string, nu
 }
 
 // Mixpanel segmentation — active mobile users per day via $ae_session.
-async function fetchMobileActivePerDay(days: number): Promise<Record<string, number> | null> {
+async function fetchMobileActivePerDay(
+  days: number
+): Promise<Record<string, number> | null> {
   const secret = process.env.MIXPANEL_SECRET;
   const base = process.env.MIXPANEL_API_BASE || "https://mixpanel.com/api/2.0";
   if (!secret) return null;
@@ -270,17 +321,22 @@ async function fetchMobileActivePerDay(days: number): Promise<Record<string, num
 
   try {
     const auth = Buffer.from(`${secret}:`).toString("base64");
-    const response = await fetch(`${base.replace(/\/$/, "")}/segmentation?${params.toString()}`, {
-      headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
-    });
+    const response = await fetch(
+      `${base.replace(/\/$/, "")}/segmentation?${params.toString()}`,
+      {
+        headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
+      }
+    );
     if (!response.ok) return null;
     const raw = await response.json();
     if (raw?.error) return null;
-    const values: Record<string, Record<string, number>> = raw?.data?.values ?? {};
+    const values: Record<string, Record<string, number>> = raw?.data?.values ??
+    {};
     const out: Record<string, number> = {};
     for (const [os, daily] of Object.entries(values)) {
       const lower = os.toLowerCase();
-      if (lower !== "ios" && lower !== "android" && lower !== "iphone os") continue;
+      if (lower !== "ios" && lower !== "android" && lower !== "iphone os")
+        continue;
       for (const [day, count] of Object.entries(daily)) {
         const key = String(day).slice(0, 10);
         out[key] = (out[key] ?? 0) + Number(count ?? 0);
@@ -313,10 +369,16 @@ async function fetchMobileUidsFromMixpanel(): Promise<Set<string> | null> {
       });
       if (sessionId) params.set("session_id", sessionId);
       if (sessionId) params.set("page", String(page));
-      const response = await fetch(`${base.replace(/\/$/, "")}/engage?${params.toString()}`, {
-        method: "POST",
-        headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
-      });
+      const response = await fetch(
+        `${base.replace(/\/$/, "")}/engage?${params.toString()}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${auth}`,
+            Accept: "application/json",
+          },
+        }
+      );
       if (!response.ok) {
         console.error("Mixpanel engage failed:", response.status);
         break;
@@ -324,7 +386,8 @@ async function fetchMobileUidsFromMixpanel(): Promise<Set<string> | null> {
       const raw = await response.json();
       const results: { $distinct_id: string }[] = raw?.results ?? [];
       for (const r of results) if (r?.$distinct_id) uids.add(r.$distinct_id);
-      if (!raw?.session_id || !raw?.page_size || results.length < raw.page_size) break;
+      if (!raw?.session_id || !raw?.page_size || results.length < raw.page_size)
+        break;
       sessionId = raw.session_id;
       page = (raw.page ?? 0) + 1;
     }
@@ -338,12 +401,16 @@ async function fetchMobileUidsFromMixpanel(): Promise<Set<string> | null> {
 function mergeUserPlatforms(
   tokens: Map<string, { desktop: Date | null; mobile: Date | null }> | null,
   posthogDesktopUids: Set<string> | null,
-  mixpanelMobileUids: Set<string> | null,
+  mixpanelMobileUids: Set<string> | null
 ): Map<string, UserPlatformInfo> {
   const result = new Map<string, UserPlatformInfo>();
 
   const addHas = (uid: string, platform: KnownPlatform) => {
-    const cur = result.get(uid) ?? { platform: "unknown" as KnownPlatform | "unknown", hasDesktop: false, hasMobile: false };
+    const cur = result.get(uid) ?? {
+      platform: "unknown" as KnownPlatform | "unknown",
+      hasDesktop: false,
+      hasMobile: false,
+    };
     if (platform === "desktop") cur.hasDesktop = true;
     if (platform === "mobile") cur.hasMobile = true;
     result.set(uid, cur);
@@ -355,8 +422,10 @@ function mergeUserPlatforms(
       if (dates.mobile) addHas(uid, "mobile");
     }
   }
-  if (posthogDesktopUids) for (const uid of Array.from(posthogDesktopUids)) addHas(uid, "desktop");
-  if (mixpanelMobileUids) for (const uid of Array.from(mixpanelMobileUids)) addHas(uid, "mobile");
+  if (posthogDesktopUids)
+    for (const uid of Array.from(posthogDesktopUids)) addHas(uid, "desktop");
+  if (mixpanelMobileUids)
+    for (const uid of Array.from(mixpanelMobileUids)) addHas(uid, "mobile");
 
   // Resolve primary platform: prefer earliest token date when both. Otherwise
   // desktop wins if only desktop signal, mobile wins if only mobile signal.
@@ -364,7 +433,8 @@ function mergeUserPlatforms(
     const tokenDates = tokens?.get(uid);
     if (info.hasDesktop && info.hasMobile) {
       if (tokenDates?.desktop && tokenDates?.mobile) {
-        info.platform = tokenDates.desktop < tokenDates.mobile ? "desktop" : "mobile";
+        info.platform =
+          tokenDates.desktop < tokenDates.mobile ? "desktop" : "mobile";
       } else {
         // ASSUMPTION (unverified): a dual-platform user with no token dates to
         // order is counted as mobile, because mobile is the more common
@@ -412,7 +482,13 @@ async function listAllAuthSignups(): Promise<AuthSignup[] | null> {
 }
 
 interface InfraCostsSnapshot {
-  daily: { date: string; desktop: number; mobile: number; unknown: number; total: number }[];
+  daily: {
+    date: string;
+    desktop: number;
+    mobile: number;
+    unknown: number;
+    total: number;
+  }[];
   overheadMonthlyUsd: number;
   costSource?: "billing" | "estimated";
 }
@@ -422,11 +498,19 @@ interface InfraCostsSnapshot {
 // scan + overhead split as the infra-costs route. Uses that route's default
 // overhead (env / hard-coded April projection) by passing -1, which falls
 // through to the default inside parseInfraCostsParams-equivalent logic.
-async function fetchInfraCosts(days: number): Promise<InfraCostsSnapshot | null> {
+async function fetchInfraCosts(
+  days: number
+): Promise<InfraCostsSnapshot | null> {
   try {
-    const envOverhead = parseFloat(process.env.ADMIN_INFRA_OVERHEAD_MONTHLY || "");
-    const overheadMonthly = Number.isFinite(envOverhead) && envOverhead >= 0 ? envOverhead : 57447;
-    const raw: InfraCostsPayload = await computeInfraCosts({ days, overheadMonthly });
+    const envOverhead = parseFloat(
+      process.env.ADMIN_INFRA_OVERHEAD_MONTHLY || ""
+    );
+    const overheadMonthly =
+      Number.isFinite(envOverhead) && envOverhead >= 0 ? envOverhead : 57447;
+    const raw: InfraCostsPayload = await computeInfraCosts({
+      days,
+      overheadMonthly,
+    });
     if (!raw?.daily) return null;
     return {
       daily: raw.daily,
@@ -451,16 +535,22 @@ interface StripeSnapshot {
 
 async function fetchStripeSnapshot(
   days: number,
-  userPlatforms: Map<string, UserPlatformInfo>,
+  userPlatforms: Map<string, UserPlatformInfo>
 ): Promise<StripeSnapshot | null> {
   const stripe = getOptionalStripe();
   if (!stripe) return null;
 
-  const mrrByPlatform: Record<Platform, number> = { desktop: 0, mobile: 0, unknown: 0 };
-  const newPaidByDayByPlatform: Record<Platform, Record<string, number>> = {
-    desktop: {}, mobile: {}, unknown: {},
+  const mrrByPlatform: Record<Platform, number> = {
+    desktop: 0,
+    mobile: 0,
+    unknown: 0,
   };
-  const activeSubs: StripeSnapshot['activeSubs'] = [];
+  const newPaidByDayByPlatform: Record<Platform, Record<string, number>> = {
+    desktop: {},
+    mobile: {},
+    unknown: {},
+  };
+  const activeSubs: StripeSnapshot["activeSubs"] = [];
 
   const now = Math.floor(Date.now() / 1000);
   const windowStart = now - (days + 1) * 24 * 60 * 60;
@@ -472,7 +562,10 @@ async function fetchStripeSnapshot(
 
   const results = await Promise.allSettled([
     (async () => {
-      const { subscriptions } = await fetchOmiSubscriptions(stripe, MRR_STATUSES);
+      const { subscriptions } = await fetchOmiSubscriptions(
+        stripe,
+        MRR_STATUSES
+      );
       for (const sub of subscriptions) {
         const platform = lookupPlatform(sub.metadata?.uid);
         const monthlyMrr = monthlyAmount(sub);
@@ -485,7 +578,9 @@ async function fetchStripeSnapshot(
     (async () => {
       // Conversion counts every new paid subscription in the window, including ones already
       // cancelled, so this leg reads all statuses.
-      const { subscriptions } = await fetchOmiSubscriptions(stripe, ['all'], { created: { gte: windowStart } });
+      const { subscriptions } = await fetchOmiSubscriptions(stripe, ["all"], {
+        created: { gte: windowStart },
+      });
       for (const sub of subscriptions) {
         if (!sub.created) continue;
         const day = formatDate(new Date(sub.created * 1000));
@@ -498,7 +593,9 @@ async function fetchStripeSnapshot(
 
   const partial = results.some((r) => r.status === "rejected");
   if (partial) {
-    for (const r of results) if (r.status === "rejected") console.error("Stripe snapshot partial:", r.reason);
+    for (const r of results)
+      if (r.status === "rejected")
+        console.error("Stripe snapshot partial:", r.reason);
   }
 
   return { mrrByPlatform, newPaidByDayByPlatform, activeSubs, partial };
@@ -509,296 +606,390 @@ export { cacheKey as profitabilityCacheKey };
 // Parse the profitability request params the same way the GET handler does, so
 // the cache key derived from them matches between the route and the precompute
 // cron.
-export function parseProfitabilityParams(searchParams: URLSearchParams): { days: number; desktopCost: number; mobileCost: number } {
-  const days = Math.min(Math.max(parseInt(searchParams.get("days") || "30", 10), 7), 90);
-  const desktopCost = parseCost(searchParams.get("desktop_cost"), DEFAULT_DESKTOP_COST);
-  const mobileCost = parseCost(searchParams.get("mobile_cost"), DEFAULT_MOBILE_COST);
+export function parseProfitabilityParams(searchParams: URLSearchParams): {
+  days: number;
+  desktopCost: number;
+  mobileCost: number;
+} {
+  const days = Math.min(
+    Math.max(parseInt(searchParams.get("days") || "30", 10), 7),
+    90
+  );
+  const desktopCost = parseCost(
+    searchParams.get("desktop_cost"),
+    DEFAULT_DESKTOP_COST
+  );
+  const mobileCost = parseCost(
+    searchParams.get("mobile_cost"),
+    DEFAULT_MOBILE_COST
+  );
   return { days, desktopCost, mobileCost };
 }
 
-export async function computeProfitability(opts: { days: number; desktopCost: number; mobileCost: number }): Promise<ProfitabilityPayload> {
+export async function computeProfitability(opts: {
+  days: number;
+  desktopCost: number;
+  mobileCost: number;
+}): Promise<ProfitabilityPayload> {
   const { days, desktopCost, mobileCost } = opts;
 
-    const [tokensRes, signupsRes, desktopUidsRes, mobileUidsRes, desktopActiveRes, mobileActiveRes, infraRes] = await Promise.allSettled([
-      buildUserPlatformMapFromTokens(),
-      listAllAuthSignups(),
-      fetchDesktopUidsFromPostHog(days),
-      fetchMobileUidsFromMixpanel(),
-      fetchDesktopActivePerDay(days),
-      fetchMobileActivePerDay(days),
-      fetchInfraCosts(days),
-    ]);
+  const [
+    tokensRes,
+    signupsRes,
+    desktopUidsRes,
+    mobileUidsRes,
+    desktopActiveRes,
+    mobileActiveRes,
+    infraRes,
+  ] = await Promise.allSettled([
+    buildUserPlatformMapFromTokens(),
+    listAllAuthSignups(),
+    fetchDesktopUidsFromPostHog(days),
+    fetchMobileUidsFromMixpanel(),
+    fetchDesktopActivePerDay(days),
+    fetchMobileActivePerDay(days),
+    fetchInfraCosts(days),
+  ]);
 
-    const tokens = tokensRes.status === "fulfilled" ? tokensRes.value : null;
-    const signups = signupsRes.status === "fulfilled" ? signupsRes.value : null;
-    const desktopUids = desktopUidsRes.status === "fulfilled" ? desktopUidsRes.value : null;
-    const mobileUids = mobileUidsRes.status === "fulfilled" ? mobileUidsRes.value : null;
-    const desktopActive = desktopActiveRes.status === "fulfilled" ? desktopActiveRes.value : null;
-    const mobileActive = mobileActiveRes.status === "fulfilled" ? mobileActiveRes.value : null;
-    const infraCosts = infraRes.status === "fulfilled" ? infraRes.value : null;
+  const tokens = tokensRes.status === "fulfilled" ? tokensRes.value : null;
+  const signups = signupsRes.status === "fulfilled" ? signupsRes.value : null;
+  const desktopUids =
+    desktopUidsRes.status === "fulfilled" ? desktopUidsRes.value : null;
+  const mobileUids =
+    mobileUidsRes.status === "fulfilled" ? mobileUidsRes.value : null;
+  const desktopActive =
+    desktopActiveRes.status === "fulfilled" ? desktopActiveRes.value : null;
+  const mobileActive =
+    mobileActiveRes.status === "fulfilled" ? mobileActiveRes.value : null;
+  const infraCosts = infraRes.status === "fulfilled" ? infraRes.value : null;
 
-    const userPlatforms = mergeUserPlatforms(tokens, desktopUids, mobileUids);
+  const userPlatforms = mergeUserPlatforms(tokens, desktopUids, mobileUids);
 
-    const stripeRes = await fetchStripeSnapshot(days, userPlatforms).catch((e) => {
+  const stripeRes = await fetchStripeSnapshot(days, userPlatforms).catch(
+    (e) => {
       console.error("Stripe snapshot threw:", e);
       return null;
-    });
-
-    if (
-      tokens == null &&
-      signups == null &&
-      desktopUids == null &&
-      mobileUids == null &&
-      desktopActive == null &&
-      mobileActive == null &&
-      stripeRes == null
-    ) {
-      throw new Error("All profitability data sources failed");
     }
+  );
 
-    const dateKeys = buildDayKeys(days);
+  if (
+    tokens == null &&
+    signups == null &&
+    desktopUids == null &&
+    mobileUids == null &&
+    desktopActive == null &&
+    mobileActive == null &&
+    stripeRes == null
+  ) {
+    throw new Error("All profitability data sources failed");
+  }
 
-    const signupsByDay: Record<string, { desktop: number; mobile: number }> = {};
-    let totalUsersDesktop = 0;
-    let totalUsersMobile = 0;
-    let totalUsersUnknown = 0;
-    const cumulativeTotals = { desktop: 0, mobile: 0 };
+  const dateKeys = buildDayKeys(days);
 
-    const sortedSignups = (signups ?? []).slice().sort(
-      (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+  const signupsByDay: Record<string, { desktop: number; mobile: number }> = {};
+  let totalUsersDesktop = 0;
+  let totalUsersMobile = 0;
+  let totalUsersUnknown = 0;
+  const cumulativeTotals = { desktop: 0, mobile: 0 };
+
+  const sortedSignups = (signups ?? [])
+    .slice()
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  const windowStartKey = dateKeys[0];
+  for (const { uid, createdAt } of sortedSignups) {
+    const info = userPlatforms.get(uid);
+    const platform = info?.platform ?? "unknown";
+    if (platform === "desktop") {
+      totalUsersDesktop += 1;
+      cumulativeTotals.desktop += 1;
+    } else if (platform === "mobile") {
+      totalUsersMobile += 1;
+      cumulativeTotals.mobile += 1;
+    } else totalUsersUnknown += 1;
+
+    const day = formatDate(
+      new Date(
+        Date.UTC(
+          createdAt.getUTCFullYear(),
+          createdAt.getUTCMonth(),
+          createdAt.getUTCDate()
+        )
+      )
     );
-    const windowStartKey = dateKeys[0];
-    for (const { uid, createdAt } of sortedSignups) {
-      const info = userPlatforms.get(uid);
-      const platform = info?.platform ?? "unknown";
-      if (platform === "desktop") { totalUsersDesktop += 1; cumulativeTotals.desktop += 1; }
-      else if (platform === "mobile") { totalUsersMobile += 1; cumulativeTotals.mobile += 1; }
-      else totalUsersUnknown += 1;
-
-      const day = formatDate(new Date(Date.UTC(
-        createdAt.getUTCFullYear(),
-        createdAt.getUTCMonth(),
-        createdAt.getUTCDate(),
-      )));
-      if (day >= windowStartKey && platform !== "unknown") {
-        const bucket = signupsByDay[day] ?? { desktop: 0, mobile: 0 };
-        bucket[platform] += 1;
-        signupsByDay[day] = bucket;
-      }
+    if (day >= windowStartKey && platform !== "unknown") {
+      const bucket = signupsByDay[day] ?? { desktop: 0, mobile: 0 };
+      bucket[platform] += 1;
+      signupsByDay[day] = bucket;
     }
+  }
 
-    const users: DailyPoint[] = dateKeys.map((date) => {
-      const row = signupsByDay[date] ?? { desktop: 0, mobile: 0 };
-      return { date, desktop: row.desktop, mobile: row.mobile, total: row.desktop + row.mobile };
-    });
-
-    let runningDesktop = cumulativeTotals.desktop - users.reduce((s, u) => s + u.desktop, 0);
-    let runningMobile = cumulativeTotals.mobile - users.reduce((s, u) => s + u.mobile, 0);
-    const cumulativeUsers: DailyPoint[] = users.map((row) => {
-      runningDesktop += row.desktop;
-      runningMobile += row.mobile;
-      return { date: row.date, desktop: runningDesktop, mobile: runningMobile, total: runningDesktop + runningMobile };
-    });
-
-    const activeUsers: DailyPoint[] = dateKeys.map((date) => {
-      const d = Number(desktopActive?.[date] ?? 0);
-      const m = Number(mobileActive?.[date] ?? 0);
-      return { date, desktop: d, mobile: m, total: d + m };
-    });
-
-    const mrrByPlatform = stripeRes?.mrrByPlatform ?? { desktop: 0, mobile: 0, unknown: 0 };
-    const mrr = mrrByPlatform.desktop + mrrByPlatform.mobile + mrrByPlatform.unknown;
-
-    // Cumulative MRR per platform, day by day. For each day in the window we
-    // sum the monthly MRR of every active subscription that was created on or
-    // before that day. This reflects actual revenue growth instead of a flat
-    // proportional split. Subs with an unresolved `unknown` platform are
-    // attributed to whichever platform has the larger share of known revenue
-    // so the stacked chart still ends at the live MRR total.
-    const subs = stripeRes?.activeSubs ?? [];
-    // ASSUMPTION (unverified): unknown-platform MRR is smeared across the two
-    // platforms in proportion to known MRR, and 50/50 when no MRR is
-    // attributable at all. `mrrUnknown` in the summary reports the real size of
-    // what is being smeared; the exact series below never include it.
-    const knownMrrTotal = mrrByPlatform.desktop + mrrByPlatform.mobile;
-    const desktopShare = knownMrrTotal > 0 ? mrrByPlatform.desktop / knownMrrTotal : 0.5;
-    const mobileShare = knownMrrTotal > 0 ? mrrByPlatform.mobile / knownMrrTotal : 0.5;
-    const sortedSubs = subs.slice().sort((a, b) => a.createdAt - b.createdAt);
-    let subIdx = 0;
-    let cumulativeDesktop = 0;
-    let cumulativeMobile = 0;
-    // Exact = only subscriptions attributed to the platform; unknown-platform
-    // revenue never enters these. The platform boards chart the exact series
-    // so "Revenue / day (desktop)" cannot include smeared unknown revenue;
-    // the All board keeps the proportional split so its stack ends at live MRR.
-    let cumulativeDesktopExact = 0;
-    let cumulativeMobileExact = 0;
-    const revenue: (DailyPoint & { desktopExact: number; mobileExact: number })[] =
-      dateKeys.map((date) => {
-        const endOfDay = Date.parse(`${date}T23:59:59Z`) / 1000;
-        while (subIdx < sortedSubs.length && sortedSubs[subIdx].createdAt <= endOfDay) {
-          const s = sortedSubs[subIdx];
-          if (s.platform === "desktop") {
-            cumulativeDesktop += s.monthlyMrr;
-            cumulativeDesktopExact += s.monthlyMrr;
-          } else if (s.platform === "mobile") {
-            cumulativeMobile += s.monthlyMrr;
-            cumulativeMobileExact += s.monthlyMrr;
-          } else {
-            cumulativeDesktop += s.monthlyMrr * desktopShare;
-            cumulativeMobile += s.monthlyMrr * mobileShare;
-          }
-          subIdx += 1;
-        }
-        const d = round2(cumulativeDesktop);
-        const m = round2(cumulativeMobile);
-        return {
-          date, desktop: d, mobile: m, total: round2(d + m),
-          desktopExact: round2(cumulativeDesktopExact),
-          mobileExact: round2(cumulativeMobileExact),
-        };
-      });
-
-    // Prefer real cost from infra-costs endpoint (Firestore llm_usage buckets
-    // + configurable monthly overhead). Fallback to active-users × per-user
-    // assumption when the endpoint didn't return data.
-    const infraByDate: Record<string, { desktop: number; mobile: number; total: number }> = {};
-    if (infraCosts?.daily) {
-      for (const row of infraCosts.daily) {
-        infraByDate[row.date] = { desktop: row.desktop, mobile: row.mobile, total: row.total };
-      }
-    }
-
-    // In billing mode the infra series honestly ends at D-2 (the billing
-    // export back-fills ~2 days). Never pad those trailing days with the
-    // per-user assumption — a chart that ends two days ago beats one whose
-    // freshest points are fabricated.
-    const billingMode = infraCosts?.costSource === "billing";
-    const costDateKeys = billingMode ? dateKeys.filter((d) => infraByDate[d]) : dateKeys;
-    const costIdx = new Map(dateKeys.map((d, i) => [d, i] as const));
-
-    const cost: DailyPoint[] = costDateKeys.map((date) => {
-      const real = infraByDate[date];
-      if (real) {
-        return { date, desktop: round2(real.desktop), mobile: round2(real.mobile), total: round2(real.total) };
-      }
-      const row = activeUsers[costIdx.get(date)!];
-      const d = round2(row.desktop * desktopCost);
-      const m = round2(row.mobile * mobileCost);
-      return { date, desktop: d, mobile: m, total: round2(d + m) };
-    });
-
-    // Cost PER USER = total platform cost / platform active users for that
-    // day. With 0 active users there is no rate to report: in billing mode the
-    // cell is null (a gap in the chart), because filling it with the per-user
-    // assumption would print an invented number next to measured ones. The
-    // legacy estimated path keeps the old fallback — the whole series there is
-    // already labeled costSource:"estimated".
-    const rate = (numerator: number, denominator: number, assumed: number): number | null => {
-      if (denominator > 0) return round2(numerator / denominator);
-      return billingMode ? null : round2(assumed);
+  const users: DailyPoint[] = dateKeys.map((date) => {
+    const row = signupsByDay[date] ?? { desktop: 0, mobile: 0 };
+    return {
+      date,
+      desktop: row.desktop,
+      mobile: row.mobile,
+      total: row.desktop + row.mobile,
     };
-    const costPerUser: NullableDailyPoint[] = costDateKeys.map((date, idx) => {
-      const active = activeUsers[costIdx.get(date)!];
-      const costRow = cost[idx];
+  });
+
+  let runningDesktop =
+    cumulativeTotals.desktop - users.reduce((s, u) => s + u.desktop, 0);
+  let runningMobile =
+    cumulativeTotals.mobile - users.reduce((s, u) => s + u.mobile, 0);
+  const cumulativeUsers: DailyPoint[] = users.map((row) => {
+    runningDesktop += row.desktop;
+    runningMobile += row.mobile;
+    return {
+      date: row.date,
+      desktop: runningDesktop,
+      mobile: runningMobile,
+      total: runningDesktop + runningMobile,
+    };
+  });
+
+  const activeUsers: DailyPoint[] = dateKeys.map((date) => {
+    const d = Number(desktopActive?.[date] ?? 0);
+    const m = Number(mobileActive?.[date] ?? 0);
+    return { date, desktop: d, mobile: m, total: d + m };
+  });
+
+  const mrrByPlatform = stripeRes?.mrrByPlatform ?? {
+    desktop: 0,
+    mobile: 0,
+    unknown: 0,
+  };
+  const mrr =
+    mrrByPlatform.desktop + mrrByPlatform.mobile + mrrByPlatform.unknown;
+
+  // Cumulative MRR per platform, day by day. For each day in the window we
+  // sum the monthly MRR of every active subscription that was created on or
+  // before that day. This reflects actual revenue growth instead of a flat
+  // proportional split. Subs with an unresolved `unknown` platform are
+  // attributed to whichever platform has the larger share of known revenue
+  // so the stacked chart still ends at the live MRR total.
+  const subs = stripeRes?.activeSubs ?? [];
+  // ASSUMPTION (unverified): unknown-platform MRR is smeared across the two
+  // platforms in proportion to known MRR, and 50/50 when no MRR is
+  // attributable at all. `mrrUnknown` in the summary reports the real size of
+  // what is being smeared; the exact series below never include it.
+  const knownMrrTotal = mrrByPlatform.desktop + mrrByPlatform.mobile;
+  const desktopShare =
+    knownMrrTotal > 0 ? mrrByPlatform.desktop / knownMrrTotal : 0.5;
+  const mobileShare =
+    knownMrrTotal > 0 ? mrrByPlatform.mobile / knownMrrTotal : 0.5;
+  const sortedSubs = subs.slice().sort((a, b) => a.createdAt - b.createdAt);
+  let subIdx = 0;
+  let cumulativeDesktop = 0;
+  let cumulativeMobile = 0;
+  // Exact = only subscriptions attributed to the platform; unknown-platform
+  // revenue never enters these. The platform boards chart the exact series
+  // so "Revenue / day (desktop)" cannot include smeared unknown revenue;
+  // the All board keeps the proportional split so its stack ends at live MRR.
+  let cumulativeDesktopExact = 0;
+  let cumulativeMobileExact = 0;
+  const revenue: (DailyPoint & {
+    desktopExact: number;
+    mobileExact: number;
+  })[] = dateKeys.map((date) => {
+    const endOfDay = Date.parse(`${date}T23:59:59Z`) / 1000;
+    while (
+      subIdx < sortedSubs.length &&
+      sortedSubs[subIdx].createdAt <= endOfDay
+    ) {
+      const s = sortedSubs[subIdx];
+      if (s.platform === "desktop") {
+        cumulativeDesktop += s.monthlyMrr;
+        cumulativeDesktopExact += s.monthlyMrr;
+      } else if (s.platform === "mobile") {
+        cumulativeMobile += s.monthlyMrr;
+        cumulativeMobileExact += s.monthlyMrr;
+      } else {
+        cumulativeDesktop += s.monthlyMrr * desktopShare;
+        cumulativeMobile += s.monthlyMrr * mobileShare;
+      }
+      subIdx += 1;
+    }
+    const d = round2(cumulativeDesktop);
+    const m = round2(cumulativeMobile);
+    return {
+      date,
+      desktop: d,
+      mobile: m,
+      total: round2(d + m),
+      desktopExact: round2(cumulativeDesktopExact),
+      mobileExact: round2(cumulativeMobileExact),
+    };
+  });
+
+  // Prefer real cost from infra-costs endpoint (Firestore llm_usage buckets
+  // + configurable monthly overhead). Fallback to active-users × per-user
+  // assumption when the endpoint didn't return data.
+  const infraByDate: Record<
+    string,
+    { desktop: number; mobile: number; total: number }
+  > = {};
+  if (infraCosts?.daily) {
+    for (const row of infraCosts.daily) {
+      infraByDate[row.date] = {
+        desktop: row.desktop,
+        mobile: row.mobile,
+        total: row.total,
+      };
+    }
+  }
+
+  // In billing mode the infra series honestly ends at D-2 (the billing
+  // export back-fills ~2 days). Never pad those trailing days with the
+  // per-user assumption — a chart that ends two days ago beats one whose
+  // freshest points are fabricated.
+  const billingMode = infraCosts?.costSource === "billing";
+  const costDateKeys = billingMode
+    ? dateKeys.filter((d) => infraByDate[d])
+    : dateKeys;
+  const costIdx = new Map(dateKeys.map((d, i) => [d, i] as const));
+
+  const cost: DailyPoint[] = costDateKeys.map((date) => {
+    const real = infraByDate[date];
+    if (real) {
       return {
         date,
-        desktop: rate(costRow.desktop, active.desktop, desktopCost),
-        mobile: rate(costRow.mobile, active.mobile, mobileCost),
-        total: rate(costRow.total, active.total, (desktopCost + mobileCost) / 2),
+        desktop: round2(real.desktop),
+        mobile: round2(real.mobile),
+        total: round2(real.total),
       };
-    });
+    }
+    const row = activeUsers[costIdx.get(date)!];
+    const d = round2(row.desktop * desktopCost);
+    const m = round2(row.mobile * mobileCost);
+    return { date, desktop: d, mobile: m, total: round2(d + m) };
+  });
 
-    const totalCostUsd = cost.reduce((s, c) => s + c.total, 0);
-    // Average over the same (possibly D-2-trimmed) days as the cost series so
-    // numerator and denominator cover identical windows, and only over the days
-    // that produced a real rate — a null day contributes neither its cost nor
-    // its (zero) actives, instead of being averaged in as $0.
-    const avgRate = (platform: "desktop" | "mobile", assumed: number): number | null => {
-      let costSum = 0;
-      let activeSum = 0;
-      costDateKeys.forEach((date, idx) => {
-        if (costPerUser[idx][platform] === null) return;
-        costSum += cost[idx][platform];
-        activeSum += activeUsers[costIdx.get(date)!][platform];
-      });
-      if (activeSum > 0) return round2(costSum / activeSum);
-      return billingMode ? null : round2(assumed);
+  // Cost PER USER = total platform cost / platform active users for that
+  // day. With 0 active users there is no rate to report: in billing mode the
+  // cell is null (a gap in the chart), because filling it with the per-user
+  // assumption would print an invented number next to measured ones. The
+  // legacy estimated path keeps the old fallback — the whole series there is
+  // already labeled costSource:"estimated".
+  const rate = (
+    numerator: number,
+    denominator: number,
+    assumed: number
+  ): number | null => {
+    if (denominator > 0) return round2(numerator / denominator);
+    return billingMode ? null : round2(assumed);
+  };
+  const costPerUser: NullableDailyPoint[] = costDateKeys.map((date, idx) => {
+    const active = activeUsers[costIdx.get(date)!];
+    const costRow = cost[idx];
+    return {
+      date,
+      desktop: rate(costRow.desktop, active.desktop, desktopCost),
+      mobile: rate(costRow.mobile, active.mobile, mobileCost),
+      total: rate(costRow.total, active.total, (desktopCost + mobileCost) / 2),
     };
-    const avgCostPerUserDesktop = avgRate("desktop", desktopCost);
-    const avgCostPerUserMobile = avgRate("mobile", mobileCost);
+  });
 
-    const newPaidByDayByPlatform = stripeRes?.newPaidByDayByPlatform ?? { desktop: {}, mobile: {}, unknown: {} };
-    const conversion: DailyPoint[] = dateKeys.map((date, idx) => {
-      const newRow = users[idx];
-      const dPaid = (newPaidByDayByPlatform.desktop[date] ?? 0);
-      const mPaid = (newPaidByDayByPlatform.mobile[date] ?? 0);
-      const uPaid = (newPaidByDayByPlatform.unknown[date] ?? 0);
-      const dPct = newRow.desktop > 0 ? Math.round((dPaid / newRow.desktop) * 1000) / 10 : 0;
-      const mPct = newRow.mobile > 0 ? Math.round((mPaid / newRow.mobile) * 1000) / 10 : 0;
-      const tPaid = dPaid + mPaid + uPaid;
-      const tPct = newRow.total > 0 ? Math.round((tPaid / newRow.total) * 1000) / 10 : 0;
-      return { date, desktop: dPct, mobile: mPct, total: tPct };
+  const totalCostUsd = cost.reduce((s, c) => s + c.total, 0);
+  // Average over the same (possibly D-2-trimmed) days as the cost series so
+  // numerator and denominator cover identical windows, and only over the days
+  // that produced a real rate — a null day contributes neither its cost nor
+  // its (zero) actives, instead of being averaged in as $0.
+  const avgRate = (
+    platform: "desktop" | "mobile",
+    assumed: number
+  ): number | null => {
+    let costSum = 0;
+    let activeSum = 0;
+    costDateKeys.forEach((date, idx) => {
+      if (costPerUser[idx][platform] === null) return;
+      costSum += cost[idx][platform];
+      activeSum += activeUsers[costIdx.get(date)!][platform];
     });
+    if (activeSum > 0) return round2(costSum / activeSum);
+    return billingMode ? null : round2(assumed);
+  };
+  const avgCostPerUserDesktop = avgRate("desktop", desktopCost);
+  const avgCostPerUserMobile = avgRate("mobile", mobileCost);
 
-    const totalNewDesktop = users.reduce((s, u) => s + u.desktop, 0);
-    const totalNewMobile = users.reduce((s, u) => s + u.mobile, 0);
+  const newPaidByDayByPlatform = stripeRes?.newPaidByDayByPlatform ?? {
+    desktop: {},
+    mobile: {},
+    unknown: {},
+  };
+  const conversion: DailyPoint[] = dateKeys.map((date, idx) => {
+    const newRow = users[idx];
+    const dPaid = newPaidByDayByPlatform.desktop[date] ?? 0;
+    const mPaid = newPaidByDayByPlatform.mobile[date] ?? 0;
+    const uPaid = newPaidByDayByPlatform.unknown[date] ?? 0;
+    const dPct =
+      newRow.desktop > 0 ? Math.round((dPaid / newRow.desktop) * 1000) / 10 : 0;
+    const mPct =
+      newRow.mobile > 0 ? Math.round((mPaid / newRow.mobile) * 1000) / 10 : 0;
+    const tPaid = dPaid + mPaid + uPaid;
+    const tPct =
+      newRow.total > 0 ? Math.round((tPaid / newRow.total) * 1000) / 10 : 0;
+    return { date, desktop: dPct, mobile: mPct, total: tPct };
+  });
 
-    const partial =
-      tokens == null ||
-      signups == null ||
-      (desktopUids == null && desktopActive == null) ||
-      (mobileUids == null && mobileActive == null) ||
-      stripeRes == null ||
-      (stripeRes?.partial ?? false);
+  const totalNewDesktop = users.reduce((s, u) => s + u.desktop, 0);
+  const totalNewMobile = users.reduce((s, u) => s + u.mobile, 0);
 
-    const payload: ProfitabilityPayload = {
-      days,
-      users,
-      cumulativeUsers,
-      activeUsers,
-      revenue,
-      cost,
-      costPerUser,
-      conversion,
-      summary: {
-        mrr,
-        mrrDesktop: round2(mrrByPlatform.desktop),
-        mrrMobile: round2(mrrByPlatform.mobile),
-        mrrUnknown: round2(mrrByPlatform.unknown),
-        totalNewDesktop,
-        totalNewMobile,
-        totalUsersDesktop,
-        totalUsersMobile,
-        totalUsersUnknown,
-        totalCostUsd: round2(totalCostUsd),
-        avgCostPerUserDesktop,
-        avgCostPerUserMobile,
-        assumptions: {
-          // Only in play on the legacy estimated path; in billing mode these
-          // are inert and costSource is "real".
-          desktopCostPerUser: desktopCost,
-          mobileCostPerUser: mobileCost,
-          overheadMonthlyUsd: infraCosts?.overheadMonthlyUsd,
-          // "real" only when the infra numbers came from billing systems;
-          // the legacy hardcoded-table path reports itself as estimated.
-          costSource: infraCosts?.costSource === "billing" ? "real" : "estimated",
-        },
-        partial,
-        sources: {
-          firebaseAuth: signups != null,
-          firestoreTokens: tokens != null,
-          posthogDesktop: desktopUids != null || desktopActive != null,
-          mixpanelMobile: mobileUids != null || mobileActive != null,
-          stripeActive: stripeRes != null,
-          stripeNewPaid: stripeRes != null,
-          infraCosts: infraCosts != null,
-        },
+  const partial =
+    tokens == null ||
+    signups == null ||
+    (desktopUids == null && desktopActive == null) ||
+    (mobileUids == null && mobileActive == null) ||
+    stripeRes == null ||
+    (stripeRes?.partial ?? false);
+
+  const payload: ProfitabilityPayload = {
+    days,
+    users,
+    cumulativeUsers,
+    activeUsers,
+    revenue,
+    cost,
+    costPerUser,
+    conversion,
+    summary: {
+      mrr,
+      mrrDesktop: round2(mrrByPlatform.desktop),
+      mrrMobile: round2(mrrByPlatform.mobile),
+      mrrUnknown: round2(mrrByPlatform.unknown),
+      totalNewDesktop,
+      totalNewMobile,
+      totalUsersDesktop,
+      totalUsersMobile,
+      totalUsersUnknown,
+      totalCostUsd: round2(totalCostUsd),
+      avgCostPerUserDesktop,
+      avgCostPerUserMobile,
+      assumptions: {
+        // Only in play on the legacy estimated path; in billing mode these
+        // are inert and costSource is "real".
+        desktopCostPerUser: desktopCost,
+        mobileCostPerUser: mobileCost,
+        overheadMonthlyUsd: infraCosts?.overheadMonthlyUsd,
+        // "real" only when the infra numbers came from billing systems;
+        // the legacy hardcoded-table path reports itself as estimated.
+        costSource: infraCosts?.costSource === "billing" ? "real" : "estimated",
       },
-      generatedAt: Date.now(),
-    };
+      partial,
+      sources: {
+        firebaseAuth: signups != null,
+        firestoreTokens: tokens != null,
+        posthogDesktop: desktopUids != null || desktopActive != null,
+        mixpanelMobile: mobileUids != null || mobileActive != null,
+        stripeActive: stripeRes != null,
+        stripeNewPaid: stripeRes != null,
+        infraCosts: infraCosts != null,
+      },
+    },
+    generatedAt: Date.now(),
+  };
 
-    return payload;
+  return payload;
 }
 
 export async function GET(request: NextRequest) {
@@ -807,27 +998,38 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const { days, desktopCost, mobileCost } = parseProfitabilityParams(searchParams);
+    const { days, desktopCost, mobileCost } =
+      parseProfitabilityParams(searchParams);
     const key = cacheKey(days, desktopCost, mobileCost);
 
     // Cache-first: precompute writes this off the request path. This route is
     // far too heavy (full fcm_tokens collection-group scan + auth.listUsers
     // over ~150k users + Mixpanel paging) to recompute on the request path, so
-    // if a precomputed payload exists at any age we serve it immediately.
-    const cached = await getPayload<ProfitabilityPayload>(key);
+    // a precomputed payload within the freshness bound is served immediately.
+    // A doc older than the bound is a key no active writer maintains (the
+    // Aug-25 freeze: boards requesting legacy cost params read a doc frozen
+    // for ~4 weeks) — treat it as a miss and fall through to the inline
+    // compute below rather than serving it as live data.
+    const cached = await getPayload<ProfitabilityPayload>(key, {
+      maxAgeMs: MAX_PRECOMPUTED_AGE_MS,
+    });
     if (cached) {
       return NextResponse.json(withFreshness(cached.data, cached.freshAt));
     }
 
     // Cold start before the first precompute: compute inline (slow), cache, return.
-    const payload = await computeProfitability({ days, desktopCost, mobileCost });
+    const payload = await computeProfitability({
+      days,
+      desktopCost,
+      mobileCost,
+    });
     await setPayload(key, payload);
     return NextResponse.json(withFreshness(payload, Date.now()));
   } catch (err: any) {
     console.error("Profitability stats error:", err);
     return NextResponse.json(
       { error: err?.message || "Failed to compute profitability metrics" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

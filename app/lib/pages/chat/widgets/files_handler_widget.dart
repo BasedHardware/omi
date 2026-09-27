@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/ui/ui.dart';
 
 class FilesHandlerWidget extends StatelessWidget {
   final ServerMessage message;
@@ -36,23 +37,20 @@ class FilesHandlerWidget extends StatelessWidget {
               return _buildImageThumbnail(context, index);
             } else {
               return Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor,
-                  borderRadius: const BorderRadius.all(Radius.circular(10.0)),
-                ),
+                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 margin: const EdgeInsets.only(bottom: 6, top: 2),
                 width: MediaQuery.sizeOf(context).width * 0.32,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.insert_drive_file, color: Colors.white),
+                    const Icon(Icons.insert_drive_file, color: OmiColors.textPrimary),
                     const SizedBox(height: 6),
                     Text(
                       message.files[index].name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      style: OmiType.footnote,
                     ),
                   ],
                 ),
@@ -74,8 +72,8 @@ class FilesHandlerWidget extends StatelessWidget {
       return Container(
         margin: const EdgeInsets.only(bottom: 6, top: 2),
         decoration: BoxDecoration(
-          color: Theme.of(context).primaryColor,
-          borderRadius: const BorderRadius.all(Radius.circular(10.0)),
+          color: OmiColors.surface2,
+          borderRadius: OmiRadius.mdAll,
           image: DecorationImage(image: FileImage(File(filePath)), fit: BoxFit.cover),
         ),
         width: width,
@@ -88,8 +86,8 @@ class FilesHandlerWidget extends StatelessWidget {
       imageBuilder: (context, imageProvider) => Container(
         margin: const EdgeInsets.only(bottom: 6, top: 2),
         decoration: BoxDecoration(
-          color: Theme.of(context).primaryColor,
-          borderRadius: const BorderRadius.all(Radius.circular(10.0)),
+          color: OmiColors.surface2,
+          borderRadius: OmiRadius.mdAll,
           image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
         ),
         width: width,
@@ -98,17 +96,14 @@ class FilesHandlerWidget extends StatelessWidget {
       placeholder: (context, url) => SizedBox(
         width: width,
         height: height,
-        child: const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))),
+        child: const Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
       ),
       errorWidget: (context, url, error) => Container(
         margin: const EdgeInsets.only(bottom: 6, top: 2),
-        decoration: BoxDecoration(
-          color: Theme.of(context).primaryColor,
-          borderRadius: const BorderRadius.all(Radius.circular(10.0)),
-        ),
+        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
         width: width,
         height: height,
-        child: const Center(child: Icon(Icons.image, color: Colors.white54)),
+        child: const Center(child: Icon(Icons.image, color: OmiColors.textTertiary)),
       ),
     );
   }

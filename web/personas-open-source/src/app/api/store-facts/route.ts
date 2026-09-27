@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import Redis from 'ioredis';
+import { integrationMemoriesUrl } from '@/lib/server/omi-integration-url.mjs';
 
 // ... Redis client config ...
 
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     // The Omi integration API exposes memories/facts via /user/memories
     // (POST), validated against integration-public-openapi.json. The legacy
     // /user/facts path did not exist on the backend.
-    const url = `https://api.omi.me/v2/integrations/${appId}/user/memories?uid=${uid}`;
+    const url = integrationMemoriesUrl(appId, uid);
     const headers = {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',

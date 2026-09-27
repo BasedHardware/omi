@@ -6,6 +6,8 @@ from typing import Dict, Optional
 from datetime import datetime
 import json
 import os
+import threading
+import tempfile
 
 # Storage file paths - use /app/data for Railway persistence
 STORAGE_DIR = os.getenv("STORAGE_DIR", os.path.dirname(os.path.abspath(__file__)))
@@ -19,27 +21,32 @@ else:
 
 USERS_FILE = os.path.join(STORAGE_DIR, "users_data.json")
 
-# In-memory storage
+# In-memory storage and synchronization lock
 users: Dict[str, dict] = {}
+_storage_lock = threading.Lock()
 
 
 def load_storage():
     """Load user data from file on startup."""
     global users
     try:
-        if os.path.exists(USERS_FILE):
-            with open(USERS_FILE, 'r') as f:
-                users = json.load(f)
-                print(f"Loaded {len(users)} users from storage")
+        with _storage_lock:
+            if os.path.exists(USERS_FILE):
+                with open(USERS_FILE, 'r', encoding='utf-8') as f:
+                    users = json.load(f)
+                    print(f"Loaded {len(users)} users from storage")
     except Exception as e:
         print(f"Could not load users: {e}")
 
 
 def save_users():
-    """Save user data to file."""
+    """Save user data to file atomically and thread-safely."""
     try:
-        with open(USERS_FILE, 'w') as f:
-            json.dump(users, f, default=str, indent=2)
+        with _storage_lock:
+            temp_fd, temp_path = tempfile.mkstemp(dir=STORAGE_DIR, prefix="users_", suffix=".tmp")
+            with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                json.dump(users, f, default=str, indent=2)
+            os.replace(temp_path, USERS_FILE)
     except Exception as e:
         print(f"Could not save users: {e}")
 

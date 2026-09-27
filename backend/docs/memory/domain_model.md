@@ -63,6 +63,24 @@ flowchart TD
 **Unrelated "session" domains (do not conflate with Conversation):** `ChatSession` (AI chat),
 `StoredFocusSession` (desktop focus/screen), auth/checkout/MCP protocol sessions.
 
+### Screen-history summary evidence
+
+`database/screen_activity.py:get_screen_activity_summary` derives per-app counts
+from the earliest 5000 matching synced observations, using one additional row to
+detect truncation. Its shared `ScreenActivityCoverage` contract survives both REST
+response models and hosted MCP dispatch; the chat tool renders the same limits.
+See [the MCP contract](../../../docs/doc/developer/mcp/tools.mdx).
+
+Counts and first/last observation timestamps do not measure duration, continuous
+activity, intent, or capture freshness. Rewind gates OCR and deduplicates frames;
+`ScreenActivitySyncService.compactClosedBuckets` can suppress delivery of rows
+within five-minute buckets. Query completeness is therefore separate from capture
+and sync completeness, which this read path reports as unknown. This follows the
+Codex Computer History distinction between timestamped event evidence and derived
+summaries (installed skill version `1.0.1001067`); no personal history is required
+to validate the contract. Privacy settings and canonical memory admission remain
+owned by their existing boundaries.
+
 ### "Archive" is overloaded — disambiguate
 
 | Use of "archive" | Means | Canonical handling |

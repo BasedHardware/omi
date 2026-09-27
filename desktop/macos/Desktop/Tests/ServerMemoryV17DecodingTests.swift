@@ -130,6 +130,52 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     XCTAssertFalse(memory.tierIsExplicit)
   }
 
+  func testDecodesServerOwnedCurrencyEvidenceAndKeepsUnknownUsefulNow() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-currency",
+        "content": "A dated product decision",
+        "category": "system",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z",
+        "as_of": "2026-06-20",
+        "currency_band": "history",
+        "belief_class": "decision",
+        "belief_computed_at": "2026-06-21T11:00:00Z"
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertTrue(memory.currencyMetadataIsExplicit)
+    XCTAssertEqual(memory.currencyBand, "history")
+    XCTAssertFalse(memory.isUsefulNow)
+    XCTAssertTrue(memory.isHistory)
+    XCTAssertNotNil(memory.asOf)
+    XCTAssertNotNil(memory.beliefComputedAt)
+  }
+
+  func testMissingCurrencyEvidenceRemainsUnknownAndUsefulNow() throws {
+    let json = Data(
+      """
+      {
+        "id": "mem-legacy",
+        "content": "Legacy memory",
+        "category": "system",
+        "created_at": "2026-06-21T10:00:00Z",
+        "updated_at": "2026-06-21T10:05:00Z"
+      }
+      """.utf8)
+
+    let memory = try decoder.decode(ServerMemory.self, from: json)
+
+    XCTAssertFalse(memory.currencyMetadataIsExplicit)
+    XCTAssertNil(memory.currencyBand)
+    XCTAssertTrue(memory.isUsefulNow)
+    XCTAssertFalse(memory.isHistory)
+  }
+
   func testUnknownPresentTierFailsClosed() {
     let json = Data(
       """

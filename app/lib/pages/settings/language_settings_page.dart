@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/settings/transcription/stt_language.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class LanguageSettingsPage extends StatefulWidget {
@@ -20,58 +22,23 @@ class LanguageSettingsPage extends StatefulWidget {
 class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
   bool _isUpdatingLanguage = false;
 
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8),
-      child: Text(
-        title,
-        style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5),
-      ),
-    );
-  }
-
-  Widget _buildAppInterfaceCard(LocaleProvider localeProvider) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _showAppLanguageSelectionSheet(localeProvider),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-              child: Center(child: FaIcon(FontAwesomeIcons.textHeight, color: Colors.grey.shade400, size: 16)),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.appLanguage,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    localeProvider.locale != null
-                        ? LocaleProvider.getDisplayName(localeProvider.locale!)
-                        : context.l10n.systemDefault,
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
-          ],
+  Widget _buildAppInterfaceGroup(LocaleProvider localeProvider) {
+    return OmiSettingsGroup(
+      header: context.l10n.appInterfaceSectionTitle,
+      children: [
+        OmiSettingsRow(
+          leading: const FaIcon(FontAwesomeIcons.textHeight, size: 16),
+          title: context.l10n.appLanguage,
+          value: localeProvider.locale != null
+              ? LocaleProvider.getDisplayName(localeProvider.locale!)
+              : context.l10n.systemDefault,
+          onTap: () => _showAppLanguageSelectionSheet(localeProvider),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildSpeechTranscriptionCard(
+  Widget _buildSpeechTranscriptionGroup(
     HomeProvider homeProvider,
     UserProvider userProvider,
     CaptureProvider captureProvider,
@@ -87,263 +54,104 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
 
     final isUpdatingTranslation = userProvider.isUpdatingSingleLanguageMode;
     final isAutoTranslationEnabled = !userProvider.singleLanguageMode;
+    const translationIcon = FaIcon(FontAwesomeIcons.language, size: 16);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-      child: Column(
-        children: [
-          // Speech Language Row
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _isUpdatingLanguage ? null : () => _showLanguageSelectionSheet(homeProvider, captureProvider),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-                  child: Center(child: FaIcon(FontAwesomeIcons.microphone, color: Colors.grey.shade400, size: 16)),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.primaryLanguage,
-                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(languageName, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-                    ],
-                  ),
-                ),
-                if (_isUpdatingLanguage)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                else
-                  FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
-              ],
+    return OmiSettingsGroup(
+      header: context.l10n.speechTranscriptionSectionTitle,
+      footer: context.l10n.languageSettingsHelperText,
+      children: [
+        OmiSettingsRow(
+          leading: const FaIcon(FontAwesomeIcons.microphone, size: 16),
+          title: context.l10n.primaryLanguage,
+          value: languageName,
+          trailing: _isUpdatingLanguage ? const OmiSpinner(size: OmiSpinnerSize.small) : null,
+          showChevron: !_isUpdatingLanguage,
+          onTap: _isUpdatingLanguage ? null : () => _showLanguageSelectionSheet(homeProvider, captureProvider),
+        ),
+        if (isUpdatingTranslation)
+          OmiSettingsRow(
+            leading: translationIcon,
+            title: context.l10n.automaticTranslation,
+            subtitle: context.l10n.detectLanguages,
+            trailing: const OmiSpinner(size: OmiSpinnerSize.small),
+          )
+        else
+          OmiSettingsRow.toggle(
+            leading: translationIcon,
+            title: context.l10n.automaticTranslation,
+            subtitle: context.l10n.detectLanguages,
+            value: isAutoTranslationEnabled,
+            onChanged: (value) async {
+              final success = await userProvider.setSingleLanguageMode(!value);
+              if (success && mounted) {
+                context.read<CaptureProvider>().onTranscriptionSettingsChanged();
+              }
+            },
+          ),
+      ],
+    );
+  }
+
+  void _showAppLanguageSelectionSheet(LocaleProvider localeProvider) {
+    final currentLocale = localeProvider.locale;
+    showOmiSheet<void>(
+      context: context,
+      title: context.l10n.appLanguage,
+      padding: EdgeInsets.zero,
+      builder: (sheetContext) => _LanguageOptionList(
+        options: [
+          for (final locale in LocaleProvider.supportedLocales)
+            (
+              label: LocaleProvider.getDisplayName(locale),
+              selected: currentLocale?.languageCode == locale.languageCode,
+              onTap: () {
+                localeProvider.setLocale(locale);
+                Navigator.pop(sheetContext);
+              },
             ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Divider(height: 1, color: Colors.grey.shade800),
-          ),
-
-          // Multi-language Detection Row
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-                child: Center(child: FaIcon(FontAwesomeIcons.language, color: Colors.grey.shade400, size: 16)),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.automaticTranslation,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(context.l10n.detectLanguages, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              if (isUpdatingTranslation)
-                const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              else
-                Switch(
-                  value: isAutoTranslationEnabled,
-                  onChanged: (value) async {
-                    final success = await userProvider.setSingleLanguageMode(!value);
-                    if (success && mounted) {
-                      context.read<CaptureProvider>().onTranscriptionSettingsChanged();
-                    }
-                  },
-                  activeThumbColor: const Color(0xFF22C55E),
-                ),
-            ],
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildHelperText() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      child: Text(
-        context.l10n.languageSettingsHelperText,
-        style: TextStyle(color: Colors.grey.shade600, fontSize: 12, height: 1.4),
+  void _showLanguageSelectionSheet(HomeProvider homeProvider, CaptureProvider captureProvider) {
+    final currentLanguage = homeProvider.userPrimaryLanguage;
+    showOmiSheet<void>(
+      context: context,
+      title: context.l10n.selectLanguage,
+      padding: EdgeInsets.zero,
+      builder: (sheetContext) => _LanguageOptionList(
+        options: [
+          for (final entry in homeProvider.availableLanguages.entries)
+            (
+              label: entry.key,
+              selected: entry.value == currentLanguage,
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _setPrimaryLanguage(homeProvider, captureProvider, entry.value);
+              },
+            ),
+        ],
       ),
     );
   }
 
-  void _showAppLanguageSelectionSheet(LocaleProvider localeProvider) {
-    final supportedLocales = LocaleProvider.supportedLocales;
-    final currentLocale = localeProvider.locale;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                margin: const EdgeInsets.only(top: 12, bottom: 16),
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
-              ),
-              Text(
-                context.l10n.appLanguage,
-                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 16),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  physics: const ClampingScrollPhysics(),
-                  itemCount: supportedLocales.length,
-                  itemBuilder: (context, index) {
-                    final locale = supportedLocales[index];
-                    final isSelected = currentLocale?.languageCode == locale.languageCode;
-                    return ListTile(
-                      title: Text(
-                        LocaleProvider.getDisplayName(locale),
-                        style: TextStyle(
-                          color: isSelected ? Colors.white : const Color(0xFF8E8E93),
-                          fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
-                        ),
-                      ),
-                      trailing: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                      onTap: () {
-                        localeProvider.setLocale(locale);
-                        Navigator.pop(context);
-                      },
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showLanguageSelectionSheet(HomeProvider homeProvider, CaptureProvider captureProvider) {
-    final languages = homeProvider.availableLanguages;
-    String currentLanguage = homeProvider.userPrimaryLanguage;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      isScrollControlled: true,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return DraggableScrollableSheet(
-              initialChildSize: 0.7,
-              minChildSize: 0.5,
-              maxChildSize: 0.9,
-              expand: false,
-              builder: (context, scrollController) {
-                return Column(
-                  children: [
-                    Container(
-                      margin: const EdgeInsets.only(top: 12, bottom: 16),
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
-                    ),
-                    Text(
-                      context.l10n.selectLanguage,
-                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      child: ListView.builder(
-                        controller: scrollController,
-                        itemCount: languages.length,
-                        itemBuilder: (context, index) {
-                          final entry = languages.entries.elementAt(index);
-                          final isSelected = entry.value == currentLanguage;
-                          return ListTile(
-                            title: Text(
-                              entry.key,
-                              style: TextStyle(
-                                color: isSelected ? Colors.white : const Color(0xFF8E8E93),
-                                fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
-                              ),
-                            ),
-                            trailing: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                            onTap: _isUpdatingLanguage
-                                ? null
-                                : () async {
-                                    setSheetState(() {
-                                      currentLanguage = entry.value;
-                                    });
-                                    Navigator.pop(sheetContext);
-                                    setState(() {
-                                      _isUpdatingLanguage = true;
-                                    });
-                                    try {
-                                      final userProvider = Provider.of<UserProvider>(context, listen: false);
-                                      final success = await homeProvider.updateUserPrimaryLanguage(
-                                        entry.value,
-                                        userProvider: userProvider,
-                                      );
-                                      if (success) {
-                                        captureProvider.onRecordProfileSettingChanged();
-                                        PlatformManager.instance.analytics.languageChanged(entry.value);
-                                      }
-                                    } finally {
-                                      if (mounted) {
-                                        setState(() {
-                                          _isUpdatingLanguage = false;
-                                        });
-                                      }
-                                    }
-                                  },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                );
-              },
-            );
-          },
-        );
-      },
-    );
+  Future<void> _setPrimaryLanguage(HomeProvider homeProvider, CaptureProvider captureProvider, String code) async {
+    if (_isUpdatingLanguage) return;
+    setState(() => _isUpdatingLanguage = true);
+    final previous = homeProvider.userPrimaryLanguage;
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final success = await homeProvider.updateUserPrimaryLanguage(code, userProvider: userProvider);
+      if (success) {
+        // Custom STT providers that follow the primary language pick up the new one.
+        await SttLanguage.syncToPrimary(code, previous: previous);
+        captureProvider.onRecordProfileSettingChanged();
+        PlatformManager.instance.analytics.languageChanged(code);
+      }
+    } finally {
+      if (mounted) setState(() => _isUpdatingLanguage = false);
+    }
   }
 
   @override
@@ -351,40 +159,54 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
     PlatformManager.instance.analytics.pageOpened('Language Settings');
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0D0D),
-        elevation: 0,
-        leading: IconButton(
-          icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          context.l10n.languageTitle,
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        centerTitle: true,
-      ),
+      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.languageTitle)),
       body: Consumer4<HomeProvider, UserProvider, CaptureProvider, LocaleProvider>(
         builder: (context, homeProvider, userProvider, captureProvider, localeProvider, _) {
           return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.xs),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 16),
-                // App Interface Section
-                _buildSectionHeader(context.l10n.appInterfaceSectionTitle),
-                _buildAppInterfaceCard(localeProvider),
-                const SizedBox(height: 24),
-                // Speech & Transcription Section
-                _buildSectionHeader(context.l10n.speechTranscriptionSectionTitle),
-                _buildSpeechTranscriptionCard(homeProvider, userProvider, captureProvider),
-                const SizedBox(height: 12),
-                _buildHelperText(),
-                const SizedBox(height: 32),
+                const SizedBox(height: OmiSpacing.md),
+                _buildAppInterfaceGroup(localeProvider),
+                const SizedBox(height: OmiSpacing.xl),
+                _buildSpeechTranscriptionGroup(homeProvider, userProvider, captureProvider),
+                const SizedBox(height: OmiSpacing.xxl),
               ],
             ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// A single-choice list for a language sheet: the selected row is white with a check.
+class _LanguageOptionList extends StatelessWidget {
+  const _LanguageOptionList({required this.options});
+
+  final List<({String label, bool selected, VoidCallback onTap})> options;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.7),
+      child: ListView.builder(
+        shrinkWrap: true,
+        itemCount: options.length,
+        itemBuilder: (context, index) {
+          final option = options[index];
+          return ListTile(
+            selected: option.selected,
+            title: Text(
+              option.label,
+              style: OmiType.body.copyWith(
+                color: option.selected ? OmiColors.textPrimary : OmiColors.textSecondary,
+                fontWeight: option.selected ? FontWeight.w500 : FontWeight.w400,
+              ),
+            ),
+            trailing: option.selected ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+            onTap: option.onTap,
           );
         },
       ),

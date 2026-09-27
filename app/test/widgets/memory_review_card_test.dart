@@ -10,6 +10,7 @@ import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/memory_review.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
 
@@ -64,6 +65,8 @@ Widget _harness(MemoriesProvider provider, List<MemoryReviewItem> items) {
     value: provider,
     child: MaterialApp(
       theme: ThemeData.dark(),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: const [Locale('en')],
       home: Scaffold(
         body: SingleChildScrollView(
           child: MemoryReviewCard(items: items, source: MemoryReviewSource.chatBlock),

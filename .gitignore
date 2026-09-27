@@ -285,3 +285,10 @@ htmlcov/
 # cannot quietly commit a second lockfile.
 pnpm-lock.yaml
 pnpm-workspace.yaml
+# Flutter regenerates the iOS ephemeral tree on every pub get/build
+# (files self-describe as "Generated file. Do not edit."); tracking them made
+# every worktree dirty and failed diff-hygiene on the regenerated whitespace.
+**/ios/Flutter/ephemeral/
+
++# amp orb portal links (generated); .amp/services.yaml stays tracked
++.amp/portals/

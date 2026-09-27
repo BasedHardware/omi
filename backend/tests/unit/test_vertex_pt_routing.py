@@ -8,6 +8,13 @@ overflow onto it, so most of these assert behaviour across BOTH PT states.
 import pytest
 
 from utils.llm import vertex_pt_routing as ptr
+from utils.llm.model_config import (
+    LUNA_MODEL,
+    FEATURE_PT_OVERFLOW_ORIGIN,
+    OVERFLOW_ORIGIN_OPTION,
+    get_model,
+    get_route_options,
+)
 
 
 def test_pt_model_defaults_to_the_currently_provisioned_order():
@@ -179,7 +186,9 @@ def test_every_chain_is_non_increasing_in_output_price():
     """A degraded request must never cost more than the request it replaces."""
     for model, chain in ptr.MODEL_FALLBACKS.items():
         prices = [ptr.PRICE_PER_MTOK_OUT[m] for m in (model, *chain) if m in ptr.PRICE_PER_MTOK_OUT]
-        assert prices == sorted(prices, reverse=True), f'{model} chain {chain} climbs in price'
+        assert prices == sorted(prices, reverse=True), f'{model} chain {chain} climbs in output price'
+        input_prices = [ptr.PRICE_PER_MTOK_IN[m] for m in (model, *chain) if m in ptr.PRICE_PER_MTOK_IN]
+        assert input_prices == sorted(input_prices, reverse=True), f'{model} chain {chain} climbs in input price'
 
 
 def test_the_cheapest_text_model_is_terminal():
@@ -248,3 +257,178 @@ def test_exhaustion_matching_is_case_insensitive():
     where the regional one uses title case. Measured 2026-08-18."""
     assert ptr.is_provisioned_capacity_exhausted(429, 'Too many requests. Exceeded the provisioned throughput.')
     assert ptr.is_provisioned_capacity_exhausted(429, 'Too many requests. Exceeded the Provisioned Throughput.')
+
+
+# --- SCA-481: company-paid Pro/image containment -----------------------------
+
+
+@pytest.mark.parametrize(
+    'model',
+    [
+        'gemini-3-pro-preview',
+        'gemini-3.0-pro',
+        'gemini-3.1-pro',
+        'gemini-2.5-pro',
+        'gemini-3.1-flash-image',
+        'gemini-2.5-flash-image',
+        'imagen-4.0-generate-001',
+        'google/gemini-3-pro-preview',
+    ],
+)
+def test_operator_pins_cannot_select_pro_or_image_models(model):
+    """Pro text and image output are PayGo-only SKUs (2026-09-06..09-12 dev
+    billing: "Gemini 3.0 / 3.1 Pro Text Output", "Gemini 3.1 Flash Image
+    Global Image Output", "Pro Image Output"). An operator override is the one
+    code-free way such a model could become a served model, so every pin
+    resolver fails closed."""
+    with pytest.raises(ValueError, match='SCA-481'):
+        ptr.resolve_pt_model(target_dedicated_ready=False, override=model)
+    with pytest.raises(ValueError, match='SCA-481'):
+        ptr.resolve_overflow_model(pt_model='gemini-2.5-flash', override=model)
+    with pytest.raises(ValueError, match='SCA-481'):
+        ptr.resolve_overflow_ladder(pt_model='gemini-2.5-flash', override=model)
+    with pytest.raises(ValueError, match='SCA-481'):
+        ptr.resolve_fallback_chain(model='gemini-2.5-pro', pt_model='gemini-2.5-flash', override=model)
+
+
+def test_operator_pins_still_move_between_declared_anchors():
+    """The escape hatch survives containment: pinning the reservation back
+    during a bad auto-promotion, or overflow onto the cheap floor, both work."""
+    assert ptr.resolve_pt_model(target_dedicated_ready=True, override='gemini-2.5-flash') == 'gemini-2.5-flash'
+    assert (
+        ptr.resolve_overflow_model(pt_model='gemini-2.5-flash', override='gemini-2.5-flash-lite')
+        == 'gemini-2.5-flash-lite'
+    )
+    assert ptr.resolve_fallback_chain(
+        model='gemini-2.5-pro', pt_model='gemini-2.5-flash', override='gemini-2.5-flash-lite'
+    ) == ('gemini-2.5-flash-lite',)
+
+
+@pytest.mark.parametrize('model', sorted(ptr.COMPANY_PAID_VERTEX_TEXT_MODELS))
+def test_declared_company_paid_models_never_carry_a_pro_or_image_shape(model):
+    assert not ptr.is_prohibited_company_paid_model(model)
+
+
+def test_non_gemini_models_that_merely_contain_the_substrings_stay_routable():
+    """Perplexity `sonar-pro` is not a Gemini Pro SKU; containment must not
+    reach outside the Google model family."""
+    assert not ptr.is_prohibited_company_paid_model('sonar-pro')
+    assert not ptr.is_prohibited_company_paid_model(LUNA_MODEL)
+
+
+# --- Origin price ceiling --------------------------------------------------
+# FC-degraded-fallback-exceeds-origin-price: a lane admitted to PT on behalf
+# of a cheaper origin must not overflow above that origin's list price.
+
+
+def test_input_and_output_prices_cover_the_same_models():
+    assert set(ptr.PRICE_PER_MTOK_IN) == set(ptr.PRICE_PER_MTOK_OUT)
+
+
+def test_flash_lite_origin_on_flash_pt_overflows_to_flash_lite_never_3_1():
+    """The cost trap this ceiling exists to close.
+
+    gemini-2.5-flash's declared ladder prefers 3.1-flash-lite ($1.50 out),
+    3.75x a flash-lite origin ($0.40 out). A lane admitted to the reservation
+    on that origin's behalf skips 3.1 and lands on flash-lite.
+    """
+    origin = 'gemini-2.5-flash-lite'
+    ladder = ptr.resolve_overflow_ladder(pt_model='gemini-2.5-flash', origin_model=origin)
+    assert ladder == ('gemini-2.5-flash-lite',)
+    assert ptr.resolve_overflow_model(pt_model='gemini-2.5-flash', origin_model=origin) == 'gemini-2.5-flash-lite'
+    assert 'gemini-3.1-flash-lite' not in ladder
+    chain = ptr.resolve_fallback_chain(model='gemini-2.5-flash', pt_model='gemini-2.5-flash', origin_model=origin)
+    assert chain == ('gemini-2.5-flash-lite',)
+
+
+def test_an_origin_above_the_ladder_does_not_remove_cheaper_rungs():
+    """A ceiling at flash's own price leaves the declared flash ladder intact."""
+    assert ptr.resolve_overflow_ladder(pt_model='gemini-2.5-flash', origin_model='gemini-2.5-flash') == (
+        'gemini-3.1-flash-lite',
+        'gemini-2.5-flash-lite',
+    )
+
+
+def test_unknown_origin_fails_closed_instead_of_overflowing_upward():
+    with pytest.raises(ValueError, match='origin'):
+        ptr.resolve_overflow_ladder(pt_model='gemini-2.5-flash', origin_model='not-a-priced-model')
+
+
+def test_override_above_the_origin_ceiling_is_refused():
+    with pytest.raises(ValueError, match='origin'):
+        ptr.resolve_overflow_ladder(
+            pt_model='gemini-2.5-flash',
+            override='gemini-3.1-flash-lite',
+            origin_model='gemini-2.5-flash-lite',
+        )
+    assert ptr.resolve_overflow_ladder(
+        pt_model='gemini-2.5-flash',
+        override='gemini-2.5-flash-lite',
+        origin_model='gemini-2.5-flash-lite',
+    ) == ('gemini-2.5-flash-lite',)
+
+
+@pytest.mark.parametrize('model', sorted(ptr.MODEL_FALLBACKS))
+@pytest.mark.parametrize('pt_model', [ptr.PT_MODEL_CURRENT, ptr.PT_MODEL_TARGET])
+def test_unset_origin_leaves_every_declared_chain_unchanged(model, pt_model):
+    """No origin declared is the current ladder, for every routable model."""
+    declared = tuple(rung for rung in ptr.MODEL_FALLBACKS[model] if rung != pt_model and rung != model)
+    assert ptr.resolve_fallback_chain(model=model, pt_model=pt_model) == declared
+    assert ptr.resolve_fallback_chain(model=model, pt_model=pt_model, origin_model='') == declared
+
+
+@pytest.mark.parametrize('pt_model', [ptr.PT_MODEL_CURRENT, ptr.PT_MODEL_TARGET, 'gemini-2.5-flash-lite'])
+def test_unset_origin_leaves_the_overflow_ladder_unchanged(pt_model):
+    declared = tuple(candidate for candidate in ptr.OVERFLOW_PREFERENCE if candidate != pt_model)
+    assert ptr.resolve_overflow_ladder(pt_model=pt_model) == declared
+    assert ptr.resolve_overflow_ladder(pt_model=pt_model, origin_model='') == declared
+
+
+def test_promoted_pt_target_with_an_origin_still_steps_past_the_reservation():
+    """Once 3.1-flash-lite holds the order, a flash-lite origin still overflows
+    to flash-lite and never back onto the live reservation."""
+    origin = 'gemini-2.5-flash-lite'
+    ladder = ptr.resolve_overflow_ladder(pt_model=ptr.PT_MODEL_TARGET, origin_model=origin)
+    assert ladder == ('gemini-2.5-flash-lite',)
+    assert ptr.PT_MODEL_TARGET not in ladder
+    chain = ptr.resolve_fallback_chain(model='gemini-2.5-flash', pt_model=ptr.PT_MODEL_TARGET, origin_model=origin)
+    assert chain == ('gemini-2.5-flash-lite',)
+    assert ptr.PT_MODEL_TARGET not in chain
+
+
+def test_no_lane_declares_an_overflow_origin_and_no_flash_lite_route_moved():
+    """This policy ships the ceiling. It does not move a lane onto PT."""
+    assert ptr.LANE_OVERFLOW_ORIGINS == {}
+    assert FEATURE_PT_OVERFLOW_ORIGIN is ptr.LANE_OVERFLOW_ORIGINS
+    assert ptr.lane_overflow_origin('session_titles') == ''
+    for feature in (
+        'session_titles',
+        'followup',
+        'onboarding',
+        'app_integration',
+        'trends',
+        'translation',
+        'screen_frame_judge',
+    ):
+        assert get_model(feature) == 'gemini-2.5-flash-lite'
+
+
+def test_a_declared_origin_is_stamped_onto_route_options_without_moving_the_model(monkeypatch):
+    monkeypatch.setitem(ptr.LANE_OVERFLOW_ORIGINS, 'session_titles', 'gemini-2.5-flash-lite')
+    options = get_route_options('session_titles', 'gemini-2.5-flash-lite', 'gemini')
+    assert options[OVERFLOW_ORIGIN_OPTION] == 'gemini-2.5-flash-lite'
+    assert get_model('session_titles') == 'gemini-2.5-flash-lite'
+    untouched = get_route_options('followup', 'gemini-2.5-flash-lite', 'gemini')
+    assert OVERFLOW_ORIGIN_OPTION not in untouched
+
+
+def test_every_desktop_text_anchor_serves_a_declared_company_paid_model():
+    """Requested anchors remap onto the declared serving set. `gemini-2.5-pro`
+    is a request anchor only: company-paid traffic is never served on it."""
+    for anchor in ptr.DESKTOP_TEXT_LANES:
+        if anchor == 'gemini-2.5-pro':
+            continue
+        assert anchor in ptr.COMPANY_PAID_VERTEX_TEXT_MODELS
+    assert (
+        ptr.desktop_serving_model('gemini-2.5-pro', target_dedicated_ready=False) in ptr.COMPANY_PAID_VERTEX_TEXT_MODELS
+    )

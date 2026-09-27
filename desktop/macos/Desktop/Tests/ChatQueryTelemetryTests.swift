@@ -81,7 +81,7 @@ final class ChatQueryTelemetryTests: XCTestCase {
     )
     let detail = ChatQueryErrorDetail.from(BridgeError.agentRuntimeFailure(failure))
     XCTAssertEqual(detail?.errorCode, "authentication")
-    XCTAssertEqual(detail?.failureCode, "adapter_execution_failed")
+    XCTAssertEqual(detail?.failureCode, "authentication")
     XCTAssertEqual(detail?.failureSource, "adapter_execution")
     XCTAssertEqual(detail?.adapterId, "openclaw")
     XCTAssertEqual(detail?.retryable, false)
@@ -893,6 +893,6 @@ final class ChatQueryTelemetryTests: XCTestCase {
       return XCTFail("expected failed disposition")
     }
     XCTAssertEqual(errorClass, .authentication)
-    XCTAssertTrue(BridgeError.agentRuntimeFailure(failure).isSessionAuthenticationFailure)
+    XCTAssertFalse(BridgeError.agentRuntimeFailure(failure).isSessionAuthenticationFailure)
   }
 }

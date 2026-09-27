@@ -864,6 +864,7 @@ struct ConversationCreatedTelemetry: Equatable, Sendable {
   let conversationId: String
   let source: String
   let durationSeconds: Int?
+  let attemptId: String?
 
   init(session: TranscriptionSessionRecord, conversationId: String) {
     self.conversationId = conversationId
@@ -871,6 +872,7 @@ struct ConversationCreatedTelemetry: Equatable, Sendable {
     durationSeconds = session.finishedAt.map {
       max(0, Int($0.timeIntervalSince(session.startedAt)))
     }
+    attemptId = session.captureAttemptId
   }
 }
 

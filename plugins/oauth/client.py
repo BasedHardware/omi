@@ -1,7 +1,20 @@
 import base64
 import os
+from typing import Any, List
 
 import requests
+
+DEFAULT_TIMEOUT = 10.0
+
+
+def _safe_json(resp: requests.Response) -> dict:
+    try:
+        data = resp.json()
+        if isinstance(data, dict):
+            return data
+        return {"data": data}
+    except Exception:
+        return {"message": "Non-JSON response"}
 
 
 # """
@@ -12,19 +25,23 @@ import requests
 class NotionDatabasePropertyModel:
     def __init__(
         self,
-        id,
-        name,
-        property_type,
+        id: str = "",
+        name: str = "",
+        property_type: str = "",
     ) -> None:
         self.id = id
         self.name = name
         self.property_type = property_type
-        pass
 
     @classmethod
     def from_dict(cls, data: dict) -> "NotionDatabasePropertyModel":
-        model = cls(data["id"], data["name"], data["type"])
-        return model
+        if not isinstance(data, dict):
+            return cls("", "", "")
+        return cls(
+            id=str(data.get("id", "") or ""),
+            name=str(data.get("name", "") or ""),
+            property_type=str(data.get("type", "") or ""),
+        )
 
 
 class NotionDatabaseModel:
@@ -33,27 +50,33 @@ class NotionDatabaseModel:
     ) -> None:
         self.id = ""
         self.properties = []
-        pass
 
     @classmethod
     def from_dict(cls, data: dict) -> "NotionDatabaseModel":
         model = cls()
-        model.id = data["id"]
+        if not isinstance(data, dict):
+            return model
+        model.id = str(data.get("id", "") or "")
 
         # properties
-        properties: [NotionDatabasePropertyModel] = []
-        if data["properties"] is not None:
-            for prop in data["properties"].values():
-                properties.append(NotionDatabasePropertyModel.from_dict(prop))
+        properties: List[NotionDatabasePropertyModel] = []
+        raw_properties = data.get("properties")
+        if isinstance(raw_properties, dict):
+            for prop in raw_properties.values():
+                if isinstance(prop, dict):
+                    properties.append(NotionDatabasePropertyModel.from_dict(prop))
         model.properties = properties
 
         return model
 
     @classmethod
-    def multi_from_dict(cls, data: dict) -> "[NotionDatabaseModel]":
+    def multi_from_dict(cls, data: Any) -> List["NotionDatabaseModel"]:
         model = []
+        if not isinstance(data, list):
+            return model
         for item in data:
-            model.append(NotionDatabaseModel.from_dict(item))
+            if isinstance(item, dict):
+                model.append(NotionDatabaseModel.from_dict(item))
 
         return model
 
@@ -63,12 +86,12 @@ class NotionOAuthModel:
         self,
     ) -> None:
         self.access_token = ""
-        pass
 
     @classmethod
-    def from_dict(cls, data: dict) -> "NotionDatabaseModel":
+    def from_dict(cls, data: dict) -> "NotionOAuthModel":
         model = cls()
-        model.access_token = data["access_token"]
+        if isinstance(data, dict):
+            model.access_token = str(data.get("access_token", "") or "")
         return model
 
 
@@ -101,33 +124,43 @@ class NotionClient:
         state = uid
         return f"{self.auth_url}&state={state}"
 
-    def get_database(self, database_id: str, access_token: str):
+    def get_database(self, database_id: str, access_token: str, timeout: float = DEFAULT_TIMEOUT):
         resp: requests.Response
-        resp = requests.get(
-            f'https://api.notion.com/v1/databases/{database_id}',
-            headers={
-                'Authorization': f'Bearer {access_token}',
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'Notion-Version': '2022-06-28',
-            },
-        )
-        if resp.status_code != 200:
-            resp_json = resp.json()
-            print(f"Error: HTTP_{resp.status_code} {resp_json}")
+        try:
+            resp = requests.get(
+                f'https://api.notion.com/v1/databases/{database_id}',
+                headers={
+                    'Authorization': f'Bearer {access_token}',
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Notion-Version': '2022-06-28',
+                },
+                timeout=timeout,
+            )
+        except requests.RequestException as e:
+            err_code = type(e).__name__
             return {
                 "error": {
-                    "status": resp.status_code,
-                    "code": resp_json["code"] if "code" in resp_json else "",
-                    "message": resp_json["message"] if "message" in resp_json else "",
+                    "status": 500,
+                    "code": err_code,
+                    "message": f"Request failed: {err_code}",
                 },
             }
 
-        print(resp.json())
+        if resp.status_code != 200:
+            resp_json = _safe_json(resp)
+            print(f"Error: HTTP_{resp.status_code}")
+            return {
+                "error": {
+                    "status": resp.status_code,
+                    "code": resp_json.get("code", "") if isinstance(resp_json, dict) else "",
+                    "message": resp_json.get("message", "") if isinstance(resp_json, dict) else "",
+                },
+            }
 
-        return {"result": NotionDatabaseModel.from_dict(resp.json())}
+        return {"result": NotionDatabaseModel.from_dict(_safe_json(resp))}
 
-    def get_access_token(self, code: str):
+    def get_access_token(self, code: str, timeout: float = DEFAULT_TIMEOUT):
         client_id = self.oauth_client_id
         client_secret = self.oauth_client_secret
         redirect_uri = self.oauth_redirect_uri
@@ -140,60 +173,82 @@ class NotionClient:
             "code": code,
             "redirect_uri": redirect_uri,
         }
-        resp = requests.post(
-            "https://api.notion.com/v1/oauth/token",
-            headers={
-                "Authorization": f"Basic {encoded}",
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                'Notion-Version': '2022-06-28',
-            },
-            json=data,
-        )
-        if resp.status_code != 200:
-            resp_json = resp.json()
-            print(f"Error: HTTP_{resp.status_code} {resp_json}")
+        try:
+            resp = requests.post(
+                "https://api.notion.com/v1/oauth/token",
+                headers={
+                    "Authorization": f"Basic {encoded}",
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    'Notion-Version': '2022-06-28',
+                },
+                json=data,
+                timeout=timeout,
+            )
+        except requests.RequestException as e:
+            err_code = type(e).__name__
             return {
                 "error": {
-                    "status": resp.status_code,
-                    "code": resp_json["code"] if "code" in resp_json else "",
-                    "message": resp_json["message"] if "message" in resp_json else "",
+                    "status": 500,
+                    "code": err_code,
+                    "message": f"Request failed: {err_code}",
                 },
             }
 
-        print(resp.json())
+        if resp.status_code != 200:
+            resp_json = _safe_json(resp)
+            print(f"Error: HTTP_{resp.status_code}")
+            return {
+                "error": {
+                    "status": resp.status_code,
+                    "code": resp_json.get("code", "") if isinstance(resp_json, dict) else "",
+                    "message": resp_json.get("message", "") if isinstance(resp_json, dict) else "",
+                },
+            }
 
-        return {"result": NotionOAuthModel.from_dict(resp.json())}
+        return {"result": NotionOAuthModel.from_dict(_safe_json(resp))}
 
-    def get_databases_edited_time_desc(self, access_token: str):
+    def get_databases_edited_time_desc(self, access_token: str, timeout: float = DEFAULT_TIMEOUT):
         data = {
             "filter": {"value": "database", "property": "object"},
             "sort": {"direction": "descending", "timestamp": "last_edited_time"},
         }
-        resp = requests.post(
-            "https://api.notion.com/v1/search",
-            headers={
-                'Authorization': f'Bearer {access_token}',
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'Notion-Version': '2022-06-28',
-            },
-            json=data,
-        )
-        if resp.status_code != 200:
-            resp_json = resp.json()
-            print(f"Error: HTTP_{resp.status_code} {resp_json}")
+        try:
+            resp = requests.post(
+                "https://api.notion.com/v1/search",
+                headers={
+                    'Authorization': f'Bearer {access_token}',
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Notion-Version': '2022-06-28',
+                },
+                json=data,
+                timeout=timeout,
+            )
+        except requests.RequestException as e:
+            err_code = type(e).__name__
             return {
                 "error": {
-                    "status": resp.status_code,
-                    "code": resp_json["code"] if "code" in resp_json else "",
-                    "message": resp_json["message"] if "message" in resp_json else "",
+                    "status": 500,
+                    "code": err_code,
+                    "message": f"Request failed: {err_code}",
                 },
             }
 
-        print(resp.json())
+        if resp.status_code != 200:
+            resp_json = _safe_json(resp)
+            print(f"Error: HTTP_{resp.status_code}")
+            return {
+                "error": {
+                    "status": resp.status_code,
+                    "code": resp_json.get("code", "") if isinstance(resp_json, dict) else "",
+                    "message": resp_json.get("message", "") if isinstance(resp_json, dict) else "",
+                },
+            }
 
-        return {"result": NotionDatabaseModel.multi_from_dict(resp.json()["results"])}
+        resp_json = _safe_json(resp)
+        results = resp_json.get("results", []) if isinstance(resp_json, dict) else []
+        return {"result": NotionDatabaseModel.multi_from_dict(results)}
 
 
 client = NotionClient(

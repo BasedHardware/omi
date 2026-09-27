@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -13,8 +12,10 @@ import 'package:share_plus/share_plus.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/share_sheet.dart';
 
 class DeviceDiagnostics extends StatefulWidget {
@@ -121,6 +122,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
 
     // Every step here can fail — temp dir, file write, and the share sheet
     // itself. Unhandled, the whole handler is silent and the button looks dead.
+    final shareTitle = context.l10n.diagnosticsExportTitle;
     try {
       final json = const JsonEncoder.withIndent('  ').convert(data);
       final dir = await getTemporaryDirectory();
@@ -129,8 +131,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(file.path)],
-          title: 'Omi Device Diagnostics',
-          subject: 'Omi Device Diagnostics',
+          title: shareTitle,
+          subject: shareTitle,
           sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
         ),
       );
@@ -145,7 +147,12 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     } catch (e) {
       Logger.debug('Failed to export diagnostics: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.diagnosticsShareFailed)));
+      OmiFeedback.error(
+        context,
+        context.l10n.diagnosticsShareFailed,
+        actionLabel: context.l10n.tryAgain,
+        onAction: _exportDiagnostics,
+      );
     }
   }
 
@@ -162,19 +169,13 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   String _formatUptime(int connectedAtMs) {
     if (connectedAtMs == 0) return '--';
     final connected = DateTime.fromMillisecondsSinceEpoch(connectedAtMs);
-    final duration = DateTime.now().difference(connected);
-    if (duration.inHours > 0) {
-      return '${duration.inHours}h ${duration.inMinutes.remainder(60)}m';
-    } else if (duration.inMinutes > 0) {
-      return '${duration.inMinutes}m ${duration.inSeconds.remainder(60)}s';
-    }
-    return '${duration.inSeconds}s';
+    return OmiDuration.compact(DateTime.now().difference(connected).inSeconds, context.l10n);
   }
 
   Color _rssiColor(int rssi) {
-    if (rssi >= -60) return const Color(0xFF4CAF50);
-    if (rssi >= -75) return const Color(0xFFFFC107);
-    return const Color(0xFFF44336);
+    if (rssi >= -60) return OmiColors.success;
+    if (rssi >= -75) return OmiColors.warning;
+    return OmiColors.danger;
   }
 
   String _rssiQuality(int rssi) {
@@ -187,40 +188,33 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0D0D0D),
-        title: Text(
-          context.l10n.deviceDiagnostics,
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: const OmiBackButton(),
+        title: Text(context.l10n.deviceDiagnostics),
         actions: [
-          IconButton(
+          OmiIconButton(
             key: _shareButtonKey,
-            icon: const Icon(Icons.ios_share, color: Colors.white, size: 22),
+            icon: const Icon(Icons.ios_share),
+            label: context.l10n.share,
             onPressed: _exportDiagnostics,
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          ? const OmiLoadingState()
           : SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.xs),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildStatusCards(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: OmiSpacing.xl),
                   _buildRssiChart(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: OmiSpacing.xl),
                   _buildBatteryChart(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: OmiSpacing.xl),
                   _buildDisconnectHistory(),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: OmiSpacing.xxl),
                 ],
               ),
             ),
@@ -245,18 +239,18 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
                 value: _formatUptime(connectedAt),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: OmiSpacing.sm),
             Expanded(
               child: _statusCard(
                 icon: FontAwesomeIcons.arrowsRotate,
                 label: context.l10n.reconnections,
                 value: '$reconnections',
-                valueColor: reconnections > 5 ? const Color(0xFFF44336) : null,
+                valueColor: reconnections > 5 ? OmiColors.danger : null,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: OmiSpacing.sm),
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -268,7 +262,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
                   value: battery >= 0 ? '$battery%' : '--',
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: OmiSpacing.sm),
               Expanded(
                 child: _statusCard(
                   icon: FontAwesomeIcons.signal,
@@ -293,26 +287,25 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     String? subtitle,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              FaIcon(icon, color: const Color(0xFF8E8E93), size: 14),
-              const SizedBox(width: 8),
-              Text(label, style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+              FaIcon(icon, color: OmiColors.textTertiary, size: 14),
+              const SizedBox(width: OmiSpacing.xs),
+              Flexible(
+                child: Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(color: valueColor ?? Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
-          ),
+          const SizedBox(height: OmiSpacing.xs),
+          Text(value, style: OmiType.title3.copyWith(color: valueColor ?? OmiColors.textPrimary)),
           if (subtitle != null) ...[
             const SizedBox(height: 2),
-            Text(subtitle, style: TextStyle(color: valueColor ?? Colors.grey.shade400, fontSize: 12)),
+            Text(subtitle, style: OmiType.footnote.copyWith(color: valueColor ?? OmiColors.textSecondary)),
           ],
         ],
       ),
@@ -323,20 +316,16 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          context.l10n.signalStrength,
-          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 16),
+        OmiSectionHeader(context.l10n.signalStrength),
         Container(
           height: 200,
-          padding: const EdgeInsets.only(top: 16, right: 16, bottom: 8),
-          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+          padding: const EdgeInsets.only(top: OmiSpacing.md, right: OmiSpacing.md, bottom: OmiSpacing.xs),
+          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
           child: _rssiPoints.length < 2
               ? Center(
                   child: Text(
                     _rssiPoints.isEmpty ? context.l10n.noRssiDataYet : context.l10n.collectingData,
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                    style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
                   ),
                 )
               : LineChart(_buildLineChartData()),
@@ -360,7 +349,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         show: true,
         drawVerticalLine: false,
         horizontalInterval: 25,
-        getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withValues(alpha: 0.06), strokeWidth: 1),
+        getDrawingHorizontalLine: (value) =>
+            FlLine(color: OmiColors.textPrimary.withValues(alpha: 0.06), strokeWidth: 1),
       ),
       titlesData: FlTitlesData(
         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -371,7 +361,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             reservedSize: 28,
             interval: _xInterval(maxX - minX),
             getTitlesWidget: (value, meta) {
-              return Text('${value.toInt()}s', style: TextStyle(color: Colors.grey.shade500, fontSize: 10));
+              return Text(context.l10n.timeCompactSecs(value.toInt()), style: _axisStyle);
             },
           ),
         ),
@@ -381,7 +371,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             reservedSize: 44,
             interval: 25,
             getTitlesWidget: (value, meta) {
-              return Text('${value.toInt()}', style: TextStyle(color: Colors.grey.shade500, fontSize: 10));
+              return Text('${value.toInt()}', style: _axisStyle);
             },
           ),
         ),
@@ -393,12 +383,12 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       maxX: maxX,
       lineTouchData: LineTouchData(
         touchTooltipData: LineTouchTooltipData(
-          getTooltipColor: (_) => const Color(0xFF2C2C34),
+          getTooltipColor: (_) => OmiColors.surface2,
           getTooltipItems: (touchedSpots) {
             return touchedSpots.map((spot) {
               return LineTooltipItem(
                 '${spot.y.toInt()} dBm',
-                TextStyle(color: _rssiColor(spot.y.toInt()), fontWeight: FontWeight.w600, fontSize: 13),
+                OmiType.footnote.copyWith(color: _rssiColor(spot.y.toInt()), fontWeight: FontWeight.w600),
               );
             }).toList();
           },
@@ -409,7 +399,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           spots: spots,
           isCurved: true,
           curveSmoothness: 0.2,
-          color: _rssiPoints.isNotEmpty ? _rssiColor(_rssiPoints.last.rssi) : Colors.white,
+          color: _rssiPoints.isNotEmpty ? _rssiColor(_rssiPoints.last.rssi) : OmiColors.accent,
           barWidth: 2.5,
           isStrokeCapRound: true,
           dotData: const FlDotData(show: false),
@@ -419,8 +409,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                (_rssiPoints.isNotEmpty ? _rssiColor(_rssiPoints.last.rssi) : Colors.white).withValues(alpha: 0.3),
-                (_rssiPoints.isNotEmpty ? _rssiColor(_rssiPoints.last.rssi) : Colors.white).withValues(alpha: 0.0),
+                (_rssiPoints.isNotEmpty ? _rssiColor(_rssiPoints.last.rssi) : OmiColors.accent).withValues(alpha: 0.3),
+                (_rssiPoints.isNotEmpty ? _rssiColor(_rssiPoints.last.rssi) : OmiColors.accent).withValues(alpha: 0.0),
               ],
             ),
           ),
@@ -436,10 +426,12 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     return 30;
   }
 
+  static final TextStyle _axisStyle = OmiType.caption.copyWith(color: OmiColors.textTertiary);
+
   Color _batteryColor(int level) {
-    if (level > 50) return const Color(0xFF4CAF50);
-    if (level > 20) return const Color(0xFFFFC107);
-    return const Color(0xFFF44336);
+    if (level > 50) return OmiColors.success;
+    if (level > 20) return OmiColors.warning;
+    return OmiColors.danger;
   }
 
   Widget _buildBatteryChart() {
@@ -451,34 +443,28 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              context.l10n.batteryHistory,
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+        OmiSectionHeader(
+          context.l10n.batteryHistory,
+          trailing: Container(
+            padding: const EdgeInsets.all(2),
+            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+            child: Row(
+              children: [
+                _segmentButton(context.l10n.day, _batteryDayView, () => setState(() => _batteryDayView = true)),
+                _segmentButton(context.l10n.week, !_batteryDayView, () => setState(() => _batteryDayView = false)),
+              ],
             ),
-            const Spacer(),
-            Container(
-              decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(8)),
-              child: Row(
-                children: [
-                  _segmentButton(context.l10n.day, _batteryDayView, () => setState(() => _batteryDayView = true)),
-                  _segmentButton(context.l10n.week, !_batteryDayView, () => setState(() => _batteryDayView = false)),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
-        const SizedBox(height: 16),
         Container(
           height: 200,
-          padding: const EdgeInsets.only(top: 16, right: 16, bottom: 8),
-          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+          padding: const EdgeInsets.only(top: OmiSpacing.md, right: OmiSpacing.md, bottom: OmiSpacing.xs),
+          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
           child: points.length < 2
               ? Center(
                   child: Text(
                     context.l10n.noBatteryDataYet,
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                    style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
                   ),
                 )
               : LineChart(_buildBatteryLineChartData(points)),
@@ -488,20 +474,28 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   }
 
   Widget _segmentButton(String label, bool active, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: active ? const Color(0xFF48484A) : Colors.transparent,
-          borderRadius: BorderRadius.circular(7),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: active ? Colors.white : Colors.grey.shade400,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
+    return Semantics(
+      button: true,
+      selected: active,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (active) return;
+          OmiHaptics.selection();
+          onTap();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: active ? OmiColors.surface3 : Colors.transparent,
+            borderRadius: const BorderRadius.all(Radius.circular(OmiRadius.sm - 2)),
+          ),
+          child: Text(
+            label,
+            style: OmiType.footnote.copyWith(
+              color: active ? OmiColors.textPrimary : OmiColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       ),
@@ -524,7 +518,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         show: true,
         drawVerticalLine: false,
         horizontalInterval: 25,
-        getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withValues(alpha: 0.06), strokeWidth: 1),
+        getDrawingHorizontalLine: (value) =>
+            FlLine(color: OmiColors.textPrimary.withValues(alpha: 0.06), strokeWidth: 1),
       ),
       titlesData: FlTitlesData(
         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -536,10 +531,11 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             interval: _batteryDayView ? 4 : 24,
             getTitlesWidget: (value, meta) {
               final h = value.abs();
-              if (_batteryDayView) {
-                return Text('${h.toInt()}h', style: TextStyle(color: Colors.grey.shade500, fontSize: 10));
-              }
-              return Text('${(h / 24).toInt()}d', style: TextStyle(color: Colors.grey.shade500, fontSize: 10));
+              final l10n = context.l10n;
+              return Text(
+                _batteryDayView ? l10n.timeCompactHours(h.toInt()) : l10n.timeCompactDays((h / 24).toInt()),
+                style: _axisStyle,
+              );
             },
           ),
         ),
@@ -549,7 +545,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             reservedSize: 36,
             interval: 25,
             getTitlesWidget: (value, meta) {
-              return Text('${value.toInt()}', style: TextStyle(color: Colors.grey.shade500, fontSize: 10));
+              return Text('${value.toInt()}', style: _axisStyle);
             },
           ),
         ),
@@ -561,16 +557,15 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       maxX: maxX,
       lineTouchData: LineTouchData(
         touchTooltipData: LineTouchTooltipData(
-          getTooltipColor: (_) => const Color(0xFF2C2C34),
+          getTooltipColor: (_) => OmiColors.surface2,
           getTooltipItems: (touchedSpots) {
             return touchedSpots.map((spot) {
               final level = spot.y.toInt();
-              final hoursAgo = spot.x.abs();
-              final timeLabel =
-                  hoursAgo < 1 ? '${(hoursAgo * 60).toInt()}m ago' : '${hoursAgo.toStringAsFixed(1)}h ago';
+              final secondsAgo = (spot.x.abs() * 3600).round();
+              final timeLabel = context.l10n.durationAgo(OmiDuration.compact(secondsAgo, context.l10n));
               return LineTooltipItem(
                 '$level%\n$timeLabel',
-                TextStyle(color: _batteryColor(level), fontWeight: FontWeight.w600, fontSize: 13),
+                OmiType.footnote.copyWith(color: _batteryColor(level), fontWeight: FontWeight.w600),
               );
             }).toList();
           },
@@ -604,67 +599,63 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   Widget _buildDisconnectHistory() {
     final history = _diagnostics?.disconnectHistory ?? [];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          context.l10n.disconnectHistory,
-          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          history.isEmpty ? context.l10n.noDisconnectsRecorded : context.l10n.lastNEvents(history.length),
-          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-        ),
-        const SizedBox(height: 16),
-        if (history.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+    if (history.isEmpty) {
+      return OmiSettingsGroup(
+        header: context.l10n.disconnectHistory,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(OmiSpacing.xl),
             child: Center(
               child: Column(
                 children: [
-                  FaIcon(FontAwesomeIcons.circleCheck, color: Colors.grey.shade600, size: 32),
-                  const SizedBox(height: 12),
-                  Text(context.l10n.noDisconnectsRecorded, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
+                  const FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.textTertiary, size: 32),
+                  const SizedBox(height: OmiSpacing.sm),
+                  Text(
+                    context.l10n.noDisconnectsRecorded,
+                    style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+                  ),
                 ],
               ),
             ),
-          )
-        else
-          Container(
-            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
-            child: Column(
-              children: [
-                for (int i = history.length - 1; i >= 0; i--) ...[
-                  _buildDisconnectRow(history[i]),
-                  if (i > 0) const Divider(height: 1, color: Color(0xFF3C3C43)),
-                ],
-              ],
-            ),
           ),
-      ],
+        ],
+      );
+    }
+    return OmiSettingsGroup(
+      header: context.l10n.disconnectHistory,
+      headerSubtitle: context.l10n.lastNEvents(history.length),
+      children: [for (final event in history.reversed) _buildDisconnectRow(event)],
     );
   }
 
+  /// Month, day and time to the second: diagnostics compare events seconds apart, so this is
+  /// [OmiDateFormat]'s locale and 24-hour setting with seconds added.
+  String _formatEventTime(DateTime time) {
+    final dates = OmiDateFormat.of(context);
+    final format = DateFormat.MMMd(dates.localeName);
+    return (dates.use24HourFormat ? format.add_Hms() : format.add_jms()).format(time);
+  }
+
   Widget _buildDisconnectRow(BleDisconnectEvent event) {
-    final time = DateTime.fromMillisecondsSinceEpoch(event.timestamp);
-    final timeStr = DateFormat('MMM d, HH:mm:ss').format(time);
+    final l10n = context.l10n;
+    final timeStr = _formatEventTime(DateTime.fromMillisecondsSinceEpoch(event.timestamp));
     final isManual = event.isManual;
     final isFail = event.eventType == 'fail_to_connect';
     final reason = _formatReason(event.reason);
 
-    final Color dot = isManual ? const Color(0xFF8E8E93) : (isFail ? const Color(0xFFFF9500) : const Color(0xFFF44336));
+    final Color dot = isManual ? OmiColors.textTertiary : (isFail ? OmiColors.warning : OmiColors.danger);
 
     final metaParts = <String>[];
     if (event.rssiTrend.isNotEmpty) metaParts.add(event.rssiTrend);
     if (event.lastRssi != 0) metaParts.add('${event.lastRssi} dBm');
     if (event.connectionDurationMs > 0) metaParts.add(_formatDurationMs(event.connectionDurationMs));
     if (event.appState.isNotEmpty) metaParts.add(event.appState);
-    if (event.timeToReconnectMs > 0) metaParts.add('reconn ${_formatDurationMs(event.timeToReconnectMs)}');
+    if (event.timeToReconnectMs > 0) {
+      metaParts.add(l10n.diagnosticsReconnectedIn(_formatDurationMs(event.timeToReconnectMs)));
+    }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -676,46 +667,41 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
               decoration: BoxDecoration(shape: BoxShape.circle, color: dot),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: OmiSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  reason,
-                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400),
-                ),
+                Text(reason, style: OmiType.subhead),
                 const SizedBox(height: 2),
-                Text(timeStr, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                Text(timeStr, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
                 if (metaParts.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(metaParts.join(' · '), style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
+                  const SizedBox(height: OmiSpacing.xxs),
+                  Text(metaParts.join(' · '), style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
                 ],
               ],
             ),
           ),
           if (isFail)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: const Color(0xFF3A2A10), borderRadius: BorderRadius.circular(8)),
-              child: const Text('fail', style: TextStyle(color: Color(0xFFFF9500), fontSize: 11)),
-            )
+            _badge(l10n.diagnosticsFailBadge, OmiColors.warning, OmiColors.warning.withValues(alpha: 0.15))
           else if (isManual)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(8)),
-              child: Text(context.l10n.manual, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 11)),
-            ),
+            _badge(l10n.manual, OmiColors.textTertiary, OmiColors.surface2),
         ],
       ),
     );
   }
 
+  Widget _badge(String label, Color color, Color background) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 3),
+      decoration: BoxDecoration(color: background, borderRadius: OmiRadius.smAll),
+      child: Text(label, style: OmiType.caption.copyWith(color: color)),
+    );
+  }
+
   String _formatDurationMs(int ms) {
-    if (ms < 1000) return '${ms}ms';
-    if (ms < 60000) return '${(ms / 1000).toStringAsFixed(1)}s';
-    if (ms < 3600000) return '${(ms / 60000).toStringAsFixed(1)}m';
-    return '${(ms / 3600000).toStringAsFixed(1)}h';
+    if (ms < 1000) return '$ms ms';
+    return OmiDuration.compact((ms / 1000).round(), context.l10n);
   }
 
   String _formatReason(String reason) {

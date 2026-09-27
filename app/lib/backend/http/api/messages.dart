@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_timezone/flutter_timezone.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
 import 'package:omi/backend/schema/message.dart';
@@ -184,9 +186,16 @@ Stream<ServerMessageChunk> sendMessageStreamServer(
   }
 
   var messageId = "1000"; // Default new message
+  String? deviceTimeZone;
+  try {
+    deviceTimeZone = (await FlutterTimezone.getLocalTimezone()).identifier;
+  } catch (_) {
+    // Omit time_zone when device timezone is unavailable so chat send is not blocked.
+  }
   final body = <String, dynamic>{
     'text': text,
     'file_ids': filesId,
+    if (deviceTimeZone != null) 'time_zone': deviceTimeZone,
     if (context != null) 'context': context.toJson(),
   };
 

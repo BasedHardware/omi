@@ -1,0 +1,9 @@
+{
+  "version": "0.12.343",
+  "date": "2026-09-13",
+  "changes": [
+    "Long background-agent and discovery cards in chat now scroll smoothly and let you select their text",
+    "Settings → Advanced → AI Provider now respects the Hermes and OpenClaw selections in chat (previously both silently ran the Claude engine and failed with \"Claude sign-in is required\")",
+    "Stopped live transcripts from hitching when selecting or scrolling long captures"
+  ]
+}

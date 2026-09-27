@@ -84,6 +84,12 @@ def _restore_package_paths():
     notifications = sys.modules.get('utils.notifications')
     if notifications is not None and not hasattr(notifications, 'send_notification'):
         notifications.send_notification = MagicMock()
+    if notifications is not None and not hasattr(notifications, 'send_client_displayed_notification'):
+        notifications.send_client_displayed_notification = MagicMock()
+    if notifications is not None and not hasattr(notifications, 'send_client_displayed_notification_async'):
+        from unittest.mock import AsyncMock
+
+        notifications.send_client_displayed_notification_async = AsyncMock()
     redis_db = sys.modules.get('database.redis_db')
     if redis_db is not None:
         redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))
@@ -318,6 +324,7 @@ def _desktop_transcribe_isolation():
         _speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
         _speaker_embedding.extract_embedding_from_bytes = MagicMock()
         _speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+        _speaker_embedding.speaker_embedding_configured = lambda: True
         sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
         _attach_existing_module('utils.stt.speaker_embedding')
 

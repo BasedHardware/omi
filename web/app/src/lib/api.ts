@@ -31,6 +31,7 @@ import type {
   CreateConversationResponse,
   ActionItemsResponse,
   FairUseStatusResponse,
+  StoreRecordingPermissionResponse,
 } from './omiApi.generated';
 import {
   normalizeKnowledgeLedgerMemories,
@@ -65,7 +66,15 @@ const API_BASE_URL = '/api/proxy';
 /**
  * Make an authenticated API request
  */
-async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+interface AuthenticatedResponse<T> {
+  data: T;
+  response: Response;
+}
+
+async function fetchWithAuthResponse<T>(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<AuthenticatedResponse<T>> {
   let token: string | null = null;
 
   try {
@@ -115,10 +124,10 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
 
     // Handle 204 No Content responses (common for DELETE operations)
     if (response.status === 204) {
-      return undefined as T;
+      return { data: undefined as T, response };
     }
 
-    return response.json();
+    return { data: await response.json(), response };
   } catch (fetchError) {
     if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
       console.error('Network error - possible CORS issue or API unavailable');
@@ -128,6 +137,11 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
     }
     throw fetchError;
   }
+}
+
+async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const { data } = await fetchWithAuthResponse<T>(endpoint, options);
+  return data;
 }
 
 /**
@@ -492,6 +506,51 @@ export interface GetMemoriesParams {
   limit?: number;
   offset?: number;
   categories?: MemoryCategory[];
+  cursor?: string;
+  view?: MemoryView;
+}
+
+/** Server-selected memory presentation. The server remains authoritative for
+ * ordering and eligibility; the web client only selects the read surface. */
+export type MemoryView = 'useful_now' | 'history' | 'all';
+
+export interface MemoriesPage {
+  memories: Memory[];
+  nextCursor: string | null;
+  truncated: boolean;
+  /** `null` means this server predates the beta capability header. */
+  beliefEnabled: boolean | null;
+}
+
+function headerBoolean(response: Response, name: string): boolean | null {
+  const value = response.headers.get(name)?.trim().toLowerCase();
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return null;
+}
+
+/** Read one server-ordered page and retain pagination/capability receipts. */
+export async function getMemoriesPage(
+  params: GetMemoriesParams = {},
+): Promise<MemoriesPage> {
+  const { limit = 100, offset = 0, cursor, view } = params;
+
+  const queryParams = new URLSearchParams({
+    limit: limit.toString(),
+    offset: cursor ? '0' : offset.toString(),
+  });
+  if (cursor) queryParams.set('cursor', cursor);
+  if (view) queryParams.set('view', view);
+
+  const { data: raw, response } = await fetchWithAuthResponse<unknown>(
+    `/v3/memories?${queryParams}`,
+  );
+  return {
+    memories: normalizeKnowledgeLedgerMemories(raw),
+    nextCursor: response.headers.get('X-Omi-Memory-Next-Cursor'),
+    truncated: response.headers.get('X-Omi-List-Truncated')?.toLowerCase() === 'true',
+    beliefEnabled: headerBoolean(response, 'X-Omi-Memory-Belief-Enabled'),
+  };
 }
 
 /**
@@ -504,15 +563,7 @@ export interface GetMemoriesParams {
  * `@/lib/memoryCategory`, which mirrors how the desktop clients do it.
  */
 export async function getMemories(params: GetMemoriesParams = {}): Promise<Memory[]> {
-  const { limit = 100, offset = 0 } = params;
-
-  const queryParams = new URLSearchParams({
-    limit: limit.toString(),
-    offset: offset.toString(),
-  });
-
-  const raw = await fetchWithAuth<unknown>(`/v3/memories?${queryParams}`);
-  return normalizeKnowledgeLedgerMemories(raw);
+  return (await getMemoriesPage(params)).memories;
 }
 
 /**
@@ -592,6 +643,21 @@ export async function reviewMemory(id: string, accept: boolean): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}/review?value=${accept}`, {
     method: 'POST',
   });
+}
+
+export type MemoryUseAction = 'suppress' | 'allow' | 'useful';
+
+/** Record an owner's use preference without deleting or rewriting the memory. */
+export async function setMemoryUse(
+  id: string,
+  action: MemoryUseAction,
+  feedbackId: string,
+): Promise<void> {
+  await fetchWithAuth(`/v3/memories/${id}/use`, {
+    method: 'POST',
+    body: JSON.stringify({ action, feedback_id: feedbackId }),
+  });
+  invalidateCache(invalidationPatterns.memories);
 }
 
 // ============================================================================
@@ -981,7 +1047,9 @@ export async function sendMessageStream(
     queryParams.set('chat_session_id', options.chatSessionId);
   }
 
-  const url = `${API_BASE_URL}/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const url = `${API_BASE_URL}/v2/messages${
+    queryParams.toString() ? `?${queryParams}` : ''
+  }`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -993,6 +1061,7 @@ export async function sendMessageStream(
     body: JSON.stringify({
       text,
       file_ids: options?.fileIds || [],
+      time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       context: options?.context
         ? {
             type: options.context.type === 'general' ? 'recap' : options.context.type,
@@ -1098,7 +1167,9 @@ export async function uploadChatFiles(
     queryParams.set('app_id', appId);
   }
 
-  const url = `${API_BASE_URL}/v2/files${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const url = `${API_BASE_URL}/v2/files${
+    queryParams.toString() ? `?${queryParams}` : ''
+  }`;
 
   const formData = new FormData();
   for (const file of files) {
@@ -1528,16 +1599,13 @@ export async function getNotificationScopes(): Promise<NotificationScope[]> {
     const token = await getIdToken();
     if (!token) return [];
 
-    const response = await fetch(
-      `${API_BASE_URL}/v1/apps/proactive-notification-scopes`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'X-App-Platform': 'web',
-        },
+    const response = await fetch(`${API_BASE_URL}/v1/app/proactive-notification-scopes`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-App-Platform': 'web',
       },
-    );
+    });
 
     if (!response.ok) return [];
     return response.json();
@@ -1687,7 +1755,10 @@ export async function getTranscriptionPreferences(): Promise<TranscriptionPrefer
 
 // Webhook type enum matching backend API
 type WebhookType =
-  'memory_created' | 'realtime_transcript' | 'audio_bytes' | 'day_summary';
+  | 'memory_created'
+  | 'realtime_transcript'
+  | 'audio_bytes'
+  | 'day_summary';
 
 /**
  * Get developer webhook URL
@@ -1735,7 +1806,10 @@ export async function getDeveloperWebhooksStatus(): Promise<DeveloperWebhooks> {
  * Get store recording permission
  */
 export async function getRecordingPermission(): Promise<RecordingPermission> {
-  return fetchWithAuth<RecordingPermission>('/v1/users/store-recording-permission');
+  const response = await fetchWithAuth<StoreRecordingPermissionResponse>(
+    '/v1/users/store-recording-permission',
+  );
+  return { enabled: response.store_recording_permission };
 }
 
 /**
@@ -1949,10 +2023,12 @@ export async function createPerson(name: string): Promise<Person> {
  * Update person name
  */
 export async function updatePersonName(personId: string, name: string): Promise<void> {
-  await fetchWithAuth(`/v1/users/people/${personId}/name`, {
-    method: 'PATCH',
-    body: JSON.stringify({ name }),
-  });
+  await fetchWithAuth(
+    `/v1/users/people/${personId}/name?value=${encodeURIComponent(name)}`,
+    {
+      method: 'PATCH',
+    },
+  );
 }
 
 /**
@@ -2173,7 +2249,11 @@ export async function exportAllData(): Promise<Blob> {
   if (!response.ok) {
     throw new Error(`Export failed: ${response.status} ${response.statusText}`);
   }
-  return response.blob();
+  const blob = await response.blob();
+  if (blob.size === 0) {
+    throw new Error('Export failed: server returned an empty file');
+  }
+  return blob;
 }
 
 /**
@@ -2190,16 +2270,19 @@ export async function deleteKnowledgeGraph(): Promise<void> {
 // ============================================================================
 
 /**
- * Get custom vocabulary words from transcription preferences
+ * Get custom vocabulary words from transcription preferences.
+ *
+ * Returns null when the list could not be fetched, so a failure is not read as
+ * an empty vocabulary. The save path replaces the whole list.
  */
-export async function getCustomVocabulary(): Promise<string[]> {
+export async function getCustomVocabulary(): Promise<string[] | null> {
   try {
     const result = await fetchWithAuth<TranscriptionPreferences>(
       '/v1/users/transcription-preferences',
     );
     return result.vocabulary || [];
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -2351,7 +2434,9 @@ export async function reprocessConversation(
     queryParams.set('app_id', appId);
   }
 
-  const endpoint = `/v1/conversations/${conversationId}/reprocess${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const endpoint = `/v1/conversations/${conversationId}/reprocess${
+    queryParams.toString() ? `?${queryParams}` : ''
+  }`;
   return fetchWithAuth<Conversation>(endpoint, {
     method: 'POST',
   });

@@ -1,5 +1,9 @@
 # Daily memory sweep contract
 
+The [admission and deferred-unlock design note](daily-sweep-admission-and-unlock.md)
+describes the permanent window lock, required first-deployment drain,
+claim-bound operator abandonment, deferred replay design, read bounds and limitations.
+
 `utils.memory.daily_memory_sweep` is the dark authority seam for the ratified
 once-per-user-local-day memory sweep. The maintenance job contains a bounded
 producer/scheduler/adaptor, but its separate backend authority remains closed
@@ -28,8 +32,8 @@ are `daily_summary`, `onboarding_cold_start`, and
 `existing_trigger_reconciliation`; this staging packet is not a memory
 authority and is inert while the backend switch is closed. When staging is
 absent, the completed-day producer proves an exact UTC window, excludes
-discarded/processing/unfinished conversations, and runs ONE two-phase agent
-pass over the whole day: the conversation SUMMARIES form the bounded spine
+discarded and locked conversations, fails closed on processing/unfinished
+conversations, and runs ONE bounded two-phase agent pass over the completed day: the conversation SUMMARIES form the bounded spine
 (never photos, screen pixels, or today's partial window), and the agent may
 request a bounded number of raw transcript excerpts (at most 8, capped per
 fetch) to verify specific details before finalizing. Every memory must cite
@@ -60,6 +64,75 @@ model-controlled phase-B additions (draft memories, request reasons, prior-
 memory lookup queries and results) must fit
 `MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD` (set it to at least ~$0.80 to
 cover maximal days; typical days ceiling far lower).
+
+
+### Completed-day source bounds and invocation ownership
+
+Eligibility and selection have separate budgets. The `started_at` timestamp
+range projects `started_at`, `status`, `finished_at`, `discarded`, and `is_locked`,
+ordered by `started_at ASC, __name__ ASC`. At most 100,001 projections are read;
+more than 100,000 scanned rows returns `source_scan_over_budget`. The separate
+2,000 eligible-row ceiling excludes discarded/locked rows and returns
+`eligibility_scan_over_budget`; an unfinished visible row returns
+`row_not_eligible`. These results cannot advance the cursor or dispatch.
+
+Projection and subsequent full reads are not atomic. Mutations beyond the
+full-read page and late inserts are not rechecked; even selected rows can
+change afterward. This is an observed-read eligibility check, not a stable
+whole-window snapshot or ingestion seal. Admission protects only code that
+participates in the shared admission protocol. The deployment note explicitly
+requires draining pre-lock workers for the first transition.
+
+There is no explicit settle margin: the previous local date is eligible as
+soon as midnight passes, potentially arbitrarily close to window end. Missing
+or string-typed `started_at` values are not covered by the timestamp query.
+Conversations are attributed to their start day, not finish day; `finished_at`
+is required to be a datetime but is not required to precede window end.
+
+After the scan succeeds, only the first `min(2 * max_conversations, 400)`
+eligible IDs in that total order have their full documents read (16 for QA).
+Those reads recheck eligibility and the start time; a missing or moved document
+returns `source_row_changed`. The selected page ranks structured summaries,
+longer summaries, later start times, then IDs. An individually oversized row is
+always skipped, even after selection began; remaining rows stop at the first
+aggregate budget overflow. Selected rows are finally sorted by ID. Thus a
+successful attempt reads at most 100,000 projected and 400 full documents (16 in
+QA); a scan-overflow attempt reads 100,001 projections and no full documents.
+Firestore projections reduce payload, not billed document reads.
+
+Rows locked in the projection are excluded like discarded rows before full
+content reads. Full-document reads recheck locking before building provider
+input. This matches chat RAG's exclusion and integration rendering's removal
+of locked summaries/evidence. They do not hold the day open;
+a day consumed while locked is not revisited after later payment unlocks it.
+Replay is deferred to a separate PR; payment unlock is unchanged. Exclusions
+are counted without IDs. The completed-day agent rechecks selected rows' locks
+before each provider phase (up to 200 additional reads per phase, 8 for QA),
+failing closed if a row locks, disappears or cannot be read. A lock committed
+after its last check can still race the external request; no atomic cross-system
+privacy guarantee is claimed.
+Onboarding uses the same lock exclusion before its additional finalization
+check, so it cannot route a locked transcript around the completed-day gate.
+`rows_seen` counts eligible projected rows, `rows_used` counts selected rows,
+and the selection cap no longer treats an exactly-full query as truncation.
+Contentless eligible rows are counted as omissions and set the truncation flag.
+Source evidence belongs to the producer/stage;
+the agent receives a separate dispatch-evidence dictionary. The scheduler and
+both QA receipts accept only `SOURCE_REASON_CODES`; other values become
+`unknown_reason`.
+
+Both completed-day and onboarding invocations use stable owner/source/window/
+generation identity. A durable window admission lease commits before its identity factory runs;
+a holder-checked transaction then binds the result independently of mutable text. Both payload
+and content-free fence bind a separate input digest; only certified pre-dispatch
+release can change it. The existing three-release limit and claim binding remain.
+Lease expiry permits another admission holder, never another invocation ID.
+See the design note for mutation interleavings, distinct failure reasons, and the
+single operator skip exit through the existing repair attestation machinery.
+
+All new lookups use single-field range indexes or equality index merging; no
+new composite index is needed. The emulator proves query/transaction semantics,
+not the serving index state of a remote deployment.
 
 Onboarding provenance is a server-generated session marker written by the
 listen runtime; client `source` and onboarding flags are not trusted. The

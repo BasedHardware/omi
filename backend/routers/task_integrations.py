@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import Dict, Any, List, Optional
+from google.cloud import firestore
 from pydantic import BaseModel, Field
 from models.shared import StatusResponse
 import os
@@ -155,10 +156,35 @@ class TaskIntegrationData(BaseModel):
     list_name: Optional[str] = None
 
 
+CLEARABLE_SELECTION_FIELDS = (
+    'workspace_gid',
+    'workspace_name',
+    'project_gid',
+    'project_name',
+    'default_list_id',
+    'default_list_title',
+    'team_id',
+    'team_name',
+    'space_id',
+    'space_name',
+    'list_id',
+    'list_name',
+)
+
+
+class TaskIntegrationStatus(BaseModel):
+    """Non-secret projection safe for clients, support tooling, and OpenAPI."""
+
+    model_config = {'extra': 'forbid'}
+
+    app_key: str
+    connected: bool
+
+
 class TaskIntegrationsResponse(BaseModel):
     """Response containing all task integrations"""
 
-    integrations: Dict[str, Any] = Field(description="Map of app_key to connection details")
+    integrations: Dict[str, TaskIntegrationStatus] = Field(description="Map of app_key to non-secret status")
     default_app: Optional[str] = Field(description="Default task integration app key")
 
 
@@ -207,7 +233,12 @@ class ClickUpListsResponse(BaseModel):
 @router.get("/v1/task-integrations", response_model=TaskIntegrationsResponse, tags=['task-integrations'])
 def get_task_integrations(uid: str = Depends(auth.get_current_user_uid)):
     """Get all task integration connections for the current user."""
-    integrations = users_db.get_task_integrations(uid)
+    stored_integrations = users_db.get_task_integrations(uid)
+    integrations = {
+        app_key: TaskIntegrationStatus(app_key=app_key, connected=bool(value.get('connected')))
+        for app_key, value in stored_integrations.items()
+        if isinstance(value, dict)
+    }
     default_app = users_db.get_default_task_integration(uid)
 
     return TaskIntegrationsResponse(integrations=integrations, default_app=default_app)
@@ -234,6 +265,9 @@ def save_task_integration(app_key: str, data: TaskIntegrationData, uid: str = De
     """Save or update a task integration connection."""
     # Convert Pydantic model to dict, excluding None values
     integration_data = data.model_dump(exclude_none=True)
+    for field in CLEARABLE_SELECTION_FIELDS:
+        if field in data.model_fields_set and getattr(data, field) is None:
+            integration_data[field] = firestore.DELETE_FIELD
 
     users_db.set_task_integration(uid, app_key, integration_data)
 

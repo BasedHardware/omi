@@ -96,6 +96,7 @@ When creating/updating the Omi app, use these URLs:
 3. Add this to your Google OAuth redirect URIs
 4. Install dependencies: `pip install -r requirements.txt`
 5. Run: `python main.py`
+6. Test: `python3 test_event_ids.py` (hermetic, no credentials or network; also runs in CI via `.github/checks-manifest.yaml`)
 
 ## Environment Variables
 

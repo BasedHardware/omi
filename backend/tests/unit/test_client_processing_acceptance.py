@@ -147,6 +147,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         'get_conversation_notes',
     ):
         setattr(conv_proc, attr, MagicMock())
+    conv_proc.validate_structured_source_segment_ids = lambda structured, _ids: structured
     add('utils.llm.conversation_processing', conv_proc)
 
     add('utils.llm.conversation_prompt_prefix', AutoMockModule('utils.llm.conversation_prompt_prefix'))
@@ -168,6 +169,7 @@ def _build_fakes() -> dict[str, ModuleType]:
 
     subscription = add('utils.subscription', AutoMockModule('utils.subscription'))
     subscription.is_trial_paywalled = MagicMock(return_value=False)
+    subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
 
@@ -329,7 +331,7 @@ def _paid_decision() -> Decision:
 
 
 def _enable_flag(monkeypatch, pc) -> None:
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: True)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: True)
 
 
 def _authorize(monkeypatch, pc, decision: Decision) -> None:
@@ -564,7 +566,7 @@ def test_paid_plan_generic_persist_omits_projection_keeps_it_in_memory(monkeypat
 # In-memory attach still happens; the field is written only by ingest mutation.
 def test_flag_off_deferred_persist_omits_projection_keeps_it_in_memory(monkeypatch, stack) -> None:
     pc, _dev = stack
-    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda: False)
+    monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: False)
     spies = _spy_managed_effects(monkeypatch, pc)
     resolve = MagicMock(side_effect=AssertionError('policy must not run when flag is off'))
     monkeypatch.setattr(pc, 'resolve_free_tier_processing_plan', resolve)

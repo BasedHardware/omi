@@ -255,6 +255,8 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertNil(navigation.visibleRoute)
     navigation.markRouteVisible(.goals)
     XCTAssertEqual(navigation.visibleRoute, .goals)
+    navigation.markRouteVisible(.goals)
+    XCTAssertEqual(navigation.visibleRoute, .goals)
 
     navigation.open(focus: .task(id: "task-1"))
     XCTAssertEqual(navigation.route, .tasks)

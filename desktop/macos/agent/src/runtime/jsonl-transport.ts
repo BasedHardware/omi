@@ -101,6 +101,9 @@ interface ActiveRequestContext {
   /** Served models observed on this query's completions (from `model_used`
    *  adapter events); reported on the terminal result message. */
   modelsUsed?: Set<string>;
+  /** Provider targets observed beside `modelsUsed`; kept separate from the
+   *  runtime adapter so `pi-mono` is not mislabeled as its requested model. */
+  providerTargets?: Set<string>;
 }
 
 const TERMINAL_RUN_EVENT_STATUSES = new Set([
@@ -321,6 +324,7 @@ export class JsonlTransport {
         jitProviderAttempts: adapterReceipt?.jitProviderAttempts,
         jitReceiptAttemptIDs: adapterReceipt?.jitReceiptAttemptIDs,
         modelsUsed: context.modelsUsed ? [...context.modelsUsed] : undefined,
+        providerTargets: context.providerTargets ? [...context.providerTargets] : undefined,
         artifacts: result.artifacts.map(serializeArtifact),
         completionDeltaArtifacts: result.completionDeltaArtifacts?.map(serializeArtifact),
       };
@@ -732,6 +736,10 @@ export class JsonlTransport {
         const served = (adapterEvent as { model?: unknown }).model;
         if (typeof served === "string" && served.length > 0) {
           (context.modelsUsed ??= new Set()).add(served);
+        }
+        const provider = (adapterEvent as { provider?: unknown }).provider;
+        if (typeof provider === "string" && provider.length > 0) {
+          (context.providerTargets ??= new Set()).add(provider);
         }
         break;
       }

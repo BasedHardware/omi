@@ -13,7 +13,7 @@ from omi_cli.auth import api_key as api_key_auth
 from omi_cli.auth import oauth as oauth_auth
 from omi_cli.auth.store import clear_credentials
 from omi_cli.client import OmiClient
-from omi_cli.errors import AuthError, CliError, UsageError
+from omi_cli.errors import AuthError, CliError, TransportError, UsageError
 
 if TYPE_CHECKING:
     from omi_cli.main import AppContext
@@ -145,11 +145,12 @@ def _do_api_key_login(ctx: "AppContext", api_key: str) -> None:
     verification_warning = None
 
     # Sanity check on a tolerant endpoint — see the original launch PR's
-    # rationale. AuthError leaves disk unchanged; other CliError warns and keeps.
+    # rationale. Auth and transport failures leave disk unchanged; other
+    # HTTP errors preserve the existing warn-and-store policy.
     try:
         with OmiClient(profile, verbose=ctx.verbose) as client:
             client.get("/v1/dev/user/memories", params={"limit": 1})
-    except AuthError:
+    except (AuthError, TransportError):
         raise
     except CliError as exc:
         verification_warning = (
@@ -228,6 +229,16 @@ def refresh(typer_ctx: typer.Context) -> None:
         )
     oauth_auth.refresh_id_token(profile.name)
     ctx.renderer.success(f"Refreshed Firebase ID token for profile [bold]{escape(profile.name)}[/bold].")
+    if ctx.renderer.json_mode:
+        refreshed = ctx.reload_config().get_profile(profile.name)
+        payload: dict[str, object] = {
+            "profile": refreshed.name,
+            "auth_method": refreshed.auth_method,
+            "api_base": refreshed.api_base,
+        }
+        if refreshed.id_token_expires_at:
+            payload["id_token_expires_at"] = refreshed.id_token_expires_at
+        ctx.renderer.emit(payload)
 
 
 def _ensure_authenticated(profile: cfg.Profile) -> None:  # pragma: no cover — utility for sibling commands

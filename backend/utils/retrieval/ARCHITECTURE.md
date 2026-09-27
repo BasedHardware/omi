@@ -17,3 +17,4 @@ The `tools/` package exposes LangChain tools with user identity supplied through
 - Tool calls receive the authenticated UID from request configuration and never infer identity from user text.
 - Retrieval results are bounded before model invocation.
 - An active `chat_scope` is fail-closed: conversation and search tools must not answer from outside the scoped conversation or date window, and a tool that cannot honour the scope refuses rather than falling back to searching all memory. An empty date intersection is an error, not a widened query.
+- Screen-activity vector miss uses a bounded Firestore keyword scan (`SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED`, default on; `0`/`false`/`off` disables). `SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS` is a temporary server-owned comma-separated UID opt-out (`*` disables vectors globally); parse it fail-closed (whitespace-only tokens ignored) until the plan/entitlement resolver owns this.

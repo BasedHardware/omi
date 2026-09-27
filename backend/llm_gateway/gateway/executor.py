@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -43,6 +44,7 @@ from llm_gateway.gateway.jit_budget import (
 from llm_gateway.gateway.resolver import (
     ResolvedEmbeddingRoute,
     ResolvedRoute,
+    ResolvedSystemOneRoute,
     is_lkg_eligible,
     select_lkg_route_for_failure,
 )
@@ -56,6 +58,7 @@ from llm_gateway.gateway.schemas import (
 )
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.executors import db_executor, run_blocking
+from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -247,6 +250,12 @@ async def execute_embedding(
             last_error = error
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 raise error
+            await _pause_before_provider_429_retry(
+                failure=exc,
+                retry_ordinal=retry_ordinal,
+                max_attempts=max_attempts,
+                deadline_monotonic=deadline_monotonic,
+            )
             continue
         if attempt_trace is not None:
             attempt_trace.record(
@@ -262,6 +271,64 @@ async def execute_embedding(
         return dict(response.response)
     assert last_error is not None
     raise last_error
+
+
+async def execute_systemone(
+    resolved_route: ResolvedSystemOneRoute,
+    credential_context: CredentialContext,
+    provider_registry: 'ProviderRegistry',
+    *,
+    attempt_trace: AttemptTrace | None = None,
+) -> dict[str, Any]:
+    """Run one decision-model request through its lane's single provider attempt.
+
+    No fallback and no gateway retry: the route pins ``retry.max_attempts=1``
+    and callers own their one retry, so a slow provider costs at most one
+    gateway deadline per caller attempt.
+    """
+    route = resolved_route.route
+    _validate_credential_mode(route, credential_context)
+    provider_ref = route.primary
+    provider = provider_registry.provider_for(provider_ref.provider)
+    create_systemone_attr = getattr(provider, 'create_systemone', None) if provider is not None else None
+    if provider is None or not callable(create_systemone_attr):
+        raise _unsupported_provider_error(provider_ref, credential_context)
+    create_systemone = cast('Callable[..., Awaitable[ProviderResponse]]', create_systemone_attr)
+
+    validated = resolved_route.validated_request
+    request: dict[str, Any] = {'state': validated.state, 'questions': dict(validated.questions)}
+    try:
+        response = await create_systemone(
+            request,
+            provider_ref=provider_ref,
+            credentials=credential_context,
+            timeout_ms=route.timeouts.request_ms,
+        )
+    except ProviderFailure as exc:
+        if attempt_trace is not None:
+            attempt_trace.record(
+                provider=provider_ref.provider,
+                configured_model=provider_ref.model,
+                route_artifact_id=route.route_artifact_id,
+                fallback_reason=None,
+                retry_ordinal=1,
+                outcome='error',
+                error_class=exc.failure_class.value,
+                usage_status=UsageStatus.INDETERMINATE,
+            )
+        raise _map_provider_failure(exc, credential_context, provider_ref) from exc
+    if attempt_trace is not None:
+        attempt_trace.record(
+            provider=provider_ref.provider,
+            configured_model=provider_ref.model,
+            route_artifact_id=route.route_artifact_id,
+            fallback_reason=None,
+            retry_ordinal=1,
+            outcome='success',
+            error_class='none',
+            metadata=response.accounting,
+        )
+    return dict(response.response)
 
 
 def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
@@ -349,6 +416,63 @@ RETRYABLE_PROVIDER_FAILURE_CLASSES = frozenset(
         FailureClass.PROVIDER_5XX_OMI_PAID,
     }
 )
+
+# Jittered backoff for provider 429s. The per-sleep ceiling is 60s; the route
+# request timeout remains the total latency budget, so interactive lanes cannot
+# stall past the deadline they already had. Flex lanes already carry a longer
+# request timeout (up to 900s) and need no separate retry-config field.
+PROVIDER_429_BACKOFF_BASE_SECONDS = 2.0
+PROVIDER_429_BACKOFF_CAP_SECONDS = 60.0
+
+
+async def sleep_for_provider_retry(seconds: float) -> None:
+    """Injectable pause between accounted provider retries."""
+    await asyncio.sleep(seconds)
+
+
+def provider_429_backoff_seconds(
+    *,
+    attempt: int,
+    retry_after_seconds: float | None,
+    remaining_budget_seconds: float,
+    random_uniform: Callable[[float, float], float] | None = None,
+) -> float:
+    """Delay before the next attempt after a provider 429.
+
+    ``attempt`` is the failed attempt's 1-based ordinal. A seconds-form
+    Retry-After wins when present. Otherwise the delay is
+    ``base * 2**(attempt-1) + jitter`` with jitter uniform in ``[0, base/2]``.
+    The result is capped at 60s and at the remaining route timeout.
+    """
+    if remaining_budget_seconds <= 0:
+        return 0.0
+    if retry_after_seconds is not None and retry_after_seconds >= 0:
+        delay = float(retry_after_seconds)
+    else:
+        exponent = min(max(attempt, 1) - 1, 16)
+        draw = random.uniform if random_uniform is None else random_uniform
+        jitter = draw(0.0, PROVIDER_429_BACKOFF_BASE_SECONDS / 2.0)
+        delay = PROVIDER_429_BACKOFF_BASE_SECONDS * (2**exponent) + jitter
+    return max(0.0, min(delay, PROVIDER_429_BACKOFF_CAP_SECONDS, remaining_budget_seconds))
+
+
+async def _pause_before_provider_429_retry(
+    *,
+    failure: ProviderFailure,
+    retry_ordinal: int,
+    max_attempts: int,
+    deadline_monotonic: float,
+) -> None:
+    """Sleep only when this 429 will be retried. The attempt is already recorded."""
+    if failure.failure_class != FailureClass.PROVIDER_429_OMI_PAID or retry_ordinal >= max_attempts:
+        return
+    delay = provider_429_backoff_seconds(
+        attempt=retry_ordinal,
+        retry_after_seconds=failure.retry_after_seconds,
+        remaining_budget_seconds=deadline_monotonic - monotonic(),
+    )
+    if delay > 0:
+        await sleep_for_provider_retry(delay)
 
 
 async def _execute_route(
@@ -693,6 +817,12 @@ async def _attempt_provider(
                 return None, error
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error
+            await _pause_before_provider_429_retry(
+                failure=exc,
+                retry_ordinal=retry_ordinal,
+                max_attempts=max_attempts,
+                deadline_monotonic=deadline_monotonic,
+            )
         except asyncio.CancelledError:
             await settle_jit_attempt(
                 reservation,
@@ -755,7 +885,7 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
-    if not provider_ref.model.startswith('gpt-5.6'):
+    if not uses_explicit_cache_and_chat_sanitizer(provider_ref.model):
         _remove_gpt56_cache_fields(provider_request)
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
@@ -767,16 +897,17 @@ def _sanitize_openai_chat_completions_request(
     provider_request: dict[str, Any],
     provider_ref: ProviderRef,
 ) -> None:
-    """Normalize OpenAI chat-completions params OpenAI rejects for GPT-5.6 models.
+    """Normalize OpenAI chat-completions params rejected for GPT-5.6 and gpt-x-luna.
 
     Live OpenAI 400 (2026-08): function tools with reasoning_effort other than
     ``none`` are unsupported for ``gpt-5.6-luna`` on ``/v1/chat/completions``.
-    Temperature must also stay at the model default (1).
+    Temperature must also stay at the model default (1). gpt-x-luna keeps this
+    sanitizer; whether that model still rejects the same params is unverified.
     """
     if provider_ref.provider != 'openai':
         return
     model = provider_ref.model
-    if not model.startswith('gpt-5.6'):
+    if not uses_explicit_cache_and_chat_sanitizer(model):
         return
 
     tools = provider_request.get('tools')

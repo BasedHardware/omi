@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Load an assembled run into `based-hardware.omi_finops`.
 
-Writes run as the interactive owner account (verified by name first); every read in the
+Writes run as finops-writer@based-hardware (verified by name first); every read in the
 pipeline runs as the read-only bot. Loads are IDEMPOTENT per date: rows for the dates in
 this run are deleted and re-inserted inside one BigQuery transaction, so re-running a date
 replaces it rather than doubling it.

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/other/temp.dart';
+import 'package:omi/ui/ui.dart';
 
+/// A day group header in the conversation list: "Today", "Yesterday", "Wed, Sep 23", and the year
+/// when it is not the current one (hub audit #16). Today gets a header too.
 class DateListItem extends StatelessWidget {
   final bool isFirst;
   final DateTime date;
@@ -11,28 +12,14 @@ class DateListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var now = DateTime.now();
-    var yesterday = now.subtract(const Duration(days: 1));
-    var isToday = date.month == now.month && date.day == now.day && date.year == now.year;
-    var isYesterday = date.month == yesterday.month && date.day == yesterday.day && date.year == yesterday.year;
-
-    if (isToday) {
-      return const SizedBox.shrink();
-    }
-
     return Padding(
       padding: EdgeInsets.fromLTRB(24, isFirst ? 0 : 20, 16, 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            isYesterday
-                ? context.l10n.yesterday
-                : dateTimeFormat('MMM dd', date, locale: Localizations.localeOf(context).languageCode),
-            style: const TextStyle(color: Colors.white, fontSize: 18),
-          ),
-        ],
+      child: Semantics(
+        header: true,
+        child: Text(
+          OmiDateFormat.of(context).dayHeader(date),
+          style: OmiType.body.copyWith(fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }

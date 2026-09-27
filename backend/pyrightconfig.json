@@ -108,6 +108,7 @@
         "scripts/vector_repair_outbox_worker_entrypoint.py",
         "scripts/vector_search_provider_readiness.py",
         "scripts/verify_k8s_secret_keys.py",
+        "scripts/verify_pusher_live_alert_route.py",
         "scripts/wait_external_secret_refresh.py",
         "scripts/web.py",
         "services",

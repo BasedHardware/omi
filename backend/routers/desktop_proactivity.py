@@ -23,6 +23,7 @@ from utils.env_loader import EnvStage, resolve_stage_from_env
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.desktop_llm_stub import llm_stub_enabled
+from utils.llm.model_config import LUNA_MODEL
 from utils.llm.gateway_client import llm_gateway_headers
 from utils.llm.gateway_observability import record_direct_exception_surface
 from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS, has_cacheable_prefix
@@ -30,6 +31,9 @@ from utils.llm.providers import get_openai_api_key
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.product_metrics import extract_app_build
+from utils.free_tier_basic_gates import basic_plan_gate_proactivity_enabled
+from utils.managed_compute import Decision, authorize_managed_compute, funding_owner_for_feature
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import (
     DESKTOP_ACCESS_TIER_FREE,
@@ -60,7 +64,7 @@ _OPERATION_LANES = {
 }
 _DIRECT_MODELS = {
     "proactive_extraction": "gpt-5-nano",
-    "proactive_reasoning": "gpt-5.6-luna",
+    "proactive_reasoning": LUNA_MODEL,
 }
 # Must match generated_route_overrides.yaml for these features. The direct
 # recovery path previously used medium for reasoning, which let luna spend a
@@ -247,6 +251,52 @@ async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> 
     if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop"):
         raise HTTPException(status_code=402, detail="trial_expired")
     return uid
+
+
+# Managed-compute plan gate (S14 proactivity half): the completions lane is the
+# one desktop surface that still let PlanType.basic reach paid providers. The
+# gate reuses the JIT managed-compute contract (the same authorize_managed_compute
+# the desktop proxy and the free-tier processing policy consult) instead of a
+# second pipeline: basic + omi-funded is denied 402 plan_gated, a validated
+# BYOK key for the lane's provider funds the call, unknown identification and
+# authorization outages fail the way the contract already defines. The feature
+# is the exact model-config lane this operation spends through, so the deny
+# reason names the lane that was refused.
+_OPERATION_GATE_FEATURES = {
+    ProactiveOperation.EXTRACTION.value: "desktop_proactive_extraction",
+    ProactiveOperation.REASONING.value: "desktop_proactive_reasoning",
+}
+
+
+def _plan_gate_detail(decision: Decision) -> dict[str, Any]:
+    plan_type = decision.plan.value if decision.plan is not None else "basic"
+    return {"error": "plan_gated", "plan_type": plan_type, "reason": decision.reason}
+
+
+async def _enforce_proactive_plan_gate(uid: str, operation: ProactiveOperation) -> None:
+    """Deny non-entitled plans before any quota or provider work.
+
+    Mirrors desktop_proxy._enforce_managed_plan_gate: 503 for an authorization
+    outage, 402 plan_gated for every other deny. The offline stub path below
+    stays reachable only for callers this gate admitted.
+
+    Default off (``BASIC_PLAN_GATE_PROACTIVITY_ENABLED``): no authorize call.
+    """
+    if not basic_plan_gate_proactivity_enabled():
+        return
+    feature = _OPERATION_GATE_FEATURES[operation.value]
+    decision = await run_blocking(
+        db_executor,
+        authorize_managed_compute,
+        uid,
+        feature,
+        funding_owner_for_feature(feature),
+    )
+    if decision.allowed:
+        return
+    if decision.reason == "authorization_unavailable":
+        raise HTTPException(status_code=503, detail="plan authorization is temporarily unavailable")
+    raise HTTPException(status_code=402, detail=_plan_gate_detail(decision))
 
 
 def _customer_subscription(uid: str) -> Subscription | None:
@@ -701,11 +751,10 @@ async def _proactive_completion_unobserved(
     uid: str = Depends(_authorized_desktop_user),
 ) -> ProactiveCompletionEnvelope:
     # This route is the released proactivity lane that shipped desktop clients
-    # poll continuously. It is deliberately NOT gated on the JIT cohort: gating
-    # it would silently kill context-bucket extraction for the entire deployed
-    # fleet the moment the backend ships, long before any client migrates to
-    # the JIT trigger runtime. The JIT lanes enforce admission on their own
-    # reservation routes; retiring this lane is a later, explicit operation.
+    # poll continuously. It is not gated on the JIT *cohort* flags (that would
+    # silently kill context-bucket extraction for the entire deployed fleet);
+    # plan admission is enforced one layer up, in the route's
+    # _enforce_proactive_plan_gate, per the managed-compute contract.
     operation = request.operation.value
     lane = _OPERATION_LANES[operation]
     if llm_stub_enabled():
@@ -903,11 +952,14 @@ async def proactive_completion(
     response: Response,
     uid: str = Depends(_authorized_desktop_user),
     x_app_platform: str | None = Header(None, alias='X-App-Platform'),
+    x_app_version: str | None = Header(None, alias='X-App-Version'),
     user_agent: str | None = Header(None, alias='User-Agent'),
 ) -> ProactiveCompletionEnvelope:
+    await _enforce_proactive_plan_gate(uid, request.operation)
     attempt = ClientJourneyAttempt(
         'desktop_proactivity',
         _proactivity_client_kind(x_app_platform, user_agent),
+        app_build=extract_app_build({'x-app-version': x_app_version or ''}),
     )
     try:
         result = await _proactive_completion_unobserved(request, response, uid=uid)

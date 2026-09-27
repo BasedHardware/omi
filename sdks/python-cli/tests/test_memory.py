@@ -129,6 +129,23 @@ def test_memory_get_found_in_later_page(authed_profile, respx_mock, cli_runner) 
     assert result.exit_code == 0
 
 
+def test_memory_get_continues_after_short_filtered_page(authed_profile, respx_mock, cli_runner) -> None:
+    """A malformed record filtered by the API must not hide later memories."""
+    page1 = [
+        {"id": f"m{i}", "content": "x", "category": "core", "visibility": "private", "tags": []} for i in range(99)
+    ]
+    page2 = [{"id": "target", "content": "found me", "category": "core", "visibility": "private", "tags": []}]
+    import httpx
+
+    route = respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[httpx.Response(200, json=page1), httpx.Response(200, json=page2)]
+    )
+    result = cli_runner.invoke(app, ["--json", "memory", "get", "target"])
+    assert result.exit_code == 0, result.output
+    assert len(route.calls) == 2
+    assert route.calls[1].request.url.params["offset"] == "100"
+
+
 @pytest.mark.parametrize("command", [["memory", "list"], ["memory", "get", "m1"]])
 def test_memory_pretty_preserves_markup_like_content(authed_profile, respx_mock, cli_runner, command) -> None:
     respx_mock.get("/v1/dev/user/memories").respond(

@@ -9,7 +9,7 @@ streams AI responses.
 import logging
 from typing import Any, Callable, List, cast
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 import database.chat as chat_db
@@ -31,6 +31,7 @@ from utils.chat_rating_triage import extract_rating_triage_fields
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
 from utils.other import endpoints as auth
+from utils.product_metrics import record_product_event
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +186,7 @@ def delete_chat_session(
 @router.post('/v2/desktop/messages', tags=['chat-sessions'], response_model=SaveMessageResponse)
 def save_message(
     request: SaveMessageRequest,
+    http_request: Request,
     x_app_platform: str | None = Header(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -202,6 +204,7 @@ def save_message(
             journal_revision=request.journal_revision,
         )
     except chat_db.ClientMessageIdPayloadConflict as exc:
+        record_product_event('chat_message_sent', request=http_request, uid=uid, outcome='error')
         raise HTTPException(status_code=409, detail='client_message_id payload conflict') from exc
     if request.sender == 'human' and request.message_source == 'desktop_chat':
         try:
@@ -215,6 +218,7 @@ def save_message(
             )
         except Exception:
             logger.exception('Failed to record desktop chat quota question uid=%s message_id=%s', uid, saved['id'])
+    record_product_event('chat_message_sent', request=http_request, uid=uid, outcome='ok')
     return saved
 
 

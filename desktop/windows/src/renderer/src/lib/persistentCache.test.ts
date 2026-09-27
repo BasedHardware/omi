@@ -4,6 +4,7 @@ import {
   clearAllPersistedCaches,
   readPersistedCache,
   readPersistedValue,
+  scopedCacheKey,
   writePersistedCache,
   writePersistedValue
 } from './persistentCache'
@@ -102,5 +103,14 @@ describe('persistentCache (per-uid cold-start cache)', () => {
     writePersistedValue('apps', { enabled: ['x'] })
     clearAllPersistedCaches()
     expect(readPersistedValue('apps')).toBeNull()
+  })
+
+  it('scopes capability snapshots by backend environment as well as uid', () => {
+    localStorage.setItem(LAST_UID_KEY, 'userA')
+    const devSurface = scopedCacheKey('memory-belief-capability', 'https://dev.example')
+    const prodSurface = scopedCacheKey('memory-belief-capability', 'https://prod.example')
+    writePersistedValue(devSurface, { enabled: true })
+    expect(readPersistedValue(devSurface)).toEqual({ enabled: true })
+    expect(readPersistedValue(prodSurface)).toBeNull()
   })
 })

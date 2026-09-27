@@ -227,6 +227,7 @@ describe("runtime stdio contract", () => {
     if (begun.type !== "external_surface_run_begin_result" || !begun.ok || !begun.runId || !begun.attemptId) {
       throw new Error("realtime run admission failed");
     }
+    expect(begun.surfaceKind).toBe("realtime_voice");
 
     fixture.send({
       type: "external_surface_tool_invoke",

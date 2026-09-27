@@ -1628,7 +1628,7 @@ enum CloudConnectorFormAutomation {
     guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success else {
       return nil
     }
-    return ((raw as AnyObject) as! AXUIElement)
+    return AXAttributeCasting.element(raw)
   }
 
   private static func elementArrayAttribute(
@@ -1639,18 +1639,16 @@ enum CloudConnectorFormAutomation {
     guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success else {
       return []
     }
-    return (raw as? [AnyObject])?.map { $0 as! AXUIElement } ?? []
+    return AXAttributeCasting.elements(raw)
   }
 
   private static func frameAttribute(_ element: AXUIElement) -> CGRect {
     var point = CGPoint.zero
     var size = CGSize.zero
-    if let pointValue = rawAttribute(element, "AXPosition") {
-      let pointValue = pointValue as! AXValue
+    if let pointValue = AXAttributeCasting.value(rawAttribute(element, "AXPosition")) {
       AXValueGetValue(pointValue, .cgPoint, &point)
     }
-    if let sizeValue = rawAttribute(element, "AXSize") {
-      let sizeValue = sizeValue as! AXValue
+    if let sizeValue = AXAttributeCasting.value(rawAttribute(element, "AXSize")) {
       AXValueGetValue(sizeValue, .cgSize, &size)
     }
     return CGRect(origin: point, size: size)

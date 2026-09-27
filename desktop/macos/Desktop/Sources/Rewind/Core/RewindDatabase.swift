@@ -468,6 +468,7 @@ actor RewindDatabase {
     expectedUserId: String,
     expectedGeneration: Int
   ) async throws {
+    try Task.checkCancellation()
     guard dbQueue == nil else { return }
 
     // Resolve the directory once. `retargetEffectiveOwner` may run while
@@ -555,6 +556,7 @@ actor RewindDatabase {
         }
 
         if isCorrupted && FileManager.default.fileExists(atPath: dbPath) {
+          try Task.checkCancellation()
           log("RewindDatabase: Database is corrupted (error: \(retryError)), attempting recovery...")
           try await handleCorruptedDatabase(at: dbPath, in: omiDir, triggerError: retryError)
           // Retry with recovered or fresh database
@@ -1577,6 +1579,12 @@ actor RewindDatabase {
     migrator.registerMigration("addTranscriptionConversationRole") { db in
       try db.alter(table: "transcription_sessions") { t in
         t.add(column: "conversationRole", .text).notNull().defaults(to: "ambient")
+      }
+    }
+
+    migrator.registerMigration("addTranscriptionCaptureAttemptId") { db in
+      try db.alter(table: "transcription_sessions") { t in
+        t.add(column: "captureAttemptId", .text)
       }
     }
 
@@ -2643,6 +2651,10 @@ actor RewindDatabase {
     JITTriggerMirrorSchema.registerMigration(on: &migrator)
     KnowledgeLedgerMirrorStagingSchema.registerMigration(on: &migrator)
     Self.registerClientProcessingProjectionMigration(on: &migrator)
+    Self.registerConversationSummarySectionsMigration(on: &migrator)
+    Self.registerConversationLocalSummaryMigration(on: &migrator)
+    Self.registerConversationCaptureGroupMigration(on: &migrator)
+    LocalEmbeddingStore.registerMigration(on: &migrator)
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
@@ -2696,6 +2708,29 @@ actor RewindDatabase {
   static func registerClientProcessingProjectionMigration(on migrator: inout DatabaseMigrator) {
     migrator.registerMigration("addClientProcessingProjection") { db in
       try Self.addTranscriptionSessionColumnIfMissing(db, name: "clientProcessingJson", type: .text)
+    }
+  }
+
+  /// Persist the structured summary sections alongside the legacy overview. Without this field,
+  /// a cache refresh silently dropped section bodies and their transcript evidence even though the
+  /// network decode had succeeded.
+  static func registerConversationSummarySectionsMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationSummarySections") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "sectionsJson", type: .text)
+    }
+  }
+
+  /// Display attribution is separate from clientProcessingJson, whose exact bytes own retries.
+  static func registerConversationLocalSummaryMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationLocalSummary") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "localSummaryJson", type: .text)
+    }
+  }
+
+  /// Cross-surface event membership, so a cached list collapses the same way before the server answers.
+  static func registerConversationCaptureGroupMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationCaptureGroup") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "captureGroupJson", type: .text)
     }
   }
 

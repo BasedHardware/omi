@@ -82,7 +82,9 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # First CD WIF slice (C016). Do not pass credentials_json here.
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Login to GCR
         run: gcloud auth configure-docker
@@ -208,6 +210,19 @@ jobs:
             --region="${{ env.REGION }}" \
             --github-output "$GITHUB_OUTPUT"
 
+      # See desktop_backend_prod.yml: the expectation is rendered from the
+      # manifest so it cannot drift from the values actually deployed.
+      - name: Render desktop backend expected env state
+        id: desktop-expected-env
+        env:
+          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/render_backend_runtime_env.py \
+            --env dev \
+            --manifest backend/deploy/runtime_env.yaml \
+            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json" >> "$GITHUB_OUTPUT"
+
       - name: Deploy desktop-backend to Cloud Run
         id: deploy-candidate
         uses: google-github-actions/deploy-cloudrun@v3
@@ -224,7 +239,9 @@ jobs:
             --network=${{ vars.CLOUD_RUN_VPC_NETWORK }}
             --subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}
             --vpc-egress=private-ranges-only
-            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,SERVICE_ACCOUNT_JSON,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL,AGENT_VM_TRUSTED_HEALTH_CHANNEL,AGENT_GCS_BUCKET,GCE_SERVICE_ACCOUNT,GCE_RUNTIME_SERVICE_ACCOUNT,GCE_PROJECT_ID,AGENT_VM_BOOT_IMAGE,AGENT_VM_STARTUP_URI,AGENT_VM_RELEASE_ID,AGENT_VM_IMAGE_DIGEST,AGENT_VM_STARTUP_SHA256,AGENT_VM_STOP_AUDIENCE,AGENT_VM_PROVISIONING_ENABLED
+            --service-account=dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
+            --remove-secrets=/secrets/firebase/service-account.json
+            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,SERVICE_ACCOUNT_JSON,FIREBASE_AUTH_CREDENTIALS_PATH,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL,AGENT_VM_TRUSTED_HEALTH_CHANNEL,AGENT_GCS_BUCKET,GCE_SERVICE_ACCOUNT,GCE_RUNTIME_SERVICE_ACCOUNT,GCE_PROJECT_ID,AGENT_VM_BOOT_IMAGE,AGENT_VM_STARTUP_URI,AGENT_VM_RELEASE_ID,AGENT_VM_IMAGE_DIGEST,AGENT_VM_STARTUP_SHA256,AGENT_VM_STOP_AUDIENCE,AGENT_VM_PROVISIONING_ENABLED
           env_vars: |
             FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
@@ -232,7 +249,7 @@ jobs:
             USE_VERTEX_AI=true
             GCP_LOCATION=us-central1
             OMI_FIRESTORE_DATA_PLANE_PROJECT=based-hardware
-            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json
+            FIREBASE_SIGNER_SERVICE_ACCOUNT=dev-auth-token-signer@based-hardware.iam.gserviceaccount.com
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=development
@@ -241,9 +258,15 @@ jobs:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
             OMI_LLM_CHAT_AGENT_ROUTE=gateway
             LLM_GATEWAY_ACCOUNTING_ENABLED=true
+            MEMORY_BELIEF_MODEL_ENABLED=true
+            BASIC_PLAN_GATE_PROACTIVITY_ENABLED=true
+            FREE_TIER_LOCAL_PROCESSING=true
+            FREE_TIER_EMERGENCY_STOP=false
+            FREE_TIER_LOCAL_PROCESSING_COHORT=${{ steps.desktop-expected-env.outputs.free_tier_local_processing_cohort }}
+            BASIC_PLAN_GATE_PROXY_EMBED_ENABLED=true
+            MEMORY_BELIEF_AUTOMATION_PAUSED=false
             PROMETHEUS_SIDECAR_PORT=9090
           secrets: |
-            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
@@ -259,17 +282,6 @@ jobs:
             OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
             METRICS_SECRET=METRICS_SECRET:latest
             POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest
-
-      # See desktop_backend_prod.yml: the expectation is rendered from the
-      # manifest so it cannot drift from the values actually deployed.
-      - name: Render desktop backend expected env state
-        id: desktop-expected-env
-        run: |
-          set -euo pipefail
-          python3 backend/scripts/render_backend_runtime_env.py \
-            --env dev \
-            --manifest backend/deploy/runtime_env.yaml \
-            --desktop-state-output "$RUNNER_TEMP/desktop-backend-runtime-env-state.json"
 
       - name: Attach Managed Prometheus sidecar to development candidate
         id: attach-gmp-sidecar
@@ -341,31 +353,29 @@ jobs:
             --tag="$CANDIDATE_TAG")"
           echo "url=$candidate_url" >> "$GITHUB_OUTPUT"
 
-      - name: Stage candidate probe signer
-        if: github.event.inputs.candidate_only != 'true'
-        env:
-          FIREBASE_PROBE_SIGNER_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-        run: |
-          set -euo pipefail
-          signer_file="$(mktemp "$RUNNER_TEMP/omi-firebase-probe-signer.XXXXXX")"
-          trap 'rm -f "$signer_file"' ERR
-          chmod 600 "$signer_file"
-          printf '%s' "$FIREBASE_PROBE_SIGNER_B64" | base64 --decode > "$signer_file"
-          echo "DESKTOP_BACKEND_PROBE_SIGNER_FILE=$signer_file" >> "$GITHUB_ENV"
-          trap - ERR
-
       - name: Mint candidate probe identity
         if: github.event.inputs.candidate_only != 'true'
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
         run: |
           set -euo pipefail
+          # Phase C credential rotation: the probe signs its Firebase custom
+          # token via IAM signJwt as the named production-project signer
+          # (roles/iam.serviceAccountTokenCreator for the deploy identity on
+          # it), so no service-account key is staged in the runner.
+          if [[ -z "${FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:-}" ]]; then
+            echo "Set vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT (in the development environment) to the" >&2
+            echo "Firebase auth project's signer, and grant roles/iam.serviceAccountTokenCreator for" >&2
+            echo "omi-ci-deployer-dev on it, before dev release probes can mint a token." >&2
+            exit 1
+          fi
           token_file="$(mktemp "$RUNNER_TEMP/omi-desktop-backend-probe.XXXXXX")"
           chmod 600 "$token_file"
           python3 backend/scripts/firebase_release_probe_token.py \
             --secret-project "$PROJECT_ID" \
             --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
-            --signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE" \
+            --signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" \
             --token-output "$token_file"
           echo "DESKTOP_BACKEND_PROBE_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
 
@@ -549,9 +559,6 @@ jobs:
         run: |
           if [[ -n "${DESKTOP_BACKEND_PROBE_TOKEN_FILE:-}" ]]; then
             rm -f "$DESKTOP_BACKEND_PROBE_TOKEN_FILE"
-          fi
-          if [[ -n "${DESKTOP_BACKEND_PROBE_SIGNER_FILE:-}" ]]; then
-            rm -f "$DESKTOP_BACKEND_PROBE_SIGNER_FILE"
           fi
 
       - name: Show Output

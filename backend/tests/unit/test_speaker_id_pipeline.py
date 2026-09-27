@@ -195,7 +195,9 @@ except ImportError:
 try:
     from utils.audio import AudioRingBuffer
     from utils.speaker_identification import (
+        COPULAR_SELF_REFERENCE_LEAD_INS,
         detect_speaker_from_text,
+        detect_speaker_introduction,
         SPEAKER_IDENTIFICATION_PATTERNS,
         _pcm_to_wav_bytes,
     )
@@ -528,6 +530,72 @@ class TestDetectSpeakerFromText:
     def test_empty_string_returns_none(self):
         """Empty string input returns None."""
         assert detect_speaker_from_text("") is None
+
+    # A bare copula is not an introduction. These all produced a permanent Person
+    # record in a real account: nationalities, brands and sentence-cased fillers
+    # that happened to follow "I'm". The name may still resolve someone the user
+    # already has; it must not create one.
+    COPULAR_CASES = [
+        (None, "I'm Chinese.", "Chinese"),
+        (None, "I am American.", "American"),
+        (None, "I'm Thai food kind of person.", "Thai"),
+        (None, "I'm South Asian.", "South"),
+        (None, "I'm Amazon shopping.", "Amazon"),
+        (None, "I'm Always late.", "Always"),
+        ("zh", "我是因为这个", "因为这个"),
+        ("zh", "我是一碗稀饭，", "一碗稀饭"),
+        ("hu", "Robin vagyok", "Robin"),
+    ]
+
+    EXPLICIT_CASES = [
+        (None, "My name is Alice", "Alice"),
+        (None, "Robin is my name", "Robin"),
+        ("zh", "我叫大卫。", "大卫"),
+        ("ja", "私の名前は佐藤です", "佐藤"),
+        ("es", "Me llamo Carlos", "Carlos"),
+        ("es", "Carlos es mi nombre", "Carlos"),
+        ("fr", "Je m'appelle Marie", "Marie"),
+        ("de", "Mein Name ist Anna", "Anna"),
+        ("ko", "제 이름은 지훈입니다", "지훈"),
+    ]
+
+    @pytest.mark.parametrize("lang,text,expected_name", COPULAR_CASES)
+    def test_copula_detects_but_does_not_authorize_creation(self, lang, text, expected_name):
+        detection = detect_speaker_introduction(text, language=lang)
+        assert detection is not None, f"detection regressed for {text!r}"
+        assert detection.name == expected_name
+        assert detection.explicit is False, f"{text!r} must not be allowed to create a person"
+
+    @pytest.mark.parametrize("lang,text,expected_name", EXPLICIT_CASES)
+    def test_explicit_introduction_authorizes_creation(self, lang, text, expected_name):
+        detection = detect_speaker_introduction(text, language=lang)
+        assert detection is not None, f"Failed to detect name in {text!r}"
+        assert detection.name == expected_name
+        assert detection.explicit is True, f"{text!r} is an explicit self-introduction"
+
+    @pytest.mark.parametrize("text", ["I'm Googling it now.", "My name is Googling", "My name is Because"])
+    def test_observed_junk_names_are_rejected(self, text):
+        assert detect_speaker_introduction(text) is None
+        assert detect_speaker_from_text(text) is None
+
+    def test_name_only_wrapper_is_unchanged_by_the_split(self):
+        """Callers that only resolve an existing person keep the loose behaviour."""
+        assert detect_speaker_from_text("I'm Chinese.") == "Chinese"
+        assert detect_speaker_from_text("My name is Alice") == "Alice"
+        assert detect_speaker_from_text("Nothing to see here") is None
+
+    def test_every_lead_in_is_classified(self):
+        """No pattern may leave both branches undecided.
+
+        A new language added to the table without classifying its lead-in would
+        silently fall into `explicit=True` and start creating people again.
+        """
+        joined = '|'.join(
+            pattern for patterns in SPEAKER_IDENTIFICATION_PATTERNS.values() for pattern in patterns
+        ).lower()
+        for lead_in in COPULAR_SELF_REFERENCE_LEAD_INS:
+            assert lead_in == lead_in.lower(), f"{lead_in!r} must be lowercase for case-insensitive matching"
+            assert lead_in in joined, f"{lead_in!r} matches no pattern; it is dead weight"
 
     def test_short_name_rejected(self):
         """Single-character names are rejected (len < 2)."""

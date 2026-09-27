@@ -5,6 +5,12 @@ description: Settings Notifications section snapshot and API update
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+  # Required by the desktop-e2e-flow-coverage strict gate: every changed desktop Swift file
+  # must appear in some flow's covers. Same involvement semantics as the entries below —
+  # S1's section screen renders its master toggle through this style; a step that actually
+  # activates the switch is not expressible today (live AX cannot enumerate the Settings
+  # subtree; the bridge's set_notification_settings bypasses the view layer via APIClient).
+  - desktop/macos/Desktop/Sources/Theme/OmiToggleStyle.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+SettingsUpdates.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistantSettings.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistant.swift

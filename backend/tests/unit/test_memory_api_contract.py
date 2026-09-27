@@ -96,6 +96,7 @@ def test_canonical_api_payload_omits_belief_fields_when_flag_off(monkeypatch):
     assert "currency" not in payload
     assert "currency_band" not in payload
     assert "as_of" not in payload
+    assert "belief_computed_at" not in payload
     assert "half_life_days" not in payload
     assert "belief_class" not in payload
 
@@ -107,11 +108,13 @@ def test_canonical_api_payload_exposes_belief_fields_when_flag_on(monkeypatch):
     memory.currency = 0.5
     memory.currency_band = "fading"
     memory.as_of = now
+    memory.belief_computed_at = now
     memory.half_life_days = 30
     memory.belief_class = "state"
     payload = memory_api_payload(memory, MemoryApiExposure.CANONICAL)
     assert payload["currency"] == 0.5
     assert payload["currency_band"] == "fading"
     assert payload["as_of"] == now
+    assert payload["belief_computed_at"] == now
     assert payload["half_life_days"] == 30
     assert payload["belief_class"] == "state"

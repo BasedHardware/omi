@@ -57,6 +57,8 @@ from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from utils.feedback import record_chat_message_feedback
+from utils.product_metrics import sanitize_app_build
+from utils.marketplace_reviewers import is_marketplace_reviewer
 from database.users import *
 from models.conversation import Conversation
 from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
@@ -124,6 +126,7 @@ from utils.notifications import send_notification, send_training_data_submitted_
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.other.notifications import (
     DAILY_SUMMARY_DECLINE_LOCKED,
+    bound_daily_summary_conversations,
     generate_daily_summary_on_demand,
     local_day_bounds_utc,
 )
@@ -617,22 +620,23 @@ def get_single_person(
     person = get_person(uid, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
+    person = Person(**person)
     if include_speech_samples:
         # Convert stored GCS paths to signed URLs
-        stored_paths = person.get('speech_samples', [])
-        person['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
+        stored_paths = person.speech_samples
+        person.speech_samples = get_speech_sample_signed_urls(stored_paths)
     return person
 
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
 def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'get_all_people {include_speech_samples}')
-    people = get_people(uid)
+    people = Person.deserialize_many_safe(get_people(uid))
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):
-            stored_paths = person.get('speech_samples', [])
-            people[i]['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
+            stored_paths = person.speech_samples
+            people[i].speech_samples = get_speech_sample_signed_urls(stored_paths)
     return people
 
 
@@ -752,6 +756,8 @@ def set_chat_message_analytics(
     message_id: str,
     value: int,
     reason: str = None,  # Reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination')
+    x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+    x_app_build: Optional[str] = Header(None, alias='X-App-Build'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """
@@ -766,18 +772,30 @@ def set_chat_message_analytics(
     snapshot = chat_db.update_message_rating(uid, message_id, rating_value) or {}
     triage = extract_rating_triage_fields(snapshot)
     normalized_reason = normalize_rating_reason(reason)
+    app_version = (x_app_version or '').strip()[:64] or None
+    app_build = sanitize_app_build(x_app_build, x_app_version)
     set_chat_message_rating_score(
         uid,
         message_id,
         value,
         reason=normalized_reason,
         platform='mobile',
+        app_version=app_version,
+        app_build=app_build if app_build != 'unknown' else None,
         notification_kind=triage.get('notification_kind'),
         app_id=triage.get('app_id'),
     )
 
     # Unified feedback ledger — the daily thumbs-down report reads from here.
-    record_chat_message_feedback(uid, message_id, value, reason=normalized_reason, platform='mobile')
+    record_chat_message_feedback(
+        uid,
+        message_id,
+        value,
+        reason=normalized_reason,
+        platform='mobile',
+        app_version=app_version,
+        app_build=app_build if app_build != 'unknown' else None,
+    )
 
     # Try to submit feedback to LangSmith if the message has a run_id
     try:
@@ -1223,8 +1241,7 @@ def _user_subscription_response(
             phone_call_quota=unlimited_phone_quota,
         )
 
-    marketplace_reviewers = os.getenv('MARKETPLACE_APP_REVIEWERS', '').split(',')
-    if uid in marketplace_reviewers:
+    if is_marketplace_reviewer(uid):
         unlimited_sub = Subscription(
             plan=PlanType.unlimited,
             status=SubscriptionStatus.active,
@@ -1677,6 +1694,7 @@ def test_daily_summary(
         raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
 
     conversations = deserialize_conversations(conversations_data)
+    conversations = bound_daily_summary_conversations(uid, date_str, conversations)
 
     # Generate summary (pass date range for fetching actual action items)
     summary_data = generate_comprehensive_daily_summary(
@@ -2002,6 +2020,7 @@ def regenerate_daily_summary(
         raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
 
     conversations = deserialize_conversations(conversations_data)
+    conversations = bound_daily_summary_conversations(uid, date_str, conversations)
 
     summary_data = generate_comprehensive_daily_summary(
         uid,

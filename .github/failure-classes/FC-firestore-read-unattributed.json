@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-firestore-read-unattributed",
+  "violated_contract": "A billed Firestore read in a process that imports database/_client.py must be visible on omi_firestore_billed_reads_total with a kind that matches Cloud Monitoring's LOOKUP, NOT_FOUND, or QUERY type. A read that only increments a document, operation, or family counter, or that is labeled other because the caller cap filled with plumbing frames, cannot be reconciled to billed read_count and disappears from the coverage ratio.",
+  "canonical_prevention": "Patch the installed google-cloud-firestore read surface once, at database/_client import, and count only the RPC that bills. Skip plumbing frames so the caller label is the first product function, keep the caller set bounded above the measured database and utils read functions, and increment omi_firestore_caller_label_overflow_total when a well-formed label is dropped. tests/unit/test_firestore_document_probe.py pins the surface, the billing kinds, the plumbing skip, and the cap.",
+  "canonical_prevention_artifact": [
+    "backend/database/firestore_document_probe.py",
+    "backend/tests/unit/test_firestore_document_probe.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/firestore_document_probe.py",
+    "backend/tests/unit/test_firestore_document_probe.py"
+  ],
+  "status": "open"
+}

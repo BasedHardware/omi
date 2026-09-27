@@ -193,6 +193,7 @@ def conversations_db():
         "utils": utils,
         "utils.conversations": utils_conversations,
         "utils.encryption": AutoMockModule("utils.encryption"),
+        "utils.observability.speaker_identification": AutoMockModule("utils.observability.speaker_identification"),
         "utils.other": utils_other,
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,
@@ -213,15 +214,33 @@ def conversations_db():
         "utils.conversations.transcript_hash",
         os.path.join(str(_BACKEND), "utils", "conversations", "transcript_hash.py"),
     )
+    fragment_visibility_real = load_module_fresh(
+        "utils.conversations.fragment_visibility",
+        os.path.join(str(_BACKEND), "utils", "conversations", "fragment_visibility.py"),
+    )
+    # Receipt policy is stdlib + TranscriptSegment: load it against the real
+    # models.* graph before the stub block, then install the real module. An
+    # AutoMock here would hide apply_manual_assignments / remap_absorbed_receipt
+    # from database.conversations.
+    manual_assignments_real = load_module_fresh(
+        "utils.manual_speaker_assignments",
+        os.path.join(str(_BACKEND), "utils", "manual_speaker_assignments.py"),
+    )
     fakes["models.client_processing"] = client_processing_real
     fakes["utils.conversations.transcript_hash"] = transcript_hash_real
+    fakes["utils.conversations.fragment_visibility"] = fragment_visibility_real
+    fakes["utils.manual_speaker_assignments"] = manual_assignments_real
 
     with stub_modules(fakes):
         module = load_module_fresh(
             "database.conversations",
             os.path.join(str(_BACKEND), "database", "conversations.py"),
         )
-        yield module, firestore
+        pages_module = load_module_fresh(
+            "database.mcp_conversation_pages",
+            os.path.join(str(_BACKEND), "database", "mcp_conversation_pages.py"),
+        )
+        yield module, pages_module, firestore
 
 
 def _conversation(conversation_id, *, created_at, source, status="completed", discarded=False):
@@ -235,7 +254,7 @@ def _conversation(conversation_id, *, created_at, source, status="completed", di
 
 
 def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
-    module, firestore = conversations_db
+    module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=8, source="omi", discarded=True),
         _conversation("failed-omi", created_at=7, source="omi", status="failed"),
@@ -282,7 +301,7 @@ def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
 
 
 def test_sources_honor_legacy_include_discarded_default(conversations_db):
-    module, firestore = conversations_db
+    module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=3, source="omi", discarded=True),
         _conversation("friend", created_at=2, source="friend"),
@@ -305,7 +324,7 @@ def test_sources_honor_legacy_include_discarded_default(conversations_db):
 
 
 def test_sources_omitted_preserves_legacy_filter_chain(conversations_db):
-    module, firestore = conversations_db
+    module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=3, source="omi", discarded=True),
         _conversation("friend", created_at=2, source="friend"),
@@ -321,7 +340,7 @@ def test_sources_omitted_preserves_legacy_filter_chain(conversations_db):
 
 
 def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations_db):
-    module, firestore = conversations_db
+    module, pages_module, firestore = conversations_db
     firestore.rows = [
         {
             **_conversation("conversation-1", created_at=1, source="omi"),
@@ -334,7 +353,7 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
         }
     ]
 
-    result = module.get_mcp_conversation_cards(
+    result = pages_module.get_mcp_conversation_cards(
         "user-1",
         20,
         0,
@@ -347,8 +366,11 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
     assert "structured.overview" in selected_fields
     assert "transcript_segments" not in selected_fields
     assert "photos" not in selected_fields
+    # Visibility needs only user-owned metadata; generated arrays are never read.
     assert "structured.action_items" not in selected_fields
-    assert ("select", tuple(module._MCP_CONVERSATION_CARD_FIELD_PATHS)) in firestore.queries[0].events
+    assert "structured.sections" not in selected_fields
+    assert "structured.events" not in selected_fields
+    assert ("select", tuple(module.MCP_CONVERSATION_CARD_FIELD_PATHS)) in firestore.queries[0].events
     transcript_fields = set(module._MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS)
     assert "transcript_segments" in transcript_fields
     assert "photos" not in transcript_fields

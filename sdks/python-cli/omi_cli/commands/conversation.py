@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import typer
+from rich.markup import escape
 
+from omi_cli.client import path_segment
 from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
 from omi_cli.json_input import load_json_input
@@ -47,19 +48,44 @@ def list_conversations(
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
+    server_page_size = 25 if include_transcript else 100
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
-        items = client.get(
-            "/v1/dev/user/conversations",
-            params={
-                "limit": limit,
-                "offset": offset,
-                "start_date": start_date.isoformat() if start_date else None,
-                "end_date": end_date.isoformat() if end_date else None,
-                "categories": categories,
-                "include_transcript": include_transcript,
-            },
-        )
+        if limit <= server_page_size:
+            items = client.get(
+                "/v1/dev/user/conversations",
+                params={
+                    "limit": limit,
+                    "offset": offset,
+                    "start_date": start_date.isoformat() if start_date else None,
+                    "end_date": end_date.isoformat() if end_date else None,
+                    "categories": categories,
+                    "include_transcript": include_transcript,
+                },
+            )
+        else:
+            items = []
+            current_offset = offset
+            while len(items) < limit:
+                batch_limit = min(limit - len(items), server_page_size)
+                page = client.get(
+                    "/v1/dev/user/conversations",
+                    params={
+                        "limit": batch_limit,
+                        "offset": current_offset,
+                        "start_date": start_date.isoformat() if start_date else None,
+                        "end_date": end_date.isoformat() if end_date else None,
+                        "categories": categories,
+                        "include_transcript": include_transcript,
+                    },
+                )
+                if not page:
+                    break
+                items.extend(page)
+                current_offset += batch_limit
+            if len(items) > limit:
+                items = items[:limit]
+
     if ctx.renderer.json_mode:
         ctx.renderer.emit(items)
         return
@@ -68,7 +94,7 @@ def list_conversations(
         structured = c.get("structured") or {}
         rows.append(
             {
-                "id": shorten(c.get("id"), 14),
+                "id": c.get("id"),
                 "title": shorten(structured.get("title"), 50),
                 "category": structured.get("category"),
                 "started_at": c.get("started_at"),
@@ -87,7 +113,7 @@ def get_conversation(
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         result = client.get(
-            f"/v1/dev/user/conversations/{conversation_id}",
+            f"/v1/dev/user/conversations/{path_segment(conversation_id)}",
             params={"include_transcript": include_transcript},
         )
     ctx.renderer.emit(result, title="conversation")
@@ -151,8 +177,18 @@ def from_segments(
     ctx = _ctx(typer_ctx)
     if not segments_file.exists():
         raise UsageError(message=f"File not found: {segments_file}")
+    if segments_file.is_dir():
+        raise UsageError(
+            message=f"Expected a file, but found a directory: {segments_file}",
+            detail="Provide the path to a JSON file containing transcript_segments.",
+        )
     try:
-        payload = load_json_input(segments_file.read_bytes())
+        data = segments_file.read_bytes()
+    except OSError as exc:
+        raise UsageError(message=f"Cannot read file {segments_file}", detail=str(exc))
+
+    try:
+        payload = load_json_input(data)
     except (ValueError, UnicodeDecodeError) as exc:
         raise UsageError(message=f"Invalid JSON in {segments_file}", detail=str(exc))
 
@@ -193,8 +229,8 @@ def update_conversation(
     if not body:
         raise UsageError(message="No fields to update", detail="Provide --title or --discarded/--no-discarded.")
     with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/conversations/{conversation_id}", json_body=body)
-    ctx.renderer.success(f"Updated conversation [bold]{conversation_id}[/bold].")
+        result = client.patch(f"/v1/dev/user/conversations/{path_segment(conversation_id)}", json_body=body)
+    ctx.renderer.success(f"Updated conversation [bold]{escape(conversation_id)}[/bold].")
     ctx.renderer.emit(result)
 
 
@@ -208,7 +244,7 @@ def delete_conversation(
     if not confirm:
         typer.confirm(f"Delete conversation {conversation_id}?", abort=True)
     with ctx.make_client() as client:
-        result = client.delete(f"/v1/dev/user/conversations/{conversation_id}")
+        result = client.delete(f"/v1/dev/user/conversations/{path_segment(conversation_id)}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted conversation [bold]{conversation_id}[/bold].")
+    ctx.renderer.success(f"Deleted conversation [bold]{escape(conversation_id)}[/bold].")

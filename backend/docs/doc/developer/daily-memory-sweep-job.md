@@ -18,6 +18,13 @@ running lifecycle cleanup, invoking the scheduler/model, or committing page
 state. Inventory and lifecycle work are reachable only after the authority is
 explicitly open; the default remains closed.
 
+Belief automation has a separate deployment-wide incident stop,
+`MEMORY_BELIEF_AUTOMATION_PAUSED`. When true, evidence/synthesis/backfill
+admission must close while read paths and TTL/expiry cleanup remain available.
+This control is not a per-UID cohort. The production runtime keeps the belief
+model and daily sweep disabled; development enables processing with the pause
+control false.
+
 Per-account failures are durable retry documents under
 `daily_memory_sweep_control_retries/{uid}`. Retry state is written before a
 fair page cursor advances. A cursor write failure can duplicate a page, but

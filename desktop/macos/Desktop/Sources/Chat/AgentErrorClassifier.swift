@@ -159,8 +159,11 @@ enum AgentErrorClassifier {
       return ClassifiedAgentError(
         code: .providerBillingExhausted,
         userMessage:
-          "Omi's AI service declined this request for billing reasons. "
-          + "Check Settings → Plan and Usage; resending the same message won't help.",
+          "Omi's managed AI service declined this request for billing reasons. "
+          + "This request ran on the managed lane — your own provider key is used only "
+          + "when the request goes to a provider you hold a key for. Check Settings → "
+          + "Plan and Usage, or add a key for the provider this path uses. "
+          + "Resending the same message won't help.",
         retryable: false)
     }
     if lower.contains("credit balance is too low") {

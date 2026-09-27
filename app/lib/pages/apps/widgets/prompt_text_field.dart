@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+
 class PromptTextField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
@@ -16,7 +19,7 @@ class PromptTextField extends StatelessWidget {
         controller: controller,
         validator: (value) {
           if (value == null || value.isEmpty) {
-            return 'Please provide a prompt';
+            return context.l10n.pleaseProvidePrompt;
           }
           return null;
         },
@@ -25,25 +28,25 @@ class PromptTextField extends StatelessWidget {
           hintText: hint,
           hintMaxLines: 4,
           labelStyle: TextStyle(color: Colors.grey.shade400),
-          hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+          hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
           floatingLabelStyle: TextStyle(color: Colors.grey.shade300),
           alignLabelWithHint: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12.0),
+            borderRadius: OmiRadius.mdAll,
             borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12.0),
+            borderRadius: OmiRadius.mdAll,
             borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12.0),
+            borderRadius: OmiRadius.mdAll,
             borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
           ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12.0),
-            borderSide: BorderSide(color: Colors.red.shade300, width: 1),
+          errorBorder: const OutlineInputBorder(
+            borderRadius: OmiRadius.mdAll,
+            borderSide: BorderSide(color: OmiColors.danger, width: 1),
           ),
           filled: false,
         ),

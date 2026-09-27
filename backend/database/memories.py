@@ -35,6 +35,8 @@ from utils.other.list_budget import ListReadBudget, budgeted_get_all, budgeted_s
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
 
+BATCH_LIMIT = 500  # Firestore hard limit
+
 logger = logging.getLogger(__name__)
 
 memories_collection = 'memories'
@@ -1531,6 +1533,7 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, 
 
     # Create batch for destination user
     batch = database.batch()
+    batch_count = 0
     new_user_ref = database.collection(users_collection).document(new_uid)
     new_memories_ref = new_user_ref.collection(memories_collection)
 
@@ -1553,8 +1556,14 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: Optional[str] = None, 
                 memory = {**memory, 'content': encryption.encrypt(plaintext, new_uid)}
         memory_ref = new_memories_ref.document(memory['id'])
         batch.set(memory_ref, memory)
+        batch_count += 1
+        if batch_count >= BATCH_LIMIT:
+            batch.commit()
+            batch = database.batch()
+            batch_count = 0
 
     # Commit batch
-    batch.commit()
+    if batch_count > 0:
+        batch.commit()
     logger.info(f'Migrated {len(memories_to_migrate)} memories from {prev_uid} to {new_uid}')
     return len(memories_to_migrate)

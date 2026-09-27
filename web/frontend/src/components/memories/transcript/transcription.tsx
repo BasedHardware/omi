@@ -21,9 +21,9 @@ export default function Transcription({
     return <ExternalData externalData={externalData} />;
   } else if (transcript.length === 0 && !externalData) {
     return (
-      <div className="px-4 md:px-12">
-        <h3 className="mt-10 text-xl font-semibold md:text-2xl">Transcription</h3>
-        <p className="mt-4 text-gray-400">No available data.</p>
+      <div>
+        <h2 className="sn-h3 mt-10">Transcription</h2>
+        <p className="sn-muted mt-4">No available data.</p>
       </div>
     );
   } else {
@@ -31,9 +31,9 @@ export default function Transcription({
       new Set(transcript.map((segment) => segment.speaker_id)),
     );
     return (
-      <div className="px-4 md:px-12">
-        <h3 className="mt-10 text-xl font-semibold md:text-2xl">Transcription</h3>
-        <span className="text-sm font-light text-gray-400 md:text-base">
+      <div>
+        <h2 className="sn-h3 mt-10">Transcription</h2>
+        <span className="sn-muted text-sm md:text-base">
           Total Speakers: {uniqueSpeakers.length}
         </span>
         <ul className="mt-4">

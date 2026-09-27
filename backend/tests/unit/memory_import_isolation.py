@@ -113,6 +113,7 @@ def install_canonical_write_runtime_stubs() -> list[str]:
     subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
     subscription_mod.request_has_llm_byok_key = lambda: False
+    subscription_mod.should_skip_omi_paid_postprocessing = lambda uid, uses_custom_stt=False, source=None: False
     sys.modules["utils.subscription"] = subscription_mod
     touched.append("utils.subscription")
 
@@ -274,6 +275,7 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
     subscription_mod.request_has_llm_byok_key = lambda: False
+    subscription_mod.should_skip_omi_paid_postprocessing = lambda uid, uses_custom_stt=False, source=None: False
     _set("utils.subscription", subscription_mod)
 
     vector_db_mod = AutoMockModule("database.vector_db")
@@ -751,8 +753,10 @@ def install_mcp_search_memories_stubs(backend_dir: str) -> list[str]:
         "database._client",
         "database.redis_db",
         "database.conversations",
+        "database.mcp_conversation_pages",
         "database.memories",
         "database.action_items",
+        "database.action_item_sync",
         "database.folders",
         "database.users",
         "database.user_usage",

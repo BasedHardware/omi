@@ -43,6 +43,51 @@ app = FastAPI(
 )
 
 
+def _as_dict(value: Any) -> Dict[str, Any]:
+    """Return value when it is a mapping, otherwise an empty mapping.
+
+    Third-party payloads occasionally change shape (a list where an object was
+    documented, a bare string, null); callers treat a miss as "no data".
+    """
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> List[Any]:
+    """Return value when it is a list, otherwise an empty list."""
+    return value if isinstance(value, list) else []
+
+
+def _as_text(value: Any, default: str = "") -> str:
+    """Return a displayable string for a JSON text field.
+
+    ``dict.get(key, default)`` does not apply its default when the key is
+    present and null, so ``coin.get("symbol", "").upper()`` raised
+    AttributeError on an explicit ``"symbol": null`` and lost the whole result
+    list. Absent, null and non-string values all fall back to ``default``.
+    """
+    if isinstance(value, str):
+        return value or default
+    if value is None or isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return str(value)
+    return default
+
+
+def _coerce_number(value: Any) -> Optional[float]:
+    """Coerce a JSON numeric field to float, or None when unusable."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
 def _get_currency_symbol(currency_code: str) -> str:
     """Return appropriate currency symbol or prefix."""
     code = currency_code.lower()
@@ -62,6 +107,7 @@ def _get_currency_symbol(currency_code: str) -> str:
 
 def _format_currency(amount: Optional[float], currency_symbol: str = "$", decimals: int = 2) -> str:
     """Format numerical prices cleanly with precision preservation for micro-values."""
+    amount = _coerce_number(amount)
     if amount is None:
         return "N/A"
     if amount == 0:
@@ -77,6 +123,7 @@ def _format_currency(amount: Optional[float], currency_symbol: str = "$", decima
 
 def _format_compact(value: Optional[float], currency_symbol: str = "$") -> str:
     """Format large numbers into human-readable compact units (e.g. $1.25B, EUR 500M)."""
+    value = _coerce_number(value)
     if value is None or value == 0:
         return "N/A"
     abs_v = abs(value)
@@ -93,6 +140,7 @@ def _format_compact(value: Optional[float], currency_symbol: str = "$") -> str:
 
 def _format_percentage(change: Optional[float]) -> str:
     """Format percentage with +/- sign."""
+    change = _coerce_number(change)
     if change is None:
         return "N/A"
     return f"{change:+.2f}%"
@@ -109,7 +157,10 @@ async def _fetch_coingecko(endpoint: str, params: Optional[Dict[str, Any]] = Non
         if response.status_code == 404:
             raise ValueError(f"Resource not found at {endpoint}.")
         response.raise_for_status()
-        return response.json()
+        try:
+            return response.json()
+        except ValueError:
+            raise ValueError("CoinGecko returned a response that was not valid JSON.")
     except httpx.TimeoutException:
         raise ValueError("Request to CoinGecko timed out. Please try again.")
     except httpx.HTTPError as exc:
@@ -274,7 +325,7 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
             "include_24hr_vol": "true",
             "include_24hr_change": "true",
         }
-        data = await _fetch_coingecko("/simple/price", params=params)
+        data = _as_dict(await _fetch_coingecko("/simple/price", params=params))
 
         if not data:
             return ChatToolResponse(
@@ -285,15 +336,15 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
         lines = [f"Cryptocurrency Prices ({vs.upper()}):"]
 
         for coin_id in req.coin_ids:
-            coin_data = data.get(coin_id)
+            coin_data = _as_dict(data.get(coin_id))
             if not coin_data:
                 lines.append(f"- {coin_id}: Not found (try searching with search_crypto_coins)")
                 continue
 
-            price = coin_data.get(vs)
-            change_24h = coin_data.get(f"{vs}_24h_change")
-            mcap = coin_data.get(f"{vs}_market_cap")
-            vol_24h = coin_data.get(f"{vs}_24h_vol")
+            price = _coerce_number(coin_data.get(vs))
+            change_24h = _coerce_number(coin_data.get(f"{vs}_24h_change"))
+            mcap = _coerce_number(coin_data.get(f"{vs}_market_cap"))
+            vol_24h = _coerce_number(coin_data.get(f"{vs}_24h_vol"))
 
             formatted_price = _format_currency(price, currency_symbol)
             formatted_change = _format_percentage(change_24h)
@@ -316,8 +367,8 @@ async def get_crypto_price(req: GetCryptoPriceRequest) -> ChatToolResponse:
 @app.post("/tools/search_crypto_coins", response_model=ChatToolResponse)
 async def search_crypto_coins(req: SearchCryptoCoinsRequest) -> ChatToolResponse:
     try:
-        data = await _fetch_coingecko("/search", params={"query": req.query})
-        coins = data.get("coins", [])
+        data = _as_dict(await _fetch_coingecko("/search", params={"query": req.query}))
+        coins = [c for c in _as_list(data.get("coins")) if isinstance(c, dict)]
 
         if not coins:
             return ChatToolResponse(result=f"No cryptocurrency coins matched query '{req.query}'.")
@@ -326,9 +377,9 @@ async def search_crypto_coins(req: SearchCryptoCoinsRequest) -> ChatToolResponse
         lines = [f"Cryptocurrency search results for '{req.query}':"]
 
         for idx, coin in enumerate(selected, 1):
-            name = coin.get("name", "Unknown")
-            symbol = coin.get("symbol", "").upper()
-            coin_id = coin.get("id", "")
+            name = _as_text(coin.get("name"), "Unknown")
+            symbol = _as_text(coin.get("symbol")).upper()
+            coin_id = _as_text(coin.get("id"))
             rank = coin.get("market_cap_rank")
             rank_str = f"Rank #{rank}" if rank else "Unranked"
 
@@ -344,8 +395,8 @@ async def search_crypto_coins(req: SearchCryptoCoinsRequest) -> ChatToolResponse
 @app.post("/tools/get_trending_crypto", response_model=ChatToolResponse)
 async def get_trending_crypto(req: GetTrendingCryptoRequest) -> ChatToolResponse:
     try:
-        data = await _fetch_coingecko("/search/trending")
-        trending_items = data.get("coins", [])
+        data = _as_dict(await _fetch_coingecko("/search/trending"))
+        trending_items = [w for w in _as_list(data.get("coins")) if isinstance(w, dict)]
 
         if not trending_items:
             return ChatToolResponse(result="No trending coins available right now.")
@@ -354,15 +405,15 @@ async def get_trending_crypto(req: GetTrendingCryptoRequest) -> ChatToolResponse
         lines = ["Top Trending Cryptocurrencies on CoinGecko:"]
 
         for idx, item_wrapper in enumerate(selected, 1):
-            item = item_wrapper.get("item", {})
-            name = item.get("name", "Unknown")
-            symbol = item.get("symbol", "").upper()
-            coin_id = item.get("id", "")
+            item = _as_dict(item_wrapper.get("item"))
+            name = _as_text(item.get("name"), "Unknown")
+            symbol = _as_text(item.get("symbol")).upper()
+            coin_id = _as_text(item.get("id"))
             rank = item.get("market_cap_rank")
             rank_str = f"Rank #{rank}" if rank else "Unranked"
 
             # Check price in BTC if available
-            price_btc = item.get("price_btc")
+            price_btc = _coerce_number(item.get("price_btc"))
             btc_str = f" | {price_btc:.8f} BTC" if price_btc else ""
 
             lines.append(f"{idx}. {name} ({symbol}) - {rank_str}{btc_str} | ID: {coin_id}")
@@ -386,7 +437,7 @@ async def get_crypto_market_overview(req: GetCryptoMarketOverviewRequest) -> Cha
             "sparkline": "false",
             "price_change_percentage": "24h",
         }
-        markets = await _fetch_coingecko("/coins/markets", params=params)
+        markets = [m for m in _as_list(await _fetch_coingecko("/coins/markets", params=params)) if isinstance(m, dict)]
 
         if not markets:
             return ChatToolResponse(error="Failed to retrieve cryptocurrency market rankings.")
@@ -395,12 +446,12 @@ async def get_crypto_market_overview(req: GetCryptoMarketOverviewRequest) -> Cha
         lines = [f"Top {len(markets)} Cryptocurrencies by Market Cap ({vs.upper()}):"]
 
         for coin in markets:
-            rank = coin.get("market_cap_rank", "-")
-            name = coin.get("name", "Unknown")
-            symbol = coin.get("symbol", "").upper()
-            price = coin.get("current_price")
-            change = coin.get("price_change_percentage_24h")
-            mcap = coin.get("market_cap")
+            rank = coin.get("market_cap_rank") or "-"
+            name = _as_text(coin.get("name"), "Unknown")
+            symbol = _as_text(coin.get("symbol")).upper()
+            price = _coerce_number(coin.get("current_price"))
+            change = _coerce_number(coin.get("price_change_percentage_24h"))
+            mcap = _coerce_number(coin.get("market_cap"))
 
             formatted_price = _format_currency(price, currency_symbol)
             formatted_change = _format_percentage(change)

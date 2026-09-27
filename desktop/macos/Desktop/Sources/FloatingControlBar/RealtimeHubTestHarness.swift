@@ -186,6 +186,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
   static func registerAutomationAction() {
     DesktopAutomationActionRegistry.shared.register(
       name: "hub_test_turn",
+      effects: [.networkOrModel],
       summary: "Drive the realtime hub with a PCM16/16k file; returns the normalized turn. "
         + "auth=byok (default, uses BYOK key) | ephemeral (mints a server token, Phase 2)",
       params: ["pcm", "provider", "timeout", "auth"]
@@ -199,7 +200,13 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
       // Phase 2: if asked for ephemeral, or no BYOK key exists (managed user),
       // mint a server-side ephemeral token via the backend; else use the BYOK key.
       let wantEphemeral = params["auth"] == "ephemeral"
-      let byok = APIKeyService.selectedRealtimeBYOKKey(for: provider.byokProvider)
+      // Mirrors the session call site exactly (RealtimeHubController+SessionLifecycle):
+      // a provider that is the user's Voice Model gets its own key, one reached any
+      // other way does not. A blanket `true` here would make the harness more permissive
+      // than production and stop it exercising the withholding half of the contract.
+      let byok = APIKeyService.selectedRealtimeBYOKKey(
+        for: provider.byokProvider,
+        chosenForVoice: RealtimeHubSettings.shared.isVoiceModelChoice(provider))
       let auth: HubAuth
       if !wantEphemeral, let key = byok {
         auth = .byokKey(key)

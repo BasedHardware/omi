@@ -379,7 +379,7 @@ class ServerMessage {
       'created_at': createdAt.toUtc().toIso8601String(),
       'text': text,
       'sender': sender.toString().split('.').last,
-      'type': type.toString().split('.').last,
+      'type': type.value,
       'plugin_id': appId,
       'from_integration': fromIntegration,
       'memories': memories.map((m) => m.toJson()).toList(),

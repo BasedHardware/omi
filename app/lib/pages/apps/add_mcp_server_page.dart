@@ -7,8 +7,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'widgets/app_form_fields.dart';
 
 class AddMcpServerPage extends StatefulWidget {
   const AddMcpServerPage({super.key});
@@ -74,11 +76,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
     } else {
       final toolsCount = result['tools_count'] as int? ?? 0;
       if (mounted) {
-        try {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.mcpServerConnected(toolsCount)), backgroundColor: Colors.green),
-          );
-        } catch (_) {}
+        OmiFeedback.confirm(context, context.l10n.mcpServerConnected(toolsCount));
         _navigateToAppDetail(_appId!);
       }
     }
@@ -129,14 +127,10 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
         final toolsCount = chatTools?.length ?? 0;
         if (mounted) {
           setState(() => _isPolling = false);
-          try {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(context.l10n.mcpServerConnected(toolsCount)), backgroundColor: Colors.green),
-            );
-            final app = App.fromJson(appData);
-            Navigator.pop(context);
-            routeToPage(context, AppDetailPage(app: app));
-          } catch (_) {}
+          OmiFeedback.confirm(context, context.l10n.mcpServerConnected(toolsCount));
+          final app = App.fromJson(appData);
+          Navigator.pop(context);
+          routeToPage(context, AppDetailPage(app: app));
         }
       }
     });
@@ -156,133 +150,87 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
 
   void _showError(String message) {
     if (!mounted) return;
-    try {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
-    } catch (_) {
-      // Widget may be deactivated during async navigation
-    }
+    OmiFeedback.error(context, message);
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        title: Text(context.l10n.addMcpServer, style: const TextStyle(fontSize: 18)),
-        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
+        backgroundColor: OmiColors.surface0,
+        title: Text(l10n.addMcpServer, style: OmiType.body),
+        leading: const OmiBackButton(),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(OmiSpacing.xl),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                context.l10n.connectExternalAiTools,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.white.withValues(alpha: 0.7)),
+                l10n.connectExternalAiTools,
+                style: OmiType.body.copyWith(color: OmiColors.textSecondary),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: OmiSpacing.xxl),
               TextFormField(
                 controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: context.l10n.appName,
-                  hintText: 'e.g. Mixpanel Analytics',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.white, width: 1.5),
-                  ),
-                ),
+                decoration: appFormInputDecoration(label: l10n.appName, hint: 'e.g. Mixpanel Analytics'),
+                style: const TextStyle(color: OmiColors.textPrimary),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return context.l10n.appName;
+                    return l10n.appName;
                   }
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: OmiSpacing.md),
               TextFormField(
                 controller: _descriptionController,
-                decoration: InputDecoration(
-                  labelText: context.l10n.descriptionOptional,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.white, width: 1.5),
-                  ),
-                ),
+                decoration: appFormInputDecoration(label: l10n.descriptionOptional),
+                style: const TextStyle(color: OmiColors.textPrimary),
                 maxLines: 2,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: OmiSpacing.md),
               TextFormField(
                 controller: _urlController,
-                decoration: InputDecoration(
-                  labelText: context.l10n.mcpServerUrl,
-                  hintText: 'https://mcp.example.com/sse',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.white, width: 1.5),
-                  ),
-                ),
+                decoration: appFormInputDecoration(label: l10n.mcpServerUrl, hint: 'https://mcp.example.com/mcp'),
+                style: const TextStyle(color: OmiColors.textPrimary),
                 keyboardType: TextInputType.url,
                 autocorrect: false,
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return context.l10n.mcpServerUrl;
+                    return l10n.mcpServerUrl;
                   }
                   final uri = Uri.tryParse(value.trim());
                   if (uri == null || !uri.hasScheme || !uri.host.contains('.')) {
-                    return context.l10n.mcpServerUrl;
+                    return l10n.mcpServerUrl;
                   }
                   return null;
                 },
               ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: (_isLoading || _isPolling) ? null : _connect,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: (_isLoading || _isPolling)
-                      ? Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                            ),
-                            if (_isPolling) ...[
-                              const SizedBox(width: 12),
-                              Text(
-                                context.l10n.authorizingMcpServer,
-                                style: const TextStyle(fontSize: 14, color: Colors.black),
-                              ),
-                            ],
-                          ],
-                        )
-                      : Text(context.l10n.connect, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              const SizedBox(height: OmiSpacing.xxl),
+              if (_isPolling) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const OmiSpinner(size: OmiSpinnerSize.small),
+                    const SizedBox(width: OmiSpacing.xs),
+                    Text(
+                      l10n.authorizingMcpServer,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: OmiSpacing.sm),
+              ],
+              OmiButton(
+                label: l10n.connect,
+                expand: true,
+                isLoading: _isLoading,
+                onPressed: (_isLoading || _isPolling) ? null : _connect,
               ),
             ],
           ),

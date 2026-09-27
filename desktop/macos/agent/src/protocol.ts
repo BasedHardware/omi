@@ -1,3 +1,4 @@
+import type { ModelHeadersReply } from "./runtime/model-fetch.js";
 // JSON lines protocol between Swift app and Node.js agent runtime
 // Extended from agent protocol with authentication message types
 
@@ -8,6 +9,7 @@ export const RUNTIME_CAPABILITIES = [
   "journal_import_remote_turn",
   "runtime_adapter_availability",
   "chat_first_capability_projection",
+  "request_scoped_model_credentials",
 ] as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
@@ -617,11 +619,11 @@ export interface ChatFirstDeferralDeliveryResultMessage extends ProtocolEnvelope
   errorCode?: string;
 }
 
-/** Swift pushes a refreshed Firebase ID token to the bridge (piMono mode) */
-export interface RefreshTokenMessage {
-  type: "refresh_token";
-  token: string;
-  ownerId: string;
+/** Request-scoped credentials; never persist or log this response. */
+export interface ModelHeadersResultMessage {
+  type: "model_headers_result";
+  requestId: string;
+  result: ModelHeadersReply;
 }
 
 /** Swift establishes the signed-in owner even when a local adapter needs no Firebase token. */
@@ -683,7 +685,7 @@ export type InboundMessage =
   | JournalBackendReconcileResultMessage
   | ChatFirstDeferralDeliveryResultMessage
   | ChatFirstHarnessExecutorBeginMessage
-  | RefreshTokenMessage
+  | ModelHeadersResultMessage
   | RefreshOwnerMessage;
 
 const INBOUND_RESPONSE_MESSAGE_TYPES = new Set<InboundMessage["type"]>([
@@ -780,6 +782,7 @@ export interface ExternalSurfaceRunBeginResultMessage extends OutboundEnvelope {
   type: "external_surface_run_begin_result";
   ownerId: string;
   sessionId: string;
+  surfaceKind?: string;
   turnId: string;
   ok: boolean;
   runId?: string;
@@ -862,6 +865,7 @@ export interface ResultMessage extends QueryScopedOutbound {
   jitReceiptAttemptIDs?: string[];
   /// Served model identities observed on this run's completions, deduplicated.
   modelsUsed?: string[];
+  providerTargets?: string[];
   artifacts?: SerializedArtifact[];
   completionDeltaArtifacts?: SerializedArtifact[];
 }
@@ -1321,7 +1325,16 @@ export interface ChatFirstDeferralDeliveryMessage extends OutboundEnvelope {
   payloadHash: string;
 }
 
+export interface ModelHeadersRequestMessage {
+  type: "model_headers_request";
+  protocolVersion: number;
+  requestId: string;
+  ownerId: string;
+  forceRefresh: boolean;
+}
+
 export type OutboundMessage =
+  | ModelHeadersRequestMessage
   | InitMessage
   | TextDeltaMessage
   | ToolUseMessage
@@ -1362,6 +1375,7 @@ type DraftEnvelope<T extends OutboundWithEnvelope> = Omit<T, "protocolVersion"> 
 
 /** Outbound payload before correlation / envelope enrichment (adapters, transport internals). */
 export type OutboundMessageDraft =
+  | DraftEnvelope<ModelHeadersRequestMessage>
   | DraftEnvelope<InitMessage>
   | AuthRequiredMessage
   | AuthSuccessMessage

@@ -59,6 +59,9 @@ for sub in [
     "notifications",
     "workstreams",
     "firestore_transaction_retry",
+    # Landing with #15099: routers/account_cutover.py imports this submodule at
+    # module scope; collection of this file fails without the stub.
+    "account_cutover",
 ]:
     mod = _stub_module(f"database.{sub}")
     setattr(database_mod, sub, mod)
@@ -101,6 +104,12 @@ clients_mod.llm_large = MagicMock()
 
 # Stub other utils that import heavy dependencies
 _stub_module("utils.llm.notifications")
+# routers/action_items.py imports product_metrics (#15099); its real import
+# chain reaches database.read_boundary, unresolvable under the stubbed
+# "database" package, so stub it before the router import.
+product_metrics_mod = _stub_module("utils.product_metrics")
+product_metrics_mod.record_product_event = MagicMock()
+product_metrics_mod.extract_app_build = MagicMock(return_value='unknown')
 notif_mod = _stub_module("utils.notifications")
 notif_mod.send_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
@@ -341,6 +350,34 @@ class TestAcceptEndpoint:
                 assert False, "Should have raised HTTPException"
             except Exception as e:
                 assert e.status_code == 503
+
+    def _accept_one(self, original):
+        request = AcceptSharedTasksRequest(token="tok1")
+        with patch("routers.action_items.redis_db") as mock_redis, patch(
+            "routers.action_items.action_items_db"
+        ) as mock_db, patch("routers.action_items.send_action_item_data_message") as reminder:
+            mock_redis.get_task_share.return_value = self._mock_share_data()
+            mock_redis.try_accept_task_share.return_value = True
+            mock_db.get_action_item.return_value = original
+            mock_db.create_action_item.return_value = "new_t1"
+            accept_shared_action_items(request, uid="uid_bob")
+        return reminder
+
+    def test_accept_schedules_reminder_for_task_with_due_date(self):
+        due = datetime(2026, 9, 20, 9, 0, tzinfo=timezone.utc)
+        reminder = self._accept_one({"id": "t1", "description": "Review PR", "due_at": due})
+
+        reminder.assert_called_once_with(
+            user_id="uid_bob",
+            action_item_id="new_t1",
+            description="Review PR",
+            due_at=due.isoformat(),
+        )
+
+    def test_accept_schedules_no_reminder_without_due_date(self):
+        reminder = self._accept_one({"id": "t1", "description": "Review PR", "due_at": None})
+
+        reminder.assert_not_called()
 
 
 class TestCompletionNotification:

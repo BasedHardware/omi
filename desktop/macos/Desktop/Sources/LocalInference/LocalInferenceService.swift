@@ -2,9 +2,10 @@ import Foundation
 
 /// Engine identifiers the runtime knows how to select.
 ///
-/// AFM is named so `forceLocalInferenceEngine=afm` fails closed in this shard
-/// (S12 lands the adapter). There is no cloud case: a missing or failed local
-/// engine becomes the deterministic minimum, never luna.
+/// `makeDefault` selects `.afm` when this Mac can run Apple Foundation Models
+/// and `.localServer` otherwise. `forceLocalInferenceEngine` still pins either
+/// id. There is no cloud case: a missing or failed local engine becomes the
+/// deterministic minimum, never luna.
 enum LocalInferenceEngineID: String, Sendable, Equatable, CaseIterable {
   case localServer = "local-server"
   case afm = "afm"
@@ -85,7 +86,17 @@ protocol LocalInferenceFallbackRecording: Sendable {
   )
 }
 
+/// Uses the shared health-event path, which emits one fallback_triggered event
+/// to PostHog on prod/beta as well as the local diagnostic ring. Keep identities
+/// bounded: a mistyped force-engine setting is arbitrary text, not an engine.
 struct DesktopLocalInferenceFallbackRecorder: LocalInferenceFallbackRecording {
+  private static func boundedEngineLabel(_ value: String) -> String {
+    switch value {
+    case "afm", "local-server", "deterministic_minimum", "none": return value
+    default: return "other"
+    }
+  }
+
   func recordLocalInferenceFallback(
     from: String,
     to: String,
@@ -94,8 +105,8 @@ struct DesktopLocalInferenceFallbackRecorder: LocalInferenceFallbackRecording {
   ) {
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "local_llm",
-      from: from,
-      to: to,
+      from: Self.boundedEngineLabel(from),
+      to: Self.boundedEngineLabel(to),
       reason: reason,
       outcome: outcome
     )

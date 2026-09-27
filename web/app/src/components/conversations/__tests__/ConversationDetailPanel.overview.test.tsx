@@ -49,12 +49,19 @@ const NOTES_V2_OVERVIEW = `## Key points
 - Ship the notes render
 - Keep action items
 `;
+const NOTES_V2_SECTIONS = [
+  {
+    heading: 'Key points',
+    body_markdown: '- Ship the notes render\n- Keep action items',
+  },
+];
 
 describe('SummaryTab overview markdown', () => {
   it('renders a heading and a bullet list as elements, not literal text', () => {
     render(
       <SummaryTab
         overview={NOTES_V2_OVERVIEW}
+        sections={NOTES_V2_SECTIONS}
         conversationId="conv-1"
         appResults={[]}
         suggestedAppIds={[]}
@@ -75,6 +82,7 @@ describe('SummaryTab overview markdown', () => {
     render(
       <SummaryTab
         overview={NOTES_V2_OVERVIEW}
+        sections={NOTES_V2_SECTIONS}
         conversationId="conv-1"
         appResults={[]}
         suggestedAppIds={[]}

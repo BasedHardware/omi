@@ -479,10 +479,33 @@
             "title": "Artifact Ref",
             "type": "object"
           },
+          "attribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
           "capture_confidence": {
             "default": 0.5,
             "title": "Capture Confidence",
             "type": "number"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "client_device_id": {
             "anyOf": [
@@ -518,6 +541,25 @@
             "title": "Independence Group",
             "type": "string"
           },
+          "lineage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage Id"
+          },
+          "quote_refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Quote Refs",
+            "type": "array"
+          },
           "redaction_status": {
             "default": "active",
             "title": "Redaction Status",
@@ -543,6 +585,17 @@
             "default": "unknown",
             "title": "Source Type",
             "type": "string"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
           }
         },
         "required": [
@@ -1008,6 +1061,122 @@
         "title": "MemoriesResponse",
         "type": "object"
       },
+      "MemoryCaptureContext": {
+        "description": "Original capture metadata, separate from API transport and device.",
+        "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unknown",
+                  "assistant",
+                  "inferred",
+                  "third_party",
+                  "screen",
+                  "user_spoken",
+                  "user_written"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "independence_group": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Independence Group"
+          },
+          "lineage_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage Id"
+          },
+          "quote_refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "maxItems": 5,
+            "title": "Quote Refs",
+            "type": "array"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "source_signal": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Signal"
+          },
+          "source_type": {
+            "maxLength": 64,
+            "title": "Source Type",
+            "type": "string"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
+          }
+        },
+        "required": [
+          "source_type"
+        ],
+        "title": "MemoryCaptureContext",
+        "type": "object"
+      },
       "MemoryCategory": {
         "enum": [
           "interesting",
@@ -1071,6 +1240,18 @@
             ],
             "title": "Belief Class"
           },
+          "belief_computed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Belief Computed At"
+          },
           "body": {
             "anyOf": [
               {
@@ -1104,6 +1285,16 @@
             ],
             "description": "Fixed confidence that the source was captured correctly",
             "title": "Capture Confidence"
+          },
+          "capture_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryCaptureContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "capture_device_ids": {
             "items": {

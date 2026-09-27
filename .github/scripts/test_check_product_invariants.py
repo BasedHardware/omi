@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,7 @@ from check_product_invariants import (
     audit_registry,
     format_invariant_briefing,
     format_suggest_block,
+    load_changed_paths,
     matched_invariants,
     missing_invariant_hits,
     parse_invariant,
@@ -513,6 +515,58 @@ class GlobAttributionTests(unittest.TestCase):
         inv = {"id": "INV-TEST-1", "globs": ["backend/**", "web/**"], "require_naming": True}
         hit = matched_invariants(["backend/a.py"], [inv])[0]
         self.assertEqual(list(hit["matched_by_glob"]), ["backend/**"])
+
+
+class ThreeDotChangeSetTests(unittest.TestCase):
+    def test_load_changed_paths_agrees_on_both_merge_parent_orders(self) -> None:
+        git_iso = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+
+        def git(cwd: Path, *args: str) -> str:
+            env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+            result = subprocess.run(
+                ["git", *git_iso, *args],
+                cwd=cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                env=env,
+            )
+            return result.stdout.strip()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            git(root, "init", "-q", "-b", "main")
+            git(root, "config", "user.email", "test@example.com")
+            git(root, "config", "user.name", "Test")
+            (root / "root.txt").write_text("root\n", encoding="utf-8")
+            git(root, "add", "root.txt")
+            git(root, "commit", "-qm", "root")
+            git(root, "switch", "-q", "-c", "pr")
+            (root / "pr_file.txt").write_text("pr\n", encoding="utf-8")
+            git(root, "add", "pr_file.txt")
+            git(root, "commit", "-qm", "pr")
+            pr_sha = git(root, "rev-parse", "HEAD")
+            git(root, "switch", "-q", "main")
+            (root / "unrelated.txt").write_text("main\n", encoding="utf-8")
+            git(root, "add", "unrelated.txt")
+            git(root, "commit", "-qm", "main advanced")
+            main_sha = git(root, "rev-parse", "HEAD")
+            git(root, "switch", "-q", "--detach", pr_sha)
+            git(root, "merge", "--no-ff", "-q", "--no-edit", main_sha)
+            branch_first = git(root, "rev-parse", "HEAD")
+            git(root, "switch", "-q", "--detach", main_sha)
+            git(root, "merge", "--no-ff", "-q", "--no-edit", pr_sha)
+            base_first = git(root, "rev-parse", "HEAD")
+
+            from argparse import Namespace
+
+            expected = ["pr_file.txt"]
+            for head in (pr_sha, branch_first, base_first):
+                args = Namespace(base="main", head=head, changed_files=None)
+                self.assertEqual(load_changed_paths(args, root), expected)
+            two_dot = git(root, "diff", "--name-only", main_sha, pr_sha).splitlines()
+            self.assertIn("unrelated.txt", two_dot)
 
 
 if __name__ == "__main__":

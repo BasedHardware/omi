@@ -20,7 +20,7 @@ import {
   LayoutGrid,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { cn } from '@/lib/utils';
+import { cn, urlWithUidParam } from '@/lib/utils';
 import { getApp, enableApp, disableApp, reEnableApp } from '@/lib/api';
 import type { App } from '@/types/apps';
 import { AppDisabledNotice } from '@/components/apps/AppDisabledNotice';
@@ -429,7 +429,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                           {app.external_integration.auth_steps.map((step, index) => (
                             <a
                               key={index}
-                              href={step.url}
+                              href={user ? urlWithUidParam(step.url, user.uid) : step.url}
                               target="_blank"
                               rel="noopener noreferrer"
                               className={cn(

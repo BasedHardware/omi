@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 typedef SpeakerSelected = Future<void> Function(String? speakerId);
@@ -12,21 +13,17 @@ Future<void> showSpeakerFilterSheet(BuildContext context) async {
   final conversationProvider = context.read<ConversationProvider>();
   final people = context.read<PeopleProvider>().people;
   final l10n = context.l10n;
-  final title = l10n.phoneSpeaker;
-  final allLabel = l10n.all;
-  final userLabel = l10n.speakerLabelYou;
 
-  await showModalBottomSheet<void>(
+  await showOmiSheet<void>(
     context: context,
-    backgroundColor: const Color(0xFF1F1F25),
-    showDragHandle: true,
+    title: l10n.filterBySpeaker,
+    padding: EdgeInsets.zero,
     builder: (sheetContext) {
       return SpeakerFilterSheet(
         people: people,
         selectedSpeakerId: conversationProvider.selectedSpeakerId,
-        title: title,
-        allLabel: allLabel,
-        userLabel: userLabel,
+        allLabel: l10n.all,
+        userLabel: l10n.speakerLabelYou,
         onSelected: (speakerId) async {
           Navigator.of(sheetContext).pop();
           await conversationProvider.setSpeakerFilter(speakerId);
@@ -41,7 +38,7 @@ class SpeakerFilterSheet extends StatelessWidget {
     super.key,
     required this.people,
     required this.selectedSpeakerId,
-    required this.title,
+    this.title,
     required this.allLabel,
     required this.userLabel,
     required this.onSelected,
@@ -49,7 +46,9 @@ class SpeakerFilterSheet extends StatelessWidget {
 
   final List<Person> people;
   final String? selectedSpeakerId;
-  final String title;
+
+  /// Drawn above the list when the sheet shell does not already show it.
+  final String? title;
   final String allLabel;
   final String userLabel;
   final SpeakerSelected onSelected;
@@ -57,16 +56,18 @@ class SpeakerFilterSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
+      top: false,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.7),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-              child: Text(title, style: Theme.of(context).textTheme.titleMedium),
-            ),
+            if (title != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Text(title!, style: Theme.of(context).textTheme.titleMedium),
+              ),
             Flexible(
               child: ListView(
                 shrinkWrap: true,
@@ -103,9 +104,11 @@ class SpeakerFilterSheet extends StatelessWidget {
     final selected = speakerId == selectedSpeakerId;
     return ListTile(
       key: key,
+      selected: selected,
+      selectedColor: OmiColors.textPrimary,
       leading: Icon(icon),
       title: Text(name),
-      trailing: selected ? const Icon(Icons.check, color: Colors.deepPurpleAccent) : null,
+      trailing: selected ? const Icon(Icons.check, color: OmiColors.accent) : null,
       onTap: () async {
         await onSelected(speakerId);
       },

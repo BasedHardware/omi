@@ -29,6 +29,15 @@ BASELINE_REPOSITORY_PATH = "backend/scripts/legacy_memory_surface_baseline.json"
 POTENTIAL_SURFACE_ROLES = frozenset(("reader", "writer", "job"))
 EVIDENCE_SCOPE = "checked_in_source_and_resources"
 
+# Gate F tracks lifecycle/consolidation mechanisms, not every canonical field
+# that happens to use the words ``promotion`` or ``short_term``.  Canonical
+# truth-review metadata is retained product state, and tier enum inspection is
+# part of the canonical read/write contract; neither is evidence that the old
+# lifecycle is being reintroduced.  Keep the semantic lifecycle names below
+# explicit so a new call/import/write still enters the ratchet.
+SHORT_TERM_LIFECYCLE_MARKER = r"short_term_lifecycle|MemoryTier\.short_term|MemoryLayer\.short_term"
+CONSOLIDATION_PROMOTION_MARKER = r"canonical_consolidation|short_term_promotion|consolidat(?:e|ion|ed|ing)|promotion"
+
 
 @dataclass(frozen=True)
 class InventoryRule:
@@ -95,7 +104,7 @@ RULES: tuple[InventoryRule, ...] = (
             "backend/routers/memory_admin.py",
             "backend/database/product_memory_items.py",
         ),
-        r"short_term_lifecycle|MemoryTier\.short_term|MemoryLayer\.short_term",
+        SHORT_TERM_LIFECYCLE_MARKER,
         "short_term_symbol",
         ("reader", "writer", "job"),
     ),
@@ -106,7 +115,7 @@ RULES: tuple[InventoryRule, ...] = (
             "backend/modal/memory_maintenance_job.py",
             "backend/scripts/memory-continuity-gauntlet.py",
         ),
-        r"canonical_consolidation|short_term_promotion|consolidat(?:e|ion|ed|ing)|promotion",
+        CONSOLIDATION_PROMOTION_MARKER,
         "consolidation_symbol",
         ("reader", "writer", "job"),
     ),
@@ -171,6 +180,51 @@ def _iter_files(root: Path, paths: Sequence[str]) -> Iterable[Path]:
                 yield path
 
 
+def _is_canonical_promotion_metadata(line: str, match: re.Match[str]) -> bool:
+    """Recognize a canonical metadata access without hiding lifecycle names.
+
+    The legacy rule historically matched the bare word ``promotion``.  That
+    word is also a retained canonical payload field (``item.promotion``,
+    ``promotion.get(...)``, and ``promotion = ...``).  Those accesses are
+    metadata inspection, while identifiers such as ``promotion_worker`` and
+    an imported/called ``promotion`` symbol remain meaningful lifecycle
+    evidence and must continue to match.
+    """
+
+    if match.group(0) != "promotion":
+        return False
+    start, end = match.span()
+
+    def is_identifier(character: str) -> bool:
+        return character.isalnum() or character == "_"
+
+    if (start > 0 and is_identifier(line[start - 1])) or (end < len(line) and is_identifier(line[end])):
+        return False
+    stripped = line.strip()
+    if re.search(r"\b(?:from|import)\b", stripped) or re.search(r"\bpromotion\s*\(", line):
+        return False
+    return bool(
+        re.search(r"\bpromotion\s*=", line)
+        or re.search(r"(?:\b[A-Za-z_]\w*|\])\.promotion\b", line)
+        or re.search(r"\bpromotion\.(?:get|pop|update|setdefault)\b", line)
+        or re.search(r"\bpromotion\s*\[", line)
+        or re.search(r"[\"']promotion[\"']", line)
+    )
+
+
+def _is_legacy_marker_match(rule: InventoryRule, line: str, match: re.Match[str]) -> bool:
+    """Filter canonical contract reads from the broad historical marker rules."""
+
+    if rule.classification == "short_term_lifecycle" and match.group(0) in {
+        "MemoryTier.short_term",
+        "MemoryLayer.short_term",
+    }:
+        return False
+    if rule.classification == "consolidation_promotion" and _is_canonical_promotion_metadata(line, match):
+        return False
+    return True
+
+
 def scan(root: Path = ROOT, rules: Sequence[InventoryRule] = RULES) -> list[Finding]:
     """Return stable, content-free findings for ``root``."""
 
@@ -185,6 +239,8 @@ def scan(root: Path = ROOT, rules: Sequence[InventoryRule] = RULES) -> list[Find
                 raise RuntimeError(f"cannot read inventory input {relative}: {exc}") from exc
             for line_number, line in enumerate(lines, start=1):
                 for _match in expression.finditer(line):
+                    if not _is_legacy_marker_match(rule, line, _match):
+                        continue
                     findings.append(
                         Finding(
                             classification=rule.classification,

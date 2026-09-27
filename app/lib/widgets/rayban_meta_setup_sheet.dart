@@ -6,7 +6,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/ui/ui.dart';
 
 /// Guided setup for Ray-Ban Meta glasses.
 ///
@@ -19,12 +19,7 @@ class RayBanMetaSetupSheet extends StatefulWidget {
 
   /// Returns true when setup finished and the device is ready to connect.
   static Future<bool> show(BuildContext context) async {
-    final ready = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const RayBanMetaSetupSheet(),
-    );
+    final ready = await showOmiSheet<bool>(context: context, builder: (_) => const RayBanMetaSetupSheet());
     return ready == true;
   }
 
@@ -115,77 +110,50 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final responsive = ResponsiveHelper(context);
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary,
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(color: ResponsiveHelper.textTertiary, borderRadius: BorderRadius.circular(2)),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xl),
+      child: Column(
+        children: [
+          ExcludeSemantics(
+            child: Container(
+              height: 120,
+              width: 120,
+              padding: const EdgeInsets.all(OmiSpacing.sm),
+              decoration: const BoxDecoration(borderRadius: OmiRadius.lgAll, color: OmiColors.accent),
+              child: Image.asset(Assets.images.raybanMeta.path, fit: BoxFit.contain),
             ),
-            Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: Column(
-                children: [
-                  Container(
-                    height: 120,
-                    width: 120,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: responsive.mediumShadow,
-                      color: Colors.white,
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Image.asset(Assets.images.raybanMeta.path, fit: BoxFit.contain),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  ..._buildStepContent(context, responsive),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: OmiSpacing.xxl),
+          ..._buildStepContent(context),
+        ],
       ),
     );
   }
 
-  List<Widget> _buildStepContent(BuildContext context, ResponsiveHelper responsive) {
+  List<Widget> _buildStepContent(BuildContext context) {
     switch (_step) {
       case _SetupStep.loading:
       case _SetupStep.ready:
         return [
-          Text(context.l10n.connectRayBanMeta, style: responsive.titleLarge, textAlign: TextAlign.center),
+          Text(context.l10n.connectRayBanMeta, style: OmiType.title3, textAlign: TextAlign.center),
           const SizedBox(height: 24),
-          const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white), strokeWidth: 2),
+          const OmiSpinner(),
         ];
 
       case _SetupStep.audioOnly:
         return [
           Text(
             context.l10n.raybanMetaAudioOnlyTitle,
-            style: responsive.titleLarge.copyWith(height: 1.2),
+            style: OmiType.title3.copyWith(height: 1.2),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
-          Text(context.l10n.raybanMetaAudioOnlyExplanation, style: responsive.bodyLarge, textAlign: TextAlign.center),
+          Text(context.l10n.raybanMetaAudioOnlyExplanation,
+              style: OmiType.body.copyWith(color: OmiColors.textSecondary), textAlign: TextAlign.center),
           const SizedBox(height: 12),
           Text(
             context.l10n.raybanMetaMusicPauseNote,
-            style: responsive.bodyMedium.copyWith(color: ResponsiveHelper.textTertiary),
+            style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
@@ -198,11 +166,12 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
         return [
           Text(
             context.l10n.connectRayBanMeta,
-            style: responsive.titleLarge.copyWith(height: 1.2),
+            style: OmiType.title3.copyWith(height: 1.2),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
-          Text(context.l10n.raybanMetaSetupDescription, style: responsive.bodyLarge, textAlign: TextAlign.center),
+          Text(context.l10n.raybanMetaSetupDescription,
+              style: OmiType.body.copyWith(color: OmiColors.textSecondary), textAlign: TextAlign.center),
           const SizedBox(height: 32),
           _primaryButton(context.l10n.raybanMetaOpenMetaAI, _startRegistration),
           const SizedBox(height: 12),
@@ -213,13 +182,14 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
         return [
           Text(
             context.l10n.connectRayBanMeta,
-            style: responsive.titleLarge.copyWith(height: 1.2),
+            style: OmiType.title3.copyWith(height: 1.2),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
-          Text(context.l10n.raybanMetaWaitingForMetaAI, style: responsive.bodyLarge, textAlign: TextAlign.center),
+          Text(context.l10n.raybanMetaWaitingForMetaAI,
+              style: OmiType.body.copyWith(color: OmiColors.textSecondary), textAlign: TextAlign.center),
           const SizedBox(height: 24),
-          const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white), strokeWidth: 2),
+          const OmiSpinner(),
           const SizedBox(height: 24),
           _secondaryButton(context.l10n.raybanMetaCheckAgain, _refreshStep),
         ];
@@ -228,43 +198,23 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
         return [
           Text(
             context.l10n.raybanMetaAllowCamera,
-            style: responsive.titleLarge.copyWith(height: 1.2),
+            style: OmiType.title3.copyWith(height: 1.2),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
-          Text(context.l10n.raybanMetaCameraExplanation, style: responsive.bodyLarge, textAlign: TextAlign.center),
+          Text(context.l10n.raybanMetaCameraExplanation,
+              style: OmiType.body.copyWith(color: OmiColors.textSecondary), textAlign: TextAlign.center),
           const SizedBox(height: 32),
           _primaryButton(context.l10n.raybanMetaAllowCamera, _requestCameraPermission),
           const SizedBox(height: 12),
-          _secondaryButton(context.l10n.raybanMetaSkipForNow, () => Navigator.of(context).pop(true)),
+          _secondaryButton(context.l10n.notNow, () => Navigator.of(context).pop(true)),
         ];
     }
   }
 
-  Widget _primaryButton(String label, VoidCallback onPressed) {
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        ),
-        child: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-      ),
-    );
-  }
+  Widget _primaryButton(String label, FutureOr<void> Function() onPressed) =>
+      OmiButton(label: label, expand: true, onPressed: onPressed);
 
-  Widget _secondaryButton(String label, VoidCallback onPressed) {
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: TextButton(
-        onPressed: onPressed,
-        child: Text(label, style: const TextStyle(fontSize: 16, color: ResponsiveHelper.textTertiary)),
-      ),
-    );
-  }
+  Widget _secondaryButton(String label, FutureOr<void> Function() onPressed) =>
+      OmiButton.tertiary(label: label, expand: true, onPressed: onPressed);
 }

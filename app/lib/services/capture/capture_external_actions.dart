@@ -26,6 +26,8 @@ abstract interface class CaptureExternalActions {
 
   Future<Person?> createPerson(String name);
 
+  Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId});
+
   Future<void> refreshPeople();
 
   Future<void> markAsOutOfCreditsAndRefresh();
@@ -66,6 +68,10 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
 
   @override
   Future<Person?> createPerson(String name) async => null;
+
+  @override
+  Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId}) async =>
+      false;
 
   @override
   Future<void> refreshPeople() async {}

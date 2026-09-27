@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/widgets/components/chat_evidence_card.dart';
@@ -22,6 +23,8 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: Column(
               children: [
@@ -62,6 +65,8 @@ void main() {
         );
         await tester.pumpWidget(
           MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: Column(
                 children: [
@@ -115,6 +120,8 @@ void main() {
 
         await tester.pumpWidget(
           MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: buildMessageWidget(
                 message,
@@ -142,6 +149,8 @@ void main() {
         var opened = false;
         await tester.pumpWidget(
           MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: ChatEvidenceReferenceCard(
                 reference: reference,

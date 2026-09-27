@@ -53,6 +53,8 @@ def _chat_file_gateway_stub() -> ModuleType:
     gateway_client.get_file_chat_gateway_async_client = MagicMock()
     gateway_client.get_file_chat_gateway_sync_client = MagicMock()
     gateway_client.is_gateway_model_not_found = MagicMock(return_value=False)
+    # chat_file imports LUNA_MODEL from model_config, which imports this name.
+    gateway_client.is_auto_lane_id = MagicMock(return_value=False)
     return gateway_client
 
 

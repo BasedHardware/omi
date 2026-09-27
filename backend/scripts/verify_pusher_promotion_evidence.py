@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -99,6 +101,7 @@ def _validate_semantic_probe(probe: Any, *, source_sha: Any, digest: Any, deploy
         "synthetic_uid_class",
         "producer_observation",
         "consumer_readback",
+        "live_segment_window",
     }
     if set(probe) != expected_fields:
         errors.append("semantic probe evidence has an unexpected schema")
@@ -143,6 +146,14 @@ def _validate_semantic_probe(probe: Any, *, source_sha: Any, digest: Any, deploy
         or failed != 0
     ):
         errors.append("semantic probe PASS requires at least one sample, all successful and none failed")
+    live_segment_window = probe.get("live_segment_window") if isinstance(probe.get("live_segment_window"), dict) else {}
+    if set(live_segment_window) != {"matched", "segment_text_chars"}:
+        errors.append("semantic probe live_segment_window must declare matched and segment_text_chars")
+    if not isinstance(live_segment_window.get("matched"), bool):
+        errors.append("semantic probe live_segment_window.matched must be a boolean")
+    segment_text_chars = live_segment_window.get("segment_text_chars")
+    if not isinstance(segment_text_chars, int) or isinstance(segment_text_chars, bool) or segment_text_chars < 0:
+        errors.append("semantic probe live_segment_window.segment_text_chars must be a non-negative integer")
     return errors
 
 
@@ -202,20 +213,36 @@ def _validate_canary(
     )
     identity = canary.get("deployment_identity") if isinstance(canary.get("deployment_identity"), dict) else {}
     listener_identity = identity.get("listener") if isinstance(identity.get("listener"), dict) else {}
+    pusher_pods = pusher_identity.get("pods")
     if (
         canary_deployment_receipt.get("environment") != "prod"
+        or canary_deployment_receipt.get("run_id") != expected_canary_run_id
         or canary_deployment_receipt.get("source_sha") != source_sha
         or canary_image.get("digest") != digest
         or identity.get("pusher") != pusher_identity
+        or pusher_identity.get("namespace") != "prod-omi-backend"
         or pusher_identity.get("replicas") != 1
         or pusher_identity.get("ready_replicas") != 1
-        or not str(pusher_identity.get("deployment_name", "")).startswith("prod-omi-pusher-canary-")
+        or pusher_identity.get("deployment_name") != f"prod-omi-pusher-canary-{expected_canary_run_id}"
+        or not isinstance(pusher_pods, list)
+        or len(pusher_pods) != 1
+        or any(
+            not isinstance(pod, dict)
+            or set(pod) != {"name", "uid", "image_id"}
+            or not isinstance(pod.get("name"), str)
+            or not pod["name"]
+            or not isinstance(pod.get("uid"), str)
+            or not pod["uid"]
+            or not isinstance(pod.get("image_id"), str)
+            or not pod["image_id"].endswith(f"@{digest}")
+            for pod in pusher_pods
+        )
     ):
         errors.append("production canary does not prove one exact isolated candidate Pusher pod")
     if (
         listener_identity.get("ordinary_service_selector_excluded") is not True
         or listener_identity.get("pusher_url_class") != "isolated_cluster_service"
-        or not str(listener_identity.get("deployment_name", "")).startswith("prod-omi-listener-canary-")
+        or listener_identity.get("deployment_name") != f"prod-omi-listener-canary-{expected_canary_run_id}"
         or not isinstance(listener_identity.get("runtime_image"), str)
         or "@sha256:" not in listener_identity["runtime_image"]
         or not listener_identity.get("deployment_uid")
@@ -294,7 +321,7 @@ def _validate_canary(
     if canary_run.get("status") == "completed" and canary_run.get("conclusion") != "success":
         errors.append("production canary receipt run did not complete successfully")
     if canary_run.get("head_sha") != source_sha:
-        errors.append("production canary receipt run source does not match the qualified source")
+        errors.append("production canary receipt run source does not match the checked-out production source")
     return errors
 
 
@@ -329,7 +356,7 @@ def _validate_final_deployment(
     image = final_receipt.get("image") if isinstance(final_receipt.get("image"), dict) else {}
     identity = final_receipt.get("live_identity") if isinstance(final_receipt.get("live_identity"), dict) else {}
     if final_receipt.get("environment") != "prod" or final_receipt.get("source_sha") != source_sha:
-        errors.append("final deployment receipt does not match the qualified production source")
+        errors.append("final deployment receipt does not match the checked-out production source")
     if image != {"repository": repository, "digest": digest}:
         errors.append("final deployment receipt does not match the exact promoted image")
     if final_receipt.get("run_id") != run_id:
@@ -357,6 +384,63 @@ def _validate_final_deployment(
     return errors
 
 
+def _verify_qualified_source_closure(
+    qualified_sha: str,
+    checked_out_sha: str,
+    checkout_repository: Path,
+) -> list[str]:
+    closure_script = ROOT / "backend/scripts/verify_pusher_source_closure.py"
+    try:
+        closure = subprocess.run(
+            [sys.executable, str(closure_script)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return [f"could not derive the Pusher source closure: {exc}"]
+    if closure.returncode != 0:
+        return [f"could not derive the Pusher source closure (exit {closure.returncode})"]
+    paths = closure.stdout.split()
+    if not paths:
+        return ["Pusher source closure derivation returned no paths"]
+    try:
+        ancestry = subprocess.run(
+            ["git", "-C", str(checkout_repository), "merge-base", "--is-ancestor", qualified_sha, checked_out_sha],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return [f"could not check qualified source ancestry in the production checkout: {exc}"]
+    if ancestry.returncode == 1:
+        return [
+            f"qualified development source {qualified_sha} is not an ancestor of the checked-out "
+            f"production source {checked_out_sha}"
+        ]
+    if ancestry.returncode != 0:
+        return [
+            f"could not check qualified source ancestry in the production checkout (git exit {ancestry.returncode})"
+        ]
+    try:
+        diff = subprocess.run(
+            ["git", "-C", str(checkout_repository), "diff", "--quiet", qualified_sha, checked_out_sha, "--", *paths],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        return [f"could not compare the Pusher source closure: {exc}"]
+    if diff.returncode == 1:
+        return [
+            f"Pusher image source or chart changed between qualified source {qualified_sha} and checked-out "
+            f"production source {checked_out_sha}; run a new development qualification"
+        ]
+    if diff.returncode != 0:
+        return [f"could not compare the Pusher source closure (git exit {diff.returncode})"]
+    return []
+
+
 def validate(
     evidence: dict[str, Any],
     deployment_receipt: dict[str, Any],
@@ -370,12 +454,14 @@ def validate(
     expected_run_id: int,
     expected_canary_workflow_id: int,
     expected_canary_run_id: int,
+    expected_canary_source_sha: str = "",
     canary_deployment_receipt: dict[str, Any] | None = None,
     canary_semantic_evidence: dict[str, Any] | None = None,
     final_deployment_receipt: dict[str, Any] | None = None,
     expected_final_repository: str = "",
     require_canary: bool = True,
     require_final: bool = False,
+    checkout_repository: Path = ROOT,
 ) -> list[str]:
     """Return every missing immutable-promotion proof without exposing secrets."""
 
@@ -517,6 +603,10 @@ def validate(
             deployment_receipt_sha256=receipt_sha256,
         )
     )
+    if (require_canary or require_final) and (
+        not isinstance(expected_canary_source_sha, str) or not SHA_RE.fullmatch(expected_canary_source_sha)
+    ):
+        errors.append("expected canary source must be a full lowercase SHA naming the checked-out production source")
     if require_canary:
         errors.extend(
             _validate_canary(
@@ -524,7 +614,7 @@ def validate(
                 canary_semantic_evidence or {},
                 canary_run,
                 canary_deployment_receipt or {},
-                source_sha=source_sha,
+                source_sha=expected_canary_source_sha,
                 digest=digest,
                 qualification_deployment_receipt_sha256=receipt_sha256,
                 expected_canary_workflow_id=expected_canary_workflow_id,
@@ -536,12 +626,21 @@ def validate(
             _validate_final_deployment(
                 final_deployment_receipt,
                 canary_deployment_receipt or {},
-                source_sha=source_sha,
+                source_sha=expected_canary_source_sha,
                 digest=digest,
                 repository=expected_final_repository,
                 run_id=expected_canary_run_id,
             )
         )
+    if (
+        (require_canary or require_final)
+        and isinstance(source_sha, str)
+        and SHA_RE.fullmatch(source_sha)
+        and isinstance(expected_canary_source_sha, str)
+        and SHA_RE.fullmatch(expected_canary_source_sha)
+        and source_sha != expected_canary_source_sha
+    ):
+        errors.extend(_verify_qualified_source_closure(source_sha, expected_canary_source_sha, checkout_repository))
     return errors
 
 
@@ -563,6 +662,7 @@ def main() -> int:
     parser.add_argument("--expected-run-id", type=int, required=True)
     parser.add_argument("--expected-canary-workflow-id", type=int, default=0)
     parser.add_argument("--expected-canary-run-id", type=int, default=0)
+    parser.add_argument("--expected-canary-source-sha", default="")
     args = parser.parse_args()
 
     try:
@@ -578,6 +678,7 @@ def main() -> int:
             expected_run_id=args.expected_run_id,
             expected_canary_workflow_id=args.expected_canary_workflow_id,
             expected_canary_run_id=args.expected_canary_run_id,
+            expected_canary_source_sha=args.expected_canary_source_sha,
             canary_deployment_receipt=(
                 load_json(args.canary_deployment_receipt) if args.canary_deployment_receipt else None
             ),

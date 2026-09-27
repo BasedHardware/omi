@@ -318,3 +318,21 @@ def test_retry_after_partial_failure_creates_only_missing(tmp_path, store):
         limitless.conversation_id_for_lifelog(UID, FN_B),
     }
     assert store.docs[limitless.conversation_id_for_lifelog(UID, FN_B)]["transcript_segments"][0]["text"] == "ok"
+
+
+def test_cancelling_an_import_stops_the_worker(store, monkeypatch, tmp_path):
+    lifelogs = {
+        f"lifelogs/2025-10-{day:02d}_07h00m00s_Standup.md": _lifelog_md(start_ms=1000 + day) for day in range(1, 26)
+    }
+    calls = {'n': 0}
+
+    def _job(_job_id):
+        # Processing at first, cancelled by the user right after it starts.
+        calls['n'] += 1
+        return {'status': 'processing' if calls['n'] == 1 else 'cancelled'}
+
+    monkeypatch.setattr(limitless.import_jobs_db, "get_import_job", _job)
+
+    _run_import(tmp_path, _zip_bytes(lifelogs))
+
+    assert len(store.docs) < len(lifelogs), "the worker kept importing after the cancel"

@@ -35,6 +35,8 @@ from utils.llm.desktop_llm_stub import (
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.fallback import record_fallback
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.product_metrics import extract_app_build
+from utils.free_tier_basic_gates import basic_plan_gate_proxy_embed_enabled
 from utils.managed_compute import Decision, authorize_managed_compute
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import RELEASE_PROBE_UID, is_desktop_trial_paywalled
@@ -509,30 +511,42 @@ def _record_pt_target_observation(ready: bool) -> None:
 
 def _provisioned_model() -> str:
     """The model that currently owns prepaid capacity."""
-    return ptr.resolve_pt_model(
-        target_dedicated_ready=_pt_target_is_ready(),
-        override=os.getenv(_PT_MODEL_OVERRIDE_ENV, ''),
-    )
+    try:
+        return ptr.resolve_pt_model(
+            target_dedicated_ready=_pt_target_is_ready(),
+            override=os.getenv(_PT_MODEL_OVERRIDE_ENV, ''),
+        )
+    except ValueError as exc:
+        # A prohibited or undeclared operator pin (e.g. a Pro/image-output
+        # model) must never become a served model. Fail the request closed
+        # instead of dispatching PayGo (SCA-481).
+        raise RoutingFailure(
+            code='routing_invalid_operator_pin',
+            message=str(exc),
+            phase='routing',
+        ) from exc
 
 
 def _overflow_enabled() -> bool:
     return os.getenv(_OVERFLOW_ENABLED_ENV, 'true').strip().lower() not in {'0', 'false', 'no', 'off'}
 
 
-def _fallback_chain(model: str) -> tuple[str, ...]:
+def _fallback_chain(model: str, *, origin_model: str | None = None) -> tuple[str, ...]:
     """Reachable models that may serve `model`'s traffic, best first."""
+    origin = ptr.lane_overflow_origin(model) if origin_model is None else origin_model
     try:
         return ptr.resolve_fallback_chain(
             model=model,
             pt_model=_provisioned_model(),
             unreachable=_unreachable_models(),
             override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''),
+            origin_model=origin,
         )
     except ValueError:
         return ()
 
 
-def _first_reachable(model: str) -> str:
+def _first_reachable(model: str, *, origin_model: str | None = None) -> str:
     """`model`, or the best rung of its chain if traffic has proved it dead.
 
     Falling back before dispatch is what keeps a known-unreachable model from
@@ -540,7 +554,7 @@ def _first_reachable(model: str) -> str:
     """
     if _model_believed_available(model):
         return model
-    for candidate in _fallback_chain(model):
+    for candidate in _fallback_chain(model, origin_model=origin_model):
         return candidate
     # Nothing declared and reachable. Keep the request honest and let the
     # provider answer rather than inventing a substitute.
@@ -573,7 +587,7 @@ def _serving_model(model: str) -> str:
         intended = _provisioned_model()
     else:
         intended = model
-    return _first_reachable(intended)
+    return _first_reachable(intended, origin_model=ptr.lane_overflow_origin(model))
 
 
 def _retarget_path(path: str, model: str, action: str) -> str:
@@ -716,7 +730,7 @@ async def _upstream(
     return UpstreamRoute(_studio_url(path), {}, {**query, 'key': server_key}, 'ai_studio', 'server_key', 'global')
 
 
-def _overflow_plan(served_model: str) -> list[tuple[str, str]]:
+def _overflow_plan(served_model: str, *, origin_model: str | None = None) -> list[tuple[str, str]]:
     """Ordered (model, request_type) attempts to try after prepaid capacity is full.
 
     Only traffic that was actually routed at the reservation can exhaust it, so
@@ -734,7 +748,12 @@ def _overflow_plan(served_model: str) -> list[tuple[str, str]]:
     if served_model != pt_model:
         return []
     try:
-        ladder = ptr.resolve_overflow_ladder(pt_model=pt_model, override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''))
+        origin = ptr.lane_overflow_origin(served_model) if origin_model is None else origin_model
+        ladder = ptr.resolve_overflow_ladder(
+            pt_model=pt_model,
+            override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''),
+            origin_model=origin,
+        )
     except ValueError:
         return []
     plan: list[tuple[str, str]] = []
@@ -749,7 +768,9 @@ def _overflow_plan(served_model: str) -> list[tuple[str, str]]:
     return plan
 
 
-def _recovery_plan(served_model: str, status: int, message: str) -> list[tuple[str, str]]:
+def _recovery_plan(
+    served_model: str, status: int, message: str, *, origin_model: str | None = None
+) -> list[tuple[str, str]]:
     """Attempts to make after a response this proxy can route around.
 
     Two distinct recoverable conditions, for ANY routable model rather than
@@ -766,9 +787,9 @@ def _recovery_plan(served_model: str, status: int, message: str) -> list[tuple[s
         return []
     if ptr.is_model_unavailable(status, message):
         _record_model_unavailable(served_model)
-        return [(rung, ptr.REQUEST_TYPE_SHARED) for rung in _fallback_chain(served_model)]
+        return [(rung, ptr.REQUEST_TYPE_SHARED) for rung in _fallback_chain(served_model, origin_model=origin_model)]
     if _overflow_triggered(status, message):
-        return _overflow_plan(served_model)
+        return _overflow_plan(served_model, origin_model=origin_model)
     return []
 
 
@@ -1137,7 +1158,10 @@ async def _stream_provider(
             telemetry.record_attempt('error', _attempt_error_class(upstream.status_code, upstream.text))
             if not pending and query is not None:
                 for overflow_model, overflow_capacity in _recovery_plan(
-                    attempt_model, upstream.status_code, upstream.text
+                    attempt_model,
+                    upstream.status_code,
+                    upstream.text,
+                    origin_model=ptr.lane_overflow_origin(model),
                 ):
                     pending.append(
                         (
@@ -1338,7 +1362,11 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
     if action not in {'generateContent', 'streamGenerateContent'}:
         return await _proxy_unobserved(request, path, streaming, uid)
 
-    attempt = ClientJourneyAttempt('desktop_proactivity', _proxy_client_kind(request))
+    attempt = ClientJourneyAttempt(
+        'desktop_proactivity',
+        _proxy_client_kind(request),
+        app_build=extract_app_build(request),
+    )
     try:
         response = await _proxy_unobserved(request, path, streaming, uid)
     except asyncio.CancelledError:
@@ -1485,7 +1513,9 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
             response = await _cancel_on_disconnect(request, post(route, body))
             if response.status_code < 400:
                 _record_model_available(model)
-            recovery = _recovery_plan(model, response.status_code, response.text)
+            recovery = _recovery_plan(
+                model, response.status_code, response.text, origin_model=ptr.lane_overflow_origin(model)
+            )
             if recovery:
                 query = dict(request.query_params)
                 for overflow_model, capacity in recovery:
@@ -1625,12 +1655,18 @@ async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> 
 
 # Gen-1 Gemini generate/stream is the screen-intelligence spend path (free-tier S14).
 # screen_frame_judge is the configured Gemini-provider feature, so a request-scoped
-# Gemini BYOK key satisfies authorize_managed_compute. embedContent stays ungated
-# here (TBD-4 / S24). desktop_proactivity completions are the JIT/context-bucket
-# lane and are intentionally not gated in this shard — a blanket 402 there would
-# kill the ambient nano triage (S24) and the shipped completion lane
-# (test_legacy_clients_are_not_gated_by_jit_rollout).
-_PLAN_GATED_PROXY_ACTIONS = frozenset({'generateContent', 'streamGenerateContent'})
+# Gemini BYOK key satisfies authorize_managed_compute. Embed actions (TBD-4) are the
+# remaining company-paid surface (Vertex :predict single embed, AI Studio batch):
+# basic non-BYOK gets the same 402 plan_gated. They share screen_frame_judge's
+# Gemini provider binding, so the BYOK exemption stays provider-exact without a
+# second configured feature. desktop_proactivity completions are gated in their own
+# router (S14 proactivity half).
+_PLAN_GATED_PROXY_GENERATE_ACTIONS = frozenset({'generateContent', 'streamGenerateContent'})
+_PLAN_GATED_PROXY_EMBED_ACTIONS = frozenset({'embedContent', 'batchEmbedContents'})
+# generate/stream stay gated unconditionally (S14, already live in prod).
+# embed actions join this set so existing membership tests stay meaningful;
+# runtime consults BASIC_PLAN_GATE_PROXY_EMBED_ENABLED before authorizing.
+_PLAN_GATED_PROXY_ACTIONS = _PLAN_GATED_PROXY_GENERATE_ACTIONS | _PLAN_GATED_PROXY_EMBED_ACTIONS
 _PLAN_GATED_PROXY_FEATURE = 'screen_frame_judge'
 
 
@@ -1644,7 +1680,10 @@ async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
         _, _, action = _path_parts(path)
     except HTTPException:
         return
-    if action not in _PLAN_GATED_PROXY_ACTIONS:
+    if action in _PLAN_GATED_PROXY_EMBED_ACTIONS:
+        if not basic_plan_gate_proxy_embed_enabled():
+            return
+    elif action not in _PLAN_GATED_PROXY_GENERATE_ACTIONS:
         return
     # Same exemption as enforce_chat_quota: dest's candidate probe signs in as
     # this fixed non-human Free-plan UID to prove the Gemini provider path.

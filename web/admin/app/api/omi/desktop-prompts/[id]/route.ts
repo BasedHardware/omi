@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
+import { isSafeDocumentId } from "@/lib/firestore-doc-id.mjs";
 export const dynamic = "force-dynamic";
 
 // PATCH toggles/edits one remote desktop prompt; DELETE removes it. A
@@ -12,7 +13,10 @@ export async function PATCH(
 ) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
-  const { id } = await params;
+  const id = (await params).id;
+  if (!isSafeDocumentId(id)) {
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  }
   const body = await request.json();
   const updates: Record<string, unknown> = { updated_at: Date.now() / 1000 };
   if (typeof body?.active === "boolean") updates.active = body.active;
@@ -35,7 +39,10 @@ export async function DELETE(
 ) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
-  const { id } = await params;
+  const id = (await params).id;
+  if (!isSafeDocumentId(id)) {
+    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  }
   await getDb().collection("desktop_prompts").doc(id).delete();
   return NextResponse.json({ id, deleted: true });
 }

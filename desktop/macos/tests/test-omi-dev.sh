@@ -8,7 +8,15 @@ OMI_MAIN="$SCRIPT_DIR/../scripts/omi-main"
 # below creates independent repositories, so inheriting them would reinitialize
 # the caller's worktree instead of the temporary source repository.
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
-TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/omi-dev-test.XXXXXX")"
+# omi-dev creates linked worktrees. Prefer a managed worktree root when one
+# already exists (the local git wrapper refuses $TMPDIR). GitHub runners have
+# neither $OMI_WORKTREES nor /Volumes/scratch — do not mkdir those; fall back.
+MANAGED_ROOT="${OMI_WORKTREES:-${SCRATCH_ROOT:-/Volumes/scratch}/worktrees/omi}"
+if [ -d "$MANAGED_ROOT" ] && [ -w "$MANAGED_ROOT" ]; then
+  TEST_ROOT="$(mktemp -d "$MANAGED_ROOT/omi-dev-test.XXXXXX")"
+else
+  TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/omi-dev-test.XXXXXX")"
+fi
 trap 'rm -rf "$TEST_ROOT"' EXIT
 
 ORIGIN="$TEST_ROOT/origin.git"

@@ -1222,12 +1222,31 @@ export async function handleAgentControlToolCall(
         if (parsed.provider && parsed.adapterId && parsed.provider !== parsed.adapterId) {
           throw new Error("provider and adapterId must match when both are supplied");
         }
+        const inheritedAdapterId = parentRunId
+          ? context.kernel.defaultAdapterIdForRun(parentRunId)
+          : spawnProfile.adapterId;
+        // Older/retrained coordinator models sometimes emit the provider name
+        // (`codex` or `openai-codex`) through the legacy adapterId escape hatch.
+        // Codex is not a desktop runtime adapter: it is a provider target owned
+        // by the managed pi-mono boundary. Normalize that alias only for the
+        // exact kernel-authorized primary-model invocation which inherits an
+        // existing managed pi-mono run. Direct/signed control, unknown aliases,
+        // explicit providers and local boundaries continue to fail closed.
+        const isAuthorizedManagedPiAlias = Boolean(
+          (parsed.adapterId === "codex" || parsed.adapterId === "openai-codex")
+          && !parsed.provider
+          && parentRunId
+          && context.authorizedCallerRunId === parentRunId
+          && context.authorizedProducerJournal
+          && context.authorizedToolInvocation?.toolName === "spawn_agent"
+          && context.executionRole === "coordinator"
+          && context.providerBoundary === "managed_cloud"
+          && inheritedAdapterId === "pi-mono"
+        );
         const adapterId =
-          parsed.adapterId ??
+          (isAuthorizedManagedPiAlias ? "pi-mono" : parsed.adapterId) ??
           (parsed.provider === "openclaw" ? "openclaw" : parsed.provider === "hermes" ? "hermes" : undefined) ??
-          (parentRunId
-            ? context.kernel.defaultAdapterIdForRun(parentRunId)
-            : spawnProfile.adapterId);
+          inheritedAdapterId;
         /**
          * A kernel-authorized primary model tool carries its producing run so
          * the journal can attach the child to the exact assistant turn. That
@@ -3108,21 +3127,33 @@ function appendErrorFields(
 }
 
 function serializeRun(run: AgentRun): Record<string, unknown> {
+  const result = parseOptionalJsonObject(run.resultJson);
+  const resultRecord = result && typeof result === "object" && !Array.isArray(result)
+    ? result as Record<string, unknown>
+    : undefined;
+  const providerTargets = Array.isArray(resultRecord?.providerTargets)
+    ? resultRecord.providerTargets.filter((value): value is string => typeof value === "string" && value.length > 0)
+    : [];
+  const modelsUsed = Array.isArray(resultRecord?.modelsUsed)
+    ? resultRecord.modelsUsed.filter((value): value is string => typeof value === "string" && value.length > 0)
+    : [];
   return appendErrorFields(
     {
       runId: run.runId,
       sessionId: run.sessionId,
       parentRunId: run.parentRunId,
+      status: run.status,
+      mode: run.mode,
+      requestedModelId: run.requestedModelId,
+      providerTargets,
+      modelsUsed,
+      result,
+      finalText: run.finalText,
       clientId: run.clientId,
       requestId: run.requestId,
       idempotencyKey: run.idempotencyKey,
-      status: run.status,
-      mode: run.mode,
       input: parseJsonObject(run.inputJson),
-      requestedModelId: run.requestedModelId,
       cwd: run.cwd,
-      finalText: run.finalText,
-      result: parseOptionalJsonObject(run.resultJson),
       usage: {
         inputTokens: run.inputTokens,
         outputTokens: run.outputTokens,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/ui.dart';
+
 /// Shared visual chrome for chat content-block components.
 ///
 /// Deliberately mirrors [ChatEvidenceReferenceCard]'s paddings, radius, and
@@ -16,18 +18,17 @@ class ChatBlockCard extends StatelessWidget {
   final VoidCallback? onTap;
   final String? semanticsLabel;
 
-  static const double radius = 10;
+  static const BorderRadius radius = OmiRadius.mdAll;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final card = Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 10),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.55)),
+        color: OmiColors.surface1,
+        borderRadius: radius,
+        border: Border.all(color: OmiColors.border),
       ),
       child: child,
     );
@@ -36,7 +37,7 @@ class ChatBlockCard extends StatelessWidget {
         ? card
         : InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(radius),
+            borderRadius: radius,
             child: card,
           );
 
@@ -60,19 +61,12 @@ class ChatBlockEyebrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: colorScheme.onSurfaceVariant),
+        ExcludeSemantics(child: Icon(icon, size: 14, color: OmiColors.textSecondary)),
         const SizedBox(width: 6),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-        ),
+        Text(label, style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600)),
       ],
     );
   }
@@ -93,7 +87,6 @@ class ChatBlockUnavailable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return ChatBlockCard(
       semanticsLabel: '$label: $message',
       child: Column(
@@ -102,10 +95,7 @@ class ChatBlockUnavailable extends StatelessWidget {
         children: [
           ChatBlockEyebrow(icon: icon, label: label),
           const SizedBox(height: 6),
-          Text(
-            message,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
-          ),
+          Text(message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
         ],
       ),
     );
@@ -127,22 +117,14 @@ class ChatBlockLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return ChatBlockCard(
       semanticsLabel: '$label: $message',
       child: Row(
         children: [
-          SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.onSurfaceVariant),
-          ),
+          const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              message,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
-            ),
+            child: Text(message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
           ),
         ],
       ),
@@ -176,7 +158,6 @@ class ChatBlockLinkCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return ChatBlockCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,23 +170,13 @@ class ChatBlockLinkCard extends StatelessWidget {
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton.icon(
+            child: OmiButton.tertiary(
               key: actionKey,
+              label: actionTitle,
+              icon: Icons.open_in_new,
+              size: OmiButtonSize.compact,
+              isLoading: isOpening,
               onPressed: isOpening ? null : onAction,
-              icon: isOpening
-                  ? SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.onSurfaceVariant),
-                    )
-                  : const Icon(Icons.open_in_new, size: 16),
-              label: Text(actionTitle),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: const Size(0, 32),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                foregroundColor: colorScheme.onSurface,
-              ),
             ),
           ),
         ],

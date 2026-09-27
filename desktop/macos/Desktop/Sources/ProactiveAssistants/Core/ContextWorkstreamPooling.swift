@@ -82,25 +82,6 @@ enum ContextWorkstreamPooling {
     return scaffoldingPrefixes.contains { lowered.hasPrefix($0) }
   }
 
-  /// The workstream the director should pool for right now. The visit's own
-  /// freshly extracted facts are the strongest signal; a bucket-majority tag
-  /// stands in only when it is overwhelming, so genuinely multi-topic surfaces
-  /// (a chat app hosting several projects) stay bucket-only rather than pooling
-  /// the wrong project's context.
-  static func liveTag(
-    ownTagCounts: [String: Int], bucketTagCounts: [String: Int]
-  ) -> String? {
-    if let own = ownTagCounts.max(by: { ($0.value, $1.key) < ($1.value, $0.key) }), own.value > 0 {
-      return own.key
-    }
-    let total = bucketTagCounts.values.reduce(0, +)
-    guard total >= bucketMajorityMinimumFacts else { return nil }
-    guard let dominant = bucketTagCounts.max(by: { ($0.value, $1.key) < ($1.value, $0.key) })
-    else { return nil }
-    guard Double(dominant.value) >= bucketMajorityShare * Double(total) else { return nil }
-    return dominant.key
-  }
-
   /// Quality gate and ranking: worthiness floor, scaffolding filter, then
   /// worthiness plus a recency half-life, capped per source bucket.
   static func select(
@@ -147,24 +128,6 @@ enum ContextWorkstreamPooling {
       maximumItems: recentContextMaximumItems,
       maximumPerBucket: recentContextMaximumPerBucket,
       createdAfter: now.addingTimeInterval(-recentContextWindow))
-  }
-
-  /// The section rides in the uncached volatile suffix, below the untrusted
-  /// preamble that opens the stable prompt, exactly like the retrieval hop's
-  /// section. Pooled facts are printed without their ids on purpose: the
-  /// director cannot cite what it was never handed a ref for, so delivery
-  /// grounding remains own-bucket by construction.
-  static func promptSection(tag: String, items: [ContextWorkstreamPoolItem], now: Date) -> String? {
-    formattedSection(
-      header: "RELATED WORKSTREAM CONTEXT (\(tag))",
-      intro: """
-        Validated facts from other buckets in the same workstream, most relevant first.
-        Context only: use them to connect what the user is doing across apps.
-        They are not citable: never place them in bucket_entry_refs or fact_ids.
-        Do not re-deliver a point they already cover from this bucket.
-        """,
-      items: items,
-      now: now)
   }
 
   static func recentContextPromptSection(

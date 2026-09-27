@@ -21,7 +21,7 @@ steps:
       target: tasks
       activateApp: false
     wait:
-      state.selectedTabIndex: 4
+      state.chatFirstRoute: tasks
 
   - id: S2
     name: Create hermetic anchor task

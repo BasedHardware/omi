@@ -151,9 +151,11 @@ def set_generic_cache(path: str, data: object, ttl: Optional[int] = None) -> Non
     key = base64.b64encode(f'{path}'.encode('utf-8'))
     key = key.decode('utf-8')
 
-    r.set(f'cache:{key}', json.dumps(data, default=str))
+    payload = json.dumps(data, default=str)
     if ttl:
-        r.expire(f'cache:{key}', ttl)
+        r.set(f'cache:{key}', payload, ex=ttl)
+    else:
+        r.set(f'cache:{key}', payload)
 
 
 @try_catch_decorator
@@ -278,12 +280,29 @@ def set_app_money_made_cache(app_id: str, money: Dict[str, Any]) -> None:
     r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 10)  # 10 minutes
 
 
+# Two reviewers of the same app race on this one key: a plain GET-modify-SET lets
+# a write that lands between another writer's GET and SET vanish, silently
+# dropping that reviewer from everything the product reads. Do the read-modify-
+# write as a single atomic script instead, mirroring the rate-limit scripts
+# below. A legacy (pre-JSON) value that cjson can't parse is treated as empty
+# rather than raising, matching the fail-open behavior of the Python reader.
+_SET_APP_REVIEW_CACHE_LUA = r.register_script("""
+local raw = redis.call('GET', KEYS[1])
+local reviews = {}
+if raw then
+    local ok, decoded = pcall(cjson.decode, raw)
+    if ok and type(decoded) == 'table' then
+        reviews = decoded
+    end
+end
+reviews[ARGV[1]] = cjson.decode(ARGV[2])
+redis.call('SET', KEYS[1], cjson.encode(reviews))
+return 1
+""")
+
+
 def set_app_review_cache(app_id: str, uid: str, data: Dict[str, Any]) -> None:
-    raw = r.get(f'plugins:{app_id}:reviews')
-    loaded = _deserialize_cache_value(raw)
-    reviews: Dict[str, Any] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
-    reviews[uid] = data
-    r.set(f'plugins:{app_id}:reviews', _serialize_cache_value(reviews))
+    _SET_APP_REVIEW_CACHE_LUA(keys=[f'plugins:{app_id}:reviews'], args=[uid, _serialize_cache_value(data)])
 
 
 def get_specific_user_review(app_id: str, uid: str) -> Dict[str, Any]:
@@ -320,8 +339,8 @@ def get_user_app_subscription_customer_id(app_id: str, uid: str) -> Optional[str
     return val.decode()
 
 
-def enable_app(uid: str, app_id: str) -> None:
-    r.sadd(f'users:{uid}:enabled_plugins', app_id)
+def enable_app(uid: str, app_id: str) -> bool:
+    return bool(r.sadd(f'users:{uid}:enabled_plugins', app_id))
 
 
 def disable_app(uid: str, app_id: str) -> None:
@@ -394,8 +413,7 @@ def get_apps_installs_count(app_ids: List[str]) -> Dict[str, int]:
 def _cache_set_fail_open(key: str, value: Any, ttl: int) -> None:
     """Best-effort cache write. Redis maxmemory must not 500 product requests."""
     try:
-        r.set(key, value)
-        r.expire(key, ttl)
+        r.set(key, value, ex=ttl)
     except Exception as exc:
         # redis-py types omit ``exceptions``; match the live maxmemory class by name.
         if type(exc).__name__ != 'OutOfMemoryError':
@@ -422,8 +440,7 @@ def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
 
 
 def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60) -> None:
-    r.set(f'urls:{blob_path}', signed_url)
-    r.expire(f'urls:{blob_path}', ttl - 1)
+    r.set(f'urls:{blob_path}', signed_url, ex=ttl - 1)
 
 
 def get_cached_signed_url(blob_path: str) -> str:
@@ -511,8 +528,14 @@ def remove_public_conversation(conversation_id: str) -> None:
 
 
 def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 300) -> None:
-    r.set(f'users:{uid}:in_progress_memory_id', conversation_id)
-    r.expire(f'users:{uid}:in_progress_memory_id', ttl)
+    # Best-effort pointer written AFTER the authoritative Firestore create of the
+    # in-progress conversation. Every reader falls back to Firestore
+    # (retrieve_in_progress_conversation, get_in_progress_conversation) when the
+    # key is absent, so a Redis capacity failure must skip the write instead of
+    # raising: under prod maxmemory the raise crashed the listen `lifecycle`
+    # lifetime task and tore down live sessions (supervisor `crash`), and the
+    # same raise inside prepare() surfaced as the ASGI WebSocket traceback.
+    _cache_set_fail_open(f'users:{uid}:in_progress_memory_id', conversation_id, ttl)
 
 
 def remove_in_progress_conversation_id(uid: str) -> None:
@@ -528,8 +551,13 @@ def get_in_progress_conversation_id(uid: str) -> str:
 
 def set_conversation_meeting_id(conversation_id: str, meeting_id: str, ttl: int = 86400) -> None:
     """Store the meeting_id for a conversation. TTL defaults to 24 hours."""
-    r.set(f'conversation:{conversation_id}:meeting_id', meeting_id)
-    r.expire(f'conversation:{conversation_id}:meeting_id', ttl)
+    # Same best-effort contract as set_in_progress_conversation_id: the mapping
+    # is an enrichment pointer (meeting-context attribution during processing,
+    # utils/conversations/process_conversation.py), written after the durable
+    # conversation create. Its absence degrades enrichment to the calendar
+    # overlap path, so a Redis capacity failure skips the write rather than
+    # raising out of the listen session bootstrap.
+    _cache_set_fail_open(f'conversation:{conversation_id}:meeting_id', meeting_id, ttl)
 
 
 def get_conversation_meeting_id(conversation_id: str) -> Optional[str]:
@@ -566,6 +594,55 @@ def get_user_webhook_db(uid: str, wtype: str) -> str:
     return url.decode()
 
 
+FILTER_CATEGORY_CAP = 500
+FILTER_CATEGORY_TRIM_BATCH = 128
+FILTER_CATEGORIES = frozenset({'people', 'topics', 'entities', 'dates'})
+
+# allow-oom: trim must still run when the box is at maxmemory (the incident).
+_FILTER_TRIM_LUA = """#!lua flags=allow-oom
+local key = KEYS[1]
+local cap = tonumber(ARGV[1])
+local batch = tonumber(ARGV[2])
+local n = redis.call('SCARD', key)
+if n <= cap then
+  return {n, 0}
+end
+local to_remove = math.min(n - cap, batch)
+redis.call('SPOP', key, to_remove)
+return {redis.call('SCARD', key), to_remove}
+"""
+
+_FILTER_ADMIT_LUA = """
+local key = KEYS[1]
+local member = ARGV[1]
+local cap = tonumber(ARGV[2])
+if redis.call('SISMEMBER', key, member) == 1 then
+  return 0
+end
+if redis.call('SCARD', key) >= cap then
+  return 0
+end
+return redis.call('SADD', key, member)
+"""
+
+_filter_trim_script = None
+_filter_admit_script = None
+
+
+def _filter_category_scripts() -> tuple[Any, Any]:
+    global _filter_trim_script, _filter_admit_script
+    if _filter_trim_script is None or _filter_admit_script is None:
+        # Register into locals first; publish the globals only after both
+        # registrations succeed so a concurrent caller can never observe a
+        # half-initialized pair (which would raise TypeError outside the
+        # RedisError handler in add_filter_category_item).
+        trim = r.register_script(_FILTER_TRIM_LUA)
+        admit = r.register_script(_FILTER_ADMIT_LUA)
+        _filter_trim_script = trim
+        _filter_admit_script = admit
+    return _filter_trim_script, _filter_admit_script
+
+
 def get_filter_category_items(uid: str, category: str, limit: Optional[int] = None) -> List[str]:
     key = f'users:{uid}:filters:{category}'
     if limit:
@@ -581,7 +658,38 @@ def get_filter_category_items(uid: str, category: str, limit: Optional[int] = No
 
 
 def add_filter_category_item(uid: str, category: str, item: str) -> None:
-    r.sadd(f'users:{uid}:filters:{category}', item)
+    """SADD chat-search filter members with a 500-cap; SPOP-trim oversized sets.
+
+    Redis SETs have no insertion order. Trim is random, one batch per call.
+    Fail-open on Redis errors: never fall back to an uncapped SADD.
+    """
+    if category not in FILTER_CATEGORIES or not item:
+        return
+    key = f'users:{uid}:filters:{category}'
+    try:
+        trim, admit = _filter_category_scripts()
+        after, removed = trim(keys=[key], args=[FILTER_CATEGORY_CAP, FILTER_CATEGORY_TRIM_BATCH])
+        after_n = int(after)
+        removed_n = int(removed)
+        if removed_n:
+            logger.info('filter_category_trim removed=%s after=%s', removed_n, after_n)
+        if after_n < FILTER_CATEGORY_CAP:
+            admit(keys=[key], args=[item, FILTER_CATEGORY_CAP])
+    except redis.exceptions.RedisError:  # type: ignore[attr-defined]
+        try:
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='other',
+                from_mode='filter_sadd',
+                to_mode='skip',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+        except Exception:
+            pass
+        return
 
 
 def save_migrated_retrieval_conversation_id(conversation_id: str) -> None:
@@ -1530,6 +1638,24 @@ def release_notifications_job_run_lock(token: str) -> None:
         _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[_NOTIFICATIONS_JOB_RUN_LOCK_KEY], args=[token])
     except Exception as error:
         logger.warning('Failed to release notifications job run lock: %s', error)
+
+
+def try_acquire_x_sync_window_lock(date: str, window: int, ttl: int = 6 * 60 * 60 + 10 * 60) -> bool:
+    """At most one X-connector sweep per 6-hour window across job executions.
+
+    Cloud Scheduler fires every minute, so a whole sync hour of executions can
+    otherwise start overlapping full-registry sweeps. The key carries the UTC
+    date and window index (``hour // 6``); the TTL is one window plus a margin
+    so a crashed holder cannot black out the next window for long and stale
+    keys reap themselves. Fail-open on Redis errors: losing the lock degrades
+    to the previous always-run behavior instead of silently skipping syncs.
+    """
+    try:
+        result = r.set(f'notifications_job:x_sync_lock:{date}:{window}', '1', ex=ttl, nx=True)
+        return result is not None
+    except Exception as error:
+        logger.warning('notifications-job x-sync window lock unavailable, running sweep without dedupe: %s', error)
+        return True
 
 
 @try_catch_decorator
