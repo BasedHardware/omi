@@ -845,15 +845,25 @@ def batch_delete_action_items(
     vector store delete and the FCM cancellation message both use their batch
     helpers — no per-id loop on this hot path.
     """
+    # Deduplicate and filter non-empty string IDs to prevent redundant RPCs
+    # and multiple operations on the same document in a single commit.
+    clean_ids: List[str] = list(
+        dict.fromkeys(
+            [str(item_id).strip() for item_id in request.ids if isinstance(item_id, str) and item_id.strip()]
+        )
+    )
+    if not clean_ids:
+        return {"status": "Ok", "deleted_count": 0, "deleted_ids": []}
+
     # Chunk the locked-task preflight so large Select All batches (up to 10,000
     # IDs) stay within Firestore's batch-get limits and avoid loading tens of
     # megabytes of document data in one RPC before any deletion begins.
-    for i in range(0, len(request.ids), 500):
-        existing_items = action_items_db.get_action_items_by_ids(uid, request.ids[i : i + 500])
+    for i in range(0, len(clean_ids), 500):
+        existing_items = action_items_db.get_action_items_by_ids(uid, clean_ids[i : i + 500])
         if any(item.get('is_locked', False) for item in existing_items):
             raise HTTPException(status_code=402, detail="A paid plan is required to delete locked action items.")
 
-    deleted_ids = action_items_db.delete_action_items_batch(uid, request.ids)
+    deleted_ids = action_items_db.delete_action_items_batch(uid, clean_ids)
 
     if deleted_ids:
         _wake_task_changes(uid, deleted_ids, datetime.now(timezone.utc))

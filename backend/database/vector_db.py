@@ -1030,11 +1030,17 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> No
         return
     if not action_item_ids:
         return
-    vector_ids = [f'{uid}-ai-{aid}' for aid in action_item_ids]
+    vector_ids = [f'{uid}-ai-{aid}' for aid in action_item_ids if aid and str(aid).strip()]
+    if not vector_ids:
+        return
     # Chunk to stay within Pinecone's per-delete id limit (1,000).
-    for i in range(0, len(vector_ids), 1000):
-        index.delete(ids=vector_ids[i : i + 1000], namespace=ACTION_ITEMS_NAMESPACE)
-    logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
+    try:
+        for i in range(0, len(vector_ids), 1000):
+            index.delete(ids=vector_ids[i : i + 1000], namespace=ACTION_ITEMS_NAMESPACE)
+        logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
+    except Exception as exc:
+        logger.warning(f'Failed to delete action item vectors batch for uid={uid}: {exc}')
+
 
 
 def delete_conversation_vectors_batch(uid: str, conversation_ids: List[str]) -> None:
