@@ -161,6 +161,7 @@ struct TaskChatPanel: View {
           .foregroundColor(Ink.primary)
           .lineLimit(1)
           .truncationMode(.tail)
+          .help(task?.description ?? coordinator.activeThreadProjection?.title ?? "Omi thread")
 
         Spacer()
 
@@ -176,6 +177,7 @@ struct TaskChatPanel: View {
             .scaledFont(size: OmiType.micro)
             .lineLimit(1)
             .truncationMode(.middle)
+            .help(coordinator.workspacePath)
           Spacer()
         }
         .foregroundColor(Ink.secondary)
