@@ -205,6 +205,10 @@ overlay:
         value: 'false'
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
         value: based-hardware
+    secrets:
+      GEMINI_API_KEY:
+        secret: DESKTOP_GEMINI_API_KEY
+        version: latest
   cloud_run:
     network:
       flags:
