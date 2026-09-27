@@ -61,7 +61,7 @@ enum HomeWidgetKeys {
 struct WidgetDevice: Codable, Hashable {
     let id: String
     let name: String
-    /// "pendant" draws the Omi orb; anything else names a picture in the widget's assets.
+    /// The product photo in the widget's assets, as the app shows it ("device-omi" for an Omi pendant).
     let image: String
     let connected: Bool
     /// 0–100, or -1 when unknown.
@@ -115,7 +115,7 @@ enum SharedWidgetStore {
         }
         let info = DeviceBatteryInfo.fromSharedDefaults()
         guard info.isConnected || info.lastUpdated != Date.distantPast else { return [] }
-        return [WidgetDevice(id: "", name: info.deviceName, image: "pendant", connected: info.isConnected,
+        return [WidgetDevice(id: "", name: info.deviceName, image: "device-omi", connected: info.isConnected,
                              battery: info.batteryLevel, charging: info.isCharging)]
     }
 

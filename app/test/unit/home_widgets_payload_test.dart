@@ -36,7 +36,7 @@ void main() {
       });
       expect(devices[1]['connected'], false);
       expect(devices[1]['battery'], -1, reason: 'a device that is not connected has no live battery');
-      expect(devices[2]['image'], 'pendant', reason: 'an Omi pendant is drawn as the orb');
+      expect(devices[2]['image'], 'device-omi', reason: 'an Omi pendant shows the photo the app shows');
     });
 
     test('nothing connected: every paired device, none live; the phone is never listed', () {
@@ -51,6 +51,8 @@ void main() {
     });
 
     test('each product has its own picture', () {
+      expect(HomeWidgetsPayload.image(device('o', 'Omi', DeviceType.omi)), 'device-omi');
+      expect(HomeWidgetsPayload.image(device('k', 'Omi DevKit 2', DeviceType.omi)), 'device-devkit');
       expect(HomeWidgetsPayload.image(device('a', 'Watch', DeviceType.appleWatch)), 'device-apple-watch');
       expect(HomeWidgetsPayload.image(device('b', 'Limitless', DeviceType.limitless)), 'device-limitless');
       expect(HomeWidgetsPayload.image(device('c', 'Fieldy', DeviceType.fieldy)), 'device-fieldy');

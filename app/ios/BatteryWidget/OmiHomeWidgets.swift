@@ -45,44 +45,6 @@ struct OmiRingMark: View {
     }
 }
 
-/// An Omi pendant as the app draws it (its orb): a dark sphere with the light near the top, lit
-/// blue while connected.
-struct WidgetPendantOrb: View {
-    let active: Bool
-    let size: CGFloat
-
-    private static let led = Color(red: 0x4C / 255, green: 0x9B / 255, blue: 0xFF / 255)
-    private static let ledOff = Color(red: 0x33 / 255, green: 0x38 / 255, blue: 0x42 / 255)
-
-    var body: some View {
-        let led = max(4, size * 0.13)
-        ZStack {
-            Circle()
-                .fill(RadialGradient(stops: [
-                    .init(color: Color(red: 0x7A / 255, green: 0x80 / 255, blue: 0x8A / 255), location: 0),
-                    .init(color: Color(red: 0x40 / 255, green: 0x45 / 255, blue: 0x4E / 255), location: 0.20),
-                    .init(color: Color(red: 0x1B / 255, green: 0x1E / 255, blue: 0x24 / 255), location: 0.52),
-                    .init(color: Color(red: 0x0C / 255, green: 0x0D / 255, blue: 0x10 / 255), location: 0.80),
-                    .init(color: Color(red: 0x08 / 255, green: 0x09 / 255, blue: 0x0B / 255), location: 1),
-                ], center: UnitPoint(x: 0.68, y: 0.24), startRadius: 0, endRadius: size * 0.72))
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5))
-            Group {
-                if active {
-                    Circle()
-                        .fill(Self.led)
-                        .shadow(color: Self.led.opacity(0.7), radius: 5)
-                } else {
-                    Circle().fill(Self.ledOff)
-                }
-            }
-            .frame(width: led, height: led)
-            .offset(y: -size * 0.18)
-        }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
-    }
-}
-
 /// A link into Omi: the widget extension's callback scheme, host "app", then the in-app route.
 func omiWidgetURL(_ route: String) -> URL? {
     var components = URLComponents()

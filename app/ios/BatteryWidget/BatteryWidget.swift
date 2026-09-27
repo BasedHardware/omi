@@ -25,7 +25,7 @@ struct BatteryTimelineProvider: TimelineProvider {
                 lastUpdated: Date(),
                 isMuted: false
             ),
-            devices: [WidgetDevice(id: "omi", name: "Omi", image: "pendant", connected: true, battery: 85, charging: false)]
+            devices: [WidgetDevice(id: "omi", name: "Omi", image: "device-omi", connected: true, battery: 85, charging: false)]
         )
     }
 
@@ -104,8 +104,8 @@ extension View {
 
 // MARK: - Home Screen: Small (v2 HomeScreen "Battery")
 
-/// Each wearable's charge at a glance (v2 HomeScreen): its picture (the orb for an Omi pendant,
-/// its light on while connected), "Battery", the level large, and its state ("Omi · charging").
+/// Each wearable's charge at a glance (v2 HomeScreen): its picture (the product photo the app
+/// shows), "Battery", the level large, and its state ("Omi · charging").
 /// With more than one device, page dots show which it is; tapping them shows the next (iOS 17).
 /// The phone is never a device here.
 struct SmallBatteryView: View {
@@ -190,25 +190,22 @@ struct SmallBatteryView: View {
     }
 }
 
-/// A wearable's own picture: the orb for an Omi pendant (its light on while connected), the
-/// product photo for the rest; dimmed while not connected.
+/// A wearable's own picture, the product photo the app shows. While not connected the Omi pendant
+/// shows its lights-off photo (as the app's device page does) and other devices are dimmed.
 struct DevicePicture: View {
     let device: WidgetDevice?
     let size: CGFloat
 
     var body: some View {
-        Group {
-            if let device, device.image != "pendant" {
-                Image(device.image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: size, height: size)
-                    .opacity(device.connected ? 1 : 0.55)
-            } else {
-                WidgetPendantOrb(active: device?.connected == true, size: size)
-            }
-        }
-        .accessibilityHidden(true)
+        let connected = device?.connected ?? false
+        let image = device?.image ?? "device-omi"
+        let lightsOff = image == "device-omi" && !connected
+        Image(lightsOff ? "device-omi-off" : image)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .opacity(connected || lightsOff ? 1 : 0.55)
+            .accessibilityHidden(true)
     }
 }
 

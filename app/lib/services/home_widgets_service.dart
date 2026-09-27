@@ -16,11 +16,13 @@ import 'package:omi/widgets/extensions/string.dart';
 /// (ios/BatteryWidget/SharedDefaults.swift): the reader's wearables, the next open tasks and the
 /// latest conversation. Pure, so each document can be checked without a phone.
 abstract final class HomeWidgetsPayload {
-  /// The picture the widget draws for [device]: "pendant" for an Omi pendant (the widget draws
-  /// the orb), otherwise the product photo in the widget's assets.
+  /// The picture the widget shows for [device]: the product photo the app shows, from the widget's
+  /// assets. An Omi pendant is "device-omi", which the widget swaps for its lights-off photo while
+  /// disconnected, as the device page does.
   static String image(BtDevice device) {
     final path = DeviceUtils.getDeviceImageFromBtDevice(device);
     final pictures = {
+      Assets.images.omiWithoutRope.path: 'device-omi',
       Assets.images.appleWatch.path: 'device-apple-watch',
       Assets.images.beeDevice.path: 'device-bee',
       Assets.images.friendPendant.path: 'device-friend',
@@ -32,7 +34,7 @@ abstract final class HomeWidgetsPayload {
       Assets.images.fieldy.path: 'device-fieldy',
       Assets.images.neoOne.path: 'device-neo',
     };
-    return pictures[path] ?? 'pendant';
+    return pictures[path] ?? 'device-omi';
   }
 
   /// The wearables the Devices widget pages through: the connected one first, then the most
