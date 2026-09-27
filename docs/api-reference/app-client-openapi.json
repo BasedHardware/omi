@@ -6229,12 +6229,24 @@
             ],
             "title": "Clock Epoch"
           },
+          "conflicts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflicts"
+          },
           "coverage": {
             "anyOf": [
               {
                 "enum": [
                   "unknown",
-                  "incomplete"
+                  "incomplete",
+                  "mapped"
                 ],
                 "type": "string"
               },
@@ -6265,6 +6277,36 @@
               }
             ],
             "title": "Reason"
+          },
+          "receipts": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipts"
+          },
+          "runs": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runs"
           },
           "source_end": {
             "anyOf": [

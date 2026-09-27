@@ -966,9 +966,12 @@ export interface CaptureEvidenceMetadata {
   capture_root?: string | null;
   channel?: string | null;
   clock_epoch?: string | null;
-  coverage?: "unknown" | "incomplete" | null;
+  conflicts?: number | null;
+  coverage?: "unknown" | "incomplete" | "mapped" | null;
   origin?: string | null;
   reason?: string | null;
+  receipts?: Array<Record<string, unknown>> | null;
+  runs?: Array<Record<string, unknown>> | null;
   source_end?: number | null;
   source_start?: number | null;
   version?: 1;
