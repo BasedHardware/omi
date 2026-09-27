@@ -349,6 +349,22 @@
           ]
         },
         {
+          "name": "NEXT_PUBLIC_POSTHOG_KEY",
+          "required": true,
+          "source": "repository_config",
+          "allowed_scopes": [
+            "repository"
+          ]
+        },
+        {
+          "name": "NEXT_PUBLIC_POSTHOG_HOST",
+          "required": false,
+          "source": "repository_config",
+          "allowed_scopes": [
+            "repository"
+          ]
+        },
+        {
           "name": "API_URL",
           "required": true,
           "source": "repository_config",

@@ -339,6 +339,29 @@ def test_same_source_different_or_unknown_device_is_not_grouped(store, seam, dev
     assert store.rows == before
 
 
+def test_shadow_enabled_keeps_grouping_unchanged(store, seam, monkeypatch):
+    monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
+    shadow_pairs = []
+    monkeypatch.setattr(policy, 'submit_same_scene', lambda *args: shadow_pairs.append(args))
+    monkeypatch.setattr(policy, 'submit_resummary', lambda *args: None)
+    store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('desktop')]))
+    assert store.rows[path('desktop')]['capture_group'] == store.rows[path('pendant')]['capture_group']
+    assert shadow_pairs
+
+
+def test_later_capture_join_submits_resummary_with_existing_primary(store, seam, monkeypatch):
+    submitted = []
+    monkeypatch.setattr(policy, 'submit_same_scene', lambda *args: None)
+    monkeypatch.setattr(policy, 'submit_resummary', lambda *args: submitted.append(args))
+    store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('desktop')]))
+    store.rows[path('late')] = row('late', 'phone', 150, 580)
+    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('late')]))
+    assert (UID, 'pendant', 'late') in submitted
+    assert store.rows[path('late')]['capture_group'] == store.rows[path('pendant')]['capture_group']
+
+
 def test_window_overlap_without_shared_speech_is_linked_but_not_grouped(store, seam):
     store.rows.update(
         {path('pendant'): row('pendant', 'omi', text=OTHER), path('desktop'): row('desktop', 'desktop', 100, 590)}
@@ -442,8 +465,14 @@ def test_stale_members_are_pruned_when_the_group_is_touched_again(store, gone):
 
 
 def test_separate_route_is_sticky_and_idempotent(monkeypatch):
-    monkeypatch.setattr(router, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(
+        router,
+        '_get_valid_conversation_by_id',
+        lambda uid, cid: {'id': cid, 'capture_group': {'members': [{'id': cid}, {'id': 'pendant'}]}},
+    )
     calls = []
+    outcomes = []
+    monkeypatch.setattr(router, 'record_capture_outcome', lambda *args, **kwargs: outcomes.append((args, kwargs)))
     results = iter([True, False])
     monkeypatch.setattr(
         router.conversations_db, 'leave_capture_group', lambda *a, **kw: calls.append((a, kw)) or next(results)
@@ -451,3 +480,4 @@ def test_separate_route_is_sticky_and_idempotent(monkeypatch):
     assert router.separate_conversation_from_capture_group('desktop', uid=UID).status == 'ok'
     assert router.separate_conversation_from_capture_group('desktop', uid=UID).status == 'unchanged'
     assert calls[0] == ((UID, 'desktop'), {'sticky': True})
+    assert outcomes == [((UID, 'separate', ['desktop', 'pendant']), {'separated_id': 'desktop'})]

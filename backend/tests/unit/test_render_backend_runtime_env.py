@@ -503,13 +503,13 @@ VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~20
 
 
 @pytest.mark.parametrize(
-    ('env', 'project'),
+    ('env', 'project', 'gemini_secret'),
     [
-        ('dev', 'based-hardware-dev'),
-        ('prod', 'based-hardware'),
+        ('dev', 'based-hardware-dev', 'GEMINI_API_KEY'),
+        ('prod', 'based-hardware', 'DESKTOP_GEMINI_API_KEY'),
     ],
 )
-def test_desktop_backend_compose_pins_vertex_pt(env, project):
+def test_desktop_backend_compose_pins_vertex_pt(env, project, gemini_secret):
     desktop = _MANIFEST['environments'][env]['desktop_backend']
     rendered = _MODULE['_render_env_vars'](desktop['env'])
     assert 'USE_VERTEX_AI=true' in rendered, VERTEX_PT_CONTRACT
@@ -517,7 +517,9 @@ def test_desktop_backend_compose_pins_vertex_pt(env, project):
     assert 'GCP_LOCATION=us-central1' in rendered, VERTEX_PT_CONTRACT
     assert 'PROMETHEUS_SIDECAR_PORT=9090' in rendered
     assert _MODULE['_render_secrets'](desktop['secrets']) == (
-        'METRICS_SECRET=METRICS_SECRET:latest\nPOSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest'
+        f'GEMINI_API_KEY={gemini_secret}:latest\n'
+        'METRICS_SECRET=METRICS_SECRET:latest\n'
+        'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest'
     )
     docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
     assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')
