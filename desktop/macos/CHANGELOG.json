@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed always-on recordings silently failing to upload (and being lost) after being stopped by paywall, sleep, device, or STT-fallback events."
+  ],
   "releases": [
     {
       "version": "0.12.403",
