@@ -46,6 +46,7 @@ SYNC_JOB_TASK_PAYLOAD_KEYS = frozenset(
         'source',
         'should_lock',
         'conversation_id',
+        'recording_session_id',
         'geolocation',
         'client_device_id',
         'client_platform',
