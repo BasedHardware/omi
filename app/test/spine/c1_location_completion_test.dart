@@ -35,8 +35,7 @@ class PhoneSpy {
     await real.finalizeCurrentSession();
   }
 
-  Future<void> stampConversationId(int start, String id, {String? recordingSessionId}) async =>
-      await real.stampConversationId(start, id, recordingSessionId: recordingSessionId);
+  Future<void> stampConversationId(int start, String id) async => await real.stampConversationId(start, id);
 }
 
 class SyncSpy {
