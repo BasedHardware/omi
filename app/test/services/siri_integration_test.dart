@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
@@ -122,6 +123,17 @@ class _ColdOwnerHost extends SiriIndexApi {
 }
 
 void main() {
+  test('iOS reindex callbacks do not bypass the owner-fenced Spotlight queue', () {
+    final source = File('ios/Runner/SiriIntegration/SiriEntities.swift').readAsStringSync();
+    for (final name in ['ConversationQuery', 'MemoryQuery', 'TaskQuery']) {
+      final start = source.indexOf('struct $name: IndexedEntityQuery');
+      expect(start, greaterThanOrEqualTo(0), reason: name);
+      final end = source.indexOf('\n}', start);
+      final query = source.substring(start, end);
+      expect(query.contains('CSSearchableIndex(name:'), isFalse, reason: name);
+      expect(query.contains('SiriSnapshotStore.shared.reindex'), isTrue, reason: name);
+    }
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   final now = DateTime.now();
 
@@ -292,7 +304,10 @@ void main() {
     final host = RecordingSiriHost();
     final siri = SiriIntegration.forTest(host, 'owner-b');
     Memory memory(String id, int ageDays,
-            {bool deleted = false, DateTime? invalidAt, MemoryLayer? layer = MemoryLayer.longTerm}) =>
+            {bool deleted = false,
+            DateTime? invalidAt,
+            DateTime? expiresAt,
+            MemoryLayer? layer = MemoryLayer.longTerm}) =>
         Memory(
           id: id,
           uid: 'owner-b',
@@ -303,6 +318,7 @@ void main() {
           visibility: MemoryVisibility.private,
           deleted: deleted,
           invalidAt: invalidAt,
+          expiresAt: expiresAt,
           layer: layer,
           layerIsExplicit: true,
         );
@@ -310,14 +326,16 @@ void main() {
     await siri.upsertMemories([
       memory('older', 10),
       memory('expired', 2, invalidAt: now.subtract(const Duration(days: 1))),
+      memory('compat-expired', 2, expiresAt: now.subtract(const Duration(days: 1))),
       memory('deleted', 1, deleted: true),
       memory('archived', 0, layer: MemoryLayer.archive),
-      memory('newest', 0),
+      memory('newest', 0, expiresAt: now.add(const Duration(days: 1)), invalidAt: now.add(const Duration(days: 2))),
     ]);
 
     expect(host.owner, 'owner-b');
     expect(host.memories.map((row) => row.id), ['newest', 'older']);
     expect(host.memories.first.content, 'Content newest');
+    expect(host.memories.first.expiresAtMs, now.add(const Duration(days: 1)).millisecondsSinceEpoch);
     await siri.upsertMemories([memory('newest', 0, layer: MemoryLayer.archive)]);
     expect(host.deletedType, 'memory');
     expect(host.deletedIds, ['newest']);

@@ -388,6 +388,20 @@ final class SiriIntentServiceTests: XCTestCase {
     XCTAssertEqual(MemoryEntity(record).eligibilityCutoff, invalidAt)
   }
 
+  func testMemoryEarlierCompatibilityExpiryWinsOverLedgerInvalidation() throws {
+    guard #available(macOS 15.4, *) else { return }
+    let expiry = Date(timeIntervalSince1970: 2_000_000_050)
+    let invalidAt = Date(timeIntervalSince1970: 2_000_000_100)
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    let record = MemoryRecord(
+      backendId: "compat-expiry", backendSynced: true, content: "Expires first",
+      expiresAt: expiry,
+      ledgerMetadataJson: "{\"invalid_at\":\"\(formatter.string(from: invalidAt))\"}")
+    XCTAssertEqual(MemoryEntity(record).eligibilityCutoff, expiry)
+    XCTAssertFalse(SiriIndexScope.memory(record, now: expiry))
+  }
+
   func testConversationCapCountsEligibleRowsOnly() {
     let now = Date(timeIntervalSince1970: 2_000_000_000)
     let hidden = (0..<SiriIndexScope.conversationLimit).map { index in

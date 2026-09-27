@@ -65,7 +65,7 @@ bool siriMemoryIsIndexable(Memory row, DateTime now, {String? owner}) =>
     row.siriVisibilityValid &&
     row.siriTierValid &&
     (row.layer == null || row.layer == MemoryLayer.shortTerm || row.layer == MemoryLayer.longTerm) &&
-    (row.invalidAt == null || row.invalidAt!.isAfter(now)) &&
+    (row.siriExpiryAt == null || row.siriExpiryAt!.isAfter(now)) &&
     (row.ledgerStatus == null || row.ledgerStatus == 'active') &&
     (row.supersededBy == null || row.supersededBy!.isEmpty) &&
     row.userReview != false;
@@ -452,7 +452,7 @@ class SiriIntegration extends SiriEventsApi {
               id: row.id,
               content: row.content,
               createdAtMs: row.createdAt.millisecondsSinceEpoch,
-              expiresAtMs: row.invalidAt?.millisecondsSinceEpoch,
+              expiresAtMs: row.siriExpiryAt?.millisecondsSinceEpoch,
             ))
         .toList();
   }

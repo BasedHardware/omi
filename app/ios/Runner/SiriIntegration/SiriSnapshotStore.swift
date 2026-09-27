@@ -558,6 +558,18 @@ final class SiriSnapshotStore {
                 dueDate: $0.dueAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000) },
                 completionDate: $0.completedAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000) }) }
     }
+    /// System callbacks use the same owner gate as mutations and wipes.
+    func reindex(type: String, ids: [String], expectedUid: String) async throws {
+        try await serialized {
+            guard enabled, #available(iOS 27.0, *) else { return }
+            try requireValidOwner(expectedUid)
+            #if OMI_SIRI_PROBE
+            await SiriReindexProbeGate.shared.pauseIfArmed()
+            #endif
+            try await applyIncremental(type: type, ids: ids, uid: expectedUid)
+        }
+    }
+
     /// Incremental mutations never empty the owner's whole index.
     private func applyIncremental(type: String, ids: [String], uid: String) async throws {
         guard enabled, #available(iOS 27.0, *) else { return }
@@ -568,7 +580,7 @@ final class SiriSnapshotStore {
         do {
             switch type {
             case "conversation":
-                let entities = conversations(ids: ids)
+                let entities = conversations(ids: ids) + memoryNotes(ids: ids)
                 let present = Set(entities.map(\.id))
                 let removed = ids.filter { !present.contains($0) }
                 if !removed.isEmpty {
@@ -585,6 +597,17 @@ final class SiriSnapshotStore {
                 }
                 try requireValidOwner(uid)
                 if !entities.isEmpty { try await index.indexAppEntities(entities, priority: 0) }
+                // A memory can also be represented as a Notes schema entity.
+                // Reindex may create that entry, so every memory mutation must
+                // update or remove it under the same owner gate.
+                let notes = conversations(ids: ids) + memoryNotes(ids: ids)
+                let noteIDs = Set(notes.map(\.id))
+                let removedNotes = ids.filter { !noteIDs.contains($0) }
+                if !removedNotes.isEmpty {
+                    try await index.deleteAppEntities(identifiedBy: removedNotes, ofType: ConversationEntity.self)
+                }
+                try requireValidOwner(uid)
+                if !notes.isEmpty { try await index.indexAppEntities(notes, priority: 0) }
             case "task":
                 let entities = tasks(ids: ids)
                 let present = Set(entities.map(\.id))
@@ -623,7 +646,7 @@ final class SiriSnapshotStore {
                 snapshot.tasks = snapshot.tasks.filter { eligible($0.value, now: now) }
             }
             lock.lock()
-            let count = snapshot.conversations.count + snapshot.memories.count + snapshot.tasks.count + 3
+            let count = snapshot.conversations.count + 2 * snapshot.memories.count + snapshot.tasks.count + 3
             lock.unlock()
             do {
             try await serialized {
@@ -638,6 +661,8 @@ final class SiriSnapshotStore {
                 try await index.indexAppEntities(conversations(ids: nil), priority: 0)
                 try requireValidOwner(uid)
                 try await index.indexAppEntities(memories(ids: nil), priority: 0)
+                try requireValidOwner(uid)
+                try await index.indexAppEntities(memoryNotes(ids: nil), priority: 0)
                 try requireValidOwner(uid)
                 try await index.indexAppEntities(tasks(ids: nil), priority: 0)
                 try requireValidOwner(uid)

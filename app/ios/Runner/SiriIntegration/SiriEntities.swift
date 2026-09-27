@@ -236,8 +236,8 @@ struct ConversationQuery: IndexedEntityQuery {
     }
     func suggestedEntities() async throws -> [ConversationEntity] { SiriSnapshotStore.shared.conversations(ids: nil) }
     func reindexEntities(for identifiers: [String], indexDescription: CSSearchableIndexDescription) async throws {
-        guard let indexName = SiriSnapshotStore.shared.indexName else { return }
-        try await CSSearchableIndex(name: indexName).indexAppEntities(try await entities(for: identifiers))
+        guard let owner = SiriSnapshotStore.shared.owner else { return }
+        try await SiriSnapshotStore.shared.reindex(type: "conversation", ids: identifiers, expectedUid: owner)
     }
     func reindexAllEntities(indexDescription: CSSearchableIndexDescription) async throws {
         try await SiriSnapshotStore.shared.rebuildIndex()
@@ -248,8 +248,8 @@ struct MemoryQuery: IndexedEntityQuery {
     func entities(for identifiers: [String]) async throws -> [MemoryEntity] { SiriSnapshotStore.shared.memories(ids: identifiers) }
     func suggestedEntities() async throws -> [MemoryEntity] { SiriSnapshotStore.shared.memories(ids: nil) }
     func reindexEntities(for identifiers: [String], indexDescription: CSSearchableIndexDescription) async throws {
-        guard let indexName = SiriSnapshotStore.shared.indexName else { return }
-        try await CSSearchableIndex(name: indexName).indexAppEntities(try await entities(for: identifiers))
+        guard let owner = SiriSnapshotStore.shared.owner else { return }
+        try await SiriSnapshotStore.shared.reindex(type: "memory", ids: identifiers, expectedUid: owner)
     }
     func reindexAllEntities(indexDescription: CSSearchableIndexDescription) async throws {
         try await SiriSnapshotStore.shared.rebuildIndex()
@@ -260,8 +260,8 @@ struct TaskQuery: IndexedEntityQuery {
     func entities(for identifiers: [String]) async throws -> [TaskEntity] { SiriSnapshotStore.shared.tasks(ids: identifiers) }
     func suggestedEntities() async throws -> [TaskEntity] { SiriSnapshotStore.shared.tasks(ids: nil) }
     func reindexEntities(for identifiers: [String], indexDescription: CSSearchableIndexDescription) async throws {
-        guard let indexName = SiriSnapshotStore.shared.indexName else { return }
-        try await CSSearchableIndex(name: indexName).indexAppEntities(try await entities(for: identifiers))
+        guard let owner = SiriSnapshotStore.shared.owner else { return }
+        try await SiriSnapshotStore.shared.reindex(type: "task", ids: identifiers, expectedUid: owner)
     }
     func reindexAllEntities(indexDescription: CSSearchableIndexDescription) async throws {
         try await SiriSnapshotStore.shared.rebuildIndex()

@@ -276,6 +276,21 @@ enum SiriDebugProbe {
                     }
                     NSLog("[SiriProbe] deletedMemoryQuery=%d deletedSpotlightCount=%d",
                           SiriSnapshotStore.shared.memories(ids: [row.id]).count, deletedIndexCount)
+                    let noteRow = SiriMemory(id: "probe-memory-note-delete",
+                        content: "probe-memory-note-delete-private-2026",
+                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([noteRow], uid: config.uid)
+                    try await ConversationQuery().reindexEntities(for: [noteRow.id],
+                        indexDescription: CSSearchableIndexDescription())
+                    try await SiriSnapshotStore.shared.delete(type: "memory", ids: [noteRow.id], uid: config.uid)
+                    let deletedNoteCount: Int = await withCheckedContinuation { continuation in
+                        let query = CSSearchQuery(queryString: "title == \"probe-memory-note-delete-private-2026\"",
+                            queryContext: nil)
+                        query.completionHandler = { _ in continuation.resume(returning: query.foundItemCount) }
+                        query.start()
+                    }
+                    NSLog("[SiriProbe] deletedMemoryNoteAbsent=%@ count=%d",
+                          deletedNoteCount == 0 ? "PASS" : "FAIL", deletedNoteCount)
                     let disabledRow = SiriMemory(id: "probe-disabled", content: "probe-disabled-index-2026",
                         createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
                     try await SiriSnapshotStore.shared.upsert([disabledRow], uid: config.uid)
@@ -479,6 +494,30 @@ enum SiriDebugProbe {
                         }
                     }
                     OmiNativeAPI.testSession = nil
+                    let racingMemory = SiriMemory(id: "probe-reindex-wipe", content: "probe-reindex-wipe-private-2026",
+                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([racingMemory], uid: next.uid)
+                    await SiriReindexProbeGate.shared.arm()
+                    let reindex = Task {
+                        try await MemoryQuery().reindexEntities(for: [racingMemory.id],
+                            indexDescription: CSSearchableIndexDescription())
+                    }
+                    await SiriReindexProbeGate.shared.waitUntilPaused()
+                    let concurrentWipe = Task { try await SiriSnapshotStore.shared.wipe() }
+                    try await Task.sleep(nanoseconds: 200_000_000)
+                    await SiriReindexProbeGate.shared.release()
+                    try await reindex.value
+                    try await concurrentWipe.value
+                    let raceCount: Int = await withCheckedContinuation { continuation in
+                        let query = CSSearchQuery(queryString: "title == \"probe-reindex-wipe-private-2026\"",
+                            queryContext: nil)
+                        query.completionHandler = { _ in continuation.resume(returning: query.foundItemCount) }
+                        query.start()
+                    }
+                    NSLog("[SiriProbe] reindexConcurrentWipeEmpty=%@ count=%d",
+                          raceCount == 0 ? "PASS" : "FAIL", raceCount)
+                    try await SiriSnapshotStore.shared.bind(uid: next.uid)
+                    try SiriSession.shared.publish(next)
                     SiriSnapshotStore.shared.simulateIndexDeleteFailure = true
                     do { try await SiriSnapshotStore.shared.wipe() }
                     catch { NSLog("[SiriProbe] injectedWipeFailure=observed") }
@@ -506,6 +545,34 @@ enum SiriDebugProbe {
             SiriSession.shared.clear()
             try? await SiriSnapshotStore.shared.wipe()
         }
+    }
+}
+
+/// Holds a system reindex inside the owner queue so the probe can submit a
+/// concurrent wipe and assert that the wipe is the final Spotlight operation.
+actor SiriReindexProbeGate {
+    static let shared = SiriReindexProbeGate()
+    private var armed = false
+    private var paused: CheckedContinuation<Void, Never>?
+    private var reached: CheckedContinuation<Void, Never>?
+
+    func arm() { armed = true }
+    func pauseIfArmed() async {
+        guard armed else { return }
+        armed = false
+        await withCheckedContinuation { continuation in
+            paused = continuation
+            reached?.resume()
+            reached = nil
+        }
+    }
+    func waitUntilPaused() async {
+        if paused != nil { return }
+        await withCheckedContinuation { reached = $0 }
+    }
+    func release() {
+        paused?.resume()
+        paused = nil
     }
 }
 

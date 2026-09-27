@@ -4,6 +4,33 @@ import 'package:omi/services/siri_integration.dart';
 
 void main() {
   group('MemoryLayer decode', () {
+    test('Siri uses the earliest compatibility memory expiry', () {
+      final base = <String, dynamic>{
+        'id': 'compat-expiry',
+        'uid': 'user-1',
+        'content': 'Legacy expiring memory',
+        'category': 'interesting',
+        'created_at': '2026-06-21T10:00:00.000Z',
+        'updated_at': '2026-06-21T10:05:00.000Z',
+      };
+      final now = DateTime.utc(2026, 6, 22);
+      final expired = Memory.fromJson({...base, 'expires_at': '2026-06-22T00:00:00Z'});
+      expect(siriMemoryIsIndexable(expired, now, owner: 'user-1'), isFalse);
+      final earlierExpiry = Memory.fromJson({
+        ...base,
+        'expires_at': '2026-06-23T00:00:00Z',
+        'invalid_at': '2026-06-24T00:00:00Z',
+      });
+      expect(earlierExpiry.siriExpiryAt, DateTime.utc(2026, 6, 23));
+      expect(siriMemoryIsIndexable(earlierExpiry, now, owner: 'user-1'), isTrue);
+      expect(Memory.fromJson(earlierExpiry.toJson()).siriExpiryAt?.toUtc(), DateTime.utc(2026, 6, 23));
+      final earlierInvalidation = Memory.fromJson({
+        ...base,
+        'expires_at': '2026-06-24T00:00:00Z',
+        'invalid_at': '2026-06-23T00:00:00Z',
+      });
+      expect(earlierInvalidation.siriExpiryAt?.toUtc(), DateTime.utc(2026, 6, 23));
+    });
     test('Siri accepts absent and null legacy tiers but excludes archive', () {
       final base = <String, dynamic>{
         'id': 'legacy-1',

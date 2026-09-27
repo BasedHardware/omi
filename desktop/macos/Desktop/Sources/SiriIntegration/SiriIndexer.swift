@@ -108,6 +108,7 @@ actor SiriIndexer {
   }
 
   private func expireDueMemories(expectedOwner: String) async {
+    guard #available(macOS 27, *) else { return }
     let now = Date()
     let next = SiriIndexScope.nextCutoff(
       Array(indexedMemoryExpirations.values) + Array(indexedConversationCutoffs.values)
@@ -135,6 +136,7 @@ actor SiriIndexer {
       let due = try await SiriMemoryExpirySweep.deleteDue(indexedMemoryExpirations, now: now) { ids in
         for chunk in ids.chunkedSiriIndex(200) {
           try await index.deleteAppEntities(identifiedBy: chunk, ofType: MemoryEntity.self)
+          try await index.deleteAppEntities(identifiedBy: chunk, ofType: ConversationEntity.self)
         }
       }
       for id in due { indexedMemoryExpirations.removeValue(forKey: id) }
@@ -236,6 +238,7 @@ actor SiriIndexer {
     guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
     defer { finishOperation() }
     try await index.deleteAppEntities(identifiedBy: [id], ofType: MemoryEntity.self)
+    try await index.deleteAppEntities(identifiedBy: [id], ofType: ConversationEntity.self)
     indexedMemoryExpirations.removeValue(forKey: id)
     scheduleNextMemoryExpiry(owner: expectedOwner)
   }
@@ -246,6 +249,7 @@ actor SiriIndexer {
     defer { finishOperation() }
     for chunk in ids.chunkedSiriIndex(200) {
       try await index.deleteAppEntities(identifiedBy: chunk, ofType: MemoryEntity.self)
+      try await index.deleteAppEntities(identifiedBy: chunk, ofType: ConversationEntity.self)
     }
     for id in ids { indexedMemoryExpirations.removeValue(forKey: id) }
     scheduleNextMemoryExpiry(owner: expectedOwner)

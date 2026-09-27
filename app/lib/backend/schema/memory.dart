@@ -107,6 +107,15 @@ class Memory {
   final String? subjectEntityId;
   final String? supersededBy;
   final DateTime? invalidAt;
+
+  /// Older compatibility responses can expire a memory without ledger invalidation.
+  final DateTime? expiresAt;
+  DateTime? get siriExpiryAt {
+    if (invalidAt == null) return expiresAt;
+    if (expiresAt == null) return invalidAt;
+    return invalidAt!.isBefore(expiresAt!) ? invalidAt : expiresAt;
+  }
+
   final DateTime? validAt;
   final bool intentBacked;
   final int curationWeight;
@@ -161,6 +170,7 @@ class Memory {
     this.subjectEntityId,
     this.supersededBy,
     this.invalidAt,
+    this.expiresAt,
     this.validAt,
     this.intentBacked = false,
     this.curationWeight = 0,
@@ -306,6 +316,7 @@ class Memory {
       subjectEntityId: generated.subjectEntityId,
       supersededBy: generated.supersededBy,
       invalidAt: generated.invalidAt,
+      expiresAt: _parseOptionalDateTime(json['expires_at']),
       validAt: generated.validAt,
       intentBacked: generated.intentBacked,
       curationWeight: generated.curationWeight,
@@ -352,6 +363,7 @@ class Memory {
       if (subjectEntityId != null) 'subject_entity_id': subjectEntityId,
       if (supersededBy != null) 'superseded_by': supersededBy,
       if (invalidAt != null) 'invalid_at': invalidAt!.toUtc().toIso8601String(),
+      if (expiresAt != null) 'expires_at': expiresAt!.toUtc().toIso8601String(),
       if (validAt != null) 'valid_at': validAt!.toUtc().toIso8601String(),
       'intent_backed': intentBacked,
       'curation_weight': curationWeight,
