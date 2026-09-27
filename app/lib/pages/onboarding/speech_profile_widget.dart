@@ -10,6 +10,7 @@ import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'guided_voice_controller.dart';
 import 'guided_voice_io.dart';
 
@@ -127,7 +128,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
     if (resume != null) {
       unawaited(() async {
         await _startTask;
-        await resume();
+        try {
+          await resume();
+        } catch (e, st) {
+          Logger.error('[SpeechProfileWidget] capture restart on dispose failed: $e\n$st');
+        }
       }());
     }
     super.dispose();
@@ -219,9 +224,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
           if (loading)
             const OmiSpinner(size: OmiSpinnerSize.small)
           else
-            Icon(success ? Icons.check_circle_outline : Icons.mic_none, size: 20, color: Colors.white),
+            Icon(success ? Icons.check_circle_outline : Icons.mic_none, size: 20, color: OmiColors.textPrimary),
           const SizedBox(width: 10),
-          Flexible(child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70))),
+          Flexible(
+              child: Text(text,
+                  textAlign: TextAlign.center, style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7)))),
         ]),
       );
 
@@ -248,8 +255,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                   key: const Key('introduction_progress'),
                   value: flow.progress,
                   minHeight: 6,
-                  color: Colors.white,
-                  backgroundColor: Colors.white24,
+                  color: OmiColors.textPrimary,
+                  backgroundColor: OmiColors.textPrimary.withValues(alpha: 0.24),
                   semanticsLabel: copy('title'),
                   semanticsValue: '${(flow.progress * 100).round()}%',
                 ))),
@@ -267,7 +274,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
             child: TextButton(
               key: const Key('introduction_another'),
               onPressed: ready && !flow.isGoalPrompt ? flow.changePrompt : null,
-              style: TextButton.styleFrom(foregroundColor: Colors.white70),
+              style: TextButton.styleFrom(foregroundColor: OmiColors.textPrimary.withValues(alpha: 0.7)),
               child: Text(copy('another')),
             )),
       const SizedBox(height: 24),
@@ -280,11 +287,13 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
               key: const Key('introduction_audio_level'),
               value: flow.level,
               minHeight: 8,
-              backgroundColor: Colors.white12,
-              color: Colors.white,
+              backgroundColor: OmiColors.textPrimary.withValues(alpha: 0.12),
+              color: OmiColors.textPrimary,
             )),
         const SizedBox(height: 12),
-        Text(copy('silence'), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, height: 1.4)),
+        Text(copy('silence'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7), height: 1.4)),
       ] else if (flow.busy || _stoppingCapture)
         _status(transcribing ? context.l10n.transcribing : context.l10n.loading, loading: true)
       else if (paused)
@@ -311,7 +320,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
         ),
       ] else if (flow.error != null) ...[
         const SizedBox(height: 12),
-        Text(copy('transcriptionError'), style: const TextStyle(color: Colors.white, height: 1.5)),
+        Text(copy('transcriptionError'), style: TextStyle(color: OmiColors.textPrimary, height: 1.5)),
       ],
     ]);
   }
@@ -323,14 +332,14 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
         const SizedBox(height: 20),
         for (var i = 0; i < flow.answers.length; i++) ...[
           DecoratedBox(
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             child: Padding(
                 padding: const EdgeInsets.fromLTRB(4, 8, 16, 8),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Checkbox(
                       value: flow.answers[i].keep,
-                      activeColor: Colors.white,
-                      checkColor: Colors.black,
+                      activeColor: OmiColors.accent,
+                      checkColor: OmiColors.onAccent,
                       onChanged:
                           flow.busy || flow.answers[i].locked ? null : (value) => flow.setKeep(i, value ?? false)),
                   Expanded(
@@ -342,16 +351,17 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                     maxLength: flow.answers[i].isGoal ? 500 : null,
                     enabled: !flow.busy && !flow.answers[i].locked,
                     onChanged: (value) => flow.edit(i, value),
-                    style: const TextStyle(color: Colors.white, height: 1.5),
+                    style: TextStyle(color: OmiColors.textPrimary, height: 1.5),
                     decoration: InputDecoration(
                         border: InputBorder.none,
                         counterText: '',
                         labelText: flow.answers[i].isGoal ? context.l10n.myGoal : context.l10n.memories,
-                        labelStyle: const TextStyle(color: Colors.white70)),
+                        labelStyle: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7))),
                   )),
                   if (flow.answers[i].saved)
-                    const Padding(
-                        padding: EdgeInsets.only(top: 14), child: Icon(Icons.check, color: Colors.white, size: 18)),
+                    Padding(
+                        padding: const EdgeInsets.only(top: 14),
+                        child: Icon(Icons.check, color: OmiColors.textPrimary, size: 18)),
                 ])),
           ),
           if (flow.answers[i].isGoal &&
@@ -363,11 +373,13 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                 child: TextButton(
                   key: Key('introduction_original_${flow.answers[i].id}'),
                   onPressed: flow.busy ? null : () => flow.useOriginalGoal(i),
-                  child: Text(copy('originalGoal'), style: const TextStyle(color: Colors.white70)),
+                  child:
+                      Text(copy('originalGoal'), style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7))),
                 )),
           const SizedBox(height: 12),
         ],
-        if (flow.answers.isEmpty) Text(copy('noMemories'), style: const TextStyle(color: Colors.white70, height: 1.5)),
+        if (flow.answers.isEmpty)
+          Text(copy('noMemories'), style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7), height: 1.5)),
         const SizedBox(height: 20),
         // saveAll() enrolls the voice first, so `voiceSaved` is already true while the
         // answers are still uploading: both receipts render together for the whole
@@ -382,16 +394,16 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
         else if (flow.stage == IntroductionStage.savingVoice)
           _status(copy('savingVoice'), loading: true)
         else if (flow.voiceError == 'short')
-          Text(copy('short'), style: const TextStyle(color: Colors.white, height: 1.5))
+          Text(copy('short'), style: TextStyle(color: OmiColors.textPrimary, height: 1.5))
         else if (flow.voiceError == 'upload')
-          Text(copy('uploadError'), style: const TextStyle(color: Colors.white, height: 1.5)),
+          Text(copy('uploadError'), style: TextStyle(color: OmiColors.textPrimary, height: 1.5)),
         if (flow.voiceError == 'voiceUnavailable')
-          Text(copy('voiceUnavailable'), style: const TextStyle(color: Colors.white, height: 1.5)),
+          Text(copy('voiceUnavailable'), style: TextStyle(color: OmiColors.textPrimary, height: 1.5)),
         if (flow.error == 'goal' || flow.error == 'goalLong')
           Text(copy(flow.error == 'goal' ? 'goalError' : 'goalLong'),
-              style: const TextStyle(color: Colors.white, height: 1.5)),
+              style: TextStyle(color: OmiColors.textPrimary, height: 1.5)),
         if (flow.error == 'memories')
-          Text(copy('memoryError'), style: const TextStyle(color: Colors.white, height: 1.5)),
+          Text(copy('memoryError'), style: TextStyle(color: OmiColors.textPrimary, height: 1.5)),
       ]);
 
   List<Widget> _actions() {
@@ -428,14 +440,14 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                     flow.addSample();
                     unawaited(_start());
                   },
-            child: Text(copy('addSample'), style: const TextStyle(color: Colors.white70)),
+            child: Text(copy('addSample'), style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7))),
           ),
         if (!editing)
           TextButton(
               key: const Key('introduction_leave_review'),
               onPressed: flow.busy ? null : widget.goNext,
               child: Text(copy(_attemptedSave ? 'continueSaved' : 'without'),
-                  textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70))),
+                  textAlign: TextAlign.center, style: TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.7)))),
       ];
     }
     return [
@@ -485,7 +497,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
         return PopScope(
             canPop: !flow.saving,
             child: ColoredBox(
-                color: Colors.black,
+                color: OmiColors.surface0,
                 child: SafeArea(
                     child: Column(children: [
                   Expanded(
@@ -503,7 +515,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                       ],
                       const SizedBox(height: 28),
                       if (done) ...[
-                        const Icon(Icons.check_circle_outline, size: 64, color: Colors.white),
+                        Icon(Icons.check_circle_outline, size: 64, color: OmiColors.textPrimary),
                         const SizedBox(height: 24),
                         _status(flow.savedMemoryCount > 0 ? copy('savedMemories') : copy('noMemories'), success: true),
                         if (flow.goalSaved) ...[const SizedBox(height: 16), _status(copy('savedGoal'), success: true)],

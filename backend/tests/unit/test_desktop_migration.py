@@ -207,9 +207,6 @@ task_intelligence_stub.candidate_service = candidate_service_stub
 staged_migration_stub = _stub_module("utils.task_intelligence.staged_migration")
 staged_migration_stub.proposal_from_legacy_staged = MagicMock()
 staged_migration_stub.migrate_staged_tasks = MagicMock()
-rollout_stub = _stub_module("utils.task_intelligence.rollout")
-setattr(rollout_stub, "effective_task_workflow_control", lambda control, rollout: control)
-setattr(rollout_stub, "resolve_task_intelligence_for_user", MagicMock())
 request_validation_stub = _stub_module("utils.request_validation")
 request_validation_stub.validate_calendar_date = lambda value, field_name='date': value
 redis_stub = _stub_module("database.redis_db")
@@ -2435,12 +2432,12 @@ class TestFocusStatsDurationBoundary:
     """Verify duration_seconds=0 and missing duration behavior."""
 
     def test_distracted_zero_duration_treated_as_default(self):
-        """duration_seconds=0 is treated as 60 via `or 60` in get_focus_stats."""
+        """Explicit duration_seconds=0 is preserved as 0 seconds in get_focus_stats."""
         sessions = [{'status': 'distracted', 'app_or_site': 'Twitter', 'duration_seconds': 0}]
         with patch.object(focus_sessions_db, 'get_focus_sessions', return_value=sessions):
             result = focus_sessions_db.get_focus_stats('uid', '2026-04-06')
-        # duration_seconds=0 is falsy, so `or 60` defaults to 60
-        assert result['distracted_minutes'] == 1  # 60 seconds = 1 minute
+        assert result['distracted_minutes'] == 0
+        assert result['top_distractions'][0]['total_seconds'] == 0
 
     def test_distracted_missing_duration_treated_as_default(self):
         """Missing duration_seconds defaults to 60 via `or 60`."""

@@ -31,6 +31,17 @@ environment_shared:
             key: TWILIO_TWIML_APP_SID
         USE_VERTEX_AI:
           value: 'true'
+        TTS_PROVIDER:
+          value: gemini
+          category: rollout
+        GEMINI_API_KEY:
+          secret:
+            name: '{env}-omi-backend-secrets'
+            key: GEMINI_API_KEY
+        ELEVENLABS_API_KEY:
+          secret:
+            name: '{env}-omi-backend-secrets'
+            key: ELEVENLABS_API_KEY
         STT_PRERECORDED_MODEL:
           value: parakeet,modulate-velma-2
           category: stt_policy
@@ -66,6 +77,12 @@ environment_shared:
           category: runtime_identity
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'false'
+          category: rollout
+        STT_MULTI_LANGUAGE_HINTS:
+          value: 'true'
+          category: rollout
+        STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
+          value: '0'
           category: rollout
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
           value: '0'
@@ -329,6 +346,9 @@ environment_shared:
         category: rollout
       USE_VERTEX_AI:
         value: 'true'
+      TTS_PROVIDER:
+        value: gemini
+        category: rollout
       GOOGLE_CLOUD_PROJECT:
         value: '{compute_project}'
       GCP_LOCATION:
@@ -340,6 +360,9 @@ environment_shared:
         value: 'true'
         category: rollout
     secrets:
+      GEMINI_API_KEY:
+        secret: GEMINI_API_KEY
+        version: latest
       METRICS_SECRET:
         secret: METRICS_SECRET
         version: latest
@@ -530,6 +553,16 @@ environment_shared:
             provisional: true
             value: 'true'
             category: rollout
+          # 9e6b55b re-armed a one-job-per-uid backfill slot that 429s uploads
+          # (37% of sync uploads refused). Worker sequencing paces per UID.
+          SYNC_BACKFILL_INFLIGHT_LIMIT:
+            provisional: true
+            value: 'false'
+            category: rollout
+          SYNC_BACKFILL_UID_SEQUENCER:
+            provisional: true
+            value: 'off'
+            category: rollout
           USE_VERTEX_AI:
             value: 'true'
           STT_PRERECORDED_MODEL:
@@ -651,6 +684,16 @@ environment_shared:
           SYNC_BACKFILL_ENABLED:
             provisional: true
             value: 'true'
+            category: rollout
+          # 9e6b55b re-armed a one-job-per-uid backfill slot that 429s uploads
+          # (37% of sync uploads refused). Worker sequencing paces per UID.
+          SYNC_BACKFILL_INFLIGHT_LIMIT:
+            provisional: true
+            value: 'false'
+            category: rollout
+          SYNC_BACKFILL_UID_SEQUENCER:
+            provisional: true
+            value: 'off'
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
@@ -845,9 +888,6 @@ environment_shared:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
             category: memory_rollout
-          DAILY_SUMMARY_SELECTION_MODE:
-            value: indexed
-            category: rollout
           PINECONE_INDEX_NAME:
             category: integrations
           OMI_ENV_STAGE:

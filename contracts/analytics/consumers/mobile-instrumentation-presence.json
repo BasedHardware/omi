@@ -124,7 +124,8 @@
     "importHistoryPageOpened",
     "liveTranscriptCardClicked",
     "appleRemindersSyncCompleted",
-    "wrappedGenerationCompleted"
+    "wrappedGenerationCompleted",
+    "voiceReplyPlayback"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

@@ -8,13 +8,52 @@ without importing the FastAPI router.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Dict, NamedTuple, Optional
 
 from routers.listen.realtime_demand import RealtimeDemandTracker
 from utils.client_device import ClientDeviceContext
 from models.geolocation import Geolocation
+
+
+class ConversationCaptureOrigin(NamedTuple):
+    """One conversation's first-audio origin on the capture wall axis.
+
+    ``pinnable`` is True only for a conversation admitted as v2 from its
+    first audio (created fresh by this v2 session). A resumed row's adopted
+    ``started_at`` projects segment offsets but never pins the v2 marker —
+    that row stays legacy for its lifetime.
+    """
+
+    wall: float
+    pinnable: bool
+
+
+def persisted_started_seconds(started_at: Any) -> Optional[float]:
+    """Wall seconds for a persisted ``started_at`` (datetime, number, or ISO string).
+
+    Firestore rows may carry any of the three; an unparseable value returns
+    None so callers fail closed instead of crash-looping on ``.timestamp()``.
+    """
+    if started_at is None:
+        return None
+    if hasattr(started_at, 'timestamp'):
+        try:
+            return float(started_at.timestamp())
+        except (TypeError, ValueError, OverflowError):
+            return None
+    if isinstance(started_at, str):
+        try:
+            return datetime.fromisoformat(started_at).timestamp()
+        except ValueError:
+            return None
+    # bool is an int subclass in Python; a stray True/False must not be read
+    # as a 1970-epoch offset (1.0/0.0 seconds).
+    if isinstance(started_at, (int, float)) and not isinstance(started_at, bool):
+        return float(started_at)
+    return None
 
 
 class CustomSttMode(str, Enum):
@@ -65,9 +104,29 @@ class ListenSessionState:
     speaker_id_done: asyncio.Event = field(default_factory=asyncio.Event)
     speaker_map_dirty: bool = False
     first_audio_byte_timestamp: Optional[float] = None
+    # Capture sample clock (single-channel server-STT sessions): the per-socket
+    # sample cursor, per-conversation pinned first-audio origins (wall seconds),
+    # fresh conversations still awaiting their first accepted frame, and the
+    # recent capture ranges that resolve a mapped provider segment's owning
+    # conversation. The clock itself is internal to the socket; capture_timeline
+    # is None only for multi-channel and custom-STT sessions. capture_timeline_v2
+    # admits the v2 *persistence* (projected times, started_at pin, marker,
+    # pusher projection) for this recording only.
+    capture_timeline: Any = None
+    capture_timeline_v2: bool = False
+    conversation_capture_origins: Dict[str, 'ConversationCaptureOrigin'] = field(default_factory=dict)
+    conversations_awaiting_capture_origin: set = field(default_factory=set)
+    # Rows resumed with an unparseable started_at: their origin is unknowable,
+    # so they never pin the v2 marker and project against the legacy base.
+    conversations_legacy_locked: set = field(default_factory=set)
+    conversation_sample_ranges: Any = None
     live_transcription_attempt: Any = None
     client_live_transcription_attempt: Any = None
     live_transcription_failed: bool = False
+    # Headline SLI latch: flipped once when the first nonempty transcript batch
+    # was delivered to the client (runtime.complete_live_transcription). Read at
+    # teardown by _record_session_transcript_outcome.
+    live_transcript_delivered: bool = False
     last_usage_record_timestamp: Optional[float] = None
     words_transcribed_since_last_record: int = 0
     last_transcript_time: Optional[float] = None

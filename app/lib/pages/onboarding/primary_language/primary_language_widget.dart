@@ -99,7 +99,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
                       final isSelected = currentSelectedLanguage == language.value;
                       return ListTile(
                         title: Text(language.key, style: OmiType.body),
-                        trailing: isSelected ? const Icon(Icons.check_circle, color: OmiColors.accent) : null,
+                        trailing: isSelected ? Icon(Icons.check_circle, color: OmiColors.accent) : null,
                         selected: isSelected,
                         selectedTileColor: OmiColors.surface2,
                         shape: const RoundedRectangleBorder(borderRadius: OmiRadius.smAll),
@@ -243,7 +243,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
             excludeSemantics: true,
             child: Material(
               color: OmiColors.surface1,
-              shape: const RoundedRectangleBorder(
+              shape: RoundedRectangleBorder(
                 borderRadius: OmiRadius.lgAll,
                 side: BorderSide(color: OmiColors.border),
               ),
@@ -268,7 +268,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                         ),
                       ),
                       const SizedBox(width: OmiSpacing.sm),
-                      const Icon(Icons.keyboard_arrow_down, color: OmiColors.textTertiary, size: 24),
+                      Icon(Icons.keyboard_arrow_down, color: OmiColors.textTertiary, size: 24),
                     ],
                   ),
                 ),

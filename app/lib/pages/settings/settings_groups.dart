@@ -13,6 +13,7 @@ import 'package:omi/pages/settings/data_export.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -169,7 +170,7 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
           for (final mode in const [0, 1, 2])
             OmiSettingsRow(
               title: _voiceResponseModeLabel(mode),
-              trailing: mode == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+              trailing: mode == current ? Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
               showChevron: false,
               onTap: () => Navigator.of(sheetContext).pop(mode),
             ),
@@ -281,9 +282,36 @@ class NotificationsDisplayGroupPage extends StatefulWidget {
 }
 
 class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGroupPage> with _GroupRows {
+  String _appearanceLabel(ThemeMode mode) => switch (mode) {
+        ThemeMode.system => context.l10n.appearanceSystem,
+        ThemeMode.light => context.l10n.appearanceLight,
+        ThemeMode.dark => context.l10n.appearanceDark,
+      };
+
+  Future<void> _showAppearancePicker() async {
+    final provider = context.read<AppearanceProvider>();
+    final picked = await showOmiSheet<ThemeMode>(
+      context: context,
+      title: context.l10n.appearance,
+      builder: (sheetContext) => OmiSettingsGroup(
+        children: [
+          for (final mode in ThemeMode.values)
+            OmiSettingsRow(
+              title: _appearanceLabel(mode),
+              trailing: mode == provider.mode ? Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+              showChevron: false,
+              onTap: () => Navigator.of(sheetContext).pop(mode),
+            ),
+        ],
+      ),
+    );
+    if (picked != null && mounted) await provider.setMode(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final appearance = context.watch<AppearanceProvider>().mode;
     return _GroupPage(
       pageKey: 'settings_page_notifications',
       title: l10n.notificationsAndDisplay,
@@ -293,6 +321,13 @@ class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGrou
             row(SettingsDestination.notifications, icon: FontAwesomeIcons.solidBell, title: l10n.notifications),
             row(SettingsDestination.homeScreen, icon: FontAwesomeIcons.house, title: l10n.homeScreen),
             row(SettingsDestination.conversationDisplay, icon: FontAwesomeIcons.list, title: l10n.conversationDisplay),
+            OmiSettingsRow(
+              key: const ValueKey('settings_row_appearance'),
+              leading: const FaIcon(FontAwesomeIcons.circleHalfStroke),
+              title: l10n.appearance,
+              value: _appearanceLabel(appearance),
+              onTap: _showAppearancePicker,
+            ),
           ],
         ),
       ],

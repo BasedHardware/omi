@@ -42,10 +42,10 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
             color: Colors.transparent,
             child: Theme(
               data: ThemeData(
-                textSelectionTheme: const TextSelectionThemeData(
-                  cursorColor: Colors.white,
-                  selectionColor: Colors.white24,
-                  selectionHandleColor: Colors.white,
+                textSelectionTheme: TextSelectionThemeData(
+                  cursorColor: OmiColors.textPrimary,
+                  selectionColor: OmiColors.textPrimary.withValues(alpha: 0.24),
+                  selectionHandleColor: OmiColors.textPrimary,
                 ),
               ),
               child: Form(
@@ -56,8 +56,8 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                   placeholder: context.l10n.name,
                   keyboardType: TextInputType.name,
                   textCapitalization: TextCapitalization.words,
-                  placeholderStyle: const TextStyle(color: OmiColors.textTertiary),
-                  style: const TextStyle(color: Colors.white),
+                  placeholderStyle: TextStyle(color: OmiColors.textTertiary),
+                  style: TextStyle(color: OmiColors.textPrimary),
                   validator: _nameValidator(context),
                 ),
               ),
@@ -71,9 +71,9 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
               textCapitalization: TextCapitalization.words,
               decoration: InputDecoration(
                 labelText: context.l10n.name,
-                labelStyle: const TextStyle(color: Colors.white),
-                focusColor: Colors.white,
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300)),
+                labelStyle: TextStyle(color: OmiColors.textPrimary),
+                focusColor: OmiColors.textPrimary,
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: OmiColors.border)),
               ),
               validator: _nameValidator(context),
             ),
@@ -214,7 +214,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                           )
                         : ListView.separated(
                             itemCount: provider.people.length,
-                            separatorBuilder: (context, index) => const Divider(height: 1, color: OmiColors.border),
+                            separatorBuilder: (context, index) => Divider(height: 1, color: OmiColors.border),
                             itemBuilder: (context, index) {
                               final person = provider.people[index];
                               return Column(

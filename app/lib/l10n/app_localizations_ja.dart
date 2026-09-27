@@ -2448,12 +2448,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get detailedDiagnosticMessages => '詳細な診断メッセージ';
 
   @override
-  String get autoCreateSpeakers => '話者を自動作成';
-
-  @override
-  String get autoCreateWhenNameDetected => '名前が検出されたら自動作成';
-
-  @override
   String get followUpQuestions => 'フォローアップの質問';
 
   @override
@@ -10987,9 +10981,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcriptionUnavailableRecordingContinues => '文字起こしは利用できません。録音は端末上で続き、後で処理されます';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => '文字起こし不可 · 端末に保存中';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return '文字起こし待ち $pending/$total';
   }
@@ -11045,4 +11036,184 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get openCall => '通話を開く';
+
+  @override
+  String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => '携帯で録音する前に、ペンダントの Transcribe Later を停止してください。';
+
+  @override
+  String get captureNotTranscribing => '文字起こし停止中';
+
+  @override
+  String get captureAudioSavedTranscribesLater => '音声は保存済み、後で文字起こし';
+
+  @override
+  String get captureStillRecording => '録音は継続中';
+
+  @override
+  String get captureMicInUseElsewhere => '別のアプリがマイクを使用中';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      '通話または別のアプリがマイクを使用しているため、Omiは今は聞き取れません。マイクが空くとOmiは自動で再開します。それまでに録音した内容は保存されています。';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'カスタムの音声認識サービスに接続できません。Omiは音声をこのスマートフォンに保持し、サービスが復旧したら送信します。何も失われません。';
+
+  @override
+  String get captureStarting => '開始中…';
+
+  @override
+  String get capturePhoneStorageFull => '端末の空き容量なし';
+
+  @override
+  String get captureStorageAlmostFull => '空き容量わずか';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$nameほか';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Omiの回答を聞く';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => '了解しました。次の会議は20分後に始まります。';
+
+  @override
+  String get deviceOnboardingAllSetTitle => '準備ができました';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => '確認または変更するには行をタップしてください。';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'ボタンで質問すると、Omi が答えを読み上げます。';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => '最後の答えを聞いてください';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => '最後の答えを再生しています...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device まで';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => '電話のスピーカーを通して';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => '現在のオーディオ出力を通じて';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => '答えは画面上に残ります。何も語られない。';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription => 'プライベート。 AirPods、Bluetooth、または有線ヘッドフォンを介してのみ話します。';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'ヘッドフォンが接続されていない場合は、電話のスピーカーを使用します。';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omiは沈黙します。答えは引き続きアプリに表示されます。';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device 接続されました。 Omi がここで話します。';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => 'ヘッドフォンが接続されていません。 Omi は接続するまで沈黙を保ちます。';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '$device まで再生します。';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => '電話のスピーカーから大音量で再生されます。';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'これはいつでも $settings › $voiceResponse で変更できます。';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return '$settings › $deviceSettings › $deviceTutorial でいつでもこのツアーを再生できます';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'ヘッドフォン';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => '分';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'タスク';
+
+  @override
+  String get usageMonth => '今月';
+
+  @override
+  String get usageYear => '今年';
+
+  @override
+  String get usageAll => '全期間';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => '外観';
+
+  @override
+  String get appearanceSystem => 'システム';
+
+  @override
+  String get appearanceLight => 'ライト';
+
+  @override
+  String get appearanceDark => 'ダーク';
 }

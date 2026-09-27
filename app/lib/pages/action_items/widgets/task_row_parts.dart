@@ -52,7 +52,7 @@ class TaskSelectionSquare extends StatelessWidget {
         border: Border.all(color: selected ? OmiColors.accent : OmiColors.textTertiary, width: 2),
         color: selected ? OmiColors.accent : Colors.transparent,
       ),
-      child: selected ? const Icon(Icons.check, size: 14, color: OmiColors.onAccent) : null,
+      child: selected ? Icon(Icons.check, size: 14, color: OmiColors.onAccent) : null,
     );
   }
 }

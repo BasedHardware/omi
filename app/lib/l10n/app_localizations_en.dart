@@ -2491,12 +2491,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detailed diagnostic messages';
 
   @override
-  String get autoCreateSpeakers => 'Auto-create Speakers';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
-
-  @override
   String get followUpQuestions => 'Follow-up Questions';
 
   @override
@@ -11161,9 +11155,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Transcriptions are unavailable, recording continues on device and will process later';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transcription unavailable · saving on device';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transcriptions pending $pending/$total';
   }
@@ -11219,4 +11210,187 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openCall => 'Open call';
+
+  @override
+  String get captureRecoveryBanner => 'Pendant audio is not reaching the app — tap to repair';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Stop Transcribe Later on your pendant before recording with your phone.';
+
+  @override
+  String get captureNotTranscribing => 'Not transcribing';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio saved, transcribes later';
+
+  @override
+  String get captureStillRecording => 'Still recording';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mic in use by another app';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'A call or another app took the microphone, so Omi can\'t hear right now. Omi resumes on its own when the microphone is free. Everything recorded before this is safe.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Your custom speech-to-text service can\'t be reached. Omi keeps your audio on this phone and sends it when the service is back. Nothing is lost.';
+
+  @override
+  String get captureStarting => 'Starting…';
+
+  @override
+  String get capturePhoneStorageFull => 'Phone storage full';
+
+  @override
+  String get captureStorageAlmostFull => 'Storage almost full';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name + others';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Hear Omi\'s Answers';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'I\'ve got it. Your next meeting starts in twenty minutes.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'You\'re All Set';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tap a row to review or change it.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'When you ask with the button, Omi can read its answer out loud.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Hear your last answer';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Playing your last answer...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Through $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Through the phone speaker';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Through the current audio output';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Answers stay on screen. Nothing is spoken.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Private. Speaks only through AirPods, Bluetooth or wired headphones.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Uses the phone speaker when no headphones are connected.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi will stay silent. Answers still appear in the app.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device connected. Omi will speak here.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'No headphones connected. Omi stays silent until you connect some.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Plays through $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Plays out loud through the phone speaker.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'You can change this anytime in $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Replay this tour anytime in $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Headphones';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'Minutes';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tasks';
+
+  @override
+  String get usageMonth => 'Month';
+
+  @override
+  String get usageYear => 'Year';
+
+  @override
+  String get usageAll => 'All time';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Appearance';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Light';
+
+  @override
+  String get appearanceDark => 'Dark';
 }

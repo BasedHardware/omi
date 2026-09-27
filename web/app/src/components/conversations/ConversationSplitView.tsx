@@ -851,14 +851,18 @@ export function ConversationSplitView() {
           />
         )}
 
-        {/* Detail pane */}
+        {/* Detail pane. The width is a custom property rather than an inline
+            `width` so the responsive layout can override it: below `lg` the
+            gallery is not beside the pane, so the pane is the whole screen. */}
         {selection && (
           <div
-            style={{
-              width: `min(${panelWidth}px, calc(100% - ${MIN_CONVERSATION_GALLERY_WIDTH}px))`,
-            }}
+            style={
+              {
+                '--conversation-detail-width': `min(${panelWidth}px, calc(100% - ${MIN_CONVERSATION_GALLERY_WIDTH}px))`,
+              } as React.CSSProperties
+            }
             data-dragging={detailResizing ? 'true' : undefined}
-            className="t-resize flex h-full w-full flex-shrink-0 flex-col overflow-hidden border-l border-stroke bg-bg-pane lg:w-auto"
+            className="t-resize flex h-full w-full flex-shrink-0 flex-col overflow-hidden border-l border-stroke bg-bg-pane lg:w-[var(--conversation-detail-width)]"
           >
             <AnimatePresence mode="wait">
               <motion.div

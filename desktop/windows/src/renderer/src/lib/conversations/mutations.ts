@@ -5,8 +5,9 @@
 // isCloudBacked in filtering.ts).
 
 import { omiApi } from '../apiClient'
+import { trackEvent } from '../analytics'
 import type { MergeConversationsResponse } from '../omiApi.generated'
-import { conversationShareUrl } from '../shareLinks'
+import { conversationShareUrl, newShareId } from '../shareLinks'
 
 /** Toggle a conversation's starred flag. Backend contract: starred is a QUERY
  *  param on a bodyless PATCH (not a JSON body). */
@@ -38,7 +39,15 @@ export async function getConversationShareLink(id: string): Promise<string> {
   await omiApi.patch(`/v1/conversations/${id}/visibility`, null, {
     params: { value: 'shared' }
   })
-  return conversationShareUrl(id)
+  const sid = newShareId()
+  const url = conversationShareUrl(id, undefined, sid)
+  trackEvent('Conversation Shared', {
+    share_method: 'url_copy',
+    share_status: 'link_minted',
+    share_id: sid,
+    target_app: 'copy'
+  })
+  return url
 }
 
 /** Re-run Omi's summarization. `appId` targets a specific app (Mac's App Insights

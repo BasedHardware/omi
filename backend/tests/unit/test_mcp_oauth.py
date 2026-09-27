@@ -1132,6 +1132,45 @@ def test_grant_document_id_hashes_legacy_resource_form():
     assert mcp_oauth._grant_document_id(uid, 'omi-chatgpt-prod', 'https://other.example/v1/mcp') != expected
 
 
+def test_trailing_slash_resource_reuses_legacy_grant_id_and_cache_keys():
+    """One trailing slash joins the existing grant id; cache keys stay put.
+
+    Grant documents and the token-cache revocation/index keys hash
+    ``legacy_mcp_resource_url(resource)``. ``/v1/mcp`` and ``/v1/mcp/sse`` do
+    not end in ``/``, so that seed is still the literal legacy URL. Access-token
+    cache keys hash the token, not the resource, so they do not move either.
+    """
+    uid = 'user-slash'
+    client_id = 'omi-chatgpt-prod'
+    canonical = 'https://api.omi.me/v1/mcp'
+    legacy = 'https://api.omi.me/v1/mcp/sse'
+    slashed = 'https://api.omi.me/v1/mcp/'
+    assert mcp_oauth.legacy_mcp_resource_url(canonical) == legacy
+    assert mcp_oauth.legacy_mcp_resource_url(legacy) == legacy
+    assert mcp_oauth.legacy_mcp_resource_url(slashed) == legacy
+    expected = f"{uid}:{client_id}:{mcp_oauth.hash_secret(legacy)[:16]}"
+    canonical_id = mcp_oauth._grant_document_id(uid, client_id, canonical)
+    legacy_id = mcp_oauth._grant_document_id(uid, client_id, legacy)
+    slashed_id = mcp_oauth._grant_document_id(uid, client_id, slashed)
+    assert canonical_id == expected
+    assert legacy_id == expected
+    assert slashed_id == expected
+    cache = mcp_oauth.mcp_token_cache
+    assert cache._revoked_grant_key(canonical_id) == f"mcp:oauth:revoked:{cache._sha256(expected)}"
+    assert cache._revoked_grant_key(slashed_id) == cache._revoked_grant_key(canonical_id)
+    assert cache._grant_tokens_key(slashed_id) == cache._grant_tokens_key(canonical_id)
+    assert cache._grant_tokens_key(legacy_id) == f"mcp:oauth:grant_tokens:{cache._sha256(expected)}"
+    beta = 'https://api.omiapi.com/v1/mcp'
+    assert mcp_oauth._grant_document_id(uid, client_id, beta) != expected
+    assert mcp_oauth._grant_document_id(uid, client_id, beta + '/') != expected
+    assert mcp_oauth._grant_document_id(uid, client_id, beta + '/') == mcp_oauth._grant_document_id(
+        uid, client_id, beta
+    )
+    assert mcp_oauth.validate_resource({'allowed_resources': [canonical]}, slashed)
+    assert mcp_oauth.validate_resource({'allowed_resources': [legacy]}, slashed)
+    assert mcp_oauth.validate_resource({'allowed_resources': [slashed]}, canonical)
+
+
 def test_legacy_then_canonical_consent_converges_on_one_grant():
     """Real consent against the legacy path then the canonical path produces
     one grant; revoking it kills the token families both consents issued."""

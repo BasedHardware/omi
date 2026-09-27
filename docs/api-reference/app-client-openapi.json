@@ -4143,6 +4143,21 @@
       },
       "AudioFile": {
         "properties": {
+          "chunk_spans": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChunkSpan"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Validated contiguous coverage spans (v2 only)",
+            "title": "Chunk Spans"
+          },
           "chunk_timestamps": {
             "description": "List of chunk timestamps (for on-demand merging)",
             "items": {
@@ -4279,6 +4294,20 @@
           "status"
         ],
         "title": "AudioPrecacheResponse",
+        "type": "object"
+      },
+      "AudioTimelineProvenance": {
+        "description": "Audio-timeline v2 provenance marker on eligible conversation rows.\n\nPresent only on single-channel, server-STT live captures admitted under\nAUDIO_TIMELINE_V2: both transcript segment offsets and audio chunk starts\nare projections of one capture sample cursor anchored at the conversation's\nfirst accepted audio sample (started_at is that origin, pinned once).\nAbsent on legacy, resumed-v1, multi-channel, custom-STT, sync-merged or\nmixed-source rows.",
+        "properties": {
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "AudioTimelineProvenance",
         "type": "object"
       },
       "AudioUrlsResponse": {
@@ -6768,6 +6797,25 @@
         "title": "CheckVerificationResponse",
         "type": "object"
       },
+      "ChunkSpan": {
+        "description": "One contiguous stretch of stored PCM, in wall-epoch seconds.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "number"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "ChunkSpan",
+        "type": "object"
+      },
       "CleanerMemory": {
         "properties": {
           "archive_default_visible": {
@@ -7249,6 +7297,16 @@
             "title": "Audio Files",
             "type": "array"
           },
+          "audio_timeline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioTimelineProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "calendar_event": {
             "anyOf": [
               {
@@ -7526,6 +7584,16 @@
               }
             ],
             "default": "omi"
+          },
+          "speaker_resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationSpeakers"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "starred": {
             "default": false,
@@ -8380,6 +8448,16 @@
             "title": "Audio Files",
             "type": "array"
           },
+          "audio_timeline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioTimelineProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "calendar_event": {
             "anyOf": [
               {
@@ -8666,6 +8744,16 @@
             ],
             "default": "omi"
           },
+          "speaker_resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationSpeakers"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "starred": {
             "default": false,
             "title": "Starred",
@@ -8808,6 +8896,38 @@
         ],
         "title": "ConversationSource",
         "type": "string"
+      },
+      "ConversationSpeakers": {
+        "description": "Server-authored meaning of this conversation's ``speaker_id`` values.\n\n``resolved``: re-diarized from the stored audio, so each ``speaker_id`` is one\nvoice for the whole conversation. ``capture``: one uninterrupted capture\ndiarized it, so capture's ids are that diarization. ``unavailable``: capture\nrestarted its numbering (reconnects, failovers, uploaded chunks) and no\nstored audio could resolve it, so ids are not people and must not be counted.\n``participant_speaker_ids`` lists the voices that spoke enough to count as\nparticipants; it is empty when the status is ``unavailable``.",
+        "properties": {
+          "participant_speaker_ids": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Participant Speaker Ids",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "capture",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ConversationSpeakers",
+        "type": "object"
       },
       "ConversationStatus": {
         "enum": [
@@ -9310,15 +9430,6 @@
           "conversation_finalization_reason": {
             "anyOf": [
               {
-                "enum": [
-                  "user_stop",
-                  "finish_and_continue",
-                  "meeting_started",
-                  "meeting_ended",
-                  "max_duration_rotation",
-                  "crash_recovery",
-                  "retry"
-                ],
                 "type": "string"
               },
               {
@@ -15556,7 +15667,7 @@
         "type": "object"
       },
       "IntegrationData": {
-        "description": "Data for an integration connection",
+        "description": "Compatibility input for integrations without a server OAuth flow.\n\nDeprecated credential fields remain in the released app-client schema, but\nregistered OAuth providers are rejected before any value is persisted.",
         "properties": {
           "access_token": {
             "anyOf": [
@@ -15567,6 +15678,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Access Token"
           },
           "connected": {
@@ -15583,6 +15695,7 @@
                 "type": "null"
               }
             ],
+            "deprecated": true,
             "title": "Refresh Token"
           }
         },
@@ -27518,6 +27631,26 @@
         "title": "TaskIntegrationMutationResponse",
         "type": "object"
       },
+      "TaskIntegrationStatus": {
+        "additionalProperties": false,
+        "description": "Non-secret projection safe for clients, support tooling, and OpenAPI.",
+        "properties": {
+          "app_key": {
+            "title": "App Key",
+            "type": "string"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "app_key",
+          "connected"
+        ],
+        "title": "TaskIntegrationStatus",
+        "type": "object"
+      },
       "TaskIntegrationsResponse": {
         "description": "Response containing all task integrations",
         "properties": {
@@ -27534,8 +27667,10 @@
             "title": "Default App"
           },
           "integrations": {
-            "additionalProperties": true,
-            "description": "Map of app_key to connection details",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TaskIntegrationStatus"
+            },
+            "description": "Map of app_key to non-secret status",
             "title": "Integrations",
             "type": "object"
           }
@@ -39421,7 +39556,7 @@
             "name": "include_discarded",
             "required": false,
             "schema": {
-              "default": true,
+              "default": false,
               "title": "Include Discarded",
               "type": "boolean"
             }
@@ -50504,7 +50639,7 @@
         ]
       },
       "put": {
-        "description": "Save or update an integration connection.",
+        "description": "Save non-secret state for integrations without server-managed OAuth.\n\nOAuth credentials are accepted only from a provider callback into the\nencrypted control plane. This legacy compatibility route cannot inject or\nreplace a provider token.",
         "operationId": "save_integration_v1_integrations__app_key__put",
         "parameters": [
           {
@@ -62746,6 +62881,22 @@
             }
           },
           {
+            "in": "query",
+            "name": "time_zone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Time Zone"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -69056,7 +69207,7 @@
     },
     "/v2/tts/synthesize": {
       "post": {
-        "description": "Proxy a TTS request to ElevenLabs. Per-user rate limited.",
+        "description": "Synthesize MP3 speech through Gemini, with a legacy rollback path.",
         "operationId": "tts_synthesize_v2_tts_synthesize_post",
         "parameters": [
           {
