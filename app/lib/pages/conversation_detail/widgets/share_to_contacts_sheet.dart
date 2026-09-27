@@ -209,7 +209,12 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       // Launch native SMS app
       if (await canLaunchUrl(smsUri)) {
         // Track SMS opened
-        PlatformManager.instance.analytics.shareToContactsSmsOpened(widget.conversation.id, selected.length, sid);
+        PlatformManager.instance.analytics.track('Share To Contacts SMS Opened', properties: {
+          'conversation_id': widget.conversation.id,
+          'contact_count': selected.length,
+          'share_id': sid,
+          'target_app': 'sms',
+        });
         HapticFeedback.mediumImpact();
         if (mounted) {
           Navigator.of(context).pop();
@@ -307,8 +312,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                 label: selectedCount == 0
                     ? context.l10n.selectContactsToShare
                     : selectedCount > 1
-                    ? context.l10n.shareWithContactsCount(selectedCount)
-                    : context.l10n.shareWithContactCount(selectedCount),
+                        ? context.l10n.shareWithContactsCount(selectedCount)
+                        : context.l10n.shareWithContactCount(selectedCount),
                 onPressed: selectedCount == 0 ? null : _openNativeSms,
               ),
             ),

@@ -20,12 +20,14 @@ Future<ShareResult> shareConversationLink(ServerConversation conversation, {Rect
       sharePositionOrigin: sharePositionOrigin,
     ),
   );
-  PlatformManager.instance.analytics.conversationShared(
-    conversation: conversation,
-    shareMethod: 'url_share',
-    shareId: sid,
-    targetApp: outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null,
-    shareStatus: outcome.status.name,
-  );
+  final analytics = PlatformManager.instance.analytics;
+  final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
+  analytics.track('Conversation Shared', properties: {
+    ...analytics.getConversationEventProperties(conversation),
+    'share_method': 'url_share',
+    'share_id': sid,
+    'share_status': outcome.status.name,
+    if (targetApp != null) 'target_app': targetApp,
+  });
   return outcome;
 }

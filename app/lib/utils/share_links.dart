@@ -51,10 +51,10 @@ String buildShareUrl(String path, {String? raw, String? source, String? sid}) {
 }
 
 String mobileShareSource() => switch (defaultTargetPlatform) {
-  TargetPlatform.iOS => 'ios',
-  TargetPlatform.android => 'android',
-  _ => 'unknown',
-};
+      TargetPlatform.iOS => 'ios',
+      TargetPlatform.android => 'android',
+      _ => 'unknown',
+    };
 
 /// Random per-share attempt; never derived from the sender or content.
 String newShareId() {

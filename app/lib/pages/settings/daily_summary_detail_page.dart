@@ -115,8 +115,13 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       final outcome = await SharePlus.instance.share(
         ShareParams(uri: Uri.parse(url), subject: summary.headline, sharePositionOrigin: shareSheetOrigin()),
       );
-      PlatformManager.instance.analytics.dailySummaryShared(summaryId: widget.summaryId, date: summary.date, shareId: sid,
-          targetApp: outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null);
+      final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
+      PlatformManager.instance.analytics.track('Daily Summary Shared', properties: {
+        'summary_id': widget.summaryId,
+        'date': summary.date,
+        'share_id': sid,
+        if (targetApp != null) 'target_app': targetApp,
+      });
     } finally {
       if (mounted) setState(() => _isSharing = false);
     }

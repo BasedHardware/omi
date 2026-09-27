@@ -938,7 +938,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
     final outcome = await SharePlus.instance
         .share(ShareParams(text: appShareUrl(app.id, sid: sid), subject: app.name, sharePositionOrigin: origin));
     final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
-    PlatformManager.instance.analytics.track('App Shared', properties: {'appId': app.id, 'share_id': sid, 'share_status': outcome.status.name, if (targetApp != null) 'target_app': targetApp});
-    PlatformManager.instance.analytics.appDetailShared(appId: app.id, appName: app.name, shareId: sid, targetApp: targetApp);
+    PlatformManager.instance.analytics.track('App Shared', properties: {
+      'appId': app.id,
+      'share_id': sid,
+      'share_status': outcome.status.name,
+      if (targetApp != null) 'target_app': targetApp
+    });
+    PlatformManager.instance.analytics.track('App Detail Shared', properties: {
+      'app_id': app.id,
+      'app_name': app.name,
+      'share_id': sid,
+      if (targetApp != null) 'target_app': targetApp,
+    });
   }
 }
