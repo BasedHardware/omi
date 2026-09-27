@@ -84,6 +84,11 @@ chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 desktop_updates_bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
 screen_frames_bucket = os.getenv('BUCKET_SCREEN_FRAMES')
 
+
+def get_private_cloud_sync_bucket() -> Any:
+    return _get_storage_client().bucket(private_cloud_sync_bucket)
+
+
 _did_warn_missing_speech_profiles_bucket = False
 
 

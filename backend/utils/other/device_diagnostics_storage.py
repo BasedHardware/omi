@@ -11,7 +11,7 @@ from utils.other import storage
 
 def save_bundle(uid: str, bundle: bytes) -> str:
     ticket = secrets.token_hex(6).upper()
-    bucket = storage._get_storage_client().bucket(storage.private_cloud_sync_bucket)
+    bucket = storage.get_private_cloud_sync_bucket()
     path = f'diagnostics/{uid}/{ticket}.json'
     # The ticket lookup is private too. Neither object is served as a public URL.
     with storage.owner_storage_write_gate(uid, bucket):
@@ -23,7 +23,7 @@ def save_bundle(uid: str, bundle: bytes) -> str:
 
 
 def read_bundle(ticket: str) -> dict[str, Any] | None:
-    bucket = storage._get_storage_client().bucket(storage.private_cloud_sync_bucket)
+    bucket = storage.get_private_cloud_sync_bucket()
     lookup = bucket.blob(f'diagnostics/tickets/{ticket}.json')
     if not lookup.exists():
         return None
