@@ -1,6 +1,7 @@
+// Chat is not a page: it lives in an overlay opened from the omnibar. The
+// rail is the Activity page plus its deeper surfaces.
 export const desktopNavItems = [
   'Home',
-  'Chat',
   'Conversations',
   'Rewind',
   'Tasks',

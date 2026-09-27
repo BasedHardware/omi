@@ -265,7 +265,7 @@ function glanceLine({
   ];
 }
 
-function GlanceCard({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
+export function GlanceCard({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
   const frame = useGlanceFrame();
   const [minuteOfDay, setMinuteOfDay] = useState(() => {
     const now = new Date();

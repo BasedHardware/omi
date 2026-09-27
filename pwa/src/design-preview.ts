@@ -283,10 +283,6 @@ function Preview() {
         desktop
           ? h(DesktopApp, {
               session: "ready",
-              reads:
-                outcomes?.conversations.status === "success"
-                  ? outcomes.conversations.value.items
-                  : [],
               outcomes,
               readsPhase: outcomes ? "ready" : "unavailable",
               ...taskActions,

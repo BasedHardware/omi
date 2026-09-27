@@ -16,7 +16,7 @@ static const CGFloat OmiGlassSheenHeight = 1.0;
 // Light appearance: the material flips to a light behind-window vibrancy and
 // the ink flips dark, so the scrim/edge/sheen invert to keep the glass legible
 // over both bright and dark backdrops.
-static const CGFloat OmiGlassLightScrimAlpha = 0.32;
+static const CGFloat OmiGlassLightScrimAlpha = 0.12;
 static const CGFloat OmiGlassLightEdgeAlpha = 0.10;
 static const CGFloat OmiGlassLightSheenAlpha = 0.08;
 

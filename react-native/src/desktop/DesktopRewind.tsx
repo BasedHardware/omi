@@ -17,7 +17,7 @@ import {
   useDesktopTheme,
   useDesktopStyleSheets,
 } from './DesktopTheme';
-import {createRewindTimeline} from './rewindTimeline';
+import {createRewindTimeline, groupRewindFrames} from './rewindTimeline';
 
 type Frame = {
   id: string;
@@ -81,9 +81,12 @@ function timeLabel(atMs: number) {
 export function DesktopRewind({
   captureRevision = 0,
   query = '',
+  focusCaptureId = null,
 }: {
   captureRevision?: number;
   query?: string;
+  /** Frame id to open directly, e.g. from an Activity timeline entry. */
+  focusCaptureId?: string | null;
 }) {
   const styles = useDesktopStyleSheets(createStyles);
   const {tokens: token} = useDesktopTheme();
@@ -182,6 +185,24 @@ export function DesktopRewind({
       setRevision(value => value + 1);
     }
   }, [busy, captureRevision]);
+
+  // Opening a capture from the Activity timeline: select its frame as soon as
+  // the first page that contains it has loaded.
+  const seenFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusCaptureId === null || busy) {
+      return;
+    }
+    if (seenFocus.current === focusCaptureId) {
+      return;
+    }
+    const frame = frames.find(item => item.id === focusCaptureId);
+    if (frame === undefined) {
+      return;
+    }
+    seenFocus.current = focusCaptureId;
+    setSelected(frame);
+  }, [busy, focusCaptureId, frames]);
   useEffect(() => {
     const refresh = () => {
       if (
@@ -324,22 +345,30 @@ export function DesktopRewind({
               contentContainerStyle={styles.rows}>
               {(() => {
                 let lastDay = '';
-                return frames.map(frame => {
-                  const day = dayLabel(frame.capturedAtMs);
+                return groupRewindFrames(frames).map(group => {
+                  const day = dayLabel(group.capturedAtMs);
                   const showDay = day !== lastDay;
                   lastDay = day;
-                  const isSelected = selected?.id === frame.id;
+                  const isSelected = selected?.id === group.id;
+                  const title =
+                    group.windowTitle || group.appName || 'Captured screen';
+                  const meta =
+                    group.windowTitle && group.windowTitle !== group.appName
+                      ? `${group.appName} · ${group.count} capture${
+                          group.count === 1 ? '' : 's'
+                        }`
+                      : `${group.count} capture${group.count === 1 ? '' : 's'}`;
                   return (
-                    <View key={frame.id}>
+                    <View key={group.id}>
                       {showDay ? <Text style={styles.day}>{day}</Text> : null}
                       <FocusPressable
                         accessibilityRole="button"
-                        accessibilityLabel={`View capture ${frame.id}`}
+                        accessibilityLabel={`View capture ${group.id}`}
                         accessibilityState={{selected: isSelected}}
-                        onPress={() => setSelected(frame)}
+                        onPress={() => setSelected(group.frame)}
                         style={[styles.row, isSelected && styles.selected]}>
                         <Text style={styles.time}>
-                          {timeLabel(frame.capturedAtMs)}
+                          {timeLabel(group.capturedAtMs)}
                         </Text>
                         <View style={styles.dotColumn}>
                           <View
@@ -348,10 +377,10 @@ export function DesktopRewind({
                         </View>
                         <View style={styles.rowBody}>
                           <Text style={styles.text} numberOfLines={1}>
-                            {frame.appName || 'Captured screen'}
+                            {title}
                           </Text>
                           <Text style={styles.meta} numberOfLines={2}>
-                            {frame.windowTitle}
+                            {meta}
                           </Text>
                         </View>
                       </FocusPressable>

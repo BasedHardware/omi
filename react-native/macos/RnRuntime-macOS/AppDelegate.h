@@ -14,7 +14,6 @@
 @property (nonatomic, strong, nullable) NSTimer *omiGuidePlacementTimer;
 @property (nonatomic, assign) BOOL omiGuideFitsBesideSettings;
 @property (nonatomic, assign) BOOL omiWindowToreDown;
-@property (nonatomic, strong, nullable) id omiWindowDragMonitor;
 @property (nonatomic, strong, nullable) NSView *omiWindowGlass;
 @property (nonatomic, strong, nullable) NSTitlebarAccessoryViewController *omiTitlebarAccessory;
 @property (nonatomic, assign) BOOL omiWindowGeometryApplied;

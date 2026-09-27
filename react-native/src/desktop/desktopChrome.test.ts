@@ -34,18 +34,12 @@ import {
 
 const workerOrigin = 'https://omi-v5-backend-staging.example.workers.dev';
 
-test('desktop chrome includes a dedicated Chat destination', () => {
-  expect(desktopNavItems).toEqual([
-    'Home',
-    'Chat',
-    'Conversations',
-    'Rewind',
-    'Tasks',
-  ]);
+test('desktop chrome rail is Activity-scoped; chat lives in the overlay', () => {
+  expect(desktopNavItems).toEqual(['Home', 'Conversations', 'Rewind', 'Tasks']);
   expect(isShippingDesktopNav('Apps')).toBe(false);
   expect(isShippingDesktopNav('Home')).toBe(true);
   expect(isShippingDesktopNav('Conversations')).toBe(true);
-  expect(isShippingDesktopNav('Chat')).toBe(true);
+  expect(isShippingDesktopNav('Chat')).toBe(false);
   expect(isShippingDesktopNav('Library')).toBe(false);
   expect(isShippingDesktopNav('Memories')).toBe(false);
   expect(desktopSearchPlaceholder).toBe("Search what you've seen and heard…");

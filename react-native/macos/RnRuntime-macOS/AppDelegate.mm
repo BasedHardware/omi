@@ -182,34 +182,6 @@ static void OmiSwizzleTitlebarHitTest(Class cls)
   method_setImplementation(method, replacement);
 }
 
-static BOOL OmiViewBlocksWindowDrag(NSView *view)
-{
-  if ([view isKindOfClass:NSControl.class] || [view isKindOfClass:NSText.class] ||
-      [view isKindOfClass:NSScrollView.class] || [view isKindOfClass:NSTextView.class]) {
-    return YES;
-  }
-  if (!view.mouseDownCanMoveWindow) {
-    return YES;
-  }
-  NSAccessibilityRole role = view.accessibilityRole;
-  NSAccessibilitySubrole subrole = view.accessibilitySubrole;
-  if ([role isEqualToString:NSAccessibilityButtonRole] ||
-      [role isEqualToString:NSAccessibilityTextFieldRole] ||
-      [role isEqualToString:NSAccessibilityTextAreaRole] ||
-      [role isEqualToString:NSAccessibilityCheckBoxRole] ||
-      [role isEqualToString:NSAccessibilityLinkRole] ||
-      [role isEqualToString:NSAccessibilityPopUpButtonRole] ||
-      [subrole isEqualToString:NSAccessibilitySearchFieldSubrole]) {
-    return YES;
-  }
-  NSString *className = NSStringFromClass(view.class);
-  if ([className containsString:@"RCTText"] || [className containsString:@"RCTUIText"] ||
-      [className containsString:@"RCTScroll"]) {
-    return YES;
-  }
-  return NO;
-}
-
 @implementation AppDelegate
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
@@ -271,7 +243,6 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
     }
   }];
   [self installDesktopSearchCommand];
-  [self installOmiWindowDragMonitor];
   self.omiAppearanceObserver =
       [NSNotificationCenter.defaultCenter addObserverForName:OmiDesktopAppearanceDidChangeNotification
           object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note) {
@@ -300,10 +271,6 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   if (self.omiAppearanceObserver != nil) {
     [NSNotificationCenter.defaultCenter removeObserver:self.omiAppearanceObserver];
     self.omiAppearanceObserver = nil;
-  }
-  if (self.omiWindowDragMonitor != nil) {
-    [NSEvent removeMonitor:self.omiWindowDragMonitor];
-    self.omiWindowDragMonitor = nil;
   }
   if (self.omiTitlebarLayoutObserver != nil) {
     [NSNotificationCenter.defaultCenter removeObserver:self.omiTitlebarLayoutObserver];
@@ -492,7 +459,13 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   window.title = @"";
   window.toolbar = nil;
   window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
-  window.movableByWindowBackground = NO;
+  // Window dragging is the native movableByWindowBackground path: RN
+  // Pressables set mouseDownCanMoveWindow=false on their hosts, so buttons
+  // stay clickable while bare surface areas drag the window. The previous
+  // custom event monitor misclassified RN View children (their React default
+  // is mouseDownCanMoveWindow=true) as drag ground and swallowed clicks on
+  // header button padding.
+  window.movableByWindowBackground = YES;
   BOOL guide = [self.omiWindowPresentation isEqualToString:@"permission-guide"];
   NSRunningApplication *front = NSWorkspace.sharedWorkspace.frontmostApplication;
   NSWindowLevel level = guide && (front.processIdentifier == NSProcessInfo.processInfo.processIdentifier ||
@@ -606,50 +579,6 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   }
   OmiSwizzleTitlebarHitTest(titlebar.class);
   OmiSwizzleTitlebarHitTest(titlebar.superview.class);
-}
-
-- (void)installOmiWindowDragMonitor
-{
-  if (self.omiWindowDragMonitor != nil) {
-    return;
-  }
-  __weak AppDelegate *weakSelf = self;
-  self.omiWindowDragMonitor =
-      [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown
-                                            handler:^NSEvent *(NSEvent *event) {
-    AppDelegate *strongSelf = weakSelf;
-    if (strongSelf == nil || ![strongSelf omiWindowGroundDragEvent:event]) {
-      return event;
-    }
-    [strongSelf.window performWindowDragWithEvent:event];
-    return nil;
-  }];
-}
-
-- (BOOL)omiWindowGroundDragEvent:(NSEvent *)event
-{
-  NSWindow *window = self.window;
-  if (window == nil || event.window != window || event.clickCount > 1) {
-    return NO;
-  }
-  NSView *contentView = window.contentView;
-  NSView *frameView = contentView.superview;
-  if (contentView == nil || frameView == nil) {
-    return NO;
-  }
-  NSView *hitView = [frameView hitTest:event.locationInWindow];
-  if (hitView == nil || ![hitView isDescendantOf:contentView]) {
-    return NO;
-  }
-  for (NSView *view = hitView; view != nil; view = view.superview) {
-    if (OmiViewBlocksWindowDrag(view)) {
-      return NO;
-    }
-    if (view == contentView) {
-      break;
-    }
-  }
-  return YES;
 }
 
 - (void)installDesktopSearchCommand

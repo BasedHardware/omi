@@ -8,6 +8,14 @@
 #import <unistd.h>
 #import <sys/stat.h>
 
+static BOOL CaptureSameText(NSString *a, NSString *b) {
+  return (a == nil && b == nil) || (a != nil && b != nil && [a isEqualToString:b]);
+}
+// An unchanged app+window inside this window is not new history — the same
+// transition gate main's ScreenWatcher applies, so a three-second capture
+// tick over a static window stops minting duplicate timeline rows.
+static const NSTimeInterval OmiCaptureRepeatWindow = 600.0;
+
 static BOOL CaptureGrantAtProcessStart = NO;
 
 static NSError *CaptureError(NSString *code) {
@@ -91,6 +99,9 @@ static void CaptureSource(void (^completion)(CGImageRef, NSString *, NSString *,
 @property(nonatomic) BOOL locked;
 @property(nonatomic) BOOL asleep;
 @property(nonatomic) BOOL grantAtLaunch;
+@property(nonatomic, copy, nullable) NSString *lastApp;
+@property(nonatomic, copy, nullable) NSString *lastTitle;
+@property(nonatomic, strong, nullable) NSDate *lastPersistAt;
 @property(nonatomic, strong) dispatch_queue_t queue;
 @property(nonatomic, strong) NSMutableArray *observers;
 @end
@@ -196,6 +207,24 @@ static void CaptureSource(void (^completion)(CGImageRef, NSString *, NSString *,
     BOOL accepted = NO;
     @synchronized(self) { accepted = [self current:generation owner:owner]; if (accepted) self.processing = YES; }
     if (!accepted) { finish(nil, CaptureError(@"OMI_CAPTURE_STOPPED")); return; }
+    // Dedupe gate: same app + same window title within the repeat window is
+    // one moment of history, not a new one. Skip the whole encode/OCR/persist
+    // pipeline for it.
+    if (sourceError == nil && image != nil) {
+      @synchronized(self) {
+        if (![self current:generation owner:owner]) { finish(nil, CaptureError(@"OMI_CAPTURE_STOPPED")); return; }
+        NSTimeInterval elapsed = self.lastPersistAt == nil
+            ? DBL_MAX
+            : -[self.lastPersistAt timeIntervalSinceNow];
+        if (CaptureSameText(appName, self.lastApp) && CaptureSameText(title, self.lastTitle) &&
+            elapsed < OmiCaptureRepeatWindow) {
+          self.processing = NO;
+          if (self.generation == generation) self.busy = NO;
+          finish(@{@"captured": @NO}, nil);
+          return;
+        }
+      }
+    }
     NSDate *timestamp = NSDate.date;
     if (appName.length > 256 || title.length > 1024) sourceError = CaptureError(@"OMI_CAPTURE_METADATA");
     if (image != nil) CGImageRetain(image);
@@ -228,6 +257,13 @@ static void CaptureSource(void (^completion)(CGImageRef, NSString *, NSString *,
         }
         if (image != nil) CGImageRelease(image);
         @synchronized(self) { self.processing = NO; if (self.generation == generation) self.busy = NO; if (![self current:generation owner:owner]) error = CaptureError(@"OMI_CAPTURE_STOPPED"); }
+        if (error == nil && captured) {
+          @synchronized(self) {
+            self.lastApp = appName;
+            self.lastTitle = title;
+            self.lastPersistAt = NSDate.date;
+          }
+        }
         finish(error == nil ? @{@"captured":@(captured)} : nil, error);
       }
     });

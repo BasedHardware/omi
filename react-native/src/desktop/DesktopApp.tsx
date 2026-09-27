@@ -1,11 +1,8 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {StyleSheet, TextInput, View} from 'react-native';
+import {StyleSheet, Text, TextInput, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
-import type {
-  DesktopReadOutcomes,
-  DesktopReadProjection,
-} from '../desktopReadClient';
+import type {DesktopReadOutcomes} from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import type {PostSetupHomeCue} from '../app/usePostSetupHomeCue';
 import {DesktopOnboarding} from './DesktopOnboarding';
@@ -22,12 +19,13 @@ import {
   type DesktopRoute,
   type OmnibarMode,
 } from './DesktopTopChrome';
-import {DesktopHome, DesktopReadBanner} from './DesktopHome';
 import {PostSetupConfetti, PostSetupOverlay} from './PostSetupOverlay';
 import {DesktopThemeProvider, type DesktopThemeName} from './DesktopTheme';
-import {UnifiedTimeline} from './timeline/UnifiedTimeline';
-import {unifiedTimelineEnabled} from './timeline/flag';
-import {LibraryPage, TasksPage} from './DesktopPages';
+import {DesktopActivity} from './DesktopActivity';
+import type {
+  ActivityFilter,
+  CaptureGroupSummary,
+} from './timeline/UnifiedTimeline';
 import type {TaskMutationProps} from '../ui/TaskEditor';
 import {DesktopSettings} from './DesktopSettings';
 import type {DesktopPreferences} from '../desktopSettingsClient';
@@ -48,9 +46,29 @@ import {useRewindCapture} from '../app/useRewindCapture';
 import type {useAmbientAudio} from '../app/useAmbientAudio';
 import {ShippingStage} from './ShippingStage';
 import {OmiLoadingMark} from '../ui/OmiLoadingMark';
-import {useDesktopTheme} from './DesktopTheme';
+import {useDesktopTheme, useDesktopStyleSheets} from './DesktopTheme';
+import type {DesktopTokens} from './tokens';
+import {FocusPressable} from '../ui/Pressable';
+import {MaterialIcon} from '../ui/MaterialIcon';
 
 export type {DesktopSession};
+
+// Window surface. Dark rides the native glass panel behind transparent RN
+// content; light paints an opaque paper background — the light native glass
+// reads as a milky gray film under translucent RN surfaces.
+function DesktopRoot({children}: {children: React.ReactNode}) {
+  const {name, tokens} = useDesktopTheme();
+  return (
+    <View
+      accessibilityLabel="Omi desktop"
+      style={[
+        styles.root,
+        name === 'light' && {backgroundColor: tokens.color.dark},
+      ]}>
+      {children}
+    </View>
+  );
+}
 
 // The probing window keeps traffic-light space and the mark — never an empty
 // sheet, and never signed-in chrome, while OmiAuth is still unresolved.
@@ -69,17 +87,12 @@ export function DesktopSessionProbe() {
 }
 
 type Props = TaskMutationProps & {
-  onLoadMoreConversations?: () => void;
-  conversationsLoadingMore?: boolean;
-  conversationNotice?: string | null;
-  taskPagination?: React.ReactNode;
   deviceContent?: React.ReactNode;
   liveVoiceControl?: React.ReactNode;
   ambient?: ReturnType<typeof useAmbientAudio>;
   activeGenerationId: string | null;
   authError: string | null;
   outcomes: DesktopReadOutcomes | null;
-  reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
   postSetupHomeCue?: PostSetupHomeCue;
   session: DesktopSession;
@@ -109,9 +122,6 @@ type Props = TaskMutationProps & {
 };
 
 export function DesktopApp({
-  onLoadMoreConversations,
-  conversationsLoadingMore = false,
-  conversationNotice = null,
   activeGenerationId,
   authError,
   deviceContent,
@@ -139,12 +149,10 @@ export function DesktopApp({
   captureAutoStart = false,
   outcomes,
   postSetupHomeCue = null,
-  reads,
   readsPhase,
   session,
   returning = false,
   signingIn,
-  ...taskMutations
 }: Props) {
   const [captureRevision, setCaptureRevision] = useState(0);
   const capture = useRewindCapture(
@@ -153,6 +161,12 @@ export function DesktopApp({
     captureAutoStart,
   );
   const [route, setRoute] = useState<DesktopRoute>('Home');
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
+  const [focusCaptureId, setFocusCaptureId] = useState<string | null>(null);
+  // Chat is an overlay, not a page: small asks answer inline under the
+  // omnibar and the full transcript opens here on demand.
+  const [chatOpen, setChatOpen] = useState(false);
+  const [inlineAnswerOpen, setInlineAnswerOpen] = useState(false);
   const [exploreDone, setExploreDone] = useState<Set<ExploreCheck> | null>(
     null,
   );
@@ -182,12 +196,23 @@ export function DesktopApp({
     };
   }, []);
   useEffect(() => clearGuideTimer, [clearGuideTimer]);
-  // Arriving at a surface ticks its checklist item off, once, forever.
+  // Arriving at a surface ticks its checklist item off, once, forever. The
+  // Activity page's filters count as arriving at the surface they select.
   useEffect(() => {
     if (exploreDone === null) {
       return;
     }
-    const check = exploreCheckForRoute(route);
+    const check = chatOpen
+      ? ('chat' as ExploreCheck)
+      : route === 'Home'
+      ? activityFilter === 'conversations'
+        ? ('conversations' as ExploreCheck)
+        : activityFilter === 'tasks'
+        ? ('tasks' as ExploreCheck)
+        : activityFilter === 'recall'
+        ? ('recall' as ExploreCheck)
+        : null
+      : exploreCheckForRoute(route);
     if (check === null || exploreDone.has(check)) {
       return;
     }
@@ -198,7 +223,7 @@ export function DesktopApp({
       'exploreProgress',
       serializeExploreProgress(next),
     ).catch(() => undefined);
-  }, [exploreDone, route]);
+  }, [exploreDone, route, activityFilter, chatOpen]);
   useEffect(() => {
     if (guideTarget !== null && route === guideTarget) {
       clearGuideTimer();
@@ -207,12 +232,26 @@ export function DesktopApp({
   }, [clearGuideTimer, guideTarget, route]);
   const startExploreGuide = (check: ExploreCheck) => {
     const item = EXPLORE_CHECKLIST.find(entry => entry.id === check);
-    if (item === undefined || route === item.route) {
+    if (item === undefined) {
+      return;
+    }
+    // Chat has no rail pill to point at — opening the overlay is the
+    // destination itself.
+    if (item.route === 'Chat') {
+      setMode('Ask');
+      setChatOpen(true);
+      return;
+    }
+    if (route === item.route) {
       return;
     }
     clearGuideTimer();
     setGuideTarget(item.route);
     guideTimer.current = setTimeout(() => setGuideTarget(null), 6000);
+  };
+  const openCaptureFromActivity = (capture: CaptureGroupSummary) => {
+    setFocusCaptureId(capture.id);
+    setRoute('Rewind');
   };
   const [proveItSeen, setProveItSeen] = useState(false);
   const [confettiFalling, setConfettiFalling] = useState(false);
@@ -221,8 +260,10 @@ export function DesktopApp({
   const [chatSubmission, setChatSubmission] = useState(0);
   const openChat = () => {
     setMode('Ask');
-    setRoute('Chat');
+    setInlineAnswerOpen(false);
+    setChatOpen(true);
   };
+  const closeChat = () => setChatOpen(false);
   useEffect(() => {
     if (mode !== 'Search') {
       return;
@@ -238,7 +279,18 @@ export function DesktopApp({
       openChat();
       return;
     }
-    setRoute(next);
+    // Conversations and Tasks are filters of the Activity timeline, not
+    // standalone pages.
+    setChatOpen(false);
+    if (next === 'Home') {
+      setRoute('Home');
+      setActivityFilter('all');
+    } else if (next === 'Conversations' || next === 'Tasks') {
+      setRoute('Home');
+      setActivityFilter(next === 'Conversations' ? 'conversations' : 'tasks');
+    } else {
+      setRoute(next);
+    }
     if (next === 'Rewind') {
       setMode('Search');
     } else if (mode === 'Search') {
@@ -254,24 +306,39 @@ export function DesktopApp({
   useEffect(() => {
     const subscription = subscribeDesktopSearchCommand(() => {
       setMode('Search');
+      setChatOpen(false);
       setRoute('Home');
+      setActivityFilter('all');
       omnibarRef.current?.focus();
     });
     return () => subscription.remove();
   }, []);
   const chatNotice =
-    route === 'Chat' ? visibleChatError(session, chatError) : null;
+    chatOpen || inlineAnswerOpen ? visibleChatError(session, chatError) : null;
+  // Which rail pill reads as selected: Conversations/Tasks select themselves
+  // even though they are filters of the Activity page.
+  const activeNav =
+    route === 'Home'
+      ? activityFilter === 'conversations'
+        ? ('Conversations' as const)
+        : activityFilter === 'tasks'
+        ? ('Tasks' as const)
+        : ('Home' as const)
+      : route === 'Settings' || route === 'Chat'
+      ? null
+      : route;
   // Session gate. Until OmiAuth reports a real cloud session with onboarding
   // complete, this shell paints no product IA at all: the probe keeps an
   // empty window (traffic-light spacer only) and a signed-out Mac sees the
   // same Welcome as every other surface — never nav pills, an omnibar, Home
   // cards, Settings, or empty-state lists.
+  const overlayStyles = useDesktopStyleSheets(createOverlayStyles);
   if (session === 'signed-out') {
     return (
       <DesktopThemeProvider
         initialName={initialAppearance}
         onSetName={onAppearanceChange}>
-        <View accessibilityLabel="Omi desktop" style={styles.root}>
+        <DesktopRoot>
           <DesktopOnboarding
             error={authError}
             onSignIn={onSignIn}
@@ -279,7 +346,7 @@ export function DesktopApp({
             returning={returning}
             signingIn={signingIn}
           />
-        </View>
+        </DesktopRoot>
       </DesktopThemeProvider>
     );
   }
@@ -288,9 +355,9 @@ export function DesktopApp({
       <DesktopThemeProvider
         initialName={initialAppearance}
         onSetName={onAppearanceChange}>
-        <View accessibilityLabel="Omi desktop" style={styles.root}>
+        <DesktopRoot>
           <DesktopSessionProbe />
-        </View>
+        </DesktopRoot>
       </DesktopThemeProvider>
     );
   }
@@ -298,7 +365,7 @@ export function DesktopApp({
     <DesktopThemeProvider
       initialName={initialAppearance}
       onSetName={onAppearanceChange}>
-      <View accessibilityLabel="Omi desktop" style={styles.root}>
+      <DesktopRoot>
         <DesktopChrome
           chatBusy={chatBusy}
           activeGenerationId={activeGenerationId}
@@ -306,7 +373,7 @@ export function DesktopApp({
           draft={draft}
           omnibarRef={omnibarRef}
           onDraftChange={onDraftChange}
-          liveControl={route === 'Chat' ? liveVoiceControl : undefined}
+          liveControl={chatOpen ? liveVoiceControl : undefined}
           mode={mode}
           onModeChange={next => {
             setMode(next);
@@ -314,6 +381,7 @@ export function DesktopApp({
               setRoute('Rewind');
             } else if (route === 'Rewind') {
               setRoute('Home');
+              setActivityFilter('all');
             }
           }}
           onNavigate={navigate}
@@ -335,7 +403,9 @@ export function DesktopApp({
           onSend={() => {
             if (mode === 'Ask') {
               setChatSubmission(value => value + 1);
-              openChat();
+              // Small asks answer inline under the omnibar, like the mobile
+              // app; the full transcript is one click away.
+              setInlineAnswerOpen(true);
               onSend();
             } else {
               setRecallQuery(draft.trim().slice(0, 200));
@@ -344,79 +414,87 @@ export function DesktopApp({
           }}
           onStop={onStop}
           route={route}
+          activeNav={activeNav}
+          inlineCard={
+            inlineAnswerOpen && !chatOpen ? (
+              <InlineAskCard
+                busy={chatBusy || activeGenerationId !== null}
+                messages={messages}
+                notice={chatNotice}
+                onClose={() => setInlineAnswerOpen(false)}
+                onOpenChat={openChat}
+              />
+            ) : undefined
+          }
         />
-        {route === 'Conversations' || route === 'Tasks' ? (
-          <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
-        ) : null}
-        <ShippingStage stageKey={route} variant="page">
-          {route === 'Home' ? (
-            <DesktopHome
-              draft={mode === 'Search' ? draft : ''}
-              exploreDone={exploreDone}
-              onExploreGuide={startExploreGuide}
-              onOpenTasks={() => setRoute('Tasks')}
-              onOpenConversations={() => setRoute('Conversations')}
-              onRefresh={onRefresh}
-              outcomes={outcomes}
-              reads={reads}
-              readsPhase={readsPhase}
-            />
-          ) : route === 'Chat' ? (
-            <DesktopChat
-              submission={chatSubmission}
-              messages={messages}
-              busy={chatBusy || activeGenerationId !== null}
-              onSuggest={prompt => {
-                setMode('Ask');
-                onDraftChange(prompt);
-                omnibarRef.current?.focus();
-              }}
-              error={chatNotice}
-              hasOlder={hasOlderChat}
-              loadingOlder={loadingOlderChat}
-              loadingHistory={loadingHistory}
-              onLoadOlder={onLoadOlderChat}
-            />
-          ) : route === 'Conversations' ? (
-            unifiedTimelineEnabled ? (
-              <UnifiedTimeline
+        <View style={styles.stage}>
+          <ShippingStage stageKey={route} variant="page">
+            {route === 'Home' ? (
+              <DesktopActivity
+                captureRevision={captureRevision}
+                exploreDone={exploreDone}
+                filter={activityFilter}
+                onCapturePress={openCaptureFromActivity}
+                onExploreItem={startExploreGuide}
+                onFilterChange={setActivityFilter}
+                onRefresh={onRefresh}
                 outcomes={outcomes}
                 query={mode === 'Search' ? draft : ''}
-                loading={readsPhase === 'initial-loading'}
+                readsPhase={readsPhase}
+              />
+            ) : route === 'Rewind' ? (
+              <DesktopRewind
+                captureRevision={captureRevision}
+                focusCaptureId={focusCaptureId}
+                query={recallQuery}
               />
             ) : (
-              <LibraryPage
-                outcomes={outcomes}
-                query={mode === 'Search' ? draft : ''}
-                onLoadMore={onLoadMoreConversations}
-                loadingMore={conversationsLoadingMore}
-                notice={conversationNotice}
+              <View style={styles.page}>
+                <DesktopSettings
+                  ambient={ambient}
+                  capture={capture}
+                  deviceContent={deviceContent}
+                  onSignIn={onSignIn}
+                  onSignOut={onSignOut}
+                  onWorkspaceReload={onWorkspaceReload}
+                  onPreferencesChange={onPreferencesChange}
+                  session={session}
+                  signingIn={signingIn}
+                  softwarePlaneLocked={chatBusy}
+                />
+              </View>
+            )}
+          </ShippingStage>
+          {chatOpen ? (
+            <View
+              accessibilityLabel="Chat overlay"
+              style={overlayStyles.chatOverlay}>
+              <FocusPressable
+                accessibilityLabel="Close chat"
+                accessibilityRole="button"
+                onPress={closeChat}
+                style={overlayStyles.chatScrim}
               />
-            )
-          ) : route === 'Rewind' ? (
-            <DesktopRewind
-              captureRevision={captureRevision}
-              query={recallQuery}
-            />
-          ) : route === 'Tasks' ? (
-            <TasksPage outcomes={outcomes} {...taskMutations} />
-          ) : (
-            <View style={styles.page}>
-              <DesktopSettings
-                ambient={ambient}
-                capture={capture}
-                deviceContent={deviceContent}
-                onSignIn={onSignIn}
-                onSignOut={onSignOut}
-                onWorkspaceReload={onWorkspaceReload}
-                onPreferencesChange={onPreferencesChange}
-                session={session}
-                signingIn={signingIn}
-                softwarePlaneLocked={chatBusy}
-              />
+              <View style={overlayStyles.chatPanel}>
+                <DesktopChat
+                  submission={chatSubmission}
+                  messages={messages}
+                  busy={chatBusy || activeGenerationId !== null}
+                  onSuggest={prompt => {
+                    setMode('Ask');
+                    onDraftChange(prompt);
+                    omnibarRef.current?.focus();
+                  }}
+                  error={chatNotice}
+                  hasOlder={hasOlderChat}
+                  loadingOlder={loadingOlderChat}
+                  loadingHistory={loadingHistory}
+                  onLoadOlder={onLoadOlderChat}
+                />
+              </View>
             </View>
-          )}
-        </ShippingStage>
+          ) : null}
+        </View>
         {postSetupHomeCue === 'proven' &&
         readsPhase === 'ready' &&
         !proveItSeen ? (
@@ -428,10 +506,149 @@ export function DesktopApp({
         {confettiFalling ? (
           <PostSetupConfetti onDone={() => setConfettiFalling(false)} />
         ) : null}
-      </View>
+      </DesktopRoot>
     </DesktopThemeProvider>
   );
 }
+
+// Small ask answers pinned under the omnibar: the trailing exchange with a
+// way into the full transcript, like the mobile app's inline bubble.
+function InlineAskCard({
+  busy,
+  messages,
+  notice,
+  onClose,
+  onOpenChat,
+}: {
+  busy: boolean;
+  messages: ChatMessage[];
+  notice: string | null;
+  onClose: () => void;
+  onOpenChat: () => void;
+}) {
+  const styles = useDesktopStyleSheets(createInlineStyles);
+  const {tokens: token} = useDesktopTheme();
+  // The exchange the omnibar just started: the last human turn plus whatever
+  // the assistant has answered so far.
+  const lastAsk = [...messages].reduce(
+    (index, message, position) =>
+      message.sender === 'human' ? position : index,
+    -1,
+  );
+  const ask = lastAsk >= 0 ? messages[lastAsk] : undefined;
+  const answer = messages
+    .slice(lastAsk + 1)
+    .find(message => message.sender === 'ai');
+  return (
+    <View accessibilityLabel="Inline chat answer" style={styles.card}>
+      <View style={styles.cardHead}>
+        <Text style={styles.cardTitle}>Omi</Text>
+        <FocusPressable
+          accessibilityLabel="Dismiss answer"
+          accessibilityRole="button"
+          onPress={onClose}
+          style={({pressed}) => [styles.close, pressed && styles.pressed]}>
+          <MaterialIcon name="close" size={14} color={token.color.inkMuted} />
+        </FocusPressable>
+      </View>
+      {ask !== undefined && ask.text.trim() !== '' ? (
+        <Text style={styles.cardAsk} numberOfLines={2}>
+          {ask.text.trim()}
+        </Text>
+      ) : null}
+      {notice !== null ? (
+        <Text style={styles.cardNotice}>{notice}</Text>
+      ) : answer !== undefined && answer.text.trim() !== '' ? (
+        <Text style={styles.cardText} numberOfLines={4}>
+          {answer.text.trim()}
+        </Text>
+      ) : (
+        <View style={styles.thinking}>
+          <OmiLoadingMark inkColor={token.color.ink} size={18} />
+          <Text style={styles.cardText}>
+            {busy ? 'Thinking…' : 'No answer yet.'}
+          </Text>
+        </View>
+      )}
+      <FocusPressable
+        accessibilityLabel="Open chat"
+        accessibilityRole="button"
+        onPress={onOpenChat}
+        style={({pressed}) => [styles.openChat, pressed && styles.pressed]}>
+        <Text style={styles.openChatText}>Open chat</Text>
+      </FocusPressable>
+    </View>
+  );
+}
+
+const createInlineStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: token.color.dark,
+      borderColor: token.color.lineStrong,
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 8,
+      padding: 12,
+    },
+    cardHead: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
+    cardTitle: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: 11,
+      fontWeight: '600',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+    },
+    close: {
+      alignItems: 'center',
+      borderRadius: 8,
+      height: 22,
+      justifyContent: 'center',
+      width: 22,
+    },
+    thinking: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 8,
+    },
+    cardText: {
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: token.type.body,
+      lineHeight: 20,
+    },
+    cardAsk: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    cardNotice: {
+      color: token.color.red,
+      fontFamily: token.font,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    openChat: {
+      alignSelf: 'flex-start',
+      backgroundColor: token.color.glassSelected,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    openChatText: {
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    pressed: {opacity: 0.7},
+  });
 
 const styles = StyleSheet.create({
   root: {
@@ -456,4 +673,35 @@ const styles = StyleSheet.create({
     width: desktopTrafficLightRowWidth,
   },
   page: {flex: 1},
+  // Stage wrapper: the page and the chat overlay share this region, so the
+  // overlay never covers the omnibar that feeds chat.
+  stage: {flex: 1},
 });
+
+const createOverlayStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    chatOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 20,
+    },
+    chatScrim: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor:
+        token.color.ink === '#F2F4EF'
+          ? 'rgba(0, 0, 0, 0.35)'
+          : 'rgba(29, 31, 27, 0.24)',
+    },
+    chatPanel: {
+      alignSelf: 'center',
+      backgroundColor: token.color.dark,
+      borderColor: token.color.lineStrong,
+      borderRadius: 18,
+      borderWidth: 1,
+      flex: 1,
+      marginVertical: 4,
+      maxHeight: 720,
+      maxWidth: 780,
+      overflow: 'hidden',
+      width: '100%',
+    },
+  });
