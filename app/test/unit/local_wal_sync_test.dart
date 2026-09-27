@@ -63,6 +63,26 @@ void main() {
       expect(sync.testFrameSynced[0], false);
     });
 
+    test('capture root and ordinal survive WAL serialization', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])), captureRoot: 'root-a');
+      sync.onFrameCaptured(WalFrame(payload: [2], syncKey: FrameSyncKey([2])), captureRoot: 'root-a');
+      await sync.finalizeCurrentSession();
+
+      final stored = Wal.fromJson(sync.testWals.single.toJson());
+      expect(stored.captureRoot, 'root-a');
+      expect(stored.sourceFrameStart, 0);
+      expect(stored.sourceClockEpoch, 0);
+      expect(
+        Wal(timerStart: 0, codec: BleAudioCodec.opus, seconds: 0).toJson().containsKey('capture_root'),
+        false,
+      );
+      expect(stored.totalFrames, 2);
+      sync.onFrameCaptured(WalFrame(payload: [3], syncKey: FrameSyncKey([3])), captureRoot: 'root-b');
+      expect(sync.testFrames.single.sourceFramePosition, 0);
+      expect(sync.testFrames.single.sourceClockEpoch, 0);
+    });
+
     test('preserves insertion order for multiple frames', () {
       for (int i = 0; i < 5; i++) {
         sync.onFrameCaptured(WalFrame(payload: [i], syncKey: FrameSyncKey([i])));

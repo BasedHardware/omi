@@ -136,6 +136,9 @@ class LocalWalSyncImpl implements LocalWalSync {
   List<Wal> _wals = [];
 
   List<WalFrame> _frames = [];
+  String? _captureEvidenceRoot;
+  int _nextSourceFramePosition = 0;
+  int _sourceClockEpoch = 0;
   List<bool> _frameSynced = [];
 
   Timer? _chunkingTimer;
@@ -229,6 +232,9 @@ class LocalWalSyncImpl implements LocalWalSync {
     _wals = [];
     _frames = [];
     _frameSynced = [];
+    _captureEvidenceRoot = null;
+    _nextSourceFramePosition = 0;
+    _sourceClockEpoch = 0;
   }
 
   /// Completes when _initializeWals() finishes loading WALs from disk.
@@ -416,6 +422,8 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     _framesPerSecond = codec.getFramesPerSecond();
     _codec = codec;
+    _sourceClockEpoch++;
+    _nextSourceFramePosition = 0;
   }
 
   @override
@@ -448,6 +456,17 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     var high = pivot;
     var low = 0;
+    final evidenceFrames = _frames.sublist(low, high);
+    final evidenceRoot = evidenceFrames.first.captureRoot;
+    final evidenceStart = evidenceFrames.first.sourceFramePosition;
+    final evidenceEpoch = evidenceFrames.first.sourceClockEpoch;
+    final stableEvidence = evidenceRoot != null &&
+        evidenceStart != null &&
+        evidenceEpoch != null &&
+        evidenceFrames.asMap().entries.every((entry) =>
+            entry.value.captureRoot == evidenceRoot &&
+            entry.value.sourceClockEpoch == evidenceEpoch &&
+            entry.value.sourceFramePosition == evidenceStart + entry.key);
     var chunk = _frames.sublist(low, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
     var chunkFrameCount = high - low;
@@ -485,6 +504,9 @@ class LocalWalSyncImpl implements LocalWalSync {
           totalFrames: chunkFrameCount,
           syncedFrameOffset: syncedOffset,
           ownerUid: _currentWalOwnerUid(),
+          captureRoot: stableEvidence ? evidenceRoot : null,
+          sourceFrameStart: stableEvidence ? evidenceStart : null,
+          sourceClockEpoch: stableEvidence ? evidenceEpoch : null,
           geolocation: _copyGeolocation(_sessionGeolocation),
         );
         _wals.add(wal);
@@ -493,6 +515,9 @@ class LocalWalSyncImpl implements LocalWalSync {
         wal.data.addAll(chunk);
         wal.storage = WalStorage.mem;
         wal.totalFrames = chunkFrameCount;
+        wal.captureRoot = null;
+        wal.sourceFrameStart = null;
+        wal.sourceClockEpoch = null;
         wal.syncedFrameOffset = syncedOffset;
         wal.status = syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss;
         _wals[walIdx] = wal;
@@ -687,6 +712,17 @@ class LocalWalSyncImpl implements LocalWalSync {
     if (high <= 0) return;
 
     var timerEnd = _now().millisecondsSinceEpoch ~/ 1000;
+    final evidenceFrames = _frames.sublist(0, high);
+    final evidenceRoot = evidenceFrames.first.captureRoot;
+    final evidenceStart = evidenceFrames.first.sourceFramePosition;
+    final evidenceEpoch = evidenceFrames.first.sourceClockEpoch;
+    final stableEvidence = evidenceRoot != null &&
+        evidenceStart != null &&
+        evidenceEpoch != null &&
+        evidenceFrames.asMap().entries.every((entry) =>
+            entry.value.captureRoot == evidenceRoot &&
+            entry.value.sourceClockEpoch == evidenceEpoch &&
+            entry.value.sourceFramePosition == evidenceStart + entry.key);
     var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - high ~/ _framesPerSecond;
     var chunkFrameCount = high;
@@ -724,6 +760,9 @@ class LocalWalSyncImpl implements LocalWalSync {
             totalFrames: chunkFrameCount,
             syncedFrameOffset: syncedOffset,
             ownerUid: _currentWalOwnerUid(),
+            captureRoot: stableEvidence ? evidenceRoot : null,
+            sourceFrameStart: stableEvidence ? evidenceStart : null,
+            sourceClockEpoch: stableEvidence ? evidenceEpoch : null,
             geolocation: _copyGeolocation(_sessionGeolocation),
           ),
         );
@@ -879,8 +918,19 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  void onFrameCaptured(WalFrame frame) {
-    _frames.add(frame);
+  void onFrameCaptured(WalFrame frame, {String? captureRoot}) {
+    if (captureRoot != _captureEvidenceRoot) {
+      _captureEvidenceRoot = captureRoot;
+      _nextSourceFramePosition = 0;
+      _sourceClockEpoch = 0;
+    }
+    _frames.add(WalFrame(
+      payload: frame.payload,
+      syncKey: frame.syncKey,
+      captureRoot: captureRoot,
+      sourceFramePosition: captureRoot == null ? null : _nextSourceFramePosition++,
+      sourceClockEpoch: captureRoot == null ? null : _sourceClockEpoch,
+    ));
     _frameSynced.add(false);
   }
 

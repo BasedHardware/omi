@@ -105,6 +105,12 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
 # conversation id, or any transcript/audio content. mode=legacy|v2;
 # segments outcome=mapped|rejected|recovered|unplaced|straddled|late_owner_dropped;
 # coverage outcome is the 3.4 vocabulary covered|missing|pending_upload|no_audio|unsupported.
+OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL = Counter(
+    'omi_capture_evidence_envelopes_total',
+    'S1 metadata attempts on existing writes, by fixed ingest path and coverage status.',
+    ['path', 'status'],
+)
+
 OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL = Counter(
     'omi_audio_timeline_segments_total',
     'Live transcript segments by audio-timeline mapping outcome',

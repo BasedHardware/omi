@@ -230,6 +230,10 @@ def assign_in_transaction(
         finished_at=extent['finished_at'],
         transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
     )
+    if incoming.get('capture_evidence') is not None:
+        # Appends may absorb multiple VAD derivatives; never preserve a stale
+        # single-source receipt as if it described the merged conversation.
+        result['capture_evidence'] = incoming['capture_evidence']
     result['has_content'] = bool(segments)
     result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
     result['sync_relevance'] = (
