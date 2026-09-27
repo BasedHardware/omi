@@ -115,6 +115,7 @@ class SharedConversationChatResponse(BaseModel):
     model_config = {'extra': 'forbid'}
 
     message: str = Field(min_length=1, strict=True)
+    remaining_free_questions: int | None = Field(default=None, ge=0)
 
 
 class SharedActionItem(BaseModel):
