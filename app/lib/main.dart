@@ -48,6 +48,7 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/providers/announcement_provider.dart';
+import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -76,6 +77,7 @@ import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/omi_theme.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
@@ -403,6 +405,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  @override
+  void didChangePlatformBrightness() {
+    setState(() {});
+  }
+
   void _deinit() {
     Logger.debug("App > _deinit");
     ServiceManager.instance().deinit();
@@ -432,7 +439,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         _appSessionTelemetry.recordResumed();
         _performanceTelemetry.setForeground(true);
         PlatformManager.instance.analytics.recordTelemetryHealth();
-        unawaited(PlatformManager.instance.analytics.refreshExperiments());
       }
       unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
@@ -527,10 +533,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(lazy: true, create: (context) => PaymentMethodProvider()),
         ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()..checkPendingRecording()),
         ChangeNotifierProvider(create: (context) => LocaleProvider()),
+        ChangeNotifierProvider(create: (context) => AppearanceProvider()),
         ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => PhoneCallProvider()),
       ],
       builder: (context, child) {
+        final mode = context.watch<AppearanceProvider>().mode;
+        final platformBrightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+        final brightness = resolveAppearanceBrightness(mode, platformBrightness);
+        OmiColors.active = OmiColors.forBrightness(brightness);
         return WithForegroundTask(
           child: MaterialApp(
             debugShowCheckedModeBanner: F.env == Environment.dev,
@@ -545,14 +556,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               GlobalCupertinoLocalizations.delegate,
             ],
             supportedLocales: AppLocalizations.supportedLocales,
-            theme: buildOmiTheme(),
-            themeMode: ThemeMode.dark,
+            theme: buildOmiTheme(brightness: Brightness.light),
+            darkTheme: buildOmiTheme(brightness: Brightness.dark),
+            themeMode: mode,
             builder: (context, child) {
               syncIntlDefaultLocale(Localizations.localeOf(context));
               ErrorWidget.builder = (errorDetails) {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };
-              final content = child!;
+              final content = AnnotatedRegion<SystemUiOverlayStyle>(
+                value: brightness == Brightness.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+                child: KeyedSubtree(key: ValueKey(brightness), child: child!),
+              );
               final guidedContent = BluetoothGuidanceListener(child: content);
               return PlatformService.isIOS && Env.posthogApiKey != null
                   ? RageClickContextTracker(child: guidedContent)

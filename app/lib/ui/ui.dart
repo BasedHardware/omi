@@ -23,7 +23,8 @@
 /// | A `Route` object | `omiPageRoute(builder:)`; to push a page use `routeToPage` |
 ///
 /// Page backgrounds are `OmiColors.surface0` (also the scaffold default); never read
-/// `Theme.of(context).colorScheme.primary` as a background — `primary` is the white accent.
+/// `Theme.of(context).colorScheme.primary` as a background — `primary` is the neutral accent
+/// (white in dark mode, black in light mode).
 library;
 
 export 'components/omi_button.dart';

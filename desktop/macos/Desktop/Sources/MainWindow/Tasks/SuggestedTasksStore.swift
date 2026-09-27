@@ -1094,6 +1094,7 @@ final class SuggestedTasksStore: ObservableObject {
     didRegisterAutomationActions = true
     DesktopAutomationActionRegistry.shared.register(
       name: "refresh_suggested_tasks",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Refresh the canonical Suggested lane",
       params: []
     ) { [weak self] _ in
@@ -1103,6 +1104,7 @@ final class SuggestedTasksStore: ObservableObject {
     }
     DesktopAutomationActionRegistry.shared.register(
       name: "dump_suggested_tasks",
+      effects: [],
       summary: "Return privacy-safe Suggested candidate opaque ids",
       params: []
     ) { [weak self] _ in
@@ -1111,6 +1113,7 @@ final class SuggestedTasksStore: ObservableObject {
     }
     DesktopAutomationActionRegistry.shared.register(
       name: "suggested_task_action",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Perform a Suggested card action through the real store",
       params: ["candidate_id", "action", "title", "reason"]
     ) { [weak self] params in

@@ -122,6 +122,24 @@ void main() {
     }
   });
 
+  testWidgets('the transcription-outage sentence wraps in the header instead of clipping', (tester) async {
+    // A phone-sized surface: the full sentence cannot fit one title line, so
+    // the header must wrap it rather than ellipsize away the promise that
+    // recording continues and will be processed later.
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+        _app(const Scaffold(appBar: ConversationStateAppBar(state: CaptureDisplayState.transcriptionUnavailable))));
+    await tester.pump();
+
+    final text = tester.widget<Text>(find.textContaining('recording continues on device'));
+    expect(text.maxLines, greaterThan(1));
+    expect(find.textContaining('will process later'), findsOneWidget);
+    expect(tester.getSize(find.byType(ConversationStateAppBar)).height, kToolbarHeight);
+  });
+
   testWidgets('search bar shows the position and disables arrows without results', (tester) async {
     final controller = TextEditingController(text: 'x');
     final focus = FocusNode();

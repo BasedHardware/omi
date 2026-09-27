@@ -937,9 +937,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Добавете към claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Копирай конфигурация';
 
   @override
@@ -2482,13 +2479,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Изчистване на всички възли и връзки';
 
   @override
-  String get addToClaudeDesktopConfig => 'Добавяне към claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Свържете AI асистенти с вашите данни';
-
-  @override
-  String get useYourMcpApiKey => 'Използвайте вашия MCP API ключ';
 
   @override
   String get realTimeTranscript => 'Транскрипция в реално време';
@@ -2501,12 +2492,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'Подробни диагностични съобщения';
-
-  @override
-  String get autoCreateSpeakers => 'Автоматично създаване на говорители';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Автоматично създаване при откриване на име';
 
   @override
   String get followUpQuestions => 'Последващи въпроси';
@@ -10005,7 +9990,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get transcriptionNoAudio => 'Транскрипцията не получава аудио';
 
   @override
-  String get tapPlusToStartRecording => 'Докоснете +, за да започнете запис';
+  String get tapPlusToStartRecording => 'Докоснете бутона за запис, за да започнете запис';
 
   @override
   String get chatBlockTask => 'Задача';
@@ -10248,7 +10233,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Разговорите, които записвате, се появяват тук. Докоснете + на началния екран, за да запишете първия.';
+      'Разговорите, които записвате, се появяват тук. Докоснете бутона за запис на началния екран, за да запишете първия.';
 
   @override
   String get conversationMap => 'Карта на разговорите';
@@ -10727,7 +10712,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get deviceConnecting => 'Свързване…';
 
   @override
-  String get recordOptionsTip => 'Съвет: натиснете и задръжте бутона за запис, за да запишете телефонно обаждане.';
+  String get recordOptionsTip => 'Съвет: докоснете стрелката на бутона за запис, за да запишете телефонно обаждане.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Неуспешна актуализация';
@@ -11200,4 +11185,267 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Когато назовете някого, Omi пази кратък гласов образец, за да го разпознае следващия път';
+
+  @override
+  String get leaveBlank => 'Оставете празно';
+
+  @override
+  String get mcpOAuthSetup =>
+      'В claude.ai добавете персонализиран конектор и поставете URL адреса на сървъра. Ако Claude поиска разширен OAuth Client ID, използвайте стойността по-долу и оставете тайната празна — никога не използвайте вашия MCP API ключ като OAuth тайна.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Добавяне към ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'В Claude Desktop → Settings → Connectors добавете персонализиран конектор и поставете URL адреса на сървъра. Ако Claude поиска разширен OAuth Client ID, използвайте стойността по-долу и оставете тайната празна — никога не използвайте вашия MCP API ключ като OAuth тайна.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Транскрипциите са недостъпни, записването продължава на устройството и ще бъде обработено по-късно';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Чакащи транскрипции $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Чакащи транскрипции $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Обаждане';
+
+  @override
+  String get captureSourcePhoneMic => 'Микрофон на телефона';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Продължи';
+
+  @override
+  String get finish => 'Приключи';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Висулката е на пауза · продължава, когато приключите';
+
+  @override
+  String get pendantIsListeningTitle => 'Висулката ви слуша';
+
+  @override
+  String get oneSourceAtATime => 'Omi записва само от един източник наведнъж.';
+
+  @override
+  String get recordWithPhoneInstead => 'Запис с телефона вместо това';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Висулката е на пауза, докато приключите';
+
+  @override
+  String get pendantPausesDuringCall => 'Висулката е на пауза по време на обаждането';
+
+  @override
+  String get keepUsingPendant => 'Продължи с висулката';
+
+  @override
+  String get recordWith => 'Запис с';
+
+  @override
+  String get moreWaysToRecord => 'Още начини за запис';
+
+  @override
+  String get openCall => 'Отвори обаждането';
+
+  @override
+  String get captureRecoveryBanner => 'Звукът от висулката не достига до приложението — докоснете, за да поправите';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Спрете Transcribe Later на висулката си, преди да записвате с телефона.';
+
+  @override
+  String get captureNotTranscribing => 'Без транскрипция';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Аудиото е запазено, транскрипция по-късно';
+
+  @override
+  String get captureStillRecording => 'Записът продължава';
+
+  @override
+  String get captureMicInUseElsewhere => 'Микрофонът се използва от друго приложение';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Обаждане или друго приложение зае микрофона, затова Omi не може да чува в момента. Omi ще продължи сам, когато микрофонът се освободи. Всичко записано дотук е запазено.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Вашата собствена услуга за преобразуване на реч в текст е недостъпна. Omi пази аудиото на този телефон и ще го изпрати, когато услугата се върне. Нищо не се губи.';
+
+  @override
+  String get captureStarting => 'Стартиране…';
+
+  @override
+  String get capturePhoneStorageFull => 'Паметта на телефона е пълна';
+
+  @override
+  String get captureStorageAlmostFull => 'Паметта е почти пълна';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name и други';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Чуйте отговорите на Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Готово. Следващата ви среща започва след двадесет минути.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Всичко е готово';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Докоснете ред, за да го прегледате или промените.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Когато питате с бутона, Omi може да прочете отговора си на глас.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Чуйте последния си отговор';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Пускане на последния ви отговор...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Чрез $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'През високоговорителя на телефона';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Чрез текущия аудио изход';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Отговорите остават на екрана. Нищо не се говори.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Частно. Говори само чрез AirPods, Bluetooth или кабелни слушалки.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Използва високоговорителя на телефона, когато няма свързани слушалки.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi ще мълчи. Отговорите все още се показват в приложението.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device свързан. Omi ще говори тук.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Няма свързани слушалки. Omi мълчи, докато не свържете някои.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Играе през $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Възпроизвежда на висок глас през високоговорителя на телефона.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Можете да промените това по всяко време в $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Повторете тази обиколка по всяко време в $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Слушалки';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'минути';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Задачи';
+
+  @override
+  String get usageMonth => 'Този месец';
+
+  @override
+  String get usageYear => 'Тази година';
+
+  @override
+  String get usageAll => 'Цялото време';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Облик';
+
+  @override
+  String get appearanceSystem => 'Система';
+
+  @override
+  String get appearanceLight => 'Светла';
+
+  @override
+  String get appearanceDark => 'Тъмна';
 }

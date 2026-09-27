@@ -208,9 +208,8 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
 
 def is_exists_user(uid: str):
     user_ref = db.collection('users').document(uid)
-    if not user_ref.get().exists:
-        return False
-    return True
+    snapshot = user_ref.get(field_paths=['uid'])
+    return parse_snapshot_or_none(lambda _payload: True, snapshot) is not None
 
 
 def get_user_profile(uid: str) -> dict:

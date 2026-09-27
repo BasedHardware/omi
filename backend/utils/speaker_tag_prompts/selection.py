@@ -1,18 +1,10 @@
 """Pick the few speaker clips worth asking the user about.
-
-Pure: no IO. The service feeds decoded conversations from the last 48 hours and
-gets back a ranked, capped list of prompts. Ranking favours the questions that
-most improve recognition:
-
-1. "Is this you?" on the loudest unnamed voice of a conversation where the owner
-   was never recognised (owner missed) or when the owner has no voiceprint yet.
-2. "Is this <name>?" on an automatic match nobody has reviewed (precision).
-3. "Is this you?" on an automatic owner label nobody has reviewed (precision).
+Pure: no IO. Feeds decoded conversations from the last 48 hours and returns a ranked, capped list of prompts:
+1. "Is this you?" on the loudest unnamed voice when owner was missed or has no voiceprint.
+2. "Is this <name>?" on an automatic match nobody has reviewed.
+3. "Is this you?" on an automatic owner label nobody has reviewed.
 4. "Who is this?" on the unnamed voices that talked the most.
-
-Only clean clips qualify: one diarized speaker, consecutive segments with no
-other voice between them, at least ``MIN_CLIP_SECONDS`` long, not already
-decided by the user, from a conversation with stored audio.
+Only clean clips qualify: one speaker, consecutive segments >= MIN_CLIP_SECONDS, not decided, with stored audio.
 """
 
 from __future__ import annotations
@@ -21,10 +13,11 @@ import hashlib
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from models.speaker_tag_prompts import SpeakerTagPrompt, SpeakerTagPromptKind, SpeakerTagPromptOrigin
 from models.transcript_segment import legacy_conversation_segment_id
+from utils.speaker_tag_prompts.coverage import prompt_window_covered
 
 PROMPT_WINDOW = timedelta(hours=48)
 MIN_CLIP_SECONDS = 5.0
@@ -55,6 +48,8 @@ class _Run:
 class _Candidate:
     score: float
     prompt: SpeakerTagPrompt
+    conversation: Mapping[str, Any]
+    expected_text: str
 
 
 def prompt_id(conversation_id: str, speaker_id: int, kind: SpeakerTagPromptKind) -> str:
@@ -63,14 +58,17 @@ def prompt_id(conversation_id: str, speaker_id: int, kind: SpeakerTagPromptKind)
 
 
 def _as_utc(value: Any) -> Optional[datetime]:
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    return None
+    if isinstance(value, str) and value.strip():
+        try:
+            value = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)) if isinstance(value, datetime) else None
 
 
 def speaker_id_of(segment: Mapping[str, Any]) -> int:
     raw = segment.get('speaker_id')
-    if isinstance(raw, int):
+    if isinstance(raw, int) and not isinstance(raw, bool):
         return raw
     speaker = segment.get('speaker') or ''
     try:
@@ -126,6 +124,9 @@ def _runs(segments: Sequence[Mapping[str, Any]], decided_segments: set) -> List[
         current.clear()
 
     for segment in segments:
+        if segment.get('audio_alignment') == 'unplaced':
+            flush()
+            continue
         if segment['id'] in decided_segments:
             flush()
             continue
@@ -135,6 +136,7 @@ def _runs(segments: Sequence[Mapping[str, Any]], decided_segments: set) -> List[
             if (
                 segment['speaker_id'] != previous['speaker_id']
                 or _identity(segment) != _identity(previous)
+                or segment.get('audio_capture_run') != previous.get('audio_capture_run')
                 or gap > MAX_GAP_SECONDS
             ):
                 flush()
@@ -197,6 +199,9 @@ def select_prompts(
     answered: set,
     people: Mapping[str, str],
     limit: int = DEFAULT_LIMIT,
+    verify: Optional[Callable[[Mapping[str, Any], SpeakerTagPrompt, str], bool]] = None,
+    max_verifications: int = 4,
+    on_skip: Optional[Callable[[str], None]] = None,
 ) -> List[SpeakerTagPrompt]:
     """Return at most ``limit`` prompts, best first. ``people`` maps person id to name."""
     recent_people = [pid for pid in recent_person_ids(conversations) if pid in people]
@@ -220,7 +225,8 @@ def select_prompts(
         best_run: Dict[Tuple[int, str], _Run] = {}
         for run in _runs(segments, decided_segments):
             if (
-                str(run.speaker_id) in decided_speakers
+                not run.text
+                or str(run.speaker_id) in decided_speakers
                 or run.duration < MIN_CLIP_SECONDS
                 or _clip_overlaps_other_speaker(segments, run)
             ):
@@ -244,6 +250,10 @@ def select_prompts(
             if pid in answered:
                 return
             clip_start, clip_end = _clip_window(run)
+            if not prompt_window_covered(conversation, clip_start, clip_end):
+                if on_skip:
+                    on_skip('uncovered')
+                return
             excerpt = ' '.join(
                 (segment.get('text') or '').strip()
                 for segment in segments
@@ -265,7 +275,15 @@ def select_prompts(
                 excerpt=_excerpt(excerpt),
                 **extra,
             )
-            candidates.append(_Candidate(score + freshness, prompt))
+            expected_text = ' '.join(
+                (segment.get('text') or '').strip()
+                for segment in segments
+                if segment['id'] in run.segment_ids
+                and float(segment.get('start') or 0) < clip_end
+                and float(segment.get('end') or 0) > clip_start
+            ).strip()
+            if expected_text:
+                candidates.append(_Candidate(score + freshness, prompt, conversation, expected_text))
 
         for (_, identity), run in best_run.items():
             if identity == 'user':
@@ -300,14 +318,21 @@ def select_prompts(
     per_conversation: Counter = Counter()
     per_speaker: set = set()
     owner_checks = 0
+    attempted = 0
     for candidate in candidates:
         prompt = candidate.prompt
         speaker_key = (prompt.conversation_id, prompt.speaker_id)
         if per_conversation[prompt.conversation_id] >= MAX_PER_CONVERSATION or speaker_key in per_speaker:
             continue
-        if prompt.kind == SpeakerTagPromptKind.owner_check:
-            if owner_checks >= MAX_OWNER_CHECKS:
+        if prompt.kind == SpeakerTagPromptKind.owner_check and owner_checks >= MAX_OWNER_CHECKS:
+            continue
+        if verify is not None:
+            if attempted >= max_verifications:
+                break
+            attempted += 1
+            if not verify(candidate.conversation, prompt, candidate.expected_text):
                 continue
+        if prompt.kind == SpeakerTagPromptKind.owner_check:
             owner_checks += 1
         chosen.append(prompt)
         per_conversation[prompt.conversation_id] += 1

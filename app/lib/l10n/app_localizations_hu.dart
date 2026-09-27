@@ -939,9 +939,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Hozzáadás claude_desktop_config.json-hoz';
-
-  @override
   String get copyConfig => 'Konfiguráció másolása';
 
   @override
@@ -2491,13 +2488,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Összes csomópont és kapcsolat törlése';
 
   @override
-  String get addToClaudeDesktopConfig => 'Hozzáadás a claude_desktop_config.json fájlhoz';
-
-  @override
   String get connectAiAssistantsToData => 'Csatlakoztassa AI asszisztenseit az adataihoz';
-
-  @override
-  String get useYourMcpApiKey => 'Használja MCP API kulcsát';
 
   @override
   String get realTimeTranscript => 'Valós idejű átirat';
@@ -2510,12 +2501,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'Részletes diagnosztikai üzenetek';
-
-  @override
-  String get autoCreateSpeakers => 'Beszélők automatikus létrehozása';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automatikus létrehozás név észlelésekor';
 
   @override
   String get followUpQuestions => 'Követő kérdések';
@@ -10006,7 +9991,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transcriptionNoAudio => 'Az átírás nem kap hangot';
 
   @override
-  String get tapPlusToStartRecording => 'Koppints a + jelre a felvétel indításához';
+  String get tapPlusToStartRecording => 'Koppints a felvétel gombra a felvétel indításához';
 
   @override
   String get chatBlockTask => 'Feladat';
@@ -10249,7 +10234,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'A rögzített beszélgetések itt jelennek meg. Az elsőhöz koppints a + gombra a Kezdőlapon.';
+      'A rögzített beszélgetések itt jelennek meg. Az elsőhöz koppints a felvétel gombra a Kezdőlapon.';
 
   @override
   String get conversationMap => 'Beszélgetéstérkép';
@@ -10728,7 +10713,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceConnecting => 'Csatlakozás…';
 
   @override
-  String get recordOptionsTip => 'Tipp: telefonhívás rögzítéséhez tartsd lenyomva a felvétel gombot.';
+  String get recordOptionsTip => 'Tipp: telefonhívás rögzítéséhez koppints a felvétel gomb nyilára.';
 
   @override
   String get firmwareUpdateFailedTitle => 'A frissítés nem sikerült';
@@ -11201,4 +11186,267 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Ha megnevezel valakit, az Omi egy rövid hangmintát tárol, hogy legközelebb felismerje';
+
+  @override
+  String get leaveBlank => 'Hagyd üresen';
+
+  @override
+  String get mcpOAuthSetup =>
+      'A claude.ai oldalon adjon hozzá egy egyéni összekötőt, és illessze be a szerver URL-címét. Ha a Claude speciális OAuth Client ID-t kér, használja az alábbi értéket, és hagyja üresen a titkot — soha ne használja az MCP API-kulcsot OAuth-titokként.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Hozzáadás a ~/.claude.json fájlhoz';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'A Claude Desktop → Settings → Connectors oldalon adjon hozzá egy egyéni összekötőt, és illessze be a szerver URL-címét. Ha a Claude speciális OAuth Client ID-t kér, használja az alábbi értéket, és hagyja üresen a titkot — soha ne használja az MCP API-kulcsot OAuth-titokként.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Átiratok nem érhetők el, a felvétel folytatódik az eszközön, és később feldolgozásra kerül';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Függő átiratok $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Függő átiratok $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Hívás';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefon mikrofonja';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Folytatás';
+
+  @override
+  String get finish => 'Befejezés';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Medál szüneteltetve · a befejezés után folytatódik';
+
+  @override
+  String get pendantIsListeningTitle => 'A medálod figyel';
+
+  @override
+  String get oneSourceAtATime => 'Az Omi egyszerre csak egy forrásból rögzít.';
+
+  @override
+  String get recordWithPhoneInstead => 'Rögzítés inkább a telefonnal';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'A medál szünetel, amíg be nem fejezed';
+
+  @override
+  String get pendantPausesDuringCall => 'A medál szünetel a hívás alatt';
+
+  @override
+  String get keepUsingPendant => 'Maradok a medálnál';
+
+  @override
+  String get recordWith => 'Rögzítés ezzel';
+
+  @override
+  String get moreWaysToRecord => 'További rögzítési módok';
+
+  @override
+  String get openCall => 'Hívás megnyitása';
+
+  @override
+  String get captureRecoveryBanner => 'A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Állítsa le a Transcribe Later módot a medálján, mielőtt telefonnal rögzítene.';
+
+  @override
+  String get captureNotTranscribing => 'Nincs átírás';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Hang mentve, később lesz átírva';
+
+  @override
+  String get captureStillRecording => 'A felvétel folytatódik';
+
+  @override
+  String get captureMicInUseElsewhere => 'A mikrofont egy másik app használja';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Egy hívás vagy egy másik app lefoglalta a mikrofont, ezért az Omi most nem hall. Az Omi magától folytatja, amint a mikrofon felszabadul. Minden, amit eddig rögzített, biztonságban van.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Az egyéni beszédfelismerő szolgáltatásod nem érhető el. Az Omi ezen a telefonon tárolja a hangot, és elküldi, amint a szolgáltatás újra elérhető. Semmi nem vész el.';
+
+  @override
+  String get captureStarting => 'Indítás…';
+
+  @override
+  String get capturePhoneStorageFull => 'A telefon tárhelye megtelt';
+
+  @override
+  String get captureStorageAlmostFull => 'A tárhely majdnem megtelt';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name és mások';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Hallgasd meg Omi válaszait';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Rendben. A következő megbeszélésed húsz perc múlva kezdődik.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Minden készen áll';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Koppints egy sorra az ellenőrzéshez vagy módosításhoz.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Ha a gombbal kérdez, a Omi fel tudja olvasni a választ.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Hallgassa meg utolsó válaszát';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Az utolsó válasz lejátszása...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device számon keresztül';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'A telefon hangszóróján keresztül';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Az aktuális hangkimeneten keresztül';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'A válaszok a képernyőn maradnak. Semmit sem beszélnek.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privát. Csak a AirPods, Bluetooth vagy vezetékes fejhallgatón keresztül beszél.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'A telefon hangszóróját használja, ha nincs fejhallgató csatlakoztatva.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff =>
+      'Omi néma marad. A válaszok továbbra is megjelennek az alkalmazásban.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device csatlakoztatva. Omi fog itt beszélni.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Nincs csatlakoztatva fejhallgató. Omi néma marad, amíg nem csatlakoztat néhányat.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Lejátszás a $device számon keresztül.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Hangosan játszik le a telefon hangszóróján keresztül.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Ezt bármikor módosíthatja a $settings › $voiceResponse számon';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'A körutat bármikor újra lejátszhatja a következő számon: $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Fejhallgató';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'perc';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Feladatok';
+
+  @override
+  String get usageMonth => 'Ez a hónap';
+
+  @override
+  String get usageYear => 'Ez az év';
+
+  @override
+  String get usageAll => 'Minden idők';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Megjelenés';
+
+  @override
+  String get appearanceSystem => 'Rendszer';
+
+  @override
+  String get appearanceLight => 'Világos';
+
+  @override
+  String get appearanceDark => 'Sötét';
 }

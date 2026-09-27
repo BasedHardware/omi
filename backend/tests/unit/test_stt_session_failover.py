@@ -22,6 +22,7 @@ from routers.listen.receiver import MAX_STT_FAILOVERS, ListenReceiver
 from utils.metrics import OMI_LIVE_STT_ACCEPTED_TOTAL
 from utils.observability.transcription import _deployment_environment
 from utils.stt.streaming import STTService, get_stt_service_for_language
+from utils.stt.language_policy import LiveLanguageProfile
 
 
 class FakeSocket:
@@ -107,7 +108,9 @@ def _receiver_with_dead_socket(monkeypatch: Any, *, replacement: Any):
     receiver = ListenReceiver(host, [], {})
     receiver.stt_socket = FakeSocket(dead=True)
     receiver.vad_gate = None
-    receiver._stt_rebuild = (lambda _s: None, lambda _s: None, 16000)
+    # Audio-timeline: _stt_rebuild holds a callback FACTORY plus the sample
+    # rate (a fresh epoch translator per rebuild), not the callbacks.
+    receiver._stt_rebuild = (lambda: (lambda _s: None, lambda _s: None, None), 16000)
     receiver._create_stt_socket = AsyncMock(return_value=replacement)
     return receiver
 
@@ -129,6 +132,42 @@ async def test_a_dead_primary_moves_the_session_to_the_next_provider(monkeypatch
     # The dead socket is released rather than leaked for the session's lifetime.
     assert dead.finished is True
     assert MODULATE_PROVIDER in receiver._stt_failed_providers
+
+
+@pytest.mark.asyncio
+async def test_failover_reuses_the_initial_language_profile(monkeypatch):
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
+    profile = LiveLanguageProfile.create('pt', multi=True, uid='stable-user')
+    receiver.host.language = 'pt'
+    receiver.host.language_profile = profile
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language',
+        return_value=(STTService.soniox, 'multi', 'soniox'),
+    ) as select:
+        assert await receiver._failover_stt_socket() is True
+    assert select.call_args.kwargs['language_profile'] is profile
+
+
+@pytest.mark.asyncio
+async def test_soniox_replacement_socket_receives_profile_for_hints(monkeypatch):
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
+    receiver._create_stt_socket = ListenReceiver._create_stt_socket.__get__(receiver)
+    profile = LiveLanguageProfile.create('pt', multi=True, uid='stable-user')
+    receiver.host.language_profile = profile
+    receiver.host.stt_service = STTService.soniox
+    receiver.host.stt_language = 'multi'
+    receiver.host.vocabulary = []
+    monkeypatch.setattr('routers.listen.receiver.managed_chain_enabled', lambda _host: False)
+
+    async def connect(**kwargs):
+        socket = await kwargs['connect_primary']()
+        return socket, STTService.soniox
+
+    with patch('routers.listen.receiver.connect_stt_socket_with_fallback', side_effect=connect), patch(
+        'routers.listen.receiver.process_audio_soniox', new_callable=AsyncMock, return_value=FakeSocket()
+    ) as soniox:
+        await receiver._create_stt_socket(lambda _segments: None, 16000)
+    assert soniox.await_args.kwargs['profile'] is profile
 
 
 @pytest.mark.asyncio

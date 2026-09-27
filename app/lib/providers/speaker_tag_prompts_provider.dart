@@ -37,8 +37,9 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     Future<ApiResult<GeneratedSpeakerTagPromptsResponse>> Function()? fetchPrompts,
     Future<ApiResult<bool>> Function(List<String>)? markShown,
     Future<ApiResult<void>> Function()? dismiss,
-    Future<ApiResult<GeneratedSpeakerTagPromptAnswerResponse>> Function(GeneratedSpeakerTagPromptAnswerRequest)?
-        submitAnswer,
+    Future<ApiResult<GeneratedSpeakerTagPromptAnswerResponse>> Function(
+      GeneratedSpeakerTagPromptAnswerRequest,
+    )? submitAnswer,
     Future<ApiResult<GeneratedVoiceProfileSettings>> Function()? fetchSettings,
     Future<ApiResult<GeneratedVoiceProfileSettings>> Function({
       bool? speakerTagPromptsEnabled,
@@ -65,8 +66,9 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   final Future<ApiResult<GeneratedSpeakerTagPromptsResponse>> Function() _fetchPrompts;
   final Future<ApiResult<bool>> Function(List<String>) _markShown;
   final Future<ApiResult<void>> Function() _dismiss;
-  final Future<ApiResult<GeneratedSpeakerTagPromptAnswerResponse>> Function(GeneratedSpeakerTagPromptAnswerRequest)
-      _submitAnswer;
+  final Future<ApiResult<GeneratedSpeakerTagPromptAnswerResponse>> Function(
+    GeneratedSpeakerTagPromptAnswerRequest,
+  ) _submitAnswer;
   final Future<ApiResult<GeneratedVoiceProfileSettings>> Function() _fetchSettings;
   final Future<ApiResult<GeneratedVoiceProfileSettings>> Function({
     bool? speakerTagPromptsEnabled,
@@ -84,6 +86,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   bool _isDisposed = false;
   final Set<String> _played = {};
   final Map<String, Uint8List> _clips = {};
+  final Map<String, DateTime> _unavailablePromptIds = {};
 
   int _sessionGeneration = 0;
   int _playbackTicket = 0;
@@ -108,10 +111,10 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   bool _isCurrent(int generation) => !_isDisposed && generation == _sessionGeneration;
 
   /// Fetch today's set when the conversations page appears. Cheap to call often.
-  Future<void> loadIfDue() async {
+  Future<void> loadIfDue({bool force = false}) async {
     final now = _now();
     if (_isDisposed || visible || loading) return;
-    if (_lastFetchAt != null && now.difference(_lastFetchAt!) < refetchInterval) return;
+    if (!force && _lastFetchAt != null && now.difference(_lastFetchAt!) < refetchInterval) return;
     _lastFetchAt = now;
     loading = true;
     final generation = _sessionGeneration;
@@ -128,7 +131,10 @@ class SpeakerTagPromptsProvider extends BaseProvider {
         return;
     }
     saveOtherVoiceProfiles = response.saveOtherVoiceProfiles;
-    final fetched = response.prompts ?? const <GeneratedSpeakerTagPrompt>[];
+    _unavailablePromptIds.removeWhere((_, failedAt) => now.difference(failedAt) >= refetchInterval);
+    final fetched = (response.prompts ?? const <GeneratedSpeakerTagPrompt>[])
+        .where((prompt) => !_unavailablePromptIds.containsKey(prompt.id))
+        .toList();
     if (fetched.isEmpty) {
       notifyListeners();
       return;
@@ -150,9 +156,16 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   Future<void> reportShown() async {
     if (_isDisposed || _shownReported || prompts.isEmpty) return;
     _shownReported = true;
-    _emit(SpeakerTagPromptsViewed(promptCount: prompts.length, firstTime: firstTime));
+    _emit(
+      SpeakerTagPromptsViewed(
+        promptCount: prompts.length,
+        firstTime: firstTime,
+      ),
+    );
     final generation = _sessionGeneration;
-    final result = await _markShown(prompts.map((prompt) => prompt.id).toList());
+    final result = await _markShown(
+      prompts.map((prompt) => prompt.id).toList(),
+    );
     if (!_isCurrent(generation)) return;
     switch (result) {
       case ApiSuccess(:final data):
@@ -181,15 +194,47 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     notifyListeners();
     final generation = _sessionGeneration;
     var wav = _clips[prompt.id];
+    var unavailable = false;
     if (wav == null) {
       switch (await _loadClip(prompt)) {
         case ApiSuccess(:final data):
           wav = data;
+          unavailable = data.isEmpty;
         case ApiFailure(:final problem):
           Logger.debug('speaker tag prompt clip unavailable: $problem');
+          unavailable = switch (problem.kind) {
+            ApiProblemKind.notFound ||
+            ApiProblemKind.forbidden ||
+            ApiProblemKind.paymentRequired ||
+            ApiProblemKind.unprocessable ||
+            ApiProblemKind.rejected =>
+              true,
+            _ => false,
+          };
       }
     }
-    if (!_isCurrent(generation) || ticket != _playbackTicket) return;
+    if (!_isCurrent(generation) || ticket != _playbackTicket || current?.id != prompt.id) return;
+    if (unavailable && current?.id == prompt.id) {
+      _played.add(prompt.id);
+      _emit(
+        SpeakerTagPromptClipPlayed(kind: _kind(prompt.kind), loaded: false),
+      );
+      _unavailablePromptIds[prompt.id] = _now();
+      playingPromptId = null;
+      clipErrorPromptId = null;
+      answerFailed = false;
+      index += 1;
+      if (index >= prompts.length) {
+        visible = false;
+        prompts = [];
+        index = 0;
+        notifyListeners();
+        await loadIfDue(force: true);
+      } else {
+        notifyListeners();
+      }
+      return;
+    }
     var played = false;
     if (wav != null && wav.isNotEmpty) {
       _clips[prompt.id] = wav;
@@ -205,7 +250,11 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   }
 
   /// Returns true when the answer was saved and the card moved on.
-  Future<bool> answer(SpeakerTagAnswer answer, {String? personId, String? name}) async {
+  Future<bool> answer(
+    SpeakerTagAnswer answer, {
+    String? personId,
+    String? name,
+  }) async {
     final prompt = current;
     if (_isDisposed || prompt == null || submitting) return false;
     submitting = true;
@@ -258,7 +307,12 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   /// The user closed the card. An unanswered set counts toward the server's back-off.
   Future<void> close() async {
     if (_isDisposed || !visible) return;
-    _emit(SpeakerTagPromptsClosed(answeredCount: answeredCount, promptCount: prompts.length));
+    _emit(
+      SpeakerTagPromptsClosed(
+        answeredCount: answeredCount,
+        promptCount: prompts.length,
+      ),
+    );
     visible = false;
     final generation = _sessionGeneration;
     _playbackTicket++;
@@ -294,14 +348,20 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   }
 
   /// Returns false and restores the previous value when the server rejects the change.
-  Future<bool> setSaveOtherVoiceProfiles(bool enabled, {required bool fromFirstPrompt}) async {
+  Future<bool> setSaveOtherVoiceProfiles(
+    bool enabled, {
+    required bool fromFirstPrompt,
+  }) async {
     if (_isDisposed) return false;
     final previous = saveOtherVoiceProfiles;
     saveOtherVoiceProfiles = enabled;
     notifyListeners();
     final generation = _sessionGeneration;
     final settings = _settingsOrNull(
-      await _updateSettings(saveOtherVoiceProfiles: enabled, source: fromFirstPrompt ? 'first_prompt' : 'settings'),
+      await _updateSettings(
+        saveOtherVoiceProfiles: enabled,
+        source: fromFirstPrompt ? 'first_prompt' : 'settings',
+      ),
     );
     if (!_isCurrent(generation)) return false;
     _emit(
@@ -329,7 +389,12 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     speakerTagPromptsEnabled = enabled;
     notifyListeners();
     final generation = _sessionGeneration;
-    final settings = _settingsOrNull(await _updateSettings(speakerTagPromptsEnabled: enabled, source: 'settings'));
+    final settings = _settingsOrNull(
+      await _updateSettings(
+        speakerTagPromptsEnabled: enabled,
+        source: 'settings',
+      ),
+    );
     if (!_isCurrent(generation)) return false;
     _emit(
       VoiceProfileSettingToggled(
@@ -374,6 +439,7 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     _shownReported = false;
     _played.clear();
     _clips.clear();
+    _unavailablePromptIds.clear();
     _player?.stop();
     notifyListeners();
   }
@@ -387,12 +453,18 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     super.dispose();
   }
 
-  Future<bool> _playWithJustAudio(Uint8List wav, int generation, int ticket) async {
+  Future<bool> _playWithJustAudio(
+    Uint8List wav,
+    int generation,
+    int ticket,
+  ) async {
     File? file;
     try {
       final directory = await getTemporaryDirectory();
       if (!_isCurrent(generation) || ticket != _playbackTicket) return false;
-      file = File('${directory.path}/speaker_tag_prompt_${generation}_$ticket.wav');
+      file = File(
+        '${directory.path}/speaker_tag_prompt_${generation}_$ticket.wav',
+      );
       await file.writeAsBytes(wav, flush: true);
       if (!_isCurrent(generation) || ticket != _playbackTicket) return false;
       final player = _player ??= AudioPlayer();
@@ -403,7 +475,9 @@ class SpeakerTagPromptsProvider extends BaseProvider {
       await player.play();
       return true;
     } catch (error) {
-      Logger.debug('speaker tag prompt clip playback failed: ${error.runtimeType}');
+      Logger.debug(
+        'speaker tag prompt clip playback failed: ${error.runtimeType}',
+      );
       return false;
     } finally {
       if (file != null) {
@@ -414,7 +488,9 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     }
   }
 
-  static GeneratedVoiceProfileSettings? _settingsOrNull(ApiResult<GeneratedVoiceProfileSettings> result) {
+  static GeneratedVoiceProfileSettings? _settingsOrNull(
+    ApiResult<GeneratedVoiceProfileSettings> result,
+  ) {
     switch (result) {
       case ApiSuccess(:final data):
         return data;
@@ -425,7 +501,10 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     }
   }
 
-  static Future<ApiResult<Uint8List>> _defaultLoadClip(GeneratedSpeakerTagPrompt prompt) => api.getSpeakerTagPromptClip(
+  static Future<ApiResult<Uint8List>> _defaultLoadClip(
+    GeneratedSpeakerTagPrompt prompt,
+  ) =>
+      api.getSpeakerTagPromptClip(
         conversationId: prompt.conversationId,
         start: prompt.clipStart,
         end: prompt.clipEnd,
@@ -445,7 +524,10 @@ class SpeakerTagPromptsProvider extends BaseProvider {
         _ => SpeakerTagPromptAnswerSubmittedKind.unknown,
       };
 
-  static SpeakerTagPromptAnswerSubmittedAnswer _answer(SpeakerTagAnswer answer) => switch (answer) {
+  static SpeakerTagPromptAnswerSubmittedAnswer _answer(
+    SpeakerTagAnswer answer,
+  ) =>
+      switch (answer) {
         SpeakerTagAnswer.me => SpeakerTagPromptAnswerSubmittedAnswer.me,
         SpeakerTagAnswer.notMe => SpeakerTagPromptAnswerSubmittedAnswer.notMe,
         SpeakerTagAnswer.person => SpeakerTagPromptAnswerSubmittedAnswer.person,

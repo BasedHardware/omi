@@ -17,6 +17,8 @@ SPEC.loader.exec_module(patch_mod)
 
 FIXTURE = """
 class ForegroundService : Service() {
+    private var isTimeout: Boolean = false
+
     override fun onCreate() {
         super.onCreate()
         registerBroadcastReceiver()
@@ -49,6 +51,8 @@ class ForegroundService : Service() {
         RestartReceiver.cancelRestartAlarm(this)
         stopForeground(true)
         stopSelf()
+
+        _isRunningServiceState.update { false }
     }
 
     private fun startForegroundService() {
@@ -141,6 +145,15 @@ class PatchFlutterForegroundTaskTests(unittest.TestCase):
         patched = patch_mod.apply_patch(round_two)
         self.assertEqual(patched.count(patch_mod.RESTART_MARKER), 1)
         self.assertEqual(patch_mod.apply_patch(patched), patched)
+
+    def test_upgrades_round_three_patch_in_pub_cache(self) -> None:
+        patched = patch_mod.apply_patch(FIXTURE)
+        round_three = patched.replace(patch_mod.START_ID_NEW, patch_mod.START_ID_OLD).replace(
+            patch_mod.START_COMMAND_NEW, patch_mod.START_COMMAND_ROUND3
+        ).replace(patch_mod.STOP_SELF_NEW, patch_mod.STOP_SELF_OLD)
+        upgraded = patch_mod.apply_patch(round_three)
+        self.assertEqual(upgraded, patched)
+        self.assertIn("stopSelf(lastDeliveredStartId)", upgraded)
 
 
 if __name__ == "__main__":

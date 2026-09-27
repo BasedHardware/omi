@@ -39,8 +39,9 @@ def test_memory_firestore_iam_deployment_doc_covers_service_account_boundary_and
     for required_term in REQUIRED_TERMS:
         assert required_term in doc
 
-    assert "MEMORY_MODE=off" in doc
-    assert "MEMORY_MODE=read" in doc
+    assert "MEMORY_ENABLED=off" in doc
+    assert "MEMORY_ENABLED=on" in doc
+    assert "MEMORY_MODE" not in doc
     assert "CANONICAL_MEMORY_USERS" not in doc
     assert "universal" in doc.lower()
     assert "memory_control.server_owned" in doc

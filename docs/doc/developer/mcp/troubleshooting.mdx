@@ -8,8 +8,8 @@ description: "Debug and fix common MCP connection issues"
 
 <AccordionGroup>
   <Accordion title="OAuth sign-in or consent does not open" icon="lock">
-    - Confirm the remote server URL is exactly `https://api.omi.me/v1/mcp/sse`
-    - Use Omi's registered ChatGPT or Claude connection flow; arbitrary client IDs are not accepted
+    - Confirm the remote server URL is exactly `https://api.omi.me/v1/mcp`
+    - Use Omi's registered ChatGPT or Claude connection flow, or a client that identifies itself with an HTTPS **Client ID Metadata Document** URL (`client_id`) + PKCE — dynamic client registration is not offered, and the client must send the user through Omi's consent flow on one of its registered redirect URIs
     - For Claude, use client ID `omi-claude-prod` and leave the client secret blank
     - For ChatGPT's developer-mode fallback, use `omi-chatgpt-prod`, leave the secret blank, and set token auth method to `none`
     - If the client cannot complete OAuth, use the manual MCP-key fallback in the [Setup guide](/doc/developer/mcp/setup)
@@ -37,8 +37,11 @@ description: "Debug and fix common MCP connection issues"
     other's endpoints returns a `401` that names the endpoints that key does authenticate.
   </Accordion>
   <Accordion title="No tools showing up" icon="toolbox">
-    - Send an `initialize` request first — tools are only available after initialization
-    - Check that your client supports the Streamable HTTP transport (`2025-03-26`)
+    - With protocol `2026-07-28` there is no initialize handshake — call
+      `server/discover` then `tools/list` directly; older clients still need
+      their `initialize` handshake first
+    - Check that your client supports the Streamable HTTP transport (the server
+      advertises `2026-07-28` and answers older protocol revisions)
     - Try the `/v1/mcp/sse/info` endpoint to verify the server is reachable:
       ```bash
       curl https://api.omi.me/v1/mcp/sse/info
@@ -68,39 +71,53 @@ description: "Debug and fix common MCP connection issues"
 
 <Tabs>
   <Tab title="MCP Inspector" icon="magnifying-glass">
-    Use the MCP inspector to test tools interactively:
+    The official inspector CLI can exercise the hosted endpoint directly:
+
+    ```bash
+    npx @modelcontextprotocol/inspector --cli https://api.omi.me/v1/mcp \
+      --transport http --method tools/list \
+      --header "Authorization: Bearer $OMI_MCP_API_KEY"
+    ```
+
+    For local development with the deprecated stdio package:
 
     ```bash
     npx @modelcontextprotocol/inspector uvx mcp-server-omi
     ```
-
-    For local development:
-
-    ```bash
-    cd path/to/servers/src/omi
-    npx @modelcontextprotocol/inspector uv run mcp-server-omi
-    ```
   </Tab>
   <Tab title="curl" icon="terminal">
-    Test the server directly:
+    Test the server directly. With protocol `2026-07-28` there is no handshake
+    or session header — every request carries `_meta` plus the
+    `MCP-Protocol-Version`/`Mcp-Method` headers:
 
     ```bash
     # Check server info
     curl https://api.omi.me/v1/mcp/sse/info
 
-    # Initialize a session
-    curl -X POST https://api.omi.me/v1/mcp/sse \
+    # Discover (2026-07-28)
+    curl -X POST https://api.omi.me/v1/mcp \
       -H "Authorization: Bearer omi_mcp_YOUR_KEY" \
       -H "Content-Type: application/json" \
-      -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+      -H "MCP-Protocol-Version: 2026-07-28" \
+      -H "Mcp-Method: server/discover" \
+      -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{},
+           "_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",
+                    "io.modelcontextprotocol/clientCapabilities":{}}}'
 
-    # List tools (use the Mcp-Session-Id from the initialize response)
-    curl -X POST https://api.omi.me/v1/mcp/sse \
+    # List tools (2026-07-28)
+    curl -X POST https://api.omi.me/v1/mcp \
       -H "Authorization: Bearer omi_mcp_YOUR_KEY" \
       -H "Content-Type: application/json" \
-      -H "Mcp-Session-Id: SESSION_ID_HERE" \
-      -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+      -H "MCP-Protocol-Version: 2026-07-28" \
+      -H "Mcp-Method: tools/list" \
+      -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{},
+           "_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",
+                    "io.modelcontextprotocol/clientCapabilities":{}}}'
     ```
+
+    Older handshake clients send `initialize` with their `protocolVersion`
+    (e.g. `2025-03-26`) instead; the server answers in that revision and no
+    `Mcp-Session-Id` tracking is required.
   </Tab>
   <Tab title="Log Files" icon="file-lines">
     View Claude Desktop MCP logs:

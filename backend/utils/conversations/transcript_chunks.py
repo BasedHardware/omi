@@ -1,19 +1,16 @@
 """Build verbatim transcript chunks for vector indexing.
 
-Conversation vectors (ns1) embed only the structured summary, so specific details
-(exact dates, names, numbers, one-off mentions) are unfindable semantically. These
-chunks slice the raw transcript into overlapping windows, each prefixed with the
-conversation date, so semantic search can land on the verbatim evidence.
+These chunks slice the raw transcript into overlapping windows prefixed with the
+conversation date, so semantic search can land on verbatim evidence.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import database.conversations as conversations_db
 from database.firestore_read_metrics import FirestoreReadSite
 
-# ~8 segments per chunk with 2-segment overlap keeps chunks small enough to embed
-# precisely while not splitting answers across a hard boundary.
+# ~8 segments per chunk with 2-segment overlap keeps chunks small enough to embed precisely.
 CHUNK_WINDOW = 8
 CHUNK_STRIDE = 6
 
@@ -21,25 +18,36 @@ CHUNK_STRIDE = 6
 def _speaker_label(seg: Dict[str, Any], people_by_id: Optional[Dict[str, str]] = None) -> str:
     if seg.get('is_user'):
         return 'User'
-    person_id = seg.get('person_id')
-    if person_id and people_by_id and person_id in people_by_id:
-        return people_by_id[person_id]
-    speaker_id = seg.get('speaker_id')
-    return f"Speaker {speaker_id}" if speaker_id is not None else 'Speaker'
+    if (pid := seg.get('person_id')) and people_by_id and pid in people_by_id:
+        return people_by_id[pid]
+    return f"Speaker {sid}" if (sid := seg.get('speaker_id')) is not None else 'Speaker'
+
+
+def _coerce_started_at(raw: Any) -> Optional[datetime]:
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        try:
+            return datetime.fromtimestamp(raw, tz=timezone.utc)
+        except (ValueError, OverflowError, OSError):
+            return None
+    if isinstance(raw, str) and raw.strip():
+        try:
+            dt = datetime.fromisoformat(raw.strip().replace('Z', '+00:00'))
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
 
 
 def build_transcript_chunks(
     segments: List[Dict[str, Any]],
-    started_at: Optional[datetime],
+    started_at: Optional[Any],
     window: int = CHUNK_WINDOW,
     stride: int = CHUNK_STRIDE,
     people_by_id: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, Any]]:
-    """segments: transcript_segment dicts ({'text','is_user','speaker_id','person_id',...}).
-
-    Returns [{'text', 'created_at' (unix ts), 'chunk_index'}] ready for
-    vector_db.upsert_transcript_chunk_vectors.
-    """
+    """Return [{'text', 'created_at' (unix ts), 'chunk_index'}] for vector_db upsert."""
     lines: List[str] = []
     for seg in segments or []:
         text = (seg.get('text') or '').strip()
@@ -51,18 +59,17 @@ def build_transcript_chunks(
 
     date_header = ''
     created_ts = 0
-    if started_at is not None:
-        date_header = f"[Conversation on {started_at.strftime('%d %b %Y, %H:%M')}]\n"
-        created_ts = int(started_at.timestamp())
+    dt = _coerce_started_at(started_at)
+    if dt is not None:
+        date_header = f"[Conversation on {dt.strftime('%d %b %Y, %H:%M')}]\n"
+        created_ts = int(dt.timestamp())
 
     chunks: List[Dict[str, Any]] = []
-    idx = 0
-    pos = 0
+    idx, pos = 0, 0
     while pos < len(lines):
-        piece = lines[pos : pos + window]
         chunks.append(
             {
-                'text': date_header + "\n".join(piece),
+                'text': date_header + "\n".join(lines[pos : pos + window]),
                 'created_at': created_ts,
                 'chunk_index': idx,
             }
@@ -75,16 +82,8 @@ def build_transcript_chunks(
 
 
 def hydrate_chunk_texts(uid: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Attach verbatim text to chunk references returned by vector search.
-
-    Re-reads the conversations from Firestore (decrypted by the db layer) and rebuilds
-    the deterministic chunking, so transcript text never has to live in Pinecone.
-    Rows whose conversation/chunk no longer exists are dropped. Each hydrated row also
-    carries the parent conversation's title and start time ('conversation_title' /
-    'conversation_started_at') so callers can emit typed sources without a second read.
-    """
-    conv_ids = list({r['conversation_id'] for r in rows if r.get('conversation_id')})
-    if not conv_ids:
+    """Attach verbatim text to chunk references returned by vector search."""
+    if not (conv_ids := list({r['conversation_id'] for r in rows if r.get('conversation_id')})):
         return []
     conversations = conversations_db.get_conversations_by_id(
         uid, conv_ids, read_site=FirestoreReadSite.TRANSCRIPT_CHUNK_HYDRATION
@@ -101,8 +100,7 @@ def hydrate_chunk_texts(uid: str, rows: List[Dict[str, Any]]) -> List[Dict[str, 
 
     hydrated: List[Dict[str, Any]] = []
     for r in rows:
-        conv_id = r.get('conversation_id')
-        chunk_idx = r.get('chunk_index')
+        conv_id, chunk_idx = r.get('conversation_id'), r.get('chunk_index')
         conv_chunks = chunks_by_conv.get(conv_id) if conv_id else None
         text = conv_chunks.get(chunk_idx) if (conv_chunks is not None and chunk_idx is not None) else None
         if text and conv_id:

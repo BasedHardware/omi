@@ -161,7 +161,7 @@ class AppChatToolsCard extends StatelessWidget {
           for (final tool in tools)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xs),
-              decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+              decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
               child: Text(
                 formatToolName(tool.name),
                 style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
