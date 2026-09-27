@@ -16760,7 +16760,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, xOmiSyncCaptureManifest: String? = nil, xOmiConversationGeolocation: String? = nil, authorization: String? = nil) async throws -> Void {
+  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, recordingSessionId: String? = nil, audioStartSeconds: Double? = nil, audioEndSeconds: Double? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, xOmiSyncCaptureManifest: String? = nil, xOmiConversationGeolocation: String? = nil, authorization: String? = nil) async throws -> Void {
     let _path = "/v2/sync-local-files"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -16768,6 +16768,15 @@ public enum OmiAPI {
     var queryItems: [URLQueryItem] = []
     if let conversationId {
       queryItems.append(URLQueryItem(name: "conversation_id", value: String(conversationId)))
+    }
+    if let recordingSessionId {
+      queryItems.append(URLQueryItem(name: "recording_session_id", value: String(recordingSessionId)))
+    }
+    if let audioStartSeconds {
+      queryItems.append(URLQueryItem(name: "audio_start_seconds", value: String(audioStartSeconds)))
+    }
+    if let audioEndSeconds {
+      queryItems.append(URLQueryItem(name: "audio_end_seconds", value: String(audioEndSeconds)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }

@@ -196,6 +196,11 @@ class Wal {
   /// arrives so WALs survive app kill and can be recovered on startup.
   String? conversationId;
 
+  /// Client recording id (`activeRecordingId` / `external_data.recording_session_id`).
+  /// Stamped when the WAL is created so a safety copy that misses
+  /// ConversationProcessingStarted can still bind to the live conversation.
+  String? recordingSessionId;
+
   /// The account that created this recording, stamped from the signed-in uid
   /// at creation (or back-filled at logout). Loaded records owned by another
   /// account are parked durably instead of being loaded, so a session never
@@ -320,6 +325,7 @@ class Wal {
     this.syncedFrameOffset = 0,
     this.originalStorage,
     this.conversationId,
+    this.recordingSessionId,
     this.ownerUid,
     this.geolocation,
     this.retryCount = 0,
@@ -350,6 +356,7 @@ class Wal {
       originalStorage:
           json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       conversationId: json['conversation_id'],
+      recordingSessionId: json['recording_session_id'],
       ownerUid: json['owner_uid'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
@@ -380,6 +387,7 @@ class Wal {
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
       'conversation_id': conversationId,
+      'recording_session_id': recordingSessionId,
       'owner_uid': ownerUid,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
