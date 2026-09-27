@@ -144,6 +144,48 @@ class TestConversationsToSqlite(unittest.TestCase):
         self.assertEqual(loaded, 2)
         self.assertEqual(total, 2)
 
+    def test_single_conversation_object_input(self):
+        """Single conversation object export (e.g., from omi conversation get) should load cleanly."""
+        single = SAMPLE_CONVERSATIONS[0]
+        json_file = self.dir_path / "single_conv.json"
+        json_file.write_text(json.dumps(single), encoding="utf-8")
+
+        db_path = self.dir_path / "single_test.sqlite"
+        loaded, added, total = load(str(db_path), [str(json_file)])
+        self.assertEqual(loaded, 1)
+        self.assertEqual(added, 1)
+        self.assertEqual(total, 1)
+
+        conn = sqlite3.connect(str(db_path))
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT title, category FROM conversations WHERE id = 'conv_1'")
+            row = cursor.fetchone()
+            self.assertEqual(row[0], "Team standup")
+            self.assertEqual(row[1], "work")
+        finally:
+            conn.close()
+
+    def test_items_and_data_envelopes(self):
+        """Envelopes with 'items' and 'data' keys should be unwrapped."""
+        for key in ("items", "data"):
+            json_file = self.dir_path / f"wrap_{key}.json"
+            json_file.write_text(json.dumps({key: SAMPLE_CONVERSATIONS}), encoding="utf-8")
+            db_path = self.dir_path / f"db_{key}.sqlite"
+            loaded, _, total = load(str(db_path), [str(json_file)])
+            self.assertEqual(loaded, 2)
+            self.assertEqual(total, 2)
+
+    def test_empty_envelopes_produce_zero_rows(self):
+        """Empty envelopes like {'conversations': []} should produce 0 rows without error."""
+        for key in ("conversations", "items", "data"):
+            json_file = self.dir_path / f"empty_{key}.json"
+            json_file.write_text(json.dumps({key: []}), encoding="utf-8")
+            db_path = self.dir_path / f"db_empty_{key}.sqlite"
+            loaded, added, total = load(str(db_path), [str(json_file)])
+            self.assertEqual(loaded, 0)
+            self.assertEqual(added, 0)
+            self.assertEqual(total, 0)
 
     def test_path_traversal_rejected(self):
         """Paths containing '..' must be rejected before any DB is opened."""

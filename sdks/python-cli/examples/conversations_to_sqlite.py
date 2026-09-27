@@ -55,12 +55,14 @@ def rows_from(pages: Sequence[str]) -> List[Tuple]:
     for path in pages:
         raw = Path(path).read_text(encoding="utf-8").lstrip("\ufeff")
         items = json.loads(raw)
-        # Support both bare array and wrapped {"conversations": [...]} shape
+        # Support both bare array, wrapped {"conversations": [...]}, and single object shape
         if isinstance(items, dict):
             for key in ("conversations", "items", "data"):
                 if isinstance(items.get(key), list):
                     items = items[key]
                     break
+            else:
+                items = [items]
         if not isinstance(items, list):
             raise ValueError(f"{path}: expected a JSON array or wrapped object")
         for item in items:
