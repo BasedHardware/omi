@@ -8,6 +8,7 @@ enum SiriListeningFailure: Error {
     case recordingOff
     case micDenied
     case nothingToStop
+    case capturePaused
     case unavailable
 
     init(pigeonCode: String) {
@@ -16,6 +17,7 @@ enum SiriListeningFailure: Error {
         case "recording_off": self = .recordingOff
         case "mic_permission_denied": self = .micDenied
         case "nothing_to_stop": self = .nothingToStop
+        case "capture_paused": self = .capturePaused
         default: self = .unavailable
         }
     }
@@ -26,6 +28,7 @@ enum SiriListeningFailure: Error {
         case .recordingOff: "Turn on audio recording in Omi first."
         case .micDenied: "Allow microphone access in Omi first."
         case .nothingToStop: "Omi isn't listening right now."
+        case .capturePaused: "Omi is paused. Open Omi to resume."
         case .unavailable: starting ? "Open Omi to start listening." : "Open Omi to stop listening."
         }
     }

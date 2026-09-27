@@ -196,11 +196,32 @@ void main() {
       deviceConnected: () => false,
       phoneBatchRecording: () => false,
       deviceBatchRecording: () => false,
+      phonePaused: () => false,
     ));
 
     await siri.setListening(true);
     await siri.setListening(false);
     expect(calls, ['streamRecording', 'stopStreamRecording']);
+  });
+
+  test('Siri Start does not report success for paused phone stream or batch capture', () async {
+    for (final batch in [false, true]) {
+      var starts = 0;
+      final siri = SiriIntegration.forTest(RecordingSiriHost(), 'owner-paused', listeningCapture: (
+        start: () async {
+          starts++;
+        },
+        stop: () async => true,
+        source: () => 'phone',
+        deviceConnected: () => false,
+        phoneBatchRecording: () => batch,
+        deviceBatchRecording: () => false,
+        phonePaused: () => true,
+      ));
+      await expectLater(siri.setListening(true),
+          throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'capture_paused')));
+      expect(starts, 0);
+    }
   });
 
   test('Siri Start reports an already-streaming BLE device without opening phone capture', () async {
@@ -214,6 +235,7 @@ void main() {
       deviceConnected: () => true,
       phoneBatchRecording: () => false,
       deviceBatchRecording: () => false,
+      phonePaused: () => false,
     ));
 
     await expectLater(siri.setListening(true),
@@ -232,6 +254,7 @@ void main() {
       deviceConnected: () => true,
       phoneBatchRecording: () => false,
       deviceBatchRecording: () => false,
+      phonePaused: () => false,
     ));
 
     await siri.setListening(true);
@@ -246,6 +269,7 @@ void main() {
       deviceConnected: () => false,
       phoneBatchRecording: () => false,
       deviceBatchRecording: () => false,
+      phonePaused: () => false,
     ));
     await expectLater(siri.setListening(false),
         throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'nothing_to_stop')));

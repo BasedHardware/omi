@@ -594,6 +594,13 @@ final class SiriSnapshotStore {
     }
 
     /// Incremental mutations never empty the owner's whole index.
+    @available(iOS 27.0, *)
+    private func deleteMemoryRepresentations(ids: [String], from index: CSSearchableIndex) async throws {
+        guard !ids.isEmpty else { return }
+        try await index.deleteAppEntities(identifiedBy: ids, ofType: MemoryEntity.self)
+        try await index.deleteAppEntities(identifiedBy: ids, ofType: ConversationEntity.self)
+    }
+
     private func applyIncremental(type: String, ids: [String], uid: String) async throws {
         guard enabled, #available(iOS 27.0, *) else { return }
         try requireValidOwner(uid)
@@ -615,20 +622,13 @@ final class SiriSnapshotStore {
                 let entities = memories(ids: ids)
                 let present = Set(entities.map(\.id))
                 let removed = ids.filter { !present.contains($0) }
-                if !removed.isEmpty {
-                    try await index.deleteAppEntities(identifiedBy: removed, ofType: MemoryEntity.self)
-                }
+                try await deleteMemoryRepresentations(ids: removed, from: index)
                 try requireValidOwner(uid)
                 if !entities.isEmpty { try await index.indexAppEntities(entities, priority: 0) }
                 // A memory can also be represented as a Notes schema entity.
                 // Reindex may create that entry, so every memory mutation must
                 // update or remove it under the same owner gate.
                 let notes = conversations(ids: ids) + memoryNotes(ids: ids)
-                let noteIDs = Set(notes.map(\.id))
-                let removedNotes = ids.filter { !noteIDs.contains($0) }
-                if !removedNotes.isEmpty {
-                    try await index.deleteAppEntities(identifiedBy: removedNotes, ofType: ConversationEntity.self)
-                }
                 try requireValidOwner(uid)
                 if !notes.isEmpty { try await index.indexAppEntities(notes, priority: 0) }
             case "task":

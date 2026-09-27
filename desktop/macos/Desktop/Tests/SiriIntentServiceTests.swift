@@ -4,6 +4,28 @@ import XCTest
 @testable import Omi_Computer
 
 final class SiriIntentServiceTests: XCTestCase {
+  func testMemoryRemovalDeletesCustomAndNotesRepresentationsInChunks() async throws {
+    guard #available(macOS 27, *) else { return }
+    actor Calls {
+      var values: [(SiriMemoryIndexRepresentation, [String])] = []
+      func append(_ kind: SiriMemoryIndexRepresentation, _ ids: [String]) { values.append((kind, ids)) }
+    }
+    let calls = Calls()
+    try await SiriIndexer.deleteMemoryRepresentations(ids: (0..<201).map(String.init)) { kind, ids in
+      await calls.append(kind, ids)
+    }
+    let values = await calls.values
+    XCTAssertEqual(values.map(\.0), [.custom, .note, .custom, .note])
+    XCTAssertEqual(values.map { $0.1.count }, [200, 200, 1, 1])
+  }
+
+  func testStartListeningRejectsPausedMeetingCapture() {
+    XCTAssertThrowsError(try SiriListeningState.requireActive(isTranscribing: true, isAwaitingMeeting: true)) {
+      XCTAssertEqual($0 as? SiriFailure, .capturePaused)
+    }
+    XCTAssertEqual(SiriFailure.capturePaused.message(for: "start_listening"), "Omi is paused. Open Omi to resume.")
+  }
+
   func testRebuildPreparationFailurePreservesExistingIndex() async {
     guard #available(macOS 15.4, *) else { return }
     actor Writes {

@@ -420,6 +420,8 @@ enum SiriDebugProbe {
                             "Turn on audio recording in Omi first." &&
                           SiriListeningFailure(pigeonCode: "mic_permission_denied").spokenDialog(starting: true) ==
                             "Allow microphone access in Omi first." &&
+                          SiriListeningFailure(pigeonCode: "capture_paused").spokenDialog(starting: true) ==
+                            "Omi is paused. Open Omi to resume." &&
                           SiriListeningFailure(pigeonCode: "nothing_to_stop").spokenDialog(starting: false) ==
                             "Omi isn't listening right now." ? "PASS" : "FAIL")
                     defaults.removeObject(forKey: SiriStorageNamespace.current.ownerKey)

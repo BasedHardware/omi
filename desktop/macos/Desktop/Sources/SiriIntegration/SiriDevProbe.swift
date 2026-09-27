@@ -18,11 +18,18 @@
       let index = CSSearchableIndex(name: "omi.siri.synthetic.\(UUID().uuidString)")
       let record = MemoryRecord(backendId: token, content: token)
       do {
+        guard let memory = record.toServerMemory() else { throw SiriFailure.server }
         try await index.indexAppEntities([MemoryEntity(record)], priority: 0)
-        log("SiriDevProbe: synthetic MemoryEntity indexed")
+        try await index.indexAppEntities([ConversationEntity(memory)], priority: 0)
+        log("SiriDevProbe: synthetic memory and Notes representations indexed")
         let found = try await spotlightContains(token)
         log("SiriDevProbe: Core Spotlight fetch found=\(found)")
-        try await index.deleteAppEntities(identifiedBy: [token], ofType: MemoryEntity.self)
+        try await SiriIndexer.deleteMemoryRepresentations(ids: [token]) { representation, ids in
+          switch representation {
+          case .custom: try await index.deleteAppEntities(identifiedBy: ids, ofType: MemoryEntity.self)
+          case .note: try await index.deleteAppEntities(identifiedBy: ids, ofType: ConversationEntity.self)
+          }
+        }
         var absent = false
         for _ in 0..<10 {
           if try await spotlightContains(token) == false {
@@ -31,7 +38,7 @@
           }
           try await Task.sleep(for: .milliseconds(250))
         }
-        log("SiriDevProbe: synthetic MemoryEntity delete fetch absent=\(absent)")
+        log("SiriDevProbe: synthetic memory and Notes delete fetch absent=\(absent)")
         if !absent {
           throw NSError(
             domain: "SiriDevProbe", code: 1,

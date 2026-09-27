@@ -35,6 +35,7 @@ typedef SiriListeningCapture = ({
   bool Function() deviceConnected,
   bool Function() phoneBatchRecording,
   bool Function() deviceBatchRecording,
+  bool Function() phonePaused,
 });
 
 typedef SiriMemoryPageFetcher = Future<GetMemoriesResult> Function({
@@ -635,6 +636,8 @@ class SiriIntegration extends SiriEventsApi {
             deviceConnected: () => device.isConnected,
             phoneBatchRecording: () => provider.isPhoneMicBatchRecording,
             deviceBatchRecording: () => provider.isPendantBatchRecording,
+            phonePaused: () =>
+                provider.isPhoneMicPaused || (provider.liveCaptureSource == 'phone' && provider.isPaused),
           );
         })();
     if (enabled) {
@@ -642,6 +645,9 @@ class SiriIntegration extends SiriEventsApi {
           (capture.deviceBatchRecording() || (capture.source() != null && capture.source() != 'phone'))) {
         throw PlatformException(
             code: 'device_already_listening', message: 'Omi is already listening from your device.');
+      }
+      if ((capture.source() == 'phone' || capture.phoneBatchRecording()) && capture.phonePaused()) {
+        throw PlatformException(code: 'capture_paused', message: 'Omi is paused. Open Omi to resume.');
       }
       if (capture.source() == 'phone' || capture.phoneBatchRecording()) return;
       try {

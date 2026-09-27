@@ -8,6 +8,11 @@ import Foundation
 // single-thread rule. The SDK has not annotated CSSearchableIndex as Sendable.
 extension CSSearchableIndex: @unchecked @retroactive Sendable {}
 
+/// A memory returned by `.notes.createNote` is also a Notes schema entity.
+enum SiriMemoryIndexRepresentation: Sendable, Equatable {
+  case custom, note
+}
+
 /// Owns the per-account Spotlight index. All public entry points are safe to call
 /// repeatedly; the preference and owner are checked before any content is sent.
 @available(macOS 15.4, *)
@@ -15,6 +20,28 @@ actor SiriIndexer {
   static let shared = SiriIndexer()
   nonisolated static func supportsSpotlightIndexing(_ version: OperatingSystemVersion) -> Bool {
     version.majorVersion >= 27
+  }
+
+  @available(macOS 27, *)
+  nonisolated static func deleteMemoryRepresentations(
+    ids: [String],
+    using delete: @Sendable (SiriMemoryIndexRepresentation, [String]) async throws -> Void
+  ) async throws {
+    for chunk in ids.chunkedSiriIndex(200) {
+      try await delete(.custom, chunk)
+      try await delete(.note, chunk)
+    }
+  }
+
+  @available(macOS 27, *)
+  nonisolated private static func deleteMemoryRepresentations(ids: [String], from index: CSSearchableIndex) async throws
+  {
+    try await Self.deleteMemoryRepresentations(ids: ids) { representation, chunk in
+      switch representation {
+      case .custom: try await index.deleteAppEntities(identifiedBy: chunk, ofType: MemoryEntity.self)
+      case .note: try await index.deleteAppEntities(identifiedBy: chunk, ofType: ConversationEntity.self)
+      }
+    }
   }
   private let ownerKey = "siriIndexedOwnerID"
   private var indexedOwner: String?
@@ -163,10 +190,7 @@ actor SiriIndexer {
       guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
       defer { finishOperation() }
       let due = try await SiriMemoryExpirySweep.deleteDue(indexedMemoryExpirations, now: now) { ids in
-        for chunk in ids.chunkedSiriIndex(200) {
-          try await index.deleteAppEntities(identifiedBy: chunk, ofType: MemoryEntity.self)
-          try await index.deleteAppEntities(identifiedBy: chunk, ofType: ConversationEntity.self)
-        }
+        try await Self.deleteMemoryRepresentations(ids: ids, from: index)
       }
       for id in due { indexedMemoryExpirations.removeValue(forKey: id) }
       scheduleNextMemoryExpiry(owner: expectedOwner)
@@ -268,8 +292,7 @@ actor SiriIndexer {
     guard #available(macOS 27, *) else { return }
     guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
     defer { finishOperation() }
-    try await index.deleteAppEntities(identifiedBy: [id], ofType: MemoryEntity.self)
-    try await index.deleteAppEntities(identifiedBy: [id], ofType: ConversationEntity.self)
+    try await Self.deleteMemoryRepresentations(ids: [id], from: index)
     indexedMemoryExpirations.removeValue(forKey: id)
     scheduleNextMemoryExpiry(owner: expectedOwner)
   }
@@ -278,10 +301,7 @@ actor SiriIndexer {
     guard #available(macOS 27, *) else { return }
     guard !ids.isEmpty, let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
     defer { finishOperation() }
-    for chunk in ids.chunkedSiriIndex(200) {
-      try await index.deleteAppEntities(identifiedBy: chunk, ofType: MemoryEntity.self)
-      try await index.deleteAppEntities(identifiedBy: chunk, ofType: ConversationEntity.self)
-    }
+    try await Self.deleteMemoryRepresentations(ids: ids, from: index)
     for id in ids { indexedMemoryExpirations.removeValue(forKey: id) }
     scheduleNextMemoryExpiry(owner: expectedOwner)
   }
@@ -349,10 +369,12 @@ actor SiriIndexer {
     defer { finishOperation() }
     let entities = try await MemoryEntityQuery().entities(for: ids)
     let present = Set(entities.map(\.id))
-    for chunk in ids.filter({ !present.contains($0) }).chunkedSiriIndex(200) {
-      try await index.deleteAppEntities(identifiedBy: chunk, ofType: MemoryEntity.self)
-    }
+    try await Self.deleteMemoryRepresentations(ids: ids.filter { !present.contains($0) }, from: index)
     for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+    let records = try await MemoryStorage.shared.getSiriMemoryRecords(backendIds: entities.map(\.id))
+    let notes = records.filter { SiriIndexScope.memory($0, now: Date()) }
+      .compactMap { $0.toServerMemory() }.map(ConversationEntity.init)
+    for chunk in notes.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
     for entity in entities { indexedMemoryExpirations[entity.id] = entity.eligibilityCutoff }
     for id in ids where !present.contains(id) { indexedMemoryExpirations.removeValue(forKey: id) }
     scheduleNextMemoryExpiry(owner: expectedOwner)

@@ -190,7 +190,7 @@ struct StartListeningIntent: AppIntent {
       guard app.audioRecordingMode != .off else { throw SiriFailure.recordingOff }
       guard app.hasMicrophonePermission else { throw SiriFailure.micDenied }
       app.startTranscription()
-      guard app.isTranscribing else { throw SiriFailure.server }
+      try SiriListeningState.requireActive(isTranscribing: app.isTranscribing, isAwaitingMeeting: app.isAwaitingMeeting)
     }
     return .result(dialog: "Omi is listening.")
   }

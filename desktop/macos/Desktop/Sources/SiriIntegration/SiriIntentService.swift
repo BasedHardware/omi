@@ -2,7 +2,7 @@ import Foundation
 
 enum SiriFailure: Error, Equatable {
   case auth, network, quota, rateLimited, server, cancelled, unsupported
-  case recordingOff, micDenied, nothingToStop
+  case recordingOff, micDenied, nothingToStop, capturePaused
 
   var outcome: String {
     switch self {
@@ -10,7 +10,7 @@ enum SiriFailure: Error, Equatable {
     case .network: "network"
     case .quota: "quota"
     case .rateLimited: "rate_limited"
-    case .server, .recordingOff, .nothingToStop: "server"
+    case .server, .recordingOff, .nothingToStop, .capturePaused: "server"
     case .cancelled: "cancelled"
     case .unsupported: "server"
     }
@@ -22,6 +22,7 @@ enum SiriFailure: Error, Equatable {
       case .recordingOff: return "Turn on audio recording in Omi first."
       case .micDenied: return "Allow microphone access in Omi first."
       case .nothingToStop: return "Omi isn't listening right now."
+      case .capturePaused: return "Omi is paused. Open Omi to resume."
       case .auth: return "Open Omi and sign in first."
       case .network: return "I couldn't reach Omi to control listening."
       case .quota: return "Your Omi limit has been reached, so listening couldn't start."
@@ -44,7 +45,7 @@ enum SiriFailure: Error, Equatable {
         ? "Omi couldn't open that right now."
         : action == "complete" ? "Omi couldn't change the task right now." : "Omi couldn't save that right now."
     case .cancelled: return "The action was cancelled."
-    case .recordingOff, .micDenied, .nothingToStop: return "Omi couldn't complete that action."
+    case .recordingOff, .micDenied, .nothingToStop, .capturePaused: return "Omi couldn't complete that action."
     case .unsupported:
       return action == "open"
         ? "That item is no longer available in Omi."
@@ -79,6 +80,13 @@ enum SiriFailure: Error, Equatable {
       return error.code == .cancelled ? .cancelled : .network
     }
     return .server
+  }
+}
+
+enum SiriListeningState {
+  static func requireActive(isTranscribing: Bool, isAwaitingMeeting: Bool) throws {
+    if isAwaitingMeeting { throw SiriFailure.capturePaused }
+    if !isTranscribing { throw SiriFailure.server }
   }
 }
 
