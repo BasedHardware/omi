@@ -260,6 +260,9 @@ class OmiVoicePlaybackService {
     if (routeToOmiDevice) {
       final deviceReady = await _probeOmiDeviceSpeaker();
       if (!deviceReady) {
+        // Deliberate: mode 3 is wearable-speaker only. Do not fall back to the
+        // phone here (same privacy idea as mode 1 skipping without headphones).
+        // Mid-stream BLE failure still falls back to system TTS for that sentence.
         debugPrint('OmiVoicePlayback: no Omi speaker — skipping playback (mode=omi_device)');
         // Closed analytics enum has no dedicated no-device reason; `none` +
         // modeInt-equivalent unknown mode still records the skip.
