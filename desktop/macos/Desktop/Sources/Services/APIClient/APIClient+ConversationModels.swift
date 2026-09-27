@@ -330,7 +330,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     discarded = wire.discarded ?? false
     deleted = false  // backend REST Conversation schema does not expose deleted
     isLocked = wire.isLocked ?? false
-    visibility = (try? container.decode(String.self, forKey: .visibility)) ?? "private"
+    visibility = try container.contains(.visibility) ? container.decode(String.self, forKey: .visibility) : "private"
     starred = wire.starred ?? false
     folderId = wire.folderId
     inputDeviceName = wire.clientDeviceId
