@@ -991,6 +991,25 @@ def test_public_shared_chat_runtime_mode_is_dev_only_on_every_backend_surface():
             'PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA'
         )
 
+        chart_path = BACKEND_DIR / 'charts' / 'backend-listen' / f'{environment}_omi_backend_listen_values.yaml'
+        with chart_path.open(encoding='utf-8') as chart_handle:
+            chart = yaml.safe_load(chart_handle)
+        chart_env = {item['name']: item.get('value') for item in chart['env']}
+        assert (
+            chart_env['PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA']
+            == {
+                'dev': '1031333818730-compute@developer.gserviceaccount.com',
+                'prod': '208440318997-compute@developer.gserviceaccount.com',
+            }[environment]
+        )
+        assert (
+            chart_env['PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE']
+            == {
+                'dev': 'https://backend-dt5lrfkkoa-uc.a.run.app',
+                'prod': 'https://api.omi.me',
+            }[environment]
+        )
+
 
 def test_rolling_anonymous_budgets_are_atomic_and_report_every_reason(monkeypatch):
     fake_redis = fakeredis.FakeRedis()

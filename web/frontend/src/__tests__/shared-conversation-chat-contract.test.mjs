@@ -122,6 +122,9 @@ describe('public shared conversation chat frontend safety contract', () => {
     assert.match(componentSource, /getOmiInstallLink\(userAgent\)/);
     assert.match(componentSource, /pages\/download\?/);
     assert.match(componentSource, /products\/omi\?/);
+    assert.match(componentSource, /withCampaign\(APP_STORE\)/);
+    assert.match(componentSource, /withCampaign\(PLAY_STORE\)/);
+    assert.match(componentSource, /utm_source=omi_share/);
     assert.match(componentSource, /question_asked/);
     assert.match(componentSource, /limit_card_shown/);
     assert.match(componentSource, /upsell_clicked/);

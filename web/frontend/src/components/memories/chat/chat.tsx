@@ -31,6 +31,10 @@ const PLAY_STORE = 'https://play.google.com/store/apps/details?id=com.friend.ios
 const CAMPAIGN =
   'utm_source=omi_share&utm_medium=shared_conversation&utm_campaign=ask_omi_limit';
 
+function withCampaign(url: string) {
+  return `${url}${url.includes('?') ? '&' : '?'}${CAMPAIGN}`;
+}
+
 export default function Chat({
   conversationId,
   transcript,
@@ -174,12 +178,12 @@ export default function Chat({
   const installLink = getOmiInstallLink(userAgent);
   const phoneLinks =
     installLink === APP_STORE
-      ? [{ label: 'App Store', href: APP_STORE }]
+      ? [{ label: 'App Store', href: withCampaign(APP_STORE) }]
       : installLink === PLAY_STORE
-      ? [{ label: 'Play Store', href: PLAY_STORE }]
+      ? [{ label: 'Play Store', href: withCampaign(PLAY_STORE) }]
       : [
-          { label: 'App Store', href: APP_STORE },
-          { label: 'Play Store', href: PLAY_STORE },
+          { label: 'App Store', href: withCampaign(APP_STORE) },
+          { label: 'Play Store', href: withCampaign(PLAY_STORE) },
         ];
   const showSignIn = limitReason !== 'no_omi_account';
 

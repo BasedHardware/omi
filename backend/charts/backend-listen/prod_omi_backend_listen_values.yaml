@@ -91,6 +91,12 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  # Keep these aligned with the production GitHub environment variables used
+  # by the Cloud Run backend; api.omi.me is served by backend-listen.
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+    value: "https://api.omi.me"
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+    value: "208440318997-compute@developer.gserviceaccount.com"
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://omi.me"
   - name: FREE_TIER_LOCAL_PROCESSING
