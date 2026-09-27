@@ -36,6 +36,15 @@ def test_upload_size_and_schema(monkeypatch):
     assert client.post('/v1/mobile/device-diagnostics', json={'bundle_base64': old}).status_code == 400
 
 
+def test_upload_rejects_oversized_stream_before_json_validation():
+    response = _client('test-user').post(
+        '/v1/mobile/device-diagnostics',
+        content=b' ' * (route.MAX_REQUEST_BYTES + 1),
+        headers={'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
+
+
 def test_admin_read_requires_key(monkeypatch):
     monkeypatch.setenv('ADMIN_KEY', 'private-key')
     monkeypatch.setattr(route.device_diagnostics_storage, 'read_bundle', lambda ticket: {'schema_version': 2})

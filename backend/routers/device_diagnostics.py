@@ -12,22 +12,60 @@ import os
 import re
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 
 from utils.executors import run_blocking, storage_executor
 from utils.other import device_diagnostics_storage
 from utils.other import endpoints as auth
 
-router = APIRouter(tags=['device-diagnostics'])
 logger = logging.getLogger(__name__)
 MAX_BUNDLE_BYTES = 4 * 1024 * 1024
+MAX_ENCODED_BYTES = (MAX_BUNDLE_BYTES + 2) // 3 * 4
+MAX_REQUEST_BYTES = MAX_ENCODED_BYTES + 1024
 TICKET_PATTERN = re.compile(r'^[0-9A-F]{12}$')
 upload_uid = auth.with_rate_limit(auth.get_current_user_uid, 'memories:modify')
 
 
+class BoundedBodyRoute(APIRoute):
+    """Reject oversized uploads while ASGI is still delivering the request body."""
+
+    def get_route_handler(self):
+        original_handler = super().get_route_handler()
+
+        async def bounded_handler(request: Request):
+            content_length = request.headers.get('content-length')
+            if content_length is not None:
+                try:
+                    if int(content_length) > MAX_REQUEST_BYTES:
+                        raise HTTPException(status_code=413, detail='Diagnostics bundle is too large')
+                except ValueError:
+                    pass
+
+            received = 0
+            receive = request.receive
+
+            async def receive_bounded():
+                nonlocal received
+                message = await receive()
+                if message['type'] == 'http.request':
+                    received += len(message.get('body', b''))
+                    if received > MAX_REQUEST_BYTES:
+                        raise HTTPException(status_code=413, detail='Diagnostics bundle is too large')
+                return message
+
+            bounded_request = Request(request.scope, receive_bounded)
+            return await original_handler(bounded_request)
+
+        return bounded_handler
+
+
+router = APIRouter(tags=['device-diagnostics'], route_class=BoundedBodyRoute)
+
+
 class DiagnosticsUpload(BaseModel):
-    bundle_base64: str = Field(max_length=5_600_000)
+    bundle_base64: str = Field(max_length=MAX_REQUEST_BYTES)
 
 
 class DiagnosticsReceipt(BaseModel):
@@ -51,7 +89,7 @@ def _admin_key(
 
 @router.post('/v1/mobile/device-diagnostics', response_model=DiagnosticsReceipt, status_code=201)
 async def upload_device_diagnostics(payload: DiagnosticsUpload, uid: str = Depends(upload_uid)) -> DiagnosticsReceipt:
-    if len(payload.bundle_base64) > (MAX_BUNDLE_BYTES + 2) // 3 * 4:
+    if len(payload.bundle_base64) > MAX_ENCODED_BYTES:
         raise HTTPException(status_code=413, detail='Diagnostics bundle is too large')
     try:
         body = base64.b64decode(payload.bundle_base64, validate=True)
