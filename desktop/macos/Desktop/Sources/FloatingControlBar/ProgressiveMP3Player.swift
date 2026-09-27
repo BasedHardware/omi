@@ -25,6 +25,19 @@ enum ProgressiveMP3PlayerError: LocalizedError {
   }
 }
 
+private final class SingleInputSupplyState: @unchecked Sendable {
+  private let lock = NSLock()
+  private var hasSuppliedInput = false
+
+  func takeInput() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !hasSuppliedInput else { return false }
+    hasSuppliedInput = true
+    return true
+  }
+}
+
 /// Incrementally parses MP3 packets, decodes them to small PCM buffers, and
 /// schedules those buffers on the same route-resilient AVAudioEngine path as
 /// realtime voice output. Compressed bytes are held only until a bounded
@@ -258,14 +271,13 @@ final class ProgressiveMP3Player: ProgressiveAudioPlaying {
       throw ProgressiveMP3PlayerError.decoderUnavailable
     }
 
-    var suppliedInput = false
+    let inputSupplyState = SingleInputSupplyState()
     var conversionError: NSError?
     let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
-      if suppliedInput {
+      guard inputSupplyState.takeInput() else {
         inputStatus.pointee = .noDataNow
         return nil
       }
-      suppliedInput = true
       inputStatus.pointee = .haveData
       return compressed
     }
