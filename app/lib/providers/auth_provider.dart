@@ -49,6 +49,7 @@ class AuthenticationProvider extends BaseProvider {
   int _sessionExpirationGeneration = 0;
   StreamSubscription<User?>? _authStateSubscription;
   StreamSubscription<User?>? _idTokenSubscription;
+  StreamSubscription<User?>? _siriIdTokenSubscription;
   StreamSubscription<AuthSessionExpiredEvent>? _sessionExpiredSubscription;
   @override
   bool get loading => _loading;
@@ -66,14 +67,13 @@ class AuthenticationProvider extends BaseProvider {
     );
 
     Future.microtask(() {
-      _authStateSubscription = _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
+      _authStateSubscription = _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         PlatformManager.instance.analytics.bindIdentity(user?.uid);
         AuthService.instance.handleAuthUserChanged(user?.uid);
         Logger.debug(
           'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}',
         );
         this.user = user;
-        unawaited(SiriIntegration.instance.accountChanged(user));
         // Only update SharedPreferences if Firebase has a user
         // Don't clear cached credentials - allows fallback for dev builds
         if (user != null) {
@@ -84,8 +84,14 @@ class AuthenticationProvider extends BaseProvider {
         final cutoverOwner = (user != null && !user.isAnonymous) ? user.uid : null;
         unawaited(AccountCutoverRuntime.instance.bindAuthenticatedOwner(cutoverOwner));
         notifyListeners();
+        await SiriIntegration.instance.accountChanged(user);
       });
-      _idTokenSubscription = _auth.idTokenChanges().listen((User? user) async {
+      // Token refreshes are Siri-only. Keep the app's original UID-distinct
+      // listener so a token refresh does not replay its auth/UI side effects.
+      _siriIdTokenSubscription = _auth.idTokenChanges().listen((User? user) async {
+        if (user != null) await SiriIntegration.instance.refreshSession(user);
+      });
+      _idTokenSubscription = _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         PlatformManager.instance.analytics.bindIdentity(user?.uid);
         AuthService.instance.handleAuthUserChanged(user?.uid);
         if (user == null) {
@@ -109,20 +115,19 @@ class AuthenticationProvider extends BaseProvider {
             Logger.debug('Failed to get token: $e');
           }
         }
-        if (user != null) unawaited(SiriIntegration.instance.refreshSession(user));
         notifyListeners();
       });
-      _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) {
+      _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) async {
         _requiresReauthentication = true;
         _sessionExpirationGeneration++;
         user = null;
         authToken = null;
-        unawaited(SiriIntegration.instance.accountChanged(null));
         final rootContext = globalNavigatorKey.currentContext;
         if (rootContext != null && rootContext.mounted) {
           clearAllUserState(rootContext);
         }
         notifyListeners();
+        await SiriIntegration.instance.accountChanged(null);
       });
     });
   }
@@ -137,6 +142,7 @@ class AuthenticationProvider extends BaseProvider {
   void dispose() {
     _authStateSubscription?.cancel();
     _idTokenSubscription?.cancel();
+    _siriIdTokenSubscription?.cancel();
     _sessionExpiredSubscription?.cancel();
     super.dispose();
   }

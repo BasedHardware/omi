@@ -58,8 +58,17 @@ final class SiriSnapshotStore {
     private var expiryTask: _Concurrency.Task<Void, Never>?
     #if OMI_SIRI_PROBE
     var simulateIndexDeleteFailure = false
+    private(set) var probeFullRebuildCount = 0
     #endif
     private var file: URL { container.appendingPathComponent(namespace.snapshotFileName) }
+    private func serialized<T>(_ operation: () async throws -> T) async rethrows -> T {
+        if SiriSnapshotQueueContext.active { return try await operation() }
+        return try await SiriSpotlightGate.shared.run {
+            try await SiriSnapshotQueueContext.$active.withValue(true) {
+                try await operation()
+            }
+        }
+    }
     private init() {
         snapshot = (try? Data(contentsOf: container.appendingPathComponent(SiriStorageNamespace.current.snapshotFileName)))
             .flatMap { try? JSONDecoder().decode(Snapshot.self, from: $0) } ?? Snapshot()
@@ -145,33 +154,39 @@ final class SiriSnapshotStore {
     /// A native intent can finish with no Flutter engine. Commit its confirmed
     /// response under the same owner generation that authorized the request.
     func applyConfirmedMemory(id: String, content: String, owner: SiriSession.Config) async throws {
-        try SiriSession.shared.validateOwner(owner)
-        guard !id.isEmpty else { throw SiriSession.Failure.server }
-        try mutateForOwner(owner.uid, generation: owner.generation ?? 0) {
-            snapshot.memories[id] = Memory(id: id, content: content,
-                createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
-        }
-        if enabled {
-            do { try await rebuildIndex() }
-            catch { NSLog("[SiriIndex] Confirmed memory index deferred: %@", String(describing: error)); scheduleIndexRetry() }
+        try await serialized {
+            try SiriSession.shared.validateOwner(owner)
+            guard !id.isEmpty else { throw SiriSession.Failure.server }
+            try mutateForOwner(owner.uid, generation: owner.generation ?? 0) {
+                snapshot.memories[id] = Memory(id: id, content: content,
+                    createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+            }
+            if enabled {
+                do { try await applyIncremental(type: "memory", ids: [id], uid: owner.uid) }
+                catch { NSLog("[SiriIndex] Confirmed memory index deferred: %@", String(describing: error)); scheduleIndexRetry() }
+            }
+
         }
     }
 
     func applyConfirmedTask(id: String, title: String, completed: Bool, dueAt: Date?,
                             owner: SiriSession.Config) async throws {
-        try SiriSession.shared.validateOwner(owner)
-        guard !id.isEmpty else { throw SiriSession.Failure.server }
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
-        try mutateForOwner(owner.uid, generation: owner.generation ?? 0) {
-            let existing = snapshot.tasks[id]
-            snapshot.tasks[id] = Task(id: id, title: title, completed: completed,
-                createdAtMs: existing?.createdAtMs ?? now,
-                dueAtMs: dueAt.map { Int64($0.timeIntervalSince1970 * 1000) } ?? existing?.dueAtMs,
-                completedAtMs: completed ? now : nil)
-        }
-        if enabled {
-            do { try await rebuildIndex() }
-            catch { NSLog("[SiriIndex] Confirmed task index deferred: %@", String(describing: error)); scheduleIndexRetry() }
+        try await serialized {
+            try SiriSession.shared.validateOwner(owner)
+            guard !id.isEmpty else { throw SiriSession.Failure.server }
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            try mutateForOwner(owner.uid, generation: owner.generation ?? 0) {
+                let existing = snapshot.tasks[id]
+                snapshot.tasks[id] = Task(id: id, title: title, completed: completed,
+                    createdAtMs: existing?.createdAtMs ?? now,
+                    dueAtMs: dueAt.map { Int64($0.timeIntervalSince1970 * 1000) } ?? existing?.dueAtMs,
+                    completedAtMs: completed ? now : nil)
+            }
+            if enabled {
+                do { try await applyIncremental(type: "task", ids: [id], uid: owner.uid) }
+                catch { NSLog("[SiriIndex] Confirmed task index deferred: %@", String(describing: error)); scheduleIndexRetry() }
+            }
+
         }
     }
     private func cancelExpiryTask() {
@@ -226,101 +241,122 @@ final class SiriSnapshotStore {
     }
 
     func bind(uid: String, generation: Int64? = nil) async throws {
-        guard !uid.isEmpty else { throw SiriSession.Failure.auth }
-        lock.lock()
-        let snapshotOwner = snapshot.ownerUid
-        let pendingWipe = !(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty
-        let accepted = generation.map(generationMatchesLocked) ?? true
-        let transitioning = transitionGeneration != nil
-        lock.unlock()
-        guard accepted, !transitioning else { throw SiriSession.Failure.auth }
-        if snapshotOwner != uid || owner != uid || pendingWipe { try await wipe(expectedGeneration: generation) }
-        lock.lock(); defer { lock.unlock() }
-        guard (generation.map(generationMatchesLocked) ?? true), transitionGeneration == nil,
-              (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty else {
-            throw SiriSession.Failure.auth
+        try await serialized {
+            guard !uid.isEmpty else { throw SiriSession.Failure.auth }
+            lock.lock()
+            let snapshotOwner = snapshot.ownerUid
+            let pendingWipe = !(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty
+            let accepted = generation.map(generationMatchesLocked) ?? true
+            let transitioning = transitionGeneration != nil
+            lock.unlock()
+            guard accepted, !transitioning else { throw SiriSession.Failure.auth }
+            if snapshotOwner != uid || owner != uid || pendingWipe { try await wipe(expectedGeneration: generation) }
+            lock.lock(); defer { lock.unlock() }
+            guard (generation.map(generationMatchesLocked) ?? true), transitionGeneration == nil,
+                  (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty else {
+                throw SiriSession.Failure.auth
+            }
+            snapshot.ownerUid = uid
+            try persist()
+            defaults.set(uid, forKey: ownerKey)
+
         }
-        snapshot.ownerUid = uid
-        try persist()
-        defaults.set(uid, forKey: ownerKey)
     }
     func publishSession(_ config: SiriSessionConfig) async throws {
-        try await bind(uid: config.uid, generation: config.generation)
-        lock.lock(); defer { lock.unlock() }
-        guard generationMatchesLocked(config.generation), transitionGeneration == nil,
-              (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty,
-              snapshot.ownerUid == config.uid,
-              owner == config.uid else { throw SiriSession.Failure.auth }
-        try SiriSession.shared.publish(config)
+        try await serialized {
+            try await bind(uid: config.uid, generation: config.generation)
+            lock.lock(); defer { lock.unlock() }
+            guard generationMatchesLocked(config.generation), transitionGeneration == nil,
+                  (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty,
+                  snapshot.ownerUid == config.uid,
+                  owner == config.uid else { throw SiriSession.Failure.auth }
+            try SiriSession.shared.publish(config)
+
+        }
     }
     func wipeForAccountTransition() async throws -> Int64 {
-        lock.lock()
-        let next = (defaults.object(forKey: generationKey) as? Int64 ?? 0) + 1
-        defaults.set(next, forKey: generationKey)
-        transitionGeneration = next
-        lock.unlock()
-        try await wipe(expectedGeneration: next)
-        return next
+        return try await serialized {
+            lock.lock()
+            let next = (defaults.object(forKey: generationKey) as? Int64 ?? 0) + 1
+            defaults.set(next, forKey: generationKey)
+            transitionGeneration = next
+            lock.unlock()
+            try await wipe(expectedGeneration: next)
+            return next
+
+        }
     }
     func retryPendingWipe() async throws -> Bool {
-        lock.lock()
-        let pending = !(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty
-        let generation = defaults.object(forKey: generationKey) as? Int64 ?? 0
-        lock.unlock()
-        guard pending else { return false }
-        try await wipe(expectedGeneration: generation)
-        return true
+        return try await serialized {
+            lock.lock()
+            let pending = !(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty
+            let generation = defaults.object(forKey: generationKey) as? Int64 ?? 0
+            lock.unlock()
+            guard pending else { return false }
+            try await wipe(expectedGeneration: generation)
+            return true
+
+        }
     }
     func maintainOnLaunch() async throws -> Bool {
-        let retriedWipe = try await retryPendingWipe()
-        // setEnabled(false) persists the preference before Spotlight deletion.
-        // A failed delete must be retried even though rebuilding is disabled.
-        if !enabled {
-            try await removeIndex()
-        } else if let uid = owner, generationForOwner(uid) != nil {
-            try await rebuildIndex()
+        return try await serialized {
+            let retriedWipe = try await retryPendingWipe()
+            // setEnabled(false) persists the preference before Spotlight deletion.
+            // A failed delete must be retried even though rebuilding is disabled.
+            if !enabled {
+                try await removeIndex()
+            } else if let uid = owner, generationForOwner(uid) != nil {
+                try await rebuildIndex()
+            }
+            return retriedWipe
+
         }
-        return retriedWipe
     }
     func setEnabled(_ value: Bool) async throws {
-        defaults.set(value, forKey: enabledKey)
-        if !value {
-            cancelExpiryTask()
-            try await removeIndex()
+        try await serialized {
+            defaults.set(value, forKey: enabledKey)
+            if !value {
+                cancelExpiryTask()
+                try await removeIndex()
+            }
+            else { try await rebuildIndex() }
+
         }
-        else { try await rebuildIndex() }
     }
     func wipe(expectedGeneration: Int64? = nil) async throws {
-        cancelExpiryTask()
-        lock.lock()
-        guard expectedGeneration.map(generationMatchesLocked) ?? true else {
+        try await serialized {
+            cancelExpiryTask()
+            lock.lock()
+            guard expectedGeneration.map(generationMatchesLocked) ?? true else {
+                lock.unlock()
+                throw SiriSession.Failure.auth
+            }
+            let owners = Set([owner, snapshot.ownerUid, SiriSession.shared.currentConfig()?.uid].compactMap { $0 })
+                .union(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? [])
+            defaults.set(Array(owners), forKey: pendingWipeOwnersKey)
+            snapshot = Snapshot()
+            let persistence: Result<Void, Error>
+            do { try persist(); persistence = .success(()) }
+            catch { persistence = .failure(error) }
+            defaults.removeObject(forKey: ownerKey)
+            defaults.removeObject(forKey: routeKey)
+            SiriSession.shared.clear()
             lock.unlock()
-            throw SiriSession.Failure.auth
+            try persistence.get()
+            try await removeIndex(owners: owners)
+            lock.lock()
+            let remaining = Set(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).subtracting(owners)
+            if remaining.isEmpty { defaults.removeObject(forKey: pendingWipeOwnersKey) }
+            else { defaults.set(Array(remaining), forKey: pendingWipeOwnersKey) }
+            if transitionGeneration == expectedGeneration { transitionGeneration = nil }
+            lock.unlock()
+
         }
-        let owners = Set([owner, snapshot.ownerUid, SiriSession.shared.currentConfig()?.uid].compactMap { $0 })
-            .union(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? [])
-        defaults.set(Array(owners), forKey: pendingWipeOwnersKey)
-        snapshot = Snapshot()
-        let persistence: Result<Void, Error>
-        do { try persist(); persistence = .success(()) }
-        catch { persistence = .failure(error) }
-        defaults.removeObject(forKey: ownerKey)
-        defaults.removeObject(forKey: routeKey)
-        SiriSession.shared.clear()
-        lock.unlock()
-        try persistence.get()
-        try await removeIndex(owners: owners)
-        lock.lock()
-        let remaining = Set(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).subtracting(owners)
-        if remaining.isEmpty { defaults.removeObject(forKey: pendingWipeOwnersKey) }
-        else { defaults.set(Array(remaining), forKey: pendingWipeOwnersKey) }
-        if transitionGeneration == expectedGeneration { transitionGeneration = nil }
-        lock.unlock()
     }
     private func removeIndex(owners explicitOwners: Set<String>? = nil) async throws {
         lock.lock(); let snapshotOwner = snapshot.ownerUid; lock.unlock()
         let owners = explicitOwners ?? Set([owner, snapshotOwner, SiriSession.shared.currentConfig()?.uid].compactMap { $0 })
-        try await SiriSpotlightGate.shared.run {
+        try await serialized {
             #if OMI_SIRI_PROBE
             if simulateIndexDeleteFailure { throw SiriSession.Failure.server }
             #endif
@@ -330,88 +366,119 @@ final class SiriSnapshotStore {
         }
     }
     func upsert(_ values: [SiriConversation], uid: String) async throws {
-        try mutateForOwner(uid) {
-        for value in values where !value.id.isEmpty {
-            snapshot.conversations[value.id] = Conversation(id: value.id, title: value.title,
-                summary: value.summary, startedAtMs: value.startedAtMs, updatedAtMs: value.updatedAtMs)
+        try await serialized {
+            var evicted: [String] = []
+            try mutateForOwner(uid) {
+            for value in values where !value.id.isEmpty {
+                snapshot.conversations[value.id] = Conversation(id: value.id, title: value.title,
+                    summary: value.summary, startedAtMs: value.startedAtMs, updatedAtMs: value.updatedAtMs)
+            }
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            let newest = snapshot.conversations.values.filter { eligible($0, now: now) }
+                .sorted { $0.startedAtMs > $1.startedAtMs }.prefix(2000)
+            let keep = Set(newest.map(\.id))
+            evicted = snapshot.conversations.keys.filter { !keep.contains($0) }
+            snapshot.conversations = snapshot.conversations.filter { keep.contains($0.key) }
+            }
+            try await applyIncremental(type: "conversation", ids: values.map(\.id) + evicted, uid: uid)
+
         }
-        }
-        if enabled { try await rebuildIndex() }
     }
     /// A successful owner-wide or newest-page fetch is authoritative only for
     /// its covered window. The oldest row on a nonfinal page is excluded so
     /// timestamp ties at the page boundary cannot delete unseen records.
     func reconcile(_ values: [SiriConversation], uid: String, coveredAfterMs: Int64?) async throws {
-        try mutateForOwner(uid) {
-            let keep = Set(values.map(\.id))
-            snapshot.conversations = snapshot.conversations.filter { id, row in
-                keep.contains(id) || (coveredAfterMs.map { row.startedAtMs <= $0 } ?? false)
+        try await serialized {
+            try mutateForOwner(uid) {
+                let keep = Set(values.map(\.id))
+                snapshot.conversations = snapshot.conversations.filter { id, row in
+                    keep.contains(id) || (coveredAfterMs.map { row.startedAtMs <= $0 } ?? false)
+                }
+                for value in values where !value.id.isEmpty {
+                    snapshot.conversations[value.id] = Conversation(id: value.id, title: value.title,
+                        summary: value.summary, startedAtMs: value.startedAtMs, updatedAtMs: value.updatedAtMs)
+                }
             }
-            for value in values where !value.id.isEmpty {
-                snapshot.conversations[value.id] = Conversation(id: value.id, title: value.title,
-                    summary: value.summary, startedAtMs: value.startedAtMs, updatedAtMs: value.updatedAtMs)
-            }
+            if enabled { try await rebuildIndex() }
+
         }
-        if enabled { try await removeIndex(); try await rebuildIndex() }
     }
     func upsert(_ values: [SiriMemory], uid: String) async throws {
-        try mutateForOwner(uid) {
-        for value in values where !value.id.isEmpty {
-            snapshot.memories[value.id] = Memory(id: value.id, content: value.content, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs)
+        try await serialized {
+            var evicted: [String] = []
+            try mutateForOwner(uid) {
+            for value in values where !value.id.isEmpty {
+                snapshot.memories[value.id] = Memory(id: value.id, content: value.content, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs)
+            }
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            let newest = snapshot.memories.values.filter { eligible($0, now: now) }
+                .sorted { $0.createdAtMs > $1.createdAtMs }.prefix(5000)
+            let keep = Set(newest.map(\.id))
+            evicted = snapshot.memories.keys.filter { !keep.contains($0) }
+            snapshot.memories = snapshot.memories.filter { keep.contains($0.key) }
+            }
+            try await applyIncremental(type: "memory", ids: values.map(\.id) + evicted, uid: uid)
+
         }
-        }
-        if enabled { try await rebuildIndex() }
     }
     /// Called only after the entire unfiltered memory traversal succeeds.
     func reconcile(_ values: [SiriMemory], uid: String) async throws {
-        try mutateForOwner(uid) {
-            let keep = Set(values.map(\.id))
-            snapshot.memories = snapshot.memories.filter { keep.contains($0.key) }
-            for value in values where !value.id.isEmpty {
-                snapshot.memories[value.id] = Memory(id: value.id, content: value.content,
-                    createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs)
+        try await serialized {
+            try mutateForOwner(uid) {
+                let keep = Set(values.map(\.id))
+                snapshot.memories = snapshot.memories.filter { keep.contains($0.key) }
+                for value in values where !value.id.isEmpty {
+                    snapshot.memories[value.id] = Memory(id: value.id, content: value.content,
+                        createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs)
+                }
             }
+            if enabled { try await rebuildIndex() }
+
         }
-        if enabled { try await removeIndex(); try await rebuildIndex() }
     }
     func upsert(_ values: [SiriTask], uid: String) async throws {
-        try mutateForOwner(uid) {
-        for value in values where !value.id.isEmpty {
-            snapshot.tasks[value.id] = Task(id: value.id, title: value.title, completed: value.completed,
-                createdAtMs: value.createdAtMs, dueAtMs: value.dueAtMs, completedAtMs: value.completedAtMs)
-        }
-        }
-        if enabled { try await rebuildIndex() }
-    }
-    /// A complete active-only task list cannot speak for completed rows.
-    func reconcile(_ values: [SiriTask], uid: String, includeCompleted: Bool) async throws {
-        try mutateForOwner(uid) {
-            let keep = Set(values.map(\.id))
-            snapshot.tasks = snapshot.tasks.filter { id, row in
-                keep.contains(id) || (!includeCompleted && row.completed)
-            }
+        try await serialized {
+            try mutateForOwner(uid) {
             for value in values where !value.id.isEmpty {
                 snapshot.tasks[value.id] = Task(id: value.id, title: value.title, completed: value.completed,
                     createdAtMs: value.createdAtMs, dueAtMs: value.dueAtMs, completedAtMs: value.completedAtMs)
             }
+            }
+            try await applyIncremental(type: "task", ids: values.map(\.id), uid: uid)
+
         }
-        if enabled { try await removeIndex(); try await rebuildIndex() }
+    }
+    /// A complete active-only task list cannot speak for completed rows.
+    func reconcile(_ values: [SiriTask], uid: String, includeCompleted: Bool) async throws {
+        try await serialized {
+            try mutateForOwner(uid) {
+                let keep = Set(values.map(\.id))
+                snapshot.tasks = snapshot.tasks.filter { id, row in
+                    keep.contains(id) || (!includeCompleted && row.completed)
+                }
+                for value in values where !value.id.isEmpty {
+                    snapshot.tasks[value.id] = Task(id: value.id, title: value.title, completed: value.completed,
+                        createdAtMs: value.createdAtMs, dueAtMs: value.dueAtMs, completedAtMs: value.completedAtMs)
+                }
+            }
+            if enabled { try await rebuildIndex() }
+
+        }
     }
     func delete(type: String, ids: [String], uid: String) async throws {
-        try mutateForOwner(uid) {
-        for id in ids {
-            switch type {
-            case "conversation": snapshot.conversations.removeValue(forKey: id)
-            case "memory": snapshot.memories.removeValue(forKey: id)
-            case "task": snapshot.tasks.removeValue(forKey: id)
-            default: break
+        try await serialized {
+            try mutateForOwner(uid) {
+            for id in ids {
+                switch type {
+                case "conversation": snapshot.conversations.removeValue(forKey: id)
+                case "memory": snapshot.memories.removeValue(forKey: id)
+                case "task": snapshot.tasks.removeValue(forKey: id)
+                default: break
+                }
             }
-        }
-        }
-        // Removing first prevents a deleted item surviving an incremental index.
-        if enabled {
-            try await removeIndex()
-            try await rebuildIndex()
+            }
+            try await applyIncremental(type: type, ids: ids, uid: uid)
+
         }
     }
     func pendingRoute() -> String? {
@@ -491,48 +558,105 @@ final class SiriSnapshotStore {
                 dueDate: $0.dueAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000) },
                 completionDate: $0.completedAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000) }) }
     }
-    func rebuildIndex() async throws {
-        let started = Date()
-        guard #available(iOS 27.0, *) else { return }
-        try requireValidOwner()
-        guard let uid = owner, let indexName else { throw SiriSession.Failure.auth }
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
-        try mutateForOwner(uid) {
-            snapshot.conversations = snapshot.conversations.filter { eligible($0.value, now: now) }
-            let newest = snapshot.conversations.values.sorted { $0.startedAtMs > $1.startedAtMs }.prefix(2000)
-            snapshot.conversations = Dictionary(uniqueKeysWithValues: newest.map { ($0.id, $0) })
-            snapshot.memories = snapshot.memories.filter { eligible($0.value, now: now) }
-            let memories = snapshot.memories.values.sorted { $0.createdAtMs > $1.createdAtMs }.prefix(5000)
-            snapshot.memories = Dictionary(uniqueKeysWithValues: memories.map { ($0.id, $0) })
-            snapshot.tasks = snapshot.tasks.filter { eligible($0.value, now: now) }
-        }
-        lock.lock()
-        let count = snapshot.conversations.count + snapshot.memories.count + snapshot.tasks.count + 3
-        lock.unlock()
+    /// Incremental mutations never empty the owner's whole index.
+    private func applyIncremental(type: String, ids: [String], uid: String) async throws {
+        guard enabled, #available(iOS 27.0, *) else { return }
+        try requireValidOwner(uid)
+        let ids = Array(Set(ids.filter { !$0.isEmpty }))
+        guard !ids.isEmpty else { return }
+        let index = CSSearchableIndex(name: indexName(for: uid))
         do {
-        try await SiriSpotlightGate.shared.run {
+            switch type {
+            case "conversation":
+                let entities = conversations(ids: ids)
+                let present = Set(entities.map(\.id))
+                let removed = ids.filter { !present.contains($0) }
+                if !removed.isEmpty {
+                    try await index.deleteAppEntities(identifiedBy: removed, ofType: ConversationEntity.self)
+                }
+                try requireValidOwner(uid)
+                if !entities.isEmpty { try await index.indexAppEntities(entities, priority: 0) }
+            case "memory":
+                let entities = memories(ids: ids)
+                let present = Set(entities.map(\.id))
+                let removed = ids.filter { !present.contains($0) }
+                if !removed.isEmpty {
+                    try await index.deleteAppEntities(identifiedBy: removed, ofType: MemoryEntity.self)
+                }
+                try requireValidOwner(uid)
+                if !entities.isEmpty { try await index.indexAppEntities(entities, priority: 0) }
+            case "task":
+                let entities = tasks(ids: ids)
+                let present = Set(entities.map(\.id))
+                let removed = ids.filter { !present.contains($0) }
+                if !removed.isEmpty {
+                    try await index.deleteAppEntities(identifiedBy: removed, ofType: TaskEntity.self)
+                }
+                try requireValidOwner(uid)
+                if !entities.isEmpty { try await index.indexAppEntities(entities, priority: 0) }
+            default: return
+            }
             try requireValidOwner(uid)
-            let index = CSSearchableIndex(name: indexName)
-            try await index.deleteAllSearchableItems()
-            try requireValidOwner(uid)
-            try await index.indexAppEntities([OmiFolderEntity.conversations, OmiFolderEntity.memories], priority: 0)
-            try requireValidOwner(uid)
-            try await index.indexAppEntities([OmiListEntity.omi], priority: 0)
-            try requireValidOwner(uid)
-            try await index.indexAppEntities(conversations(ids: nil), priority: 0)
-            try requireValidOwner(uid)
-            try await index.indexAppEntities(memories(ids: nil), priority: 0)
-            try requireValidOwner(uid)
-            try await index.indexAppEntities(tasks(ids: nil), priority: 0)
-            try requireValidOwner(uid)
-        }
-        scheduleNextExpiry()
-        SiriTelemetry.index(outcome: "ok", started: started, count: count)
+            scheduleNextExpiry()
         } catch {
-            SiriTelemetry.index(outcome: SiriTelemetry.outcome(error), started: started, count: count)
+            scheduleIndexRetry()
             throw error
         }
     }
+    func rebuildIndex() async throws {
+        try await serialized {
+            #if OMI_SIRI_PROBE
+            probeFullRebuildCount += 1
+            #endif
+            let started = Date()
+            guard #available(iOS 27.0, *) else { return }
+            try requireValidOwner()
+            guard let uid = owner, let indexName else { throw SiriSession.Failure.auth }
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            try mutateForOwner(uid) {
+                snapshot.conversations = snapshot.conversations.filter { eligible($0.value, now: now) }
+                let newest = snapshot.conversations.values.sorted { $0.startedAtMs > $1.startedAtMs }.prefix(2000)
+                snapshot.conversations = Dictionary(uniqueKeysWithValues: newest.map { ($0.id, $0) })
+                snapshot.memories = snapshot.memories.filter { eligible($0.value, now: now) }
+                let memories = snapshot.memories.values.sorted { $0.createdAtMs > $1.createdAtMs }.prefix(5000)
+                snapshot.memories = Dictionary(uniqueKeysWithValues: memories.map { ($0.id, $0) })
+                snapshot.tasks = snapshot.tasks.filter { eligible($0.value, now: now) }
+            }
+            lock.lock()
+            let count = snapshot.conversations.count + snapshot.memories.count + snapshot.tasks.count + 3
+            lock.unlock()
+            do {
+            try await serialized {
+                try requireValidOwner(uid)
+                let index = CSSearchableIndex(name: indexName)
+                try await index.deleteAllSearchableItems()
+                try requireValidOwner(uid)
+                try await index.indexAppEntities([OmiFolderEntity.conversations, OmiFolderEntity.memories], priority: 0)
+                try requireValidOwner(uid)
+                try await index.indexAppEntities([OmiListEntity.omi], priority: 0)
+                try requireValidOwner(uid)
+                try await index.indexAppEntities(conversations(ids: nil), priority: 0)
+                try requireValidOwner(uid)
+                try await index.indexAppEntities(memories(ids: nil), priority: 0)
+                try requireValidOwner(uid)
+                try await index.indexAppEntities(tasks(ids: nil), priority: 0)
+                try requireValidOwner(uid)
+            }
+            scheduleNextExpiry()
+            SiriTelemetry.index(outcome: "ok", started: started, count: count)
+            } catch {
+                SiriTelemetry.index(outcome: SiriTelemetry.outcome(error), started: started, count: count)
+                throw error
+            }
+
+        }
+    }
+}
+
+/// Serializes the whole snapshot mutation and its Spotlight write. Reentrant
+/// calls inside an operation stay on the same turn of the queue.
+private enum SiriSnapshotQueueContext {
+    @TaskLocal static var active = false
 }
 
 /// Serializes Spotlight writes, including a wipe racing an in-flight rebuild.

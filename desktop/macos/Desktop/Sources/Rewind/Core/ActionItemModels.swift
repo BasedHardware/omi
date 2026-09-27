@@ -506,7 +506,7 @@ extension ActionItemRecord {
       provenance: provenanceJson.flatMap { $0.data(using: .utf8) }
         .flatMap { try? JSONDecoder().decode([OmiAPI.EvidenceRef].self, from: $0) },
       supersededBy: supersededBy,
-      isLocked: isLocked ?? true,
+      isLocked: isLocked ?? false,
       sortOrder: sortOrder,
       indentLevel: indentLevel,
       relevanceScore: relevanceScore,

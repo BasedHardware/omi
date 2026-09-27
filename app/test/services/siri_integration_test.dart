@@ -376,6 +376,7 @@ void main() {
       bool deleted = false,
       bool dismissed = false,
       bool locked = false,
+      bool siriVisibilityValid = true,
       bool? userReview,
       MemoryLayer? layer = MemoryLayer.longTerm,
       bool layerIsExplicit = true,
@@ -394,6 +395,7 @@ void main() {
           deleted: deleted,
           isDismissed: dismissed,
           isLocked: locked,
+          siriVisibilityValid: siriVisibilityValid,
           userReview: userReview,
           layer: layer,
           layerIsExplicit: layerIsExplicit,
@@ -414,7 +416,7 @@ void main() {
       ('expired', memory(invalidAt: date), false),
       ('superseded status', memory(ledgerStatus: 'superseded'), false),
       ('superseded target', memory(supersededBy: 'replacement'), false),
-      ('unknown visibility', memory()..visibility = MemoryVisibility.unknown, false),
+      ('unknown visibility', memory(siriVisibilityValid: false), false),
     ];
     for (final (name, row, expected) in memoryCases) {
       expect(siriMemoryIsIndexable(row, now), expected, reason: name);
@@ -427,6 +429,7 @@ void main() {
       bool deleted = false,
       bool discarded = false,
       bool locked = false,
+      bool siriVisibilityValid = true,
       ConversationStatus status = ConversationStatus.completed,
       DateTime? createdAt,
     }) =>
@@ -437,6 +440,7 @@ void main() {
           deleted: deleted,
           discarded: discarded,
           isLocked: locked,
+          siriVisibilityValid: siriVisibilityValid,
           status: status,
         );
     final conversationCases = <(String, ServerConversation, bool)>[
@@ -447,11 +451,21 @@ void main() {
       ('locked', conversation(locked: true), false),
       ('processing', conversation(status: ConversationStatus.processing), false),
       ('aged', conversation(createdAt: now.subtract(const Duration(days: 181))), false),
-      ('unknown visibility', conversation()..visibility = ConversationVisibility.unknown, false),
+      ('unknown visibility', conversation(siriVisibilityValid: false), false),
     ];
     for (final (name, row, expected) in conversationCases) {
       expect(siriConversationIsIndexable(row, now), expected, reason: name);
     }
+
+    final malformedMemory = Memory.fromJson({...memory().toJson(), 'visibility': 'future-value'});
+    expect(malformedMemory.visibility, MemoryVisibility.public,
+        reason: 'ordinary Memories UI keeps its pre-Siri fallback');
+    expect(siriMemoryIsIndexable(malformedMemory, now), isFalse);
+    final malformedConversation =
+        ServerConversation.fromJson({...conversation().toJson(), 'visibility': 'future-value'});
+    expect(malformedConversation.visibility, ConversationVisibility.private_,
+        reason: 'ordinary Conversations UI keeps its pre-Siri fallback');
+    expect(siriConversationIsIndexable(malformedConversation, now), isFalse);
 
     ActionItemWithMetadata task({
       String id = 'task',

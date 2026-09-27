@@ -196,6 +196,17 @@ final class SiriIntentServiceTests: XCTestCase {
     XCTAssertEqual(entity.eligibilityCutoff, expiry)
   }
 
+  func testLegacyNullLockStateKeepsExistingAppDisplaySemantics() {
+    let memory = MemoryRecord(backendId: "legacy-memory", content: "Visible legacy memory", isLocked: nil)
+    XCTAssertEqual(memory.toServerMemory()?.isLocked, false)
+    let task = ActionItemRecord(backendId: "legacy-task", description: "Visible legacy task", isLocked: nil)
+    XCTAssertEqual(task.toTaskActionItem().isLocked, false)
+    let conversation = TranscriptionSessionRecord(
+      startedAt: Date(), source: "desktop", backendId: "legacy-conversation",
+      backendSynced: true, visibility: nil)
+    XCTAssertEqual(conversation.toServerConversation(segments: [])?.visibility, "private")
+  }
+
   @available(macOS 27, *)
   func testConversationAndTaskEntitiesProjectPersistedRows() {
     let started = Date(timeIntervalSince1970: 2_000_000_000)

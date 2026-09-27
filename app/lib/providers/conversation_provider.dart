@@ -924,10 +924,9 @@ class ConversationProvider extends ChangeNotifier {
       final coveredAfter = _conversationServerHasMore && result.items.isNotEmpty
           ? result.items.map((row) => row.startedAt ?? row.createdAt).reduce((a, b) => a.isBefore(b) ? a : b)
           : null;
-      unawaited(
-          SiriIntegration.current.reconcileConversations(completedById.values.toList(), coveredAfter: coveredAfter));
+      await SiriIntegration.current.reconcileConversations(completedById.values.toList(), coveredAfter: coveredAfter);
     } else {
-      unawaited(SiriIntegration.current.upsertConversations(conversations));
+      await SiriIntegration.current.upsertConversations(conversations);
     }
     // Keep pagination blocked until lifecycle reconciliation and the final
     // list assignment are complete. [getMoreConversationsFromServer] uses
@@ -1398,9 +1397,9 @@ class ConversationProvider extends ChangeNotifier {
           ? newConversations.map((row) => row.startedAt ?? row.createdAt).reduce((a, b) => a.isBefore(b) ? a : b)
           : null;
       final serverRows = conversations.where((row) => _conversationServerLoadedIds.contains(row.id)).toList();
-      unawaited(SiriIntegration.current.reconcileConversations(serverRows, coveredAfter: coveredAfter));
+      await SiriIntegration.current.reconcileConversations(serverRows, coveredAfter: coveredAfter);
     } else {
-      unawaited(SiriIntegration.current.upsertConversations(newConversations));
+      await SiriIntegration.current.upsertConversations(newConversations);
     }
     setLoadingConversations(false);
     notifyListeners();
@@ -1409,7 +1408,7 @@ class ConversationProvider extends ChangeNotifier {
 
   Future<void> addConversation(ServerConversation conversation) async {
     conversations.insert(0, conversation);
-    unawaited(SiriIntegration.current.upsertConversations([conversation]));
+    await SiriIntegration.current.upsertConversations([conversation]);
     _groupConversationsByDateWithoutNotify();
 
     notifyListeners();
@@ -1439,13 +1438,13 @@ class ConversationProvider extends ChangeNotifier {
         group[groupedIndex] = conversation;
       }
     }
-    unawaited(SiriIntegration.current.upsertConversations([conversation]));
+    SiriIntegration.current.queueUpsertConversations([conversation]);
     notifyListeners();
   }
 
   (int, DateTime) addConversationWithDateGrouped(ServerConversation conversation) {
     conversations.insert(0, conversation);
-    unawaited(SiriIntegration.current.upsertConversations([conversation]));
+    SiriIntegration.current.queueUpsertConversations([conversation]);
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     int idx;
     var effectiveDate = conversation.startedAt ?? conversation.createdAt;
@@ -1490,7 +1489,7 @@ class ConversationProvider extends ChangeNotifier {
     } else {
       _groupConversationsByDateWithoutNotify();
     }
-    unawaited(SiriIntegration.current.upsertConversations([conversation]));
+    SiriIntegration.current.queueUpsertConversations([conversation]);
     notifyListeners();
   }
 
@@ -1503,15 +1502,13 @@ class ConversationProvider extends ChangeNotifier {
   final Map<String, Timer> _pendingDeleteTimers = {};
   final Map<String, Future<void>> _pendingSiriDeletes = {};
 
-  void _restoreSiriAfterOptimisticDelete(ServerConversation conversation) {
+  Future<void> _restoreSiriAfterOptimisticDelete(ServerConversation conversation) async {
     final generation = _sessionGeneration;
     final pendingDelete = _pendingSiriDeletes.remove(conversation.id);
-    unawaited(() async {
-      if (pendingDelete != null) await pendingDelete;
-      if (generation == _sessionGeneration) {
-        await SiriIntegration.current.upsertConversations([conversation]);
-      }
-    }());
+    if (pendingDelete != null) await pendingDelete;
+    if (generation == _sessionGeneration) {
+      await SiriIntegration.current.upsertConversations([conversation]);
+    }
   }
 
   /// How long a deleted conversation stays restorable. Well past the 5 s Undo toast
@@ -1526,9 +1523,10 @@ class ConversationProvider extends ChangeNotifier {
 
   /// Hides [conversation] now and deletes it on the server after [pendingDeleteWindow], unless
   /// [undoDeletedConversation] restores it first. The one delete path for list, bulk and detail.
-  void deleteConversationLocally(ServerConversation conversation, [DateTime? date]) {
+  Future<void> deleteConversationLocally(ServerConversation conversation, [DateTime? date]) async {
     memoriesToDelete[conversation.id] = conversation;
-    _pendingSiriDeletes[conversation.id] = SiriIntegration.current.delete("conversation", conversation.id);
+    final indexDelete = SiriIntegration.current.delete('conversation', conversation.id);
+    _pendingSiriDeletes[conversation.id] = indexDelete;
     _pendingDeleteTimers.remove(conversation.id)?.cancel();
     _pendingDeleteTimers[conversation.id] = Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id));
     conversations.removeWhere((element) => element.id == conversation.id);
@@ -1537,6 +1535,7 @@ class ConversationProvider extends ChangeNotifier {
     }
     groupedConversations.removeWhere((_, group) => group.isEmpty);
     notifyListeners();
+    await indexDelete;
   }
 
   /// Whether [conversationId] was deleted in the UI and can still be restored.
@@ -1563,7 +1562,7 @@ class ConversationProvider extends ChangeNotifier {
         conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId);
     unawaited(
       deleteFuture.then(
-        (succeeded) {
+        (succeeded) async {
           // A DELETE can outlive sign-out/account switching. Its result belongs
           // to the session that started it; never let an old account mutate the
           // new provider's tombstones, cursor, revision, or loading state.
@@ -1593,17 +1592,17 @@ class ConversationProvider extends ChangeNotifier {
             _pendingSiriDeletes.remove(conversationId);
           } else {
             final deleted = memoriesToDelete[conversationId];
-            if (deleted != null) _restoreSiriAfterOptimisticDelete(deleted);
+            if (deleted != null) await _restoreSiriAfterOptimisticDelete(deleted);
           }
           _clearDeleteTombstone(conversationId);
           notifyListeners();
         },
-        onError: (Object _, StackTrace __) {
+        onError: (Object _, StackTrace __) async {
           // Match the prior behavior on a failed request: release the local
           // tombstone, but do not rebase the server cursor.
           if (generation != _sessionGeneration) return;
           final deleted = memoriesToDelete[conversationId];
-          if (deleted != null) _restoreSiriAfterOptimisticDelete(deleted);
+          if (deleted != null) await _restoreSiriAfterOptimisticDelete(deleted);
           _clearDeleteTombstone(conversationId);
           notifyListeners();
         },
@@ -1614,7 +1613,7 @@ class ConversationProvider extends ChangeNotifier {
   void _clearDeleteTombstone(String conversationId) => memoriesToDelete.remove(conversationId);
 
   /// Restores a conversation whose delete is still pending. Does nothing once the DELETE was sent.
-  void undoDeletedConversation(ServerConversation conversation) {
+  Future<void> undoDeletedConversation(ServerConversation conversation) async {
     final timer = _pendingDeleteTimers.remove(conversation.id);
     if (timer == null) return;
     timer.cancel();
@@ -1624,7 +1623,7 @@ class ConversationProvider extends ChangeNotifier {
       conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     }
     groupConversationsByDate();
-    _restoreSiriAfterOptimisticDelete(conversation);
+    await _restoreSiriAfterOptimisticDelete(conversation);
   }
 
   @override
@@ -1976,7 +1975,6 @@ class ConversationProvider extends ChangeNotifier {
   /// Handle merge completion from FCM notification
   Future<void> onMergeCompleted(String mergedConversationId, List<String> removedConversationIds) async {
     final generation = _sessionGeneration;
-    if (!conversations.any((row) => row.id == mergedConversationId || removedConversationIds.contains(row.id))) return;
     // Remove merging status for ALL involved conversations
     mergingConversationIds.remove(mergedConversationId);
     for (final id in removedConversationIds) {
@@ -1986,26 +1984,31 @@ class ConversationProvider extends ChangeNotifier {
     PlatformManager.instance.analytics.conversationMergeCompleted(mergedConversationId, removedConversationIds);
 
     // Remove deleted conversations from local state
+    final pendingIndexDeletes = <Future<void>>[];
     for (final id in removedConversationIds) {
       conversations.removeWhere((c) => c.id == id);
-      unawaited(SiriIntegration.current.delete('conversation', id));
+      pendingIndexDeletes.add(SiriIntegration.current.delete('conversation', id));
     }
 
     // Fetch updated merged conversation
-    final mergedConvo = (await _conversationLifecycleFetcher(mergedConversationId)).item;
-    if (generation != _sessionGeneration) return;
-    if (mergedConvo != null) {
-      final idx = conversations.indexWhere((c) => c.id == mergedConversationId);
-      if (idx != -1) {
-        conversations[idx] = mergedConvo;
-      } else {
-        conversations.insert(0, mergedConvo);
+    ServerConversation? mergedConvo;
+    try {
+      mergedConvo = (await _conversationLifecycleFetcher(mergedConversationId)).item;
+      if (generation != _sessionGeneration) return;
+      if (mergedConvo != null) {
+        final idx = conversations.indexWhere((c) => c.id == mergedConversationId);
+        if (idx != -1) {
+          conversations[idx] = mergedConvo;
+        } else {
+          conversations.insert(0, mergedConvo);
+        }
+        conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       }
-      conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      unawaited(SiriIntegration.current.upsertConversations([mergedConvo]));
+      _groupConversationsByDateWithoutNotify();
+      notifyListeners();
+    } finally {
+      await Future.wait(pendingIndexDeletes);
     }
-
-    _groupConversationsByDateWithoutNotify();
-    notifyListeners();
+    if (mergedConvo != null) await SiriIntegration.current.upsertConversations([mergedConvo]);
   }
 }

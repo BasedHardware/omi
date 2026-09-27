@@ -123,8 +123,7 @@ class ConversationExternalData {
 // ignore: constant_identifier_names
 enum ConversationVisibility {
   private_('private'),
-  shared('shared'),
-  unknown('unknown');
+  shared('shared');
 
   final String value;
   const ConversationVisibility(this.value);
@@ -133,7 +132,7 @@ enum ConversationVisibility {
     if (s == private_.value) return private_;
     if (s == shared.value) return shared;
     if (s == 'public') return shared;
-    return unknown;
+    return private_;
   }
 }
 
@@ -444,6 +443,10 @@ class ServerConversation {
   String? folderId;
   ConversationVisibility visibility;
 
+  /// The app keeps its historical private fallback for unknown wire values;
+  /// Siri excludes that row instead of inferring the owner's visibility.
+  final bool siriVisibilityValid;
+
   /// Search-only transcript evidence for find-and-play.
   final List<TranscriptMatchSnippet> matchSnippets;
 
@@ -481,6 +484,7 @@ class ServerConversation {
     this.starred = false,
     this.folderId,
     this.visibility = ConversationVisibility.private_,
+    this.siriVisibilityValid = true,
     this.matchSnippets = const [],
     this.captureGroup,
     this.speakerResolution,
@@ -516,6 +520,8 @@ class ServerConversation {
       structured: structured,
       geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
+      siriVisibilityValid: json['siri_visibility_valid'] != false &&
+          (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
     );
   }
@@ -525,6 +531,7 @@ class ServerConversation {
     Structured? structured,
     Geolocation? geolocation,
     bool deleted = false,
+    bool siriVisibilityValid = true,
     List<TranscriptMatchSnippet>? matchSnippets,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
@@ -561,6 +568,7 @@ class ServerConversation {
       starred: generated.starred,
       folderId: generated.folderId,
       visibility: ConversationVisibility.fromString(generated.visibility),
+      siriVisibilityValid: siriVisibilityValid,
       matchSnippets: snippets,
       captureGroup: generated.captureGroup == null ? null : CaptureGroup.fromGenerated(generated.captureGroup!),
       speakerResolution:
@@ -596,6 +604,7 @@ class ServerConversation {
       'starred': starred,
       'folder_id': folderId,
       'visibility': visibility.value,
+      if (!siriVisibilityValid) 'siri_visibility_valid': false,
       'capture_group': captureGroup?.toJson(),
       'speaker_resolution': speakerResolution?.toJson(),
     };

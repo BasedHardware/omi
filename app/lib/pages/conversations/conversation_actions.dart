@@ -59,18 +59,19 @@ Future<void> deleteConversationsWithUndo(BuildContext context, List<ServerConver
   if (conversations.isEmpty) return;
   final provider = context.read<ConversationProvider>();
   final l10n = context.l10n;
-  for (final conversation in conversations) {
-    provider.deleteConversationLocally(conversation);
-  }
+  final pendingIndexDeletes = conversations.map(provider.deleteConversationLocally).toList();
+  final pendingRestores = <Future<void>>[];
   final undone = await OmiFeedback.undo(
     context,
     conversations.length == 1 ? l10n.conversationDeleted : l10n.conversationsDeletedCount(conversations.length),
     onUndo: () {
       for (final conversation in conversations) {
-        provider.undoDeletedConversation(conversation);
+        pendingRestores.add(provider.undoDeletedConversation(conversation));
       }
     },
   );
+  await Future.wait(pendingIndexDeletes);
+  await Future.wait(pendingRestores);
   if (undone) return;
   for (final conversation in conversations) {
     provider.commitPendingDelete(conversation.id);

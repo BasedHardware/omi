@@ -1065,14 +1065,12 @@ class AnalyticsManager {
   }
 
   void memoriesAllVisibilityChanged(MemoryVisibility newVisibility, int count) {
-    if (newVisibility == MemoryVisibility.unknown) return;
     const TypedEvents().emit(
       MemoriesAllVisibilityChanged(
         newVisibility: switch (newVisibility) {
           MemoryVisibility.private => MemoriesAllVisibilityChangedNewVisibility.private,
           MemoryVisibility.public => MemoriesAllVisibilityChangedNewVisibility.public,
           MemoryVisibility.shared => MemoriesAllVisibilityChangedNewVisibility.shared,
-          MemoryVisibility.unknown => MemoriesAllVisibilityChangedNewVisibility.private,
         },
         factsCount: count,
       ),

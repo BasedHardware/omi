@@ -196,12 +196,8 @@ class AppleRemindersSyncService {
       deleteIds: deleteIds,
       syncBatch: syncBatchUpdate,
       deleteTask: deleteActionItem,
-      refreshTaskIndex: () async {
-        unawaited(SiriIntegration.current.refreshAuthoritativeTasks(expectedUid: ownerUid));
-      },
-      removeFromIndex: (ids) async {
-        unawaited(SiriIntegration.current.deleteMany('task', ids, expectedUid: ownerUid));
-      },
+      refreshTaskIndex: () => SiriIntegration.current.refreshAuthoritativeTasks(expectedUid: ownerUid),
+      removeFromIndex: (ids) => SiriIntegration.current.deleteMany('task', ids, expectedUid: ownerUid),
     );
     return stats;
   }

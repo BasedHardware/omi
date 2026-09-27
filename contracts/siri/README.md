@@ -57,6 +57,8 @@ The backend models are the authority for old documents that omit newer fields. D
 
 iOS refreshes its private snapshot from an owner-wide, bounded traversal independent of the visible UI page: open tasks and recent completed tasks, completed conversations in the 180-day window, and the unfiltered memory view. It defers the refresh after account binding and schedules it no more than once per owner per launch day; confirmed mutations remain incremental. A complete traversal may reconcile absent IDs in its covered scope. A failed, rate-limited, truncated, partially decoded, or cap-limited traversal only adds fetched rows. The conversation 429 path honors `Retry-After` before one retry. macOS queries eligible conversations before applying its 2,000-row limit. Both clients use the earliest applicable memory expiry or ledger `invalid_at`, conversation age, and completed-task age to schedule removal while running.
 
+On iOS, every owner transition, snapshot mutation, and Spotlight write enters one native serial queue in submission order. A single confirmed mutation upserts or deletes only its affected IDs; full delete-and-rebuild is reserved for authoritative reconciliation, launch maintenance, and toggle-on. Dart awaits each index call, including external sync callbacks. Undo or failed-delete restoration waits for the same ID's pending index deletion before re-upserting it. The same account fence applies inside the native queue, so a queued operation from an old owner cannot run under the next owner.
+
 ## Intents and phrases
 
 | Action | Kind | Parameters | Result |

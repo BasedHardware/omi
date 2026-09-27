@@ -126,6 +126,14 @@ enum SiriDebugProbe {
                           SiriSnapshotStore.shared.tasks(ids: ["native-task-1"]).first?.isCompleted == true ? "PASS" : "FAIL")
                     OmiNativeAPI.testSession = nil
                     SiriProbeURLProtocol.payload = "[]"
+                    let rebuildsBeforeSingleUpsert = SiriSnapshotStore.shared.probeFullRebuildCount
+                    try await SiriSnapshotStore.shared.upsert([
+                        SiriConversation(id: "probe-single-upsert", title: "Single", summary: "summary",
+                                         startedAtMs: Int64(Date().timeIntervalSince1970 * 1000),
+                                         updatedAtMs: Int64(Date().timeIntervalSince1970 * 1000))
+                    ], uid: config.uid)
+                    NSLog("[SiriProbe] singleUpsertFullRebuilds=%@",
+                          SiriSnapshotStore.shared.probeFullRebuildCount == rebuildsBeforeSingleUpsert ? "PASS" : "FAIL")
                     try await SiriSnapshotStore.shared.upsert([
                         SiriMemory(id: "stub-memory-1", content: "probe memory",
                                    createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),

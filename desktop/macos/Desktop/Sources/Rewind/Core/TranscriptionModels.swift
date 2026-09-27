@@ -778,7 +778,7 @@ extension TranscriptionSessionRecord {
       discarded: discarded,
       deleted: deleted,
       isLocked: isLocked,
-      visibility: visibility ?? "unknown",
+      visibility: visibility ?? "private",
       starred: starred,
       folderId: folderId,
       inputDeviceName: inputDeviceName,

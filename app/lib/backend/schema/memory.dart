@@ -2,7 +2,7 @@ import 'package:omi/backend/schema/gen/memories_wire.g.dart' as wire;
 
 enum MemoryCategory { system, interesting, manual, workflow }
 
-enum MemoryVisibility { private, public, shared, unknown }
+enum MemoryVisibility { private, public, shared }
 
 /// Semantic row kind used by the intent-backed `knowledge_ledger.v1` contract.
 enum KnowledgeLedgerKind {
@@ -95,6 +95,7 @@ class Memory {
   /// Decoding remains tolerant for the whole Memories page; Siri excludes a
   /// malformed or contradictory tier on the individual row.
   final bool siriTierValid;
+  final bool siriVisibilityValid;
   final String? primaryCaptureDevice;
   final List<String> captureDeviceIds;
   final String? ledgerSchemaVersion;
@@ -148,6 +149,7 @@ class Memory {
     this.layer,
     this.layerIsExplicit = false,
     this.siriTierValid = true,
+    this.siriVisibilityValid = true,
     this.primaryCaptureDevice,
     this.captureDeviceIds = const [],
     this.ledgerSchemaVersion,
@@ -284,13 +286,15 @@ class Memory {
       deleted: json['deleted'] as bool? ?? false,
       isDismissed: generated.isDismissed,
       visibility: generated.visibility != null
-          ? (MemoryVisibility.values.asNameMap()[generated.visibility!] ?? MemoryVisibility.unknown)
+          ? (MemoryVisibility.values.asNameMap()[generated.visibility!] ?? MemoryVisibility.public)
           : MemoryVisibility.public,
       isLocked: generated.isLocked,
       isBaseline: json['is_baseline'] as bool? ?? false,
       layer: resolvedLayer,
       layerIsExplicit: layerIsExplicit,
       siriTierValid: siriTierValid,
+      siriVisibilityValid: json['siri_visibility_valid'] != false &&
+          (json['visibility'] == null || MemoryVisibility.values.asNameMap().containsKey(json['visibility'])),
       primaryCaptureDevice: generated.primaryCaptureDevice,
       captureDeviceIds: generated.captureDeviceIds ?? const [],
       ledgerSchemaVersion: generated.ledgerSchemaVersion,
@@ -335,6 +339,7 @@ class Memory {
       'deleted': deleted,
       'is_dismissed': isDismissed,
       if (!siriTierValid) 'siri_tier_valid': false,
+      if (!siriVisibilityValid) 'siri_visibility_valid': false,
       'visibility': visibility.name,
       'is_locked': isLocked,
       'is_baseline': isBaseline,

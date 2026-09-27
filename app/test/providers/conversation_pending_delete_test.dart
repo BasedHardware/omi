@@ -91,9 +91,27 @@ void main() {
 
     provider.deleteConversationLocally(a);
     await Future<void>.delayed(Duration.zero);
-    provider.undoDeletedConversation(a);
-    await Future<void>.delayed(Duration.zero);
+    await provider.undoDeletedConversation(a);
 
+    expect(host.restored.map((row) => row.id), ['a']);
+  });
+
+  test('undo completion waits for a pending native delete of the same id', () async {
+    final host = _SiriUndoHost()..deleteGate = Completer<void>();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
+    addTearDown(() => SiriIntegration.testInstance = null);
+    final a = _conversation('a');
+    final provider = makeProvider([a]);
+    final deletion = provider.deleteConversationLocally(a);
+    var restored = false;
+    final undo = provider.undoDeletedConversation(a).then((_) => restored = true);
+    await Future<void>.delayed(Duration.zero);
+    expect(restored, isFalse);
+    expect(host.restored, isEmpty);
+    host.deleteGate!.complete();
+    await deletion;
+    await undo;
+    expect(restored, isTrue);
     expect(host.restored.map((row) => row.id), ['a']);
   });
 

@@ -551,7 +551,7 @@ extension MemoryRecord {
       contextSummary: contextSummary,
       isRead: isRead,
       isDismissed: isDismissed,
-      isLocked: isLocked ?? true,
+      isLocked: isLocked ?? false,
       tags: tags,
       reasoning: reasoning,
       currentActivity: currentActivity,

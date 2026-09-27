@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,6 +22,8 @@ class _SnapshotHost extends SiriIndexApi {
   final conversations = <String, SiriConversation>{};
   final memories = <String, SiriMemory>{};
   final tasks = <String, SiriTask>{};
+  Completer<void>? pendingMemoryDelete;
+  Completer<void>? pendingConversationDelete;
 
   @override
   Future<void> upsertConversations(String uid, List<SiriConversation> rows) async {
@@ -67,6 +70,8 @@ class _SnapshotHost extends SiriIndexApi {
 
   @override
   Future<void> deleteEntities(String uid, String type, List<String> ids) async {
+    if (type == 'memory') await pendingMemoryDelete?.future;
+    if (type == 'conversation') await pendingConversationDelete?.future;
     final rows = switch (type) {
       'conversation' => conversations,
       'memory' => memories,
@@ -169,6 +174,55 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(host.conversations.containsKey('source'), isFalse);
     expect(host.conversations.containsKey('merged'), isTrue);
+  });
+
+  test('merge notification restores state and fetches merged row with an empty visible list', () async {
+    final host = hostForTest();
+    final row = ServerConversation(
+      id: 'merged-outside-page',
+      createdAt: DateTime.now(),
+      structured: Structured('Merged', 'summary'),
+      status: ConversationStatus.completed,
+    );
+    var fetches = 0;
+    final provider = ConversationProvider(
+      conversationLifecycleFetcher: (_) async {
+        fetches++;
+        return (item: row, ok: true);
+      },
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.mergingConversationIds.add('source-outside-page');
+
+    await provider.onMergeCompleted(row.id, ['source-outside-page']);
+
+    expect(provider.mergingConversationIds, isNot(contains('source-outside-page')));
+    expect(fetches, 1);
+    expect(provider.conversations.map((item) => item.id), contains(row.id));
+    expect(host.conversations, contains(row.id));
+  });
+
+  test('merge fetch proceeds while an unrelated Spotlight delete is pending', () async {
+    final host = hostForTest()..pendingConversationDelete = Completer<void>();
+    var fetches = 0;
+    final row =
+        ServerConversation(id: 'merged', createdAt: DateTime.now(), structured: Structured('Merged', 'summary'));
+    final provider = ConversationProvider(
+      conversationLifecycleFetcher: (_) async {
+        fetches++;
+        return (item: row, ok: true);
+      },
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    final merge = provider.onMergeCompleted(row.id, ['source']);
+    await Future<void>.delayed(Duration.zero);
+    expect(fetches, 1, reason: 'the normal merge fetch cannot wait on Spotlight');
+    expect(provider.conversations.map((item) => item.id), contains(row.id));
+    host.pendingConversationDelete!.complete();
+    await merge;
+    expect(host.conversations, contains(row.id));
   });
 
   test('complete unfiltered memory fetch removes remotely deleted ids', () async {
@@ -296,6 +350,38 @@ void main() {
     await provider.loadMemories();
     expect(await provider.deleteAllMemories(), isFalse);
     expect(host.memories.containsKey(row.id), isTrue);
+  });
+
+  test('undo waits for the pending native memory delete before restoring', () async {
+    final host = hostForTest();
+    final row = Memory(
+      id: 'undo-race',
+      uid: 'siri-fetch-owner',
+      content: 'restore me',
+      category: MemoryCategory.manual,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      visibility: MemoryVisibility.private,
+    );
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([row], true),
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+    await Future<void>.delayed(Duration.zero);
+    expect(host.memories, contains(row.id));
+
+    host.pendingMemoryDelete = Completer<void>();
+    provider.deleteMemory(row);
+    final restored = provider.restoreLastDeletedMemory(id: row.id);
+    var completed = false;
+    restored.then((_) => completed = true);
+    await Future<void>.delayed(Duration.zero);
+    expect(completed, isFalse);
+    host.pendingMemoryDelete!.complete();
+    expect(await restored, isTrue);
+    expect(host.memories, contains(row.id));
   });
 
   test('confirmed memory create and visibility mutation update the snapshot', () async {

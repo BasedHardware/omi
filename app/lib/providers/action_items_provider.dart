@@ -284,7 +284,7 @@ class ActionItemsProvider extends ChangeNotifier {
         _homeDayItems = _pendingDeletionIds.isEmpty
             ? List.of(response.actionItems)
             : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
-        unawaited(SiriIntegration.current.upsertTasks(_homeDayItems));
+        await SiriIntegration.current.upsertTasks(_homeDayItems);
         _homeDayLoaded = true;
       }
     } catch (e) {
@@ -388,7 +388,7 @@ class ActionItemsProvider extends ChangeNotifier {
         onTyped: _projectTypedList,
       );
       if (response != null && generation == _sessionGeneration) {
-        _applyFetchedActionItems(response);
+        await _applyFetchedActionItems(response);
         loaded = true;
       }
     } catch (e) {
@@ -417,7 +417,7 @@ class ActionItemsProvider extends ChangeNotifier {
     );
   }
 
-  void _applyFetchedActionItems(ActionItemsResponse response) {
+  Future<void> _applyFetchedActionItems(ActionItemsResponse response) async {
     // Snapshot server IDs before filtering so tombstone retirement is
     // based on the full server response, not the filtered subset.
     final serverIds = response.actionItems.map((e) => e.id).toSet();
@@ -437,9 +437,9 @@ class ActionItemsProvider extends ChangeNotifier {
     }
     _hasMore = response.hasMore;
     if (!_hasMore && !hasActiveFilter) {
-      unawaited(SiriIntegration.current.reconcileTasks(_actionItems, includeCompleted: _includeCompleted));
+      await SiriIntegration.current.reconcileTasks(_actionItems, includeCompleted: _includeCompleted);
     } else {
-      unawaited(SiriIntegration.current.upsertTasks(_actionItems));
+      await SiriIntegration.current.upsertTasks(_actionItems);
     }
 
     if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
@@ -467,9 +467,9 @@ class ActionItemsProvider extends ChangeNotifier {
         _actionItems.addAll(filtered);
         _hasMore = response.hasMore;
         if (!_hasMore && !hasActiveFilter) {
-          unawaited(SiriIntegration.current.reconcileTasks(_actionItems, includeCompleted: _includeCompleted));
+          await SiriIntegration.current.reconcileTasks(_actionItems, includeCompleted: _includeCompleted);
         } else {
-          unawaited(SiriIntegration.current.upsertTasks(filtered));
+          await SiriIntegration.current.upsertTasks(filtered);
         }
       }
     } catch (e) {
@@ -508,7 +508,7 @@ class ActionItemsProvider extends ChangeNotifier {
         attempt.complete(ProductOutcome.failure, failure: ProductFailure.server);
         return false;
       }
-      unawaited(SiriIntegration.current.upsertTasks([success]));
+      await SiriIntegration.current.upsertTasks([success]);
       // Cancel notification if the action item is marked as completed
       if (newState == true) {
         await ActionItemNotificationHandler.cancelNotification(item.id);
@@ -566,7 +566,7 @@ class ActionItemsProvider extends ChangeNotifier {
         _actionItems[index] = updatedItem;
         notifyListeners();
       }
-      unawaited(SiriIntegration.current.upsertTasks([updatedItem]));
+      await SiriIntegration.current.upsertTasks([updatedItem]);
       _pushUpdateToAppleReminder(item, title: newDescription);
       return true;
     } catch (e) {
@@ -615,7 +615,7 @@ class ActionItemsProvider extends ChangeNotifier {
           _actionItems[idx] = updatedItem;
           notifyListeners();
         }
-        unawaited(SiriIntegration.current.upsertTasks([updatedItem]));
+        await SiriIntegration.current.upsertTasks([updatedItem]);
         _pushUpdateToAppleReminder(item, dueDate: dueDate);
         return true;
       } else {
@@ -680,7 +680,7 @@ class ActionItemsProvider extends ChangeNotifier {
           if (index != -1) {
             _actionItems[index] = updatedItem;
           }
-          unawaited(SiriIntegration.current.upsertTasks([updatedItem]));
+          await SiriIntegration.current.upsertTasks([updatedItem]);
           successCount++;
         } else if (index != -1) {
           final originalItem = originalItemsById[item.id];
@@ -729,7 +729,7 @@ class ActionItemsProvider extends ChangeNotifier {
         _pendingDeletionIds.remove(item.id);
         _restoreDeletedItem(item, index);
       } else {
-        unawaited(SiriIntegration.current.delete('task', item.id));
+        await SiriIntegration.current.delete('task', item.id);
       }
       // On success, the tombstone is intentionally retained: a refresh that
       // started before the server processed the deletion may still return the
@@ -799,7 +799,7 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
       }
     } else {
-      unawaited(SiriIntegration.current.delete('task', id));
+      await SiriIntegration.current.delete('task', id);
     }
     return success;
   }
@@ -850,7 +850,7 @@ class ActionItemsProvider extends ChangeNotifier {
         }
         // Direct sync to Apple Reminders — no FCM roundtrip needed
         _syncToAppleRemindersIfNeeded(newItem);
-        unawaited(SiriIntegration.current.upsertTasks([newItem]));
+        await SiriIntegration.current.upsertTasks([newItem]);
         return newItem;
       } else {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
@@ -1190,7 +1190,7 @@ class ActionItemsProvider extends ChangeNotifier {
     }
     final deletedIDs = deleted.toSet();
     for (final id in deletedIDs) {
-      unawaited(SiriIntegration.current.delete('task', id));
+      await SiriIntegration.current.delete('task', id);
     }
     if (deletedIDs.length != ids.length) {
       _pendingDeletionIds.removeWhere((id) => !deletedIDs.contains(id));

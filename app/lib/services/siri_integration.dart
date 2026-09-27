@@ -62,7 +62,7 @@ bool siriMemoryIsIndexable(Memory row, DateTime now, {String? owner}) =>
     !row.deleted &&
     !row.isDismissed &&
     !row.isLocked &&
-    row.visibility != MemoryVisibility.unknown &&
+    row.siriVisibilityValid &&
     row.siriTierValid &&
     (row.layer == null || row.layer == MemoryLayer.shortTerm || row.layer == MemoryLayer.longTerm) &&
     (row.invalidAt == null || row.invalidAt!.isAfter(now)) &&
@@ -76,7 +76,7 @@ bool siriConversationIsIndexable(ServerConversation row, DateTime now) =>
     !row.discarded &&
     !row.deleted &&
     !row.isLocked &&
-    row.visibility != ConversationVisibility.unknown &&
+    row.siriVisibilityValid &&
     (row.startedAt ?? row.createdAt).isAfter(now.subtract(const Duration(days: 180)));
 
 bool siriTaskIsIndexable(ActionItemWithMetadata row, DateTime now) =>
@@ -137,6 +137,7 @@ class SiriIntegration extends SiriEventsApi {
   int _accountGeneration = 0;
   int? _nativeGeneration;
   Future<void> _nativeTail = Future<void>.value();
+  Future<void> _queuedIndexTail = Future<void>.value();
   String? _uid;
   String? _ownerWideRefreshUid;
   DateTime? _ownerWideRefreshAt;
@@ -145,6 +146,19 @@ class SiriIntegration extends SiriEventsApi {
     final result = _nativeTail.then((_) => operation());
     _nativeTail = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
     return result;
+  }
+
+  /// Synchronous provider callbacks keep their immediate UI update. Their
+  /// index work is owned by this ordered Future chain and each native call is
+  /// awaited before the next callback's projection starts.
+  void queueUpsertConversations(List<ServerConversation> rows) {
+    final uid = _uid;
+    final generation = _accountGeneration;
+    final frozenRows = List<ServerConversation>.of(rows);
+    _queuedIndexTail = _queuedIndexTail.then((_) async {
+      if (uid == null || _uid != uid || generation != _accountGeneration) return;
+      await upsertConversations(frozenRows, expectedUid: uid);
+    });
   }
 
   Future<void> accountChanged(User? user) async {
@@ -190,14 +204,14 @@ class SiriIntegration extends SiriEventsApi {
     }
     _ownerWideRefreshUid = uid;
     _ownerWideRefreshAt = now;
-    unawaited(Future<void>.delayed(const Duration(seconds: 2), () async {
+    Timer(const Duration(seconds: 2), () async {
       try {
         if (_uid != uid || _accountGeneration != generation || !await isEnabled()) return;
         await refreshOwnerWideIndex();
       } catch (error) {
         Logger.debug('Siri deferred owner-wide refresh failed: $error');
       }
-    }));
+    });
   }
 
   /// Runs outside UI pagination and only reconciles an authoritative, complete
@@ -340,14 +354,18 @@ class SiriIntegration extends SiriEventsApi {
 
   Future<void> upsertConversations(List<ServerConversation> rows, {String? expectedUid}) async {
     final uid = _uid;
+    final generation = _accountGeneration;
     if (!_isIOS || uid == null || (expectedUid != null && uid != expectedUid)) return;
     try {
       final now = DateTime.now();
       final removed =
           rows.where((row) => row.id.isNotEmpty && !siriConversationIsIndexable(row, now)).map((row) => row.id).toSet();
-      if (removed.isNotEmpty) await _host.deleteEntities(uid, 'conversation', removed.toList());
       final projected = _conversationProjection(rows);
-      if (projected.isNotEmpty) await _host.upsertConversations(uid, projected);
+      await _nativeOperation(() async {
+        if (_uid != uid || _accountGeneration != generation) return;
+        if (removed.isNotEmpty) await _host.deleteEntities(uid, 'conversation', removed.toList());
+        if (projected.isNotEmpty) await _host.upsertConversations(uid, projected);
+      });
     } catch (error) {
       Logger.debug('Siri conversation index failed: $error');
     }
@@ -357,9 +375,14 @@ class SiriIntegration extends SiriEventsApi {
   /// newest-page time window. An incremental mutation must use upsert instead.
   Future<void> reconcileConversations(List<ServerConversation> rows, {DateTime? coveredAfter}) async {
     final uid = _uid;
+    final generation = _accountGeneration;
     if (!_isIOS || uid == null) return;
     try {
-      await _host.reconcileConversations(uid, _conversationProjection(rows), coveredAfter?.millisecondsSinceEpoch);
+      final projected = _conversationProjection(rows);
+      await _nativeOperation(() async {
+        if (_uid != uid || _accountGeneration != generation) return;
+        await _host.reconcileConversations(uid, projected, coveredAfter?.millisecondsSinceEpoch);
+      });
     } catch (error) {
       Logger.debug('Siri conversation reconciliation failed: $error');
     }
@@ -384,6 +407,7 @@ class SiriIntegration extends SiriEventsApi {
 
   Future<void> upsertMemories(List<Memory> rows) async {
     final uid = _uid;
+    final generation = _accountGeneration;
     if (!_isIOS || uid == null) return;
     try {
       final projected = _memoryProjection(rows, uid);
@@ -392,8 +416,11 @@ class SiriIntegration extends SiriEventsApi {
           .where((row) => row.uid == uid && row.id.isNotEmpty && !siriMemoryIsIndexable(row, now, owner: uid))
           .map((row) => row.id)
           .toSet();
-      if (removed.isNotEmpty) await _host.deleteEntities(uid, 'memory', removed.toList());
-      if (projected.isNotEmpty) await _host.upsertMemories(uid, projected);
+      await _nativeOperation(() async {
+        if (_uid != uid || _accountGeneration != generation) return;
+        if (removed.isNotEmpty) await _host.deleteEntities(uid, 'memory', removed.toList());
+        if (projected.isNotEmpty) await _host.upsertMemories(uid, projected);
+      });
     } catch (error) {
       Logger.debug('Siri memory index failed: $error');
     }
@@ -402,9 +429,14 @@ class SiriIntegration extends SiriEventsApi {
   /// Only a complete, owner-wide and unfiltered traversal may call this.
   Future<void> reconcileMemories(List<Memory> rows) async {
     final uid = _uid;
+    final generation = _accountGeneration;
     if (!_isIOS || uid == null || rows.any((row) => row.uid != uid)) return;
     try {
-      await _host.reconcileMemories(uid, _memoryProjection(rows, uid));
+      final projected = _memoryProjection(rows, uid);
+      await _nativeOperation(() async {
+        if (_uid != uid || _accountGeneration != generation) return;
+        await _host.reconcileMemories(uid, projected);
+      });
     } catch (error) {
       Logger.debug('Siri memory reconciliation failed: $error');
     }
@@ -478,14 +510,18 @@ class SiriIntegration extends SiriEventsApi {
 
   Future<void> upsertTasks(List<ActionItemWithMetadata> rows) async {
     final uid = _uid;
+    final generation = _accountGeneration;
     if (!_isIOS || uid == null) return;
     try {
       final now = DateTime.now();
       final removed =
           rows.where((row) => row.id.isNotEmpty && !siriTaskIsIndexable(row, now)).map((row) => row.id).toSet();
-      if (removed.isNotEmpty) await _host.deleteEntities(uid, 'task', removed.toList());
       final projected = _taskProjection(rows);
-      if (projected.isNotEmpty) await _host.upsertTasks(uid, projected);
+      await _nativeOperation(() async {
+        if (_uid != uid || _accountGeneration != generation) return;
+        if (removed.isNotEmpty) await _host.deleteEntities(uid, 'task', removed.toList());
+        if (projected.isNotEmpty) await _host.upsertTasks(uid, projected);
+      });
     } catch (error) {
       Logger.debug('Siri task index failed: $error');
     }
@@ -495,9 +531,14 @@ class SiriIntegration extends SiriEventsApi {
   /// result cannot remove recent completed tasks from the native snapshot.
   Future<void> reconcileTasks(List<ActionItemWithMetadata> rows, {required bool includeCompleted}) async {
     final uid = _uid;
+    final generation = _accountGeneration;
     if (!_isIOS || uid == null) return;
     try {
-      await _host.reconcileTasks(uid, _taskProjection(rows), includeCompleted);
+      final projected = _taskProjection(rows);
+      await _nativeOperation(() async {
+        if (_uid != uid || _accountGeneration != generation) return;
+        await _host.reconcileTasks(uid, projected, includeCompleted);
+      });
     } catch (error) {
       Logger.debug('Siri task reconciliation failed: $error');
     }
@@ -520,9 +561,13 @@ class SiriIntegration extends SiriEventsApi {
 
   Future<void> delete(String type, String id) async {
     final uid = _uid;
+    final generation = _accountGeneration;
     if (!_isIOS || uid == null) return;
     try {
-      await _host.deleteEntities(uid, type, [id]);
+      await _nativeOperation(() async {
+        if (_uid != uid || _accountGeneration != generation) return;
+        await _host.deleteEntities(uid, type, [id]);
+      });
     } catch (error) {
       Logger.debug('Siri index delete failed: $error');
     }
@@ -530,9 +575,13 @@ class SiriIntegration extends SiriEventsApi {
 
   Future<void> deleteMany(String type, List<String> ids, {String? expectedUid}) async {
     final uid = _uid;
+    final generation = _accountGeneration;
     if (!_isIOS || uid == null || ids.isEmpty || (expectedUid != null && uid != expectedUid)) return;
     try {
-      await _host.deleteEntities(uid, type, ids);
+      await _nativeOperation(() async {
+        if (_uid != uid || _accountGeneration != generation) return;
+        await _host.deleteEntities(uid, type, ids);
+      });
     } catch (error) {
       Logger.debug('Siri index batch delete failed: $error');
     }
@@ -540,12 +589,12 @@ class SiriIntegration extends SiriEventsApi {
 
   Future<bool> isEnabled() async {
     if (!_isIOS) return false;
-    return _host.isEnabled();
+    return _nativeOperation(_host.isEnabled);
   }
 
   Future<void> setEnabled(bool enabled) async {
     if (!_isIOS) return;
-    await _host.setEnabled(enabled);
+    await _nativeOperation(() => _host.setEnabled(enabled));
     if (enabled && _uid != null) {
       _ownerWideRefreshAt = null;
       _scheduleOwnerWideRefresh(_uid!, _accountGeneration);

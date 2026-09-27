@@ -840,10 +840,10 @@ class MemoriesProvider extends ChangeNotifier {
         !_filterThisDeviceOnly &&
         (_beliefEnabled != true || serverView == MemoryReadView.all);
     if (siriMemoryFetchIsAuthoritative) {
-      unawaited(SiriIntegration.current.reconcileMemories(_memories));
+      await SiriIntegration.current.reconcileMemories(_memories);
     } else {
-      unawaited(SiriIntegration.current.upsertMemories(_memories));
-      unawaited(SiriIntegration.current.refreshAuthoritativeMemories());
+      await SiriIntegration.current.upsertMemories(_memories);
+      await SiriIntegration.current.refreshAuthoritativeMemories();
     }
     _deviceScopeSupported = deviceScopeSupported;
     _ledgerHistorySupported = ledgerHistorySupported;
@@ -947,7 +947,7 @@ class MemoriesProvider extends ChangeNotifier {
             // assessment fields that are absent from an offline draft.
             _memories[idx] = serverMemory;
           }
-          unawaited(SiriIntegration.current.upsertMemories([serverMemory]));
+          await SiriIntegration.current.upsertMemories([serverMemory]);
         }
         if (generation != _sessionGeneration) return;
       } catch (e) {
@@ -995,7 +995,7 @@ class MemoriesProvider extends ChangeNotifier {
         // only consulted when the id does not resolve.
         _settledUnresolvedReviews[memory.id] = value;
         memory.userReview = value;
-        unawaited(SiriIntegration.current.upsertMemories([memory]));
+        await SiriIntegration.current.upsertMemories([memory]);
         notifyListeners();
         return true;
       } catch (error) {
@@ -1028,7 +1028,7 @@ class MemoriesProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
-    unawaited(SiriIntegration.current.upsertMemories([memory]));
+    await SiriIntegration.current.upsertMemories([memory]);
     return true;
   }
 
@@ -1190,12 +1190,12 @@ class MemoriesProvider extends ChangeNotifier {
         _memories.removeWhere(
           (candidate) => candidate.id == staleCurrentTail.id,
         );
-        unawaited(SiriIntegration.current.delete('memory', staleCurrentTail.id));
+        await SiriIntegration.current.delete('memory', staleCurrentTail.id);
       }
       if (existingReplacementIndex == -1) {
         _memories.add(replacement);
       }
-      unawaited(SiriIntegration.current.upsertMemories([replacement]));
+      await SiriIntegration.current.upsertMemories([replacement]);
       _setCategories();
       await _refreshLedgerHistoryAfterRevert(
         generation,
@@ -1342,21 +1342,26 @@ class MemoriesProvider extends ChangeNotifier {
   Memory? _lastDeletedMemory;
   Timer? _deletionTimer;
   String? _pendingDeletionId;
+  final Map<String, Future<void>> _pendingIndexDeletes = {};
 
   Memory? get lastDeletedMemory => _lastDeletedMemory;
 
-  void deleteMemory(Memory memory) {
+  Future<void> deleteMemory(Memory memory) async {
     _cancelDeletionTimer();
-    if (_pendingDeletionId != null) {
-      unawaited(_finalizeDeletion());
-    }
+    final previousCommit = _pendingDeletionId != null ? _finalizeDeletion() : Future<void>.value();
     _lastDeletedMemory = memory;
     _pendingDeletionId = memory.id;
-    unawaited(SiriIntegration.instance.delete("memory", memory.id));
     _memories.remove(memory);
     _setCategories();
     notifyListeners();
     _startDeletionTimer();
+    final indexDelete = previousCommit.then((_) => SiriIntegration.current.delete('memory', memory.id));
+    _pendingIndexDeletes[memory.id] = indexDelete;
+    try {
+      await indexDelete;
+    } finally {
+      if (identical(_pendingIndexDeletes[memory.id], indexDelete)) _pendingIndexDeletes.remove(memory.id);
+    }
   }
 
   void _cancelDeletionTimer() {
@@ -1367,7 +1372,9 @@ class MemoriesProvider extends ChangeNotifier {
   /// Backstop commit; the Undo toast (OmiFeedbackTiming.undo) commits sooner and must close first.
   static const Duration pendingDeletionWindow = Duration(seconds: 8);
 
-  void _startDeletionTimer() => _deletionTimer = Timer(pendingDeletionWindow, _finalizeDeletion);
+  void _startDeletionTimer() => _deletionTimer = Timer(pendingDeletionWindow, () async {
+        await _finalizeDeletion();
+      });
 
   Future<void> _finalizeDeletion() async {
     if (_pendingDeletionId == null) {
@@ -1398,7 +1405,8 @@ class MemoriesProvider extends ChangeNotifier {
         _memories.add(deletedMemory!);
       }
       _setCategories();
-      unawaited(SiriIntegration.current.upsertMemories([deletedMemory!]));
+      await _pendingIndexDeletes[id];
+      await SiriIntegration.current.upsertMemories([deletedMemory!]);
       notifyListeners();
     }
 
@@ -1421,11 +1429,13 @@ class MemoriesProvider extends ChangeNotifier {
 
     _cancelDeletionTimer();
     _pendingDeletionId = null;
-    _memories.add(_lastDeletedMemory!);
-    unawaited(SiriIntegration.current.upsertMemories([_lastDeletedMemory!]));
+    final restored = _lastDeletedMemory!;
+    _memories.add(restored);
     _lastDeletedMemory = null;
     _setCategories();
     notifyListeners();
+    await _pendingIndexDeletes[restored.id];
+    await SiriIntegration.current.upsertMemories([restored]);
 
     return true;
   }
@@ -1500,9 +1510,9 @@ class MemoriesProvider extends ChangeNotifier {
       if (generation != _sessionGeneration) return true;
       final idx = _memories.indexWhere((m) => m.id == newMemory.id);
       if (idx != -1) {
-        _memories[idx] = serverMemory;
+        _memories[idx].id = serverMemory.id;
       }
-      unawaited(SiriIntegration.current.upsertMemories([serverMemory]));
+      await SiriIntegration.current.upsertMemories([serverMemory]);
       unawaited(SiriIntegration.instance.donateUiAction('memory', serverMemory.id));
     }
     if (generation != _sessionGeneration) return true;
@@ -1530,7 +1540,7 @@ class MemoriesProvider extends ChangeNotifier {
         visibility,
       );
       _setCategories();
-      unawaited(SiriIntegration.current.upsertMemories([memoryToUpdate]));
+      await SiriIntegration.current.upsertMemories([memoryToUpdate]);
     }
     return true;
   }
@@ -1590,7 +1600,7 @@ class MemoriesProvider extends ChangeNotifier {
             return false;
           }
           _memories[idx] = replacement;
-          unawaited(SiriIntegration.current.delete('memory', memory.id));
+          await SiriIntegration.current.delete('memory', memory.id);
         } else {
           memory.content = value;
           if (category != null) {
@@ -1601,21 +1611,21 @@ class MemoriesProvider extends ChangeNotifier {
           _memories[idx] = memory;
         }
 
-        unawaited(SiriIntegration.current.upsertMemories([_memories[idx]]));
+        await SiriIntegration.current.upsertMemories([_memories[idx]]);
 
         _setCategories();
         notifyListeners();
       } else if (memory.isKnowledgeLedger) {
         // A recap may edit a row outside the loaded page. Remove the stale
         // source projection until an authoritative replacement is available.
-        unawaited(SiriIntegration.current.delete('memory', memory.id));
-        unawaited(SiriIntegration.current.refreshAuthoritativeMemories());
+        await SiriIntegration.current.delete('memory', memory.id);
+        await SiriIntegration.current.refreshAuthoritativeMemories();
       } else {
         memory.content = value;
         if (category != null) memory.category = category;
         memory.updatedAt = DateTime.now();
         memory.edited = true;
-        unawaited(SiriIntegration.current.upsertMemories([memory]));
+        await SiriIntegration.current.upsertMemories([memory]);
       }
     }
 
@@ -1651,7 +1661,7 @@ class MemoriesProvider extends ChangeNotifier {
     }
 
     if (updatedCount > 0) {
-      unawaited(SiriIntegration.current.upsertMemories(memoriesSuccessfullyUpdated));
+      await SiriIntegration.current.upsertMemories(memoriesSuccessfullyUpdated);
       PlatformManager.instance.analytics.memoriesAllVisibilityChanged(
         visibility,
         updatedCount,
