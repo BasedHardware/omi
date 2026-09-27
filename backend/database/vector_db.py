@@ -222,7 +222,6 @@ def query_vectors_by_metadata(
                     {ConversationMetadataKeys.PEOPLE: {'$in': people}},
                     {ConversationMetadataKeys.TOPICS: {'$in': topics}},
                     {ConversationMetadataKeys.ENTITIES: {'$in': entities}},
-                    # {'dates': {'$in': dates_mentioned}},
                 ]
             }
         )
