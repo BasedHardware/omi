@@ -53,7 +53,7 @@ elif [ "${2:-}" = build ]; then
   fi
 elif [ "${2:-}" = test ]; then
   [ -f "$FAKE_RELEASE_BUILD" ] || exit 20
-  expected="swift test -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -enable-testing --skip-build --filter UserNotificationCallbackBridgeTests/"
+  expected="swift test -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -emit-const-values -Xswiftc -enable-testing --skip-build --filter UserNotificationCallbackBridgeTests/"
   [ "$*" = "$expected" ] || exit 21
 fi
 SH
@@ -98,10 +98,10 @@ fi
 if [ "$(grep -c 'swift build ' "$FAKE_XCRUN_LOG")" -ne 1 ]; then
   fail "release test compile and regression must invoke exactly one build"
 fi
-if ! grep -qx 'swift build -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -enable-testing --jobs 1 --build-tests' "$FAKE_RELEASE_BUILD"; then
-  fail "release app and test targets must build together with bounded compiler concurrency"
+if ! grep -qx 'swift build -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -emit-const-values -Xswiftc -enable-testing --build-tests' "$FAKE_RELEASE_BUILD"; then
+  fail "release app and test targets must build together with the stable runner's default concurrency"
 fi
-if ! grep -q -- 'swift test -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -enable-testing --skip-build --filter UserNotificationCallbackBridgeTests/' "$FAKE_XCRUN_LOG"; then
+if ! grep -q -- 'swift test -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -emit-const-values -Xswiftc -enable-testing --skip-build --filter UserNotificationCallbackBridgeTests/' "$FAKE_XCRUN_LOG"; then
   fail "release notification regression did not reuse the compiled tests"
 fi
 if FAKE_BUILD_FAILURE=1 "$TMPDIR/macos/scripts/run-swift-ci.sh" --release-test-compile; then
