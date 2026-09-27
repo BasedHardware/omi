@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from database import conversations as conversations_db
 from database import fair_use as fair_use_db
 from database import sync_dead_letters
+from database import sync_backfill_sequencer
 from database import users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
@@ -27,6 +28,7 @@ from database.sync_jobs import (
     fenced_mark_job_queued_for_retry,
     get_sync_ledger_fence_mode,
     get_sync_job,
+    get_raw_sync_job,
     is_sync_job_stale,
     mark_job_completed,
     mark_job_queued_for_retry,
@@ -34,6 +36,7 @@ from database.sync_jobs import (
     try_acquire_sync_job_run_lock,
     try_acquire_job_run_lock,
     release_job_run_lock,
+    update_sync_job,
 )
 from database.sync_ledger import (
     claim_sync_content,
@@ -153,6 +156,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import SyncLane, classify_sync_lane
+from utils.sync import uid_sequencer
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 logger = logging.getLogger(__name__)
@@ -1014,36 +1018,12 @@ async def sync_local_files_v2(
     job_dir = f'syncing/{uid}/{job_id}'
 
     backfill_slot_acquired = False
-    if lane_decision.lane == SyncLane.BACKFILL:
-        try:
-            backfill_slot_acquired = await run_blocking(db_executor, try_acquire_backfill_slot, uid, job_id)
-        except Exception as e:
-            logger.error('sync_v2: backfill admission unavailable uid=%s error=%s', uid, type(e).__name__)
-            return JSONResponse(
-                status_code=503,
-                headers={'Retry-After': '30', 'X-Omi-Rate-Limit-Reason': 'backfill_capacity'},
-                content={'code': 'backfill_capacity', 'detail': 'Historical recovery is temporarily unavailable'},
-            )
-        if not backfill_slot_acquired:
-            try:
-                OMI_SYNC_LANE_JOBS_TOTAL.labels(
-                    lane=lane_decision.lane.value,
-                    trust=lane_decision.trust.value,
-                    outcome='paced',
-                ).inc()
-            except Exception:
-                pass
-            return JSONResponse(
-                status_code=429,
-                headers={'Retry-After': '60', 'X-Omi-Rate-Limit-Reason': 'backfill_paced'},
-                content={
-                    'code': 'backfill_paced',
-                    'detail': 'Another historical recovery job is still in flight; local audio was not consumed.',
-                },
-            )
+    # V2 admission never acquires the historical Redis slot. The kill switch
+    # changes worker dispatch only; neither setting can pace uploads with 429.
 
     paths = []
     content_id: Optional[str] = None
+    sequencer_registration_started = False
 
     try:
         # --- Fast path: save raw files only (< 2s typical) ---
@@ -1082,7 +1062,11 @@ async def sync_local_files_v2(
             # A named enqueue can lose its acknowledgement after Cloud Tasks
             # accepts it. Mark eligible jobs as Cloud Tasks-owned before that
             # call so the ambiguity never starts an unfenced inline twin.
-            dispatch_mode='cloud_tasks' if cloud_task_eligible else 'inline',
+            dispatch_mode=(
+                'sequenced'
+                if cloud_task_eligible and lane_decision.lane == SyncLane.BACKFILL and uid_sequencer.enabled()
+                else 'cloud_tasks' if cloud_task_eligible else 'inline'
+            ),
             ledger_fence_mode=(
                 SyncLedgerFenceMode.ACTIVE.value if ledger_fence_active else SyncLedgerFenceMode.LEGACY.value
             ),
@@ -1150,8 +1134,9 @@ async def sync_local_files_v2(
                 model='unknown',
                 lane=lane_decision.lane.value,
             )
-            await run_blocking(db_executor, release_backfill_slot, uid, job_id)
-            backfill_slot_acquired = False
+            if backfill_slot_acquired:
+                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
+                backfill_slot_acquired = False
             return JSONResponse(
                 status_code=503,
                 headers={'Retry-After': '30', 'X-Omi-Rate-Limit-Reason': 'backfill_capacity'},
@@ -1223,8 +1208,71 @@ async def sync_local_files_v2(
                     SyncLedgerFenceMode.ACTIVE.value if ledger_fence_active else SyncLedgerFenceMode.LEGACY.value
                 ),
             }
+            if lane_decision.lane == SyncLane.BACKFILL and uid_sequencer.enabled():
+                # The Firestore record, not a Cloud Task acknowledgement, is
+                # the durable 202 boundary. Waiting jobs hold no HTTP worker.
+                # An ambiguous Firestore acknowledgement may already have
+                # committed. Never release its content claim on that path.
+                sequencer_registration_started = True
+                try:
+                    await run_blocking(
+                        db_executor,
+                        sync_backfill_sequencer.register_job,
+                        uid,
+                        job_id,
+                        enqueue_payload,
+                        lane_decision.oldest_capture_at,
+                    )
+                except Exception as error:
+                    # A committed Firestore transaction can lose its reply.
+                    # An authoritative read converts that to a safe 202.
+                    # If the read also fails, keep all recovery material and
+                    # refuse to assert that the job was accepted.
+                    registered = await run_blocking(db_executor, sync_backfill_sequencer.is_registered, uid, job_id)
+                    if not registered:
+                        # A fast worker may have consumed the last pending
+                        # document and removed its owner before this read.
+                        observed_job = await run_blocking(db_executor, get_raw_sync_job, job_id)
+                        registered = bool(observed_job and observed_job.get('status') in TERMINAL_STATUSES)
+                    if not registered:
+                        sequencer_registration_started = False
+                        await _delete_staged_blobs_async(owned_paths)
+                        await run_blocking(sync_executor, _cleanup_files, owned_paths)
+                        await _finalize_sync_job_failure(
+                            job_id=job_id,
+                            uid=uid,
+                            content_id=content_id,
+                            error_code='sync_sequencer_registration_failed',
+                            outcome=TranscriptionOutcome.UPSTREAM_ERROR,
+                            provider='unknown',
+                            model='unknown',
+                            lane=lane_decision.lane.value,
+                        )
+                        logger.error(
+                            'event=sync_uid_sequencer action=registered outcome=failed exception_type=%s',
+                            type(error).__name__,
+                        )
+                        return JSONResponse(
+                            status_code=503,
+                            headers={'Retry-After': '30'},
+                            content={
+                                'code': 'sync_dispatch_unavailable',
+                                'detail': 'Historical recovery is temporarily unavailable',
+                            },
+                        )
+                try:
+                    await run_blocking(db_executor, uid_sequencer.kick, uid)
+                except Exception as error:
+                    # The accepted record is durable. A Scheduler tick will
+                    # rediscover it; returning 503 here would trigger a second
+                    # phone upload for the same content.
+                    logger.error(
+                        'event=sync_uid_sequencer action=kick outcome=deferred exception_type=%s',
+                        type(error).__name__,
+                    )
+                dispatched = True
             enqueue_error = None
-            for enqueue_attempt in range(2):
+            for enqueue_attempt in range(0 if dispatched else 2):
                 try:
                     await run_blocking(db_executor, enqueue_sync_job, enqueue_payload)
                     dispatched = True
@@ -1416,7 +1464,7 @@ async def sync_local_files_v2(
         raise
     except Exception as e:
         logger.error('event=sync_ingest outcome=failed exception_type=%s', type(e).__name__)
-        if content_id:
+        if content_id and not sequencer_registration_started:
             try:
                 await run_blocking(db_executor, release_sync_content_claim, uid, content_id, job_id)
             except Exception:
@@ -1597,10 +1645,120 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     return resp
 
 
-# response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
-# codes (200/409/500) drive the queue protocol, not a typed client-facing body.
+async def _maintain_uid_sequencer_lease(
+    uid: str, job_id: str, epoch: int, stop: asyncio.Event, owner: asyncio.Task | None
+) -> None:
+    while not stop.is_set():
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=sync_backfill_sequencer.HEARTBEAT_SECONDS)
+            return
+        except asyncio.TimeoutError:
+            pass
+        try:
+            renewed = await run_blocking(db_executor, sync_backfill_sequencer.renew_job, uid, job_id, epoch)
+        except Exception as error:
+            logger.error(
+                'event=sync_uid_sequencer action=heartbeat outcome=error exception_type=%s', type(error).__name__
+            )
+            renewed = False
+        if not renewed:
+            logger.error('event=sync_uid_sequencer action=heartbeat outcome=lease_lost')
+            if owner is not None:
+                owner.cancel()
+            return
+
+
+# response_model omitted: the OIDC worker/sweeper are not app API surfaces.
+@router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
+async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
+    return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
+
+
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    """Persisted sequencer epochs survive the kill switch; old tasks keep their legacy path."""
+    if await run_blocking(db_executor, get_sync_ledger_fence_mode) is SyncLedgerFenceMode.STANDBY:
+        return JSONResponse(status_code=503, content={'status': 'cutover_standby'})
+    try:
+        payload = await request.json()
+    except Exception:
+        return await _run_sync_job_body(request, task_retry_count)
+    epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
+    if epoch is None:
+        if (
+            uid_sequencer.enabled()
+            and isinstance(payload, dict)
+            and payload.get('lane') == SyncLane.BACKFILL.value
+            and isinstance(payload.get('uid'), str)
+            and isinstance(payload.get('job_id'), str)
+        ):
+            legacy_job = await run_blocking(db_executor, get_raw_sync_job, payload['job_id'])
+            if legacy_job and legacy_job.get('status') == 'queued':
+                # Polling's direct-task stale detector must stop once the
+                # durable UID registry owns a waiting legacy task.
+                marked = await run_blocking(
+                    db_executor, update_sync_job, payload['job_id'], {'dispatch_mode': 'sequenced'}
+                )
+                if marked is None:
+                    return await _run_sync_job_body(request, task_retry_count)
+                age = payload.get('recording_age_seconds')
+                captured_at = (
+                    float(payload.get('enqueued_at')) - float(age)
+                    if isinstance(payload.get('enqueued_at'), (int, float)) and isinstance(age, (int, float))
+                    else None
+                )
+                await run_blocking(
+                    db_executor,
+                    sync_backfill_sequencer.register_job,
+                    payload['uid'],
+                    payload['job_id'],
+                    payload,
+                    captured_at,
+                )
+                try:
+                    await run_blocking(db_executor, uid_sequencer.kick, payload['uid'])
+                except Exception as error:
+                    logger.error(
+                        'event=sync_uid_sequencer action=legacy_migration outcome=deferred exception_type=%s',
+                        type(error).__name__,
+                    )
+                logger.info('event=sync_uid_sequencer action=legacy_migration outcome=registered')
+                return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
+        return await _run_sync_job_body(request, task_retry_count)
+    uid = payload.get('uid')
+    job_id = payload.get('job_id')
+    if not isinstance(uid, str) or not isinstance(job_id, str) or not isinstance(epoch, int) or epoch <= 0:
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_sequencer_identity'})
+    if not await run_blocking(db_executor, sync_backfill_sequencer.begin_job, uid, job_id, epoch):
+        logger.info('event=sync_uid_sequencer action=delivery outcome=stale_epoch')
+        return JSONResponse(status_code=200, content={'status': 'stale_sequencer_epoch'})
+    stop = asyncio.Event()
+    heartbeat = start_background_task(
+        _maintain_uid_sequencer_lease(uid, job_id, epoch, stop, asyncio.current_task()),
+        name=f'sync:uid-lease:{job_id}',
+    )
+    try:
+        prior_job = await run_blocking(db_executor, get_raw_sync_job, job_id)
+        prior_attempt = prior_job.get('attempt', 0) if isinstance(prior_job, dict) else 0
+        effective_retry_count = max(task_retry_count, prior_attempt if isinstance(prior_attempt, int) else 0)
+        response = await _run_sync_job_body(request, effective_retry_count)
+    finally:
+        stop.set()
+        await heartbeat
+    if response.status_code < 300:
+        job = await run_blocking(db_executor, get_raw_sync_job, job_id)
+        if job is not None and job.get('status') not in TERMINAL_STATUSES:
+            logger.error('event=sync_uid_sequencer action=delivery outcome=nonterminal_ack')
+            return JSONResponse(status_code=500, content={'status': 'nonterminal_ack'})
+        outcome = job.get('status') if job else 'expired'
+        released = await run_blocking(db_executor, sync_backfill_sequencer.finish_job, uid, job_id, epoch, outcome)
+        if released:
+            await run_blocking(db_executor, uid_sequencer.kick, uid)
+    return response
+
+
+async def _run_sync_job_body(request: Request, task_retry_count: int):
     """Cloud Tasks handler: runs one sync job inside the request.
 
     Auth is the Cloud Tasks OIDC token (verify_cloud_tasks_oidc), not Firebase.

@@ -193,6 +193,38 @@ runs:
             --max-backoff=60s
         fi
 
+    - name: Reconcile backfill UID sequencer sweep
+      if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        # The task invoker already has run.invoker on backend-sync. Reuse its
+        # audience/identity; no new service account or queue is needed.
+        SERVICE_JSON="$(gcloud run services describe '${{ inputs.service }}-sync' \
+          --region='${{ inputs.region }}' --project='${{ inputs.project_id }}' \
+          --format='json(status.url,spec.template.spec.containers[0].env)')"
+        SERVICE_URL="$(jq -r '.status.url // empty' <<< "$SERVICE_JSON")"
+        INVOKER_SA="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name == "SYNC_TASKS_INVOKER_SA") | .value] | first // empty' <<< "$SERVICE_JSON")"
+        test -n "$SERVICE_URL"
+        test -n "$INVOKER_SA"
+        JOB='sync-backfill-uid-sequencer'
+        COMMON=(
+          --location='${{ inputs.region }}'
+          --project='${{ inputs.project_id }}'
+          --schedule='*/2 * * * *'
+          --time-zone='UTC'
+          --uri="${SERVICE_URL}/v2/sync-backfill-sequencer/sweep"
+          --http-method='POST'
+          --oidc-service-account-email="$INVOKER_SA"
+          --oidc-token-audience="${SERVICE_URL}/v2/sync-jobs/run"
+          --attempt-deadline='180s'
+        )
+        if gcloud scheduler jobs describe "$JOB" --location='${{ inputs.region }}' --project='${{ inputs.project_id }}' >/dev/null 2>&1; then
+          gcloud scheduler jobs update http "$JOB" "${COMMON[@]}"
+        else
+          gcloud scheduler jobs create http "$JOB" "${COMMON[@]}"
+        fi
+
     - name: Provision and verify sync ledger TTL
       if: ${{ inputs.mode == 'platform' && inputs.provision_sync_ledger_ttl == 'true' }}
       shell: bash
@@ -312,3 +344,33 @@ runs:
         gcloud monitoring policies describe "$POLICY" \
           --project=${{ inputs.project_id }} \
           --format='value(notificationChannels)' | grep -q .
+
+    - name: Provision routed backfill sequencer stall alert
+      if: ${{ (inputs.mode == 'platform' || inputs.mode == 'dispatch') && inputs.provision_budget_alerts == 'true' }}
+      shell: bash
+      env:
+        ALERT_CHANNELS: ${{ inputs.alert_notification_channels }}
+      run: |
+        test -n "$ALERT_CHANNELS"
+        METRIC='sync_backfill_uid_sequencer_stall'
+        DISPLAY_NAME='Sync backfill UID sequencer stalled'
+        LOG_FILTER='resource.type="cloud_run_revision" AND (resource.labels.service_name="backend-sync" OR resource.labels.service_name="backend-sync-backfill") AND ("event=sync_uid_sequencer action=wait_alert" OR "event=sync_uid_sequencer action=sweep outcome=error")'
+        if gcloud logging metrics describe "$METRIC" --project=${{ inputs.project_id }} >/dev/null 2>&1; then
+          gcloud logging metrics update "$METRIC" --project=${{ inputs.project_id }} --description="$DISPLAY_NAME" --log-filter="$LOG_FILTER"
+        else
+          gcloud logging metrics create "$METRIC" --project=${{ inputs.project_id }} --description="$DISPLAY_NAME" --log-filter="$LOG_FILTER"
+        fi
+        POLICY="$(gcloud monitoring policies list --project=${{ inputs.project_id }} --filter="displayName=\"${DISPLAY_NAME}\"" --format='value(name)' --limit=1)"
+        if [[ -z "$POLICY" ]]; then
+          POLICY="$(gcloud monitoring policies create \
+            --project=${{ inputs.project_id }} \
+            --display-name="$DISPLAY_NAME" \
+            --condition-display-name="$DISPLAY_NAME" \
+            --condition-filter="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\"" \
+            --duration=0s --if='> 0' --trigger-count=1 --combiner=OR \
+            --notification-channels="$ALERT_CHANNELS" \
+            --documentation='A backfill job has waited 12 hours, or the UID reconciler failed; investigate before the 24-hour Redis job and staged-audio expiry.' \
+            --format='value(name)')"
+        fi
+        test -n "$POLICY"
+        gcloud monitoring policies describe "$POLICY" --project=${{ inputs.project_id }} --format='value(notificationChannels)' | grep -q .

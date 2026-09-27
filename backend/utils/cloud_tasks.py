@@ -56,6 +56,7 @@ SYNC_JOB_TASK_PAYLOAD_KEYS = frozenset(
         'ledger_fence_mode',
     }
 )
+SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS = SYNC_JOB_TASK_PAYLOAD_KEYS | {'sequencer_epoch'}
 
 _tasks_client: Optional[tasks_v2.CloudTasksClient] = None
 _google_auth_request: Optional[google_auth_requests.Request] = None
@@ -285,8 +286,13 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     (request-based) rather than the ~4-dispatch lane that caused the incident.
     The lane label is always carried on the payload for metering and reporting.
     """
-    if frozenset(payload) != SYNC_JOB_TASK_PAYLOAD_KEYS:
+    keys = frozenset(payload)
+    if keys not in (SYNC_JOB_TASK_PAYLOAD_KEYS, SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS):
         raise ValueError('sync job payload does not match the durable worker schema')
+    sequencer_epoch = payload.get('sequencer_epoch')
+    if sequencer_epoch is not None and (not isinstance(sequencer_epoch, int) or sequencer_epoch <= 0):
+        raise ValueError('sync job sequencer epoch must be a positive integer')
+    task_id = f"{payload['job_id']}-s{sequencer_epoch}" if sequencer_epoch is not None else str(payload['job_id'])
     if payload.get('lane') == 'backfill' and is_sync_backfill_routing_enabled():
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
         handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
@@ -294,12 +300,12 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
             _enqueue_named_task(
                 queue,
                 handler_url,
-                str(payload['job_id']),
+                task_id,
                 payload,
                 audience=os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler_url,
             )
             return
-    _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), str(payload['job_id']), payload)
+    _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload)
 
 
 def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
