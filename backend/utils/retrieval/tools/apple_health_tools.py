@@ -69,6 +69,8 @@ def prepare_apple_health_access(
         'Error checking Apple Health connection',
     )
     if int_err:
+        if int_err.startswith('Error checking Apple Health connection'):
+            return uid, None, 'Error checking Apple Health connection.'
         return uid, None, int_err
 
     return uid, integration, None
@@ -92,12 +94,12 @@ def get_apple_health_steps_tool(
     Returns:
         Formatted step count data with daily breakdown, averages and totals.
     """
-    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
-    if err:
-        return err
-    assert integration is not None
-
     try:
+        _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+        if err:
+            return err
+        assert integration is not None
+
         health_data: Dict[str, Any] = integration.get('health_data', {})
         steps_data: Dict[str, Any] = health_data.get('steps', {})
 
@@ -138,8 +140,8 @@ def get_apple_health_steps_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_steps_tool: {e}")
-        return f"Error retrieving step data: {str(e)}"
+        logger.error(f"Error in get_apple_health_steps_tool: {e}", exc_info=True)
+        return "Error retrieving step data."
 
 
 @tool
@@ -163,12 +165,12 @@ def get_apple_health_sleep_tool(
     Returns:
         Formatted sleep data with daily breakdown, total hours and session details.
     """
-    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
-    if err:
-        return err
-    assert integration is not None
-
     try:
+        _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+        if err:
+            return err
+        assert integration is not None
+
         health_data: Dict[str, Any] = integration.get('health_data', {})
         sleep_data: Dict[str, Any] = health_data.get('sleep', {})
 
@@ -204,8 +206,8 @@ def get_apple_health_sleep_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_sleep_tool: {e}")
-        return f"Error retrieving sleep data: {str(e)}"
+        logger.error(f"Error in get_apple_health_sleep_tool: {e}", exc_info=True)
+        return "Error retrieving sleep data."
 
 
 @tool
@@ -227,12 +229,12 @@ def get_apple_health_heart_rate_tool(
     Returns:
         Formatted heart rate data with average, min, and max values.
     """
-    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
-    if err:
-        return err
-    assert integration is not None
-
     try:
+        _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+        if err:
+            return err
+        assert integration is not None
+
         health_data: Dict[str, Any] = integration.get('health_data', {})
         heart_data: Dict[str, Any] = health_data.get('heart_rate', {})
 
@@ -264,8 +266,8 @@ def get_apple_health_heart_rate_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_heart_rate_tool: {e}")
-        return f"Error retrieving heart rate data: {str(e)}"
+        logger.error(f"Error in get_apple_health_heart_rate_tool: {e}", exc_info=True)
+        return "Error retrieving heart rate data."
 
 
 @tool
@@ -288,13 +290,13 @@ def get_apple_health_workouts_tool(
     Returns:
         Formatted workout data with activity types, duration, and calories.
     """
-    uid, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
-    if err:
-        return err
-    assert uid is not None
-    assert integration is not None
-
     try:
+        uid, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+        if err:
+            return err
+        assert uid is not None
+        assert integration is not None
+
         health_data: Dict[str, Any] = integration.get('health_data', {})
         workouts: List[Dict[str, Any]] = health_data.get('workouts', [])
 
@@ -346,8 +348,8 @@ def get_apple_health_workouts_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_workouts_tool: {e}")
-        return f"Error retrieving workout data: {str(e)}"
+        logger.error(f"Error in get_apple_health_workouts_tool: {e}", exc_info=True)
+        return "Error retrieving workout data."
 
 
 @tool
@@ -369,12 +371,12 @@ def get_apple_health_summary_tool(
     Returns:
         Comprehensive health summary with all available Apple Health data.
     """
-    _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
-    if err:
-        return err
-    assert integration is not None
-
     try:
+        _, integration, err = prepare_apple_health_access(cast(Optional[Dict[str, Any]], config))
+        if err:
+            return err
+        assert integration is not None
+
         health_data: Dict[str, Any] = integration.get('health_data', {})
 
         if not health_data:
@@ -463,5 +465,5 @@ def get_apple_health_summary_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_summary_tool: {e}")
-        return f"Error retrieving health summary: {str(e)}"
+        logger.error(f"Error in get_apple_health_summary_tool: {e}", exc_info=True)
+        return "Error retrieving health summary."
