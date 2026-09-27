@@ -73,8 +73,11 @@ extension AppState {
     if !sttSession.useLocalSTT {
       let probeAudioGate = armedMicrophoneRecovery.outboundAudioGate
       audioMixer?.start { [weak self] monoMixed in
-        // A dead HAL route produces PCM zeros. Do not bill a cloud provider for it.
-        guard probeAudioGate.isOpen, AudioCaptureService.containsLivePCM(monoMixed) else { return }
+        // While an armed retry is probing a possibly dead route, nothing is streamed until
+        // the microphone proves live. Outside a probe every chunk is forwarded, quiet or not:
+        // the stream's byte count is the transcript clock, so dropping quiet chunks would
+        // shift every later timestamp and clip soft speech onsets.
+        guard probeAudioGate.isOpen else { return }
         self?.transcriptionService?.sendAudio(monoMixed)
       }
     }
