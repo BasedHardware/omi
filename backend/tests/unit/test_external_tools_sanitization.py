@@ -139,8 +139,9 @@ class TestExternalToolsSanitization(unittest.IsolatedAsyncioTestCase):
 
     def test_traverse_knowledge_graph_unexpected_exception_sanitized(self):
         secret_leak = "neo4j_bolt_connection_credentials_postgres_secret"
-        with patch.object(graph_mod, "_resolve_uid", return_value="test_uid_123"), \
-             patch.object(graph_mod, "traverse_knowledge_graph", side_effect=RuntimeError(secret_leak)):
+        with patch.object(graph_mod, "_resolve_uid", return_value="test_uid_123"), patch.object(
+            graph_mod, "traverse_knowledge_graph", side_effect=RuntimeError(secret_leak)
+        ):
             fn = getattr(graph_mod.traverse_knowledge_graph_tool, "func", graph_mod.traverse_knowledge_graph_tool)
             result = fn("Omi", 1)
             self.assertEqual(result, "Error traversing knowledge graph: Unable to complete traversal.")
@@ -153,9 +154,9 @@ class TestExternalToolsSanitization(unittest.IsolatedAsyncioTestCase):
         mock_tool.endpoint = "https://api.example.com/tool"
         mock_tool.method = "POST"
 
-        with patch.object(app_mod, "get_webhook_circuit_breaker") as mock_cb, \
-             patch.object(app_mod, "run_blocking", new_callable=AsyncMock) as mock_rb, \
-             patch("httpx.AsyncClient") as mock_client:
+        with patch.object(app_mod, "get_webhook_circuit_breaker") as mock_cb, patch.object(
+            app_mod, "run_blocking", new_callable=AsyncMock
+        ) as mock_rb, patch("httpx.AsyncClient") as mock_client:
 
             mock_cb.return_value.allow_request.return_value = True
             mock_rb.return_value = False
@@ -182,10 +183,11 @@ class TestExternalToolsSanitization(unittest.IsolatedAsyncioTestCase):
             tool_fn = kwargs.get("coroutine")
             return MagicMock()
 
-        with patch.object(app_mod, "get_webhook_circuit_breaker") as mock_cb, \
-             patch.object(app_mod, "run_blocking", new_callable=AsyncMock) as mock_rb, \
-             patch.object(app_mod, "call_mcp_tool", side_effect=RuntimeError(secret_leak)), \
-             patch.object(app_mod, "StructuredTool", side_effect=fake_structured_tool):
+        with patch.object(app_mod, "get_webhook_circuit_breaker") as mock_cb, patch.object(
+            app_mod, "run_blocking", new_callable=AsyncMock
+        ) as mock_rb, patch.object(app_mod, "call_mcp_tool", side_effect=RuntimeError(secret_leak)), patch.object(
+            app_mod, "StructuredTool", side_effect=fake_structured_tool
+        ):
 
             mock_cb.return_value.allow_request.return_value = True
             mock_rb.return_value = False
