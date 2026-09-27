@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from database import sync_backfill_sequencer as registry
-from database.sync_jobs import TERMINAL_STATUSES, get_raw_sync_job, sync_job_run_lock_present
+from database.sync_jobs import TERMINAL_STATUSES, get_sync_job, sync_job_run_lock_present
 from utils.cloud_tasks import enqueue_sync_job
 from utils.sync import backfill_cutover
 
@@ -125,7 +125,7 @@ def reconcile_uid(uid: str, owner: dict[str, Any], *, now: datetime | None = Non
         )
         registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
         return 'lock_held'
-    job = get_raw_sync_job(job_id)
+    job = get_sync_job(job_id)
     if job and job.get('status') in TERMINAL_STATUSES:
         outcome = 'terminal_cleanup'
     elif job is None:

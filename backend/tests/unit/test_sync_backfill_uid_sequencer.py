@@ -230,7 +230,7 @@ def test_sweeper_replaces_lost_dispatch_then_releases_terminal_job(db, monkeypat
     dispatched = []
     monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
     monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
-    monkeypatch.setattr(uid_sequencer, 'get_raw_sync_job', lambda _job_id: {'status': 'queued'})
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'queued'})
     monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
     expired = NOW + timedelta(minutes=6)
     owner = registry.get_owner('a', firestore_client=db)
@@ -300,7 +300,7 @@ def test_pending_sweep_rotates_heavy_uid_and_reaches_light_uid(db, monkeypatch):
     calls = []
     monkeypatch.setattr(uid_sequencer, 'kick', lambda uid: calls.append(uid) or False)
     monkeypatch.setattr(registry, 'due_owners', lambda **_kwargs: [])
-    monkeypatch.setattr(uid_sequencer, 'get_raw_sync_job', lambda _job_id: None)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: None)
     monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
     # The first bounded page is dominated by the heavy UID. Deferred entries
     # leave the next page available to another UID on the next Scheduler tick.

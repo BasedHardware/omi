@@ -619,7 +619,7 @@ class _FakeRequest:
 
 def _run_job_harness(monkeypatch, job, *, ensure_error=None):
     calls: list[str] = []
-    monkeypatch.setattr(sync_router, 'get_raw_sync_job', MagicMock(return_value=deepcopy(job)))
+    monkeypatch.setattr(sync_router, 'get_sync_job', MagicMock(return_value=deepcopy(job)))
     monkeypatch.setattr(sync_router.sync_backfill_sequencer, 'get_owner', MagicMock(return_value={}))
     monkeypatch.setattr(
         sync_router,
