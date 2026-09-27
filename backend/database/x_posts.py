@@ -31,7 +31,8 @@ KIND_LIKE = 'like'
 
 
 def _posts_ref(uid: str) -> Any:
-    return db.collection(users_collection).document(uid).collection(x_posts_collection)
+    clean_uid = uid.strip() if isinstance(uid, str) else ''
+    return db.collection(users_collection).document(clean_uid).collection(x_posts_collection)
 
 
 def save_x_posts(uid: str, posts: List[Dict[str, Any]]) -> int:
@@ -41,13 +42,24 @@ def save_x_posts(uid: str, posts: List[Dict[str, Any]]) -> int:
     kind. We dedupe on the document id (the tweet id), so calling this repeatedly
     with overlapping pages only ever inserts each post once.
     """
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        raise ValueError('uid must be a non-empty string')
+    if not isinstance(posts, list):
+        raise ValueError('posts must be a list')
     if not posts:
         return 0
 
-    coll = _posts_ref(uid)
+    clean_uid = uid.strip()
+    coll = _posts_ref(clean_uid)
     # Find which ids already exist so we can report an accurate delta and avoid
     # clobbering `ingested_at` on re-sync.
-    ids = [str(p['id']) for p in posts if p.get('id') is not None]
+    valid_posts: List[Dict[str, Any]] = [
+        p for p in posts if isinstance(p, dict) and p.get('id') is not None and str(p.get('id')).strip()
+    ]
+    if not valid_posts:
+        return 0
+
+    ids = [str(p['id']).strip() for p in valid_posts]
     existing: set[str] = set()
     # get_all is efficient for the modest page sizes the connector pulls (<=100).
     for snap in db.get_all([coll.document(i) for i in ids]):
@@ -56,11 +68,10 @@ def save_x_posts(uid: str, posts: List[Dict[str, Any]]) -> int:
 
     now = datetime.now(timezone.utc)
     batch = db.batch()
+    batch_count = 0
     new_count = 0
-    for p in posts:
-        pid = str(p.get('id')) if p.get('id') is not None else None
-        if not pid:
-            continue
+    for p in valid_posts:
+        pid = str(p['id']).strip()
         doc: Dict[str, Any] = dict(p)
         doc['id'] = pid
         doc['updated_at'] = now
@@ -71,8 +82,14 @@ def save_x_posts(uid: str, posts: List[Dict[str, Any]]) -> int:
             doc['memory_extraction_status'] = MEMORY_EXTRACTION_PENDING
             new_count += 1
         batch.set(coll.document(pid), doc, merge=True)
-    batch.commit()
-    logger.info(f'save_x_posts uid={uid} received={len(posts)} new={new_count}')
+        batch_count += 1
+        if batch_count >= 500:
+            batch.commit()
+            batch = db.batch()
+            batch_count = 0
+    if batch_count > 0:
+        batch.commit()
+    logger.info(f'save_x_posts uid={clean_uid} received={len(posts)} new={new_count}')
     return new_count
 
 
@@ -83,9 +100,11 @@ def get_pending_memory_extraction_posts(uid: str, limit: int = 200) -> List[Dict
     source rows incrementally is safer than silently treating a historical raw
     import as successfully extracted.
     """
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return []
     bounded_limit = max(1, min(limit, 500))
     pending: List[Dict[str, Any]] = []
-    for snapshot in _posts_ref(uid).stream():
+    for snapshot in _posts_ref(uid.strip()).stream():
         raw = snapshot.to_dict()
         if not isinstance(raw, dict) or raw.get('memory_extraction_status') == MEMORY_EXTRACTION_COMPLETED:
             continue
@@ -99,13 +118,20 @@ def get_pending_memory_extraction_posts(uid: str, limit: int = 200) -> List[Dict
 
 def mark_memory_extraction_completed(uid: str, post_ids: List[str]) -> None:
     """Acknowledge extraction only after its canonical/legacy memory writes succeed."""
-    if not post_ids:
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return
+    if not post_ids or not isinstance(post_ids, list):
+        return
+    clean_ids = [str(post_id).strip() for post_id in post_ids if post_id and str(post_id).strip()]
+    if not clean_ids:
         return
     now = datetime.now(timezone.utc)
     batch = db.batch()
-    for post_id in post_ids:
+    batch_count = 0
+    coll = _posts_ref(uid.strip())
+    for post_id in clean_ids:
         batch.set(
-            _posts_ref(uid).document(str(post_id)),
+            coll.document(post_id),
             {
                 'memory_extraction_status': MEMORY_EXTRACTION_COMPLETED,
                 'memory_extracted_at': now,
@@ -113,7 +139,13 @@ def mark_memory_extraction_completed(uid: str, post_ids: List[str]) -> None:
             },
             merge=True,
         )
-    batch.commit()
+        batch_count += 1
+        if batch_count >= 500:
+            batch.commit()
+            batch = db.batch()
+            batch_count = 0
+    if batch_count > 0:
+        batch.commit()
 
 
 def get_x_posts(uid: str, limit: int = 100, kind: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -123,7 +155,10 @@ def get_x_posts(uid: str, limit: int = 100, kind: Optional[str] = None) -> List[
     by kind we use the single-field equality query (auto-indexed) and sort in
     Python — post volumes per user are small enough for this to be cheap.
     """
-    coll = _posts_ref(uid)
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return []
+    bounded_limit = max(1, min(limit, 500))
+    coll = _posts_ref(uid.strip())
     if kind:
         docs: List[Dict[str, Any]] = []
         for d in coll.where(filter=FieldFilter('kind', '==', kind)).stream():
@@ -131,8 +166,8 @@ def get_x_posts(uid: str, limit: int = 100, kind: Optional[str] = None) -> List[
             if isinstance(raw, dict):
                 docs.append(cast(Dict[str, Any], raw))
         docs.sort(key=lambda x: str(x.get('created_at') or ''), reverse=True)
-        return docs[:limit]
-    query = coll.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
+        return docs[:bounded_limit]
+    query = coll.order_by('created_at', direction=firestore.Query.DESCENDING).limit(bounded_limit)
     out: List[Dict[str, Any]] = []
     for d in query.stream():
         raw = d.to_dict()
@@ -143,11 +178,16 @@ def get_x_posts(uid: str, limit: int = 100, kind: Optional[str] = None) -> List[
 
 def get_x_posts_by_ids(uid: str, ids: List[str]) -> List[Dict[str, Any]]:
     """Fetch specific posts by id (used by semantic search to hydrate matches)."""
-    if not ids:
+    if not uid or not isinstance(uid, str) or not uid.strip():
         return []
-    coll = _posts_ref(uid)
+    if not ids or not isinstance(ids, list):
+        return []
+    clean_ids = [str(i).strip() for i in ids if i and str(i).strip()]
+    if not clean_ids:
+        return []
+    coll = _posts_ref(uid.strip())
     out: List[Dict[str, Any]] = []
-    for snap in db.get_all([coll.document(str(i)) for i in ids]):
+    for snap in db.get_all([coll.document(i) for i in clean_ids]):
         if getattr(snap, "exists", False):
             raw: object = snap.to_dict()
             if isinstance(raw, dict):
@@ -157,12 +197,15 @@ def get_x_posts_by_ids(uid: str, ids: List[str]) -> List[Dict[str, Any]]:
 
 def count_x_posts(uid: str) -> int:
     """Total number of stored X posts for the user."""
-    agg = _posts_ref(uid).count().get()
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return 0
+    coll = _posts_ref(uid.strip())
+    agg = coll.count().get()
     # Firestore aggregation returns a list of AggregationResult rows.
     try:
         return int(agg[0][0].value)
     except Exception:
-        return len(list(_posts_ref(uid).stream()))
+        return len(list(coll.stream()))
 
 
 def get_newest_tweet_id(uid: str) -> Optional[str]:
@@ -172,7 +215,9 @@ def get_newest_tweet_id(uid: str) -> Optional[str]:
     zero-padded, but they're numeric strings of equal-ish length so we compare
     as ints to be safe.
     """
-    docs = list(_posts_ref(uid).where(filter=FieldFilter('kind', '==', KIND_TWEET)).stream())
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return None
+    docs = list(_posts_ref(uid.strip()).where(filter=FieldFilter('kind', '==', KIND_TWEET)).stream())
     best: Optional[int] = None
     for d in docs:
         try:
