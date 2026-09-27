@@ -89,6 +89,7 @@ def identify_speakers_for_segments(
     uid: str,
     language: Optional[str] = None,
     *,
+    owner_reserved: bool = False,
     dependencies: SpeakerIdentityDependencies = _DEFAULT_DEPS,
 ) -> None:
     """Identify speakers in transcript segments using voice embeddings and text detection.
@@ -198,7 +199,7 @@ def identify_speakers_for_segments(
                 failed_clips,
             )
 
-        decisions = arbitrate_owner_matches(voice_distances, voice_decisions)
+        decisions = arbitrate_owner_matches(voice_distances, voice_decisions, owner_reserved=owner_reserved)
         for speaker_id, decision in decisions.items():
             segments = speaker_segments[speaker_id]
             best_seg = max(segments, key=lambda s: s.end - s.start)

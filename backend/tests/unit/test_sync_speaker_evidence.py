@@ -180,6 +180,27 @@ def test_existing_labels_never_gain_automatic_provenance(monkeypatch):
     assert segment.speaker_match_source is None
 
 
+def test_manual_owner_receipt_reserves_owner_in_sync_arbitration(monkeypatch):
+    from utils.manual_speaker_assignments import manual_owner_reserved
+
+    monkeypatch.setattr(pipeline, 'speaker_embedding_configured', lambda: True)
+    monkeypatch.setattr(pipeline, 'extract_embedding_from_bytes', lambda *a: np.array([[1.0, 0.0]]))
+    monkeypatch.setattr(pipeline, 'detect_speaker_from_text', lambda *a, **k: None)
+    receipt = {'speakers': {'3': {'is_user': True, 'person_id': None}}}
+    segment = TranscriptSegment(id='auto', text='synthetic', speaker_id=4, is_user=False, start=0, end=6)
+
+    pipeline.identify_speakers_for_segments(
+        [segment],
+        wav(),
+        {'user': {'name': 'User', 'embedding': np.array([[1.0, 0.0]])}},
+        'u',
+        owner_reserved=manual_owner_reserved(receipt),
+    )
+
+    assert not segment.is_user
+    assert segment.speaker_identity_status == 'ambiguous'
+
+
 @pytest.mark.parametrize('distances,expected', [((0.631, 0.645), []), ((0.53, 0.645), [0]), ((0.645, 0.53), [1])])
 @pytest.mark.parametrize('previous_accept', [False, True])
 def test_sync_owner_competition_is_decided_before_longest_first_reservation(

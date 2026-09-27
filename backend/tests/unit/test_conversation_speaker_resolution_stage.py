@@ -118,6 +118,20 @@ def test_fragmented_conversation_is_rewritten_to_one_id_per_voice(env, monkeypat
     assert sorted(resolution.participant_speaker_ids) == sorted(next(iter(i)) for i in ids_by_voice.values())
 
 
+def test_two_sync_batches_with_no_audio_withdraw_automatic_owner_claims():
+    conversation = _conversation([0, 1], pcs=False, scopes=['sync:batch-a', 'sync:batch-b'])
+    for segment in conversation.transcript_segments:
+        segment.is_user = True
+        segment.speaker_identity_status = 'user'
+        segment.speaker_match_source = 'sync_embedding'
+
+    stage.resolve_speakers_for_processing('u', conversation)
+
+    assert conversation.speaker_resolution.status == 'unavailable'
+    assert all(not segment.is_user for segment in conversation.transcript_segments)
+    assert all(segment.speaker_identity_status == 'ambiguous' for segment in conversation.transcript_segments)
+
+
 def test_cache_means_a_growing_conversation_embeds_each_segment_once(env, monkeypatch):
     store, diarizer = env
     plan = [0, 1] * 6

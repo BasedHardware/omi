@@ -249,6 +249,22 @@ def _audio_aligned(conversation: Conversation) -> bool:
 
 def _without_resolution(conversation: Conversation, outcome: str) -> None:
     segments = conversation.transcript_segments
+    # Independent sync batches can each accept an owner in isolation. Without
+    # conversation audio there is no evidence that their capture IDs name the
+    # same voice. Withdraw only automatic claims when several scoped voices
+    # claim the owner; the transactional manual receipt is reapplied on write.
+    sync_owners = {
+        (segment.speaker_id_scope, segment.speaker_id)
+        for segment in segments
+        if segment.is_user and (segment.speaker_id_scope or '').startswith('sync:')
+    }
+    if len(sync_owners) > 1:
+        for segment in segments:
+            if segment.is_user and segment.speaker_match_source == 'sync_embedding':
+                segment.is_user = False
+                segment.person_id = None
+                segment.speaker_identity_status = SpeakerIdentityStatus.ambiguous
+                segment.speaker_match_source = MATCH_SOURCE
     if _capture_trusted(segments):
         conversation.speaker_resolution = ConversationSpeakers(
             status='capture',
