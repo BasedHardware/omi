@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import {
   attributedCtaHref,
+  chatActionProperties,
   ctaTarget,
   deviceClass,
   shareId,
@@ -86,6 +87,11 @@ export function ShareAnalytics() {
       }
     };
     const onCopy = () => capture('Share Link Re-copied');
+    const onChatAction = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const properties = chatActionProperties(event.detail);
+      if (properties) capture('Shared Conversation Chat Action', properties);
+    };
     const seen = new Set<number>();
     const onScroll = () => {
       const height = document.documentElement.scrollHeight - window.innerHeight;
@@ -100,10 +106,12 @@ export function ShareAnalytics() {
     };
     document.addEventListener('click', onClick);
     document.addEventListener('omi:share-link-copied', onCopy);
+    document.addEventListener('omi:shared-chat-action', onChatAction);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       document.removeEventListener('click', onClick);
       document.removeEventListener('omi:share-link-copied', onCopy);
+      document.removeEventListener('omi:shared-chat-action', onChatAction);
       window.removeEventListener('scroll', onScroll);
     };
   }, [pathname]);
