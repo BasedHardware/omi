@@ -8,6 +8,18 @@ overlay:
   gke:
     backend-listen:
       env:
+        # 2026-09-26 incident: with the code-fixed order, a Modulate breaker opening sent
+        # new sessions to Deepgram (402 since 09-14) and then streaming Parakeet (no ready
+        # frame, 0 connects since 08-26), so they got no transcript. The configured order
+        # (STT_SERVICE_MODELS) puts Soniox second. Parakeet window allocation stays 0.
+        STT_CONNECT_ORDER_FROM_CONFIG:
+          value: 'true'
+        # 2026-09-27: first prod ramp of the Soniox-first arm for non-English multi-language
+        # users (live STT language constraint, omi#19343). Compare arm=hintable vs control on
+        # omi_stt_output_language_segments_total before ramping further.
+        STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
+          value: '25'
+          category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
@@ -91,8 +103,32 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: MCP_OAUTH_CLIENTS_JSON
+        CAPTURE_JEV_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        CAPTURE_JEV_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
     pusher:
       env:
+        TRANSCRIPTION_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        TRANSCRIPTION_SHADOW_KILL_SWITCH:
+          value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        TRANSCRIPTION_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
+        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+          value: '1'
+          category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
@@ -113,6 +149,15 @@ overlay:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
           value: http://diarizer.omi.me:80
+        CAPTURE_JEV_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        CAPTURE_JEV_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
     config_map:
       entries:
         ACCOUNT_DELETION_HANDLER_URL:
@@ -184,6 +229,10 @@ overlay:
         value: 'false'
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
         value: based-hardware
+    secrets:
+      GEMINI_API_KEY:
+        secret: DESKTOP_GEMINI_API_KEY
+        version: latest
   cloud_run:
     network:
       flags:
@@ -204,6 +253,8 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
@@ -296,6 +347,15 @@ overlay:
           MCP_OAUTH_CLAUDE_REDIRECT_URIS:
             env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
             category: oauth_metadata
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-sync:
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -303,6 +363,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
@@ -373,6 +435,15 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-sync-backfill:
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -380,6 +451,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
@@ -442,6 +515,15 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-integration:
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -449,6 +531,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:

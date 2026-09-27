@@ -134,6 +134,7 @@ from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 from services.conversation_finalization import reconcile_abandoned_byok_finalization_jobs
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_meeting_receipts
+from services.conversation_finalization import reconcile_stale_in_progress_conversations
 from services.conversation_finalization import reconcile_stale_processing_conversations
 from database.durable_queue_age import publish_all_queue_oldest_ready_ages
 from services.users.account_deletion import reconcile_pending_deletion_wipes
@@ -309,6 +310,7 @@ methods_timeout = {
 # lock TTL (1800s) so a lock can never expire under a live run.
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
+    "/v2/sync-backfill-sequencer/sweep": 150,  # Below Scheduler's 180s deadline.
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
     "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
@@ -351,6 +353,10 @@ async def startup_event():
     start_background_task(
         run_blocking(db_executor, _drain_stale_processing_conversations),
         name='startup_stale_processing_reconcile',
+    )
+    start_background_task(
+        run_blocking(db_executor, _drain_stale_in_progress_conversations),
+        name='startup_stale_in_progress_reconcile',
     )
     start_background_task(
         run_blocking(db_executor, _drain_abandoned_byok_finalization_jobs),
@@ -413,6 +419,16 @@ def _drain_stale_processing_conversations():
         logger.error(f"Startup stale-processing reconciliation failed: {e}")
 
 
+def _drain_stale_in_progress_conversations():
+    """Best-effort durable admission of content-bearing listen zombies."""
+    try:
+        result = reconcile_stale_in_progress_conversations()
+        if result.get('enqueued') or result.get('verified'):
+            logger.info(f"Startup stale-in-progress reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup stale-in-progress reconciliation failed: {e}")
+
+
 def _drain_abandoned_byok_finalization_jobs():
     """Best-effort disposition of BYOK finalization jobs no live session can claim."""
     try:
@@ -460,6 +476,12 @@ async def _periodic_listen_finalization_reconcile(interval_seconds: int | None =
                 logger.info(f"Periodic stale-processing reconciliation: {stale_result}")
         except Exception as e:
             logger.error(f"Periodic stale-processing reconciliation failed: {e}")
+        try:
+            in_progress_result = await run_blocking(db_executor, reconcile_stale_in_progress_conversations)
+            if in_progress_result.get('enqueued') or in_progress_result.get('verified'):
+                logger.info(f"Periodic stale-in-progress reconciliation: {in_progress_result}")
+        except Exception as e:
+            logger.error(f"Periodic stale-in-progress reconciliation failed: {e}")
         try:
             byok_result = await run_blocking(db_executor, reconcile_abandoned_byok_finalization_jobs)
             if byok_result.get('abandoned'):

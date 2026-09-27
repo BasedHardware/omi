@@ -72,6 +72,35 @@ def scheduler_http_args(
     ]
 
 
+def invoker_binding_args(*, project: str, region: str, cloud_run_job: str, service_account: str) -> list[str]:
+    """Grant the trigger identity ``roles/run.invoker`` on this one job.
+
+    Without it every scheduled run is refused with a 403 (PERMISSION_DENIED)
+    before the job starts, which is invisible from the job's own logs. EXP-001's
+    first scheduled prod run (2026-09-25 15:00Z) failed exactly this way.
+    ``add-iam-policy-binding`` is idempotent, so re-running on every deploy is safe.
+    """
+
+    project = _required_identity(project, field="project")
+    region = _required_identity(region, field="region")
+    cloud_run_job = _required_identity(cloud_run_job, field="cloud_run_job")
+    service_account = _required_identity(service_account, field="service_account")
+    if cloud_run_job != EXPECTED_CLOUD_RUN_JOB:
+        raise ValueError("day3-reengagement-email scheduler identity does not match the retained contract")
+    return [
+        "gcloud",
+        "run",
+        "jobs",
+        "add-iam-policy-binding",
+        cloud_run_job,
+        f"--region={region}",
+        f"--project={project}",
+        f"--member=serviceAccount:{service_account}",
+        "--role=roles/run.invoker",
+        "--quiet",
+    ]
+
+
 def ensure_scheduler(
     *,
     project: str,
@@ -81,13 +110,22 @@ def ensure_scheduler(
     service_account: str,
     runner: Callable[..., Any] = subprocess.run,
 ) -> str:
-    """Ensure the trigger exists, targets this job, and is enabled.
+    """Ensure the trigger may invoke the job, exists, targets it, and is enabled.
 
     A describe failure is allowed to fall through to create; authentication or
     permission failures still make create fail and therefore fail the deploy.
     ``runner`` is injectable so command selection is testable without GCP.
     """
 
+    runner(
+        invoker_binding_args(
+            project=project,
+            region=region,
+            cloud_run_job=cloud_run_job,
+            service_account=service_account,
+        ),
+        check=True,
+    )
     describe = runner(
         [
             "gcloud",

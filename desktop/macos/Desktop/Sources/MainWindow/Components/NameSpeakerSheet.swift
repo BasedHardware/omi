@@ -6,8 +6,7 @@ struct NameSpeakerSheet: View {
   let segment: TranscriptSegment
   let allSegments: [TranscriptSegment]
   let people: [Person]
-  let onSave: (_ personId: String?, _ isUser: Bool, _ segmentIndices: [Int]) async -> Bool
-  let onCreatePerson: ((_ name: String) async -> Person?)?
+  let onSave: (_ personId: String?, _ isUser: Bool, _ segmentIndices: [Int], _ newName: String?) async -> Bool
   let onDismiss: () -> Void
 
   @State private var selectedPersonId: String? = nil
@@ -17,7 +16,6 @@ struct NameSpeakerSheet: View {
   @State private var duplicateWarning: String? = nil
   @State private var tagAllFromSpeaker: Bool = true
   @State private var isSaving: Bool = false
-  @State private var isCreating: Bool = false
   @State private var saveError: String? = nil
 
   /// Segments from the same speaker in this conversation
@@ -225,14 +223,11 @@ struct NameSpeakerSheet: View {
           }
         }
 
-        if onCreatePerson != nil {
-          // "+ Add Person" chip
-          personChip(label: "+ Add Person", isSelected: isAddingNewPerson, isAction: true) {
-            isAddingNewPerson = true
-            isUserSelected = false
-            selectedPersonId = nil
-            duplicateWarning = nil
-          }
+        personChip(label: "+ Add Person", isSelected: isAddingNewPerson, isAction: true) {
+          isAddingNewPerson = true
+          isUserSelected = false
+          selectedPersonId = nil
+          duplicateWarning = nil
         }
       }
 
@@ -257,33 +252,7 @@ struct NameSpeakerSheet: View {
               .onChange(of: newPersonName) { _, newValue in
                 validateName(newValue)
               }
-              .onSubmit {
-                if !newPersonName.trimmingCharacters(in: .whitespaces).isEmpty && duplicateWarning == nil {
-                  Task { await createAndSelect() }
-                }
-              }
-
-            Button(action: {
-              Task { await createAndSelect() }
-            }) {
-              if isCreating {
-                ProgressView()
-                  .scaleEffect(0.5)
-                  .frame(width: 14, height: 14)
-              } else {
-                Text("Add")
-                  .scaledFont(size: OmiType.caption, weight: .medium)
-              }
-            }
-            .buttonStyle(.plain)
-            .foregroundColor(canCreate ? Ink.surface : Ink.secondary)
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.xs)
-            .background(
-              Capsule()
-                .fill(canCreate ? Ink.primary : Ink.rowFillHover)
-            )
-            .disabled(!canCreate || isCreating)
+              .onSubmit { Task { await save(personId: nil, isUser: false) } }
           }
 
           if let warning = duplicateWarning {
@@ -312,7 +281,7 @@ struct NameSpeakerSheet: View {
   // MARK: - Helpers
 
   private var canSave: Bool {
-    isUserSelected || selectedPersonId != nil
+    isUserSelected || selectedPersonId != nil || (isAddingNewPerson && canCreate)
   }
 
   private var canCreate: Bool {
@@ -329,26 +298,14 @@ struct NameSpeakerSheet: View {
     }
   }
 
-  private func createAndSelect() async {
-    let trimmed = newPersonName.trimmingCharacters(in: .whitespaces)
-    guard !trimmed.isEmpty, duplicateWarning == nil, let onCreatePerson else { return }
-
-    isCreating = true
-    if let person = await onCreatePerson(trimmed) {
-      selectedPersonId = person.id
-      isAddingNewPerson = false
-      newPersonName = ""
-    }
-    isCreating = false
-  }
-
   private func save(personId: String?, isUser: Bool) async {
-    guard !isSaving else { return }
+    guard !isSaving, !isAddingNewPerson || canCreate else { return }
 
     isSaving = true
     saveError = nil
     let segmentIndices = tagAllFromSpeaker ? sameSpeakerIndices : [tappedSegmentIndex]
-    let succeeded = await onSave(personId, isUser, segmentIndices)
+    let name = isAddingNewPerson ? newPersonName.trimmingCharacters(in: .whitespaces) : nil
+    let succeeded = await onSave(personId, isUser, segmentIndices, name)
     isSaving = false
 
     if succeeded {

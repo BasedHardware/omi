@@ -112,6 +112,24 @@ class PostHogManager {
     log("PostHog: Tracked event '\(eventName)'")
   }
 
+  /// EXP-002: attach `experiment_id` + `variant` to every captured event as
+  /// super-properties, so all product events (`question_asked`/`question_answered`,
+  /// `desktop_daily_summary`, PTT lifecycle, Interject teach) are sliceable by
+  /// arm without per-event plumbing. Distinct id stays the uid — the variant is
+  /// a property, never an identity. Called once the launch's arm resolves.
+  func setExperimentContext(experimentId: String, variant: String, forced: Bool) {
+    guard isInitialized else {
+      log("PostHog: experiment context skipped (not initialized)")
+      return
+    }
+    PostHogSDK.shared.register([
+      "experiment_id": experimentId,
+      "variant": variant,
+      "experiment_forced": forced,
+    ])
+    log("PostHog: registered experiment context \(experimentId)/\(variant)")
+  }
+
   nonisolated static func diagnosticErrorClass(_ value: String) -> String {
     let normalized = value.lowercased()
     if normalized.contains("timeout") || normalized.contains("timed out") {
@@ -373,6 +391,12 @@ extension PostHogManager {
 
   func captureAttemptOutcome(properties: [String: Any]) {
     track(Self.captureAttemptOutcomeEventName, properties: properties)
+  }
+
+  /// One local day's per-bundle call-audio counts. `track` already drops the
+  /// event when analytics is uninitialized or the user has opted out.
+  func callAppAudioSummary(_ summary: CallAppAudioSummary) {
+    track(CallAppAudioSummaryTelemetry.eventName, properties: CallAppAudioSummaryTelemetry.properties(summary))
   }
 
   func recordingError(

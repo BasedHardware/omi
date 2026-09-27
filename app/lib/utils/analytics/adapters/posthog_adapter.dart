@@ -4,9 +4,10 @@ import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/utils/analytics/analytics_adapter.dart';
-import 'package:omi/services/experiments/experiment_registry.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
-class PostHogAnalyticsAdapter implements AnalyticsAdapter, AnalyticsDeliveryAdapter, AnalyticsIdentityAdapter {
+class PostHogAnalyticsAdapter
+    implements AnalyticsAdapter, AnalyticsDeliveryAdapter, AnalyticsIdentityAdapter, AnalyticsFeatureFlagAdapter {
   PostHogAnalyticsAdapter({
     required this.apiKey,
     this.host = 'https://us.i.posthog.com',
@@ -46,7 +47,6 @@ class PostHogAnalyticsAdapter implements AnalyticsAdapter, AnalyticsDeliveryAdap
     config.optOut = !(preferences.getBool('product_analytics_enabled') ?? true);
     config.captureApplicationLifecycleEvents = captureLifecycleEvents;
     config.debug = debug;
-    // ExperimentService records exposure only when a variant is used/rendered.
     config.sendFeatureFlagEvents = false;
     config.preloadFeatureFlags = false;
     await Posthog().setup(config);
@@ -73,25 +73,61 @@ class PostHogAnalyticsAdapter implements AnalyticsAdapter, AnalyticsDeliveryAdap
   void track({required String eventName, Map<String, Object>? properties}) {
     if (!_initialized) return;
     final masked = _captureProperties(properties);
-    _background(() => Posthog().capture(eventName: eventName, properties: masked));
+    _background(() => Posthog().capture(eventName: eventName, properties: _stampAttribution(eventName, masked)));
   }
 
   @override
   Future<void> deliver({required String eventName, required Map<String, Object> properties}) {
     if (!_initialized) return Future.error(StateError('Analytics SDK not ready'));
     final masked = _captureProperties(properties);
-    return _serialize(() => Posthog().capture(eventName: eventName, properties: masked));
+    return _serialize(() => Posthog().capture(eventName: eventName, properties: _stampAttribution(eventName, masked)));
   }
 
-  /// Native identify() reloads flags even with preloadFeatureFlags disabled.
-  /// Both native SDKs merge caller feature properties over cached flag values;
-  /// explicit false prevents their cache from inventing assignment attribution.
-  /// Snapshot here, before queueing, so later caller mutations cannot relabel an
-  /// event. True exposure/outcome properties supplied by our service win.
-  Map<String, Object> _captureProperties(Map<String, Object>? properties) => {
-        for (final definition in MobileExperiments.all) '\$feature/${definition.key}': false,
-        ...?properties,
-      };
+  /// SDK-boundary attribution stamping. Churn/retention analysis needs a
+  /// `platform` field and a `trigger` classification (user/background/system)
+  /// on every event reaching PostHog. These carry no user content, so they are
+  /// attached here — after the manager's privacy masking — rather than inside
+  /// the governed typed-emission boundary (C7 pins that payload exactly).
+  Map<String, Object> _stampAttribution(String eventName, Map<String, Object> properties) {
+    final stamped = {...properties};
+    stamped['platform'] ??= _platformName;
+    final explicit = stamped['trigger'];
+    if (explicit is String && explicit.isNotEmpty) return stamped;
+    stamped['trigger'] = _nonUserTriggerByEvent[eventName] ?? 'user';
+    return stamped;
+  }
+
+  static const Map<String, String> _nonUserTriggerByEvent = {
+    'Mobile Background Resource Session': 'background',
+    'Mobile Background Observation Interrupted': 'background',
+    'Mobile Telemetry Health': 'background',
+    'Mobile Render Observation': 'background',
+    'App Startup Timing': 'system',
+    'desktop_health_event': 'system',
+    'fallback_triggered': 'system',
+    'authenticated_request_401': 'system',
+    'auth_token_refresh_failed': 'system',
+    'Notification Sent': 'system',
+    'Notification Dismissed': 'system',
+    'Notification Settings Checked': 'system',
+    'Update Available': 'system',
+    'Update Check Started': 'system',
+    'Update Check Completed': 'system',
+    'Update Check Failed': 'system',
+    'Update Install Started': 'system',
+    'Update Installed': 'system',
+  };
+
+  static String get _platformName {
+    if (PlatformService.isIOS) return 'ios';
+    if (PlatformService.isAndroid) return 'android';
+    return 'unknown';
+  }
+
+  Map<String, Object> _captureProperties(Map<String, Object>? properties) => {...?properties};
+
+  @override
+  Future<bool> isFeatureEnabled(String key) => Posthog().isFeatureEnabled(key);
 
   @override
   Future<String> settleIdentity(String? identity, {required bool reset}) async {

@@ -455,19 +455,23 @@ surfaces:
   migration_status: allowed_for_all_plans_unified_chat_quota_gated; one question per turn_id
   test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: desktop_tts
-  code_path: backend/routers/desktop_tts_updates.py
-  entrypoint: POST desktop TTS synthesize
+  code_path: backend/utils/tts.py
+  entrypoint: POST /v1/tts/synthesize and POST /v2/tts/synthesize read-aloud
   feature: desktop_tts
   plan_gating: basic_not_entitled
   funding_owner: omi
   fallback_on_deny: none_unwired
   call_sites:
   - routers/desktop_tts_updates.py::host:api.openai.com
-  current_provider_model: OpenAI gpt-4o-mini-tts over raw REST
-  request_shape: audio/speech
-  gateway_lane_capability_needed: gateway-owned TTS proxy
-  migration_status: inventoried_direct_rest_surface; not authorize_managed_compute-gated (follow-up)
-  test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+  - utils/tts.py::host:generativelanguage.googleapis.com
+  current_provider_model: Gemini API gemini-3.8-flash-lite-tts by default; legacy rollback uses OpenAI gpt-4o-mini-tts
+    on desktop and ElevenLabs on mobile
+  request_shape: streaming GenerateContent AUDIO PCM transcoded to audio/mpeg; provider-specific legacy requests behind TTS_PROVIDER=legacy
+  gateway_lane_capability_needed: Gemini API streaming TTS with audio output (not currently available on Vertex AI)
+  migration_status: direct Gemini API key path because the selected TTS model is unavailable on Vertex; desktop remains subscription-gated,
+    mobile remains request and character rate-limited, and legacy providers remain as a temporary rollback
+  test_guardrail_coverage: backend/tests/unit/test_tts_synthesis.py, backend/tests/unit/test_tts.py, backend/tests/unit/test_desktop_tts_updates.py,
+    and backend/tests/unit/test_llm_gateway_coverage_guardrails.py
 - surface: wrapped_generation
   code_path: backend/routers/wrapped.py:generate_wrapped
   entrypoint: POST /v1/wrapped/{year}/generate

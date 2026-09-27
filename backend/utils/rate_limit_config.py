@@ -113,6 +113,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "stt:transcribe": (60, 3600),
     # Speaker tag prompts: each clip merges stored audio chunks; each answer may
     # queue voice-sample extraction. A daily set holds at most a handful.
+    "speaker_tag_prompts:list": (20, 3600),
     "speaker_tag_prompts:clip": (60, 3600),
     "speaker_tag_prompts:answer": (60, 3600),
     # Agent/MCP — bursty tool calls
@@ -265,7 +266,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # quota gate, unlike its sibling generate_prompts. Same bound as that
     # sibling until a quota-gate policy decision is made (see #12781).
     "apps:twitter_initial_message": (30, 3600),
-    # TTS — ElevenLabs proxy. Coarse outer ring; fine-grained burst + daily
+    # TTS read-aloud proxy. Coarse outer ring; fine-grained burst + daily
     # char caps are enforced in database.redis_db.check_tts_rate_limit.
     "tts:synthesize": (300, 3600),
     # Screen-frame egress adjudication — each call canonicalizes + judges up

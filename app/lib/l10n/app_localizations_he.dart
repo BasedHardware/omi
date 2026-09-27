@@ -2475,12 +2475,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get detailedDiagnosticMessages => 'הודעות אבחון מפורטות';
 
   @override
-  String get autoCreateSpeakers => 'אנשי דיבור שנוצרו אוטומטית';
-
-  @override
-  String get autoCreateWhenNameDetected => 'צור אוטומטית כאשר שם מזוהה';
-
-  @override
   String get followUpQuestions => 'שאלות המשך';
 
   @override
@@ -11083,9 +11077,6 @@ class AppLocalizationsHe extends AppLocalizations {
       'התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'תמליל לא זמין · נשמר במכשיר';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'תמלילים ממתינים $pending/$total';
   }
@@ -11141,4 +11132,186 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get openCall => 'פתיחת השיחה';
+
+  @override
+  String get captureRecoveryBanner => 'השמע מהתליון לא מגיע לאפליקציה — הקישו לתיקון';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => 'עצרו את Transcribe Later בקולייה לפני ההקלטה בטלפון.';
+
+  @override
+  String get captureNotTranscribing => 'אין תמלול';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'השמע נשמר, יתומלל מאוחר יותר';
+
+  @override
+  String get captureStillRecording => 'עדיין מקליט';
+
+  @override
+  String get captureMicInUseElsewhere => 'המיקרופון בשימוש של אפליקציה אחרת';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'שיחה או אפליקציה אחרת תפסו את המיקרופון, ולכן Omi לא שומע כרגע. Omi ימשיך מעצמו כשהמיקרופון יתפנה. כל מה שהוקלט עד עכשיו שמור.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'אין גישה לשירות המרת הדיבור לטקסט המותאם שלך. Omi שומר את השמע בטלפון הזה וישלח אותו כשהשירות יחזור. שום דבר לא הולך לאיבוד.';
+
+  @override
+  String get captureStarting => 'מתחיל…';
+
+  @override
+  String get capturePhoneStorageFull => 'אחסון הטלפון מלא';
+
+  @override
+  String get captureStorageAlmostFull => 'האחסון כמעט מלא';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ואחרים';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'האזינו לתשובות של Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'הבנתי. הפגישה הבאה שלך מתחילה בעוד עשרים דקות.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'הכול מוכן';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'יש להקיש על שורה כדי לבדוק או לשנות אותה.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'כאשר אתה שואל באמצעות הכפתור, Omi יכול לקרוא את התשובה שלו בקול רם.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'שמע את תשובתך האחרונה';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'מנגן את התשובה האחרונה שלך...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'דרך $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'דרך הרמקול של הטלפון';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'דרך פלט האודיו הנוכחי';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'התשובות נשארות על המסך. שום דבר לא נאמר.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'פרטי. מדבר רק דרך AirPods, Bluetooth או אוזניות קוויות.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'משתמש ברמקול הטלפון כאשר אין אוזניות מחוברות.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi ישתוק. התשובות עדיין מופיעות באפליקציה.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device מחובר. Omi ידבר כאן.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => 'לא מחוברות אוזניות. Omi נשאר שקט עד שתחבר כמה.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'מנגן דרך $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'מתנגן בקול רם דרך רמקול הטלפון.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'אתה יכול לשנות זאת בכל עת בטלפון $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'הפעל מחדש את הסיור הזה בכל עת ב-$settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'אוזניות';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'דקות';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'משימות';
+
+  @override
+  String get usageMonth => 'חודש זה';
+
+  @override
+  String get usageYear => 'השנה';
+
+  @override
+  String get usageAll => 'כל הזמן';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'מראה';
+
+  @override
+  String get appearanceSystem => 'מערכת';
+
+  @override
+  String get appearanceLight => 'בהיר';
+
+  @override
+  String get appearanceDark => 'כהה';
 }

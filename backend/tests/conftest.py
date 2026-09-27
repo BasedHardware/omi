@@ -17,8 +17,8 @@ os.environ.setdefault(
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
 # Product tests exercise the normal universal write-enabled deployment. Tests
-# for the global incident fence override this explicitly to ``off``/``shadow``.
-os.environ.setdefault('MEMORY_MODE', 'read')
+# for the global incident fence override this explicitly to ``off``.
+os.environ.setdefault('MEMORY_ENABLED', 'on')
 
 # Some unit tests exercise canonical-memory LLM call paths. Provide a fake key
 # so client construction remains hermetic when those tests invoke it.

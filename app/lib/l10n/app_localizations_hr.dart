@@ -2497,12 +2497,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detaljne dijagnostičke poruke';
 
   @override
-  String get autoCreateSpeakers => 'Automatski kreiraj govornika';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automatski kreiraj kada je ime detektirano';
-
-  @override
   String get followUpQuestions => 'Pitanja za praćenje';
 
   @override
@@ -11209,9 +11203,6 @@ class AppLocalizationsHr extends AppLocalizations {
       'Transkripcije nisu dostupne, snimanje se nastavlja na uređaju i obradit će se kasnije';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkripcija nedostupna · sprema se na uređaj';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transkripcije na čekanju $pending/$total';
   }
@@ -11267,4 +11258,187 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get openCall => 'Otvori poziv';
+
+  @override
+  String get captureRecoveryBanner => 'Zvuk privjeska ne stiže do aplikacije — dodirnite za popravak';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Zaustavite Transcribe Later na privjesku prije snimanja telefonom.';
+
+  @override
+  String get captureNotTranscribing => 'Nema transkripcije';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Zvuk je spremljen, transkripcija kasnije';
+
+  @override
+  String get captureStillRecording => 'Snimanje se nastavlja';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon koristi druga aplikacija';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Poziv ili druga aplikacija preuzela je mikrofon, pa Omi trenutačno ne čuje. Omi će sam nastaviti kad mikrofon bude slobodan. Sve dosad snimljeno je sigurno.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Vaša prilagođena usluga pretvorbe govora u tekst nije dostupna. Omi čuva zvuk na ovom telefonu i poslat će ga kad se usluga vrati. Ništa se ne gubi.';
+
+  @override
+  String get captureStarting => 'Pokretanje…';
+
+  @override
+  String get capturePhoneStorageFull => 'Pohrana telefona je puna';
+
+  @override
+  String get captureStorageAlmostFull => 'Pohrana je gotovo puna';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovno povezati kad je privjesak uključen i u blizini. Sve dosad snimljeno je sigurno.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name i drugi';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Poslušajte Omijeve odgovore';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'U redu. Vaš sljedeći sastanak počinje za dvadeset minuta.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Sve je spremno';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Dodirnite redak da biste ga pregledali ili promijenili.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Kada pitate pomoću gumba, Omi može pročitati svoj odgovor naglas.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Čuj svoj posljednji odgovor';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Reprodukcija vašeg posljednjeg odgovora...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Preko $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Preko zvučnika telefona';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Kroz trenutni audio izlaz';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Odgovori ostaju na ekranu. Ništa se ne govori.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privatno. Razgovara samo putem AirPods, Bluetooth ili žičnih slušalica.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Koristi zvučnik telefona kada nisu spojene slušalice.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi će šutjeti. Odgovori se i dalje pojavljuju u aplikaciji.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device povezan. Ovdje će govoriti Omi.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Nisu spojene slušalice. Omi ostaje tih dok ne povežete neke.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Igra preko $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Reproducira se naglas preko zvučnika telefona.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Ovo možete promijeniti bilo kada u $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Ponovite ovaj obilazak bilo kada u $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Slušalice';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minuta';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Zadaci';
+
+  @override
+  String get usageMonth => 'Ovaj mjesec';
+
+  @override
+  String get usageYear => 'Ova godina';
+
+  @override
+  String get usageAll => 'Sve vrijeme';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Izgled';
+
+  @override
+  String get appearanceSystem => 'Sustav';
+
+  @override
+  String get appearanceLight => 'Svijetlo';
+
+  @override
+  String get appearanceDark => 'Tamno';
 }
