@@ -786,6 +786,7 @@ actor ActionItemStorage {
     }
 
     if reconciled > 0 {
+      SiriIndexHooks.tasksChanged(items.map(\.id))
       HomeKnowledgeCountInvalidation.post(
         logMessage: "ActionItemStorage: Reconciled \(reconciled) dashboard visibility fields from backend"
       )
@@ -1027,6 +1028,7 @@ actor ActionItemStorage {
     }
 
     log("ActionItemStorage: Marked action item \(id) as synced (backendId: \(backendId))")
+    SiriIndexHooks.tasksChanged([backendId])
   }
 
   /// Get action items that haven't been synced to backend yet
@@ -1053,9 +1055,7 @@ actor ActionItemStorage {
   }
 
   // MARK: - Update Operations
-
   /// Optimistically update completion status locally (before API call)
-  /// Sets updatedAt to Date() so auto-refresh timestamp check skips this record
   func updateCompletionStatus(
     backendId: String,
     completed: Bool,
@@ -1079,10 +1079,9 @@ actor ActionItemStorage {
 
     HomeKnowledgeCountInvalidation.post(
       logMessage: "ActionItemStorage: Locally set completed=\(completed) for \(backendId)")
+    SiriIndexHooks.tasksChanged([backendId])
   }
-
   /// Optimistically update task fields locally (before API call)
-  /// Sets updatedAt to Date() so auto-refresh timestamp check skips this record
   func updateActionItemFields(
     backendId: String,
     description: String? = nil,
@@ -1132,6 +1131,7 @@ actor ActionItemStorage {
     }
 
     log("ActionItemStorage: Locally updated fields for \(backendId)")
+    SiriIndexHooks.tasksChanged([backendId])
   }
 
   /// Batch update sort orders and indent levels in SQLite

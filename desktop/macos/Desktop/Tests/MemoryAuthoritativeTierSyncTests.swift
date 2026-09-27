@@ -4,6 +4,20 @@ import XCTest
 @testable import Omi_Computer
 
 final class MemoryAuthoritativeTierSyncTests: XCTestCase {
+  func testBulkVisibilityUpdatesOnlyTheRequestedTierScope() async throws {
+    let currentID = "siri-bulk-visible-\(UUID().uuidString)"
+    let archiveID = "siri-bulk-archive-\(UUID().uuidString)"
+    try await MemoryStorage.shared.syncServerMemories([
+      makeMemory(id: currentID, tier: .longTerm, tierIsExplicit: true, updatedAt: Date()),
+      makeMemory(id: archiveID, tier: .archive, tierIsExplicit: true, updatedAt: Date()),
+    ])
+    try await MemoryStorage.shared.updateVisibility(scope: .defaultAccess, visibility: "shared")
+    let current = try await MemoryStorage.shared.getMemoryByBackendId(currentID)
+    let archive = try await MemoryStorage.shared.getMemoryByBackendId(archiveID)
+    XCTAssertEqual(current?.visibility, "shared")
+    XCTAssertEqual(archive?.visibility, "private")
+  }
+
   private var testUserId: String!
   private var userDir: URL!
 

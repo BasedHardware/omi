@@ -44,7 +44,7 @@ actor SiriIndexBatcher {
 enum SiriIndexHooks {
   @available(macOS 15.4, *)
   private static let batcher = SiriIndexBatcher { owner, kind, ids in
-    guard RuntimeOwnerIdentity.currentOwnerId() == owner else { return }
+    guard #available(macOS 27, *), RuntimeOwnerIdentity.currentOwnerId() == owner else { return }
     do {
       switch kind {
       case .memory:
@@ -54,26 +54,22 @@ enum SiriIndexHooks {
         let missing = ids.filter { !present.contains($0) }
         try await SiriIndexer.shared.deleteMemories(ids: missing, expectedOwner: owner)
       case .conversation:
-        if #available(macOS 27, *) {
-          let entities = try await ConversationEntityQuery().entities(for: ids)
-          try await SiriIndexer.shared.indexConversations(entities, expectedOwner: owner)
-          let present = Set(entities.map(\.id))
-          try await SiriIndexer.shared.deleteConversations(
-            ids: ids.filter { !present.contains($0) }, expectedOwner: owner)
-        }
+        let entities = try await ConversationEntityQuery().entities(for: ids)
+        try await SiriIndexer.shared.indexConversations(entities, expectedOwner: owner)
+        let present = Set(entities.map(\.id))
+        try await SiriIndexer.shared.deleteConversations(
+          ids: ids.filter { !present.contains($0) }, expectedOwner: owner)
       case .task:
-        if #available(macOS 27, *) {
-          let entities = try await TaskEntityQuery().entities(for: ids)
-          try await SiriIndexer.shared.indexTasks(entities, expectedOwner: owner)
-          let present = Set(entities.map(\.id))
-          try await SiriIndexer.shared.deleteTasks(ids: ids.filter { !present.contains($0) }, expectedOwner: owner)
-        }
+        let entities = try await TaskEntityQuery().entities(for: ids)
+        try await SiriIndexer.shared.indexTasks(entities, expectedOwner: owner)
+        let present = Set(entities.map(\.id))
+        try await SiriIndexer.shared.deleteTasks(ids: ids.filter { !present.contains($0) }, expectedOwner: owner)
       }
     } catch { log("Siri \(kind) index batch deferred: \(error.localizedDescription)") }
   }
 
   static func rebuild() {
-    guard #available(macOS 15.4, *) else { return }
+    guard #available(macOS 27, *) else { return }
     Task {
       do { try await SiriIndexer.shared.rebuild() } catch {
         log("Siri index rebuild deferred: \(error.localizedDescription)")
@@ -86,19 +82,19 @@ enum SiriIndexHooks {
   }
 
   static func memoriesChanged(_ ids: [String]) {
-    guard #available(macOS 15.4, *) else { return }
+    guard #available(macOS 27, *) else { return }
     guard let owner = RuntimeOwnerIdentity.currentOwnerId() else { return }
     Task { await batcher.enqueue(owner: owner, kind: .memory, ids: ids) }
   }
 
   static func memoryDeleted(_ id: String) async {
-    guard #available(macOS 15.4, *) else { return }
+    guard #available(macOS 27, *) else { return }
     guard let owner = RuntimeOwnerIdentity.currentOwnerId() else { return }
     _ = await memoryDeleted(id, using: { try await SiriIndexer.shared.deleteMemory(id: $0, expectedOwner: owner) })
   }
 
   static func memoriesDeleted(_ ids: [String]) async {
-    guard #available(macOS 15.4, *), !ids.isEmpty else { return }
+    guard #available(macOS 27, *), !ids.isEmpty else { return }
     guard let owner = RuntimeOwnerIdentity.currentOwnerId() else { return }
     do { try await SiriIndexer.shared.deleteMemories(ids: ids, expectedOwner: owner) } catch {
       log("Siri memory batch deletion pending retry: \(error.localizedDescription)")

@@ -305,6 +305,7 @@ struct ConversationEntityQuery: IndexedEntityQuery {
 @available(macOS 15.4, *)
 struct MemoryEntityQuery: IndexedEntityQuery {
   func entities(for identifiers: [String]) async throws -> [MemoryEntity] {
+    guard #available(macOS 27, *) else { return [] }
     guard let owner = RuntimeOwnerIdentity.currentOwnerId() else { return [] }
     let records = try await MemoryStorage.shared.getSiriMemoryRecords(backendIds: identifiers)
     let found = records.filter { SiriIndexScope.memory($0, now: Date()) }.map(MemoryEntity.init)

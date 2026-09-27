@@ -1729,28 +1729,36 @@ actor MemoryStorage {
         arguments: [visibility, Date(), backendId]
       )
     }
+    SiriIndexHooks.memoryChanged(backendId)
   }
 
   /// Update visibility for memories within a tier scope.
   func updateVisibility(scope: MemoryLayerScope, visibility: String) async throws {
     let db = try await ensureInitialized()
 
-    try await db.write { database in
+    let changedIds = try await db.write { database -> [String] in
       var conditions = ["deleted = 0"]
       var arguments: [DatabaseValue] = []
       guard
         let visibilityValue = DatabaseValue(value: visibility),
         let updatedAt = DatabaseValue(value: Date())
-      else { return }
+      else { return [] }
       arguments.append(visibilityValue)
       arguments.append(updatedAt)
       Self.appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
+
+      let ids = try String.fetchAll(
+        database,
+        sql: "SELECT backendId FROM memories WHERE backendId IS NOT NULL AND \(conditions.joined(separator: " AND "))",
+        arguments: StatementArguments(Array(arguments.dropFirst(2))))
 
       try database.execute(
         sql: "UPDATE memories SET visibility = ?, updatedAt = ? WHERE \(conditions.joined(separator: " AND "))",
         arguments: StatementArguments(arguments)
       )
+      return ids
     }
+    SiriIndexHooks.memoriesChanged(changedIds)
   }
 
   /// Update read status by backend ID

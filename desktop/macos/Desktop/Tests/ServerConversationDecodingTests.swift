@@ -82,8 +82,8 @@ final class ServerConversationDecodingTests: XCTestCase {
     XCTAssertEqual(hidden.visibility, "hidden")
   }
 
-  func testExplicitNullVisibilityIsRejectedLikeBackendModel() {
-    XCTAssertThrowsError(try decodeConversation(",\n\"visibility\": null"))
+  func testExplicitNullVisibilityKeepsTheAppPageReadable() throws {
+    XCTAssertEqual(try decodeConversation(",\n\"visibility\": null").visibility, "private")
   }
 
   func testExplicitEmptyTranscriptIsIncludedEmpty() throws {

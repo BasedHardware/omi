@@ -277,6 +277,7 @@ actor TranscriptionStorage {
     if result.accepted {
       log("TranscriptionStorage: Completed session \(id) (backendId: \(backendId))")
       LocalEmbeddingIndexer.scheduleFinalizedSessionIndex(sessionId: id)
+      SiriIndexHooks.conversationChanged(backendId)
     }
     if let telemetry = result.telemetry {
       await AnalyticsManager.shared.conversationCreated(
@@ -409,6 +410,7 @@ actor TranscriptionStorage {
         arguments: [title, Date(), backendId]
       )
     }
+    SiriIndexHooks.conversationChanged(backendId)
   }
 
   /// Soft-delete by backend conversation ID
@@ -440,6 +442,7 @@ actor TranscriptionStorage {
         arguments: [folderId, Date(), backendId]
       )
     }
+    SiriIndexHooks.conversationChanged(backendId)
   }
 
   // MARK: - Segment Operations

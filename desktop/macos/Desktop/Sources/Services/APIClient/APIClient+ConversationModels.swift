@@ -330,7 +330,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     discarded = wire.discarded ?? false
     deleted = false  // backend REST Conversation schema does not expose deleted
     isLocked = wire.isLocked ?? false
-    visibility = try container.contains(.visibility) ? container.decode(String.self, forKey: .visibility) : "private"
+    // Visibility is optional on older payloads. A malformed Siri-only field
+    // must not reject the entire app conversation page.
+    visibility = (try? container.decode(String.self, forKey: .visibility)) ?? "private"
     starred = wire.starred ?? false
     folderId = wire.folderId
     inputDeviceName = wire.clientDeviceId

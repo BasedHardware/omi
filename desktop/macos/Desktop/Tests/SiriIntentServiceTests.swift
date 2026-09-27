@@ -4,6 +4,19 @@ import XCTest
 @testable import Omi_Computer
 
 final class SiriIntentServiceTests: XCTestCase {
+  func testSpotlightIndexingStartsAtMacOS27() {
+    guard #available(macOS 15.4, *) else { return }
+    XCTAssertFalse(
+      SiriIndexer.supportsSpotlightIndexing(
+        OperatingSystemVersion(majorVersion: 15, minorVersion: 4, patchVersion: 0)))
+    XCTAssertFalse(
+      SiriIndexer.supportsSpotlightIndexing(
+        OperatingSystemVersion(majorVersion: 26, minorVersion: 6, patchVersion: 0)))
+    XCTAssertTrue(
+      SiriIndexer.supportsSpotlightIndexing(
+        OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0)))
+  }
+
   func testSpotlightIndexIsIsolatedByBundleAndOwner() {
     guard #available(macOS 15.4, *) else { return }
     let production = SiriIndexer.indexName(bundleID: "com.omi.desktop", owner: "same-user")

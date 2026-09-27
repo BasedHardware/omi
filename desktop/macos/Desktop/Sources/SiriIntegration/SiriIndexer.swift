@@ -13,6 +13,9 @@ extension CSSearchableIndex: @unchecked @retroactive Sendable {}
 @available(macOS 15.4, *)
 actor SiriIndexer {
   static let shared = SiriIndexer()
+  nonisolated static func supportsSpotlightIndexing(_ version: OperatingSystemVersion) -> Bool {
+    version.majorVersion >= 27
+  }
   private let ownerKey = "siriIndexedOwnerID"
   private var indexedOwner: String?
   private var activeOperations = 0
@@ -181,6 +184,12 @@ actor SiriIndexer {
   }
 
   func preferenceOrOwnerChanged() async throws {
+    guard Self.supportsSpotlightIndexing(ProcessInfo.processInfo.operatingSystemVersion), #available(macOS 27, *) else {
+      // A pre-27 build may have left a legacy custom-memory index behind.
+      // The persisted owner is removed only after Spotlight confirms deletion.
+      if indexedOwner != nil { try await wipe() }
+      return
+    }
     if !SiriIntegrationSettings.isEnabled {
       try await wipe()
       return
@@ -223,6 +232,7 @@ actor SiriIndexer {
   }
 
   func deleteMemory(id: String, expectedOwner: String) async throws {
+    guard #available(macOS 27, *) else { return }
     guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
     defer { finishOperation() }
     try await index.deleteAppEntities(identifiedBy: [id], ofType: MemoryEntity.self)
@@ -231,6 +241,7 @@ actor SiriIndexer {
   }
 
   func deleteMemories(ids: [String], expectedOwner: String) async throws {
+    guard #available(macOS 27, *) else { return }
     guard !ids.isEmpty, let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
     defer { finishOperation() }
     for chunk in ids.chunkedSiriIndex(200) {
@@ -271,6 +282,7 @@ actor SiriIndexer {
   }
 
   func indexMemories(_ entities: [MemoryEntity], expectedOwner: String) async throws {
+    guard #available(macOS 27, *) else { return }
     guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
     defer { finishOperation() }
     for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
@@ -292,6 +304,10 @@ actor SiriIndexer {
   }
 
   func rebuild(now: Date = Date()) async throws {
+    guard Self.supportsSpotlightIndexing(ProcessInfo.processInfo.operatingSystemVersion), #available(macOS 27, *) else {
+      if indexedOwner != nil { try await wipe() }
+      return
+    }
     let started = Date()
     guard let index = try await operationIndex() else { return }
     defer { finishOperation() }
@@ -299,21 +315,19 @@ actor SiriIndexer {
     do {
       try await index.deleteAllSearchableItems()
       resetMemoryExpirations()
-      if #available(macOS 27, *) {
-        try await index.indexAppEntities([OmiFolderEntity.conversations, .memories], priority: 0)
-        try await index.indexAppEntities([OmiListEntity.omi], priority: 0)
-        count += 3
-        let records = try await TranscriptionStorage.shared.getSiriEligibleSessions(
-          limit: SiriIndexScope.conversationLimit,
-          since: now.addingTimeInterval(-SiriIndexScope.conversationAge))
-        let entities = SiriIndexScope.eligibleConversations(records, now: now).map(ConversationEntity.init)
-        for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
-        for entity in entities {
-          indexedConversationCutoffs[entity.id] = entity.creationDate?.addingTimeInterval(
-            SiriIndexScope.conversationAge)
-        }
-        count += entities.count
+      try await index.indexAppEntities([OmiFolderEntity.conversations, .memories], priority: 0)
+      try await index.indexAppEntities([OmiListEntity.omi], priority: 0)
+      count += 3
+      let records = try await TranscriptionStorage.shared.getSiriEligibleSessions(
+        limit: SiriIndexScope.conversationLimit,
+        since: now.addingTimeInterval(-SiriIndexScope.conversationAge))
+      let entities = SiriIndexScope.eligibleConversations(records, now: now).map(ConversationEntity.init)
+      for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+      for entity in entities {
+        indexedConversationCutoffs[entity.id] = entity.creationDate?.addingTimeInterval(
+          SiriIndexScope.conversationAge)
       }
+      count += entities.count
 
       let memories = try await MemoryStorage.shared.getSiriMemoryCandidates()
       let memoryEntities = SiriIndexScope.capped(
@@ -324,24 +338,22 @@ actor SiriIndexer {
       if let indexedOwner { scheduleNextMemoryExpiry(owner: indexedOwner) }
       count += memoryEntities.count
 
-      if #available(macOS 27, *) {
-        let tasks = try await ActionItemStorage.shared.getAllLocalActionItems()
-        var taskEntities: [TaskEntity] = []
-        for task in tasks
-        where !task.id.hasPrefix("local_") && !task.isRetired {
-          guard let record = try await ActionItemStorage.shared.getActionItemByBackendId(task.id),
-            SiriIndexScope.task(record, now: now)
-          else { continue }
-          taskEntities.append(TaskEntity(record))
-        }
-        for chunk in taskEntities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
-        for entity in taskEntities {
-          indexedTaskCutoffs[entity.id] =
-            entity.isCompleted
-            ? entity.completionDate?.addingTimeInterval(SiriIndexScope.completedTaskAge) : nil
-        }
-        count += taskEntities.count
+      let tasks = try await ActionItemStorage.shared.getAllLocalActionItems()
+      var taskEntities: [TaskEntity] = []
+      for task in tasks
+      where !task.id.hasPrefix("local_") && !task.isRetired {
+        guard let record = try await ActionItemStorage.shared.getActionItemByBackendId(task.id),
+          SiriIndexScope.task(record, now: now)
+        else { continue }
+        taskEntities.append(TaskEntity(record))
       }
+      for chunk in taskEntities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+      for entity in taskEntities {
+        indexedTaskCutoffs[entity.id] =
+          entity.isCompleted
+          ? entity.completionDate?.addingTimeInterval(SiriIndexScope.completedTaskAge) : nil
+      }
+      count += taskEntities.count
       if let indexedOwner { scheduleNextMemoryExpiry(owner: indexedOwner) }
       await PostHogManager.shared.track(
         "Siri Index Rebuilt",
