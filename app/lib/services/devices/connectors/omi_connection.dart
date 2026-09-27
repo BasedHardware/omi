@@ -592,7 +592,12 @@ class OmiDeviceConnection extends DeviceConnection {
           notifySub = sub;
         });
         if (!ok) return false;
-        // Firmware blocks ~4s inside the final write while I2S drains.
+        // Firmware `speak()` sleeps ~4s after the final write while I2S drains
+        // (`k_sleep(K_MSEC(4000))` in speaker.c). Each framed chunk is ≤5000
+        // mono bytes ≈ 0.3125s of 8 kHz audio, so this client wait makes a ~2s
+        // sentence (~7 frames) take ~30s wall-clock until firmware can drain
+        // without a completion signal. Keep in sync with that sleep; shorten
+        // only when firmware exposes drain-complete.
         if (generation != _pcmSpeakerGeneration) return false;
         await Future<void>.delayed(const Duration(milliseconds: 4200));
       }
