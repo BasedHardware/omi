@@ -297,7 +297,7 @@ runs:
           test -n "$POLICY"
           gcloud monitoring policies describe "$POLICY" \
             --project=${{ inputs.project_id }} \
-            --format=json | python3 backend/scripts/verify_sync_backfill_alert_policy.py \
+            --format=json | python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_backfill_alert_policy.py" \
               --condition=threshold --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
         done
 
@@ -354,7 +354,7 @@ runs:
         test -n "$POLICY"
         gcloud monitoring policies describe "$POLICY" \
           --project=${{ inputs.project_id }} \
-          --format=json | python3 backend/scripts/verify_sync_backfill_alert_policy.py \
+          --format=json | python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_backfill_alert_policy.py" \
             --condition=threshold --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
 
     - name: Provision routed backfill sequencer stall alert
@@ -392,7 +392,7 @@ runs:
         fi
         test -n "$POLICY"
         gcloud monitoring policies describe "$POLICY" --project=${{ inputs.project_id }} --format=json \
-          | python3 backend/scripts/verify_sync_backfill_alert_policy.py \
+          | python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_backfill_alert_policy.py" \
               --condition=threshold --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
 
     - name: Provision backfill sequencer Scheduler execution alerts
@@ -446,7 +446,7 @@ runs:
             DURATION_SECONDS=0
           fi
           gcloud monitoring policies describe "$POLICY" --project=${{ inputs.project_id }} --format=json \
-            | python3 backend/scripts/verify_sync_backfill_alert_policy.py \
+            | python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_backfill_alert_policy.py" \
                 --condition="$CONDITION_KIND" --filter="$CONDITION_FILTER" \
                 --duration-seconds="$DURATION_SECONDS" --channels="$ALERT_CHANNELS"
         done
