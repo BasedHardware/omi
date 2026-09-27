@@ -242,8 +242,16 @@ def update_app_in_db(app_data: Dict[str, Any]) -> None:
     app_id = app_data.get('id')
     if not app_id:
         raise ValueError("app_data must include 'id'")
+    # Released clients serialize an omitted field as null, not absent. The App/AppBaseModel requires
+    # name, category, author, description, image, and capabilities, so writing a null over the stored
+    # value would make every App(**doc) read raise ValidationError (breaking GET /v1/apps and detail endpoints)
+    # with no un-poisoning path. A null for these required fields means "not sent".
+    sanitized = dict(app_data)
+    for field in ('name', 'category', 'author', 'description', 'image', 'capabilities'):
+        if sanitized.get(field) is None and field in sanitized:
+            sanitized.pop(field)
     app_ref = db.collection(apps_collection).document(app_id)
-    app_ref.update(app_data)
+    app_ref.update(sanitized)
 
 
 def delete_app_from_db(app_id: str) -> None:
