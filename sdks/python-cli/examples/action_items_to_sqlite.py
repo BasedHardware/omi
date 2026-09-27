@@ -43,6 +43,9 @@ def utc_stamp(value):
     return parsed.strftime("%Y-%m-%d %H:%M:%S")
 
 
+DONE_WORDS = {"true", "yes", "1", "done", "completed"}
+
+
 def boolean_to_int(value):
     """Normalize completed status to integer 0 or 1 for SQLite."""
     if isinstance(value, bool):
@@ -50,7 +53,7 @@ def boolean_to_int(value):
     if isinstance(value, (int, float)):
         return 1 if value else 0
     if isinstance(value, str):
-        return 1 if value.strip().lower() in ("true", "1", "yes") else 0
+        return 1 if value.strip().lower() in DONE_WORDS else 0
     return 0
 
 

@@ -156,6 +156,24 @@ class TestActionItemsToSqlite(unittest.TestCase):
         conn.close()
         self.assertEqual(rows, [("task_1", "Keep me")])
 
+    def test_boolean_to_int_extended_words(self):
+        self.assertEqual(boolean_to_int("done"), 1)
+        self.assertEqual(boolean_to_int("completed"), 1)
+        self.assertEqual(boolean_to_int("yes"), 1)
+        self.assertEqual(boolean_to_int("0"), 0)
+        self.assertEqual(boolean_to_int("no"), 0)
+        self.assertEqual(boolean_to_int("random_text"), 0)
+
+    def test_single_action_item_dict(self):
+        single = {"id": "single_1", "description": "Single action item", "completed": True}
+        file_path = self.dir_path / "single.json"
+        file_path.write_text(json.dumps(single), encoding="utf-8")
+        db = self.dir_path / "db_single.sqlite"
+        loaded, added, total = load(str(db), [str(file_path)])
+        self.assertEqual(loaded, 1)
+        self.assertEqual(added, 1)
+        self.assertEqual(total, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
