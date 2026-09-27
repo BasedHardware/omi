@@ -91,6 +91,12 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  # Keep these aligned with the production GitHub environment variables used
+  # by the Cloud Run backend; api.omi.me is served by backend-listen.
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+    value: "https://api.omi.me"
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+    value: "208440318997-compute@developer.gserviceaccount.com"
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://omi.me"
   - name: FREE_TIER_LOCAL_PROCESSING
@@ -171,6 +177,12 @@ env:
     value: "false"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
+  - name: CAPTURE_JEV_SHADOW_ENABLED
+    value: "true"
+  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: CAPTURE_JEV_SHADOW_PERCENT
+    value: "0"
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -363,7 +375,7 @@ env:
   - name: STT_MULTI_LANGUAGE_HINTS
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
-    value: "0"
+    value: "25"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
     value: "0"
   - name: PARAKEET_WINDOW_MAX_SESSIONS

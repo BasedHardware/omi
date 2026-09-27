@@ -8,6 +8,8 @@ overlay:
   gke:
     backend-listen:
       env:
+        PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+          value: 'gateway'
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'false'
           category: rollout
@@ -89,6 +91,15 @@ overlay:
         MEMORY_OWNER_JEV_FLIP_ENABLED:
           value: 'true'
           category: rollout
+        CAPTURE_JEV_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        CAPTURE_JEV_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
     pusher:
       env:
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -154,6 +165,15 @@ overlay:
           category: rollout
         MEMORY_OWNER_JEV_FLIP_ENABLED:
           value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        CAPTURE_JEV_SHADOW_PERCENT:
+          value: '0'
           category: rollout
         GITHUB_TOKEN:
           secret:
@@ -337,6 +357,8 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           SCREEN_FRAME_EGRESS_ENABLED:
             value: 'true'
             category: rollout
@@ -418,6 +440,15 @@ overlay:
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-sync:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
@@ -430,6 +461,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -513,6 +546,15 @@ overlay:
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-sync-backfill:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
@@ -525,6 +567,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
@@ -579,6 +623,15 @@ overlay:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-integration:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
@@ -594,6 +647,8 @@ overlay:
             secret: POSTHOG_EVENTS_API_KEY
             version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:

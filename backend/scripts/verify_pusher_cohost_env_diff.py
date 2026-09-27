@@ -116,6 +116,10 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "OMI_PARITY_PACK_ROOT",
             "OPENROUTER_API_KEY",
             "POSTHOG_PROJECT_API_KEY",
+            # Only backend-listen serves api.omiapi.com; its shared-chat route
+            # validates the frontend service OIDC identity at the API edge.
+            "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE",
+            "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA",
             "PUBLIC_SHARED_CONVERSATION_CHAT_MODE",
             "RAPID_API_KEY",
             "REFERRAL_PUBLIC_BASE_URL",
@@ -185,6 +189,10 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",
             "OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED",
             "POSTHOG_PROJECT_API_KEY",
+            # Only backend-listen serves api.omi.me; its shared-chat route
+            # validates the frontend service OIDC identity at the API edge.
+            "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE",
+            "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA",
             "PUBLIC_SHARED_CONVERSATION_CHAT_MODE",
             "REFERRAL_PUBLIC_BASE_URL",
             "SYNC_TASKS_LOCATION",

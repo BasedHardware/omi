@@ -324,6 +324,14 @@ all three of these, each overridable:
 - at least 15 shared trigrams (`CROSS_DEVICE_GROUP_MIN_SHARED_TRIGRAMS`);
 - containment of at least 0.25 (`CROSS_DEVICE_GROUP_MIN_CONTAINMENT`).
 
+The default-off `CAPTURE_JEV_SHADOW_ENABLED` experiment also submits up to six
+overlapping pairs, including same-source and below-threshold pairs, to a bounded
+background Jev worker after finalization. It records the shipped group outcome
+and Jev's advice, and separately evaluates material re-summary when a capture
+joins an existing group. It never changes membership or summary content. The
+worker uses the existing trusted gateway lane, Redis daily caps, a uid cohort,
+and a hard UTC expiry; see `docs/experiments/EXP-003-jev-capture-shadow.md`.
+
 In production, unrelated pairs of the same user from different surfaces
 peaked at a containment of 0.13 (p99), while pairs that heard the same speech
 landed between 0.2 and 0.8. Confirmed pairs join one group through

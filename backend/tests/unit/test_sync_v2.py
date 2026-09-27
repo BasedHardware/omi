@@ -1328,6 +1328,9 @@ class TestAsyncCoordinatorBehavioral:
         prior_manual_assignments = sys.modules.get('utils.manual_speaker_assignments')
         from utils import manual_speaker_assignments as actual_manual_assignments
 
+        prior_capture_evidence = sys.modules.get('utils.capture_evidence')
+        from utils import capture_evidence as actual_capture_evidence
+
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -1483,6 +1486,11 @@ class TestAsyncCoordinatorBehavioral:
         # Keep receipt apply/remap real: pipeline → assignment imports the policy
         # module at scope, and a MagicMock parent for utils is not a package.
         sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+        saved_modules['utils.capture_evidence'] = prior_capture_evidence
+        # Keep the S1 evidence envelope builder real (pure, stdlib-only): the
+        # pipeline imports unknown_envelope at module scope, and a MagicMock
+        # parent for utils is not a package.
+        sys.modules['utils.capture_evidence'] = actual_capture_evidence
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
@@ -2346,7 +2354,9 @@ class TestAsyncCoordinatorBehavioral:
 
             stubs['sync_jobs'].mark_job_failed.assert_called_once()
             assert stubs['sync_jobs'].mark_job_failed.call_args.args[1] == 'sync_invalid_audio'
-            stubs['pipeline'].release_sync_content_claim.assert_called_once_with('uid', 'content-3', 'j3')
+            stubs['pipeline'].release_sync_content_claim.assert_called_once_with(
+                'uid', 'content-3', 'j3', failure_key='invalid_audio'
+            )
             stubs['pipeline'].release_sync_content_claim_after_job_retired.assert_not_called()
             stubs['sync_jobs'].finalize_sync_job.assert_not_called()
             stubs['pipeline'].mark_sync_content_completed.assert_not_called()
@@ -3323,6 +3333,9 @@ class TestV2EndpointExecution:
         prior_manual_assignments = sys.modules.get('utils.manual_speaker_assignments')
         from utils import manual_speaker_assignments as actual_manual_assignments
 
+        prior_capture_evidence = sys.modules.get('utils.capture_evidence')
+        from utils import capture_evidence as actual_capture_evidence
+
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -3476,6 +3489,11 @@ class TestV2EndpointExecution:
         # Keep receipt apply/remap real: pipeline → assignment imports the policy
         # module at scope, and a MagicMock parent for utils is not a package.
         sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+        saved_modules['utils.capture_evidence'] = prior_capture_evidence
+        # Keep the S1 evidence envelope builder real (pure, stdlib-only): the
+        # pipeline imports unknown_envelope at module scope, and a MagicMock
+        # parent for utils is not a package.
+        sys.modules['utils.capture_evidence'] = actual_capture_evidence
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
@@ -3864,6 +3882,59 @@ class TestV2EndpointExecution:
             assert body['poll_after_ms'] == 3000
             mock_sync_jobs.create_sync_job.assert_called_once()
             assert scheduled_tasks == [f"sync_pipeline:{body['job_id']}"]
+        finally:
+            self._cleanup_modules(saved)
+
+    @pytest.mark.parametrize('failure_key', ['invalid_audio', 'persistent_persistence'])
+    def test_capped_content_returns_a_per_wal_retryable_job_without_dispatch(self, failure_key):
+        saved, mock_sync_jobs, _ = self._build_test_app()
+        try:
+            sys.modules.pop('routers.sync', None)
+            sys.modules.pop('utils.sync.pipeline', None)
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                'sync_post_capped', os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module._retrieve_file_paths_v2 = MagicMock(return_value=['/tmp/fake.opus'])
+            module._cleanup_files = MagicMock()
+            module.claim_sync_content = MagicMock(
+                return_value={'outcome': 'capped', 'failure_key': failure_key, 'retry_after': 123}
+            )
+            module.start_background_task = MagicMock()
+
+            async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
+                return fn(*args, **kwargs)
+
+            module.run_blocking = _passthrough_run_blocking
+            module.classify_sync_lane = MagicMock(
+                return_value=types.SimpleNamespace(
+                    lane=module.SyncLane.FRESH,
+                    trust=types.SimpleNamespace(value='legacy'),
+                    reason='recent_capture',
+                    maximum_age_seconds=60,
+                    automatic_recovery_allowed=True,
+                )
+            )
+            from starlette.datastructures import UploadFile
+
+            upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+            resp = asyncio.run(module.sync_local_files_v2(files=[upload], uid='test-uid'))
+            assert resp.status_code == 202
+            body = json.loads(resp.body)
+            assert body['status'] == 'failed'
+            assert body['job_id']
+            assert body['poll_after_ms'] == 0
+            assert 'X-Omi-Rate-Limit-Reason' not in resp.headers
+            assert 'Retry-After' not in resp.headers
+            mock_sync_jobs.mark_job_failed.assert_called_once_with(
+                body['job_id'], 'Repeated content failure paused', reason_code='sync_repeat_failure_paused'
+            )
+            mock_sync_jobs.delete_sync_job.assert_not_called()
+            module.start_background_task.assert_not_called()
+            module._cleanup_files.assert_called_once_with(['/tmp/fake.opus'])
         finally:
             self._cleanup_modules(saved)
 

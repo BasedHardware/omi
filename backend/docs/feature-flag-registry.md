@@ -85,6 +85,12 @@ entries are exempt: they are queued for removal, not running.
 
 | key | owner | prereg | review_by |
 | --- | --- | --- | --- |
+| `CAPTURE_JEV_SHADOW_ENABLED` | David | [backend/docs/experiments/EXP-003-jev-capture-shadow.md](../../backend/docs/experiments/EXP-003-jev-capture-shadow.md) | 2026-10-18 |
+| `CAPTURE_JEV_SHADOW_EXPIRY` | David | [backend/docs/experiments/EXP-003-jev-capture-shadow.md](../../backend/docs/experiments/EXP-003-jev-capture-shadow.md) | 2026-10-18 |
+| `CAPTURE_JEV_SHADOW_GLOBAL_DAILY_CAP` | David | [backend/docs/experiments/EXP-003-jev-capture-shadow.md](../../backend/docs/experiments/EXP-003-jev-capture-shadow.md) | 2026-10-18 |
+| `CAPTURE_JEV_SHADOW_PERCENT` | David | [backend/docs/experiments/EXP-003-jev-capture-shadow.md](../../backend/docs/experiments/EXP-003-jev-capture-shadow.md) | 2026-10-18 |
+| `CAPTURE_JEV_SHADOW_UID_ALLOWLIST` | David | [backend/docs/experiments/EXP-003-jev-capture-shadow.md](../../backend/docs/experiments/EXP-003-jev-capture-shadow.md) | 2026-10-18 |
+| `CAPTURE_JEV_SHADOW_USER_DAILY_CAP` | David | [backend/docs/experiments/EXP-003-jev-capture-shadow.md](../../backend/docs/experiments/EXP-003-jev-capture-shadow.md) | 2026-10-18 |
 | `DAY3_REENGAGEMENT_EMAIL_ENABLED` | dazheng | [backend/docs/experiments/EXP-001-day3-reengagement.md](../../backend/docs/experiments/EXP-001-day3-reengagement.md) | 2026-10-28 |
 | `exp-002-desktop-identity-v1` | unowned | [backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md](../../backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md) | 2026-10-26 |
 
@@ -105,6 +111,12 @@ and an explicit empty literal renders as `''`.
 
 | key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | review_by | owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `CAPTURE_JEV_SHADOW_ENABLED` | Log Jev same-scene and re-summary advice without changing capture behavior | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-18 | David |
+| `CAPTURE_JEV_SHADOW_EXPIRY` | Shorten the Jev capture shadow hard deadline | backend | env | closed | — | — | — | — | pending | 2026-10-18 | David |
+| `CAPTURE_JEV_SHADOW_GLOBAL_DAILY_CAP` | Global daily Jev capture shadow call budget | backend | env | closed | — | — | — | — | pending | 2026-10-18 | David |
+| `CAPTURE_JEV_SHADOW_PERCENT` | Optional Jev capture shadow percentage cohort, default zero | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | 0 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-18 | David |
+| `CAPTURE_JEV_SHADOW_UID_ALLOWLIST` | Explicit UIDs for Jev capture shadow | backend | env | closed | — | vi7SA9ckQCe4ccobWNxlbdcNdC23 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | vi7SA9ckQCe4ccobWNxlbdcNdC23 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-18 | David |
+| `CAPTURE_JEV_SHADOW_USER_DAILY_CAP` | Per-user daily Jev capture shadow call budget | backend | env | closed | — | — | — | — | pending | 2026-10-18 | David |
 | `DAY3_REENGAGEMENT_EMAIL_ENABLED` | Send randomized day-three re-engagement email | backend | env | closed | false | false | true | — | pending | 2026-10-28 | dazheng |
 | `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` | Select gateway output-budget experiments | llm-gateway | env | closed | — | — | — | — | kill | 2026-10-15 | dazheng |
 | `exp-002-desktop-identity-v1` | EXP-002 memory_v1 desktop identity arm enrollment | backend, macos | posthog | closed | — | — | — | expected (enable) | pending | 2026-10-26 | unowned |
@@ -152,16 +164,17 @@ and an explicit empty literal renders as `''`.
 | `PARAKEET_STREAM_ALLOCATION_PERCENT` | Allocate streaming sessions to Parakeet | backend | env | closed | 100 | 100 (gke/parakeet, parakeet (chart)) | 100 (gke/parakeet, parakeet (chart)) | — | pending | 2026-10-23 | unowned |
 | `PARAKEET_WINDOW_ALLOCATION_PERCENT` | Allocate live sessions to Parakeet window | backend | env | closed | 0 | 100 (backend-listen (chart), gke/backend-listen) | 0 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | unowned |
 | `PARAKEET_WINDOW_DIARIZATION` | Enable Parakeet window diarization | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | unowned |
-| `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | off | off (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | off (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | kill | 2026-10-15 | dazheng |
+| `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | off | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | dazheng |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `SCREEN_FRAME_EGRESS_ENABLED` | Allow meeting-note screen frame egress | backend | env | closed | — | true | — | — | graduate | 2026-10-23 | dazheng |
 | `SELFHEAL_MODE` | Conversation self-heal sweeper mode: off/detect-only/nudge/heal | backend | env | closed | — | — | — | — | pending | 2026-10-15 | backend runtime_env (PR #18855) |
 | `SONIOX_ELAPSED_AXIS` | Measure Soniox elapsed timestamps before enabling speaker windows | backend | env | closed | — | — | — | — | pending | 2026-10-27 | dazheng |
 | `STT_CONNECT_ORDER_FROM_CONFIG` | Use configured STT provider connection order | backend | env | closed | false | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | unowned |
 | `STT_MULTI_LANGUAGE_HINTS` | Send primary and English hints to Soniox in non-English multilingual live sessions | backend | env | closed | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-27 | backend |
-| `STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT` | Prefer Soniox for allocated non-English multilingual live sessions | backend | env | closed | 0 | 100 (backend-listen (chart), gke/backend-listen) | 0 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-27 | backend |
+| `STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT` | Prefer Soniox for allocated non-English multilingual live sessions | backend | env | closed | 0 | 100 (backend-listen (chart), gke/backend-listen) | 25 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-27 | backend |
 | `SYNC_BACKFILL_INFLIGHT_LIMIT` | One in-flight backfill upload per uid; excess uploads get 429 backfill_paced | backend | env | closed | false | false | false | — | pending | 2026-10-27 | dazheng |
 | `SYNC_BACKFILL_ROUTING_ENABLED` | Route eligible sync work to backfill lane | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
+| `SYNC_BACKFILL_UID_SEQUENCER` | Accept backfill uploads then dispatch one worker job per uid from durable queue | backend | env | closed | off | off | off | — | pending | 2026-10-27 | dazheng |
 | `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 0 (gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSCRIPT_CHUNK_INDEXING_ENABLED` | Index transcript chunks for retrieval | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
@@ -259,6 +272,9 @@ their code default (`fail` tells you which way a missing value resolves).
 - `ADMIN_KEY_AUTH_ENABLED` — Allow administrator-key authentication (fail: open)
 - `AUDIO_MERGE_DISPATCH_MODE` — Select audio-merge dispatch lane (fail: closed)
 - `CAPTURE_EVIDENCE_V1_DARK_WRITE` — Piggyback bounded capture evidence metadata on existing writes (fail: closed)
+- `CAPTURE_JEV_SHADOW_EXPIRY` — Shorten the Jev capture shadow hard deadline (fail: closed)
+- `CAPTURE_JEV_SHADOW_GLOBAL_DAILY_CAP` — Global daily Jev capture shadow call budget (fail: closed)
+- `CAPTURE_JEV_SHADOW_USER_DAILY_CAP` — Per-user daily Jev capture shadow call budget (fail: closed)
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)

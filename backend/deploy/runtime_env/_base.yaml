@@ -554,10 +554,14 @@ environment_shared:
             value: 'true'
             category: rollout
           # 9e6b55b re-armed a one-job-per-uid backfill slot that 429s uploads
-          # (37% of sync uploads refused). Cloud Tasks concurrency paces instead.
+          # (37% of sync uploads refused). Worker sequencing paces per UID.
           SYNC_BACKFILL_INFLIGHT_LIMIT:
             provisional: true
             value: 'false'
+            category: rollout
+          SYNC_BACKFILL_UID_SEQUENCER:
+            provisional: true
+            value: 'off'
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
@@ -682,10 +686,14 @@ environment_shared:
             value: 'true'
             category: rollout
           # 9e6b55b re-armed a one-job-per-uid backfill slot that 429s uploads
-          # (37% of sync uploads refused). Cloud Tasks concurrency paces instead.
+          # (37% of sync uploads refused). Worker sequencing paces per UID.
           SYNC_BACKFILL_INFLIGHT_LIMIT:
             provisional: true
             value: 'false'
+            category: rollout
+          SYNC_BACKFILL_UID_SEQUENCER:
+            provisional: true
+            value: 'off'
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
