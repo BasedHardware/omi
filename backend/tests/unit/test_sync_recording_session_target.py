@@ -65,10 +65,27 @@ def test_incompatible_recording_session_rows_stay_unbound(mutation):
 
 
 @pytest.mark.parametrize(
-    ('audio_start_seconds', 'audio_end_seconds'), [(999.0, 1008.0), (1001.0, 1010.0), (1008.0, 1008.0)]
+    ('audio_start_seconds', 'audio_end_seconds'), [(994.99, 1008.0), (1001.0, 1069.51), (1008.0, 1008.0)]
 )
 def test_audio_outside_or_spanning_live_generation_stays_unbound(audio_start_seconds, audio_end_seconds):
     assert select([live_row()], audio_start_seconds=audio_start_seconds, audio_end_seconds=audio_end_seconds) is None
+
+
+@pytest.mark.parametrize(('audio_start_seconds', 'audio_end_seconds'), [(995.0, 1008.0), (1001.0, 1069.5)])
+def test_bounded_skew_and_trailing_silence_bind(audio_start_seconds, audio_end_seconds):
+    assert select([live_row()], audio_start_seconds=audio_start_seconds, audio_end_seconds=audio_end_seconds) == 'live'
+
+
+def test_adjacent_conversations_made_ambiguous_by_allowance_stay_unbound():
+    first = live_row()
+    second = live_row(started_at=first['finished_at'])
+    second['id'] = 'live-2'
+    second['finished_at'] = second['started_at'] + (first['finished_at'] - first['started_at'])
+    assert select([first, second], audio_start_seconds=1006.0, audio_end_seconds=1012.0) is None
+
+
+def test_trailing_allowance_does_not_bind_an_interval_without_overlap():
+    assert select([live_row()], audio_start_seconds=1040.0, audio_end_seconds=1050.0) is None
 
 
 def test_ambiguous_recording_session_matches_stay_unbound():
@@ -99,17 +116,21 @@ def test_blank_recording_session_id_does_not_query():
     )
 
 
-def test_recording_session_lookup_failure_stays_unbound():
+def test_recording_session_lookup_failure_stays_unbound(caplog, monkeypatch):
+    monkeypatch.setenv('SYNC_CONTENT_ID_SECRET', 'unit-test-secret')
+
     class Unavailable:
         def collection(self, name):
             raise RuntimeError('firestore down')
 
     assert (
         resolve_recording_session_sync_target(
-            'u', SESSION, 'omi', 'pendant', False, 1001.0, 1008.0, firestore_client=Unavailable()
+            'private-account-id', SESSION, 'omi', 'pendant', False, 1001.0, 1008.0, firestore_client=Unavailable()
         )
         is None
     )
+    assert 'uid_hash=' in caplog.text
+    assert 'private-account-id' not in caplog.text
 
 
 class _Docs:
@@ -128,6 +149,7 @@ class _Docs:
         return self
 
     def limit(self, count):
+        self.query_limit = count
         return self
 
     def stream(self):
@@ -153,6 +175,19 @@ def test_resolve_returns_the_one_stored_match():
     assert client.uid == 'u'
 
 
+def test_truncated_candidate_query_cannot_establish_uniqueness():
+    rows = [live_row()]
+    rows += [live_row(client_device_id=f'other-{i}') for i in range(5)]
+    client = _Docs([_Doc(row) for row in rows])
+    assert (
+        resolve_recording_session_sync_target(
+            'u', SESSION, 'omi', 'pendant', False, 1001.0, 1008.0, firestore_client=client
+        )
+        is None
+    )
+    assert client.query_limit == 6
+
+
 def test_matching_recording_session_dedupes_into_the_live_conversation():
     store = StrictFirestore()
     original = live_row()
@@ -165,6 +200,38 @@ def test_matching_recording_session_dedupes_into_the_live_conversation():
     assert result['id'] == 'live'
     assert len(result['transcript_segments']) == 1
     assert len(conversations(store)) == 1
+
+
+def test_live_bound_mixed_wal_drops_one_near_exact_repeat_and_keeps_new_speech():
+    store = StrictFirestore()
+    original = live_row()
+    store.rows[('users', 'u', 'conversations', 'live')] = deepcopy(original)
+    incoming = chunk('wal', 1001, text=TEXT)
+    incoming['finished_at'] = incoming['started_at'] + (original['finished_at'] - original['started_at']) * 2
+    incoming['transcript_segments'].append(
+        {'start': 10.0, 'end': 19.5, 'text': 'A new discussion after the repeated line.', 'speaker_id': 0}
+    )
+    result, created, survivors = intake(store, incoming, target_id=select([original]))
+    assert not created
+    assert len(survivors) == 1
+    assert len(result['transcript_segments']) == 2
+    assert [segment['text'] for segment in result['transcript_segments']] == [
+        TEXT,
+        'A new discussion after the repeated line.',
+    ]
+
+
+def test_live_bound_mixed_wal_keeps_single_match_with_loose_time_alignment():
+    store = StrictFirestore()
+    original = live_row()
+    store.rows[('users', 'u', 'conversations', 'live')] = deepcopy(original)
+    incoming = chunk('wal', 1004, text=TEXT)
+    incoming['finished_at'] = incoming['started_at'] + (original['finished_at'] - original['started_at']) * 2
+    incoming['transcript_segments'].append(
+        {'start': 10.0, 'end': 19.5, 'text': 'A new discussion after the repeated line.', 'speaker_id': 0}
+    )
+    _, _, survivors = intake(store, incoming, target_id=select([original]))
+    assert len(survivors) == 2
 
 
 def test_missing_recording_session_id_leaves_the_live_conversation_unchanged():

@@ -2,8 +2,9 @@
 
 ``/v4/listen`` stamps ``external_data.recording_session_id`` with the client
 recording id. Binding also requires source, device, lock state, and full audio
-interval containment. A client id can outlive server-side silence rollover;
-containment prevents a spanning WAL from binding to the earlier generation.
+interval containment with bounded edge allowance. A client id can outlive
+server-side silence rollover; the bounded interval prevents a spanning WAL
+from binding to the earlier generation.
 No unique match keeps today's temporal assignment.
 """
 
@@ -17,6 +18,12 @@ from typing import Any, Mapping, Sequence, cast
 logger = logging.getLogger(__name__)
 
 _CANDIDATE_LIMIT = 5
+# The socket can open after the first buffered frames (or the phone clock can
+# differ slightly). finished_at is the last recognized word, while the WAL can
+# contain trailing silence. A 60-second tail is less than the 120-second
+# silence-rollover gap; larger spans remain unbound.
+_START_SKEW_SECONDS = 5
+_TRAILING_AUDIO_SECONDS = 60
 
 
 def _text(value: Any) -> str:
@@ -84,8 +91,11 @@ def select_recording_session_target(
         if (
             conversation_start is None
             or conversation_end is None
-            or audio_start_seconds < conversation_start
-            or audio_end_seconds > conversation_end
+            or conversation_end < conversation_start
+            or audio_start_seconds > conversation_end
+            or audio_end_seconds < conversation_start
+            or audio_start_seconds < conversation_start - _START_SKEW_SECONDS
+            or audio_end_seconds > conversation_end + _TRAILING_AUDIO_SECONDS
         ):
             continue
         conversation_id = _text(row.get('id'))
@@ -110,13 +120,19 @@ def _candidate_rows(uid: str, recording_session_id: str, *, firestore_client: An
         .document(uid)
         .collection(conversations_collection)
         .where(filter=FieldFilter('external_data.recording_session_id', '==', recording_session_id))
-        .limit(_CANDIDATE_LIMIT)
+        .limit(_CANDIDATE_LIMIT + 1)
     )
     rows: list[dict[str, Any]] = []
+    seen = 0
     for doc in query.stream():
+        seen += 1
         data = doc.to_dict()
         if isinstance(data, dict):
             rows.append(cast(dict[str, Any], data))
+    # A truncated query cannot establish uniqueness, even if only one of the
+    # visible rows passes the provenance and interval checks.
+    if seen > _CANDIDATE_LIMIT:
+        return []
     return rows
 
 
@@ -142,9 +158,15 @@ def resolve_recording_session_sync_target(
     try:
         rows = _candidate_rows(uid, session_id, firestore_client=firestore_client)
     except Exception as exc:
+        try:
+            from utils.sync.backfill_cutover import uid_hash
+
+            log_uid_hash = uid_hash(uid)
+        except Exception:
+            log_uid_hash = 'unavailable'
         logger.warning(
-            'event=sync_recording_session_target outcome=lookup_failed uid=%s exception_type=%s',
-            uid,
+            'event=sync_recording_session_target outcome=lookup_failed uid_hash=%s exception_type=%s',
+            log_uid_hash,
             type(exc).__name__,
         )
         return None
