@@ -115,9 +115,9 @@ def test_deploy_workflows_gate_success_on_read_only_scheduler_validation(workflo
     assert "--region" in workflow
     assert "--scheduler-job" in workflow
     assert "--cloud-run-job" in workflow
-    assert workflow.index("uses: google-github-actions/deploy-cloudrun@v3") < workflow.index(
-        "validate_memory_maintenance_scheduler.py"
-    )
+    assert workflow.index(
+        "uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d"
+    ) < workflow.index("validate_memory_maintenance_scheduler.py")
     assert "scheduler jobs create" not in workflow
     assert "scheduler jobs update" not in workflow
     assert "scheduler jobs resume" not in workflow

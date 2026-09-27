@@ -208,19 +208,19 @@ runs:
 
     - name: Google Auth (WIF)
       if: ${{ inputs.workload_identity_provider != '' }}
-      uses: google-github-actions/auth@v3
+      uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
       with:
         workload_identity_provider: ${{ inputs.workload_identity_provider }}
         service_account: ${{ inputs.workload_identity_service_account }}
 
     - name: Google Auth (JSON)
       if: ${{ inputs.workload_identity_provider == '' }}
-      uses: google-github-actions/auth@v3
+      uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
       with:
         credentials_json: ${{ inputs.gcp_credentials }}
 
     - name: Set up gcloud
-      uses: google-github-actions/setup-gcloud@v3
+      uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
 
     - name: Verify serving sync ledger fence mode before deploy
       shell: bash
@@ -238,7 +238,7 @@ runs:
       run: gcloud auth configure-docker
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v4
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
 
     - name: Compute short SHA
       id: image-tag
@@ -298,7 +298,7 @@ runs:
         ${{ inputs.deploy_profile == 'auto-dev' ||
         inputs.deploy_targets == 'all' ||
         (inputs.deploy_profile == 'manual' && steps.gateway-intent.outputs.enabled == 'true') }}
-      uses: google-github-actions/get-gke-credentials@v3
+      uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395
       with:
         cluster_name: ${{ env.GKE_CLUSTER }}
         location: ${{ inputs.region }}
@@ -337,7 +337,7 @@ runs:
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" "${PREFLIGHT_ARGS[@]}"
 
     - name: Build runtime image
-      uses: docker/build-push-action@v7
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
       with:
         context: .
         file: ./backend/Dockerfile
@@ -363,7 +363,7 @@ runs:
 
     - name: Install Helm for combined LLM Gateway deployment
       if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_gateway == 'true' }}
-      uses: azure/setup-helm@v5
+      uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
 
     - name: Build, smoke, and push combined LLM Gateway image
       if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_gateway == 'true' }}
@@ -606,7 +606,7 @@ runs:
 
     - name: Deploy ${{ inputs.service }} to Cloud Run
       id: deploy-backend
-      uses: google-github-actions/deploy-cloudrun@v3
+      uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d
       with:
         service: ${{ inputs.service }}
         region: ${{ inputs.region }}
@@ -694,7 +694,7 @@ runs:
 
     - name: Deploy ${{ inputs.service }}-sync to Cloud Run
       id: deploy-backend-sync
-      uses: google-github-actions/deploy-cloudrun@v3
+      uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d
       with:
         service: ${{ inputs.service }}-sync
         region: ${{ inputs.region }}
@@ -761,7 +761,7 @@ runs:
 
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run
       id: deploy-backend-integration
-      uses: google-github-actions/deploy-cloudrun@v3
+      uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d
       with:
         service: ${{ inputs.service }}-integration
         region: ${{ inputs.region }}
@@ -951,7 +951,7 @@ runs:
 
     - name: Install Helm
       if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
-      uses: azure/setup-helm@v5
+      uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
 
     - name: Apply non-secret backend runtime config
       if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}

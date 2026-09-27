@@ -164,20 +164,20 @@ jobs:
       # omi-private-cloud-sync only; credential-hygiene WS-C). Development keeps JSON.
       - name: Google Auth (prod WIF)
         if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'development') == 'prod' }}
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
           service_account: omi-ci-schema-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Google Auth
         if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'development') != 'prod' }}
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
           service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
-      - uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
 
       - name: Capture live bucket state before apply
         run: |

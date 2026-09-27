@@ -530,8 +530,8 @@ def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_pa
     assert "./gradlew :app:testDevDebugUnitTest -Ptarget-platform=android-arm64" in unit_tests
     unit_run_lines = {line.strip() for line in unit_tests.splitlines()}
     assert "flutter build apk --debug --flavor dev --target-platform android-arm64" not in unit_run_lines
-    assert "uses: gradle/actions/setup-gradle@v6" in android
-    assert "uses: gradle/actions/setup-gradle@v6" in unit_tests
+    assert "uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb" in android
+    assert "uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb" in unit_tests
     # Configuration cache broke AGP 8.11.1 + Kotlin 2.2.20 in CI
     # (run 35207698338): warn mode does not downgrade a cache-state
     # serialization failure. Savings stay in the Gradle User Home cache

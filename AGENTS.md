@@ -13,6 +13,7 @@ Read the guide for the area you are changing. `CLAUDE.md` points here.
 | Web app / admin | `web/app/AGENTS.md` / `web/admin/AGENTS.md` |
 | Firmware | `omi/firmware/AGENTS.md` |
 | CI / deployment workflows | `.github/AGENTS.md` |
+| Actions supply-chain hygiene guard | `.github/agent-docs/actions-hygiene.md` |
 | Public documentation | `docs/AGENTS.md` |
 | Product behavior / UI | `PRODUCT.md`, `product/invariants/`; macOS UI: `desktop/macos/docs/ux-contract.md` |
 | Shared client behavior | `contracts/parity/README.md` |

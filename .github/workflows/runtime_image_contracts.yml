@@ -14,11 +14,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: runtime-image-contracts-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   source-closure:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Check final-image first-party source closures
         run: make runtime-image-source-closure
       - id: matrix
@@ -36,10 +43,8 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.pull_request.head.repo.full_name == github.repository
-    permissions:
-      contents: read
-      id-token: write
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       GCP_CREDENTIALS_AVAILABLE: ${{ secrets.GCP_CREDENTIALS != '' }}
     strategy:
@@ -47,16 +52,18 @@ jobs:
       matrix: ${{ fromJSON(needs.source-closure.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Skip image smoke when GCP credentials are unavailable
         if: env.GCP_CREDENTIALS_AVAILABLE != 'true'
         run: >-
           echo "Skipping ${{ matrix.service }} image smoke because GCP_CREDENTIALS is not available to this run."
       - name: Authenticate to GCP
         if: env.GCP_CREDENTIALS_AVAILABLE == 'true'
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-      - uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
         if: env.GCP_CREDENTIALS_AVAILABLE == 'true'
       - name: Configure Docker for GCR
         if: env.GCP_CREDENTIALS_AVAILABLE == 'true'

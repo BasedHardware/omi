@@ -108,7 +108,7 @@ jobs:
 
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v3'
+        uses: 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
         with:
           # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
@@ -118,7 +118,7 @@ jobs:
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
 
       - name: Compute short SHA
         id: image-tag
@@ -129,7 +129,7 @@ jobs:
         run: python3 -m pip install -q pyyaml
 
       - name: Get GKE credentials for gateway serving gate
-        uses: google-github-actions/get-gke-credentials@v3
+        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: ${{ env.REGION }}
@@ -145,7 +145,7 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
 
       - name: Build runtime image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           file: ./backend/modal/Dockerfile.daily_memory_sweep_job
@@ -158,7 +158,7 @@ jobs:
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
       - name: Build ledger drain runtime image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           file: ./backend/modal/Dockerfile.knowledge_ledger_drain_job
@@ -241,7 +241,7 @@ jobs:
 
       - name: Deploy to Cloud Run
         id: deploy
-        uses: google-github-actions/deploy-cloudrun@v3
+        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d
         with:
           job: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
@@ -253,7 +253,7 @@ jobs:
 
       - name: Deploy independent ledger drain to Cloud Run
         id: deploy-ledger-drain
-        uses: google-github-actions/deploy-cloudrun@v3
+        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d
         with:
           job: ${{ env.LEDGER_DRAIN_SERVICE }}
           region: ${{ env.REGION }}

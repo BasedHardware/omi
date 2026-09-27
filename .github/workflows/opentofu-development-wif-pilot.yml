@@ -23,12 +23,12 @@ jobs:
           ref: main
 
       - name: Authenticate with development WIF plan identity
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-opentofu-9842-dev/providers/github
           service_account: omi-tofu-plan-dev-9842@based-hardware-dev.iam.gserviceaccount.com
 
-      - uses: opentofu/setup-opentofu@v2
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4
         with:
           tofu_version: 1.12.4
           tofu_wrapper: false

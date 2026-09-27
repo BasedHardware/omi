@@ -23,11 +23,21 @@ on:
       - "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift"
       - "desktop/macos/Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-backend-contracts-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   desktop-core-e2e-t0:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v6
         with:
@@ -35,6 +45,12 @@ jobs:
 
       - name: Install flow lint dependency
         run: python3 -m pip install PyYAML
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/macos/agent/package-lock.json
 
       - name: Install agent runtime for gauntlet self-check
         working-directory: desktop/macos/agent
@@ -45,6 +61,7 @@ jobs:
 
   contracts:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: ${{ github.workspace }}
@@ -54,6 +71,8 @@ jobs:
       GOOGLE_CLOUD_PROJECT: omi-contract-tests
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v6
         with:

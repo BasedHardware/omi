@@ -149,7 +149,7 @@ jobs:
           cache-dependency-glob: backend/pylock*.toml
 
       - name: Set up Helm
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
 
       - name: Install backend dependencies
         working-directory: backend

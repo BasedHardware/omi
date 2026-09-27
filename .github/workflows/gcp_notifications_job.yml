@@ -64,7 +64,7 @@ jobs:
       - name: Google Auth (development WIF)
         id: auth-wif
         if: github.event.inputs.environment == 'development'
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-notif-dev/providers/github
           service_account: omi-gha-notif-job-dev@based-hardware-dev.iam.gserviceaccount.com
@@ -77,7 +77,7 @@ jobs:
       - name: Google Auth (prod WIF)
         id: auth
         if: github.event.inputs.environment == 'prod'
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-notif-prod/providers/github
           service_account: omi-gha-notif-job-prod@based-hardware.iam.gserviceaccount.com
@@ -86,7 +86,7 @@ jobs:
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
 
       - name: Compute short SHA
         id: image-tag
@@ -99,7 +99,7 @@ jobs:
         run: python3 -m pip install -q pyyaml
 
       - name: Get GKE credentials for gateway serving gate
-        uses: google-github-actions/get-gke-credentials@v3
+        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: ${{ env.REGION }}
@@ -130,7 +130,7 @@ jobs:
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows
 
       - name: Build runtime image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           file: ./backend/modal/Dockerfile.notifications_job
@@ -169,7 +169,7 @@ jobs:
 
       - name: Deploy to Cloud Run
         id: deploy
-        uses: google-github-actions/deploy-cloudrun@v3
+        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d
         with:
           job: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
