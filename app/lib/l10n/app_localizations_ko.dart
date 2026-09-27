@@ -11163,4 +11163,61 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => '헤드폰';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => '분';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => '작업';
+
+  @override
+  String get usageMonth => '이번 달';
+
+  @override
+  String get usageYear => '올해';
+
+  @override
+  String get usageAll => '전체 기간';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => '화면 모드';
+
+  @override
+  String get appearanceSystem => '시스템';
+
+  @override
+  String get appearanceLight => '라이트';
+
+  @override
+  String get appearanceDark => '다크';
 }

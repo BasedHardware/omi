@@ -268,13 +268,13 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
         itemCount: 8, // Show 8 shimmer items
         itemBuilder: (context, index) {
           return ShimmerWithTimeout(
-            baseColor: AppStyles.backgroundSecondary,
-            highlightColor: AppStyles.backgroundTertiary,
+            baseColor: OmiColors.surface1,
+            highlightColor: OmiColors.surface3,
             child: Container(
               margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
               height: 88, // Approximate height of a memory item
-              decoration: const BoxDecoration(
-                color: AppStyles.backgroundSecondary,
+              decoration: BoxDecoration(
+                color: OmiColors.surface1,
                 borderRadius: OmiRadius.mdAll,
               ),
             ),

@@ -108,7 +108,7 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
                               ),
                               borderRadius: const BorderRadius.all(Radius.circular(4)),
                             ),
-                            child: isCompleted ? const Icon(Icons.check, size: 14, color: OmiColors.onAccent) : null,
+                            child: isCompleted ? Icon(Icons.check, size: 14, color: OmiColors.onAccent) : null,
                           ),
                         ),
                       ),
@@ -194,7 +194,7 @@ class _SectionHeader extends StatelessWidget {
             excludeSemantics: true,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 2),
-              decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+              decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
               child: Text(
                 '$count',
                 style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
@@ -219,7 +219,7 @@ class _PlaceholderRow extends StatelessWidget {
       child: Container(
         constraints: const BoxConstraints(minHeight: 52),
         alignment: Alignment.center,
-        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
         child: Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
       ),
     );

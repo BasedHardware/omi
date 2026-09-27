@@ -239,6 +239,7 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
 
       moreMenu
     }
+    .fixedSize()
   }
 
   private var moreMenu: some View {

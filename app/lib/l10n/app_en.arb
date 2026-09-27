@@ -13493,5 +13493,69 @@
     "deviceOnboardingVoiceReplyGenericHeadphones": "Headphones",
     "@deviceOnboardingVoiceReplyGenericHeadphones": {
         "description": "Generic fallback name for connected headphones when the system does not provide a device name"
-    }
+    },
+    "usageListened": "Listened",
+    "@usageListened": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageWordsHeard": "Words heard",
+    "@usageWordsHeard": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageTasksNotes": "Tasks & notes",
+    "@usageTasksNotes": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usagePeakHour": "Peak hour",
+    "@usagePeakHour": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageBestDay": "Best day",
+    "@usageBestDay": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageBestMonth": "Best month",
+    "@usageBestMonth": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageBestYear": "Best year",
+    "@usageBestYear": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageMinutes": "Minutes",
+    "@usageMinutes": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageWords": "Words",
+    "@usageWords": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageTasks": "Tasks",
+    "@usageTasks": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageMonth": "Month",
+    "@usageMonth": {
+        "description": "Plan and Usage period selector"
+    },
+    "usageYear": "Year",
+    "@usageYear": {
+        "description": "Plan and Usage period selector"
+    },
+    "usageAll": "All time",
+    "@usageAll": {
+        "description": "Plan and Usage period selector"
+    },
+    "usageNow": "now",
+    "@usageNow": {
+        "description": "Current hour marker on Plan and Usage chart"
+    },
+    "usageChatThisMonth": "Chat this month",
+    "@usageChatThisMonth": {
+        "description": "Label for monthly chat usage meter"
+    },
+    "appearance": "Appearance",
+    "appearanceSystem": "System",
+    "appearanceLight": "Light",
+    "appearanceDark": "Dark"
 }

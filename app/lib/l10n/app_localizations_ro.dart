@@ -11402,4 +11402,61 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Căști';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minute';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Sarcini';
+
+  @override
+  String get usageMonth => 'Luna aceasta';
+
+  @override
+  String get usageYear => 'Anul acesta';
+
+  @override
+  String get usageAll => 'Toate timpurile';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Aspect';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Luminos';
+
+  @override
+  String get appearanceDark => 'Întunecat';
 }

@@ -38,6 +38,17 @@ environments:
               key: TWILIO_TWIML_APP_SID
           USE_VERTEX_AI:
             value: 'true'
+          TTS_PROVIDER:
+            value: gemini
+            category: rollout
+          GEMINI_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: GEMINI_API_KEY
+          ELEVENLABS_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: ELEVENLABS_API_KEY
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -73,6 +84,12 @@ environments:
             category: runtime_identity
           STT_CONNECT_ORDER_FROM_CONFIG:
             value: 'true'
+            category: rollout
+          STT_MULTI_LANGUAGE_HINTS:
+            value: 'true'
+            category: rollout
+          STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
+            value: '100'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
             value: '100'
@@ -151,7 +168,7 @@ environments:
             value: '900'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-            value: 'off'
+            value: gateway
             category: rollout
           ACCOUNT_CUTOVER_ENFORCEMENT:
             value: 'off'
@@ -279,6 +296,15 @@ environments:
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -377,6 +403,15 @@ environments:
             category: rollout
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
             category: rollout
           GITHUB_TOKEN:
             secret:
@@ -550,6 +585,9 @@ environments:
           category: rollout
         USE_VERTEX_AI:
           value: 'true'
+        TTS_PROVIDER:
+          value: gemini
+          category: rollout
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
         GCP_LOCATION:
@@ -563,6 +601,9 @@ environments:
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
       secrets:
+        GEMINI_API_KEY:
+          secret: GEMINI_API_KEY
+          version: latest
         METRICS_SECRET:
           secret: METRICS_SECRET
           version: latest
@@ -702,7 +743,7 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
@@ -791,6 +832,15 @@ environments:
             MEMORY_OWNER_JEV_FLIP_ENABLED:
               value: 'true'
               category: rollout
+            CAPTURE_JEV_SHADOW_ENABLED:
+              value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+            CAPTURE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -837,6 +887,10 @@ environments:
               provisional: true
               value: 'false'
               category: rollout
+            SYNC_BACKFILL_UID_SEQUENCER:
+              provisional: true
+              value: 'off'
+              category: rollout
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -871,7 +925,7 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
@@ -992,6 +1046,15 @@ environments:
             MEMORY_OWNER_JEV_FLIP_ENABLED:
               value: 'true'
               category: rollout
+            CAPTURE_JEV_SHADOW_ENABLED:
+              value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+            CAPTURE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
           forbidden_env:
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -1041,6 +1104,10 @@ environments:
               provisional: true
               value: 'false'
               category: rollout
+            SYNC_BACKFILL_UID_SEQUENCER:
+              provisional: true
+              value: 'off'
+              category: rollout
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -1075,7 +1142,7 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
@@ -1156,6 +1223,15 @@ environments:
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: '1.0'
+              category: rollout
+            CAPTURE_JEV_SHADOW_ENABLED:
+              value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+            CAPTURE_JEV_SHADOW_PERCENT:
+              value: '0'
               category: rollout
           provisional: true
           forbidden_env:
@@ -1241,7 +1317,7 @@ environments:
               value: 'false'
               category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
@@ -1650,6 +1726,17 @@ environments:
               key: TWILIO_TWIML_APP_SID
           USE_VERTEX_AI:
             value: 'true'
+          TTS_PROVIDER:
+            value: gemini
+            category: rollout
+          GEMINI_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: GEMINI_API_KEY
+          ELEVENLABS_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: ELEVENLABS_API_KEY
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -1685,6 +1772,12 @@ environments:
             category: runtime_identity
           STT_CONNECT_ORDER_FROM_CONFIG:
             value: 'true'
+            category: rollout
+          STT_MULTI_LANGUAGE_HINTS:
+            value: 'true'
+            category: rollout
+          STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
+            value: '25'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
             value: '0'
@@ -1903,6 +1996,15 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -1974,6 +2076,15 @@ environments:
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       config_map:
         name: prod-omi-backend-config
         entries:
@@ -2053,6 +2164,9 @@ environments:
           category: rollout
         USE_VERTEX_AI:
           value: 'true'
+        TTS_PROVIDER:
+          value: gemini
+          category: rollout
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware
         GCP_LOCATION:
@@ -2066,6 +2180,9 @@ environments:
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
       secrets:
+        GEMINI_API_KEY:
+          secret: DESKTOP_GEMINI_API_KEY
+          version: latest
         METRICS_SECRET:
           secret: METRICS_SECRET
           version: latest
@@ -2209,7 +2326,7 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
@@ -2310,6 +2427,15 @@ environments:
             MCP_OAUTH_CLAUDE_REDIRECT_URIS:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
+            CAPTURE_JEV_SHADOW_ENABLED:
+              value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+            CAPTURE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -2352,6 +2478,10 @@ environments:
               provisional: true
               value: 'false'
               category: rollout
+            SYNC_BACKFILL_UID_SEQUENCER:
+              provisional: true
+              value: 'off'
+              category: rollout
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -2386,7 +2516,7 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
@@ -2495,6 +2625,15 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
+            CAPTURE_JEV_SHADOW_ENABLED:
+              value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+            CAPTURE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -2539,6 +2678,10 @@ environments:
               provisional: true
               value: 'false'
               category: rollout
+            SYNC_BACKFILL_UID_SEQUENCER:
+              provisional: true
+              value: 'off'
+              category: rollout
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -2573,7 +2716,7 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
@@ -2664,6 +2807,15 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
+            CAPTURE_JEV_SHADOW_ENABLED:
+              value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+            CAPTURE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
           provisional: true
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -2743,7 +2895,7 @@ environments:
               value: 'false'
               category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'

@@ -108,6 +108,7 @@ def receiver():
         language='en',
         stt_language='multi',
         multi_lang_enabled=True,
+        language_profile=None,
         stt_model='parakeet-window',
         stt_service=st.STTService.parakeet,
         vocabulary=[],
@@ -335,7 +336,7 @@ async def test_soniox_primary_can_reach_window_and_old_callbacks_are_fenced(monk
     await asyncio.gather(first.raw._pump_task, return_exceptions=True)
     callbacks = []
 
-    async def soniox(callback, *args):
+    async def soniox(callback, *args, **kwargs):
         callbacks.append(callback)
         return SimpleNamespace(is_connection_dead=False, finish=lambda: None)
 
@@ -426,7 +427,7 @@ async def test_real_receiver_initializes_window_and_survives_post_failure(monkey
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     callbacks = []
 
-    async def tail(callback, *args):
+    async def tail(callback, *args, **kwargs):
         callbacks.append(callback)
         return SimpleNamespace(
             is_connection_dead=False, send=lambda _: True, finalize=lambda: None, finish=lambda: None

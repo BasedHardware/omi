@@ -342,7 +342,9 @@ class TestIsTrialPaywalledBehavioral:
         self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:deepgram')
         self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:deepgram:strict')
         self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123')
-        assert self._sub.redis_db.delete_generic_cache.call_count == 7
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:managed')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:openai:managed')
+        assert self._sub.redis_db.delete_generic_cache.call_count == 14
 
 
 class TestByokRequestEscapeHatch:
@@ -468,6 +470,14 @@ class TestByokRequestEscapeHatch:
         self._byok._byok_validated_ctx.set(True)
         self._byok.set_byok_uid('uid-stale-firestore')
         assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop') is False
+
+    def test_managed_credential_surface_does_not_accept_byok_exemption(self):
+        self._byok.set_byok_keys({'openai': 'sk-stub'})
+        self._byok.set_byok_uid('uid-stale-firestore')
+        self._byok._byok_validated_ctx.set(True)
+
+        assert self._sub.is_trial_paywalled('uid-stale-firestore', 'desktop', byok_exempt=False) is True
+        self._sub.redis_db.get_generic_cache.assert_called_with('trial_paywall:expired:uid-stale-firestore:managed')
 
     def test_validated_deepgram_only_header_still_paywalls(self):
         self._byok.set_byok_keys({'deepgram': 'stub-deepgram'})

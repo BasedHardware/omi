@@ -11384,4 +11384,61 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Koptelefoon';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minuten';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Taken';
+
+  @override
+  String get usageMonth => 'Deze maand';
+
+  @override
+  String get usageYear => 'Dit jaar';
+
+  @override
+  String get usageAll => 'Altijd';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Uiterlijk';
+
+  @override
+  String get appearanceSystem => 'Systeem';
+
+  @override
+  String get appearanceLight => 'Licht';
+
+  @override
+  String get appearanceDark => 'Donker';
 }
