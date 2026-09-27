@@ -125,7 +125,7 @@ def _ensure_detector_seeded() -> None:
         _detector_seeded = True
 
 
-# Languages with 100% accuracy in langdetect
+# Languages recognized by langdetect; membership does not imply reliable identification.
 LANGDETECT_RELIABLE_LANGUAGES = {
     'af',
     'ar',
@@ -342,6 +342,22 @@ def classify_translation_need(text: str, target_language: str, is_stable: bool =
 
     # Low-confidence foreign — defer
     return TranslationNeed.DEFER
+
+
+def expected_foreign_language(text: str, target: str, expected: Tuple[str, ...]) -> Optional[str]:
+    """Look for confident expected foreign clauses hidden by a dominant language.
+
+    Bounded to eight clauses / 1024 characters. This does not infer languages
+    from the profile alone and never changes the STT provider's inputs.
+    """
+    foreign = {code.split('-')[0].lower() for code in expected} - {target.split('-')[0].lower()}
+    if not foreign:
+        return None
+    for clause in re.split(r'[,;.!?。！？।\n]+', text[:1024])[:8]:
+        language, confidence = detect_language_with_confidence(clause)
+        if language and language.split('-')[0].lower() in foreign and confidence >= CONFIDENCE_FOREIGN_TRANSLATE:
+            return language
+    return None
 
 
 def split_into_sentences(text: str) -> List[str]:
