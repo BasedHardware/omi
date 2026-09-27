@@ -11400,4 +11400,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Tối';
+
+  @override
+  String get chatDiscardRecording => 'Hủy bỏ';
 }

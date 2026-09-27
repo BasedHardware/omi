@@ -11441,4 +11441,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Donker';
+
+  @override
+  String get chatDiscardRecording => 'Verwerpen';
 }

@@ -11194,4 +11194,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appearanceDark => '深色';
+
+  @override
+  String get chatDiscardRecording => '放弃';
 }

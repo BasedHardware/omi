@@ -3597,5 +3597,6 @@
     "appearance": "Utseende",
     "appearanceSystem": "System",
     "appearanceLight": "Ljust",
-    "appearanceDark": "Mörkt"
+    "appearanceDark": "Mörkt",
+    "chatDiscardRecording": "Förkasta"
 }

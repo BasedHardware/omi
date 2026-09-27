@@ -11157,5 +11157,6 @@
     "appearance": "Hitsura",
     "appearanceSystem": "System",
     "appearanceLight": "Maliwanag",
-    "appearanceDark": "Madilim"
+    "appearanceDark": "Madilim",
+    "chatDiscardRecording": "Itapon"
 }

@@ -11441,4 +11441,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Tamno';
+
+  @override
+  String get chatDiscardRecording => 'Odbaci';
 }

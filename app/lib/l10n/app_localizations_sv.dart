@@ -11414,4 +11414,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Mörkt';
+
+  @override
+  String get chatDiscardRecording => 'Förkasta';
 }

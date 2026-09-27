@@ -3597,5 +3597,6 @@
     "appearance": "Облик",
     "appearanceSystem": "Система",
     "appearanceLight": "Светла",
-    "appearanceDark": "Тъмна"
+    "appearanceDark": "Тъмна",
+    "chatDiscardRecording": "Отхвърляне"
 }

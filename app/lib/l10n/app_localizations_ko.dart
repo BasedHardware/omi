@@ -11220,4 +11220,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get appearanceDark => '다크';
+
+  @override
+  String get chatDiscardRecording => '삭제';
 }

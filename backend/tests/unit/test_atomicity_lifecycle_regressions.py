@@ -79,7 +79,7 @@ def test_preference_tool_blocks_exact_normalized_duplicate(preference_tools_modu
         [{"memory_id": "dup", "content": "  Prefers Google Calendar over Outlook "}],
     )
     assert message is not None
-    assert message.startswith("Similar preference already exists:")
+    assert message.startswith("Similar preference already exists (memory_id=dup):")
 
 
 def test_preference_tool_honors_real_relevance_score(preference_tools_module):
@@ -122,7 +122,7 @@ def test_preference_tool_writes_retry_stable_agent_conclusion_to_ledger(preferen
     first = module.save_user_preference_tool("Prefers metric units", config=config)
     second = module.save_user_preference_tool("Prefers metric units", config=config)
 
-    assert first == second == "Preference saved: Prefers metric units"
+    assert first == second == "Preference saved (memory_id=mem_ledger): Prefers metric units"
     assert save_fact.call_count == 2
     first_call = save_fact.call_args_list[0]
     second_call = save_fact.call_args_list[1]
@@ -165,13 +165,16 @@ def test_preference_tool_persists_canonical_slot_and_drops_unknown_names(prefere
     known = module.save_user_preference_tool("Lives in Brooklyn", slot=" Home-Location ", config=config)
     unknown = module.save_user_preference_tool("Prefers dark mode", slot="invented_slot", config=config)
 
-    assert known == "Preference saved: Lives in Brooklyn"
-    assert unknown == "Preference saved: Prefers dark mode"
+    assert known == "Preference saved (memory_id=mem_ledger): Lives in Brooklyn"
+    assert unknown == "Preference saved (memory_id=mem_ledger): Prefers dark mode"
     assert save_fact.call_args_list[0].kwargs["slot"] == "home_city"
     assert save_fact.call_args_list[1].kwargs["slot"] is None
 
 
-def test_preference_tool_uses_strict_compatibility_writer_in_default_mode(preference_tools_module, monkeypatch):
+@pytest.mark.parametrize("user_stated", [False, True])
+def test_preference_tool_uses_strict_compatibility_writer_in_default_mode(
+    preference_tools_module, monkeypatch, user_stated
+):
     """The default writer mode retains the released MemoryService contract."""
     module = preference_tools_module
     firestore_client = object()
@@ -187,7 +190,7 @@ def test_preference_tool_uses_strict_compatibility_writer_in_default_mode(prefer
         @classmethod
         def model_validate(cls, payload):
             assert payload["category"] == "system"
-            assert payload["manually_added"] is False
+            assert payload["manually_added"] is user_stated
             assert payload["visibility"] == "private"
             assert payload["tags"] == ["agent-learned"]
             assert "ledger_schema_version" not in payload
@@ -235,9 +238,9 @@ def test_preference_tool_uses_strict_compatibility_writer_in_default_mode(prefer
     )
     config = {"configurable": {"user_id": "user-compat", "chat_session_id": "chat-compat"}}
 
-    result = module.save_user_preference_tool("Prefers metric units", config=config)
+    result = module.save_user_preference_tool("Prefers metric units", user_stated=user_stated, config=config)
 
-    assert result == "Preference saved: Prefers metric units"
+    assert result == "Preference saved (memory_id=mem-compat): Prefers metric units"
     save_fact.assert_not_called()
     capture_memory_write.assert_called_once()
     capture = capture_memory_write.call_args.kwargs
@@ -248,9 +251,126 @@ def test_preference_tool_uses_strict_compatibility_writer_in_default_mode(prefer
     assert captured_memory["id"] == "mem-compat"
     assert captured_memory["content"] == "Prefers metric units"
     assert captured_memory["category"] == "system"
+    assert captured_memory["manually_added"] is user_stated
     assert captured_memory["tags"] == ["agent-learned"]
     assert captured_memory["scoring"] == "00_999_0000000000"
     assert "ledger_schema_version" not in captured_memory
+
+
+def test_user_stated_ledger_preference_keeps_existing_ledger_writer(preference_tools_module, monkeypatch):
+    module = preference_tools_module
+    writes = MagicMock(return_value='mem-ledger')
+    monkeypatch.setattr(module, 'get_data_plane_firestore_client', lambda: object())
+    monkeypatch.setattr(module, 'search_canonical_memories', lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        module,
+        'ensure_canonical_apply_control_state',
+        lambda *_args, **_kwargs: types.SimpleNamespace(writer_mode=WriterMode.ledger),
+    )
+    monkeypatch.setattr(module, 'save_fact', writes)
+    monkeypatch.setattr(module, 'capture_memory_write', MagicMock())
+
+    result = module.save_user_preference_tool(
+        'Likes hot pot',
+        user_stated=True,
+        config={'configurable': {'user_id': 'user-1', 'chat_session_id': 'chat-1'}},
+    )
+
+    assert result == 'Preference saved (memory_id=mem-ledger): Likes hot pot'
+    assert writes.call_args.kwargs['write_reason'] == module.LedgerWriteReason.agent_reusable_conclusion
+    assert '_direct_user_authority' not in writes.call_args.kwargs
+
+
+def test_user_stated_chat_preference_enters_required_short_term_processing():
+    from utils.memory.required_promotion import required_processing_payload
+
+    payload = required_processing_payload(
+        {'id': 'chat-memory', 'content': 'Likes hot pot', 'manually_added': True},
+        source_surface='agent_preference',
+    )
+    assert payload['memory_tier'] == 'short_term'
+    assert payload['user_asserted'] is True
+    assert payload['promotion']['required'] is True
+    assert payload['promotion']['source_surface'] == 'agent_preference'
+
+
+def test_preference_correction_supersedes_ledger_fact(preference_tools_module, monkeypatch):
+    module = preference_tools_module
+
+    class Provenance:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+        def model_copy(self, *, update):
+            return Provenance(**(self.__dict__ | update))
+
+    monkeypatch.setattr(module, 'LedgerProvenance', Provenance)
+    prior = types.SimpleNamespace(
+        status=types.SimpleNamespace(value='active'),
+        superseded_by=None,
+        content='Likes sitran mala',
+        ledger_schema_version='knowledge_ledger.v1',
+        slot=None,
+        subject_scope=None,
+        subject_entity_id=None,
+        curation_weight=0,
+        visibility='private',
+    )
+    amended = MagicMock(return_value='mem-corrected')
+    monkeypatch.setattr(module, 'get_data_plane_firestore_client', lambda: object())
+    monkeypatch.setattr(module, 'read_canonical_memory_item', lambda *_args, **_kwargs: prior)
+    monkeypatch.setattr(module, 'MemoryService', MagicMock())
+    monkeypatch.setattr(module, 'amend_fact', amended)
+    config = {
+        'configurable': {
+            'user_id': 'user-1',
+            'chat_session_id': 'chat-1',
+        }
+    }
+
+    result = module.save_user_preference_tool(
+        'Likes Szechuan Mala',
+        replace_memory_id='mem-original',
+        user_stated=True,
+        config=config,
+    )
+
+    assert result == 'Preference updated (memory_id=mem-corrected): Likes Szechuan Mala'
+    assert amended.call_args.args[:3] == ('user-1', 'mem-original', 'Likes Szechuan Mala')
+    assert amended.call_args.kwargs['provenance'].source_type == 'agent_chat_correction'
+
+
+def test_preference_correction_updates_preledger_canonical_item(preference_tools_module, monkeypatch):
+    module = preference_tools_module
+    prior = types.SimpleNamespace(
+        status=types.SimpleNamespace(value='active'),
+        superseded_by=None,
+        content='Likes sitran mala',
+        ledger_schema_version=None,
+    )
+    service = MagicMock()
+    monkeypatch.setattr(module, 'get_data_plane_firestore_client', lambda: object())
+    monkeypatch.setattr(module, 'read_canonical_memory_item', lambda *_args, **_kwargs: prior)
+    monkeypatch.setattr(module, 'MemoryService', MagicMock(return_value=service))
+    monkeypatch.setattr(module, 'amend_fact', MagicMock())
+
+    result = module.save_user_preference_tool(
+        'Likes Szechuan Mala',
+        replace_memory_id='mem-original',
+        user_stated=True,
+        config={'configurable': {'user_id': 'user-1'}},
+    )
+
+    assert result == 'Preference updated (memory_id=mem-original): Likes Szechuan Mala'
+    service.update_external_memory_content.assert_called_once_with(
+        'user-1',
+        'mem-original',
+        'Likes Szechuan Mala',
+        memory_system=module.MemorySystem.CANONICAL,
+        consumer='agent_preference',
+        operation='correct_user_preference',
+    )
+    module.amend_fact.assert_not_called()
 
 
 def test_preference_tool_fails_closed_during_writer_transition(preference_tools_module, monkeypatch):

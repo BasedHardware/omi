@@ -11441,4 +11441,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get appearanceDark => 'ಕತ್ತಲೆ';
+
+  @override
+  String get chatDiscardRecording => 'ತ್ಯಜಿಸಿ';
 }

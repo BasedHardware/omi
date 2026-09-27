@@ -3597,5 +3597,6 @@
     "appearance": "Aparença",
     "appearanceSystem": "Sistema",
     "appearanceLight": "Clar",
-    "appearanceDark": "Fosc"
+    "appearanceDark": "Fosc",
+    "chatDiscardRecording": "Descarta"
 }

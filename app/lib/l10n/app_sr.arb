@@ -11157,5 +11157,6 @@
     "appearance": "Izgled",
     "appearanceSystem": "Sistem",
     "appearanceLight": "Svetlo",
-    "appearanceDark": "Tamno"
+    "appearanceDark": "Tamno",
+    "chatDiscardRecording": "Одбаци"
 }

@@ -11426,4 +11426,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Темна';
+
+  @override
+  String get chatDiscardRecording => 'Скасувати';
 }

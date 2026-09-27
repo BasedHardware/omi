@@ -3632,5 +3632,6 @@
     "appearance": "Tampilan",
     "appearanceSystem": "Sistem",
     "appearanceLight": "Terang",
-    "appearanceDark": "Gelap"
+    "appearanceDark": "Gelap",
+    "chatDiscardRecording": "Buang"
 }

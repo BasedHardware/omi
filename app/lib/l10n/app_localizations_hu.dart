@@ -11449,4 +11449,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Sötét';
+
+  @override
+  String get chatDiscardRecording => 'Elvetés';
 }

@@ -326,7 +326,7 @@ def get_memories_tool(
         records.append(
             format_memory_evidence(
                 memory.content,
-                suffix=f'date: {date_str}',
+                suffix=f'memory_id: {memory.id}, date: {date_str}',
                 subject_attribution=getattr(memory, 'subject_attribution', 'unknown'),
             )
         )
@@ -490,7 +490,9 @@ def search_memories_tool(
             score = match.score
             display_date = _memory_read_date(memory, temporal=effective_view != 'released')
             date_str = format_local_date(display_date, display_tz) if display_date else 'Unknown'
-            suffix = f"relevance: {score:.2f}, category: {memory.category.value}, date: {date_str}"
+            suffix = (
+                f"memory_id: {memory.id}, relevance: {score:.2f}, category: {memory.category.value}, date: {date_str}"
+            )
             if effective_view != 'released':
                 band = getattr(memory, 'currency_band', None)
                 evidence_date = getattr(memory, 'as_of', None)

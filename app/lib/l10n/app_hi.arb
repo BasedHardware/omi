@@ -3597,5 +3597,6 @@
     "appearance": "दिखावट",
     "appearanceSystem": "सिस्टम",
     "appearanceLight": "लाइट",
-    "appearanceDark": "डार्क"
+    "appearanceDark": "डार्क",
+    "chatDiscardRecording": "रद्द करें"
 }

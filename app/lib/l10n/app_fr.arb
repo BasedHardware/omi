@@ -3632,5 +3632,6 @@
     "appearance": "Apparence",
     "appearanceSystem": "Système",
     "appearanceLight": "Clair",
-    "appearanceDark": "Sombre"
+    "appearanceDark": "Sombre",
+    "chatDiscardRecording": "Ignorer"
 }

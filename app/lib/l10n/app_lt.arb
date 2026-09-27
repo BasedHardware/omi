@@ -3597,5 +3597,6 @@
     "appearance": "Išvaizda",
     "appearanceSystem": "Sistema",
     "appearanceLight": "Šviesus",
-    "appearanceDark": "Tamsus"
+    "appearanceDark": "Tamsus",
+    "chatDiscardRecording": "Atmesti"
 }

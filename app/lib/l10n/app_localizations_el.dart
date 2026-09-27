@@ -11483,4 +11483,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Σκοτεινό';
+
+  @override
+  String get chatDiscardRecording => 'Απόρριψη';
 }

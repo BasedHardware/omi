@@ -13557,5 +13557,9 @@
     "appearance": "Appearance",
     "appearanceSystem": "System",
     "appearanceLight": "Light",
-    "appearanceDark": "Dark"
+    "appearanceDark": "Dark",
+    "chatDiscardRecording": "Discard",
+    "@chatDiscardRecording": {
+        "description": "Discard the current chat voice recording without transcription"
+    }
 }

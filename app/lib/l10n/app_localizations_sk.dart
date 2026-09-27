@@ -11396,4 +11396,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Tmavý';
+
+  @override
+  String get chatDiscardRecording => 'Zahodiť';
 }

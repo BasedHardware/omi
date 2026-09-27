@@ -11441,4 +11441,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Ciemny';
+
+  @override
+  String get chatDiscardRecording => 'Odrzuć';
 }

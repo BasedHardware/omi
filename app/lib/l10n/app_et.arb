@@ -3597,5 +3597,6 @@
     "appearance": "Välimus",
     "appearanceSystem": "Süsteem",
     "appearanceLight": "Hele",
-    "appearanceDark": "Tume"
+    "appearanceDark": "Tume",
+    "chatDiscardRecording": "Loobu"
 }

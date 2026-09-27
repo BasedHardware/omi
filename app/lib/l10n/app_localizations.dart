@@ -20774,6 +20774,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dark'**
   String get appearanceDark;
+
+  /// Discard the current chat voice recording without transcription
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get chatDiscardRecording;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

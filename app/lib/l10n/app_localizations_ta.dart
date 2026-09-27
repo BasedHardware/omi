@@ -11483,4 +11483,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get appearanceDark => 'இருள்';
+
+  @override
+  String get chatDiscardRecording => 'நிராகரி';
 }

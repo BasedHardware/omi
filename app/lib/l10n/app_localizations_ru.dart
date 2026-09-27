@@ -11444,4 +11444,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Тёмная';
+
+  @override
+  String get chatDiscardRecording => 'Отменить';
 }

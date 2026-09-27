@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -531,6 +532,65 @@ void main() {
       expect(provider.state, equals(VoiceRecorderState.idle));
       expect(wavFile.existsSync(), isFalse);
       expect(SharedPreferencesUtil().getString('voice_recorder_pending_wav_path'), isEmpty);
+    });
+
+    test('discard removes a pending recording without transcribing', () async {
+      final wavFile = await createPendingWav('discard_pending.wav');
+      var calls = 0;
+      final provider = VoiceRecorderProvider(transcriber: (_) async {
+        calls++;
+        return 'unexpected';
+      });
+      await provider.checkPendingRecording();
+
+      await provider.discardRecording();
+
+      expect(provider.state, VoiceRecorderState.idle);
+      expect(wavFile.existsSync(), isFalse);
+      expect(SharedPreferencesUtil().getString('voice_recorder_pending_wav_path'), isEmpty);
+      expect(calls, 0);
+    });
+
+    test('discard removes a failed recording without retrying transcription', () async {
+      final wavFile = await createPendingWav('discard_failed.wav');
+      var calls = 0;
+      final provider = VoiceRecorderProvider(transcriber: (_) async {
+        calls++;
+        return '';
+      });
+      await provider.checkPendingRecording();
+      await provider.retry();
+      expect(provider.state, VoiceRecorderState.transcribeFailed);
+
+      await provider.discardRecording();
+
+      expect(provider.state, VoiceRecorderState.idle);
+      expect(wavFile.existsSync(), isFalse);
+      expect(calls, 1);
+    });
+
+    test('discard ignores a late transcription result', () async {
+      final wavFile = await createPendingWav('discard_late.wav');
+      final pending = Completer<String>();
+      final started = Completer<void>();
+      var transcriptCallbackCalled = false;
+      final provider = VoiceRecorderProvider(transcriber: (_) {
+        started.complete();
+        return pending.future;
+      });
+      provider.setCallbacks(onTranscriptReady: (_, __) => transcriptCallbackCalled = true);
+      await provider.checkPendingRecording();
+
+      final retry = provider.retry();
+      await started.future;
+      await provider.discardRecording();
+      pending.complete('discarded words');
+      await retry;
+
+      expect(provider.state, VoiceRecorderState.idle);
+      expect(provider.transcript, isEmpty);
+      expect(transcriptCallbackCalled, isFalse);
+      expect(wavFile.existsSync(), isFalse);
     });
   });
 }

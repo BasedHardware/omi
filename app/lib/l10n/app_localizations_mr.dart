@@ -11413,4 +11413,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get appearanceDark => 'गडद';
+
+  @override
+  String get chatDiscardRecording => 'टाकून द्या';
 }

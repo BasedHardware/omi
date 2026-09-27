@@ -3597,5 +3597,6 @@
     "appearance": "Darstellung",
     "appearanceSystem": "System",
     "appearanceLight": "Hell",
-    "appearanceDark": "Dunkel"
+    "appearanceDark": "Dunkel",
+    "chatDiscardRecording": "Verwerfen"
 }

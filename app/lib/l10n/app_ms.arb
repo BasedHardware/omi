@@ -3597,5 +3597,6 @@
     "appearance": "Penampilan",
     "appearanceSystem": "Sistem",
     "appearanceLight": "Cerah",
-    "appearanceDark": "Gelap"
+    "appearanceDark": "Gelap",
+    "chatDiscardRecording": "Buang"
 }
