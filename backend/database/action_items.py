@@ -139,6 +139,22 @@ def get_action_item_ids(uid: str, *, firestore_client: Any = None) -> List[str]:
     return [doc.id for doc in _iter_query_pages(query)]
 
 
+def iter_all_action_items(uid: str, *, firestore_client: Any = None) -> Iterable[Dict[str, Any]]:
+    """Stream every non-deleted action item, including fields the list reader omits.
+
+    Account export must not page ``get_action_items``. That reader caps at
+    ``_ACTION_ITEMS_LIST_HARD_MAX`` and its projection leaves ``provenance`` out.
+    """
+    client = firestore_client or get_firestore_client()
+    query = client.collection('users').document(uid).collection(action_items_collection).order_by('__name__')
+    for doc in _iter_query_pages(query):
+        data = typed_doc(doc)
+        if data.get('deleted'):
+            continue
+        data['id'] = doc.id
+        yield prepare_action_item_for_read(data)
+
+
 def get_visible_action_item_ids(
     uid: str,
     *,
