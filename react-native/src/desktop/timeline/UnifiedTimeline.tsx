@@ -8,7 +8,6 @@ import type {
   MemoryProjection,
   TaskProjection,
 } from '../../desktopReadClient';
-import {ScrollFade, useScrollFade} from '../ScrollFade';
 import {OmiLoadingMark} from '../../ui/OmiLoadingMark';
 import {
   type DesktopTokens,
@@ -167,16 +166,12 @@ export function UnifiedTimeline({
 }) {
   const styles = useDesktopStyleSheets(createStyles);
   const {tokens: token} = useDesktopTheme();
-  const fade = useScrollFade();
   const {entries, failures} = mergeTimeline(outcomes, query);
   let lastDay = '';
   return (
-    <ScrollFade visible style={styles.root}>
+    <View style={styles.root}>
       <ScrollView
         accessibilityLabel="Unified timeline"
-        onLayout={fade.onLayout}
-        onScroll={fade.onScroll}
-        onContentSizeChange={fade.onContentSizeChange}
         scrollEventThrottle={16}
         contentContainerStyle={styles.content}>
         {loading && entries.length === 0 ? (
@@ -231,7 +226,7 @@ export function UnifiedTimeline({
           );
         })}
       </ScrollView>
-    </ScrollFade>
+    </View>
   );
 }
 

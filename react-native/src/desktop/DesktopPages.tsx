@@ -12,7 +12,6 @@ import {matchesSearchQuery} from '../searchText';
 import {omiBackend, subscribeOmiBackendSessionInvalidated} from '../omiNative';
 import {ReadStatus} from '../ui/ReadStatus';
 import {ConversationDetail} from '../ui/ConversationDetail';
-import {ScrollFade, useScrollFade} from './ScrollFade';
 import {FocusPressable} from '../ui/Pressable';
 import {
   TaskEditor,
@@ -48,7 +47,6 @@ export function LibraryPage({
   notice?: string | null;
 }) {
   const styles = useDesktopStyleSheets(createStyles);
-  const fade = useScrollFade();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   useEffect(
     () => subscribeOmiBackendSessionInvalidated(() => setSelectedId(null)),
@@ -103,12 +101,9 @@ export function LibraryPage({
         </Text>
       ) : null}
       {selected !== null ? (
-        <ScrollFade visible style={styles.list}>
+        <View style={styles.list}>
           <ScrollView
             accessibilityLabel="Selected conversation details"
-            onLayout={fade.onLayout}
-            onScroll={fade.onScroll}
-            onContentSizeChange={fade.onContentSizeChange}
             scrollEventThrottle={16}
             contentContainerStyle={styles.conversationDetail}>
             <FocusPressable
@@ -155,13 +150,10 @@ export function LibraryPage({
               </View>
             )}
           </ScrollView>
-        </ScrollFade>
+        </View>
       ) : (
-        <ScrollFade visible style={styles.list}>
+        <View style={styles.list}>
           <ScrollView
-            onLayout={fade.onLayout}
-            onScroll={fade.onScroll}
-            onContentSizeChange={fade.onContentSizeChange}
             scrollEventThrottle={16}
             contentContainerStyle={styles.listContent}>
             {items.length === 0 ? (
@@ -233,7 +225,7 @@ export function LibraryPage({
               />
             ) : null}
           </ScrollView>
-        </ScrollFade>
+        </View>
       )}
     </View>
   );
@@ -255,7 +247,6 @@ export function TasksPage({
 }) {
   const styles = useDesktopStyleSheets(createStyles);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const fade = useScrollFade();
   const outcome = outcomes?.tasks ?? null;
   const tasks = outcome?.status === 'success' ? outcome.value.items : [];
   const emptyCopy =
@@ -276,11 +267,8 @@ export function TasksPage({
         onRetryTaskMutation={onRetryTaskMutation}
         onDismissTaskMutation={onDismissTaskMutation}
       />
-      <ScrollFade visible style={styles.list}>
+      <View style={styles.list}>
         <ScrollView
-          onLayout={fade.onLayout}
-          onScroll={fade.onScroll}
-          onContentSizeChange={fade.onContentSizeChange}
           scrollEventThrottle={16}
           contentContainerStyle={styles.listContent}>
           {tasks.length > 0 ? (
@@ -369,7 +357,7 @@ export function TasksPage({
             <ReadStatus label="Tasks" mac page={outcome.value.page} />
           ) : null}
         </ScrollView>
-      </ScrollFade>
+      </View>
     </View>
   );
 }

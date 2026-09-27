@@ -8,7 +8,6 @@ import {FocusPressable} from '../ui/Pressable';
 import {OmiAvatar} from '../ui/OmiAvatar';
 import {ShippingPressable} from './ShippingPressable';
 import {useReduceMotion} from '../app/useReduceMotion';
-import {ScrollFade, useScrollFade} from './ScrollFade';
 import {
   type DesktopTokens,
   useDesktopTheme,
@@ -120,7 +119,6 @@ export function DesktopChat({
       scrollToBottom();
     }
   }, [following, submission, scrollToBottom]);
-  const fade = useScrollFade();
   const reduceMotion = useReduceMotion();
   const empty =
     messages.length === 0 ? (
@@ -171,12 +169,11 @@ export function DesktopChat({
     ) : null;
   return (
     <View style={styles.root} accessibilityLabel="Chat with Omi">
-      <ScrollFade visible style={styles.history}>
+      <View style={styles.history}>
         <ScrollView
           ref={list}
           contentContainerStyle={styles.messages}
-          onLayout={event => {
-            fade.onLayout(event);
+          onLayout={() => {
             scrollToBottom();
           }}
           onScrollBeginDrag={beginUserScroll}
@@ -191,7 +188,6 @@ export function DesktopChat({
           }}
           scrollEventThrottle={16}
           onScroll={event => {
-            fade.onScroll(event);
             const {contentOffset, contentSize, layoutMeasurement} =
               event.nativeEvent;
             if (userScrolling.current) {
@@ -206,7 +202,6 @@ export function DesktopChat({
             }
           }}
           onContentSizeChange={(width, height) => {
-            fade.onContentSizeChange(width, height);
             contentHeight.current = height;
             scrollToBottom();
           }}>
@@ -241,7 +236,7 @@ export function DesktopChat({
             <ChatThinking reduceMotion={reduceMotion} desktop />
           ) : null}
         </ScrollView>
-      </ScrollFade>
+      </View>
       {error ? (
         <Text accessibilityRole="alert" style={styles.error}>
           {error}
