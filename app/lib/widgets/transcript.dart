@@ -159,9 +159,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (OmiColors.active == OmiPalette.light) {
       if (isUser) return OmiColors.surface2;
       // Keep anonymous speaker bubbles quiet on the light canvas. Known
-      // speakers use a soft blue tint so their bubbles remain distinct without
-      // carrying the dark, saturated palette from dark mode.
-      return person == null ? const Color(0xFFE5E5EA) : const Color(0xFFE4EEFF);
+      // speakers use a pale tint of their speaker colour so their bubbles remain
+      // distinct without carrying the dark, saturated fill from dark mode.
+      if (person == null) return OmiColors.surface2;
+      final colorIndex = (person.colorIdx ?? speakerId) % _speakerColors.length;
+      return Color.alphaBlend(_speakerColors[colorIndex].withValues(alpha: 0.15), OmiColors.surface1);
     }
     if (isUser) return OmiColors.surface3;
     final colorIndex = (person?.colorIdx ?? speakerId) % _speakerColors.length;
