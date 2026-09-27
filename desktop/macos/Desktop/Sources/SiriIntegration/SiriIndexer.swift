@@ -307,6 +307,79 @@ actor SiriIndexer {
     scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
+  /// Resolve the requested IDs after acquiring the owner operation slot. A
+  /// query that fetched before a local delete must never restore that row
+  /// after its delete operation has finished.
+  @available(macOS 27, *)
+  func reindexConversations(ids: [String], expectedOwner: String) async throws {
+    let ids = Array(Set(ids.filter { !$0.isEmpty }))
+    guard !ids.isEmpty, let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
+    defer { finishOperation() }
+    let resolved = try await ConversationEntityQuery().entities(for: ids)
+    let noteIDs = resolved.filter { $0.folder?.id == "memories" }.map(\.id)
+    let noteRecords = try await MemoryStorage.shared.getSiriMemoryRecords(backendIds: noteIDs)
+    var validNotes: [String: MemoryRecord] = [:]
+    for record in noteRecords where SiriIndexScope.memory(record, now: Date()) {
+      if let id = record.backendId { validNotes[id] = record }
+    }
+    let entities = resolved.filter { $0.folder?.id != "memories" || validNotes[$0.id] != nil }
+    let present = Set(entities.map(\.id))
+    for chunk in ids.filter({ !present.contains($0) }).chunkedSiriIndex(200) {
+      try await index.deleteAppEntities(identifiedBy: chunk, ofType: ConversationEntity.self)
+    }
+    for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+    for entity in entities {
+      if entity.folder?.id == "memories", let record = validNotes[entity.id] {
+        indexedMemoryExpirations[entity.id] = SiriIndexScope.memoryNextCutoff(
+          expiresAt: record.expiresAt, invalidAt: record.siriLedgerMetadata["invalid_at"])
+      } else {
+        indexedConversationCutoffs[entity.id] = entity.creationDate?.addingTimeInterval(
+          SiriIndexScope.conversationAge)
+      }
+    }
+    for id in ids where !present.contains(id) {
+      indexedConversationCutoffs.removeValue(forKey: id)
+      indexedMemoryExpirations.removeValue(forKey: id)
+    }
+    scheduleNextMemoryExpiry(owner: expectedOwner)
+  }
+
+  @available(macOS 27, *)
+  func reindexMemories(ids: [String], expectedOwner: String) async throws {
+    let ids = Array(Set(ids.filter { !$0.isEmpty }))
+    guard !ids.isEmpty, let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
+    defer { finishOperation() }
+    let entities = try await MemoryEntityQuery().entities(for: ids)
+    let present = Set(entities.map(\.id))
+    for chunk in ids.filter({ !present.contains($0) }).chunkedSiriIndex(200) {
+      try await index.deleteAppEntities(identifiedBy: chunk, ofType: MemoryEntity.self)
+    }
+    for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+    for entity in entities { indexedMemoryExpirations[entity.id] = entity.eligibilityCutoff }
+    for id in ids where !present.contains(id) { indexedMemoryExpirations.removeValue(forKey: id) }
+    scheduleNextMemoryExpiry(owner: expectedOwner)
+  }
+
+  @available(macOS 27, *)
+  func reindexTasks(ids: [String], expectedOwner: String) async throws {
+    let ids = Array(Set(ids.filter { !$0.isEmpty }))
+    guard !ids.isEmpty, let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
+    defer { finishOperation() }
+    let entities = try await TaskEntityQuery().entities(for: ids)
+    let present = Set(entities.map(\.id))
+    for chunk in ids.filter({ !present.contains($0) }).chunkedSiriIndex(200) {
+      try await index.deleteAppEntities(identifiedBy: chunk, ofType: TaskEntity.self)
+    }
+    for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+    for entity in entities {
+      indexedTaskCutoffs[entity.id] =
+        entity.isCompleted
+        ? entity.completionDate?.addingTimeInterval(SiriIndexScope.completedTaskAge) : nil
+    }
+    for id in ids where !present.contains(id) { indexedTaskCutoffs.removeValue(forKey: id) }
+    scheduleNextMemoryExpiry(owner: expectedOwner)
+  }
+
   func rebuild(now: Date = Date()) async throws {
     guard Self.supportsSpotlightIndexing(ProcessInfo.processInfo.operatingSystemVersion), #available(macOS 27, *) else {
       if indexedOwner != nil { try await wipe() }

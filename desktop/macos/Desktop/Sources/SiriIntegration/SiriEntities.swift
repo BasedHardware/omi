@@ -294,7 +294,7 @@ struct ConversationEntityQuery: IndexedEntityQuery {
 
   func reindexEntities(for identifiers: [String], indexDescription: CSSearchableIndexDescription) async throws {
     guard let owner = RuntimeOwnerIdentity.currentOwnerId() else { return }
-    try await SiriIndexer.shared.indexConversations(try await entities(for: identifiers), expectedOwner: owner)
+    try await SiriIndexer.shared.reindexConversations(ids: identifiers, expectedOwner: owner)
   }
 
   func reindexAllEntities(indexDescription: CSSearchableIndexDescription) async throws {
@@ -315,7 +315,7 @@ struct MemoryEntityQuery: IndexedEntityQuery {
   @available(macOS 27, *)
   func reindexEntities(for identifiers: [String], indexDescription: CSSearchableIndexDescription) async throws {
     guard let owner = RuntimeOwnerIdentity.currentOwnerId() else { return }
-    try await SiriIndexer.shared.indexMemories(try await entities(for: identifiers), expectedOwner: owner)
+    try await SiriIndexer.shared.reindexMemories(ids: identifiers, expectedOwner: owner)
   }
 
   @available(macOS 27, *)
@@ -340,7 +340,7 @@ struct TaskEntityQuery: IndexedEntityQuery {
 
   func reindexEntities(for identifiers: [String], indexDescription: CSSearchableIndexDescription) async throws {
     guard let owner = RuntimeOwnerIdentity.currentOwnerId() else { return }
-    try await SiriIndexer.shared.indexTasks(try await entities(for: identifiers), expectedOwner: owner)
+    try await SiriIndexer.shared.reindexTasks(ids: identifiers, expectedOwner: owner)
   }
 
   func reindexAllEntities(indexDescription: CSSearchableIndexDescription) async throws {
