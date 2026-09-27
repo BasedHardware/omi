@@ -369,7 +369,7 @@ env:
   - name: STT_MULTI_LANGUAGE_HINTS
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
-    value: "0"
+    value: "25"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
     value: "0"
   - name: PARAKEET_WINDOW_MAX_SESSIONS

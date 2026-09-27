@@ -1732,7 +1732,7 @@ environments:
             value: 'true'
             category: rollout
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
-            value: '0'
+            value: '25'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
             value: '0'
