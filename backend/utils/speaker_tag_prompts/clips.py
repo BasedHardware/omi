@@ -18,6 +18,7 @@ from typing import Any, List, Mapping, Optional
 
 from database.audio_timeline import chunk_span_bounds
 from utils.audio_timeline import coverage_outcome, segment_wall_window
+from utils.speaker_tag_prompts.coverage import prompt_window_covered
 from utils.metrics import OMI_AUDIO_TIMELINE_COVERAGE_TOTAL
 from utils.other.storage import download_audio_chunks_and_merge
 
@@ -75,6 +76,8 @@ def conversation_clip_pcm(
         raise ValueError('Clip window must be positive and at most 12 seconds')
     started_at = _started_at_seconds(conversation)
     if started_at is None:
+        return None
+    if not prompt_window_covered(conversation, start, end):
         return None
     marker = conversation.get('audio_timeline')
     if isinstance(marker, Mapping) and marker.get('version') == 2:

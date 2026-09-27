@@ -11309,4 +11309,131 @@ class AppLocalizationsBs extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name i drugi';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Čujte Omijeve odgovore';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'U redu. Vaš sljedeći sastanak počinje za dvadeset minuta.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Sve je spremno';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Dodirnite red da ga pregledate ili promijenite.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Kada pitate pomoću dugmeta, Omi može naglas pročitati svoj odgovor.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Čuj svoj zadnji odgovor';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Reprodukcija vašeg posljednjeg odgovora...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Putem $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Preko zvučnika telefona';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Preko trenutnog audio izlaza';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Odgovori ostaju na ekranu. Ništa se ne govori.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privatno. Govori samo preko AirPods, Bluetooth ili žičanih slušalica.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Koristi zvučnik telefona kada nisu povezane slušalice.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi će šutjeti. Odgovori se i dalje pojavljuju u aplikaciji.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device povezan. Omi će govoriti ovdje.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Nisu povezane slušalice. Omi ostaje tih dok ne povežete neke.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Reproducira preko $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Reproducira se naglas preko zvučnika telefona.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Ovo možete promijeniti bilo kada u $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Ponovite ovu turneju bilo kada u $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Slušalice';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minute';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Zadaci';
+
+  @override
+  String get usageMonth => 'Ovaj mesec';
+
+  @override
+  String get usageYear => 'Ove godine';
+
+  @override
+  String get usageAll => 'Celo vreme';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }

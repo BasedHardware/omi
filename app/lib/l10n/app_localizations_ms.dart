@@ -11308,4 +11308,133 @@ class AppLocalizationsMs extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name dan lain-lain';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Dengar jawapan Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample =>
+      'Baik. Mesyuarat anda yang seterusnya bermula dalam masa dua puluh minit.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Semuanya Sudah Sedia';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Ketik baris untuk menyemak atau mengubahnya.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Apabila anda bertanya dengan butang, Omi boleh membaca jawapannya dengan kuat.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Dengar jawapan terakhir anda';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Memainkan jawapan terakhir anda...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Melalui $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Melalui pembesar suara telefon';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Melalui output audio semasa';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Jawapan kekal di skrin. Tiada apa yang terucap.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Persendirian. Bercakap hanya melalui AirPods, Bluetooth atau fon kepala berwayar.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Menggunakan pembesar suara telefon apabila tiada fon kepala disambungkan.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi akan terus senyap. Jawapan masih muncul dalam apl.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device disambungkan. Omi akan bercakap di sini.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Tiada fon kepala disambungkan. Omi kekal senyap sehingga anda menyambung beberapa.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Dimainkan melalui $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Dimainkan dengan kuat melalui pembesar suara telefon.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Anda boleh menukar ini pada bila-bila masa di $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Main semula lawatan ini pada bila-bila masa dalam $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Fon kepala';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minit';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tugas';
+
+  @override
+  String get usageMonth => 'Bulan Ini';
+
+  @override
+  String get usageYear => 'Tahun Ini';
+
+  @override
+  String get usageAll => 'Sepanjang Masa';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }

@@ -86,7 +86,7 @@ def _admit_finalization(_conversation_data: dict) -> jobs.FinalizationAdmission:
     }
 
 
-def _recover(conversation_ref: _Ref, *, cutoff=CUTOFF, jobs_collection=None):
+def _recover(conversation_ref: _Ref, *, cutoff=CUTOFF, jobs_collection=None, recording_sessions_collection=None):
     transaction = _Transaction()
     intent = jobs._create_or_get_finalization_intent_txn(
         transaction,
@@ -99,6 +99,7 @@ def _recover(conversation_ref: _Ref, *, cutoff=CUTOFF, jobs_collection=None):
         NOW,
         trigger=ProcessingTrigger.SERVER_RECOVERY,
         recovery_cutoff=cutoff,
+        recording_sessions_collection=recording_sessions_collection,
     )
     return transaction, intent
 
@@ -127,6 +128,38 @@ def test_recovery_refuses_when_finished_at_raced_inside_the_cutoff():
     assert intent['status'] == 'refused_not_stale'
     assert transaction.sets == []
     assert transaction.updates == []
+
+
+def test_live_audio_session_lease_wins_when_recovery_sweep_runs_mid_session():
+    """The sweep and lease share one transactional document conflict fence."""
+    conversation = _recovery_conversation(
+        {
+            'transcript_segments': [],
+            'audio_files': [{'id': 'live-audio'}],
+            'external_data': {'recording_session_id': 'session-live'},
+        }
+    )
+    session = _Ref(
+        'session-live',
+        {
+            'uid': 'uid-1',
+            'recording_session_id': 'session-live',
+            'conversation_id': 'conversation-1',
+            'lifecycle_phase': 'in_progress',
+            'lease_expires_at': NOW + timedelta(minutes=5),
+        },
+    )
+
+    transaction, intent = _recover(
+        conversation,
+        recording_sessions_collection=_Collection({'session-live': session}),
+    )
+
+    assert intent['status'] == 'refused_active_recording_session'
+    assert intent['created'] is False
+    assert transaction.sets == []
+    assert transaction.updates == []
+    assert conversation.data['status'] == 'in_progress'
 
 
 def test_recovery_refuses_a_rich_structured_row():

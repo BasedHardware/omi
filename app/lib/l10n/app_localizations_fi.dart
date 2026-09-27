@@ -11282,4 +11282,131 @@ class AppLocalizationsFi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ja muut';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Kuuntele Omin vastaukset';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Selvä. Seuraava kokouksesi alkaa kahdenkymmenen minuutin kuluttua.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Kaikki on valmista';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tarkista tai muuta riviä napauttamalla sitä.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Kun kysyt painikkeella, Omi voi lukea vastauksensa ääneen.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Kuuntele viimeinen vastauksesi';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Toistetaan viimeistä vastaustasi...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device kautta';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Puhelimen kaiuttimen kautta';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Nykyisen äänilähdön kautta';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Vastaukset pysyvät näytöllä. Mitään ei puhuta.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Yksityinen. Puhuu vain numeroiden AirPods, Bluetooth tai langallisten kuulokkeiden kautta.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Käyttää puhelimen kaiutinta, kun kuulokkeita ei ole kytketty.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi pysyy hiljaa. Vastaukset näkyvät edelleen sovelluksessa.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device yhdistetty. Omi puhuu täällä.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Kuulokkeita ei ole kytketty. Omi pysyy äänettömänä, kunnes yhdistät osan.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Toistaa numeron $device kautta.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Toistaa ääneen puhelimen kaiuttimesta.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Voit muuttaa tätä milloin tahansa numerossa $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Toista tämä kiertue milloin tahansa numerossa $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kuulokkeet';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minuuttia';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tehtävät';
+
+  @override
+  String get usageMonth => 'Tässä kuussa';
+
+  @override
+  String get usageYear => 'Tänä vuonna';
+
+  @override
+  String get usageAll => 'Kaikki aika';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }

@@ -4,10 +4,114 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'pusher_semantic_probe.py'
+
+
+def test_alignment_probe_rejects_repeated_live_fixture(probe):
+    fixture = probe.load_fixture()
+    phrase = fixture.expected_phrase
+    observed, expected = probe._alignment_word_counts(
+        [{'text': phrase}, {'text': phrase}], phrase, probe.ALIGNMENT_AUDIO_PASSES
+    )
+    assert (observed, expected) == (34, 34)
+    assert probe._alignment_word_count_ok(observed, expected)
+    for repeats in (4, 8):
+        observed, expected = probe._alignment_word_counts(
+            [{'text': phrase}] * repeats, phrase, probe.ALIGNMENT_AUDIO_PASSES
+        )
+        assert not probe._alignment_word_count_ok(observed, expected)
+    receipt = probe._alignment_receipt(
+        status='FAIL',
+        started_at='2026-09-26T00:00:00Z',
+        failure_stage='transcript_word_count',
+        live_word_count=137,
+        expected_word_count=34,
+    )
+    assert receipt['word_counts'] == {'live': 137, 'expected': 34}
+    assert phrase not in str(receipt)
+
+
+def test_qualification_probe_bounds_one_conversation_with_eight_fixture_sends(probe):
+    phrase = probe.load_fixture().expected_phrase
+    fixture_words = len(phrase.split())
+    for passes, passed in ((1, False), (4, True), (6, True), (8, True)):
+        observed, expected = probe._alignment_word_counts(
+            [{'text': phrase}] * passes, phrase, probe.DISCARD_KEEP_AUDIO_PASSES
+        )
+        assert expected == 136
+        assert probe._base_word_count_ok(observed, expected, fixture_words) is passed
+    # The readback's phrase check proves one pass; the word-count floor
+    # requires four. The upper bound rejects duplicate transcripts.
+    assert not probe._base_word_count_ok(0, expected, fixture_words)
+    assert not probe._base_word_count_ok(272, expected, fixture_words)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('passes', 'passed'), [(1, False), (4, True), (6, True), (10, False)])
+async def test_base_probe_records_counts_when_rollover_or_duplication_changes_the_readback(
+    monkeypatch, probe, tmp_path, passes, passed
+):
+    phrase = probe.load_fixture().expected_phrase
+    monkeypatch.setattr(probe, '_read_token', lambda *_: 'token')
+    monkeypatch.setattr(probe, '_listen_sample', lambda *_a, **_k: asyncio.sleep(0, result=(True, '')))
+    monkeypatch.setattr(
+        probe,
+        '_terminal_readback',
+        lambda *_a, **_k: asyncio.sleep(0, result={'transcript_segments': [{'text': phrase}] * passes}),
+    )
+    monkeypatch.setattr(probe, '_observe_candidate_pusher', lambda *_a, **_k: asyncio.sleep(0, result=1))
+    deployment_receipt = tmp_path / 'deployment.json'
+    deployment_receipt.write_text(json.dumps({'image': {'digest': 'sha256:synthetic'}}))
+    args = SimpleNamespace(
+        run_id='123',
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment_receipt,
+        api_url='https://example.invalid',
+        allow_local_http=False,
+        finalization_timeout_seconds=1,
+        project='synthetic',
+        namespace='synthetic',
+    )
+
+    receipt, actual_passed = await probe.run_probe(args)
+
+    assert actual_passed is passed
+    assert receipt['word_counts'] == {'live': 17 * passes, 'expected': 136}
+    assert receipt['consumer_readback'] == {'status': 'PASS'}
+    assert receipt.get('failure_stage') == (None if passed else 'transcript_word_count')
+
+
+def test_base_probe_status_line_exposes_only_bounded_diagnostics(monkeypatch, probe, tmp_path, capsys):
+    receipt = probe._receipt(
+        status='FAIL',
+        evidence_id='pusher-dev-123-synthetic',
+        deployment_receipt={},
+        deployment_receipt_sha256='',
+        started_at='2026-09-27T00:00:00Z',
+        ended_at='2026-09-27T00:00:01Z',
+        candidate_pod_count=0,
+        failure_stage='transcript_word_count',
+        live_word_count=17,
+        expected_word_count=136,
+        consumer_readback_passed=True,
+    )
+    receipt['private_extra'] = 'secret transcript token endpoint uid'
+    monkeypatch.setattr(
+        probe, 'parse_args', lambda *_: SimpleNamespace(output=tmp_path / 'receipt.json', alignment_scenario=False)
+    )
+    monkeypatch.setattr(probe, 'run_probe', lambda *_: asyncio.sleep(0, result=(receipt, False)))
+
+    assert probe.main([]) == 1
+    line = capsys.readouterr().out.strip()
+    assert 'failure_stage=transcript_word_count' in line
+    assert 'word_counts_live=17 word_counts_expected=136' in line
+    assert 'consumer_readback=PASS candidate_pod_count=0' in line
+    assert 'secret' not in line
+    assert 'transcript token endpoint uid' not in line
 
 
 @pytest.fixture
@@ -273,3 +377,81 @@ def test_alignment_coverage_compares_segments_and_spans_on_one_axis(probe):
     assert not probe._alignment_covered(spans, origin + 10.0, origin + 12.0)
     # The relative segment offsets alone never overlap wall-epoch spans.
     assert not probe._alignment_covered(spans, 0.28, 4.66)
+
+
+def test_alignment_receipt_exposes_only_the_probe_conversation_id(probe):
+    conversation_id = '5df117e1-3b4b-41b2-94c6-54f3c690e811'
+    receipt = probe._alignment_receipt(
+        status='PASS',
+        started_at='2026-09-26T00:00:00Z',
+        failure_stage=None,
+        conversation_id=conversation_id,
+        coverage_ok=True,
+        candidate_pusher_observed=True,
+    )
+    assert receipt['conversation_id'] == conversation_id
+    assert receipt['checks']['span_coverage'] is True
+    assert receipt['checks']['candidate_pusher_observed'] is True
+    assert 'omi-release-probe' not in json.dumps(receipt)
+    assert 'transcript' not in json.dumps(receipt)
+
+
+@pytest.mark.asyncio
+async def test_alignment_probe_requires_private_cloud_flag_on_finalized_conversation(monkeypatch, probe, tmp_path):
+    deployment_receipt = tmp_path / 'deployment.json'
+    deployment_receipt.write_text('{"source_sha":"synthetic"}', encoding='utf-8')
+    monkeypatch.setattr(probe, '_read_token', lambda _path: 'synthetic-token')
+    monkeypatch.setattr(probe, 'load_fixture', lambda: SimpleNamespace(expected_phrase='synthetic'))
+    monkeypatch.setattr(
+        probe,
+        '_http_json_method',
+        lambda url, _token: (
+            (200, {'private_cloud_sync_enabled': True})
+            if url.endswith('/v1/users/private-cloud-sync')
+            else (200, {'id': conversation_id, 'private_cloud_sync_enabled': False})
+        ),
+    )
+
+    async def no_op(*_args, **_kwargs):
+        return []
+
+    async def observe(*_args, **_kwargs):
+        return 1
+
+    monkeypatch.setattr(probe, '_alignment_listen', no_op)
+    monkeypatch.setattr(probe, '_terminal_readback', no_op)
+    monkeypatch.setattr(probe, '_observe_candidate_pusher', observe)
+    conversation_id = '5df117e1-3b4b-41b2-94c6-54f3c690e811'
+    monkeypatch.setattr(probe.uuid, 'uuid4', lambda: conversation_id)
+    args = SimpleNamespace(
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment_receipt,
+        api_url='https://api.omiapi.com',
+        allow_local_http=False,
+        finalization_timeout_seconds=1,
+        project='based-hardware-dev',
+        namespace='dev-omi-backend',
+    )
+    receipt, passed = await probe.run_alignment_scenario(args)
+    assert not passed
+    assert receipt['failure_stage'] == 'private_cloud_conversation_flag'
+    assert receipt['checks']['candidate_pusher_observed'] is True
+    assert receipt['conversation_id'] == conversation_id
+
+
+@pytest.mark.asyncio
+async def test_alignment_probe_rejects_non_dev_endpoint_before_any_account_write(monkeypatch, probe, tmp_path):
+    deployment_receipt = tmp_path / 'deployment.json'
+    deployment_receipt.write_text('{"source_sha":"synthetic"}', encoding='utf-8')
+    monkeypatch.setattr(probe, '_read_token', lambda _path: 'synthetic-token')
+    monkeypatch.setattr(probe, 'load_fixture', lambda: SimpleNamespace(expected_phrase='synthetic'))
+    monkeypatch.setattr(probe, '_http_json_method', lambda *_args: pytest.fail('unexpected account request'))
+    args = SimpleNamespace(
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment_receipt,
+        api_url='https://api.omi.me',
+        allow_local_http=False,
+    )
+    receipt, passed = await probe.run_alignment_scenario(args)
+    assert not passed
+    assert receipt['failure_stage'] == 'dev_api_url'

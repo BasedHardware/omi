@@ -296,8 +296,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         return;
       }
 
-      await ServiceManager.instance().device.ensureConnection(device.id, force: true);
-
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
+      if (connection == null || connection.status != DeviceConnectionState.connected) {
+        throw StateError('Device initialization did not complete');
+      }
       if (primary.id.isNotEmpty && primary.id != device.id) {
         // Replacing the primary: only tear down the old link after the new one
         // is live, and drop a companion that no longer pairs with it.

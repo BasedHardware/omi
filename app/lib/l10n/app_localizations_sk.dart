@@ -11269,4 +11269,132 @@ class AppLocalizationsSk extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name a ďalší';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Vypočujte si odpovede Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Rozumiem. Vaše ďalšie stretnutie sa začne o dvadsať minút.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Všetko je pripravené';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Ťuknutím na riadok ho skontrolujete alebo zmeníte.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Keď sa spýtate tlačidlom, číslo Omi dokáže prečítať svoju odpoveď nahlas.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Vypočujte si svoju poslednú odpoveď';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Prehráva sa vaša posledná odpoveď...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Prostredníctvom $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Cez reproduktor telefónu';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Prostredníctvom aktuálneho zvukového výstupu';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Odpovede zostávajú na obrazovke. Nič sa nehovorí.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Súkromné. Hovorí iba cez AirPods, Bluetooth alebo káblové slúchadlá.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Používa reproduktor telefónu, keď nie sú pripojené žiadne slúchadlá.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi zostane ticho. Odpovede sa stále zobrazujú v aplikácii.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device pripojené. Tu bude hovoriť Omi.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Nie sú pripojené žiadne slúchadlá. Omi zostane ticho, kým nejaké nepripojíte.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Prehráva cez číslo $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Prehráva sa nahlas cez reproduktor telefónu.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Toto môžete kedykoľvek zmeniť na čísle $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Prehrajte si túto prehliadku kedykoľvek na čísle $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Slúchadlá';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minút';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Úlohy';
+
+  @override
+  String get usageMonth => 'Tento mesiac';
+
+  @override
+  String get usageYear => 'Tento rok';
+
+  @override
+  String get usageAll => 'Celkovo';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }

@@ -1481,7 +1481,7 @@ export interface CreateConversationFromTranscriptRequest {
   client_platform?: string | null;
   client_processing?: unknown | null;
   client_session_id?: string | null;
-  conversation_finalization_reason?: "user_stop" | "finish_and_continue" | "meeting_started" | "meeting_ended" | "max_duration_rotation" | "crash_recovery" | "retry" | null;
+  conversation_finalization_reason?: string | null;
   conversation_role?: "ambient" | "meeting";
   finished_at?: string | null;
   geolocation?: GeolocationInput | null;
@@ -4514,9 +4514,14 @@ export interface TaskIntegrationMutationResponse {
   status: string;
 }
 
+export interface TaskIntegrationStatus {
+  app_key: string;
+  connected: boolean;
+}
+
 export interface TaskIntegrationsResponse {
   default_app: string | null;
-  integrations: Record<string, unknown>;
+  integrations: Record<string, TaskIntegrationStatus>;
 }
 
 export type TaskIntelligenceFeedbackAction = "do_now" | "later" | "dismiss" | "accept_candidate" | "edit" | "complete";
@@ -5727,6 +5732,7 @@ export interface OmiApiSchemas {
   "TaskGoalLinkImportRequest": TaskGoalLinkImportRequest;
   "TaskIntegrationData": TaskIntegrationData;
   "TaskIntegrationMutationResponse": TaskIntegrationMutationResponse;
+  "TaskIntegrationStatus": TaskIntegrationStatus;
   "TaskIntegrationsResponse": TaskIntegrationsResponse;
   "TaskIntelligenceFeedbackAction": TaskIntelligenceFeedbackAction;
   "TaskIntelligenceFeedbackReason": TaskIntelligenceFeedbackReason;
@@ -17490,7 +17496,7 @@ export async function get_user_trial_status_v1_users_me_trial_get(header: { auth
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_user_usage_stats_endpoint_v1_users_me_usage_get(query: { period?: UsagePeriod }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserUsageResponse> {
+export async function get_user_usage_stats_endpoint_v1_users_me_usage_get(query: { period?: UsagePeriod, time_zone?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserUsageResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/me/usage`;
   const _params = query ? Object.entries(query)

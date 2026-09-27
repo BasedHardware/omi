@@ -2,6 +2,48 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.404",
+      "date": "2026-09-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.403",
+      "date": "2026-09-27",
+      "changes": [
+        "Fixed conversation summaries to show compact Sources controls instead of internal transcript identifiers"
+      ]
+    },
+    {
+      "version": "0.12.402",
+      "date": "2026-09-26",
+      "changes": [
+        "Improved chat scrolling reliability and added read-only automation that blocks actions which can change app or account data."
+      ]
+    },
+    {
+      "version": "0.12.401",
+      "date": "2026-09-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.400",
+      "date": "2026-09-26",
+      "changes": [
+        "Beta experiment: a randomized group sees Omi as memory first — the daily postcard leads, Interject on, proactive director quiet, generic web answers starved — while everyone else keeps today's experience"
+      ]
+    },
+    {
+      "version": "0.12.399",
+      "date": "2026-09-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.398",
       "date": "2026-09-26",
       "changes": [

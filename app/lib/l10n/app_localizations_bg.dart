@@ -11321,4 +11321,132 @@ class AppLocalizationsBg extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Чуйте отговорите на Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Готово. Следващата ви среща започва след двадесет минути.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Всичко е готово';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Докоснете ред, за да го прегледате или промените.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Когато питате с бутона, Omi може да прочете отговора си на глас.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Чуйте последния си отговор';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Пускане на последния ви отговор...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Чрез $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'През високоговорителя на телефона';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Чрез текущия аудио изход';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Отговорите остават на екрана. Нищо не се говори.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Частно. Говори само чрез AirPods, Bluetooth или кабелни слушалки.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Използва високоговорителя на телефона, когато няма свързани слушалки.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi ще мълчи. Отговорите все още се показват в приложението.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device свързан. Omi ще говори тук.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Няма свързани слушалки. Omi мълчи, докато не свържете някои.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Играе през $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Възпроизвежда на висок глас през високоговорителя на телефона.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Можете да промените това по всяко време в $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Повторете тази обиколка по всяко време в $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Слушалки';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'минути';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Задачи';
+
+  @override
+  String get usageMonth => 'Този месец';
+
+  @override
+  String get usageYear => 'Тази година';
+
+  @override
+  String get usageAll => 'Цялото време';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }
