@@ -355,7 +355,14 @@ def expected_foreign_language(text: str, target: str, expected: Tuple[str, ...])
         return None
     for clause in re.split(r'[,;.!?。！？।\n]+', text[:1024])[:8]:
         language, confidence = detect_language_with_confidence(clause)
-        if language and language.split('-')[0].lower() in foreign and confidence >= CONFIDENCE_FOREIGN_TRANSLATE:
+        raw_language, raw_confidence = detect_language_with_confidence(clause, remove_non_lexical=False)
+        if (
+            language
+            and language.split('-')[0].lower() in foreign
+            and confidence >= CONFIDENCE_FOREIGN_TRANSLATE
+            and raw_language == language
+            and raw_confidence >= CONFIDENCE_FOREIGN_TRANSLATE
+        ):
             return language
     return None
 

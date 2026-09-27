@@ -1463,9 +1463,17 @@ through that interval; the stale cache never authorizes changing labeled spans.
 After connect preferences load, `TranscriptProcessor` construction binds the
 existing `LiveLanguageProfile.expected` to the coordinator. These are spoken-language
 priors, not reading preferences. `TRANSLATION_PROFILE_GATE_ENABLED=true` defers short
-out-of-profile detections locally; a >=40-letter, >=0.95-confidence sample establishes
-an unlisted language for that conversation. Expected foreign switches remain eligible.
-Missing profiles retain legacy admission. Deferrals never poison shared negative caches.
+out-of-profile detections locally. Expected foreign detections require agreement
+between raw and filler-cleaned local reads; expected foreign clauses can still
+override an English-dominant mixed turn. A >=40-letter, >=0.95-confidence sample
+on both reads establishes an unlisted language for that conversation. Without a
+profile, short Latin-script guesses defer until substantial evidence arrives; a
+clear non-Latin script can establish its language sooner. This may delay genuine
+short Latin-script speech without a profile. Deferrals never poison shared negative
+caches. Provider-echoed target codes alone cannot write a negative cache entry for
+unchanged foreign source text. Conversation changes discard queued work and prior evidence.
+The phone-call interpreter bypasses the profile admission gate to preserve short
+foreign replies; it still applies the output guard before writing a badge.
 
 `TRANSLATION_OUTPUT_GUARD_ENABLED=true` rejects empty/case-only rewrites and conservative
 near-copies before cache publication and segment persistence, including legacy cache hits.

@@ -150,9 +150,11 @@ class ConversationLanguageState:
 
         Expected languages are spoken-language hints, not reading preferences.
         A substantial confident sample admits an unlisted language immediately.
-        Missing profile keeps legacy behavior; never infer an English-only user.
+        Without a profile, require substantial Latin-script evidence or a clear
+        non-Latin script. Short ambiguous Latin fragments defer until a longer
+        sample establishes their language in this conversation.
         """
-        if not translation_profile_gate_enabled() or not expected_languages:
+        if not translation_profile_gate_enabled():
             return True
         language, confidence = detect_language_with_confidence(text)
         base = _normalize_base_language(language)
@@ -160,13 +162,23 @@ class ConversationLanguageState:
             return True
         if not base:
             return True  # the ordinary confidence/stability gate still defers
-        if confidence >= 0.95 and sum(char.isalpha() for char in text) >= 40:
-            self.established_languages.add(base)
-        return base in {
-            self.target_base,
-            *(_normalize_base_language(code) for code in expected_languages),
-            *self.established_languages,
-        }
+        if base == self.target_base or base in self.established_languages:
+            return True
+        if base in {_normalize_base_language(code) for code in expected_languages}:
+            raw_language, raw_confidence = detect_language_with_confidence(text, remove_non_lexical=False)
+            return _normalize_base_language(raw_language) == base and raw_confidence >= CONFIDENCE_FOREIGN_TRANSLATE
+        alphabetic = [char for char in text if char.isalpha()]
+        if not expected_languages and alphabetic:
+            non_latin = sum(ord(char) > 0x024F for char in alphabetic)
+            if non_latin >= 6 and non_latin * 5 >= len(alphabetic) * 3 and confidence >= 0.95:
+                self.established_languages.add(base)
+                return True
+        if confidence >= 0.95 and len(alphabetic) >= 40:
+            raw_language, raw_confidence = detect_language_with_confidence(text, remove_non_lexical=False)
+            if _normalize_base_language(raw_language) == base and raw_confidence >= 0.95:
+                self.established_languages.add(base)
+                return True
+        return False
 
     def should_probe(self) -> bool:
         """In monolingual mode, periodically allow a detection check."""

@@ -146,14 +146,16 @@ def nllb_service(outputs, store=None):
     )
 
 
-async def evaluate(texts, expected, outputs):
+async def evaluate(texts, expected, outputs, target='en', realtime_interpreter=False):
     service, calls, client = nllb_service(outputs)
     ready = []
 
     async def callback(*args):
         ready.append(args)
 
-    coordinator = TranslationCoordinator('en', service, callback, expected_languages=expected)
+    coordinator = TranslationCoordinator(
+        target, service, callback, expected_languages=expected, realtime_interpreter=realtime_interpreter
+    )
     for index, text in enumerate(texts):
         await coordinator.observe([segment(text, str(index))], [], 'conversation')
     await coordinator.flush()
@@ -222,7 +224,7 @@ def test_profile_prior_escape_hatches_and_rollback(monkeypatch):
     state = ConversationLanguageState('en')
     unexpected = 'Precisamos terminar o trabalho.'
     assert not state.source_is_plausible(unexpected, ('en',))
-    assert state.source_is_plausible(unexpected, ())
+    assert not state.source_is_plausible(unexpected, ())
     assert state.source_is_plausible(unexpected, ('pt-BR', 'en'))
     assert state.source_is_plausible(
         'Precisamos terminar todo este trabalho antes de começar a próxima reunião.', ('en',)
@@ -288,7 +290,8 @@ async def test_prefix_cache_rewrite_cannot_bypass_output_guard():
     coordinator._get_or_create_state('segment').committed_text = 'An earlier revision.'
     await coordinator.observe([segment(source)], [], 'conversation')
     await coordinator.flush()
-    assert not ready and not calls and not store.negative
+    assert not ready and not calls
+    assert store.negative == {(fingerprint_text(source), 'en')}
     assert not coordinator.language_state.established_languages
     client.close()
 
@@ -321,6 +324,91 @@ async def test_profile_flag_off_restores_legacy_admissions(monkeypatch):
     baseline = sum(classify_translation_need(text, 'en', True) == TranslationNeed.TRANSLATE for text in ENGLISH)
     assert len(ready) == baseline and calls
     print(f'EVAL English: baseline false admissions/badges={baseline}/{len(ENGLISH)}; profile gate on=0/{len(ENGLISH)}')
+
+
+async def test_no_profile_english_catalog_has_no_false_admissions():
+    ready, calls = await evaluate(ENGLISH, (), {})
+    assert not ready and not calls
+
+
+async def test_no_profile_requires_source_evidence_but_keeps_clear_foreign_speech():
+    ambiguous_latin = 'Precisamos terminar o trabalho.'
+    substantial_latin = 'Precisamos terminar todo este trabalho antes de começar a próxima reunião.'
+    short_non_latin = '请在会议开始之前把厨房的窗户关上。'
+    assert not ConversationLanguageState('en').source_is_plausible(ambiguous_latin, ())
+    assert ConversationLanguageState('en').source_is_plausible(substantial_latin, ())
+    assert ConversationLanguageState('en').source_is_plausible(short_non_latin, ())
+    outputs = {
+        substantial_latin: 'We need to finish all this work before the next meeting begins.',
+        short_non_latin: 'Please close the kitchen window before the meeting starts.',
+    }
+    ready, _calls = await evaluate([ambiguous_latin, substantial_latin, short_non_latin], (), outputs)
+    assert len(ready) == 2
+
+
+@pytest.mark.parametrize('expected', [(), ('en',)])
+async def test_phone_interpreter_keeps_short_foreign_replies(expected):
+    source = 'Precisamos terminar o trabalho.'
+    output = 'We need to finish the work.'
+    ready, calls = await evaluate([source], expected, {source: output}, realtime_interpreter=True)
+    assert len(ready) == 1 and calls
+
+
+@pytest.mark.parametrize(
+    'target,expected,source,output',
+    [
+        (
+            'pt',
+            ('pt', 'en'),
+            'We need to finish this work before lunch.',
+            'Precisamos terminar este trabalho antes do almoço.',
+        ),
+        (
+            'pt',
+            ('es', 'pt'),
+            'Necesitamos terminar este trabajo antes del almuerzo.',
+            'Precisamos terminar este trabalho antes do almoço.',
+        ),
+        ('da', ('no', 'da'), 'Vi må avslutte møtet før middag.', 'Vi skal afslutte mødet inden middag.'),
+    ],
+)
+async def test_non_english_targets_and_close_language_pairs(target, expected, source, output):
+    ready, calls = await evaluate([source], expected, {source: output}, target=target)
+    assert len(ready) == 1 and calls
+    assert ready[0][1] == output
+
+
+async def test_conversation_change_discards_prior_queued_work_even_with_reused_segment_id():
+    source, output = FOREIGN[0][1:]
+    service, calls, client = nllb_service({source: output})
+    ready = []
+
+    async def callback(*args):
+        ready.append(args)
+
+    coordinator = TranslationCoordinator('en', service, callback, expected_languages=('pt', 'en'))
+    await coordinator.observe([segment(source)], [], 'old')
+    await coordinator.observe([segment('An ordinary English sentence.')], [], 'new')
+    await coordinator.flush()
+    assert not calls and not ready
+    assert coordinator.language_state.established_languages == set()
+    client.close()
+
+
+async def test_echoed_target_code_cannot_negative_cache_foreign_source():
+    source = 'Precisamos terminar o trabalho antes do almoço.'
+    store = DictTranslationStore()
+    service, _calls, client = nllb_service({source: source}, store)
+    ready = []
+
+    async def callback(*args):
+        ready.append(args)
+
+    coordinator = TranslationCoordinator('en', service, callback, source_language='en', expected_languages=('pt', 'en'))
+    await coordinator.observe([segment(source)], [], 'conversation')
+    await coordinator.flush()
+    assert not ready and not store.negative
+    client.close()
 
 
 def test_ambiguous_code_switch_remains_deferred_not_falsely_proven():
