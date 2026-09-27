@@ -247,6 +247,7 @@ jobs:
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
             USE_VERTEX_AI=true
+            TTS_PROVIDER=gemini
             GCP_LOCATION=us-central1
             OMI_FIRESTORE_DATA_PLANE_PROJECT=based-hardware
             FIREBASE_SIGNER_SERVICE_ACCOUNT=dev-auth-token-signer@based-hardware.iam.gserviceaccount.com

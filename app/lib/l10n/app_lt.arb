@@ -3578,5 +3578,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Groja garsiai per telefono garsiakalbį.",
     "deviceOnboardingVoiceReplySettingsHint": "Tai galite bet kada pakeisti numeriu {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Pakartokite šią kelionę bet kuriuo metu {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Ausinės"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Ausinės",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "minučių",
+    "usageWords": "Words",
+    "usageTasks": "Užduotys",
+    "usageMonth": "Šį mėnesį",
+    "usageYear": "Šiais metais",
+    "usageAll": "Visą laiką",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }

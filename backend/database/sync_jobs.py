@@ -60,7 +60,7 @@ _SYNC_JOB_OUTCOMES = (
 _SYNC_LANES = ('fresh', 'backfill')
 _SYNC_PROVIDERS = ('deepgram', 'modulate', 'parakeet')
 _SYNC_MODELS = ('nova-3', 'velma-2', 'parakeet')
-_SYNC_DISPATCH_MODES = ('inline', 'cloud_tasks')
+_SYNC_DISPATCH_MODES = ('inline', 'cloud_tasks', 'sequenced')
 SYNC_LEDGER_FENCE_MODE_ENV = 'SYNC_LEDGER_FENCE_MODE'
 
 RUN_LOCK_KEY_PREFIX = 'sync_job_lock:'
@@ -239,6 +239,11 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     and that pending retry must never be flipped terminal by a poll, however
     long its backoff.
     """
+    # The UID owner/sweeper, not a polling reader, owns liveness for accepted
+    # sequenced jobs. Waiting in the per-UID queue is expected to exceed the
+    # direct Cloud Tasks dispatch-stale threshold for a heavy account.
+    if job.get('dispatch_mode') == 'sequenced':
+        return False
     status = job.get('status')
     if status == 'processing':
         threshold = STALE_THRESHOLD_SECONDS
@@ -262,6 +267,28 @@ def _as_redis_text(value: Any) -> str:
     if isinstance(value, bytes):
         return value.decode('utf-8')
     return str(value)
+
+
+def _read_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
+    """Raw job doc without the stale self-heal read-side mutation."""
+    data = r.get(f'{JOB_KEY_PREFIX}{job_id}')
+    if not data:
+        return None
+    try:
+        job = json.loads(_as_redis_text(data))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return cast(Dict[str, Any], job) if isinstance(job, dict) else None
+
+
+def get_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
+    """Read without the status-poll stale mutation; sequencer recovery owns its lease check."""
+    return _read_raw_sync_job(job_id)
+
+
+def sync_job_run_lock_present(job_id: str) -> bool:
+    """Conservatively refuse a replacement dispatch while a worker still owns its run lock."""
+    return bool(r.exists(f'{RUN_LOCK_KEY_PREFIX}{job_id}'))
 
 
 def _backfill_dead_letter_pending(job_id: str, job: Optional[Dict[str, Any]], reason_code: Any) -> None:
@@ -606,6 +633,9 @@ def _sync_job_finalization_updates(
             'failed_segments': failed,
             'processed_segments': total,
             'error': error,
+            'reason_code': (
+                'stt_invalid_input' if status == 'failed' and result.get('reason_code') == 'stt_invalid_input' else None
+            ),
         },
     )
 

@@ -130,6 +130,7 @@ def _receiver(monkeypatch, *, v2: bool, conversation='conv-collapse'):
         language='en',
         stt_language='multi',
         multi_lang_enabled=True,
+        language_profile=None,
         stt_model='parakeet-window',
         stt_service=st.STTService.parakeet,
         vocabulary=[],

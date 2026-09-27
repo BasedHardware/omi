@@ -11360,4 +11360,49 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kulaklıklar';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'dakika';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Görevler';
+
+  @override
+  String get usageMonth => 'Bu Ay';
+
+  @override
+  String get usageYear => 'Bu Yıl';
+
+  @override
+  String get usageAll => 'Tüm Zamanlar';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }

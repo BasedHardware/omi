@@ -3578,5 +3578,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Dimainkan dengan kuat melalui pembesar suara telefon.",
     "deviceOnboardingVoiceReplySettingsHint": "Anda boleh menukar ini pada bila-bila masa di {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Main semula lawatan ini pada bila-bila masa dalam {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Fon kepala"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Fon kepala",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "minit",
+    "usageWords": "Words",
+    "usageTasks": "Tugas",
+    "usageMonth": "Bulan Ini",
+    "usageYear": "Tahun Ini",
+    "usageAll": "Sepanjang Masa",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }

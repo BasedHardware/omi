@@ -58,6 +58,7 @@ from utils.pusher import PusherCircuitBreakerOpen
 from utils.product_telemetry import emit_product_event
 from utils.stt.streaming import get_stt_service_for_language
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
+from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
     effective_conversation_timeout,
@@ -142,6 +143,8 @@ class ListenSessionRuntime:
         self.stt_service_selected: Any = None
         self.stt_language = ''
         self.stt_model = ''
+        self.language_profile: LiveLanguageProfile | None = None
+        self.language_observations: LiveLanguageObservations | None = None
         self.vocabulary: List[str] = []
         self.translation_language: Optional[str] = None
         self.user_has_credits = True
@@ -467,10 +470,18 @@ class ListenSessionRuntime:
         )
         # Retained so a mid-session failover reselects under the same language policy.
         self.multi_lang_enabled = not single_language_mode
+        self.language_profile = LiveLanguageProfile.create(
+            self.language,
+            multi=self.multi_lang_enabled,
+            uid=request.uid,
+            in_scope=not (self.is_multi_channel or self.use_custom_stt or get_byok_keys()),
+        )
+        self.language_observations = LiveLanguageObservations(self.language_profile)
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
             self.language,
             multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
+            language_profile=self.language_profile,
             **window_selection_kwargs(self, request.uid),
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
@@ -1032,6 +1043,8 @@ class ListenSessionRuntime:
                     logger.error('Pusher close failed type=%s', type(error).__name__)
         if self.onboarding_handler:
             self.onboarding_handler.cleanup()
+        if self.language_observations is not None:
+            await self.language_observations.summarize()
         if not owner_persistence_blocked:
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
         self.receiver.clear()

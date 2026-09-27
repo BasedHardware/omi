@@ -11384,4 +11384,49 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'ಹೆಡ್‌ಫೋನ್‌ಗಳು';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'ನಿಮಿಷಗಳು';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'ಕಾರ್ಯಗಳು';
+
+  @override
+  String get usageMonth => 'ಈ ತಿಂಗಳು';
+
+  @override
+  String get usageYear => 'ಈ ವರ್ಷ';
+
+  @override
+  String get usageAll => 'ಎಲ್ಲಾ ಸಮಯ';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }
