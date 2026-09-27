@@ -70,7 +70,7 @@ class _TodayTasksWidgetState extends State<TodayTasksWidget> {
                 offset: const Offset(-8, 0),
                 child: Container(
                   margin: const EdgeInsets.only(top: 8),
-                  decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+                  decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   child: Column(
                     children: displayTasks.map((task) => _TaskItem(task: task, provider: provider)).toList(),

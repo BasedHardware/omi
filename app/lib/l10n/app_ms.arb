@@ -3593,5 +3593,9 @@
     "usageYear": "Tahun Ini",
     "usageAll": "Sepanjang Masa",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Penampilan",
+    "appearanceSystem": "Sistem",
+    "appearanceLight": "Cerah",
+    "appearanceDark": "Gelap"
 }

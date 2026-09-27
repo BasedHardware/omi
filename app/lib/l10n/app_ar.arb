@@ -3593,5 +3593,9 @@
     "usageYear": "هذا العام",
     "usageAll": "كل الأوقات",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "المظهر",
+    "appearanceSystem": "النظام",
+    "appearanceLight": "فاتح",
+    "appearanceDark": "داكن"
 }

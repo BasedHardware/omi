@@ -3593,5 +3593,9 @@
     "usageYear": "Năm nay",
     "usageAll": "Tất cả thời gian",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Giao diện",
+    "appearanceSystem": "Hệ thống",
+    "appearanceLight": "Sáng",
+    "appearanceDark": "Tối"
 }

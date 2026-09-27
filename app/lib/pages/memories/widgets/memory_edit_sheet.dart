@@ -257,7 +257,7 @@ class _MemoryChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
-      decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

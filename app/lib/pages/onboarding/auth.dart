@@ -38,8 +38,8 @@ class _AuthComponentState extends State<AuthComponent> {
               // Title text
               Text(
                 context.l10n.speakTranscribeSummarize,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: OmiColors.textPrimary,
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
                   height: 1.2,
@@ -61,8 +61,8 @@ class _AuthComponentState extends State<AuthComponent> {
                       provider.onAppleSignIn(widget.onSignIn);
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
+                      backgroundColor: OmiColors.accent,
+                      foregroundColor: OmiColors.onAccent,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                     ),
                     child: Row(
@@ -95,8 +95,8 @@ class _AuthComponentState extends State<AuthComponent> {
                     provider.onGoogleSignIn(widget.onSignIn);
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
+                    backgroundColor: OmiColors.accent,
+                    foregroundColor: OmiColors.onAccent,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                   ),
                   child: Row(
@@ -129,8 +129,8 @@ class _AuthComponentState extends State<AuthComponent> {
                       provider.onLocalDevSignIn(widget.onSignIn);
                     },
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+                      foregroundColor: OmiColors.textPrimary,
+                      side: BorderSide(color: OmiColors.textPrimary.withValues(alpha: 0.4)),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                     ),
                     child: const Text(
@@ -148,7 +148,7 @@ class _AuthComponentState extends State<AuthComponent> {
                 textAlign: TextAlign.center,
                 text: TextSpan(
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.6),
+                    color: OmiColors.textPrimary.withValues(alpha: 0.6),
                     fontSize: 11,
                     fontFamily: 'Manrope',
                   ),

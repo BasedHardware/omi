@@ -11153,5 +11153,9 @@
     "usageYear": "या वर्षी",
     "usageAll": "सर्व काळ",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "दृश्य",
+    "appearanceSystem": "सिस्टम",
+    "appearanceLight": "हलका",
+    "appearanceDark": "गडद"
 }
