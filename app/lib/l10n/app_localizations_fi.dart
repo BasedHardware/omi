@@ -11274,6 +11274,18 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'Kertanapautus';
+
+  @override
+  String get singleTapAction => 'Kertanapautustoiminto';
+
+  @override
+  String get tripleTap => 'Kolmoisnapautus';
+
+  @override
+  String get tripleTapAction => 'Kolmoisnapautustoiminto';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'Kuuntele Omin vastaukset';
 
   @override

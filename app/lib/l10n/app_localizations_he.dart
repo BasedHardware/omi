@@ -11181,6 +11181,18 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'לחץ בודד';
+
+  @override
+  String get singleTapAction => 'פעולת לחיצה בודדת';
+
+  @override
+  String get tripleTap => 'לחץ משולש';
+
+  @override
+  String get tripleTapAction => 'פעולת לחיצה משולשת';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'האזינו לתשובות של Omi';
 
   @override

@@ -11301,6 +11301,18 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'Jedan dodir';
+
+  @override
+  String get singleTapAction => 'Akcija jednog dodira';
+
+  @override
+  String get tripleTap => 'Trostruki dodir';
+
+  @override
+  String get tripleTapAction => 'Akcija trostrukog dodira';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'Čujte Omijeve odgovore';
 
   @override

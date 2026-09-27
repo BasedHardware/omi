@@ -11281,6 +11281,18 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'Ketuk Tunggal';
+
+  @override
+  String get singleTapAction => 'Aksi Ketuk Tunggal';
+
+  @override
+  String get tripleTap => 'Ketuk Tiga Kali';
+
+  @override
+  String get tripleTapAction => 'Aksi Ketuk Tiga Kali';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'Dengarkan jawaban Omi';
 
   @override

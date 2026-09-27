@@ -11347,6 +11347,18 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'Απλό Πάτημα';
+
+  @override
+  String get singleTapAction => 'Ενέργεια Απλού Πατήματος';
+
+  @override
+  String get tripleTap => 'Τριπλό Πάτημα';
+
+  @override
+  String get tripleTapAction => 'Ενέργεια Τριπλού Πατήματος';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'Ακούστε τις απαντήσεις του Omi';
 
   @override

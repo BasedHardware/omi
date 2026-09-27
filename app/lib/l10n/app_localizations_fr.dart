@@ -11367,6 +11367,18 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'Appui simple';
+
+  @override
+  String get singleTapAction => 'Action appui simple';
+
+  @override
+  String get tripleTap => 'Triple appui';
+
+  @override
+  String get tripleTapAction => 'Action triple appui';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'Écoutez les réponses d’Omi';
 
   @override

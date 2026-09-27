@@ -20529,6 +20529,30 @@ abstract class AppLocalizations {
   /// **'{name} + others'**
   String participantsSummaryUncounted(String name);
 
+  /// Device button gesture: one short press
+  ///
+  /// In en, this message translates to:
+  /// **'Single Tap'**
+  String get singleTap;
+
+  /// Single tap action setting
+  ///
+  /// In en, this message translates to:
+  /// **'Single Tap Action'**
+  String get singleTapAction;
+
+  /// Device button gesture: three quick presses
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Tap'**
+  String get tripleTap;
+
+  /// Triple tap action setting
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Tap Action'**
+  String get tripleTapAction;
+
   /// No description provided for @deviceOnboardingVoiceReplyTitle.
   ///
   /// In en, this message translates to:

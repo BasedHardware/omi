@@ -11363,6 +11363,18 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'Einfachtippen';
+
+  @override
+  String get singleTapAction => 'Einfachtippen-Aktion';
+
+  @override
+  String get tripleTap => 'Dreifachtippen';
+
+  @override
+  String get tripleTapAction => 'Dreifachtippen-Aktion';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'Omis Antworten anhören';
 
   @override

@@ -11286,6 +11286,18 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'Toque único';
+
+  @override
+  String get singleTapAction => 'Ação de toque único';
+
+  @override
+  String get tripleTap => 'Toque triplo';
+
+  @override
+  String get tripleTapAction => 'Ação de toque triplo';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'Ouça as respostas do Omi';
 
   @override

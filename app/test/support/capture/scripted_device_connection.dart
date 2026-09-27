@@ -35,6 +35,16 @@ class ScriptedDeviceConnection implements DeviceConnection {
   Future<StreamSubscription?> getBleButtonListener({required void Function(List<int>) onButtonReceived}) async => null;
 
   @override
+  Future<StreamSubscription?> getBleButtonTapsListener({
+    required void Function(List<int>) onTapsReceived,
+  }) async =>
+      null;
+
+  /// No progressive-tap feature bit: capture tests use the legacy button path.
+  @override
+  Future<int> getFeatures() async => 0;
+
+  @override
   Future<bool> hasPhotoStreamingCharacteristic() async => false;
 
   @override

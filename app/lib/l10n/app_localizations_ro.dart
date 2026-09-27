@@ -11323,6 +11323,18 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'Apăsare simplă';
+
+  @override
+  String get singleTapAction => 'Acțiune apăsare simplă';
+
+  @override
+  String get tripleTap => 'Triplă apăsare';
+
+  @override
+  String get tripleTapAction => 'Acțiune triplă apăsare';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'Ascultă răspunsurile Omi';
 
   @override
