@@ -3597,5 +3597,6 @@
     "appearance": "المظهر",
     "appearanceSystem": "النظام",
     "appearanceLight": "فاتح",
-    "appearanceDark": "داكن"
+    "appearanceDark": "داكن",
+    "voiceQuestionNoSpeech": "لم ألتقط ذلك — حاول مرة أخرى"
 }

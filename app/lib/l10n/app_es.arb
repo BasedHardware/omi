@@ -3597,5 +3597,6 @@
     "appearance": "Apariencia",
     "appearanceSystem": "Sistema",
     "appearanceLight": "Claro",
-    "appearanceDark": "Oscuro"
+    "appearanceDark": "Oscuro",
+    "voiceQuestionNoSpeech": "No entendí eso — inténtalo de nuevo"
 }

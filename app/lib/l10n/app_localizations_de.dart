@@ -11499,4 +11499,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Dunkel';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Das habe ich nicht verstanden — versuche es erneut';
 }

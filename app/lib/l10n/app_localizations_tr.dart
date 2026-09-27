@@ -11417,4 +11417,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Koyu';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Anlayamadım — tekrar deneyin';
 }

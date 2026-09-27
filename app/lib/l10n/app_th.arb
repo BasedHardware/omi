@@ -3597,5 +3597,6 @@
     "appearance": "รูปลักษณ์",
     "appearanceSystem": "ระบบ",
     "appearanceLight": "สว่าง",
-    "appearanceDark": "มืด"
+    "appearanceDark": "มืด",
+    "voiceQuestionNoSpeech": "ฟังไม่ชัด — ลองอีกครั้ง"
 }

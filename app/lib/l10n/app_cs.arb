@@ -3597,5 +3597,6 @@
     "appearance": "Vzhled",
     "appearanceSystem": "Systém",
     "appearanceLight": "Světlý",
-    "appearanceDark": "Tmavý"
+    "appearanceDark": "Tmavý",
+    "voiceQuestionNoSpeech": "Nerozuměl jsem — zkuste to znovu"
 }

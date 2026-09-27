@@ -11157,5 +11157,6 @@
     "appearance": "ظاهر",
     "appearanceSystem": "سیستم",
     "appearanceLight": "روشن",
-    "appearanceDark": "تیره"
+    "appearanceDark": "تیره",
+    "voiceQuestionNoSpeech": "متوجه نشدم — دوباره تلاش کنید"
 }

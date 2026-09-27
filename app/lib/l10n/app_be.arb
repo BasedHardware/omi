@@ -11157,5 +11157,6 @@
     "appearance": "Выгляд",
     "appearanceSystem": "Сістэма",
     "appearanceLight": "Светлы",
-    "appearanceDark": "Цёмны"
+    "appearanceDark": "Цёмны",
+    "voiceQuestionNoSpeech": "Не ўдалося распазнаць — паспрабуйце яшчэ раз"
 }

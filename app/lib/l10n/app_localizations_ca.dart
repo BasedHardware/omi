@@ -11472,4 +11472,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Fosc';
+
+  @override
+  String get voiceQuestionNoSpeech => 'No ho he entès — torna-ho a provar';
 }

@@ -11423,4 +11423,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Tamsus';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Neišgirdau — bandykite dar kartą';
 }

@@ -11401,4 +11401,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get appearanceDark => 'تیره';
+
+  @override
+  String get voiceQuestionNoSpeech => 'متوجه نشدم — دوباره تلاش کنید';
 }
