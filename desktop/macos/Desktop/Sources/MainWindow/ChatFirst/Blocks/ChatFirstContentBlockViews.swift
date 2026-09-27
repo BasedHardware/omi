@@ -709,6 +709,9 @@ struct ConversationLinkView: View {
           id: conversationID,
           recipientEmails: shareRecipients.map(\.email)
         )
+        AnalyticsManager.shared.shareAction(
+          category: "conversation_email",
+          properties: ["target_app": "email", "recipients_count": sent.count])
         summarySendStatus = (
           "Summary sent to \(sent.joined(separator: ", ")) — anyone with the link can view", true
         )

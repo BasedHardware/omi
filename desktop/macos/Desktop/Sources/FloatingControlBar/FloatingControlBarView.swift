@@ -3149,6 +3149,9 @@ private struct MeetingSummaryShareCard: View {
       do {
         let sent = try await MeetingSummaryShareActions.sendSummary(
           conversationID: conversationID, recipientEmails: [address])
+        AnalyticsManager.shared.shareAction(
+          category: "conversation_email",
+          properties: ["target_app": "email", "recipients_count": sent.count])
         let label = ConversationShareRecipient(name: nil, email: address).shortLabel
         finish(confirmation: sent.count > 1 ? "Sent to \(label) +\(sent.count - 1)" : "Sent to \(label)")
       } catch {
