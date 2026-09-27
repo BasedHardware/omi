@@ -12,9 +12,10 @@ does not cover (multipart/form-data JSON-string fields, multi-field calendar
 date validation, filename timestamp parsing, chunked-upload envelopes).
 """
 
+import os
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Any, TypeVar, cast
+from typing import Annotated, Any, Optional, TypeVar, cast
 
 from fastapi import HTTPException, Query
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
@@ -93,6 +94,41 @@ def parse_timezone_aware_datetime(value: str, field_name: str) -> datetime:
 
 
 MAX_IMAGE_CHUNK_TOTAL = 4096
+
+
+def require_safe_sync_filename(filename: Optional[str]) -> str:
+    """Return a client-supplied sync upload name, or 400 if it could escape the staging dir.
+
+    Sync upload names are client-controlled and are concatenated onto a staging
+    directory (``syncing/<uid>/<job_id>/<name>``) right before being written to
+    disk, so a name containing a path separator turns the upload into an
+    arbitrary file write (CWE-22) with caller-controlled bytes. The timestamp
+    parser cannot catch this: it reads ``path.split('/')[-1]`` and therefore
+    happily validates the trailing component of ``../../x_1750000000.bin``.
+
+    Both staging helpers (``retrieve_file_paths`` and the job-scoped
+    ``_retrieve_file_paths_v2``) must call this -- the v2 helper previously
+    skipped it, which is exactly how the two drifted apart.
+
+    Args:
+        filename: the raw ``UploadFile.filename`` value.
+
+    Returns:
+        The same name, proven to be a single path component.
+    """
+    if not filename:
+        raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
+    # os.path.basename only understands '/' on POSIX, so check '\' explicitly:
+    # otherwise '..\\..\\evil.bin' is one opaque component on Linux and a
+    # traversal on Windows.
+    if os.path.basename(filename) != filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, path separators are not allowed")
+    if not filename.strip('.'):
+        # '.', '..' and '...' are directory references, not file names. They carry
+        # no separator, so the check above cannot see them, and a caller that only
+        # validated the separator would join a directory onto the staging path.
+        raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, not a file name")
+    return filename
 
 
 def parse_sync_filename_timestamp(path: str) -> int | float:

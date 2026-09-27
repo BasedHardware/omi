@@ -10,7 +10,7 @@ from fastapi import HTTPException, UploadFile
 
 from models.conversation_enums import ConversationSource
 from utils.log_sanitizer import sanitize
-from utils.request_validation import parse_sync_filename_timestamp
+from utils.request_validation import parse_sync_filename_timestamp, require_safe_sync_filename
 from utils.sync import playback as sync_playback
 
 try:
@@ -112,13 +112,7 @@ def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
     os.makedirs(directory, exist_ok=True)
     paths: List[str] = []
     for file in files:
-        filename = file.filename
-        if not filename:
-            raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
-        if os.path.basename(filename) != filename or '/' in filename or '\\' in filename:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid file format {filename}, path separators are not allowed"
-            )
+        filename = require_safe_sync_filename(file.filename)
         if not filename.endswith('.bin'):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}")
         if '_' not in filename:

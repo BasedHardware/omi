@@ -113,6 +113,7 @@ from utils.other.storage import (
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
+from utils.request_validation import require_safe_sync_filename
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.voiceprints import usable_person_voiceprint
@@ -1494,9 +1495,11 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     os.makedirs(directory, exist_ok=True)
     paths = []
     for file in files:
-        filename = file.filename
-        if not filename:
-            raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
+        # The name is concatenated onto `directory` and written below, so it must
+        # be a single path component. retrieve_file_paths (v1) has always
+        # checked this; v2 did not, which allowed ../../ writes out of the
+        # staging dir (CWE-22).
+        filename = require_safe_sync_filename(file.filename)
         if not filename.endswith('.bin'):
             raise HTTPException(status_code=400, detail='Invalid sync file format')
         if '_' not in filename:

@@ -37,6 +37,7 @@ from utils.mcp_client import (
     parse_state_token,
     generate_pkce_pair,
 )
+from utils.other.safe_filename import safe_filename
 
 from database.apps import (
     change_app_approval_status,
@@ -870,7 +871,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                         detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}',
                     )
     os.makedirs('_temp/apps', exist_ok=True)
-    file_path = f"_temp/apps/{file.filename}"
+    file_path = os.path.join('_temp/apps', safe_filename(file.filename, default='logo'))
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
     img_url = upload_app_logo(file_path, data['id'])
@@ -927,7 +928,7 @@ async def create_persona(
     data['persona_prompt'] = await generate_persona_prompt(uid, data)
     data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
     os.makedirs('_temp/apps', exist_ok=True)
-    file_path = f"_temp/apps/{file.filename}"
+    file_path = os.path.join('_temp/apps', safe_filename(file.filename, default='logo'))
     contents = await file.read()
     await run_blocking(storage_executor, _write_file, file_path, contents)
     img_url = await run_blocking(storage_executor, upload_app_logo, file_path, data['id'])
@@ -968,7 +969,7 @@ async def update_persona(
         ):
             await run_blocking(storage_executor, delete_app_logo, persona['image'])
         os.makedirs('_temp/apps', exist_ok=True)
-        file_path = f"_temp/apps/{file.filename}"
+        file_path = os.path.join('_temp/apps', safe_filename(file.filename, default='logo'))
         contents = await file.read()
         await run_blocking(storage_executor, _write_file, file_path, contents)
         img_url = await run_blocking(storage_executor, upload_app_logo, file_path, persona_id)
@@ -1097,7 +1098,7 @@ def update_app(
         if 'image' in app and len(app['image']) > 0 and app['image'].startswith('https://storage.googleapis.com/'):
             delete_app_logo(app['image'])
         os.makedirs('_temp/apps', exist_ok=True)
-        file_path = f"_temp/apps/{file.filename}"
+        file_path = os.path.join('_temp/apps', safe_filename(file.filename, default='logo'))
         with open(file_path, 'wb') as f:
             f.write(file.file.read())
         img_url = upload_app_logo(file_path, app_id)

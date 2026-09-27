@@ -10,6 +10,7 @@ from pydub import AudioSegment
 from database.redis_db import set_speech_profile_duration, get_speech_profile_duration
 from database.users import set_user_speaker_embedding
 from utils.other import endpoints as auth
+from utils.other.safe_filename import safe_filename
 from utils.other.storage import (
     upload_profile_audio,
     get_profile_audio_if_exists,
@@ -109,7 +110,9 @@ def get_speech_profile_status(uid: str = Depends(auth.get_current_user_uid)):
 @max_part_size(SPEECH_PROFILE_MAX_PART_SIZE)
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
-    file_path = f"_temp/{uid}/{file.filename}"
+    # file.filename is client-controlled: joining it raw let a request write
+    # outside _temp/<uid> (CWE-22). Confine it to one safe component.
+    file_path = os.path.join(f'_temp/{uid}', safe_filename(file.filename, default='sample.wav'))
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 
