@@ -860,6 +860,10 @@ environments:
               provisional: true
               value: 'false'
               category: rollout
+            SYNC_BACKFILL_UID_SEQUENCER:
+              provisional: true
+              value: 'off'
+              category: rollout
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -1063,6 +1067,10 @@ environments:
             SYNC_BACKFILL_INFLIGHT_LIMIT:
               provisional: true
               value: 'false'
+              category: rollout
+            SYNC_BACKFILL_UID_SEQUENCER:
+              provisional: true
+              value: 'off'
               category: rollout
             USE_VERTEX_AI:
               value: 'true'
@@ -2255,7 +2263,7 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
@@ -2398,6 +2406,10 @@ environments:
               provisional: true
               value: 'false'
               category: rollout
+            SYNC_BACKFILL_UID_SEQUENCER:
+              provisional: true
+              value: 'off'
+              category: rollout
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -2432,7 +2444,7 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
@@ -2585,6 +2597,10 @@ environments:
               provisional: true
               value: 'false'
               category: rollout
+            SYNC_BACKFILL_UID_SEQUENCER:
+              provisional: true
+              value: 'off'
+              category: rollout
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -2619,7 +2635,7 @@ environments:
               value: '900'
               category: reliability
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
@@ -2789,7 +2805,7 @@ environments:
               value: 'false'
               category: rollout
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
-              value: 'off'
+              value: gateway
               category: rollout
             ACCOUNT_CUTOVER_ENFORCEMENT:
               value: 'off'
