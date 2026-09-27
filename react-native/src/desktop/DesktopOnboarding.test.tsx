@@ -12,6 +12,10 @@ import {
 } from '../desktopSettingsClient';
 
 jest.mock('../desktopSettingsClient', () => ({
+  loadDesktopPreferences: jest.fn(async () => ({
+    softwarePlane: 'old' as const,
+  })),
+  setDesktopPreference: jest.fn(async () => ({})),
   loadPermissionStatus: jest.fn(async () => ({
     screen: 'unknown',
     microphone: 'unknown',
@@ -426,4 +430,26 @@ test('desktop handoff shows the confirmation code and reopens the browser page w
   expect(content()).not.toContain('418293');
   expect(content()).not.toContain('sign-in code');
   openURL.mockRestore();
+});
+
+test('the backend toggle persists the selected plane before sign-in', async () => {
+  const {setDesktopPreference} = jest.requireMock('../desktopSettingsClient');
+  await mount();
+  expect(
+    renderer.root.findByProps({accessibilityLabel: 'Backend'}),
+  ).toBeDefined();
+  expect(
+    renderer.root.findByProps({accessibilityLabel: 'Use old backend'}).props
+      .accessibilityState.selected,
+  ).toBe(true);
+  await act(async () => {
+    renderer.root
+      .findByProps({accessibilityLabel: 'Use new backend'})
+      .props.onPress();
+  });
+  expect(setDesktopPreference).toHaveBeenCalledWith('softwarePlane', 'new');
+  expect(
+    renderer.root.findByProps({accessibilityLabel: 'Use new backend'}).props
+      .accessibilityState.selected,
+  ).toBe(true);
 });

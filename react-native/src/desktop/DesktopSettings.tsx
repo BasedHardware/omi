@@ -1,15 +1,9 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import type {useRewindCapture} from '../app/useRewindCapture';
 import type {useAmbientAudio} from '../app/useAmbientAudio';
-import {Animated, ScrollView, Switch, Text, View} from 'react-native';
-import SettingsIcon from 'lucide-react-native/icons/settings';
-import UserRound from 'lucide-react-native/icons/user-round';
-import AudioLines from 'lucide-react-native/icons/audio-lines';
-import History from 'lucide-react-native/icons/rotate-ccw-clock';
-import ShieldCheck from 'lucide-react-native/icons/shield-check';
-import Sparkles from 'lucide-react-native/icons/sparkles';
-import Info from 'lucide-react-native/icons/info';
-import Puzzle from 'lucide-react-native/icons/puzzle';
+import {Animated, Easing, ScrollView, Text, View} from 'react-native';
+import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
+
 import {useReduceMotion} from '../app/useReduceMotion';
 import {desktopEaseSmoothOut} from './desktopMotion';
 import {ScrollFade, useScrollFade} from './ScrollFade';
@@ -41,7 +35,6 @@ import {
   type DesktopSettingsPane,
 } from './desktopChrome';
 import {ShippingStage} from './ShippingStage';
-import {PageHeading} from './DesktopRows';
 import {
   type DesktopTokens,
   useDesktopTheme,
@@ -64,51 +57,132 @@ type Props = {
 const PANE_ITEM_HEIGHT = 40;
 const PANE_ITEM_GAP = 4;
 const PANE_PILL_RADIUS = 10;
-const switchTrackColors = (token: DesktopTokens) => ({
-  false: token.color.glassSelected,
-  true: token.color.inkMuted,
-});
+
+const TOGGLE_WIDTH = 44;
+const TOGGLE_HEIGHT = 26;
+const TOGGLE_THUMB = 20;
+const TOGGLE_TRAVEL = TOGGLE_WIDTH - TOGGLE_THUMB - 6;
+
+/**
+ * The house toggle: a glass pill with a sliding thumb, matching the nav pill
+ * and segmented controls instead of the system switch. Role stays "switch" so
+ * accessibility behavior is unchanged.
+ */
+function GlassToggle({
+  accessibilityLabel,
+  disabled = false,
+  onValueChange,
+  value,
+}: {
+  accessibilityLabel: string;
+  disabled?: boolean;
+  onValueChange: (value: boolean) => void;
+  value: boolean;
+}) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const reduceMotion = useReduceMotion();
+  const thumb = useRef(new Animated.Value(value ? 1 : 0)).current;
+  const [pressed, setPressed] = useState(false);
+  useEffect(() => {
+    if (reduceMotion) {
+      thumb.setValue(value ? 1 : 0);
+      return;
+    }
+    const animation = Animated.timing(thumb, {
+      toValue: value ? 1 : 0,
+      duration: pressed ? 220 : 160,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [value, pressed, reduceMotion, thumb]);
+  return (
+    <FocusPressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="switch"
+      accessibilityState={{disabled, checked: value}}
+      disabled={disabled}
+      onPress={() => {
+        if (!disabled) {
+          onValueChange(!value);
+        }
+      }}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      style={({pressed: active}) => [
+        styles.toggle,
+        value && styles.toggleOn,
+        active && !disabled && styles.pressed,
+        disabled && styles.toggleDisabled,
+      ]}>
+      <Animated.View
+        style={[
+          styles.toggleThumb,
+          value && styles.toggleThumbOn,
+          {
+            transform: [
+              {
+                translateX: thumb.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, TOGGLE_TRAVEL],
+                }),
+              },
+              {
+                scale: thumb.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 1.05],
+                }),
+              },
+            ],
+          },
+        ]}
+      />
+    </FocusPressable>
+  );
+}
 const paneInfo: Record<
   DesktopSettingsPane,
-  {icon: typeof SettingsIcon; title: string; description: string}
+  {icon: MaterialIconName; title: string; description: string}
 > = {
   General: {
-    icon: SettingsIcon,
+    icon: 'settings',
     title: 'General',
     description: 'What Omi can remember, and when. You’re in control.',
   },
   'Account & Plan': {
-    icon: UserRound,
+    icon: 'person',
     title: 'Account & plan',
     description: 'Your Omi account and subscription.',
   },
   Transcription: {
-    icon: AudioLines,
+    icon: 'graphic_eq',
     title: 'Transcription',
     description: 'Make room for the words that matter.',
   },
   Rewind: {
-    icon: History,
+    icon: 'history',
     title: 'Recall',
     description: 'Choose how screen history stays on this Mac.',
   },
   'Alerts & Privacy': {
-    icon: ShieldCheck,
+    icon: 'verified_user',
     title: 'Privacy',
     description: 'Decide what stays local and what goes to the cloud.',
   },
   Apps: {
-    icon: Puzzle,
+    icon: 'extension',
     title: 'Apps & integrations',
     description: 'Your Omi app catalog and connected accounts.',
   },
   'AI & Automation': {
-    icon: Sparkles,
+    icon: 'auto_awesome',
     title: 'AI & automation',
     description: 'The services behind your conversations with Omi.',
   },
   About: {
-    icon: Info,
+    icon: 'info',
     title: 'About Omi',
     description: 'A little less to remember. A little more room for you.',
   },
@@ -231,7 +305,7 @@ function SettingsNav({
           style={[styles.panePill, {transform: [{translateY}]}]}
         />
         {desktopSettingsPanes.map(label => {
-          const Icon = paneInfo[label].icon;
+          const icon = paneInfo[label].icon;
           return (
             <FocusPressable
               accessibilityLabel={label}
@@ -240,7 +314,8 @@ function SettingsNav({
               key={label}
               onPress={() => onChange(label)}
               style={styles.paneItem}>
-              <Icon
+              <MaterialIcon
+                name={icon}
                 size={16}
                 color={pane === label ? token.color.ink : token.color.inkMuted}
               />
@@ -271,7 +346,6 @@ export function DesktopSettings({
   signingIn,
   softwarePlaneLocked,
 }: Props) {
-  const {tokens: token} = useDesktopTheme();
   const styles = useDesktopStyleSheets(createStyles);
   const [pane, setPane] = useState<DesktopSettingsPane>('General');
   const fade = useScrollFade();
@@ -479,9 +553,8 @@ export function DesktopSettings({
         }
         title="Screen Capture"
         trailing={
-          <Switch
+          <GlassToggle
             accessibilityLabel="Screen capture setting"
-            trackColor={switchTrackColors(token)}
             onValueChange={value => {
               if (capture?.available) {
                 if (value) {
@@ -514,8 +587,15 @@ export function DesktopSettings({
           permissions.microphone === 'denied'
             ? 'Microphone access is denied in System Settings.'
             : ambient?.error ??
+              ambient?.uploadError ??
               (ambient?.running
-                ? 'Listening on this Mac. Audio is saved locally.'
+                ? ambient.pendingUploads > 0
+                  ? `Listening on this Mac. ${
+                      ambient.pendingUploads
+                    } recording segment${
+                      ambient.pendingUploads === 1 ? '' : 's'
+                    } uploading.`
+                  : 'Listening on this Mac. Audio uploads to your Omi account.'
                 : 'Off, or always on. Meeting-only capture arrives soon.')
         }
         title="Audio Recording"
@@ -549,9 +629,8 @@ export function DesktopSettings({
         }
         title="Notifications"
         trailing={
-          <Switch
+          <GlassToggle
             accessibilityLabel="Notifications setting"
-            trackColor={switchTrackColors(token)}
             onValueChange={value => {
               if (value) {
                 runAction(async () => {
@@ -625,9 +704,8 @@ export function DesktopSettings({
         copy="Detect the spoken language automatically."
         title="Language Mode"
         trailing={
-          <Switch
+          <GlassToggle
             accessibilityLabel="Automatic language detection"
-            trackColor={switchTrackColors(token)}
             onValueChange={value => {
               runAction(() => setPref('transcriptionAutoDetect', value));
             }}
@@ -639,9 +717,8 @@ export function DesktopSettings({
         copy="Skip silence before sending audio."
         title="Local VAD Gate"
         trailing={
-          <Switch
+          <GlassToggle
             accessibilityLabel="Skip silence"
-            trackColor={switchTrackColors(token)}
             onValueChange={value => {
               runAction(() => setPref('vadGate', value));
             }}
@@ -671,9 +748,8 @@ export function DesktopSettings({
         copy="Keep meeting screenshots with conversation notes."
         title="Meeting Screenshots"
         trailing={
-          <Switch
+          <GlassToggle
             accessibilityLabel="Meeting screenshots"
-            trackColor={switchTrackColors(token)}
             onValueChange={value => {
               runAction(() => setPref('meetingNoteScreenshots', value));
             }}
@@ -780,10 +856,6 @@ export function DesktopSettings({
           onContentSizeChange={fade.onContentSizeChange}
           scrollEventThrottle={16}
           contentContainerStyle={styles.content}>
-          <PageHeading
-            title={paneInfo[pane].title}
-            subtitle={paneInfo[pane].description}
-          />
           {actionStatus !== null ? (
             <Text
               accessibilityLabel="Settings action status"
@@ -904,6 +976,28 @@ const createStyles = (token: DesktopTokens) => ({
     fontWeight: '600' as const,
   },
   pressed: {opacity: 0.78},
+  toggle: {
+    alignItems: 'center' as const,
+    borderColor: token.color.line,
+    borderRadius: TOGGLE_HEIGHT / 2,
+    borderWidth: 1,
+    height: TOGGLE_HEIGHT,
+    justifyContent: 'center' as const,
+    paddingLeft: 3,
+    width: TOGGLE_WIDTH,
+  },
+  toggleOn: {
+    backgroundColor: token.color.ink,
+    borderColor: token.color.ink,
+  },
+  toggleThumb: {
+    backgroundColor: token.color.inkMuted,
+    borderRadius: TOGGLE_THUMB / 2,
+    height: TOGGLE_THUMB,
+    width: TOGGLE_THUMB,
+  },
+  toggleThumbOn: {backgroundColor: token.color.dark},
+  toggleDisabled: {opacity: 0.4},
   segments: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,

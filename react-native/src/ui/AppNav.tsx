@@ -1,41 +1,30 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {Animated, Easing, Text, View} from 'react-native';
-import Brain from 'lucide-react-native/icons/brain';
-import GanttChartSquare from 'lucide-react-native/icons/square-chart-gantt';
-import House from 'lucide-react-native/icons/house';
-import ListChecks from 'lucide-react-native/icons/list-checks';
-import PanelLeft from 'lucide-react-native/icons/panel-left';
-import PanelLeftClose from 'lucide-react-native/icons/panel-left-close';
+import {MaterialIcon, type MaterialIconName} from './MaterialIcon';
+
 import type {Route} from '../app/routes';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
 
-type NavigationIcon = React.ComponentType<{
-  accessible?: boolean;
-  color?: string;
-  size?: number;
-  strokeWidth?: number;
-}>;
-
-const navigation: Array<{label: string; icon: NavigationIcon}> = [
-  {label: 'Home', icon: House},
-  {label: 'Conversations', icon: GanttChartSquare},
-  {label: 'Memories', icon: Brain},
-  {label: 'Tasks', icon: ListChecks},
-  {label: 'Connectors', icon: PanelLeftClose},
-  {label: 'Settings', icon: PanelLeft},
+const navigation: Array<{label: string; icon: MaterialIconName}> = [
+  {label: 'Home', icon: 'home'},
+  {label: 'Conversations', icon: 'view_timeline'},
+  {label: 'Memories', icon: 'neurology'},
+  {label: 'Tasks', icon: 'checklist'},
+  {label: 'Connectors', icon: 'extension'},
+  {label: 'Settings', icon: 'settings'},
 ];
 
 function NavItem({
   label,
-  icon: Icon,
+  icon,
   compact,
   active,
   expanded,
   onPress,
 }: {
   label: string;
-  icon: NavigationIcon;
+  icon: MaterialIconName;
   compact: boolean;
   active: boolean;
   expanded: boolean;
@@ -54,11 +43,11 @@ function NavItem({
         pressed && styles.pressed,
       ]}>
       <View style={styles.navIcon}>
-        <Icon
+        <MaterialIcon
           accessible={false}
           color={active ? '#141414' : '#888888'}
+          name={icon}
           size={20}
-          strokeWidth={2}
         />
       </View>
       {(compact || expanded) && (
@@ -155,9 +144,9 @@ export function AppNav({
               pressed && styles.pressed,
             ]}>
             {railExpanded ? (
-              <PanelLeftClose color="#888888" size={20} strokeWidth={2} />
+              <MaterialIcon name="left_panel_close" color="#888888" size={20} />
             ) : (
-              <PanelLeft color="#888888" size={20} strokeWidth={2} />
+              <MaterialIcon name="left_panel_open" color="#888888" size={20} />
             )}
           </FocusPressable>
         </View>

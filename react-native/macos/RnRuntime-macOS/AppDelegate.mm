@@ -4,13 +4,14 @@
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <React/RCTBundleURLProvider.h>
+#import <React/RCTDevLoadingViewSetEnabled.h>
 #import <React/RCTUIKit.h>
 #import <React/RCTViewManager.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <objc/runtime.h>
+#import <stdio.h>
 
 static const CGFloat OmiWindowInset = 12.0;
-static const CGFloat OmiTrafficLightSpacing = 8.0;
 static const CGFloat OmiChromeRowHeight = 52.0;
 static NSString *const OmiWindowPresentationChanged = @"OmiWindowPresentationChanged";
 
@@ -108,12 +109,35 @@ static void OmiSwizzleContentHitTest(NSView *contentView)
   }
   NSView *(*original)(id, SEL, NSPoint) =
       (NSView * (*)(id, SEL, NSPoint)) method_getImplementation(method);
+  // Dev-mode bundle reloads can transiently leave the view graph cyclic; a
+  // cyclic hitTest walk overflows the stack and takes down the whole app.
+  // A depth far above any legitimate React hierarchy bails out instead.
+  // 96, not 512: each level costs ~7 native frames (hitTest + pointInside +
+  // tracking-area cursorUpdate), so 512 levels exhausts the 8 MB main-thread
+  // stack before this guard trips — the crash the guard exists to prevent.
+  static thread_local NSUInteger omiHitTestDepth = 0;
+  static BOOL omiHitTestGuardLogged = NO;
   IMP replacement = imp_implementationWithBlock(^NSView *(NSView *self, NSPoint point) {
+    if (omiHitTestDepth > 96) {
+      if (!omiHitTestGuardLogged) {
+        omiHitTestGuardLogged = YES;
+        NSString *note = [NSString stringWithFormat:
+            @"%@ [OmiUI] hitTest depth guard tripped class=%@ — content input dead\n",
+            NSDate.date, NSStringFromClass(self.class)];
+        FILE *log = fopen("/tmp/omi-auth-debug.log", "a");
+        if (log != NULL) { fwrite(note.UTF8String, 1, strlen(note.UTF8String), log); fclose(log); }
+      }
+      return nil;
+    }
+    omiHitTestDepth += 1;
     NSView *light = OmiTrafficLightHit(self, point);
     if (light != nil) {
+      omiHitTestDepth -= 1;
       return light;
     }
-    return original(self, selector, point);
+    NSView *hit = original(self, selector, point);
+    omiHitTestDepth -= 1;
+    return hit;
   });
   method_setImplementation(method, replacement);
 }
@@ -190,6 +214,10 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
+  // RN's dev loading indicator is a borderless helper window that flashes
+  // over the custom desktop chrome on every Metro load/reload; the app has
+  // its own launch surface, so keep that overlay off entirely.
+  RCTDevLoadingViewSetEnabled(NO);
   self.moduleName = @"RnRuntime";
   self.initialProps = @{};
   NSString *metroPort = NSProcessInfo.processInfo.environment[@"OMI_METRO_PORT"];
@@ -228,6 +256,20 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
                                                    usingBlock:^(__unused NSNotification *note) {
     [weakSelf dressOmiWindow];
   }];
+  __weak AppDelegate *weakSelfForClose = self;
+  self.omiWindowCloseObserver =
+      [NSNotificationCenter.defaultCenter addObserverForName:NSWindowWillCloseNotification
+                                                       object:self.window
+                                                        queue:NSOperationQueue.mainQueue
+                                                   usingBlock:^(__unused NSNotification *note) {
+    // The content hierarchy goes away with the window; later update or
+    // workspace notifications must not reach dressOmiWindow anymore.
+    weakSelfForClose.omiWindowToreDown = YES;
+    if (weakSelfForClose.omiWindowUpdateObserver != nil) {
+      [NSNotificationCenter.defaultCenter removeObserver:weakSelfForClose.omiWindowUpdateObserver];
+      weakSelfForClose.omiWindowUpdateObserver = nil;
+    }
+  }];
   [self installDesktopSearchCommand];
   [self installOmiWindowDragMonitor];
   self.omiAppearanceObserver =
@@ -239,6 +281,7 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
 
 - (void)applicationWillTerminate:(NSNotification *)notification
 {
+  self.omiWindowToreDown = YES;
   [self.omiGuidePlacementTimer invalidate];
   if (self.omiWindowPresentationObserver != nil) {
     [NSNotificationCenter.defaultCenter removeObserver:self.omiWindowPresentationObserver];
@@ -249,6 +292,10 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   if (self.omiWindowUpdateObserver != nil) {
     [NSNotificationCenter.defaultCenter removeObserver:self.omiWindowUpdateObserver];
     self.omiWindowUpdateObserver = nil;
+  }
+  if (self.omiWindowCloseObserver != nil) {
+    [NSNotificationCenter.defaultCenter removeObserver:self.omiWindowCloseObserver];
+    self.omiWindowCloseObserver = nil;
   }
   if (self.omiAppearanceObserver != nil) {
     [NSNotificationCenter.defaultCenter removeObserver:self.omiAppearanceObserver];
@@ -418,8 +465,15 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
 
 - (void)dressOmiWindow
 {
+  // Window-update and workspace notifications can arrive after AppKit has
+  // begun releasing the window's content hierarchy (quit, last-window close).
+  // Touching the half-torn-down view tree segfaults, so stop early.
+  if (self.omiWindowToreDown) {
+    return;
+  }
   NSWindow *window = self.window;
-  if (window == nil) {
+  if (window == nil || window.contentViewController == nil ||
+      window.contentViewController.view == nil) {
     return;
   }
 
@@ -514,24 +568,33 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   closeButton.hidden = NO;
   miniaturizeButton.hidden = NO;
   zoomButton.hidden = NO;
-  NSView *container = closeButton.superview;
-  NSView *frameView = window.contentView.superview ?: container;
-  CGFloat buttonWidth = NSWidth(closeButton.frame);
+  NSView *titlebar = closeButton.superview;
+  NSView *container = titlebar.superview;
+  if (container == nil || container.superview == nil) {
+    return;
+  }
+  NSView *frameView = window.contentView.superview ?: container.superview;
   CGFloat buttonHeight = NSHeight(closeButton.frame);
   // Center the lights on the React chrome row: the row starts at the even
   // window inset and is OmiChromeRowHeight tall, so its center sits
   // OmiWindowInset + OmiChromeRowHeight / 2 below the top of the frame view.
   CGFloat yInFrame = NSHeight(frameView.bounds) - OmiWindowInset - OmiChromeRowHeight +
       floor((OmiChromeRowHeight - buttonHeight) / 2.0);
-  CGFloat xInFrame = OmiWindowInset;
-  for (NSButton *button in @[ closeButton, miniaturizeButton, zoomButton ]) {
-    NSPoint inFrame = NSMakePoint(xInFrame, yInFrame);
-    NSPoint inContainer = [container convertPoint:inFrame fromView:frameView];
-    NSRect frame = button.frame;
-    frame.origin = inContainer;
-    button.frame = frame;
-    xInFrame += buttonWidth + OmiTrafficLightSpacing;
+  // AppKit renders hover glyphs and hit areas from its own titlebar layout,
+  // so re-framing the buttons individually desyncs hover from drawing.
+  // Shift the outer titlebar container instead (the inner titlebar view is
+  // clipped to the container's bounds) and leave the buttons at their
+  // AppKit-default positions inside it; drawing and hover then agree.
+  NSPoint currentInFrame = [frameView convertPoint:closeButton.frame.origin fromView:titlebar];
+  CGFloat dx = OmiWindowInset - currentInFrame.x;
+  CGFloat dy = yInFrame - currentInFrame.y;
+  if (fabs(dx) < 0.1 && fabs(dy) < 0.1) {
+    return;
   }
+  NSRect containerFrame = container.frame;
+  containerFrame.origin.x += dx;
+  containerFrame.origin.y += dy;
+  container.frame = containerFrame;
 }
 
 - (void)installOmiTitlebarClickThrough:(NSWindow *)window

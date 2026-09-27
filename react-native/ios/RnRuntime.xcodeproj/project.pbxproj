@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		51AA5F010000000000000011 /* MaterialSymbolsRounded.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 51AA5F010000000000000012 /* MaterialSymbolsRounded.ttf */; };
 		0C80B921A6F3F58F76C31292 /* libPods-RnRuntime.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-RnRuntime.a */; };
 		0D1A2B3C4D5E6F708192A3B4 /* CoreBluetooth.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D1A2B3C4D5E6F708192A3B5 /* CoreBluetooth.framework */; };
 		0D1A2B3C4D5E6F708192A3B6 /* AVFAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D1A2B3C4D5E6F708192A3B7 /* AVFAudio.framework */; };
@@ -34,6 +35,7 @@
 		0D1A2B3C4D5E6F708192A3B9 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
 		13B07F961A680F5B00A75B9A /* RnRuntime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RnRuntime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = RnRuntime/Images.xcassets; sourceTree = "<group>"; };
+		51AA5F010000000000000012 /* MaterialSymbolsRounded.ttf */ = {isa = PBXFileReference; lastKnownFileType = text; name = MaterialSymbolsRounded.ttf; path = RnRuntime/MaterialSymbolsRounded.ttf; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = RnRuntime/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = RnRuntime/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-RnRuntime.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RnRuntime.debug.xcconfig"; path = "Target Support Files/Pods-RnRuntime/Pods-RnRuntime.debug.xcconfig"; sourceTree = "<group>"; };
@@ -78,6 +80,7 @@
 			isa = PBXGroup;
 			children = (
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
+				51AA5F010000000000000012 /* MaterialSymbolsRounded.ttf */,
 				761780EC2CA45674006654F0 /* AppDelegate.h */,
 				761780EC2CA45674006654EE /* AppDelegate.mm */,
 				761780EC2CA45674006654EF /* main.m */,
@@ -205,6 +208,7 @@
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
+				51AA5F010000000000000011 /* MaterialSymbolsRounded.ttf in Resources */,
 				4AA5CD6BD223060A0F26C5EC /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

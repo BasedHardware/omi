@@ -46,6 +46,14 @@ RCT_REMAP_METHOD(requestCapturePermission,
     resolve([self.capture requestCapturePermission]);
   });
 }
+RCT_REMAP_METHOD(capturePermissionStatus,
+                 capturePermissionStatusWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self.disposed || self.capture == nil) { reject(@"OMI_REWIND_UNAVAILABLE", @"Rewind is unavailable", nil); return; }
+    resolve([self.capture capturePermissionStatus]);
+  });
+}
 RCT_REMAP_METHOD(startCapture,
                  startCaptureWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
@@ -151,5 +159,36 @@ RCT_REMAP_METHOD(ambientAudioStatus,
                  rejecter:(RCTPromiseRejectBlock)reject) {
   if (self.disposed || self.audio == nil) { reject(@"OMI_REWIND_UNAVAILABLE", @"Ambient audio is unavailable", nil); return; }
   resolve([self.audio status]);
+}
+RCT_REMAP_METHOD(ambientAudioSegments,
+                 ambientAudioSegmentsWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (self.disposed || self.audio == nil) { reject(@"OMI_REWIND_UNAVAILABLE", @"Ambient audio is unavailable", nil); return; }
+  dispatch_async(self.ioQueue, ^{ resolve([self.audio pendingSegments]); });
+}
+RCT_REMAP_METHOD(ambientAudioSegmentPackets,
+                 ambientAudioSegmentPacketsWithIdentifier:(NSString *)identifier
+                 offset:(NSUInteger)offset
+                 limit:(NSUInteger)limit
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (self.disposed || self.audio == nil) { reject(@"OMI_REWIND_UNAVAILABLE", @"Ambient audio is unavailable", nil); return; }
+  dispatch_async(self.ioQueue, ^{
+    NSError *error = nil;
+    NSDictionary *result = [self.audio segmentPackets:identifier offset:offset limit:limit error:&error];
+    if (result == nil) { reject(error.domain ?: @"OMI_CAPTURE_SEGMENT_MISSING", @"Ambient audio segment could not be read", nil); return; }
+    resolve(result);
+  });
+}
+RCT_REMAP_METHOD(ambientAudioAcknowledgeSegment,
+                 ambientAudioAcknowledgeSegmentWithIdentifier:(NSString *)identifier
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (self.disposed || self.audio == nil) { reject(@"OMI_REWIND_UNAVAILABLE", @"Ambient audio is unavailable", nil); return; }
+  dispatch_async(self.ioQueue, ^{
+    NSError *error = nil;
+    if (![self.audio acknowledgeSegment:identifier error:&error]) { reject(error.domain ?: @"OMI_CAPTURE_SEGMENT_MISSING", @"Ambient audio segment could not be removed", nil); return; }
+    resolve(nil);
+  });
 }
 @end

@@ -22,6 +22,7 @@ export const desktopPreferenceKeys = {
   pushToTalk: 'shortcut_pttEnabled',
   liveVoiceProvider: 'omi.live.voiceProvider',
   appearance: 'omi.appearance',
+  exploreProgress: 'omi.onboarding.exploreProgress',
 } as const;
 
 export type AudioRecordingMode = 'off' | 'always' | 'meetings';
@@ -46,6 +47,7 @@ export type DesktopPreferences = {
   pushToTalk: boolean;
   liveVoiceProvider: LiveVoiceProvider;
   appearance: DesktopAppearance;
+  exploreProgress: string;
   stampedV5Origin: string | null;
 };
 
@@ -75,6 +77,7 @@ const memoryPreferences: DesktopPreferences = {
   pushToTalk: true,
   liveVoiceProvider: 'gpt_live',
   appearance: 'dark',
+  exploreProgress: '',
   stampedV5Origin: null,
 };
 
@@ -144,6 +147,8 @@ function snapshotFromRecord(
     pushToTalk: record.pushToTalk !== false,
     liveVoiceProvider: parseLiveVoiceProvider(record.liveVoiceProvider),
     appearance: parseDesktopAppearance(record.appearance),
+    exploreProgress:
+      typeof record.exploreProgress === 'string' ? record.exploreProgress : '',
     stampedV5Origin,
   };
 }

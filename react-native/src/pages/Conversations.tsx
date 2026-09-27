@@ -10,9 +10,8 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import Search from 'lucide-react-native/icons/search';
-import X from 'lucide-react-native/icons/x';
-import ChevronLeft from 'lucide-react-native/icons/chevron-left';
+import {MaterialIcon} from '../ui/MaterialIcon';
+
 import {
   conversationGroupLabel,
   type ConversationProjection,
@@ -227,7 +226,12 @@ export function ConversationsPage({
                 styles.conversationSearchBox,
                 embedded && mobileStyles.search,
               ]}>
-              <Search accessible={false} color="#777777" size={17} />
+              <MaterialIcon
+                name="search"
+                accessible={false}
+                color="#777777"
+                size={17}
+              />
               <TextInput
                 accessibilityLabel="Search loaded conversations"
                 onChangeText={setQuery}
@@ -251,7 +255,11 @@ export function ConversationsPage({
                   accessibilityLabel="Clear conversation search"
                   onPress={() => setQuery('')}
                   style={mobileStyles.clear}>
-                  <X size={18} color={mobileColor.textMuted} />
+                  <MaterialIcon
+                    name="close"
+                    size={18}
+                    color={mobileColor.textMuted}
+                  />
                 </FocusPressable>
               )}
             </View>
@@ -454,7 +462,11 @@ export function ConversationsPage({
                 accessibilityLabel="Back to conversations"
                 onPress={() => setSelectedId(null)}
                 style={mobileStyles.back}>
-                <ChevronLeft size={20} color={mobileColor.text} />
+                <MaterialIcon
+                  name="chevron_left"
+                  size={20}
+                  color={mobileColor.text}
+                />
                 <Text style={mobileStyles.filterTextSelected}>
                   Conversations
                 </Text>

@@ -336,6 +336,10 @@ describe("desktop-auth routes", () => {
     expect(html).toContain("6-digit code");
     expect(html).toContain(material.sessionId);
     expect(html).toContain("test-desktop-key");
+    // The link-carried code (URL fragment) lets the page finish the handoff
+    // without retyping; typing stays as the fallback path.
+    expect(html).toContain("autoComplete");
+    expect(html).toContain("/^#c=([0-9]{6})$/.exec(location.hash)");
     // The inline script must be syntactically valid JavaScript: a broken
     // quoting layer still serves 200 HTML but renders a blank page.
     const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];

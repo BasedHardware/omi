@@ -8,7 +8,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Search from 'lucide-react-native/icons/search';
+import {MaterialIcon} from '../ui/MaterialIcon';
+
 import {
   taskGroup,
   type DesktopReadProjection,
@@ -91,7 +92,12 @@ export function TasksPage({
         Tasks
       </Text>
       <View style={styles.taskSearchBox}>
-        <Search accessible={false} color="#777777" size={17} />
+        <MaterialIcon
+          name="search"
+          accessible={false}
+          color="#777777"
+          size={17}
+        />
         <TextInput
           accessibilityLabel="Search loaded tasks"
           onChangeText={setQuery}

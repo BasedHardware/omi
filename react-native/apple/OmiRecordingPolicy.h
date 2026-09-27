@@ -78,6 +78,14 @@ static NSDictionary *OmiRecordingLocalIdentity(NSDictionary *session, NSDictiona
   NSString *login = [session[@"journalLogin"] isKindOfClass:NSString.class] ? session[@"journalLogin"] : nil;
   NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"];
   if (uid.length == 0 || uid.length > 128 || [uid rangeOfCharacterFromSet:allowed.invertedSet].location != NSNotFound || login.length == 0 || login.length > 128) return nil;
-  if (![claims[@"aud"] isEqual:@"based-hardware"] || ![claims[@"iss"] isEqual:@"https://securetoken.google.com/based-hardware"] || ![claims[@"sub"] isEqual:uid] || (claims[@"user_id"] != nil && ![claims[@"user_id"] isEqual:uid])) return nil;
+  // The idToken must come from a trusted Firebase project whose issuer
+  // matches its audience, and the subject must be the session's uid.
+  // Desktop sign-in on the v5 backend mints accounts in based-hardware-dev;
+  // the mobile/backend path stays on based-hardware.
+  NSString *audience = [claims[@"aud"] isKindOfClass:NSString.class] ? claims[@"aud"] : nil;
+  BOOL trustedProject = [audience isEqual:@"based-hardware"] || [audience isEqual:@"based-hardware-dev"];
+  BOOL issuerMatches = [claims[@"iss"] isKindOfClass:NSString.class] && audience != nil &&
+      [claims[@"iss"] isEqual:[@"https://securetoken.google.com/" stringByAppendingString:audience]];
+  if (!trustedProject || !issuerMatches || ![claims[@"sub"] isEqual:uid] || (claims[@"user_id"] != nil && ![claims[@"user_id"] isEqual:uid])) return nil;
   return @{@"uid":uid,@"login":login};
 }

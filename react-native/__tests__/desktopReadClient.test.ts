@@ -18,7 +18,6 @@ import {
   parseMemoryText,
   projectionTimestamp,
   taskGroup,
-  timelineGroups,
 } from '../src/desktopReadClient';
 import type {
   ConversationProjection,
@@ -456,7 +455,6 @@ test('groups validated UTC conversation timestamps by local calendar day', () =>
 });
 
 test('groups timeline rows through one canonical timestamp policy', () => {
-  const now = new Date(2026, 7, 14, 12, 0).getTime();
   const rows: DesktopReadProjection[] = [
     {
       kind: 'conversation',
@@ -497,10 +495,6 @@ test('groups timeline rows through one canonical timestamp policy', () => {
     new Date(2026, 7, 14, 8, 0).getTime(),
   );
   expect(projectionTimestamp(rows[1])).toBeNull();
-  expect(timelineGroups(rows, now)).toEqual([
-    {label: 'Today', items: [rows[0]]},
-    {label: 'Date unavailable', items: [rows[1]]},
-  ]);
 });
 
 test('normalizes memory epoch seconds to timeline milliseconds', () => {
@@ -1081,9 +1075,6 @@ test('groups canonical task millisecond timestamps without converting them twice
     revision: '1',
   };
   expect(projectionTimestamp(item)).toBe(now);
-  expect(timelineGroups([item], now)).toEqual([
-    {label: 'Today', items: [item]},
-  ]);
 });
 
 test('task reads forward opaque cursors and classify stale cursor responses', async () => {

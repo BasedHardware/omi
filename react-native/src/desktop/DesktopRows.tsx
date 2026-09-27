@@ -1,8 +1,7 @@
 import React, {memo} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import CheckCircle2 from 'lucide-react-native/icons/circle-check';
-import MessageCircle from 'lucide-react-native/icons/message-circle';
-import Sparkles from 'lucide-react-native/icons/sparkles';
+import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
+
 import {
   projectionTimestamp,
   type ConversationProjection,
@@ -30,15 +29,15 @@ function timeLabel(item: DesktopReadProjection): string {
 function RowGlyph({kind}: {kind: DesktopReadProjection['kind']}) {
   const styles = useDesktopStyleSheets(createStyles);
   const {tokens: token} = useDesktopTheme();
-  const Icon =
+  const name =
     kind === 'conversation'
-      ? MessageCircle
+      ? 'chat_bubble'
       : kind === 'memory'
-      ? Sparkles
-      : CheckCircle2;
+      ? 'auto_awesome'
+      : 'check_circle';
   return (
     <View style={styles.glyph}>
-      <Icon color={token.color.ink} size={16} />
+      <MaterialIcon color={token.color.ink} name={name} size={16} />
     </View>
   );
 }
@@ -86,12 +85,12 @@ export function PageHeading({
 export function DesktopEmptyState({
   title,
   detail,
-  icon: Icon = MessageCircle,
+  icon = 'chat_bubble',
   error = false,
 }: {
   title: string;
   detail: string;
-  icon?: typeof MessageCircle;
+  icon?: MaterialIconName;
   error?: boolean;
 }) {
   const styles = useDesktopStyleSheets(createStyles);
@@ -101,7 +100,7 @@ export function DesktopEmptyState({
       style={styles.emptyState}
       accessibilityRole={error ? 'alert' : undefined}>
       <View style={styles.emptyGlyph}>
-        <Icon size={24} color={token.color.inkMuted} />
+        <MaterialIcon name={icon} size={24} color={token.color.inkMuted} />
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyDetail}>{detail}</Text>

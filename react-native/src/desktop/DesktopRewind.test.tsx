@@ -1,13 +1,6 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {
-  AppState,
-  Image,
-  NativeModules,
-  Switch,
-  Text,
-  TextInput,
-} from 'react-native';
+import {AppState, Image, NativeModules, Text, TextInput} from 'react-native';
 
 const mockRewind = {listFrames: jest.fn(), readFrame: jest.fn()};
 NativeModules.OmiRewind = mockRewind;
@@ -454,20 +447,26 @@ test('Settings Screen Capture switch operates the shared producer instead of cha
         <DesktopSettings {...props} capture={capture} />,
       );
     });
-    expect(view.root.findAllByType(Switch)[0]!.props.value).toBe(true);
-    await act(async () =>
-      view.root.findAllByType(Switch)[0]!.props.onValueChange(false),
-    );
+    const toggle = () =>
+      view.root
+        .findAll(
+          node => node.props.accessibilityLabel === 'Screen capture setting',
+        )
+        .find(
+          node =>
+            node.props.accessibilityState != null &&
+            typeof node.props.onPress === 'function',
+        )!;
+    expect(toggle().props.accessibilityState.checked).toBe(true);
+    await act(async () => toggle().props.onPress());
     expect(capture.stop).toHaveBeenCalledTimes(1);
     await act(async () =>
       view.update(
         <DesktopSettings {...props} capture={{...capture, capturing: false}} />,
       ),
     );
-    expect(view.root.findAllByType(Switch)[0]!.props.value).toBe(false);
-    await act(async () =>
-      view.root.findAllByType(Switch)[0]!.props.onValueChange(true),
-    );
+    expect(toggle().props.accessibilityState.checked).toBe(false);
+    await act(async () => toggle().props.onPress());
     expect(capture.start).toHaveBeenCalledTimes(1);
     // The switch also persists intent so capture auto-starts on next launch
     // and re-arms after sleep/lock.

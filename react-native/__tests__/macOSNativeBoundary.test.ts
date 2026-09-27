@@ -58,19 +58,22 @@ test('puts traffic lights in the content chrome next to Home', () => {
   expect(source).not.toContain('accessibilityLabel="Window drag handle"');
 });
 
-test('keeps every traffic light at its native standard size and moves only its origin', () => {
+test('shifts the whole titlebar container instead of reframing individual buttons', () => {
   const source = readNativeSource('AppDelegate.mm');
   const methodStart = source.indexOf('- (void)positionOmiTrafficLights');
   expect(methodStart).toBeGreaterThan(-1);
   const methodEnd = source.indexOf('\n}', methodStart);
   const methodSource = source.slice(methodStart, methodEnd);
 
-  expect(methodSource).toContain(
+  // Hover glyphs and hit areas follow AppKit's own titlebar layout, so the
+  // buttons themselves must never be reframed; only their container moves.
+  expect(methodSource).not.toMatch(/button\.frame\s*=/);
+  expect(methodSource).not.toContain('frame.origin = inContainer;');
+  expect(methodSource).not.toContain(
     'for (NSButton *button in @[ closeButton, miniaturizeButton, zoomButton ])',
   );
-  expect(methodSource).toContain(
-    'CGFloat buttonWidth = NSWidth(closeButton.frame);',
-  );
+  expect(methodSource).toContain('NSView *titlebar = closeButton.superview;');
+  expect(methodSource).toContain('NSView *container = titlebar.superview;');
   expect(methodSource).toContain(
     'CGFloat buttonHeight = NSHeight(closeButton.frame);',
   );
@@ -78,21 +81,18 @@ test('keeps every traffic light at its native standard size and moves only its o
     'NSView *frameView = window.contentView.superview',
   );
   expect(methodSource).toContain(
-    '[container convertPoint:inFrame fromView:frameView]',
+    '[frameView convertPoint:closeButton.frame.origin fromView:titlebar]',
   );
-  expect(methodSource).toContain('frame.origin = inContainer;');
   expect(methodSource).toContain(
-    'xInFrame += buttonWidth + OmiTrafficLightSpacing;',
+    'CGFloat dx = OmiWindowInset - currentInFrame.x;',
   );
-  expect(methodSource).toContain('CGFloat xInFrame = OmiWindowInset;');
+  expect(methodSource).toContain('if (fabs(dx) < 0.1 && fabs(dy) < 0.1) {');
+  expect(methodSource).toContain('containerFrame.origin.x += dx;');
+  expect(methodSource).toContain('containerFrame.origin.y += dy;');
+  expect(methodSource).toContain('container.frame = containerFrame;');
   expect(methodSource).toContain(
     'NSHeight(frameView.bounds) - OmiWindowInset - OmiChromeRowHeight',
   );
-  expect(methodSource).not.toContain(
-    'NSHeight(container.bounds) - OmiWindowInset - OmiChromeRowHeight',
-  );
-  expect(methodSource).not.toContain('frame.size =');
-  expect(methodSource).not.toMatch(/button\.frame\s*=\s*NSMakeRect/);
 });
 
 test('titlebar and drag monitor do not steal chrome clicks', () => {
@@ -467,7 +467,13 @@ test('clears the leftover loopback tab and returns the user to the app', () => {
   expect(auth).not.toContain('<title>Signed in to Omi</title>');
   expect(auth).not.toContain('Signed in to Omi');
   expect(auth).not.toContain('This window closes itself');
-  expect(auth).not.toContain('<circle ');
+  // The confirmation page is a tiny inline SVG of the eight-dot Omi mark
+  // plus a visible countdown — no scripts beyond the close sequence, no
+  // gradients, no palette math.
+  expect(auth).toContain("svg class='mark' viewBox='0 0 260 260'");
+  expect(auth.match(/<circle /g)?.length).toBe(8);
+  expect(auth).toContain('Logged in successfully');
+  expect(auth).toContain("id='count'>Closing in 3");
   expect(auth).not.toContain('radial-gradient');
   expect(auth).toContain("location.replace('about:blank')");
   expect(auth).toContain('window.close()');
@@ -622,7 +628,9 @@ test('desktop settings persist preferences and request real macOS permissions', 
   expect(source).toContain('RCT_REMAP_METHOD(setDesktopPreference');
   expect(source).toContain('@"softwarePlane" : @"omi.backend.softwarePlane"');
   expect(source).toContain('@"liveVoiceProvider" : @"omi.live.voiceProvider"');
-  expect(source).toContain('environment[@"OMI_V5_BACKEND_URL"]');
+  // The stamped v5 origin comes from the shared validator (environment first,
+  // then the persisted dev origin for Finder/Dock launches).
+  expect(source).toContain('OmiValidatedV5BackendURLFromEnvironment');
   expect(source).toContain('screenAnalysisEnabled');
   expect(source).toContain('audioRecordingMode');
   expect(source).toContain('CGPreflightScreenCaptureAccess');

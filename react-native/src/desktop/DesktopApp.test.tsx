@@ -6,7 +6,6 @@ import {
   NativeModules,
   Platform,
   ScrollView,
-  Switch,
   Text,
   TextInput,
 } from 'react-native';
@@ -400,12 +399,12 @@ test.each(['tasks', 'conversations'] as const)(
         }
       }
     }
-    expect(home).toContain('Open Recall');
+    expect(home).not.toContain('Open Recall');
     expect(
       renderer.root.findAll(
         node => node.props.accessibilityLabel === 'Open Recall',
       ).length,
-    ).toBeGreaterThan(0);
+    ).toBe(0);
     act(() => {
       renderer.root
         .find(node => node.props.accessibilityLabel === `Show more ${section}`)
@@ -421,7 +420,7 @@ test.each(['tasks', 'conversations'] as const)(
   },
 );
 
-test('persistent capture toggle uses the existing owner across Home, Recall and Chat', async () => {
+test('persistent capture toggle uses the existing owner across Settings and Home', async () => {
   const capture = {
     available: true,
     capturing: false,
@@ -435,31 +434,38 @@ test('persistent capture toggle uses the existing owner across Home, Recall and 
     .mockReturnValue(capture);
   try {
     const renderer = renderDesktop();
+    const openSettings = () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Settings')
+        .props.onPress();
     const toggle = () =>
       renderer.root
-        .findAllByType(Switch)
-        .find(node => node.props.accessibilityLabel === 'Screen capture')!;
-    expect(toggle().props.value).toBe(false);
-    await act(async () => toggle().props.onValueChange(true));
+        .findAll(
+          node => node.props.accessibilityLabel === 'Screen capture setting',
+        )
+        .find(
+          node =>
+            node.props.accessibilityState != null &&
+            typeof node.props.onPress === 'function',
+        )!;
+    await act(async () => openSettings());
+    expect(toggle().props.accessibilityState.checked).toBe(false);
+    await act(async () => toggle().props.onPress());
     expect(capture.start).toHaveBeenCalledTimes(1);
     capture.capturing = true;
     await act(async () =>
       renderer.root
-        .find(node => node.props.accessibilityLabel === 'Use Search mode')
+        .find(node => node.props.accessibilityLabel === 'Home')
         .props.onPress(),
     );
-    expect(toggle().props.value).toBe(true);
     expect(
-      renderer.root
-        .findAllByType(Switch)
-        .filter(node => node.props.accessibilityLabel === 'Screen capture'),
-    ).toHaveLength(1);
-    await act(async () =>
-      renderer.root
-        .find(node => node.props.accessibilityLabel === 'Use Ask mode')
-        .props.onPress(),
-    );
-    await act(async () => toggle().props.onValueChange(false));
+      renderer.root.findAll(
+        node => node.props.accessibilityLabel === 'Screen capture setting',
+      ),
+    ).toHaveLength(0);
+    await act(async () => openSettings());
+    expect(toggle().props.accessibilityState.checked).toBe(true);
+    await act(async () => toggle().props.onPress());
     expect(capture.stop).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
     renderers.splice(renderers.indexOf(renderer), 1);
@@ -582,7 +588,7 @@ test('empty Ask is disabled and Enter cannot send, and Ask stays on Home', () =>
       node => node.props.accessibilityLabel === 'Chat with Omi',
     ),
   ).toHaveLength(0);
-  expect(renderedText(renderer)).toContain('Screen history');
+  expect(renderedText(renderer)).toContain('Conversations & memories');
 });
 
 test.each(['initial-loading', 'refreshing', 'unavailable'] as const)(
@@ -1440,12 +1446,27 @@ test('Home renders real memories alongside conversations', () => {
   expect(tree).toContain('Memory');
 });
 
-test('Home opens the real Rewind destination', async () => {
+test('Home explore checklist guides to the real Rewind destination', async () => {
   const renderer = renderDesktop();
-  expect(renderedText(renderer)).toContain('Open Recall');
+  await act(async () => {
+    await Promise.resolve();
+  });
+  const home = renderedText(renderer);
+  expect(home).toContain('Getting started');
+  expect(home).toContain('Find something you saw');
+  expect(home).not.toContain('Open Recall');
   await act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Open Recall')
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Guide: Find something you saw',
+      )
+      .props.onPress();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Recall')
       .props.onPress();
     await Promise.resolve();
   });
@@ -1454,8 +1475,12 @@ test('Home opens the real Rewind destination', async () => {
       node => node.props.accessibilityLabel === 'Recall screen history',
     ).length,
   ).toBeGreaterThan(0);
-  expect(renderedText(renderer)).not.toContain(
-    'Screen history is ready when capture is on',
+  const {setDesktopPreference} = jest.requireMock(
+    '../desktopSettingsClient',
+  ) as {setDesktopPreference: jest.Mock};
+  expect(setDesktopPreference).toHaveBeenCalledWith(
+    'exploreProgress',
+    'recall',
   );
 });
 
@@ -1734,6 +1759,9 @@ test('re-selecting the current backend segment does not wipe the workspace', asy
       .props.onPress();
     await Promise.resolve();
   });
+  // Arriving at Settings legitimately ticks the explore checklist off; the
+  // assertion below is about pane writes only.
+  setDesktopPreference.mockClear();
   act(() => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'AI & Automation')
@@ -1782,7 +1810,6 @@ test('Settings surfaces a failed mutation and does not reload the workspace', as
   const {setDesktopPreference} = jest.requireMock(
     '../desktopSettingsClient',
   ) as {setDesktopPreference: jest.Mock};
-  setDesktopPreference.mockRejectedValueOnce(new Error('write failed'));
   const renderer = renderDesktop({onWorkspaceReload});
   await act(async () => {
     renderer.root
@@ -1790,6 +1817,10 @@ test('Settings surfaces a failed mutation and does not reload the workspace', as
       .props.onPress();
     await Promise.resolve();
   });
+  // The explore checklist marks Settings on arrival; the rejection below must
+  // target the pane mutation, not the checklist write.
+  setDesktopPreference.mockClear();
+  setDesktopPreference.mockRejectedValueOnce(new Error('write failed'));
   act(() => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'AI & Automation')

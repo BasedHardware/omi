@@ -1,7 +1,7 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import Mic from 'lucide-react-native/icons/mic';
-import PhoneOff from 'lucide-react-native/icons/phone-off';
+import {MaterialIcon} from './MaterialIcon';
+
 import type {OmiBackend} from '../omiNativeTypes';
 import type {LiveVoiceProvider} from '../desktopSettingsClient';
 import {
@@ -173,9 +173,13 @@ export function LiveVoiceButton({
           pressed && styles.pressed,
         ]}>
         {active ? (
-          <PhoneOff color={on ? '#ffffff' : ink} size={16} />
+          <MaterialIcon
+            name="phone_disabled"
+            color={on ? '#ffffff' : ink}
+            size={16}
+          />
         ) : (
-          <Mic color={ink} size={16} />
+          <MaterialIcon name="mic" color={ink} size={16} />
         )}
         <Text style={[styles.label, on ? styles.labelOn : {color: ink}]}>
           {label}

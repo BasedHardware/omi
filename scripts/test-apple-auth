@@ -14,6 +14,9 @@ xcrun clang++ -fobjc-arc -std=c++17 -framework AppKit -framework QuartzCore \
 xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
   "$repo_root/react-native/apple/OmiDeviceInformationTest.mm" -o "$build_dir/device-information"
 "$build_dir/device-information"
+xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation -framework AVFoundation -framework AppKit -framework AudioToolbox \
+  "$repo_root/react-native/apple/OmiAudioCaptureTest.mm" -o "$build_dir/ambient-audio"
+"$build_dir/ambient-audio"
 xcrun clang++ -fobjc-arc -std=c++17 -framework Foundation \
   "$repo_root/react-native/apple/OmiBleSessionTest.mm" -o "$build_dir/ble-session"
 "$build_dir/ble-session"

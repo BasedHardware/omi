@@ -1,9 +1,8 @@
 import React from 'react';
 import {StyleSheet, TextInput, View} from 'react-native';
-import ArrowUp from 'lucide-react-native/icons/arrow-up';
-import Search from 'lucide-react-native/icons/search';
+import {MaterialIcon} from './MaterialIcon';
+
 import {FocusPressable} from './Pressable';
-import {Icon} from './Icon';
 import {Input} from './Field';
 import {
   type KitTokens,
@@ -48,13 +47,11 @@ export function HomeSearchField({
         !compact && !desktop && styles.wideDock,
         searchFocused && styles.focused,
       ]}>
-      <Icon
+      <MaterialIcon
         accessible={false}
         color={desktop ? tokens.color.chromeText : tokens.color.textSubtle}
-        fallback={Search}
+        name="search"
         size={desktop ? tokens.space.lg : tokens.size.icon}
-        strokeWidth={tokens.icon.strokeWidth}
-        symbolName="magnifyingglass"
       />
       <Input
         accessibilityHint={
@@ -86,12 +83,10 @@ export function HomeSearchField({
           desktop && styles.desktopAskButton,
           pressed && styles.pressed,
         ]}>
-        <Icon
+        <MaterialIcon
           color={tokens.color.textInverse}
-          fallback={ArrowUp}
+          name="arrow_upward"
           size={desktop ? tokens.size.iconSmall : 17}
-          strokeWidth={2.5}
-          symbolName="arrow.up"
         />
       </FocusPressable>
     </View>

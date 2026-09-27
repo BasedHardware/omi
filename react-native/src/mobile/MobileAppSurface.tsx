@@ -15,13 +15,8 @@ import {
   TaskMutationStatus,
   type TaskMutationProps,
 } from '../ui/TaskEditor';
-import House from 'lucide-react-native/icons/house';
-import MessageCircle from 'lucide-react-native/icons/message-circle';
-import ChevronLeft from 'lucide-react-native/icons/chevron-left';
-import ListChecks from 'lucide-react-native/icons/list-checks';
-import Settings from 'lucide-react-native/icons/settings';
-import Check from 'lucide-react-native/icons/check';
-import Pencil from 'lucide-react-native/icons/pencil';
+import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
+
 import {OmiAvatar} from '../ui/OmiAvatar';
 import {useReduceMotion} from '../app/useReduceMotion';
 import type {
@@ -184,7 +179,13 @@ const TaskRow = memo(function TaskRow({
         onPress={() => onToggle?.(task.id)}
         style={styles.taskToggle}>
         <View style={[styles.checkbox, task.completed && styles.checkboxDone]}>
-          {task.completed && <Check color={mobileColor.background} size={14} />}
+          {task.completed && (
+            <MaterialIcon
+              name="check"
+              color={mobileColor.background}
+              size={14}
+            />
+          )}
         </View>
         <View style={styles.taskCopy}>
           <Text
@@ -216,7 +217,7 @@ const TaskRow = memo(function TaskRow({
           disabled={busy}
           onPress={() => onEdit(task.id)}
           style={styles.taskEdit}>
-          <Pencil color={mobileColor.textMuted} size={16} />
+          <MaterialIcon name="edit" color={mobileColor.textMuted} size={16} />
         </Pressable>
       )}
     </View>
@@ -249,11 +250,15 @@ const ConversationRow = memo(function ConversationRow({
   );
 });
 
-const tabItems = [
-  {route: 'home' as const, label: 'Home', Icon: House},
-  {route: 'chat' as const, label: 'Conversations', Icon: MessageCircle},
-  {route: 'tasks' as const, label: 'Tasks', Icon: ListChecks},
-  {route: 'settings' as const, label: 'Settings', Icon: Settings},
+const tabItems: Array<{
+  route: MobileRoute;
+  label: string;
+  icon: MaterialIconName;
+}> = [
+  {route: 'home', label: 'Home', icon: 'home'},
+  {route: 'chat', label: 'Conversations', icon: 'chat_bubble'},
+  {route: 'tasks', label: 'Tasks', icon: 'checklist'},
+  {route: 'settings', label: 'Settings', icon: 'settings'},
 ];
 
 function MobileTabBar({
@@ -266,7 +271,7 @@ function MobileTabBar({
   const selectedRoute = activeRoute === 'apps' ? 'settings' : activeRoute;
   return (
     <View accessibilityRole="tablist" style={styles.tabBar}>
-      {tabItems.map(({route, label, Icon}) => (
+      {tabItems.map(({route, label, icon}) => (
         <Pressable
           accessibilityLabel={label}
           accessibilityRole="tab"
@@ -278,12 +283,13 @@ function MobileTabBar({
             selectedRoute === route && styles.tabActive,
           ]}>
           <View style={styles.tabIcon}>
-            <Icon
+            <MaterialIcon
               color={
                 selectedRoute === route
                   ? mobileColor.text
                   : mobileColor.textSubtle
               }
+              name={icon}
               size={22}
             />
           </View>
@@ -487,7 +493,11 @@ export function MobileAppSurface({
                 accessibilityLabel="Back to Settings"
                 onPress={() => onRouteChange('settings')}
                 style={styles.backButton}>
-                <ChevronLeft size={20} color={mobileColor.text} />
+                <MaterialIcon
+                  name="chevron_left"
+                  size={20}
+                  color={mobileColor.text}
+                />
                 <Text style={styles.quietButtonText}>Settings</Text>
               </Pressable>
               <Text style={styles.sectionTitle}>Apps</Text>

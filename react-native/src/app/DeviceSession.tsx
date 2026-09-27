@@ -9,7 +9,8 @@ import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {bluetoothStatusLabel} from './bluetooth';
 import {DeviceControls} from './DeviceControls';
-import ChevronDown from 'lucide-react-native/icons/chevron-down';
+import {MaterialIcon} from '../ui/MaterialIcon';
+
 import {mobileColor as color} from '../mobile/mobileTokens';
 
 export type DeviceSessionVariant = 'affordance' | 'compact' | 'overview';
@@ -379,7 +380,8 @@ export function DeviceSession({
               <Text style={local.disclosureText}>
                 Device details & controls
               </Text>
-              <ChevronDown
+              <MaterialIcon
+                name="expand_more"
                 color={color.textMuted}
                 size={18}
                 style={detailsId === connected.id ? local.expanded : undefined}

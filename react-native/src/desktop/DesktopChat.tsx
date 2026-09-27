@@ -1,6 +1,7 @@
 import React, {useCallback, useLayoutEffect, useRef, useState} from 'react';
 import {Platform, ScrollView, StyleSheet, Text, View} from 'react-native';
-import ArrowUpRight from 'lucide-react-native/icons/arrow-up-right';
+import {MaterialIcon} from '../ui/MaterialIcon';
+
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
 import {FocusPressable} from '../ui/Pressable';
@@ -156,7 +157,11 @@ export function DesktopChat({
                   onPress={() => onSuggest(prompt)}
                   style={styles.suggestion}>
                   <Text style={styles.suggestionText}>{prompt}</Text>
-                  <ArrowUpRight size={15} color={token.color.inkMuted} />
+                  <MaterialIcon
+                    name="arrow_outward"
+                    size={15}
+                    color={token.color.inkMuted}
+                  />
                 </ShippingPressable>
               ))}
             </View>

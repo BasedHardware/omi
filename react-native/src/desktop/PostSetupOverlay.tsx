@@ -1,109 +1,233 @@
 import React, {useCallback, useEffect, useRef} from 'react';
 import {Animated, Easing, StyleSheet, Text, View} from 'react-native';
 import {FocusPressable} from '../ui/Pressable';
+import {useReduceMotion} from '../app/useReduceMotion';
 import {type DesktopTokens, useDesktopStyleSheets} from './DesktopTheme';
 
 const CONFETTI_COLORS = ['#38e0c0', '#7aa2ff', '#ffd166', '#ff8fa3', '#ffffff'];
 
 type ConfettiPiece = {
   color: string;
-  drift: number;
+  /** Seconds the piece stays in flight. */
   duration: number;
   height: number;
+  /** Absolute px offsets from the piece origin, sampled over flight. */
+  path: {x: number; y: number}[];
   rotation: number;
-  spread: number;
+  wobblePhase: number;
+  wobbleWidth: number;
   width: number;
 };
 
-// One confetti burst: paper pieces launch upward from behind the button, arc
-// with a little drift and spin, and fade before they leave the frame. Runs on
-// the Continue press, right before the overlay closes.
-function makeConfetti(count: number): ConfettiPiece[] {
-  return Array.from({length: count}, (_, index) => ({
-    color: CONFETTI_COLORS[index % CONFETTI_COLORS.length],
-    drift: (Math.random() - 0.5) * 320,
-    duration: 900 + Math.random() * 700,
-    height: 6 + Math.random() * 6,
-    rotation: (Math.random() - 0.5) * 1440,
-    spread: (Math.random() - 0.5) * 260,
-    width: 4 + Math.random() * 4,
-  }));
+// Trajectory sampling density for the Animated interpolations.
+const PATH_SAMPLES = 26;
+
+/**
+ * One physics step of the canvas-confetti model: ballistic motion with linear
+ * drag, integrated forward in time.
+ */
+function stepPhysics(
+  state: {vx: number; vy: number; x: number; y: number},
+  gravity: number,
+  drag: number,
+  dt: number,
+) {
+  state.vx *= Math.exp(-drag * dt);
+  state.vy = state.vy * Math.exp(-drag * dt) + gravity * dt;
+  state.x += state.vx * dt;
+  state.y += state.vy * dt;
 }
 
-function ConfettiBurst({pieces}: {pieces: ConfettiPiece[]}) {
+function samplePath(
+  origin: {vx: number; vy: number},
+  duration: number,
+  gravity: number,
+  drag: number,
+): {x: number; y: number}[] {
+  const state = {vx: origin.vx, vy: origin.vy, x: 0, y: 0};
+  const dt = duration / (PATH_SAMPLES - 1);
+  const path = [{x: 0, y: 0}];
+  for (let sample = 1; sample < PATH_SAMPLES; sample += 1) {
+    stepPhysics(state, gravity, drag, dt);
+    path.push({x: state.x, y: state.y});
+  }
+  return path;
+}
+
+function cannonPiece(
+  angleDegrees: number,
+  spreadDegrees: number,
+): ConfettiPiece {
+  const angle =
+    ((angleDegrees + (Math.random() - 0.5) * spreadDegrees) * Math.PI) / 180;
+  const speed = 880 + Math.random() * 320;
+  const duration = 1.9 + Math.random() * 0.7;
+  return {
+    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+    duration,
+    height: 9 + Math.random() * 6,
+    path: samplePath(
+      {vx: Math.sin(angle) * speed, vy: -Math.cos(angle) * speed},
+      duration,
+      1350,
+      1.1,
+    ),
+    rotation: (Math.random() - 0.5) * 1440,
+    wobblePhase: Math.random() * Math.PI * 2,
+    wobbleWidth: 18 + Math.random() * 26,
+    width: 5 + Math.random() * 4,
+  };
+}
+
+function drizzlePiece(): ConfettiPiece {
+  const duration = 2.1 + Math.random() * 0.9;
+  return {
+    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+    duration,
+    height: 8 + Math.random() * 5,
+    path: samplePath(
+      {vx: (Math.random() - 0.5) * 60, vy: 120 + Math.random() * 160},
+      duration,
+      210,
+      0.25,
+    ),
+    rotation: (Math.random() - 0.5) * 900,
+    wobblePhase: Math.random() * Math.PI * 2,
+    wobbleWidth: 26 + Math.random() * 30,
+    width: 5 + Math.random() * 3,
+  };
+}
+
+const PROGRESS_SAMPLES = Array.from(
+  {length: PATH_SAMPLES},
+  (_, index) => index / (PATH_SAMPLES - 1),
+);
+
+function ConfettiPieceView({
+  left,
+  piece,
+  top,
+}: {
+  left: number | `${number}%`;
+  piece: ConfettiPiece;
+  top: number | `${number}%`;
+}) {
   const progress = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const animation = Animated.timing(progress, {
-      duration: 1900,
-      easing: Easing.out(Easing.quad),
+      duration: piece.duration * 1000,
+      easing: t => t,
       toValue: 1,
       useNativeDriver: true,
       isInteraction: false,
     });
     animation.start();
     return () => animation.stop();
-  }, [progress]);
+  }, [progress, piece.duration]);
+  const xs = piece.path.map(point => point.x);
+  const ys = piece.path.map(point => point.y);
+  // Paper flip: the piece rotates about its long axis, so its projected
+  // height oscillates — the effect that makes canvas confetti read as paper.
+  const flips = PROGRESS_SAMPLES.map(
+    sample =>
+      0.25 +
+      0.75 * Math.abs(Math.sin(Math.PI * 3 * sample + piece.wobblePhase)),
+  );
+  const wobble = PROGRESS_SAMPLES.map(
+    sample => Math.sin(Math.PI * 4 * sample + piece.wobblePhase) * 6,
+  );
+  const opacity = progress.interpolate({
+    inputRange: [0, 0.72, 1],
+    outputRange: [1, 1, 0],
+  });
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-      {pieces.map((piece, index) => {
-        const rise = piece.duration / 1700;
-        return (
-          <Animated.View
-            key={index}
-            style={{
-              backgroundColor: piece.color,
-              borderRadius: 1.5,
-              height: piece.height,
-              left: '50%',
-              marginLeft: piece.spread / 2 - piece.width / 2,
-              opacity: progress.interpolate({
-                inputRange: [0, 0.6, 0.85, 1],
-                outputRange: [1, 1, 0.9, 0],
-              }),
-              position: 'absolute',
-              top: '62%',
-              transform: [
-                {
-                  translateX: progress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, piece.drift],
-                  }),
-                },
-                {
-                  translateY: progress.interpolate({
-                    inputRange: [0, rise, 1],
-                    outputRange: [0, -140 - piece.duration / 14, 320],
-                  }),
-                },
-                {
-                  rotate: progress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['0deg', `${piece.rotation}deg`],
-                  }),
-                },
-                {scale: 0.9},
-              ],
-              width: piece.width,
-            }}
-          />
-        );
-      })}
-    </View>
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        backgroundColor: piece.color,
+        borderRadius: 1.5,
+        height: piece.height,
+        left,
+        opacity,
+        position: 'absolute',
+        top,
+        transform: [
+          {
+            translateX: progress.interpolate({
+              inputRange: PROGRESS_SAMPLES,
+              outputRange: xs.map((x, index) => x + wobble[index]),
+            }),
+          },
+          {
+            translateY: progress.interpolate({
+              inputRange: PROGRESS_SAMPLES,
+              outputRange: ys,
+            }),
+          },
+          {
+            rotate: progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: ['0deg', `${piece.rotation}deg`],
+            }),
+          },
+          {
+            scaleY: progress.interpolate({
+              inputRange: PROGRESS_SAMPLES,
+              outputRange: flips,
+            }),
+          },
+        ],
+        width: piece.width,
+      }}
+    />
   );
 }
 
 /**
- * Confetti that outlives the post-setup overlay. Rendered by DesktopApp at
- * the top of the tree, so pieces keep falling over the app UI after the
- * overlay has faded away, then unmounts itself.
+ * Confetti that outlives the post-setup overlay: two side cannons fire the
+ * canvas-confetti "school pride" burst while a light drizzle keeps falling
+ * from the top over the app UI after the overlay has faded away. Renders
+ * nothing under reduce motion.
  */
 export function PostSetupConfetti({onDone}: {onDone: () => void}) {
-  const pieces = useRef(makeConfetti(84)).current;
+  const reduceMotion = useReduceMotion();
+  const pieces = useRef(
+    [] as (ConfettiPiece & {left: `${number}%`; top: `${number}%`})[],
+  ).current;
+  if (pieces.length === 0) {
+    for (let index = 0; index < 44; index += 1) {
+      pieces.push({...cannonPiece(52, 44), left: '2%', top: '96%'});
+    }
+    for (let index = 0; index < 44; index += 1) {
+      pieces.push({...cannonPiece(128, 44), left: '98%', top: '96%'});
+    }
+    for (let index = 0; index < 36; index += 1) {
+      pieces.push({
+        ...drizzlePiece(),
+        left: `${4 + ((index * 97) % 92)}%`,
+        top: '-2%',
+      });
+    }
+  }
   useEffect(() => {
-    const timer = setTimeout(onDone, 2000);
+    const timer = setTimeout(onDone, reduceMotion ? 200 : 3000);
     return () => clearTimeout(timer);
-  }, [onDone]);
-  return <ConfettiBurst pieces={pieces} />;
+  }, [onDone, reduceMotion]);
+  if (reduceMotion) {
+    return null;
+  }
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+      {pieces.map((piece, index) => (
+        <ConfettiPieceView
+          key={index}
+          left={piece.left}
+          piece={piece}
+          top={piece.top}
+        />
+      ))}
+    </View>
+  );
 }
 
 /**

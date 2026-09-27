@@ -1,21 +1,14 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Animated,
+  Easing,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import Search from 'lucide-react-native/icons/search';
-import ArrowUp from 'lucide-react-native/icons/arrow-up';
-import Square from 'lucide-react-native/icons/square';
-import House from 'lucide-react-native/icons/house';
-import MessageCircle from 'lucide-react-native/icons/message-circle';
-import MessageSquare from 'lucide-react-native/icons/message-square';
-import ListFilter from 'lucide-react-native/icons/list-filter';
-import History from 'lucide-react-native/icons/rotate-ccw-clock';
-import Settings from 'lucide-react-native/icons/settings';
+import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
+
 import {FocusPressable} from '../ui/Pressable';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {
@@ -40,21 +33,18 @@ import {
 
 export type DesktopRoute = DesktopNavItem | 'Settings';
 
-const navIcons: Record<DesktopNavItem, typeof House> = {
-  Home: House,
-  Chat: MessageSquare,
-  Conversations: MessageCircle,
-  Rewind: History,
-  Tasks: ListFilter,
+const navIcons: Record<DesktopNavItem, MaterialIconName> = {
+  Home: 'home',
+  Chat: 'chat',
+  Conversations: 'chat_bubble',
+  Rewind: 'history',
+  Tasks: 'checklist',
 };
 
 export type OmnibarMode = 'Ask' | 'Search';
 
 type Props = {
   chatBusy?: boolean;
-  capture?: ReturnType<
-    typeof import('../app/useRewindCapture').useRewindCapture
-  >;
   mode?: OmnibarMode;
   onModeChange?: (mode: OmnibarMode) => void;
   liveControl?: React.ReactNode;
@@ -67,11 +57,13 @@ type Props = {
   onStop: () => void;
   chatNotice: string | null;
   omnibarRef: React.RefObject<TextInput | null>;
+  // When set, a decorative fake cursor travels to this destination in the
+  // chrome (nav pill or the settings gear) and nudges it until dismissed.
+  guideTarget?: DesktopRoute | null;
 };
 
 export function DesktopChrome({
   chatBusy = false,
-  capture,
   mode = 'Ask',
   onModeChange,
   liveControl,
@@ -84,6 +76,7 @@ export function DesktopChrome({
   onSend,
   onStop,
   route,
+  guideTarget = null,
 }: Props) {
   const styles = useDesktopStyleSheets(createStyles);
   const {tokens: token} = useDesktopTheme();
@@ -211,15 +204,140 @@ export function DesktopChrome({
     return () => animation.stop();
   }, [activeModeFrame, modePillOpacity, modePillW, modePillX, reduceMotion]);
 
+  // Decorative guide cursor: it flies from the omnibar to the destination the
+  // checklist is pointing at and gently nudges it until the user arrives.
+  const [chromeBox, setChromeBox] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const [rowBox, setRowBox] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [navBox, setNavBox] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [gearBox, setGearBox] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const guideTravel = useRef(new Animated.Value(0)).current;
+  const guideNudge = useRef(new Animated.Value(0)).current;
+  const guideRect = useMemo(() => {
+    if (guideTarget === null || rowBox === null) {
+      return null;
+    }
+    if (guideTarget === 'Settings') {
+      if (gearBox === null) {
+        return null;
+      }
+      return {
+        x: rowBox.x + gearBox.x,
+        y: rowBox.y + gearBox.y,
+        width: gearBox.width,
+        height: gearBox.height,
+      };
+    }
+    const frame = frames[guideTarget];
+    if (frame === undefined || navBox === null) {
+      return null;
+    }
+    return {
+      x: rowBox.x + navBox.x + frame.x,
+      y: rowBox.y + navBox.y,
+      width: frame.width,
+      height: navBox.height,
+    };
+  }, [frames, gearBox, guideTarget, navBox, rowBox]);
+  const guidePoint = useMemo(() => {
+    if (guideRect === null) {
+      return null;
+    }
+    return {
+      x: guideRect.x + guideRect.width / 2,
+      y: guideRect.y + guideRect.height / 2,
+    };
+  }, [guideRect]);
+  useEffect(() => {
+    if (guideTarget === null || guidePoint === null) {
+      return;
+    }
+    guideTravel.setValue(reduceMotion ? 1 : 0);
+    guideNudge.setValue(0);
+    if (reduceMotion) {
+      return;
+    }
+    const travel = Animated.timing(guideTravel, {
+      duration: desktopMotion.slowMs,
+      easing: desktopEaseSmoothOut(),
+      toValue: 1,
+      useNativeDriver: false,
+    });
+    const nudge = Animated.loop(
+      Animated.sequence([
+        Animated.timing(guideNudge, {
+          duration: 300,
+          easing: Easing.inOut(Easing.quad),
+          toValue: 1,
+          useNativeDriver: false,
+        }),
+        Animated.timing(guideNudge, {
+          duration: 300,
+          easing: Easing.inOut(Easing.quad),
+          toValue: 0,
+          useNativeDriver: false,
+        }),
+      ]),
+    );
+    travel.start(() => nudge.start());
+    return () => {
+      travel.stop();
+      nudge.stop();
+    };
+  }, [guideNudge, guidePoint, guideTarget, guideTravel, reduceMotion]);
+  const guideFrom =
+    chromeBox === null
+      ? {x: 0, y: 0}
+      : {x: chromeBox.width / 2, y: chromeBox.height - 10};
+
   return (
-    <View accessibilityLabel="Omi desktop chrome" style={styles.chrome}>
-      <View style={styles.row}>
+    <View
+      accessibilityLabel="Omi desktop chrome"
+      onLayout={event => {
+        const {width, height} = event.nativeEvent.layout;
+        setChromeBox(current =>
+          current !== null &&
+          current.width === width &&
+          current.height === height
+            ? current
+            : {width, height},
+        );
+      }}
+      style={styles.chrome}>
+      <View
+        onLayout={event => {
+          const {x, y, width, height} = event.nativeEvent.layout;
+          setRowBox({height, width, x, y});
+        }}
+        style={styles.row}>
         <View
           accessibilityLabel="Window controls"
           pointerEvents="none"
           style={styles.windowControls}
         />
-        <View style={styles.nav}>
+        <View
+          onLayout={event => {
+            const {x, y, width, height} = event.nativeEvent.layout;
+            setNavBox({height, width, x, y});
+          }}
+          style={styles.nav}>
           <Animated.View
             pointerEvents="none"
             style={[
@@ -232,7 +350,7 @@ export function DesktopChrome({
             ]}
           />
           {desktopNavItems.map((label, index) => {
-            const Icon = navIcons[label];
+            const iconName = navIcons[label];
             const active = route === label;
             return (
               <View
@@ -264,7 +382,11 @@ export function DesktopChrome({
                     pressed && styles.pressed,
                   ]}>
                   <View style={styles.navIcon}>
-                    <Icon color={token.color.ink} size={14} />
+                    <MaterialIcon
+                      color={token.color.ink}
+                      name={iconName}
+                      size={14}
+                    />
                   </View>
                   <Text
                     style={[styles.navText, active && styles.navTextActive]}>
@@ -275,49 +397,23 @@ export function DesktopChrome({
             );
           })}
         </View>
-        {capture ? (
-          <View style={styles.captureControl}>
-            <Text style={styles.captureLabel}>
-              {capture.busy ? 'Waiting…' : 'Capture'}
-            </Text>
-            <Switch
-              accessibilityLabel="Screen capture"
-              accessibilityHint={
-                capture.available
-                  ? 'Start or stop screen capture on this Mac'
-                  : 'Capture is available in the native Mac app'
-              }
-              disabled={!capture.available}
-              value={capture.capturing || capture.busy}
-              onValueChange={value => {
-                if (value) {
-                  capture.start();
-                } else {
-                  capture.stop();
-                }
-              }}
-              trackColor={{
-                false: token.color.glassSelected,
-                true: token.color.inkMuted,
-              }}
-            />
-          </View>
-        ) : null}
         <ShippingPressable
           accessibilityLabel="Settings"
           accessibilityRole="button"
           accessibilityState={{selected: route === 'Settings'}}
           active={route === 'Settings'}
+          onLayout={event => {
+            const {x, y, width, height} = event.nativeEvent.layout;
+            setGearBox({height, width, x, y});
+          }}
           onPress={() => onNavigate('Settings')}
-          style={styles.settingsButton}>
-          <Settings color={token.color.ink} size={15} />
+          style={[
+            styles.settingsButton,
+            route === 'Settings' && styles.settingsButtonActive,
+          ]}>
+          <MaterialIcon name="settings" color={token.color.ink} size={15} />
         </ShippingPressable>
       </View>
-      {capture?.error ? (
-        <Text accessibilityRole="alert" style={styles.notice}>
-          {capture.error}
-        </Text>
-      ) : null}
       <View style={styles.omnibar}>
         <View style={styles.modes}>
           <Animated.View
@@ -335,7 +431,7 @@ export function DesktopChrome({
             }}
           />
           {(['Ask', 'Search'] as const).map(value => {
-            const Icon = value === 'Ask' ? MessageCircle : Search;
+            const iconName = value === 'Ask' ? 'chat_bubble' : 'search';
             return (
               <FocusPressable
                 key={value}
@@ -351,7 +447,8 @@ export function DesktopChrome({
                 }}
                 onPress={() => onModeChange?.(value)}
                 style={styles.modeButton}>
-                <Icon
+                <MaterialIcon
+                  name={iconName}
                   size={15}
                   color={
                     mode === value ? token.color.ink : token.color.inkMuted
@@ -416,11 +513,15 @@ export function DesktopChrome({
             pressed && styles.pressed,
           ]}>
           {canStop ? (
-            <Square size={13} color={token.color.dark} />
+            <MaterialIcon name="stop" size={13} color={token.color.dark} />
           ) : mode === 'Ask' ? (
-            <ArrowUp size={17} color={token.color.dark} />
+            <MaterialIcon
+              name="arrow_upward"
+              size={17}
+              color={token.color.dark}
+            />
           ) : (
-            <Search size={16} color={token.color.dark} />
+            <MaterialIcon name="search" size={16} color={token.color.dark} />
           )}
         </FocusPressable>
       </View>
@@ -432,19 +533,72 @@ export function DesktopChrome({
           {chatNotice}
         </Text>
       )}
+      {guideTarget !== null && guideRect !== null ? (
+        <Animated.View
+          accessibilityLabel="Explore guide highlight"
+          pointerEvents="none"
+          style={[
+            styles.guideHighlight,
+            {
+              left: guideRect.x - 7,
+              top: guideRect.y - 6,
+              width: guideRect.width + 14,
+              height: guideRect.height + 12,
+              opacity: guideTravel.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 1],
+              }),
+              transform: [
+                {
+                  scale: guideNudge.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 1.05],
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
+      ) : null}
+      {guideTarget !== null && guidePoint !== null ? (
+        <Animated.View
+          accessibilityLabel="Explore guide pointer"
+          pointerEvents="none"
+          style={[
+            styles.guideCursor,
+            {
+              left: guideTravel.interpolate({
+                inputRange: [0, 1],
+                outputRange: [guideFrom.x, guidePoint.x - 2],
+              }),
+              top: guideTravel.interpolate({
+                inputRange: [0, 1],
+                outputRange: [guideFrom.y, guidePoint.y - 2],
+              }),
+              transform: [
+                {
+                  translateY: guideNudge.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 3],
+                  }),
+                },
+              ],
+            },
+          ]}>
+          <MaterialIcon
+            name="arrow_selector_tool"
+            size={22}
+            color={token.color.ink}
+            fill={token.color.glass}
+          />
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
 
 const createStyles = (token: DesktopTokens) =>
   StyleSheet.create({
-    captureControl: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginHorizontal: 8,
-    },
-    captureLabel: {fontSize: 12, color: token.color.inkMuted},
     modes: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -466,6 +620,23 @@ const createStyles = (token: DesktopTokens) =>
     chrome: {
       gap: 14,
       marginBottom: 4,
+    },
+    guideCursor: {
+      position: 'absolute',
+      zIndex: 4,
+      elevation: 4,
+    },
+    guideHighlight: {
+      position: 'absolute',
+      zIndex: 3,
+      elevation: 3,
+      borderRadius: 10,
+      borderWidth: 2,
+      borderColor: token.color.ink,
+      shadowColor: token.color.ink,
+      shadowOpacity: 0.35,
+      shadowRadius: 12,
+      shadowOffset: {width: 0, height: 0},
     },
     row: {
       alignItems: 'center',
@@ -575,12 +746,18 @@ const createStyles = (token: DesktopTokens) =>
     },
     settingsButton: {
       alignItems: 'center',
+      backgroundColor: 'rgba(0,0,0,0)',
       borderRadius: 17,
       flexShrink: 0,
       height: 34,
       justifyContent: 'center',
       overflow: 'hidden',
       width: 34,
+    },
+    settingsButtonActive: {
+      backgroundColor: token.color.glassSelected,
+      borderColor: token.color.line,
+      borderWidth: 1,
     },
     pressed: {opacity: 0.78},
   });

@@ -1,13 +1,8 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import Brain from 'lucide-react-native/icons/brain';
-import GanttChartSquare from 'lucide-react-native/icons/square-chart-gantt';
-import House from 'lucide-react-native/icons/house';
-import ListChecks from 'lucide-react-native/icons/list-checks';
-import PanelLeft from 'lucide-react-native/icons/panel-left';
-import PanelLeftClose from 'lucide-react-native/icons/panel-left-close';
+import {MaterialIcon, type MaterialIconName} from './MaterialIcon';
+
 import type {Route} from '../app/routes';
-import {Icon, type IconComponent} from './Icon';
 import {FocusPressable} from './Pressable';
 import {
   type KitTokens,
@@ -16,20 +11,15 @@ import {
 } from '../desktop/DesktopTheme';
 
 const destinations: Array<{
-  fallback: IconComponent;
+  icon: MaterialIconName;
   label: Route;
-  symbolName: string;
 }> = [
-  {fallback: House, label: 'Home', symbolName: 'house'},
-  {
-    fallback: GanttChartSquare,
-    label: 'Conversations',
-    symbolName: 'bubble.left.and.bubble.right',
-  },
-  {fallback: Brain, label: 'Memories', symbolName: 'brain'},
-  {fallback: ListChecks, label: 'Tasks', symbolName: 'checklist'},
-  {fallback: PanelLeftClose, label: 'Connectors', symbolName: 'link'},
-  {fallback: PanelLeft, label: 'Settings', symbolName: 'gearshape'},
+  {icon: 'home', label: 'Home'},
+  {icon: 'view_timeline', label: 'Conversations'},
+  {icon: 'neurology', label: 'Memories'},
+  {icon: 'checklist', label: 'Tasks'},
+  {icon: 'extension', label: 'Connectors'},
+  {icon: 'settings', label: 'Settings'},
 ];
 
 export function Sheet({
@@ -69,15 +59,14 @@ export function Sheet({
               route === destination.label && styles.itemActive,
               pressed && styles.pressed,
             ]}>
-            <Icon
+            <MaterialIcon
               color={
                 route === destination.label
                   ? tokens.color.text
                   : tokens.color.menuText
               }
-              fallback={destination.fallback}
+              name={destination.icon}
               size={16}
-              symbolName={destination.symbolName}
             />
             <Text
               style={[

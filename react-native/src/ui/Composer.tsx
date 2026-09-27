@@ -1,7 +1,7 @@
 import React from 'react';
 import {StyleSheet, TextInput, View} from 'react-native';
-import ArrowUp from 'lucide-react-native/icons/arrow-up';
-import Square from 'lucide-react-native/icons/square';
+import {MaterialIcon} from './MaterialIcon';
+
 import {omiBackend} from '../omiNative';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
@@ -81,13 +81,13 @@ export function Composer({
               pressed && styles.pressed,
             ]}>
             {activeGenerationId === null ? (
-              <ArrowUp color="#141414" size={18} strokeWidth={2.5} />
+              <MaterialIcon name="arrow_upward" color="#141414" size={18} />
             ) : (
-              <Square
+              <MaterialIcon
+                name="stop"
                 color="#141414"
                 fill="#141414"
                 size={13}
-                strokeWidth={2}
               />
             )}
           </FocusPressable>

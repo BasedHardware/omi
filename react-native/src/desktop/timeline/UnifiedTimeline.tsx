@@ -1,8 +1,7 @@
 import React from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
-import MessageCircle from 'lucide-react-native/icons/message-circle';
-import Sparkles from 'lucide-react-native/icons/sparkles';
-import CircleCheck from 'lucide-react-native/icons/circle-check';
+import {MaterialIcon, type MaterialIconName} from '../../ui/MaterialIcon';
+
 import type {
   DesktopReadOutcomes,
   ConversationProjection,
@@ -146,12 +145,11 @@ function timeLabel(atMs: number): string {
   });
 }
 
-const kindMeta: Record<EntryKind, {icon: typeof MessageCircle; label: string}> =
-  {
-    conversation: {icon: MessageCircle, label: 'Conversation'},
-    memory: {icon: Sparkles, label: 'Memory'},
-    task: {icon: CircleCheck, label: 'Task'},
-  };
+const kindMeta: Record<EntryKind, {icon: MaterialIconName; label: string}> = {
+  conversation: {icon: 'chat_bubble', label: 'Conversation'},
+  memory: {icon: 'auto_awesome', label: 'Memory'},
+  task: {icon: 'check_circle', label: 'Task'},
+};
 
 /**
  * Experimental unified timeline Home: one chronological feed of
@@ -202,13 +200,17 @@ export function UnifiedTimeline({
           const day = dayLabel(entry.atMs);
           const showDay = day !== lastDay;
           lastDay = day;
-          const Meta = kindMeta[entry.kind].icon;
+          const meta = kindMeta[entry.kind].icon;
           return (
             <View key={entry.id}>
               {showDay ? <Text style={styles.day}>{day}</Text> : null}
               <View style={styles.row}>
                 <View style={styles.rowIcon}>
-                  <Meta size={16} color={token.color.inkMuted} />
+                  <MaterialIcon
+                    name={meta}
+                    size={16}
+                    color={token.color.inkMuted}
+                  />
                 </View>
                 <View style={styles.rowBody}>
                   <Text style={styles.rowTitle} numberOfLines={1}>
