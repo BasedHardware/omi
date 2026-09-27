@@ -3689,5 +3689,9 @@
     "usageYear": "Ez az év",
     "usageAll": "Minden idők",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Megjelenés",
+    "appearanceSystem": "Rendszer",
+    "appearanceLight": "Világos",
+    "appearanceDark": "Sötét"
 }

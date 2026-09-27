@@ -289,7 +289,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                     return Theme(
                                       data: Theme.of(context).copyWith(
                                         textSelectionTheme: TextSelectionThemeData(
-                                          selectionColor: Colors.white.withValues(alpha: 0.3),
+                                          selectionColor: OmiColors.textPrimary.withValues(alpha: 0.3),
                                           selectionHandleColor: OmiColors.accent,
                                         ),
                                       ),
@@ -515,8 +515,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                         : Theme(
                                                             data: Theme.of(context).copyWith(
                                                               textSelectionTheme: TextSelectionThemeData(
-                                                                selectionColor: Colors.grey.withValues(alpha: 0.4),
-                                                                selectionHandleColor: Colors.white,
+                                                                selectionColor:
+                                                                    OmiColors.textSecondary.withValues(alpha: 0.4),
+                                                                selectionHandleColor: OmiColors.textPrimary,
                                                               ),
                                                             ),
                                                             child: TextField(
@@ -1078,7 +1079,7 @@ class _OfflineHint extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const ExcludeSemantics(child: Icon(Icons.cloud_off_rounded, size: 14, color: OmiColors.textTertiary)),
+            ExcludeSemantics(child: Icon(Icons.cloud_off_rounded, size: 14, color: OmiColors.textTertiary)),
             const SizedBox(width: 6),
             Flexible(
               child: Text(
@@ -1133,7 +1134,7 @@ class _ComposerChip extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    const Icon(Icons.close, size: 14, color: OmiColors.textSecondary),
+                    Icon(Icons.close, size: 14, color: OmiColors.textSecondary),
                   ],
                 ),
               ),
@@ -1157,12 +1158,12 @@ class _SelectedTextChip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: OmiSpacing.xxs, left: 2),
       child: Container(
-        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
         padding: const EdgeInsets.only(left: OmiSpacing.sm),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const ExcludeSemantics(
+            ExcludeSemantics(
               child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary),
             ),
             const SizedBox(width: OmiSpacing.xs),

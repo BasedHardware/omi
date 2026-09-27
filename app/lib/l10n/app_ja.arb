@@ -3593,5 +3593,9 @@
     "usageYear": "今年",
     "usageAll": "全期間",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "外観",
+    "appearanceSystem": "システム",
+    "appearanceLight": "ライト",
+    "appearanceDark": "ダーク"
 }

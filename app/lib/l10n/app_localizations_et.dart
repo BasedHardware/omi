@@ -11389,4 +11389,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Välimus';
+
+  @override
+  String get appearanceSystem => 'Süsteem';
+
+  @override
+  String get appearanceLight => 'Hele';
+
+  @override
+  String get appearanceDark => 'Tume';
 }

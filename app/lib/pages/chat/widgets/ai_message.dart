@@ -98,13 +98,13 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
             child: Icon(
               Icons.apps,
               size: size * 0.7,
-              color: Colors.white.withValues(alpha: opacity),
+              color: OmiColors.textPrimary.withValues(alpha: opacity),
             ),
           ),
           errorWidget: (context, url, error) => Icon(
             Icons.apps,
             size: size * 0.7,
-            color: Colors.white.withValues(alpha: opacity),
+            color: OmiColors.textPrimary.withValues(alpha: opacity),
           ),
         ),
       ),
@@ -117,7 +117,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
     child: Icon(
       Icons.apps,
       size: size,
-      color: Colors.white.withValues(alpha: opacity),
+      color: OmiColors.textPrimary.withValues(alpha: opacity),
     ),
   );
 }
@@ -163,7 +163,7 @@ FaIconData _getThinkingIcon(String thinkingText) {
 }
 
 /// Build the thinking icon widget - either an integration logo or a fallback icon
-Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color color = Colors.white}) {
+Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color? color}) {
   final logoPath = _getIntegrationLogoPath(thinkingText);
   if (logoPath != null) {
     return ClipRRect(
@@ -173,11 +173,12 @@ Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color co
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => FaIcon(_getThinkingIcon(thinkingText), size: size, color: color),
+        errorBuilder: (context, error, stackTrace) =>
+            FaIcon(_getThinkingIcon(thinkingText), size: size, color: color ?? OmiColors.textPrimary),
       ),
     );
   }
-  return FaIcon(_getThinkingIcon(thinkingText), size: size, color: color);
+  return FaIcon(_getThinkingIcon(thinkingText), size: size, color: color ?? OmiColors.textPrimary);
 }
 
 /// Conversation-shaped evidence is the same source list as [ServerMessage.memories].
@@ -823,7 +824,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
                     width: double.maxFinite,
-                    decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                    decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
                     child: Row(
                       children: [
                         Expanded(
@@ -836,8 +837,8 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                         ),
                         const SizedBox(width: 8),
                         conversationDetailLoading[data.$1]
-                            ? const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary)
-                            : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: OmiColors.textTertiary),
+                            ? OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary)
+                            : FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: OmiColors.textTertiary),
                       ],
                     ),
                   ),
@@ -959,7 +960,7 @@ class _ChartShimmer extends StatelessWidget {
           decoration: BoxDecoration(
             color: OmiColors.surface1,
             borderRadius: OmiRadius.lgAll,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+            border: Border.all(color: OmiColors.textPrimary.withValues(alpha: 0.06)),
           ),
         ),
       ),
@@ -982,7 +983,7 @@ class InitialOptionWidget extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 10),
           width: double.maxFinite,
-          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
           child: Text(optionText, style: Theme.of(context).textTheme.bodyMedium),
         ),
         onTap: () {
@@ -1007,10 +1008,10 @@ class ChatReplyError extends StatelessWidget {
       liveRegion: true,
       child: Container(
         padding: const EdgeInsets.all(OmiSpacing.sm),
-        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
         child: Row(
           children: [
-            const ExcludeSemantics(child: Icon(Icons.error_outline_rounded, size: 20, color: OmiColors.danger)),
+            ExcludeSemantics(child: Icon(Icons.error_outline_rounded, size: 20, color: OmiColors.danger)),
             const SizedBox(width: OmiSpacing.sm),
             Expanded(
               child: Text(l10n.chatReplyFailed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),

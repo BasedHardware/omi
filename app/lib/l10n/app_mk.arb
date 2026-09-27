@@ -11153,5 +11153,9 @@
     "usageYear": "Оваа година",
     "usageAll": "Целото време",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Изглед",
+    "appearanceSystem": "Систем",
+    "appearanceLight": "Светло",
+    "appearanceDark": "Темно"
 }

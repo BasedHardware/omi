@@ -190,6 +190,29 @@ def with_jev_flags_env(payload: str) -> str:
     )
 
 
+def with_capture_jev_shadow_env(payload: str) -> str:
+    """EXP-003 shadow bindings belong on every Cloud Run capture-shadow host.
+
+    backend runs reprocess and merge inline. backend-sync writes Cloud Tasks
+    finalization and fresh sync. backend-sync-backfill replays historical sync.
+    Percentage stays 0; only the allowlisted UID is shadowed.
+    """
+    flags = (
+        r'\1\n        {"name": "CAPTURE_JEV_SHADOW_ENABLED", "value": "true"},'
+        r'\n        {"name": "CAPTURE_JEV_SHADOW_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},'
+        r'\n        {"name": "CAPTURE_JEV_SHADOW_PERCENT", "value": "0"},'
+    )
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill'):
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[\s*\{{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\}},)',
+            flags,
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return payload
+
+
 def with_backend_public_shared_chat_auth_env(payload: str) -> str:
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
@@ -307,13 +330,15 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         with_wake_word_adjudication_env(
             with_meeting_receipt_reconciler_env(
                 with_jev_flags_env(
-                    with_conversation_notes_v2_env(
-                        with_backend_pusher_env(
-                            with_parity_pack_env(
-                                with_listen_finalization_orphan_env(
-                                    with_belief_model_env(
-                                        with_memory_env(
-                                            with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload))
+                    with_capture_jev_shadow_env(
+                        with_conversation_notes_v2_env(
+                            with_backend_pusher_env(
+                                with_parity_pack_env(
+                                    with_listen_finalization_orphan_env(
+                                        with_belief_model_env(
+                                            with_memory_env(
+                                                with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload))
+                                            )
                                         )
                                     )
                                 )

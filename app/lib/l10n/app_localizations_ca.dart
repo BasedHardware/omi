@@ -11460,4 +11460,16 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Aparença';
+
+  @override
+  String get appearanceSystem => 'Sistema';
+
+  @override
+  String get appearanceLight => 'Clar';
+
+  @override
+  String get appearanceDark => 'Fosc';
 }

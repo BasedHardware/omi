@@ -14,6 +14,12 @@ overlay:
         # (STT_SERVICE_MODELS) puts Soniox second. Parakeet window allocation stays 0.
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
+        # 2026-09-27: first prod ramp of the Soniox-first arm for non-English multi-language
+        # users (live STT language constraint, omi#19343). Compare arm=hintable vs control on
+        # omi_stt_output_language_segments_total before ramping further.
+        STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
+          value: '25'
+          category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
@@ -97,6 +103,15 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: MCP_OAUTH_CLIENTS_JSON
+        CAPTURE_JEV_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        CAPTURE_JEV_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
     pusher:
       env:
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -134,6 +149,15 @@ overlay:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
           value: http://diarizer.omi.me:80
+        CAPTURE_JEV_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        CAPTURE_JEV_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
     config_map:
       entries:
         ACCOUNT_DELETION_HANDLER_URL:
@@ -323,6 +347,15 @@ overlay:
           MCP_OAUTH_CLAUDE_REDIRECT_URIS:
             env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
             category: oauth_metadata
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-sync:
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -402,6 +435,15 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-sync-backfill:
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -472,6 +514,15 @@ overlay:
             value: based-hardware
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
             category: rollout
       backend-integration:
         forbidden_env:

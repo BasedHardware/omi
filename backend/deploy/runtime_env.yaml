@@ -296,6 +296,15 @@ environments:
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -394,6 +403,15 @@ environments:
             category: rollout
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
             category: rollout
           GITHUB_TOKEN:
             secret:
@@ -814,6 +832,15 @@ environments:
             MEMORY_OWNER_JEV_FLIP_ENABLED:
               value: 'true'
               category: rollout
+            CAPTURE_JEV_SHADOW_ENABLED:
+              value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+            CAPTURE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -1019,6 +1046,15 @@ environments:
             MEMORY_OWNER_JEV_FLIP_ENABLED:
               value: 'true'
               category: rollout
+            CAPTURE_JEV_SHADOW_ENABLED:
+              value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+            CAPTURE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
           forbidden_env:
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -1187,6 +1223,15 @@ environments:
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: '1.0'
+              category: rollout
+            CAPTURE_JEV_SHADOW_ENABLED:
+              value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+            CAPTURE_JEV_SHADOW_PERCENT:
+              value: '0'
               category: rollout
           provisional: true
           forbidden_env:
@@ -1732,7 +1777,7 @@ environments:
             value: 'true'
             category: rollout
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
-            value: '0'
+            value: '25'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
             value: '0'
@@ -1951,6 +1996,15 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -2022,6 +2076,15 @@ environments:
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       config_map:
         name: prod-omi-backend-config
         entries:
@@ -2364,6 +2427,15 @@ environments:
             MCP_OAUTH_CLAUDE_REDIRECT_URIS:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
+            CAPTURE_JEV_SHADOW_ENABLED:
+              value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+            CAPTURE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -2553,6 +2625,15 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
+            CAPTURE_JEV_SHADOW_ENABLED:
+              value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+            CAPTURE_JEV_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -2725,6 +2806,15 @@ environments:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_ENABLED:
+              value: 'true'
+              category: rollout
+            CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
+            CAPTURE_JEV_SHADOW_PERCENT:
+              value: '0'
               category: rollout
           provisional: true
           forbidden_env:

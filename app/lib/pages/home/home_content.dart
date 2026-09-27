@@ -21,7 +21,6 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 
@@ -207,13 +206,13 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             itemBuilder: (_, __) => Padding(
               padding: const EdgeInsets.only(right: 12),
               child: ShimmerWithTimeout(
-                baseColor: AppStyles.backgroundSecondary,
-                highlightColor: AppStyles.backgroundTertiary,
+                baseColor: OmiColors.surface1,
+                highlightColor: OmiColors.surface3,
                 child: Container(
                   width: DailySummaryCard.width,
-                  decoration: const BoxDecoration(
-                    color: AppStyles.backgroundSecondary,
-                    borderRadius: BorderRadius.all(Radius.circular(DailySummaryCard.radius)),
+                  decoration: BoxDecoration(
+                    color: OmiColors.surface1,
+                    borderRadius: const BorderRadius.all(Radius.circular(DailySummaryCard.radius)),
                   ),
                 ),
               ),
@@ -307,12 +306,11 @@ class HomeConversationsPreview extends StatelessWidget {
               (_) => Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: ShimmerWithTimeout(
-                  baseColor: AppStyles.backgroundSecondary,
-                  highlightColor: AppStyles.backgroundTertiary,
+                  baseColor: OmiColors.surface1,
+                  highlightColor: OmiColors.surface3,
                   child: Container(
                     height: 80,
-                    decoration:
-                        const BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: OmiRadius.xlAll),
+                    decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
                   ),
                 ),
               ),

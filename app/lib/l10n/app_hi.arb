@@ -3593,5 +3593,9 @@
     "usageYear": "इस साल",
     "usageAll": "अब तक",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "दिखावट",
+    "appearanceSystem": "सिस्टम",
+    "appearanceLight": "लाइट",
+    "appearanceDark": "डार्क"
 }

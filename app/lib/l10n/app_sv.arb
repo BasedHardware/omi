@@ -3593,5 +3593,9 @@
     "usageYear": "Detta år",
     "usageAll": "All tid",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Utseende",
+    "appearanceSystem": "System",
+    "appearanceLight": "Ljust",
+    "appearanceDark": "Mörkt"
 }

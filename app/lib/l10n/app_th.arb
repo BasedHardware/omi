@@ -3593,5 +3593,9 @@
     "usageYear": "ปีนี้",
     "usageAll": "ตลอดเวลา",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "รูปลักษณ์",
+    "appearanceSystem": "ระบบ",
+    "appearanceLight": "สว่าง",
+    "appearanceDark": "มืด"
 }

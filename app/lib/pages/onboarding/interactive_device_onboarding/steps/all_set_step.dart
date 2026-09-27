@@ -34,7 +34,7 @@ class AllSetStep extends StatelessWidget {
           ),
           const SizedBox(height: OmiSpacing.xl),
           DecoratedBox(
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             child: Column(
               children: [
                 _SummaryRow(
@@ -44,7 +44,7 @@ class AllSetStep extends StatelessWidget {
                   subtitle: context.l10n.deviceOnboardingAskQuestionSubtitle,
                   onTap: () => provider.goToStep(DeviceOnboardingProvider.askQuestionStep),
                 ),
-                const Divider(height: 1, color: OmiColors.border),
+                Divider(height: 1, color: OmiColors.border),
                 _SummaryRow(
                   key: const Key('all_set_voice_reply'),
                   icon: Icons.headphones,
@@ -52,7 +52,7 @@ class AllSetStep extends StatelessWidget {
                   subtitle: _voiceModeLabel(context, voiceMode),
                   onTap: () => provider.goToStep(DeviceOnboardingProvider.voiceReplyStep),
                 ),
-                const Divider(height: 1, color: OmiColors.border),
+                Divider(height: 1, color: OmiColors.border),
                 _SummaryRow(
                   key: const Key('all_set_double_tap'),
                   badge: context.l10n.deviceOnboardingAllSetDoublePressBadge,
@@ -60,7 +60,7 @@ class AllSetStep extends StatelessWidget {
                   subtitle: _doubleTapLabel(context, doubleTapAction),
                   onTap: () => provider.goToStep(DeviceOnboardingProvider.doublePressStep),
                 ),
-                const Divider(height: 1, color: OmiColors.border),
+                Divider(height: 1, color: OmiColors.border),
                 _SummaryRow(
                   key: const Key('all_set_hold'),
                   icon: Icons.power_settings_new,
@@ -141,7 +141,7 @@ class _SummaryRow extends StatelessWidget {
                   Container(
                     width: 40,
                     height: 40,
-                    decoration: const BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
+                    decoration: BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
                     alignment: Alignment.center,
                     child: icon == null
                         ? Text(badge!, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w700))
@@ -159,7 +159,7 @@ class _SummaryRow extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_right, size: 20, color: OmiColors.textTertiary),
+                  Icon(Icons.chevron_right, size: 20, color: OmiColors.textTertiary),
                 ],
               ),
             ),

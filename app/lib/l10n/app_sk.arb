@@ -3593,5 +3593,9 @@
     "usageYear": "Tento rok",
     "usageAll": "Celkovo",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Vzhľad",
+    "appearanceSystem": "Systém",
+    "appearanceLight": "Svetlý",
+    "appearanceDark": "Tmavý"
 }

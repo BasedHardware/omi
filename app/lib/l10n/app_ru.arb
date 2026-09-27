@@ -3628,5 +3628,9 @@
     "usageYear": "Этот год",
     "usageAll": "Всё время",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Внешний вид",
+    "appearanceSystem": "Система",
+    "appearanceLight": "Светлая",
+    "appearanceDark": "Тёмная"
 }
