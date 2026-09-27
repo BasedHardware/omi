@@ -11407,5 +11407,8 @@ class AppLocalizationsNo extends AppLocalizations {
   String get appearanceDark => 'Mørk';
 
   @override
+  String get chatDiscardRecording => 'Forkast';
+
+  @override
   String get voiceQuestionNoSpeech => 'Jeg fikk ikke med meg det — prøv igjen';
 }

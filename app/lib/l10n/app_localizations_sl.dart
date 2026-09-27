@@ -11437,5 +11437,8 @@ class AppLocalizationsSl extends AppLocalizations {
   String get appearanceDark => 'Temno';
 
   @override
+  String get chatDiscardRecording => 'Zavrzi';
+
+  @override
   String get voiceQuestionNoSpeech => 'Nisem razumel — poskusite znova';
 }

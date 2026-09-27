@@ -3598,5 +3598,6 @@
     "appearanceSystem": "Hệ thống",
     "appearanceLight": "Sáng",
     "appearanceDark": "Tối",
+    "chatDiscardRecording": "Hủy bỏ",
     "voiceQuestionNoSpeech": "Không nghe rõ — hãy thử lại"
 }

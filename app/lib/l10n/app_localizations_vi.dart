@@ -11402,5 +11402,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get appearanceDark => 'Tối';
 
   @override
+  String get chatDiscardRecording => 'Hủy bỏ';
+
+  @override
   String get voiceQuestionNoSpeech => 'Không nghe rõ — hãy thử lại';
 }

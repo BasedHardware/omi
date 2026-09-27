@@ -11438,5 +11438,8 @@ class AppLocalizationsMs extends AppLocalizations {
   String get appearanceDark => 'Gelap';
 
   @override
+  String get chatDiscardRecording => 'Buang';
+
+  @override
   String get voiceQuestionNoSpeech => 'Tidak dapat mendengarnya — cuba lagi';
 }

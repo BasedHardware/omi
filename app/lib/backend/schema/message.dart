@@ -249,6 +249,9 @@ class ServerMessage {
   Map<String, dynamic>? rawChartData;
   List<Map<String, dynamic>> contentBlocks;
 
+  /// Receipt for a successful memory write in this streamed reply.
+  String? memoryAction;
+
   /// Optional supplemental references. Text remains authoritative when this
   /// envelope is absent, malformed, unavailable, or from a future version.
   ChatEvidenceReferenceEnvelope? evidenceEnvelope;
@@ -621,6 +624,7 @@ class ServerMessage {
 
 enum MessageChunkType {
   think('think'),
+  memory('memory'),
   data('data'),
   done('done'),
   error('error'),

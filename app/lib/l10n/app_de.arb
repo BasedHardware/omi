@@ -3598,5 +3598,6 @@
     "appearanceSystem": "System",
     "appearanceLight": "Hell",
     "appearanceDark": "Dunkel",
+    "chatDiscardRecording": "Verwerfen",
     "voiceQuestionNoSpeech": "Das habe ich nicht verstanden — versuche es erneut"
 }

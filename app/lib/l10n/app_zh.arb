@@ -3598,5 +3598,6 @@
     "appearanceSystem": "系统",
     "appearanceLight": "浅色",
     "appearanceDark": "深色",
+    "chatDiscardRecording": "放弃",
     "voiceQuestionNoSpeech": "没听清楚 — 请再试一次"
 }

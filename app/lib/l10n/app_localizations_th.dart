@@ -11341,5 +11341,8 @@ class AppLocalizationsTh extends AppLocalizations {
   String get appearanceDark => 'มืด';
 
   @override
+  String get chatDiscardRecording => 'ละทิ้ง';
+
+  @override
   String get voiceQuestionNoSpeech => 'ฟังไม่ชัด — ลองอีกครั้ง';
 }
