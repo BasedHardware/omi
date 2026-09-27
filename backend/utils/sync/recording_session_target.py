@@ -12,11 +12,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Mapping, Sequence, cast
 
-from google.cloud.firestore_v1.base_query import FieldFilter
-
-from database._client import get_firestore_client
-from database.conversations import conversations_collection
-
 logger = logging.getLogger(__name__)
 
 _CANDIDATE_LIMIT = 5
@@ -73,6 +68,13 @@ def select_recording_session_target(
 
 
 def _candidate_rows(uid: str, recording_session_id: str, *, firestore_client: Any = None) -> list[dict[str, Any]]:
+    # Import on use. pipeline.py loads this module while unit tests have stubbed
+    # google.cloud and database._client, and a module-level import fails collection.
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
+    from database._client import get_firestore_client
+    from database.conversations import conversations_collection
+
     client = firestore_client or get_firestore_client()
     query = (
         client.collection('users')
