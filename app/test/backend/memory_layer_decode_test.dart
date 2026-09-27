@@ -30,7 +30,7 @@ void main() {
       }
     });
 
-    test('unknown explicit tier is rejected like the backend enum', () {
+    test('unknown explicit tier excludes only that Siri row', () {
       final row = <String, dynamic>{
         'id': 'legacy-1',
         'uid': 'user-1',
@@ -41,7 +41,26 @@ void main() {
         'visibility': 'private',
         'memory_tier': 'future_tier',
       };
-      expect(() => Memory.fromJson(row), throwsA(isA<FormatException>()));
+      final decoded = Memory.fromJson(row);
+      expect(siriMemoryIsIndexable(decoded, DateTime.utc(2026, 6, 22), owner: 'user-1'), isFalse);
+    });
+
+    test('one invalid Siri tier does not reject the entire app memory page', () {
+      final base = <String, dynamic>{
+        'id': 'row',
+        'uid': 'user-1',
+        'content': 'fact',
+        'category': 'interesting',
+        'created_at': '2026-06-21T10:00:00.000Z',
+        'updated_at': '2026-06-21T10:05:00.000Z',
+      };
+      final decoded = [
+        Memory.fromJson({...base, 'id': 'valid'}),
+        Memory.fromJson({...base, 'id': 'future', 'memory_tier': 'future_tier'}),
+      ];
+      expect(decoded.length, 2);
+      expect(siriMemoryIsIndexable(decoded[0], DateTime.utc(2026, 6, 22), owner: 'user-1'), isTrue);
+      expect(siriMemoryIsIndexable(decoded[1], DateTime.utc(2026, 6, 22), owner: 'user-1'), isFalse);
     });
 
     test('unknown legacy alias is ignored like the backend extra field', () {
@@ -70,7 +89,8 @@ void main() {
         'layer': 'long_term',
         'memory_tier': 'archive',
       };
-      expect(() => Memory.fromJson(row), throwsA(isA<FormatException>()));
+      final decoded = Memory.fromJson(row);
+      expect(siriMemoryIsIndexable(decoded, DateTime.utc(2026, 6, 22), owner: 'user-1'), isFalse);
     });
     test('layer field only sets explicit layer', () {
       final memory = Memory.fromJson({
@@ -119,7 +139,7 @@ void main() {
       expect(memory.layerIsExplicit, isFalse);
     });
 
-    test('conflicting legacy tier aliases fail closed', () {
+    test('conflicting legacy tier aliases exclude only that Siri row', () {
       final row = <String, dynamic>{
         'id': 'mem-priority',
         'uid': 'user-1',
@@ -131,7 +151,8 @@ void main() {
         'updated_at': '2026-06-21T10:05:00.000Z',
         'visibility': 'private',
       };
-      expect(() => Memory.fromJson(row), throwsA(isA<FormatException>()));
+      final decoded = Memory.fromJson(row);
+      expect(siriMemoryIsIndexable(decoded, DateTime.utc(2026, 6, 22), owner: 'user-1'), isFalse);
     });
   });
 }

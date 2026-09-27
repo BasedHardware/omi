@@ -63,6 +63,7 @@ bool siriMemoryIsIndexable(Memory row, DateTime now, {String? owner}) =>
     !row.isDismissed &&
     !row.isLocked &&
     row.visibility != MemoryVisibility.unknown &&
+    row.siriTierValid &&
     (row.layer == null || row.layer == MemoryLayer.shortTerm || row.layer == MemoryLayer.longTerm) &&
     (row.invalidAt == null || row.invalidAt!.isAfter(now)) &&
     (row.ledgerStatus == null || row.ledgerStatus == 'active') &&
@@ -212,6 +213,14 @@ class SiriIntegration extends SiriEventsApi {
     await refreshAuthoritativeMemories();
   }
 
+  /// A confirmed external task batch (for example Apple Reminders sync) can
+  /// change rows beyond the currently visible UI page.
+  Future<void> refreshAuthoritativeTasks({String? expectedUid}) async {
+    final uid = _uid;
+    if (!_isIOS || uid == null || (expectedUid != null && uid != expectedUid)) return;
+    await _refreshOwnerWideTasks(uid, _accountGeneration);
+  }
+
   Future<void> _refreshOwnerWideTasks(String uid, int generation) async {
     const limit = 100;
     const maxPages = 50;
@@ -329,9 +338,9 @@ class SiriIntegration extends SiriEventsApi {
     }
   }
 
-  Future<void> upsertConversations(List<ServerConversation> rows) async {
+  Future<void> upsertConversations(List<ServerConversation> rows, {String? expectedUid}) async {
     final uid = _uid;
-    if (!_isIOS || uid == null) return;
+    if (!_isIOS || uid == null || (expectedUid != null && uid != expectedUid)) return;
     try {
       final now = DateTime.now();
       final removed =
@@ -516,6 +525,16 @@ class SiriIntegration extends SiriEventsApi {
       await _host.deleteEntities(uid, type, [id]);
     } catch (error) {
       Logger.debug('Siri index delete failed: $error');
+    }
+  }
+
+  Future<void> deleteMany(String type, List<String> ids, {String? expectedUid}) async {
+    final uid = _uid;
+    if (!_isIOS || uid == null || ids.isEmpty || (expectedUid != null && uid != expectedUid)) return;
+    try {
+      await _host.deleteEntities(uid, type, ids);
+    } catch (error) {
+      Logger.debug('Siri index batch delete failed: $error');
     }
   }
 

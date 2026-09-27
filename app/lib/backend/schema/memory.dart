@@ -91,6 +91,10 @@ class Memory {
   bool isBaseline;
   final MemoryLayer? layer;
   final bool layerIsExplicit;
+
+  /// Decoding remains tolerant for the whole Memories page; Siri excludes a
+  /// malformed or contradictory tier on the individual row.
+  final bool siriTierValid;
   final String? primaryCaptureDevice;
   final List<String> captureDeviceIds;
   final String? ledgerSchemaVersion;
@@ -143,6 +147,7 @@ class Memory {
     this.isBaseline = false,
     this.layer,
     this.layerIsExplicit = false,
+    this.siriTierValid = true,
     this.primaryCaptureDevice,
     this.captureDeviceIds = const [],
     this.ledgerSchemaVersion,
@@ -251,14 +256,12 @@ class Memory {
     final layerValue = MemoryLayer.tryParse(rawLayer);
     final tierValue = MemoryLayer.tryParse(rawTier);
     final memoryTierValue = MemoryLayer.tryParse(rawMemoryTier);
-    // MemoryDB validates memory_tier as an enum, but treats layer and tier as
-    // extra legacy aliases. Unknown values of those aliases carry no tier.
-    if (rawMemoryTier != null && memoryTierValue == null) {
-      throw FormatException('Unknown memory memory_tier: $rawMemoryTier');
-    }
-    if ([layerValue, tierValue, memoryTierValue].whereType<MemoryLayer>().toSet().length > 1) {
-      throw const FormatException('Conflicting memory tier aliases');
-    }
+    // A bad Siri lifecycle field must not reject an otherwise valid app page.
+    // The backend normally rejects an unknown canonical enum; if one reaches
+    // this older-client decoder, keep the row visible but exclude it from Siri.
+    final siriTierValid = (rawMemoryTier == null || memoryTierValue != null) &&
+        [layerValue, tierValue, memoryTierValue].whereType<MemoryLayer>().toSet().length <= 1 &&
+        normalizedJson['siri_tier_valid'] != false;
     normalizedJson['layer'] = (layerValue ?? tierValue ?? memoryTierValue ?? MemoryLayer.longTerm).apiValue;
     normalizedJson['memory_tier'] = (memoryTierValue ?? tierValue ?? layerValue ?? MemoryLayer.longTerm).apiValue;
 
@@ -287,6 +290,7 @@ class Memory {
       isBaseline: json['is_baseline'] as bool? ?? false,
       layer: resolvedLayer,
       layerIsExplicit: layerIsExplicit,
+      siriTierValid: siriTierValid,
       primaryCaptureDevice: generated.primaryCaptureDevice,
       captureDeviceIds: generated.captureDeviceIds ?? const [],
       ledgerSchemaVersion: generated.ledgerSchemaVersion,
@@ -330,6 +334,7 @@ class Memory {
       'edited': edited,
       'deleted': deleted,
       'is_dismissed': isDismissed,
+      if (!siriTierValid) 'siri_tier_valid': false,
       'visibility': visibility.name,
       'is_locked': isLocked,
       'is_baseline': isBaseline,

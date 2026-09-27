@@ -64,6 +64,19 @@ class _SnapshotHost extends SiriIndexApi {
     tasks.removeWhere((id, row) => (includeCompleted || !row.completed) && !keep.contains(id));
     await upsertTasks(uid, rows);
   }
+
+  @override
+  Future<void> deleteEntities(String uid, String type, List<String> ids) async {
+    final rows = switch (type) {
+      'conversation' => conversations,
+      'memory' => memories,
+      'task' => tasks,
+      _ => throw ArgumentError.value(type),
+    };
+    for (final id in ids) {
+      rows.remove(id);
+    }
+  }
 }
 
 void main() {
@@ -135,6 +148,29 @@ void main() {
     expect(host.conversations.containsKey('outside-page'), isTrue);
   });
 
+  test('merge notification deletes source conversations and upserts merged row', () async {
+    final host = hostForTest();
+    final now = DateTime.now();
+    ServerConversation row(String id) => ServerConversation(
+          id: id,
+          createdAt: now,
+          structured: Structured(id, 'summary'),
+          status: ConversationStatus.completed,
+        );
+    final provider = ConversationProvider(
+      conversationLifecycleFetcher: (_) async => (item: row('merged'), ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    await provider.addConversation(row('source'));
+    await Future<void>.delayed(Duration.zero);
+    expect(host.conversations.containsKey('source'), isTrue);
+    await provider.onMergeCompleted('merged', ['source']);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.conversations.containsKey('source'), isFalse);
+    expect(host.conversations.containsKey('merged'), isTrue);
+  });
+
   test('complete unfiltered memory fetch removes remotely deleted ids', () async {
     final host = hostForTest();
     host.memories['remote-deleted'] =
@@ -148,6 +184,212 @@ void main() {
     await provider.loadMemories();
     await Future<void>.delayed(Duration.zero);
     expect(host.memories, isEmpty);
+  });
+
+  test('confirmed memory review removes a rejected row from the index', () async {
+    final host = hostForTest();
+    final row = Memory(
+        id: 'reviewed',
+        uid: 'siri-fetch-owner',
+        content: 'private fact',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        visibility: MemoryVisibility.private);
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([row], true),
+      reviewMemoryRequest: (_, __) async => true,
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+    await Future<void>.delayed(Duration.zero);
+    expect(host.memories.containsKey(row.id), isTrue);
+    expect(await provider.reviewMemory(row, false), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.memories.containsKey(row.id), isFalse);
+  });
+
+  test('confirmed memory edit updates indexed content', () async {
+    final host = hostForTest();
+    final row = Memory(
+        id: 'edited',
+        uid: 'siri-fetch-owner',
+        content: 'old',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        visibility: MemoryVisibility.private);
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([row], true),
+      editMemoryRequest: (_, __) async => const EditMemoryResult(persisted: true),
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+    expect(await provider.editMemory(row, 'new'), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.memories[row.id]?.content, 'new');
+  });
+
+  test('confirmed edit of an unloaded memory cannot leave stale indexed text', () async {
+    final host = hostForTest();
+    final row = Memory(
+        id: 'unloaded-edit',
+        uid: 'siri-fetch-owner',
+        content: 'old',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        visibility: MemoryVisibility.private);
+    await SiriIntegration.current.upsertMemories([row]);
+    final provider = MemoriesProvider(
+      editMemoryRequest: (_, __) async => const EditMemoryResult(persisted: true),
+    );
+    addTearDown(provider.dispose);
+    expect(await provider.editMemory(row, 'new'), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.memories[row.id]?.content, 'new');
+  });
+
+  test('confirmed delete all memories clears memory index but retains other types', () async {
+    final host = hostForTest();
+    final row = Memory(
+        id: 'delete-all',
+        uid: 'siri-fetch-owner',
+        content: 'private',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        visibility: MemoryVisibility.private);
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([row], true),
+      deleteAllMemoriesRequest: () async => true,
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+    host.tasks['retained-task'] = SiriTask(
+        id: 'retained-task', title: 'task', completed: false, createdAtMs: DateTime.now().millisecondsSinceEpoch);
+    expect(await provider.deleteAllMemories(), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.memories, isEmpty);
+    expect(host.tasks.containsKey('retained-task'), isTrue);
+  });
+
+  test('failed delete all memories keeps existing index entries', () async {
+    final host = hostForTest();
+    final row = Memory(
+        id: 'still-owned',
+        uid: 'siri-fetch-owner',
+        content: 'private',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        visibility: MemoryVisibility.private);
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([row], true),
+      deleteAllMemoriesRequest: () async => false,
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+    expect(await provider.deleteAllMemories(), isFalse);
+    expect(host.memories.containsKey(row.id), isTrue);
+  });
+
+  test('confirmed memory create and visibility mutation update the snapshot', () async {
+    final host = hostForTest();
+    final confirmed = Memory(
+        id: 'created-server-id',
+        uid: 'siri-fetch-owner',
+        content: 'remembered',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        visibility: MemoryVisibility.private);
+    final provider = MemoriesProvider(
+      createMemoryRequest: (_, __, ___) async => confirmed,
+      updateMemoryVisibilityRequest: (_, __) async => true,
+    );
+    addTearDown(provider.dispose);
+    expect(await provider.createMemory('remembered'), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.memories['created-server-id']?.content, 'remembered');
+    expect(await provider.updateMemoryVisibility(provider.memories.single, MemoryVisibility.public), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.memories['created-server-id'], isNotNull);
+  });
+
+  test('confirmed visibility update refreshes the indexed projection', () async {
+    final host = hostForTest();
+    final row = Memory(
+        id: 'visible',
+        uid: 'siri-fetch-owner',
+        content: 'fact',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        visibility: MemoryVisibility.private);
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult([row], true),
+      updateMemoryVisibilityRequest: (_, __) async => true,
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+    host.memories.remove(row.id);
+    expect(await provider.updateMemoryVisibility(row, MemoryVisibility.public), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.memories.containsKey(row.id), isTrue);
+  });
+
+  test('bulk visibility writes reproject every confirmed memory', () async {
+    final host = hostForTest();
+    final rows = ['bulk-a', 'bulk-b']
+        .map((id) => Memory(
+            id: id,
+            uid: 'siri-fetch-owner',
+            content: id,
+            category: MemoryCategory.manual,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+            visibility: MemoryVisibility.public))
+        .toList();
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          GetMemoriesResult(rows, true),
+      updateMemoryVisibilityRequest: (_, __) async => true,
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+    host.memories.clear();
+    expect(await provider.updateAllMemoriesVisibility(true), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.memories.keys.toSet(), {'bulk-a', 'bulk-b'});
+  });
+
+  test('offline memory upload indexes its confirmed server row', () async {
+    final host = hostForTest();
+    var attempt = 0;
+    final confirmed = Memory(
+        id: 'uploaded',
+        uid: 'siri-fetch-owner',
+        content: 'offline fact',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        visibility: MemoryVisibility.private);
+    final provider = MemoriesProvider(createMemoryRequest: (_, __, ___) async {
+      attempt++;
+      return attempt == 1 ? null : confirmed;
+    });
+    addTearDown(provider.dispose);
+    expect(await provider.createMemory('offline fact'), isTrue);
+    expect(host.memories, isEmpty);
+    await provider.syncPendingMemories();
+    await Future<void>.delayed(Duration.zero);
+    expect(host.memories.containsKey('uploaded'), isTrue);
   });
 
   test('default filtered memory view refreshes the owner-wide all view', () async {

@@ -1409,6 +1409,7 @@ class ConversationProvider extends ChangeNotifier {
 
   Future<void> addConversation(ServerConversation conversation) async {
     conversations.insert(0, conversation);
+    unawaited(SiriIntegration.current.upsertConversations([conversation]));
     _groupConversationsByDateWithoutNotify();
 
     notifyListeners();
@@ -1438,11 +1439,13 @@ class ConversationProvider extends ChangeNotifier {
         group[groupedIndex] = conversation;
       }
     }
+    unawaited(SiriIntegration.current.upsertConversations([conversation]));
     notifyListeners();
   }
 
   (int, DateTime) addConversationWithDateGrouped(ServerConversation conversation) {
     conversations.insert(0, conversation);
+    unawaited(SiriIntegration.current.upsertConversations([conversation]));
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     int idx;
     var effectiveDate = conversation.startedAt ?? conversation.createdAt;
@@ -1487,6 +1490,7 @@ class ConversationProvider extends ChangeNotifier {
     } else {
       _groupConversationsByDateWithoutNotify();
     }
+    unawaited(SiriIntegration.current.upsertConversations([conversation]));
     notifyListeners();
   }
 
@@ -1971,6 +1975,8 @@ class ConversationProvider extends ChangeNotifier {
 
   /// Handle merge completion from FCM notification
   Future<void> onMergeCompleted(String mergedConversationId, List<String> removedConversationIds) async {
+    final generation = _sessionGeneration;
+    if (!conversations.any((row) => row.id == mergedConversationId || removedConversationIds.contains(row.id))) return;
     // Remove merging status for ALL involved conversations
     mergingConversationIds.remove(mergedConversationId);
     for (final id in removedConversationIds) {
@@ -1982,10 +1988,12 @@ class ConversationProvider extends ChangeNotifier {
     // Remove deleted conversations from local state
     for (final id in removedConversationIds) {
       conversations.removeWhere((c) => c.id == id);
+      unawaited(SiriIntegration.current.delete('conversation', id));
     }
 
     // Fetch updated merged conversation
-    final mergedConvo = await getConversationById(mergedConversationId);
+    final mergedConvo = (await _conversationLifecycleFetcher(mergedConversationId)).item;
+    if (generation != _sessionGeneration) return;
     if (mergedConvo != null) {
       final idx = conversations.indexWhere((c) => c.id == mergedConversationId);
       if (idx != -1) {
@@ -1994,6 +2002,7 @@ class ConversationProvider extends ChangeNotifier {
         conversations.insert(0, mergedConvo);
       }
       conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      unawaited(SiriIntegration.current.upsertConversations([mergedConvo]));
     }
 
     _groupConversationsByDateWithoutNotify();

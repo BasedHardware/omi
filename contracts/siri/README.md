@@ -22,7 +22,7 @@ Each row below is an AND condition. A missing required ID, owner, or completion 
 | --- | --- | --- | --- |
 | Backend ID and account owner | Nonempty server ID, synced into the current account's cache | Nonempty server ID; `uid` (when supplied) equals the current account; current account cache | Nonempty server ID, current account cache |
 | Deleted / discarded | Neither deleted nor discarded | Not deleted | Not deleted |
-| Archived tier | N/A | Missing/null `memory_tier` is legacy active `long_term`; `short_term` and `long_term` are active; explicit `archive` excluded; unknown enum values fail decoding | N/A |
+| Archived tier | N/A | Missing/null `memory_tier` is legacy active `long_term`; `short_term` and `long_term` are active; explicit `archive` excluded. The backend rejects unknown enum values; the tolerant client decoder excludes only that row from Siri without failing the whole page | N/A |
 | Expired / invalidated | N/A | `expires_at` and `invalid_at` absent or later than `now` | N/A |
 | User rejected / dismissed | N/A | `user_review != false`, not dismissed | N/A |
 | Visibility | Owner-visible `private`, `shared`, or `public`; no hidden/unknown value | Owner-visible `private`, `shared`, or `public`; no hidden/unknown value | No visibility field in task response |
@@ -42,11 +42,11 @@ The backend models are the authority for old documents that omit newer fields. D
 | Account owner | Memory `uid` is required. Conversation and task responses are fetched by the signed-in account and carry no UID. | Reject a missing or mismatched memory UID; fence the account-scoped cache and index by current owner on both platforms. |
 | Sync provenance | No backend field; local cache state | Require an authoritative backend ID and current-account sync; no assumption from absent provenance. |
 | Deleted / discarded | Memory and task deletion is represented by removal or a local tombstone; conversation `discarded` defaults false. | Keep a present, non-tombstoned row; absent `discarded` is false. |
-| Memory `memory_tier` | `None`; backend reads existing documents as active, and the clients project them as `long_term`. | Include absent/null, `short_term`, and `long_term`; exclude explicit `archive`. Backend enum validation rejects an unknown `memory_tier`. Unknown extra `layer`/`tier` aliases do not establish a tier; conflicting recognized aliases fail closed. |
+| Memory `memory_tier` | `None`; backend reads existing documents as active, and the clients project them as `long_term`. | Include absent/null, `short_term`, and `long_term`; exclude explicit `archive`. Backend enum validation rejects an unknown `memory_tier`; if a malformed row reaches a released client, exclude only that row from Siri without throwing during whole-page decode. Unknown extra `layer`/`tier` aliases do not establish a tier; conflicting recognized aliases are Siri-ineligible without failing app decode. |
 | Memory compatibility `expires_at` / `invalid_at` | `MemoryDB` has no `expires_at` field; the optional compatibility field is absent on normal responses. `invalid_at=None` means active. | Include until a present deadline passes; missing deadlines do not exclude. |
 | Memory `user_review` / `is_dismissed` | `None` / false | Include unless explicitly rejected (`false`) or dismissed (`true`). |
 | Memory visibility | `MemoryDB.visibility` defaults `public`; explicit null is allowed. | Include absent/null as owner-visible; exclude a present hidden or unknown value. iOS projects absent as public, macOS as private; both are owner-visible. |
-| Conversation visibility | `Conversation.visibility` defaults `private`; explicit null is invalid. | Include an omitted visibility as private, including `nil` in the older macOS cache; exclude hidden or unknown. |
+| Conversation visibility | `Conversation.visibility` defaults `private`; explicit null is invalid in the backend, but older/malformed app payloads may contain it. | Include omitted/null as private in the app decoder so one row cannot reject a page; exclude explicit hidden or unknown string values. |
 | Memory / conversation / task `is_locked` | false in all three backend response models | Include omitted/nil legacy lock flags as unlocked; exclude explicit true. |
 | Memory `ledger_status` / `superseded_by` | `None` / `None` means current | Include absent status and empty supersession; exclude non-active status or a replacement ID. |
 | Memory `kind` / `intent_backed` | `None` / false | Neither is a Siri eligibility prerequisite; old ordinary memories remain eligible. |
