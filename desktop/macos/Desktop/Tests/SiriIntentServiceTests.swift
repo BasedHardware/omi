@@ -4,6 +4,29 @@ import XCTest
 @testable import Omi_Computer
 
 final class SiriIntentServiceTests: XCTestCase {
+  @MainActor
+  func testSearchFromColdConversationsPageKeepsQueryUntilPageAppears() {
+    SiriPendingConversationSearch.clear()
+    SiriNavigator.search("quarterly roadmap")
+    XCTAssertEqual(SiriPendingConversationSearch.take(), "quarterly roadmap")
+    XCTAssertNil(SiriPendingConversationSearch.take())
+  }
+
+  func testFullRebuildAndIncrementalMemoryProjectionHaveMatchingRepresentations() {
+    guard #available(macOS 27, *) else { return }
+    let now = Date()
+    let eligible = MemoryRecord(
+      backendId: "active-memory", backendSynced: true,
+      content: "An active memory", createdAt: now)
+    let archived = MemoryRecord(
+      backendId: "archived-memory", backendSynced: true,
+      content: "An archived memory", tier: "archive", createdAt: now)
+    let projection = SiriIndexer.projectMemoryRepresentations([eligible, archived], now: now)
+    XCTAssertEqual(projection.custom.map(\.id), ["active-memory"])
+    XCTAssertEqual(projection.notes.map(\.id), projection.custom.map(\.id))
+    XCTAssertEqual(projection.notes.first?.folder?.id, OmiFolderEntity.memories.id)
+  }
+
   func testMemoryRemovalDeletesCustomAndNotesRepresentationsInChunks() async throws {
     guard #available(macOS 27, *) else { return }
     actor Calls {

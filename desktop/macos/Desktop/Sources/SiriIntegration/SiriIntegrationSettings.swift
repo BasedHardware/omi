@@ -17,6 +17,25 @@ extension Notification.Name {
   static let siriIndexPreferenceChanged = Notification.Name("siriIndexPreferenceChanged")
 }
 
+/// Holds a search intent until the Conversations page mounts after navigation.
+/// This file is also compiled by the required Xcode 26.6 no-Siri build.
+@MainActor
+enum SiriPendingConversationSearch {
+  private static var pending: (owner: String?, query: String)?
+
+  static func store(_ query: String) {
+    pending = (RuntimeOwnerIdentity.currentOwnerId(), query)
+  }
+
+  static func take() -> String? {
+    defer { pending = nil }
+    guard let pending, pending.owner == RuntimeOwnerIdentity.currentOwnerId() else { return nil }
+    return pending.query
+  }
+
+  static func clear() { pending = nil }
+}
+
 #if !compiler(>=6.4)
   import SwiftUI
 

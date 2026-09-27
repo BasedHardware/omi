@@ -133,7 +133,12 @@ enum SiriIntentService {
       content: content, visibility: "private", category: .manual, tags: ["siri"],
       expectedOwnerId: authorization.ownerID, authorizationSnapshot: authorization)
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw SiriFailure.cancelled }
-    do { try await MemoryStorage.shared.syncServerMemory(result) } catch {
+    do {
+      try await MemoryStorage.shared.syncServerMemory(
+        result, authorization: TasksStore.localMutationAuthorization(snapshot: authorization))
+    } catch LocalMutationAuthorizationError.revoked {
+      throw SiriFailure.cancelled
+    } catch {
       log("Siri memory cache refresh deferred: \(error.localizedDescription)")
     }
     return result

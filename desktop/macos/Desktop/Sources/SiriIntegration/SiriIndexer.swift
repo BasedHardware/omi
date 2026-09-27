@@ -367,15 +367,13 @@ actor SiriIndexer {
     let ids = Array(Set(ids.filter { !$0.isEmpty }))
     guard !ids.isEmpty, let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
     defer { finishOperation() }
-    let entities = try await MemoryEntityQuery().entities(for: ids)
-    let present = Set(entities.map(\.id))
+    let records = try await MemoryStorage.shared.getSiriMemoryRecords(backendIds: ids)
+    let projection = Self.projectMemoryRepresentations(records, now: Date())
+    let present = Set(projection.custom.map(\.id))
     try await Self.deleteMemoryRepresentations(ids: ids.filter { !present.contains($0) }, from: index)
-    for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
-    let records = try await MemoryStorage.shared.getSiriMemoryRecords(backendIds: entities.map(\.id))
-    let notes = records.filter { SiriIndexScope.memory($0, now: Date()) }
-      .compactMap { $0.toServerMemory() }.map(ConversationEntity.init)
-    for chunk in notes.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
-    for entity in entities { indexedMemoryExpirations[entity.id] = entity.eligibilityCutoff }
+    for chunk in projection.custom.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+    for chunk in projection.notes.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+    for entity in projection.custom { indexedMemoryExpirations[entity.id] = entity.eligibilityCutoff }
     for id in ids where !present.contains(id) { indexedMemoryExpirations.removeValue(forKey: id) }
     scheduleNextMemoryExpiry(owner: expectedOwner)
   }
@@ -401,11 +399,24 @@ actor SiriIndexer {
   }
 
   @available(macOS 27, *)
+  struct MemoryProjection {
+    let custom: [MemoryEntity]
+    let notes: [ConversationEntity]
+  }
+
+  @available(macOS 27, *)
+  nonisolated static func projectMemoryRepresentations(_ records: [MemoryRecord], now: Date) -> MemoryProjection {
+    let eligible = records.filter { SiriIndexScope.memory($0, now: now) }
+    return MemoryProjection(custom: eligible.map(MemoryEntity.init), notes: eligible.map(ConversationEntity.init))
+  }
+
+  @available(macOS 27, *)
   private struct RebuildProjection {
     let conversations: [ConversationEntity]
     let memories: [MemoryEntity]
+    let memoryNotes: [ConversationEntity]
     let tasks: [TaskEntity]
-    var count: Int { 3 + conversations.count + memories.count + tasks.count }
+    var count: Int { 3 + conversations.count + memories.count + memoryNotes.count + tasks.count }
   }
 
   @available(macOS 27, *)
@@ -415,9 +426,10 @@ actor SiriIndexer {
       since: now.addingTimeInterval(-SiriIndexScope.conversationAge))
     let conversations = SiriIndexScope.eligibleConversations(records, now: now).map(ConversationEntity.init)
     let memories = try await MemoryStorage.shared.getSiriMemoryCandidates()
-    let memoryEntities = SiriIndexScope.capped(
+    let selectedMemories = SiriIndexScope.capped(
       memories.filter { SiriIndexScope.memory($0, now: now) }, at: SiriIndexScope.memoryLimit
-    ).map(MemoryEntity.init)
+    )
+    let memoryProjection = Self.projectMemoryRepresentations(selectedMemories, now: now)
     let tasks = try await ActionItemStorage.shared.getAllLocalActionItems()
     var taskEntities: [TaskEntity] = []
     for task in tasks where !task.id.hasPrefix("local_") && !task.isRetired {
@@ -426,7 +438,9 @@ actor SiriIndexer {
       else { continue }
       taskEntities.append(TaskEntity(record))
     }
-    return RebuildProjection(conversations: conversations, memories: memoryEntities, tasks: taskEntities)
+    return RebuildProjection(
+      conversations: conversations, memories: memoryProjection.custom,
+      memoryNotes: memoryProjection.notes, tasks: taskEntities)
   }
 
   func rebuild(now: Date = Date()) async throws {
@@ -448,6 +462,9 @@ actor SiriIndexer {
           try await index.indexAppEntities(chunk, priority: 0)
         }
         for chunk in projection.memories.chunkedSiriIndex(200) {
+          try await index.indexAppEntities(chunk, priority: 0)
+        }
+        for chunk in projection.memoryNotes.chunkedSiriIndex(200) {
           try await index.indexAppEntities(chunk, priority: 0)
         }
         for chunk in projection.tasks.chunkedSiriIndex(200) {

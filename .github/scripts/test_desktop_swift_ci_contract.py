@@ -508,7 +508,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("#if compiler(>=6.4)", manifest)
         for name in ("SiriDevProbe", "SiriDonations", "SiriEntities", "SiriIndexHooks",
                      "SiriIndexLifecycle", "SiriIndexer", "SiriIntents", "SiriNavigation",
-                     "SiriViewAnnotations", "SiriIntentService"):
+                     "SiriViewAnnotations", "SiriIntentService", "SiriMemoryCacheWriter"):
             with self.subTest(source=name):
                 self.assertIn(f'SiriIntegration/{name}.swift', manifest)
         self.assertIn('SiriIntentServiceTests.swift', manifest)

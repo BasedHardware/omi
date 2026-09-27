@@ -1315,7 +1315,7 @@ actor MemoryStorage {
     }
   }
 
-  private static func reconcileServerMemories(
+  static func reconcileServerMemories(
     _ memories: [ServerMemory],
     in database: Database
   ) throws -> (skipped: Int, adopted: Int, inserted: Int, index: [(Int64, String)], changed: [String]) {

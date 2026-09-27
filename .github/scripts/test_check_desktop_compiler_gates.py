@@ -149,11 +149,15 @@ class DesktopCompilerGatesTests(unittest.TestCase):
     def test_only_siri_27_compiler_gates_are_allowed(self):
         """Exact paths and Swift version keep the release-only exception narrow."""
         allowed = self.guard.ALLOWED_COMPILER_GATES
-        self.assertEqual(len(allowed), 1)
+        self.assertEqual(len(allowed), 2)
         self.assertEqual(allowed[0].relative_path, "Sources/SiriIntegration/SiriIntegrationSettings.swift")
         self.assertEqual(allowed[0].line_contains, "#if !compiler(>=6.4)")
         source = (REAL_DESKTOP_ROOT / allowed[0].relative_path).read_text()
         self.assertEqual(source.count("#if !compiler(>=6.4)"), 1)
+        self.assertEqual(allowed[1].relative_path, "Tests/EffectiveOwnerDatabaseBoundaryTests.swift")
+        self.assertEqual(allowed[1].line_contains, "#if compiler(>=6.4)")
+        test_source = (REAL_DESKTOP_ROOT / allowed[1].relative_path).read_text()
+        self.assertEqual(test_source.count("#if compiler(>=6.4)"), 2)
 
     def test_allowlist_entry_must_match_path_and_line_to_suppress(self):
         with tempfile.TemporaryDirectory() as temp_dir:

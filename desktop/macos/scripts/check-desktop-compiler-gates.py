@@ -64,6 +64,11 @@ ALLOWED_COMPILER_GATES: tuple[AllowlistEntry, ...] = (
         "#if !compiler(>=6.4)",
         "Siri no-op call-site shims for required Xcode 26.6 CI",
     ),
+    AllowlistEntry(
+        "Tests/EffectiveOwnerDatabaseBoundaryTests.swift",
+        "#if compiler(>=6.4)",
+        "Siri-only owner-switch regression uses the Xcode 27 cache writer",
+    ),
 )
 
 

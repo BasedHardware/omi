@@ -20,7 +20,7 @@ private final class OwnerDatabaseCommitObserver: TransactionObserver, @unchecked
       waiters.removeAll()
       return pending
     }
-    pending.forEach { $0.resume() }
+    for continuation in pending { continuation.resume() }
     releaseCommit.wait()
   }
 
@@ -44,6 +44,38 @@ private final class OwnerDatabaseCommitObserver: TransactionObserver, @unchecked
   }
 }
 
+#if compiler(>=6.4)
+  private actor SiriMemoryWriteGate {
+    private var entered = false
+    private var enteredWaiter: CheckedContinuation<Void, Never>?
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+
+    func pauseBeforeWrite() async {
+      entered = true
+      enteredWaiter?.resume()
+      enteredWaiter = nil
+      await withCheckedContinuation { releaseWaiter = $0 }
+    }
+
+    func waitUntilEntered() async {
+      if entered { return }
+      await withCheckedContinuation { enteredWaiter = $0 }
+    }
+
+    func release() {
+      releaseWaiter?.resume()
+      releaseWaiter = nil
+    }
+  }
+
+  private final class SiriMemoryIndexCallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func increment() { lock.withLock { value += 1 } }
+    var count: Int { lock.withLock { value } }
+  }
+#endif
+
 @MainActor
 final class EffectiveOwnerDatabaseBoundaryTests: XCTestCase {
   private var originalAuthOwner: String?
@@ -51,18 +83,58 @@ final class EffectiveOwnerDatabaseBoundaryTests: XCTestCase {
   private var originalBackup: String?
   private var createdOwnerIDs: [String] = []
 
+  #if compiler(>=6.4)
+    func testSiriRememberDoesNotCacheOrIndexAfterOwnerSwitchDuringAwait() async throws {
+      let ownerA = makeOwnerID("siri-memory-a")
+      let ownerB = makeOwnerID("siri-memory-b")
+      await setOwner(ownerA)
+      let snapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+      let gate = SiriMemoryWriteGate()
+      let indexCalls = SiriMemoryIndexCallCounter()
+      let memory = ServerMemory(
+        id: "siri-memory-owner-fence", content: "Only owner A may see this", category: .manual,
+        tier: .longTerm, tierIsExplicit: true, createdAt: Date(), updatedAt: Date(),
+        conversationId: nil, reviewed: false, userReview: nil, visibility: "private",
+        manuallyAdded: true, scoring: nil, source: "siri", confidence: nil,
+        sourceApp: nil, contextSummary: nil, isRead: false, isDismissed: false,
+        isLocked: false, tags: ["siri"], reasoning: nil, currentActivity: nil,
+        inputDeviceName: nil, windowTitle: nil, headline: nil)
+      let write = Task {
+        try await MemoryStorage.shared.syncServerMemory(
+          memory, authorization: TasksStore.localMutationAuthorization(snapshot: snapshot),
+          beforeLocalWrite: { await gate.pauseBeforeWrite() },
+          onIndexChange: { _ in indexCalls.increment() })
+      }
+      await gate.waitUntilEntered()
+      await setOwner(ownerB)
+      await gate.release()
+      do {
+        _ = try await write.value
+        XCTFail("The superseded Siri write must be rejected")
+      } catch let error as LocalMutationAuthorizationError {
+        XCTAssertEqual(error, .revoked)
+      }
+      let ownerBMemory = try await MemoryStorage.shared.getMemoryByBackendId(memory.id)
+      XCTAssertNil(ownerBMemory)
+      await RewindDatabase.shared.close()
+      XCTAssertEqual(try readMemoryBackendIDs(ownerID: ownerA), [])
+      XCTAssertEqual(try readMemoryBackendIDs(ownerID: ownerB), [])
+      XCTAssertEqual(indexCalls.count, 0)
+    }
+  #endif
+
   override func setUp() async throws {
     originalAuthOwner = UserDefaults.standard.string(forKey: .authUserId)
     originalOverride = UserDefaults.standard.string(forKey: .automationOwnerOverride)
     originalBackup = UserDefaults.standard.string(forKey: .automationOwnerABackup)
     try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
       allowAutomationOverride: true,
-      plannedNextOwner: { _, _ in nil }
-    ) { defaults in
-      defaults.removeObject(forKey: .authUserId)
-      defaults.removeObject(forKey: .automationOwnerOverride)
-      defaults.removeObject(forKey: .automationOwnerABackup)
-    }
+      plannedNextOwner: { _, _ in nil },
+      { defaults in
+        defaults.removeObject(forKey: .authUserId)
+        defaults.removeObject(forKey: .automationOwnerOverride)
+        defaults.removeObject(forKey: .automationOwnerABackup)
+      })
     await RewindDatabase.shared.close()
   }
 
@@ -77,12 +149,12 @@ final class EffectiveOwnerDatabaseBoundaryTests: XCTestCase {
         let normalizedOverride = override?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let normalizedOverride, !normalizedOverride.isEmpty { return normalizedOverride }
         return authOwner?.trimmingCharacters(in: .whitespacesAndNewlines)
-      }
-    ) { defaults in
-      Self.restore(authOwner, forKey: .authUserId, in: defaults)
-      Self.restore(override, forKey: .automationOwnerOverride, in: defaults)
-      Self.restore(backup, forKey: .automationOwnerABackup, in: defaults)
-    }
+      },
+      { defaults in
+        Self.restore(authOwner, forKey: .authUserId, in: defaults)
+        Self.restore(override, forKey: .automationOwnerOverride, in: defaults)
+        Self.restore(backup, forKey: .automationOwnerABackup, in: defaults)
+      })
     for ownerID in createdOwnerIDs {
       try? FileManager.default.removeItem(at: userDirectory(ownerID))
     }
@@ -164,10 +236,10 @@ final class EffectiveOwnerDatabaseBoundaryTests: XCTestCase {
     do {
       try await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
         allowAutomationOverride: false,
-        plannedNextOwner: { _, _ in ownerID }
-      ) { defaults in
-        defaults.set(ownerID, forKey: .authUserId)
-      }
+        plannedNextOwner: { _, _ in ownerID },
+        { defaults in
+          defaults.set(ownerID, forKey: .authUserId)
+        })
     } catch {
       XCTFail("owner transition failed: \(error)")
     }
@@ -178,6 +250,13 @@ final class EffectiveOwnerDatabaseBoundaryTests: XCTestCase {
       path: userDirectory(ownerID).appendingPathComponent("omi.db").path)
     return try pool.read { db in
       try String.fetchAll(db, sql: "SELECT value FROM owner_probe ORDER BY rowid")
+    }
+  }
+
+  private func readMemoryBackendIDs(ownerID: String) throws -> [String] {
+    let pool = try DatabasePool(path: userDirectory(ownerID).appendingPathComponent("omi.db").path)
+    return try pool.read { db in
+      try String.fetchAll(db, sql: "SELECT backendId FROM memories WHERE backendId IS NOT NULL")
     }
   }
 

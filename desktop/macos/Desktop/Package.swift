@@ -18,6 +18,7 @@ import PackageDescription
     "SiriIntegration/SiriIntentService.swift",
     "SiriIntegration/SiriIntents.swift",
     "SiriIntegration/SiriMemoryStorageQueries.swift",
+    "SiriIntegration/SiriMemoryCacheWriter.swift",
     "SiriIntegration/SiriNavigation.swift",
     "SiriIntegration/SiriViewAnnotations.swift",
   ]

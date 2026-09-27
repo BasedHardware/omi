@@ -22,6 +22,7 @@ enum SiriNavigator {
   }
 
   static func search(_ query: String) {
+    SiriPendingConversationSearch.store(query)
     NotificationCenter.default.post(name: .desktopAutomationOpenConversationRequested, object: nil)
     NotificationCenter.default.post(
       name: .desktopAutomationSetConversationsSearchRequested,

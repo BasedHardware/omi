@@ -77,6 +77,17 @@ struct ConversationEntity: IndexedEntity {
     folder = .memories
   }
 
+  init(_ memory: MemoryRecord) {
+    id = memory.backendId ?? ""
+    name = AttributedString(String(memory.content.prefix(60)))
+    content = AttributedString(memory.content)
+    attachments = []
+    isPinned = false
+    creationDate = memory.createdAt
+    modificationDate = memory.updatedAt
+    folder = .memories
+  }
+
   init(donationID: String) {
     id = donationID
     name = AttributedString("Omi Conversation")
