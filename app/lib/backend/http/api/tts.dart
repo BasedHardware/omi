@@ -18,10 +18,14 @@ class TtsUnavailableException implements Exception {
       'TtsUnavailableException(status=$statusCode${retryAfter != null ? ', retryAfter=$retryAfter' : ''})';
 }
 
-/// Calls `POST /v2/tts/synthesize` and returns the raw MP3 bytes.
+/// Calls `POST /v2/tts/synthesize` and returns the raw audio bytes.
 ///
 /// Defaults mirror the desktop client and the Rust backend at
 /// desktop backend route so both platforms stay in sync.
+///
+/// Phone playback uses `mp3_44100_128`. The DevKit 2 wearable speaker path
+/// requests `pcm_16000` (signed 16-bit LE mono) and downsamples to 8 kHz
+/// before streaming over BLE.
 Future<Uint8List?> synthesizeSpeech({
   required String text,
   String voiceId = 'BAMYoBHLZM7lJgJAmFz0', // Sloane

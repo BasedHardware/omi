@@ -135,9 +135,7 @@ void main() {
 
   test('disabled Omi actions still deliver tutorial double-press events', () {
     final onboarding = DeviceOnboardingProvider()..startOnboarding();
-    onboarding.advanceStep();
-    onboarding.advanceStep();
-    onboarding.advanceStep();
+    onboarding.goToStep(DeviceOnboardingProvider.doublePressStep);
     onboarding.selectDoubleTapAction(1);
     final provider = _NoSocketCaptureProvider();
     provider.deviceOnboardingProvider = onboarding;

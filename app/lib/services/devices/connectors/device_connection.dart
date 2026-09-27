@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -393,6 +394,14 @@ abstract class DeviceConnection {
       return false;
     }
   }
+
+  /// Whether this link exposes the DevKit 2 PCM speaker write characteristic.
+  bool get supportsPcmSpeakerPlayback => false;
+
+  /// Stream mono PCM16LE @ 8 kHz to the wearable speaker.
+  ///
+  /// Default no-op. [OmiDeviceConnection] implements the DevKit 2 BLE protocol.
+  Future<bool> performPlayPcmToSpeaker(Uint8List pcm16leMono8k) async => false;
 
   // storage here
 

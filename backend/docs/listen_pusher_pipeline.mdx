@@ -1111,6 +1111,19 @@ never erase the gap while the header claims the first run's position. Opcode
 103 is emitted ahead of each conversation boundary so the pusher flushes
 rather than concatenating across rollovers.
 
+The dev qualification probe sends the same 17-word release fixture eight
+times (136 expected words), then near-silence while finalization completes.
+Its separate opt-in alignment scenario sends the fixture twice (34 expected
+words), with delivered silence and an inter-arrival gap between sends. The
+shadow pass uses the first stored chunk as its time origin; its result records
+the scalar difference between that origin and `conversation.started_at` so a
+text-estimated remap shift can be checked against the capture clock. The two
+offsets should have opposite signs when the live and stored audio clocks
+refer to the same samples; the result also exposes the v2 marker verdict.
+The shadow annotation remap verifies each target's text against its live source,
+or an exact sequential text partition, before carrying speaker receipts and
+summary references. Sequential filler is unresolved even when its time overlaps.
+
 Storage. v2 audio runs compare against the last accepted run's end with 1 ms
 tolerance: a positive discontinuity flushes the partial 60 s chunk and closes
 the pending per-conversation batch (never concatenating across a gap or

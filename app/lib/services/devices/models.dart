@@ -14,6 +14,10 @@ const String omiServiceUuid = '19b10000-e8f2-537e-4f6c-d104768a1214';
 const String audioDataStreamCharacteristicUuid = '19b10001-e8f2-537e-4f6c-d104768a1214';
 const String audioCodecCharacteristicUuid = '19b10002-e8f2-537e-4f6c-d104768a1214';
 
+/// DevKit 2 PCM speaker write characteristic (mono PCM16LE @ 8 kHz).
+/// Present only when firmware is built with `CONFIG_OMI_ENABLE_SPEAKER`.
+const String audioSpeakerPcmCharacteristicUuid = '19b10003-e8f2-537e-4f6c-d104768a1214';
+
 const String buttonServiceUuid = '23ba7924-0000-1000-7450-346eac492e92';
 const String buttonTriggerCharacteristicUuid = '23ba7925-0000-1000-7450-346eac492e92';
 const String buttonTapsCharacteristicUuid = '23ba7926-0000-1000-7450-346eac492e92';

@@ -684,6 +684,7 @@ class SharedPreferencesUtil {
   //   0 = off (never speak)
   //   1 = headphones only — AirPods / wired / USB / AirPlay (default)
   //   2 = always, including the phone speaker
+  //   3 = Omi device — DevKit 2 wearable speaker when connected (falls back to phone)
   // Default is 1 so Omi never blasts a private answer out of the speaker
   // in public unless the user explicitly opts in.
   set voiceResponseMode(int value) => saveInt('voiceResponseMode', value);

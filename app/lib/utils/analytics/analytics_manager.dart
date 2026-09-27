@@ -1399,6 +1399,9 @@ class AnalyticsManager {
         0 => VoiceResponseModeChangedMode.off,
         1 => VoiceResponseModeChangedMode.headphonesOnly,
         2 => VoiceResponseModeChangedMode.always,
+        // Mode 3 (Omi device speaker) is newer than the closed analytics enum;
+        // modeInt carries the real value for funnels that need it.
+        3 => VoiceResponseModeChangedMode.unknown,
         _ => VoiceResponseModeChangedMode.unknown,
       },
       modeInt: mode,
