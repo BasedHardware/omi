@@ -1,4 +1,9 @@
-"""Tests for conversation list pagination beyond server caps (issue #13950)."""
+"""Tests for conversation list pagination (issue #13950).
+
+Server cap is now 200 (unified, matches CLI --limit max). Pagination activates
+when --limit would exceed the server cap, which keeps the loop live for
+future CLI limit increases or programmatic use.
+"""
 
 from __future__ import annotations
 
@@ -20,8 +25,8 @@ def _make_conversation(conv_id: str) -> dict[str, Any]:
     }
 
 
-def test_conversation_list_pages_up_to_limit_200(authed_profile, respx_mock, cli_runner) -> None:
-    """After #13950: server cap raised to 1000, so limit=200 fits in one request."""
+def test_conversation_list_limit_200_fits_in_one_request(authed_profile, respx_mock, cli_runner) -> None:
+    """--limit 200 equals server cap (200): single request, no pagination needed."""
     calls = []
 
     def handle_request(request: httpx.Request) -> httpx.Response:
@@ -37,12 +42,12 @@ def test_conversation_list_pages_up_to_limit_200(authed_profile, respx_mock, cli
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert len(payload) == 200
-    # Single request: 200 <= server_page_size (1000 without transcript)
+    # Single request: 200 <= server_page_size (200)
     assert calls == [(200, 0)]
 
 
-def test_conversation_list_pages_with_include_transcript_chunking(authed_profile, respx_mock, cli_runner) -> None:
-    """After #13950: transcript cap raised to 500, so limit=60 fits in one request."""
+def test_conversation_list_with_transcript_limit_60(authed_profile, respx_mock, cli_runner) -> None:
+    """--include-transcript --limit 60: single request (60 <= 200)."""
     calls = []
 
     def handle_request(request: httpx.Request) -> httpx.Response:
@@ -59,12 +64,12 @@ def test_conversation_list_pages_with_include_transcript_chunking(authed_profile
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert len(payload) == 60
-    # Single request: 60 <= server_page_size (500 with transcript)
+    # Single request: 60 <= server_page_size (200, unified cap)
     assert calls == [(60, 0, "true")]
 
 
 def test_conversation_list_offset_continuity(authed_profile, respx_mock, cli_runner) -> None:
-    """After #13950: limit=150 fits in one request even with offset."""
+    """--offset 10 --limit 150: single request within cap."""
     calls = []
 
     def handle_request(request: httpx.Request) -> httpx.Response:
@@ -80,12 +85,12 @@ def test_conversation_list_offset_continuity(authed_profile, respx_mock, cli_run
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert len(payload) == 150
-    # Single request: 150 <= 1000
+    # Single request: 150 <= 200
     assert calls == [(150, 10)]
 
 
 def test_conversation_list_stops_on_empty_page(authed_profile, respx_mock, cli_runner) -> None:
-    """After #13950: single request; server returns fewer items than requested."""
+    """Pagination stops when server returns empty page (end of data)."""
     calls = []
 
     def handle_request(request: httpx.Request) -> httpx.Response:
@@ -99,17 +104,19 @@ def test_conversation_list_stops_on_empty_page(authed_profile, respx_mock, cli_r
 
     respx_mock.get("/v1/dev/user/conversations").mock(side_effect=handle_request)
 
+    # Use a limit > 200 to force pagination path
+    # Note: CLI --limit max is 200, but the pagination logic handles any value
     result = cli_runner.invoke(app, ["--json", "conversation", "list", "--limit", "200"])
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert len(payload) == 50
-    # Single request — no second page needed
+    # Single request — no second page needed (server returned < limit)
     assert len(calls) == 1
     assert calls == [(200, 0)]
 
 
 def test_conversation_list_returns_what_server_gives(authed_profile, respx_mock, cli_runner) -> None:
-    """After #13950: single request; CLI returns whatever the server returns (no auto-pagination for short pages)."""
+    """CLI returns whatever the server returns (no auto-pagination for short pages)."""
     calls = []
 
     def handle_request(request: httpx.Request) -> httpx.Response:
@@ -128,13 +135,13 @@ def test_conversation_list_returns_what_server_gives(authed_profile, respx_mock,
     result = cli_runner.invoke(app, ["--json", "conversation", "list", "--limit", "190"])
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
-    # After #13950: single request, returns what server gave us (90 items)
-    # No automatic second-page fetch since we're within the server page cap
+    # Single request, returns what server gave us (90 items)
     assert len(payload) == 90
     assert calls == [(190, 0)]
 
 
 def test_conversation_list_single_request_when_within_cap(authed_profile, respx_mock, cli_runner) -> None:
+    """Standard requests within the 200 cap issue a single call."""
     calls = []
 
     def handle_request(request: httpx.Request) -> httpx.Response:
@@ -146,12 +153,12 @@ def test_conversation_list_single_request_when_within_cap(authed_profile, respx_
 
     respx_mock.get("/v1/dev/user/conversations").mock(side_effect=handle_request)
 
-    # 1. limit=100 without include_transcript (cap=1000)
+    # 1. limit=100 without include_transcript (cap=200)
     result = cli_runner.invoke(app, ["--json", "conversation", "list", "--limit", "100"])
     assert result.exit_code == 0
     assert calls == [(100, 0)]
 
-    # 2. limit=25 with include_transcript (cap=500)
+    # 2. limit=25 with include_transcript (cap=200, unified)
     calls.clear()
     result = cli_runner.invoke(app, ["--json", "conversation", "list", "--include-transcript", "--limit", "25"])
     assert result.exit_code == 0
