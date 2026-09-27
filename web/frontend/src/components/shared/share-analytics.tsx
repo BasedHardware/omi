@@ -21,12 +21,13 @@ export function ShareAnalytics() {
     if (!surface || !key) return;
 
     const params = new URLSearchParams(window.location.search);
+    const device = deviceClass(navigator.userAgent);
     const common = {
       surface,
       share_id: shareId(params.get('sid')),
       s: shareSource(params.get('s')),
-      device_class: deviceClass(navigator.userAgent),
-      is_preview_bot: false,
+      device_class: device,
+      is_preview_bot: device === 'bot',
     };
     const distinctId = crypto.randomUUID();
     const capture = (event: string, properties: Record<string, unknown> = {}) => {
