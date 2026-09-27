@@ -3598,5 +3598,9 @@
     "appearanceSystem": "Hệ thống",
     "appearanceLight": "Sáng",
     "appearanceDark": "Tối",
-    "voiceQuestionNoSpeech": "Không nghe rõ — hãy thử lại"
+    "voiceQuestionNoSpeech": "Không nghe rõ — hãy thử lại",
+    "sendToSupport": "Gửi cho bộ phận hỗ trợ",
+    "deviceDiagnosticsUploadDescription": "Xem lại dữ liệu chẩn đoán JSON bên dưới. Dữ liệu gồm mã thiết bị, lịch sử kết nối, pin, firmware và sự kiện Bluetooth. Không có âm thanh hay bản chép lời.",
+    "deviceDiagnosticsTicket": "Mã hỗ trợ",
+    "deviceDiagnosticsUploadFailed": "Không thể gửi dữ liệu chẩn đoán. Vui lòng thử lại."
 }

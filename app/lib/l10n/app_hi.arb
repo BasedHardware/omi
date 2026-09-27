@@ -3598,5 +3598,9 @@
     "appearanceSystem": "सिस्टम",
     "appearanceLight": "लाइट",
     "appearanceDark": "डार्क",
-    "voiceQuestionNoSpeech": "समझ नहीं आया — फिर से कोशिश करें"
+    "voiceQuestionNoSpeech": "समझ नहीं आया — फिर से कोशिश करें",
+    "sendToSupport": "Send to support",
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again."
 }

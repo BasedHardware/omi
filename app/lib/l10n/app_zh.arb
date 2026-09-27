@@ -3598,5 +3598,9 @@
     "appearanceSystem": "系统",
     "appearanceLight": "浅色",
     "appearanceDark": "深色",
-    "voiceQuestionNoSpeech": "没听清楚 — 请再试一次"
+    "voiceQuestionNoSpeech": "没听清楚 — 请再试一次",
+    "sendToSupport": "Send to support",
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again."
 }

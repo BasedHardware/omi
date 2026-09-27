@@ -3598,5 +3598,9 @@
     "appearanceSystem": "Sistema",
     "appearanceLight": "Claro",
     "appearanceDark": "Oscuro",
-    "voiceQuestionNoSpeech": "No entendí eso — inténtalo de nuevo"
+    "voiceQuestionNoSpeech": "No entendí eso — inténtalo de nuevo",
+    "sendToSupport": "Enviar a soporte",
+    "deviceDiagnosticsUploadDescription": "Revisa los datos de diagnóstico JSON que aparecen abajo. Incluyen el identificador del dispositivo, el historial de conexiones, la batería, el firmware y los eventos Bluetooth. No incluyen audio ni transcripciones.",
+    "deviceDiagnosticsTicket": "Código del ticket de soporte",
+    "deviceDiagnosticsUploadFailed": "No se pudieron enviar los datos de diagnóstico. Inténtalo de nuevo."
 }

@@ -19,6 +19,8 @@ import android.content.*
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
+import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -54,23 +56,11 @@ class OmiBleForegroundService : Service() {
         private const val KEY_DISCONNECT_HISTORY = "disconnect_history"
         private const val KEY_RECONNECT_COUNT = "reconnect_count"
         private const val KEY_FAIL_TO_CONNECT_COUNT = "fail_to_connect_count"
-        private const val MAX_DISCONNECT_HISTORY = 20
-        private const val RSSI_TREND_WINDOW_MS = 15_000L
-        private const val RSSI_TREND_FADING_DROP_DB = 10
-        /** Classify the RSSI trajectory in the window before [nowMs]. See BleDisconnectEvent.rssiTrend
-         *  for the semantics of each label. */
-        private fun classifyRssiTrend(samples: List<Pair<Long, Int>>, nowMs: Long): String {
-            val windowStart = nowMs - RSSI_TREND_WINDOW_MS
-            val recent = samples.filter { it.first >= windowStart }
-            if (recent.isEmpty()) return "gap"
-            if (recent.size < 3) return "unknown"
-            val third = (recent.size / 3).coerceAtLeast(1)
-            val oldestAvg = recent.take(third).sumOf { it.second } / third
-            val newestAvg = recent.takeLast(third).sumOf { it.second } / third
-            // RSSI is negative; a larger drop = newestAvg more negative than oldestAvg.
-            val dropDb = oldestAvg - newestAvg
-            return if (dropDb >= RSSI_TREND_FADING_DROP_DB) "fading" else "sudden"
-        }
+        private const val MAX_DISCONNECT_HISTORY = 500
+        private const val DISCONNECT_RETENTION_MS = 7L * 24 * 3600 * 1000
+        private const val DIAGNOSTICS_SERVICE = "19b10040-e8f2-537e-4f6c-d104768a1214"
+        private const val DIAGNOSTICS_CHAR = "19b10041-e8f2-537e-4f6c-d104768a1214"
+        private const val AUDIO_CHAR = "19b10001-e8f2-537e-4f6c-d104768a1214"
 
         @Volatile
         var instance: OmiBleForegroundService? = null
@@ -168,6 +158,8 @@ class OmiBleForegroundService : Service() {
     private var isDestroying = false
     private var isBluetoothEnabled = true
     private val syncLock = Any()
+    private val audioCounters = ConcurrentHashMap<String, BleAudioPacketCounter>()
+    private val pendingAudioRecovery = ConcurrentHashMap<String, Long>()
     private val bleManager get() = OmiBleManager.instance
     private val backgroundAudioStreamer by lazy { OmiBackgroundAudioStreamer(applicationContext) }
     private val batchAudioWriter by lazy { OmiBatchAudioWriter(applicationContext) }
@@ -193,6 +185,15 @@ class OmiBleForegroundService : Service() {
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
             managed.pendingReconnect = null
             managed.connectionStartTime = System.currentTimeMillis()
+            bleManager.lastRssi.remove(addr)
+            bleManager.rssiHistory.remove(addr)
+            bleManager.chargingState.remove(addr)
+            audioCounters[addr] = BleAudioPacketCounter()
+            getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE).let { prefs ->
+                val key = "counters_since_$addr"
+                if (!prefs.contains(key)) prefs.edit().putLong(key, managed.connectionStartTime ?: 0L).apply()
+            }
+            logBle(addr, "connected", "")
             managed.currentGattHash = gatt.hashCode()
 
             startStabilityTimer(addr)
@@ -214,6 +215,19 @@ class OmiBleForegroundService : Service() {
 
             if (services.isEmpty()) {
                 Log.w(TAG, "No services discovered for $addr")
+            }
+            if (services.any { it.uuid.equals(DIAGNOSTICS_SERVICE, ignoreCase = true) &&
+                it.characteristicUuids.any { characteristic -> characteristic.equals(DIAGNOSTICS_CHAR, ignoreCase = true) }
+            }) {
+                bleManager.readCharacteristic(addr, DIAGNOSTICS_SERVICE, DIAGNOSTICS_CHAR) { result ->
+                    result.getOrNull()?.let { value ->
+                        FirmwareDiagnosticsParser.parse(value, System.currentTimeMillis())?.let { parsed ->
+                            if (!parsed.isNull("charging")) bleManager.chargingState[addr] = parsed.getBoolean("charging")
+                            appendJsonRing("firmware_$addr", parsed, 20, DISCONNECT_RETENTION_MS)
+                            logBle(addr, "firmware_diagnostics_read", "v${parsed.optInt("version")}")
+                        }
+                    }
+                }
             }
 
             if (managed.requiresBond) {
@@ -635,6 +649,7 @@ class OmiBleForegroundService : Service() {
 
             when (state) {
                 BluetoothAdapter.STATE_TURNING_OFF -> {
+                    lifecycle("bluetooth_off")
                     Log.i(TAG, "Bluetooth turning off, cleaning up GATT")
                     isBluetoothEnabled = false
                     for ((addr, managed) in managedDevices) {
@@ -664,6 +679,7 @@ class OmiBleForegroundService : Service() {
                     isBluetoothEnabled = false
                 }
                 BluetoothAdapter.STATE_ON -> {
+                    lifecycle("bluetooth_on")
                     Log.i(TAG, "Bluetooth on, reconnecting in 2s")
                     isBluetoothEnabled = true
                     updateNotification("Reconnecting...")
@@ -677,11 +693,42 @@ class OmiBleForegroundService : Service() {
         }
     }
 
+    private val powerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val power = getSystemService(POWER_SERVICE) as PowerManager
+            lifecycle(if (power.isPowerSaveMode) "low_power_on" else "low_power_off")
+        }
+    }
+
+    fun recordPermissionStates() {
+        val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+        val states = mapOf(
+            "mic" to checkSelfPermission(android.Manifest.permission.RECORD_AUDIO),
+            "bluetooth" to checkSelfPermission(
+                if (Build.VERSION.SDK_INT >= 31) android.Manifest.permission.BLUETOOTH_CONNECT
+                else android.Manifest.permission.BLUETOOTH
+            )
+        )
+        for ((name, value) in states) {
+            val key = "permission_$name"
+            if (prefs.getInt(key, -99) != value) {
+                prefs.edit().putInt(key, value).apply()
+                lifecycle("${name}_permission_$value")
+            }
+        }
+    }
+
     // ── Service lifecycle ──
 
     override fun onCreate() {
         super.onCreate()
         instance = this
+        getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE).let { prefs ->
+            if (prefs.getBoolean("run_open", false)) lifecycle("previous_run_unclean")
+            prefs.edit().putBoolean("run_open", true).apply()
+        }
+        lifecycle("app_launch")
+        recordPermissionStates()
         // Transition guard: old builds used START_STICKY, so Android may re-deliver
         // a pending intent after process death before MainActivity initializes OmiBleManager.
         if (!OmiBleManager.isInitialized) OmiBleManager.initialize(application)
@@ -696,6 +743,7 @@ class OmiBleForegroundService : Service() {
             IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED),
             RECEIVER_NOT_EXPORTED
         )
+        registerReceiver(powerReceiver, IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED), RECEIVER_NOT_EXPORTED)
         bleManager.connectionListener = connectionListener
         bleManager.characteristicValueListener = object : OmiBleManager.CharacteristicValueListener {
             override fun onCharacteristicValue(
@@ -704,6 +752,7 @@ class OmiBleForegroundService : Service() {
                 characteristicUuid: String,
                 value: ByteArray
             ) {
+                if (characteristicUuid.equals(AUDIO_CHAR, ignoreCase = true)) recordAudioPacket(address, value)
                 // Batch mode and background streaming are mutually exclusive (gated by
                 // their respective prefs); calling all sinks is safe — each self-gates.
                 batchAudioWriter.handleCharacteristic(address, serviceUuid, characteristicUuid, value)
@@ -765,6 +814,7 @@ class OmiBleForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE).edit().putBoolean("run_open", false).apply()
         Log.d(TAG, "Service destroying")
         isDestroying = true
         backgroundAudioStreamer.stop("service_destroyed")
@@ -789,6 +839,7 @@ class OmiBleForegroundService : Service() {
 
         try { unregisterReceiver(bluetoothReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(bondStateReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(powerReceiver) } catch (_: Exception) {}
 
         super.onDestroy()
     }
@@ -813,6 +864,47 @@ class OmiBleForegroundService : Service() {
     private fun failToConnectKey(address: String) = "${KEY_FAIL_TO_CONNECT_COUNT}_${address.uppercase()}"
 
     private fun currentAppState(): String = if (OmiBleManager.isAppForeground) "foreground" else "background"
+
+    private fun appendJsonRing(key: String, value: JSONObject, limit: Int, retentionMs: Long) {
+        val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+        val source = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { JSONArray() }
+        val now = System.currentTimeMillis()
+        val kept = JSONArray()
+        for (i in 0 until source.length()) {
+            val row = source.optJSONObject(i) ?: continue
+            if (row.optLong("ts", 0L) >= now - retentionMs) kept.put(row)
+        }
+        kept.put(value)
+        while (kept.length() > limit) kept.remove(0)
+        prefs.edit().putString(key, kept.toString()).apply()
+    }
+
+    private fun lifecycle(event: String) = appendJsonRing(
+        "lifecycle", JSONObject().put("ts", System.currentTimeMillis()).put("event", event),
+        500, DISCONNECT_RETENTION_MS
+    )
+
+    private fun logBle(address: String, event: String, detail: String) = appendJsonRing(
+        "log_${address.uppercase()}", JSONObject().put("ts", System.currentTimeMillis())
+            .put("event", event).put("detail", detail), 500, 24 * 3600 * 1000L
+    )
+
+    private fun recordAudioPacket(address: String, value: ByteArray) {
+        val addr = address.uppercase()
+        if (audioCounters[addr]?.record(value) != true) return
+        val marker = pendingAudioRecovery.remove(addr) ?: return
+        val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+        val key = historyKey(addr)
+        val history = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { return }
+        for (i in history.length() - 1 downTo 0) {
+            val item = history.optJSONObject(i) ?: continue
+            if (item.optLong("timestamp", 0L) == marker) {
+                item.put("lostAudioSeconds", (System.currentTimeMillis() - marker).coerceAtLeast(0L) / 1000.0)
+                prefs.edit().putString(key, history.toString()).apply()
+                break
+            }
+        }
+    }
 
     private fun persistDisconnectEvent(
         address: String,
@@ -841,7 +933,8 @@ class OmiBleForegroundService : Service() {
         val rssiSnapshot = bleManager.rssiHistory[addr]?.let { deque ->
             synchronized(deque) { deque.toList() }
         } ?: emptyList()
-        val trend = classifyRssiTrend(rssiSnapshot, now)
+        val trend = BleRssiDiagnostics.trend(rssiSnapshot, now)
+        val counter = audioCounters[addr]
 
         val event = JSONObject().apply {
             put("timestamp", now)
@@ -850,6 +943,9 @@ class OmiBleForegroundService : Service() {
             put("isManual", isManual)
             put("eventType", eventType)
             put("lastRssi", bleManager.lastRssi[addr] ?: 0)
+            put("lastRssiAgeMs", BleRssiDiagnostics.ageMs(rssiSnapshot, now))
+            put("audioPacketsReceived", counter?.received ?: 0L)
+            put("audioPacketsExpected", counter?.expected ?: 0L)
             put("connectionDurationMs", durationMs)
             put("appState", currentAppState())
             put("timeToReconnectMs", 0L)
@@ -857,18 +953,51 @@ class OmiBleForegroundService : Service() {
         }
         history.put(event)
 
+        for (i in history.length() - 1 downTo 0) {
+            if ((history.optJSONObject(i)?.optLong("timestamp", 0L) ?: 0L) < now - DISCONNECT_RETENTION_MS) {
+                history.remove(i)
+            }
+        }
+
         // Keep only the last MAX_DISCONNECT_HISTORY entries
         while (history.length() > MAX_DISCONNECT_HISTORY) {
             history.remove(0)
         }
 
         prefs.edit().putString(key, history.toString()).apply()
+        logBle(addr, eventType, event.optString("reason"))
 
         // Remember the event timestamp so the next successful connect can backfill
         // the time-to-reconnect latency on this record.
         if (!isManual && managed != null) {
             managed.pendingReconnectMarkerTs = now
+            if (eventType == "disconnect") pendingAudioRecovery[addr] = now
         }
+    }
+
+    fun getExtendedDeviceDiagnostics(address: String): String {
+        val addr = address.uppercase()
+        val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+        fun array(key: String): JSONArray = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { JSONArray() }
+        val samples = JSONArray()
+        bleManager.rssiHistory[addr]?.let { deque -> synchronized(deque) {
+            deque.forEach { (ts, rssi) -> samples.put(JSONObject().put("ts", ts).put("rssi", rssi)) }
+        } }
+        val counter = audioCounters[addr]
+        return JSONObject()
+            .put("disconnect_history_v2", array(historyKey(addr)))
+            .put("battery_history_v2", try {
+                JSONArray(getSharedPreferences("battery_history", MODE_PRIVATE).getString("battery_history_$addr", "[]"))
+            } catch (_: Exception) { JSONArray() })
+            .put("rssi_samples", samples)
+            .put("audio_packets_received", counter?.received ?: 0L)
+            .put("audio_packets_expected", counter?.expected ?: 0L)
+            .put("connected_at", managedDevices[addr]?.connectionStartTime ?: 0L)
+            .put("firmware_diagnostics", array("firmware_$addr"))
+            .put("lifecycle_events", array("lifecycle"))
+            .put("ble_log", array("log_$addr"))
+            .put("counters_since", prefs.getLong("counters_since_$addr", 0L).takeIf { it > 0L } ?: JSONObject.NULL)
+            .toString()
     }
 
     private fun backfillTimeToReconnect(address: String, managed: ManagedDevice) {

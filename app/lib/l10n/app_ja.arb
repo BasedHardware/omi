@@ -3598,5 +3598,9 @@
     "appearanceSystem": "システム",
     "appearanceLight": "ライト",
     "appearanceDark": "ダーク",
-    "voiceQuestionNoSpeech": "聞き取れませんでした — もう一度お試しください"
+    "voiceQuestionNoSpeech": "聞き取れませんでした — もう一度お試しください",
+    "sendToSupport": "Send to support",
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again."
 }
