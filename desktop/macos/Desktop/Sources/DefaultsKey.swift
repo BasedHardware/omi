@@ -135,6 +135,11 @@ enum DefaultsKey: String {
   /// Ambient capture mutes its microphone contribution while a dictation app (Wispr Flow,
   /// superwhisper, macOS Dictation) holds the mic. Absent means on.
   case transcriptionIgnoreDictationApps = "transcription_ignoreDictationApps"
+  /// Overlay on `audioRecordingMode`: pause keeps mic/BLE capture up and gates only
+  /// transcription forwarding. Absent means not paused. Never a second recording policy.
+  case transcriptionPaused = "transcriptionPaused"
+  case shortcutToggleListeningEnabled = "shortcut_toggleListeningEnabled"
+  case shortcutToggleListeningKey = "shortcut_toggleListeningKey"
   /// Current local day's per-bundle call-audio aggregates. The meeting detector
   /// flushes the previous day as `Desktop Call App Audio Summary` on the first
   /// tick of a new day and when it starts after a relaunch.

@@ -1,0 +1,3 @@
+{
+  "change": "Added a listening toggle so you can pause and resume transcription from the control bar, menu bar, or a rebindable global hotkey, and the setting persists across restarts."
+}

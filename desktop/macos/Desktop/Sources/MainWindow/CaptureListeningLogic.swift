@@ -25,10 +25,55 @@ enum CaptureListeningLogic {
   /// `.armed`, not `.active`: it is switched on, so it wears no off-slash, but nothing is recorded
   /// yet, and green is reserved for recording now. Whether audio is reaching STT is
   /// `isLiveCapturing`, which the live-transcript surfaces read directly.
+  ///
+  /// Pause is a separate overlay (`isTranscriptionPaused`) and must not be read as Off: the
+  /// mode control still shows Always On / Only Meetings while transcription is gated.
   static func listeningStatus(appState: AppState) -> HomeStatusState {
     if appState.transcriptionServiceError != nil { return .blocked }
     if appState.isLiveCapturing { return .active }
     return appState.isAwaitingMeeting ? .armed : .inactive
+  }
+
+  /// Pause is an explicit overlay on `audioRecordingMode`, not a second recording policy.
+  /// Off tears down capture; pause keeps mic/BLE up and gates only transcription forwarding.
+  /// The overlay never writes `audioRecordingMode`.
+  static func shouldForwardTranscriptionAudio(
+    mode: AssistantSettings.AudioRecordingMode,
+    isPaused: Bool
+  ) -> Bool {
+    mode != .off && !isPaused
+  }
+
+  /// Control-bar pause/listen pill. Pause is not Off: Off is the recording mode
+  /// that stops capture; pause only gates STT while a mode is on.
+  enum ConversationListeningPill: Equatable {
+    case listening
+    case paused
+    case off
+
+    static func state(
+      mode: AssistantSettings.AudioRecordingMode,
+      isPaused: Bool
+    ) -> ConversationListeningPill {
+      if mode == .off { return .off }
+      return isPaused ? .paused : .listening
+    }
+
+    var title: String {
+      switch self {
+      case .listening: return "Listening"
+      case .paused: return "Paused"
+      case .off: return "Off"
+      }
+    }
+
+    var actionHelp: String {
+      switch self {
+      case .listening: return "Pause conversation listening"
+      case .paused: return "Resume conversation listening"
+      case .off: return "Conversation listening is off"
+      }
+    }
   }
 
   static func audioRecordingMode(raw: String) -> AssistantSettings.AudioRecordingMode {
