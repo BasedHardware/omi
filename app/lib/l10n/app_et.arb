@@ -3593,5 +3593,9 @@
     "usageYear": "See aasta",
     "usageAll": "Kogu aeg",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Välimus",
+    "appearanceSystem": "Süsteem",
+    "appearanceLight": "Hele",
+    "appearanceDark": "Tume"
 }

@@ -11437,4 +11437,16 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Megjelenés';
+
+  @override
+  String get appearanceSystem => 'Rendszer';
+
+  @override
+  String get appearanceLight => 'Világos';
+
+  @override
+  String get appearanceDark => 'Sötét';
 }

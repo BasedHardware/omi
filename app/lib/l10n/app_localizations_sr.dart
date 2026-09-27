@@ -11407,4 +11407,16 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Izgled';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Svetlo';
+
+  @override
+  String get appearanceDark => 'Tamno';
 }

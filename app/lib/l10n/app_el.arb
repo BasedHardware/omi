@@ -3593,5 +3593,9 @@
     "usageYear": "Φέτος",
     "usageAll": "Συνολικά",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Εμφάνιση",
+    "appearanceSystem": "Σύστημα",
+    "appearanceLight": "Φωτεινό",
+    "appearanceDark": "Σκοτεινό"
 }

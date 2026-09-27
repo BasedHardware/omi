@@ -11153,5 +11153,9 @@
     "usageYear": "Ове године",
     "usageAll": "Свих времена",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Izgled",
+    "appearanceSystem": "Sistem",
+    "appearanceLight": "Svetlo",
+    "appearanceDark": "Tamno"
 }

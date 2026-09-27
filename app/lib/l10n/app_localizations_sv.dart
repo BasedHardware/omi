@@ -11402,4 +11402,16 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Utseende';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Ljust';
+
+  @override
+  String get appearanceDark => 'Mörkt';
 }

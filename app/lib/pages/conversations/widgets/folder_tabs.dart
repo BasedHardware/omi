@@ -13,7 +13,6 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 
 class FolderTabs extends StatefulWidget {
@@ -213,7 +212,7 @@ class _FolderTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Use a visible color for "All" tab (white), otherwise use folder color
-    final effectiveColor = color ?? Colors.white;
+    final effectiveColor = color ?? OmiColors.textPrimary;
 
     return GestureDetector(
       onTap: () {
@@ -235,7 +234,7 @@ class _FolderTab extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: (kMinTapTarget - 36) / 2),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: isSelected ? effectiveColor.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.12),
+            color: isSelected ? effectiveColor.withValues(alpha: 0.15) : OmiColors.textPrimary.withValues(alpha: 0.12),
             borderRadius: OmiRadius.pillAll,
           ),
           child: Row(
@@ -244,14 +243,15 @@ class _FolderTab extends StatelessWidget {
               if (icon != null) ...[
                 Padding(
                   padding: const EdgeInsets.only(bottom: 2),
-                  child: FaIcon(folderIconToFa(icon), size: 12, color: isSelected ? effectiveColor : Colors.grey[400]),
+                  child: FaIcon(folderIconToFa(icon),
+                      size: 12, color: isSelected ? effectiveColor : OmiColors.textTertiary),
                 ),
                 const SizedBox(width: 5),
               ],
               Text(
                 label,
                 style: OmiType.footnote.copyWith(
-                  color: isSelected ? effectiveColor : Colors.grey[400],
+                  color: isSelected ? effectiveColor : OmiColors.textTertiary,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
@@ -274,8 +274,8 @@ class _AddFolderButton extends StatelessWidget {
       child: HeaderCircleButton(
         semanticLabel: context.l10n.newFolder,
         diameter: 32,
-        color: Colors.grey.withValues(alpha: 0.12),
-        icon: Icon(Icons.add, size: 18, color: Colors.grey[400]),
+        color: OmiColors.textPrimary.withValues(alpha: 0.12),
+        icon: Icon(Icons.add, size: 18, color: OmiColors.textTertiary),
         onTap: () async {
           HapticFeedback.mediumImpact();
           PlatformManager.instance.analytics.createFolderButtonClicked();
@@ -420,7 +420,7 @@ class _DeleteFolderSheet extends StatelessWidget {
                     icon: '🚫',
                     name: context.l10n.noFolder,
                     description: context.l10n.removeFromAllFolders,
-                    color: Colors.grey,
+                    color: OmiColors.textTertiary,
                     onTap: () => onDelete(null),
                   ),
 
@@ -464,9 +464,9 @@ class _MoveOption extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary,
+        color: OmiColors.surface3,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: ResponsiveHelper.backgroundTertiary, width: 1),
+        border: Border.all(color: OmiColors.surface3, width: 1),
       ),
       child: Material(
         color: Colors.transparent,
@@ -493,10 +493,10 @@ class _MoveOption extends StatelessWidget {
                     children: [
                       Text(
                         name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
-                          color: ResponsiveHelper.textPrimary,
+                          color: OmiColors.textPrimary,
                         ),
                       ),
                       if (description != null && description!.isNotEmpty)
@@ -506,7 +506,7 @@ class _MoveOption extends StatelessWidget {
                             description!,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12, color: ResponsiveHelper.textTertiary),
+                            style: TextStyle(fontSize: 12, color: OmiColors.textTertiary),
                           ),
                         ),
                     ],

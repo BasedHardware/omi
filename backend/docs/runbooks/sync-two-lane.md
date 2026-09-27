@@ -121,6 +121,44 @@ The terminal `sync_transcription_job_finalized` event adds the first failed
 segment's bounded `failure_phase` and `failure_class`; successful and
 speech-free jobs log `none`.
 
+### Repeated content failures
+
+The 45-day content ledger counts only whole-job, same-content deterministic
+failures: `sync_invalid_audio` after decode finds no usable audio, or a
+persistence data-shape exception with the same bounded phase and subtype on
+each attempt (for example, `persistence:ValueError`). Unknown exceptions,
+provider invalid-input verdicts, assignment conflicts, and mixed segment
+failures do not count. Three consecutive matching failures within 24 hours
+pause that content for 24 hours. A different or unclassified failure resets
+the streak; an expired window starts at one.
+Firestore `Aborted` (including exhausted contention wrappers), timeouts,
+service outages, provider 5xx, and superseded/fenced jobs remain retryable.
+The first three attempts use the existing STT path unchanged. Successful
+content is still acknowledged through the normal completed ledger.
+
+Admission checks the ledger before dispatch. Either cap creates a terminal
+`failed` job and returns the existing HTTP 202 job contract with
+`reason_code=sync_repeat_failure_paused` on the polled job. No capped job enters
+paid STT. Shipped mobile parses arbitrary reason-code strings and treats this
+one as a per-WAL retryable failure: it keeps the local file, consumes that
+WAL's retry budget, and does not set the account-wide rate limiter. The sync
+reconciler schedules subsequent attempts; exhausted WALs remain available for
+the UI's manual Retry. A
+plain upload 400 would mark the WAL `uploadRejected` and show only Delete in
+the current UI; a `backfill_capacity` 503 would pause unrelated uploads.
+First decode failures still use `sync_invalid_audio` and the existing terminal
+job semantics.
+
+Monitor `event=sync_repeat_failure_cap outcome=paused` grouped by the bounded
+`failure_key` and lane. The event includes only `device_hash`, never UID,
+content ID, file names, or exception text. Also monitor
+`sync_transcription_job_finalized` with `failure_phase=persistence` and
+`failure_class`, and `sync_transcription_job outcome=invalid_input` with
+`reason_code=sync_invalid_audio`. A rising cap rate means clients still have
+retained audio requiring investigation; it is not a success count.
+`event=sync_persistence_exception` exposes a bounded exception subtype when
+the closed telemetry class is `OtherException`, without exception text.
+
 ## Run ownership and recovery
 
 ### Epoch-fence rollout modes

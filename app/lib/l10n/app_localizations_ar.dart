@@ -11323,4 +11323,16 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'المظهر';
+
+  @override
+  String get appearanceSystem => 'النظام';
+
+  @override
+  String get appearanceLight => 'فاتح';
+
+  @override
+  String get appearanceDark => 'داكن';
 }

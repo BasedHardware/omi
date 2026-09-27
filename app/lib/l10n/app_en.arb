@@ -13553,5 +13553,9 @@
     "usageChatThisMonth": "Chat this month",
     "@usageChatThisMonth": {
         "description": "Label for monthly chat usage meter"
-    }
+    },
+    "appearance": "Appearance",
+    "appearanceSystem": "System",
+    "appearanceLight": "Light",
+    "appearanceDark": "Dark"
 }

@@ -11384,4 +11384,16 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Vzhľad';
+
+  @override
+  String get appearanceSystem => 'Systém';
+
+  @override
+  String get appearanceLight => 'Svetlý';
+
+  @override
+  String get appearanceDark => 'Tmavý';
 }

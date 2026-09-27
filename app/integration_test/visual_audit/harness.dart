@@ -1,3 +1,4 @@
+import 'package:omi/ui/ui.dart';
 // Visual audit harness: real production widgets, synthetic local I/O, one registry of scenarios.
 // How to run it and how to add a scenario: app/e2e/SKILL.md, "Visual audit".
 //
@@ -149,6 +150,7 @@ class AuditRun {
   /// Pumps [page] inside the production theme and localizations, with a broad inert provider
   /// roster. [providers] come last, so they win the lookup for the types they seed.
   Future<void> pump(Widget page, {List<SingleChildWidget> providers = const [], bool scaffold = true}) async {
+    OmiColors.active = OmiColors.forBrightness(_auditLight ? Brightness.light : Brightness.dark);
     tester.view.physicalSize = auditViewport;
     tester.view.devicePixelRatio = 1;
     await tester.pumpWidget(MultiProvider(
@@ -161,7 +163,7 @@ class AuditRun {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: const [Locale('en')],
           // The app's own theme at this revision; Android font metrics (Roboto).
-          theme: _suite.theme(),
+          theme: _auditLight ? buildOmiTheme(brightness: Brightness.light) : _suite.theme(),
           home: scaffold ? Scaffold(backgroundColor: _suite.hostBackground, body: page) : page,
         ),
       ),
@@ -254,6 +256,7 @@ class AuditRun {
 }
 
 Directory? _outputDir;
+final bool _auditLight = Platform.environment['OMI_AUDIT_BRIGHTNESS'] == 'light';
 
 /// Registers one test per scenario. With [output] set, writes `<id>*.png` and `frames.json` there;
 /// without it (the smoke test), renders every scenario and writes nothing.

@@ -75,8 +75,8 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                         child: Container(
                           width: 72,
                           height: 72,
-                          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
-                          child: const Icon(Icons.check_rounded, color: OmiColors.textPrimary, size: 36),
+                          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+                          child: Icon(Icons.check_rounded, color: OmiColors.textPrimary, size: 36),
                         ),
                       ),
                       const SizedBox(height: OmiSpacing.xxl),
