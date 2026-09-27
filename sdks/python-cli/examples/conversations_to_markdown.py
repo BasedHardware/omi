@@ -17,6 +17,26 @@ from pathlib import Path
 from typing import Any, Dict, List, Union
 
 
+DONE_WORDS = {"true", "yes", "1", "done", "completed"}
+
+
+def is_completed(value: Any) -> bool:
+    """Normalize completed status for loosely typed API / LLM exports.
+
+    Native booleans, non-zero numbers, and loose strings ('true', 'yes', '1',
+    'done', 'completed') evaluate to True. String representations of falsy values
+    ('false', 'no', '0', '') evaluate to False rather than falling victim to
+    standard Python truthiness coercion.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in DONE_WORDS
+    return False
+
+
 def format_timestamp(seconds: float | int | None) -> str:
     """Format seconds into MM:SS or HH:MM:SS format."""
     if seconds is None:
@@ -100,18 +120,20 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
         ])
 
     # Action items checklist
-    if action_items:
+    if action_items and isinstance(action_items, list):
         lines.extend([
             "## Action Items",
             "",
         ])
         for item in action_items:
             if isinstance(item, dict):
-                desc = item.get("description") or item.get("title") or ""
-                completed = item.get("completed", False)
+                desc = str(item.get("description") or item.get("title") or "").strip().replace("\r\n", " ").replace("\n", " ")
+                if not desc:
+                    desc = "Untitled action item"
+                completed = is_completed(item.get("completed", False))
                 box = "[x]" if completed else "[ ]"
-                lines.append(f"- {box} {desc.strip()}")
-            elif isinstance(item, str):
+                lines.append(f"- {box} {desc}")
+            elif isinstance(item, str) and item.strip():
                 lines.append(f"- [ ] {item.strip()}")
         lines.append("")
 
@@ -188,6 +210,25 @@ def export_conversations(
     return exported_paths
 
 
+def extract_conversations(data: Any) -> List[Dict[str, Any]]:
+    """Unwrap conversation list from bare arrays, wrapped dictionaries, or single objects.
+
+    Supports:
+    - Bare arrays: [ {...}, {...} ]
+    - Wrapped dicts: {"conversations": [...]}, {"items": [...]}, {"data": [...]}
+    - Single conversation dict: { "id": "...", ... }
+    """
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        for key in ("conversations", "items", "data"):
+            val = data.get(key)
+            if isinstance(val, list):
+                return [item for item in val if isinstance(item, dict)]
+        return [data]
+    return []
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Convert Omi conversation JSON exports to Markdown files."
@@ -218,13 +259,10 @@ def main() -> None:
         raw_data = Path(args.input).read_text(encoding="utf-8-sig")
 
     data = json.loads(raw_data)
-    items: List[Dict[str, Any]]
-    if isinstance(data, list):
-        items = data
-    elif isinstance(data, dict):
-        items = [data]
-    else:
+    if not isinstance(data, (list, dict)):
         sys.exit("Error: Expected JSON object or array.")
+
+    items = extract_conversations(data)
 
     exported = export_conversations(
         items,

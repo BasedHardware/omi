@@ -89,8 +89,10 @@ from models.users import (
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
+    DESKTOP_CHAT_BYOK_PROVIDER,
     resolve_transcription_allowance,
     request_has_llm_byok_key,
+    request_has_byok_provider,
     enforce_chat_quota,
     get_chat_quota_snapshot,
     get_basic_plan_limits,
@@ -1464,10 +1466,12 @@ def get_user_chat_usage_quota(
 
     Used by the desktop app. Mobile uses the subscription endpoint instead.
     """
-    # BYOK free plan: user brings their own keys, so there's no Omi-side cost
-    # to meter. Only return unlimited when BYOK headers are on the request (desktop).
-    # Mobile (no headers) should see real quota.
-    if users_db.is_byok_active(uid) and request_has_llm_byok_key():
+    # Match enforce_desktop_chat_quota: only the provider actually used by
+    # desktop chat can exempt it. Other enrolled keys still use managed chat.
+    customer_client = get_customer_firestore_client()
+    if users_db.is_byok_active(uid, firestore_client=customer_client) and request_has_byok_provider(
+        DESKTOP_CHAT_BYOK_PROVIDER
+    ):
         return ChatUsageQuota(
             plan='Free (BYOK)',
             plan_type=PlanType.unlimited.value,
@@ -1486,7 +1490,11 @@ def get_user_chat_usage_quota(
     # here while /v2/chat/completions gates on the customer project's, and the
     # two disagree for the same uid (#11199).
     snapshot = get_chat_quota_snapshot(
-        uid, platform=x_app_platform, firestore_client=get_customer_firestore_client(), provision=False
+        uid,
+        platform=x_app_platform,
+        firestore_client=customer_client,
+        provision=False,
+        required_llm_provider=DESKTOP_CHAT_BYOK_PROVIDER,
     )
     plan = snapshot['plan']
 

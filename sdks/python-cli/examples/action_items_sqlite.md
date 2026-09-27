@@ -81,12 +81,16 @@ def rows_from(source):
     content = Path(source).read_bytes().decode("utf-8-sig")
     items = json.loads(content)
     if isinstance(items, dict):
-        items = (
-            items.get("action_items")
-            or items.get("items")
-            or items.get("data")
-            or [items]
-        )
+        # An empty list is falsy, so an `or` chain would mistake
+        # {"action_items": []} for an absent key and treat the wrapper
+        # itself as an action item. Match the first key that actually
+        # holds a list, in documented wrapper precedence order.
+        for key in ("action_items", "items", "data"):
+            if isinstance(items.get(key), list):
+                items = items[key]
+                break
+        else:
+            items = [items]
     if not isinstance(items, list):
         raise ValueError(f"{source}: expected a JSON array or object containing action items")
     rows = []
@@ -169,4 +173,5 @@ so they sort chronologically and work with SQLite's `date()`, `datetime()`, and
 Every original object is preserved verbatim in `raw_json` for `json_extract`. The loader
 validates every input file before writing, applies each run as a single transaction, and
 replaces rows that share an `id`, so loading the same page twice leaves exactly one row per
-action item.
+action item. A recognised wrapper (`action_items`, `items`, or `data`) holding an empty list
+imports zero rows, so empty export pages import cleanly alongside populated ones.
