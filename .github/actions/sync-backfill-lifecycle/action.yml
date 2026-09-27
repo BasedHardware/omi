@@ -429,13 +429,17 @@ runs:
             exit 1
           fi
           if [[ -z "$POLICY" ]]; then
-            POLICY="$(gcloud monitoring policies create \
-              --project=${{ inputs.project_id }} --display-name="$DISPLAY_NAME" \
-              --condition-display-name="$DISPLAY_NAME" --condition-filter="$CONDITION_FILTER" \
-              --duration="$DURATION" --if="$CONDITION" --combiner=OR \
+            POLICY="$(python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_monitoring_metric_alert_policy.py" \
+              --project='${{ inputs.project_id }}' \
+              --display-name="$DISPLAY_NAME" \
+              --metric-type="logging.googleapis.com/user/${METRIC}" \
+              --condition-display-name="$DISPLAY_NAME" \
+              --condition-filter="$CONDITION_FILTER" \
+              --duration="$DURATION" \
+              --comparison="$CONDITION" \
+              --combiner=OR \
               --notification-channels="$ALERT_CHANNELS" \
-              --documentation='The two-minute sync-backfill-uid-sequencer sweep failed or stopped. Admission and normal completion still dispatch; investigate crash recovery and pending age.' \
-              --format='value(name)')"
+              --documentation='The two-minute sync-backfill-uid-sequencer sweep failed or stopped. Admission and normal completion still dispatch; investigate crash recovery and pending age.')"
           fi
           test -n "$POLICY"
           if [[ "$KIND" == heartbeat ]]; then

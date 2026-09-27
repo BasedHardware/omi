@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-deploy-alert-metric-propagation",
+  "violated_contract": "A deployment that creates an alert policy from a new Cloud Logging metric must account for Cloud Monitoring's eventual metric visibility. Treating the documented propagation delay as a permanent failure blocks an otherwise valid deployment, while retrying unrelated policy errors or skipping policy verification can hide real alert drift.",
+  "canonical_prevention": "Retry only the documented metric-not-yet-visible response for the exact newly created metric, re-list the exact policy name before every create attempt to avoid duplicates, and retain the existing post-create policy verifier. Bound the wait to the provider's propagation window and fail all other errors immediately.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/ensure_monitoring_metric_alert_policy.py",
+    ".github/scripts/test_ensure_monitoring_metric_alert_policy.py",
+    ".github/actions/sync-backfill-lifecycle/action.yml",
+    "backend/tests/unit/test_sync_two_lane.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/actions/sync-backfill-lifecycle/",
+    ".github/scripts/ensure_monitoring_metric_alert_policy.py",
+    ".github/scripts/test_ensure_monitoring_metric_alert_policy.py",
+    "backend/tests/unit/test_sync_two_lane.py"
+  ],
+  "status": "open"
+}
