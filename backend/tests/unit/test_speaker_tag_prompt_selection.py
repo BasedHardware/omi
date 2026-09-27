@@ -15,7 +15,7 @@ def _conversation(cid='c1', hours_ago=2, segments=None, **extra):
         'id': cid,
         'started_at': NOW - timedelta(hours=hours_ago),
         'status': 'completed',
-        'audio_files': [{'chunk_timestamps': [1.0]}],
+        'audio_files': [{'chunk_timestamps': [(NOW - timedelta(hours=hours_ago)).timestamp()], 'duration': 300.0}],
         'structured': {'title': 'Coffee chat'},
         'transcript_segments': segments or [],
         **extra,
@@ -262,3 +262,88 @@ def test_prompt_id_is_stable():
     assert selection.prompt_id('c', 1, SpeakerTagPromptKind.identify) != selection.prompt_id(
         'c', 1, SpeakerTagPromptKind.owner_check
     )
+
+
+def test_drifted_legacy_window_before_first_chunk_is_not_offered():
+    started = NOW - timedelta(hours=2)
+    conversation = _conversation(
+        segments=[_segment('speech', 0, 45.61, 55.61)],
+        audio_files=[{'chunk_timestamps': [started.timestamp() + 2692], 'duration': 60.0}],
+    )
+    assert _select([conversation]) == []
+
+
+def test_legacy_window_after_file_end_is_not_offered():
+    started = NOW - timedelta(hours=2)
+    conversation = _conversation(
+        segments=[_segment('speech', 0, 95.0, 105.0)],
+        audio_files=[{'chunk_timestamps': [started.timestamp()], 'duration': 92.3}],
+    )
+    assert _select([conversation]) == []
+
+
+def test_v2_window_requires_validated_span_coverage():
+    started = NOW - timedelta(hours=2)
+    conversation = _conversation(
+        segments=[_segment('speech', 0, 10, 20)],
+        audio_timeline={'version': 2},
+        audio_files=[
+            {
+                'chunk_timestamps': [started.timestamp()],
+                'chunk_spans': [{'start': started.timestamp(), 'end': started.timestamp() + 8}],
+                'duration': 30.0,
+            }
+        ],
+    )
+    assert _select([conversation]) == []
+    conversation['audio_files'][0]['chunk_spans'][0]['end'] = started.timestamp() + 25
+    assert len(_select([conversation])) == 1
+
+
+def test_legacy_playback_span_and_missing_duration_do_not_claim_coverage():
+    started = NOW - timedelta(hours=2)
+    conversation = _conversation(
+        segments=[_segment('speech', 0, 10, 20)],
+        audio_files=[{'chunk_timestamps': [started.timestamp()]}],
+        conversation_audio={'spans': [{'wall_offset': 0, 'len': 149.4}]},
+    )
+    assert _select([conversation]) == []
+
+
+def test_misaligned_merged_sync_candidate_requires_content_verification():
+    started = NOW - timedelta(hours=2)
+    conversation = _conversation(
+        segments=[_segment('speech', 0, 10.28, 20.28)],
+        audio_files=[{'chunk_timestamps': [started.timestamp(), started.timestamp() + 88.2], 'duration': 92.3}],
+        conversation_audio={'spans': [{'wall_offset': 0, 'len': 149.4}]},
+        sync_merged_from=['donor'],
+        sync_live_target=True,
+    )
+    attempts = []
+    prompts = selection.select_prompts(
+        [conversation],
+        now=NOW,
+        owner_has_voice=False,
+        named_allowed=True,
+        answered=set(),
+        people={},
+        verify=lambda row, prompt, text: attempts.append((prompt.clip_start, prompt.clip_end, text)) or False,
+    )
+    assert prompts == []
+    assert attempts and attempts[0][:2] == (10.28, 20.28)
+
+
+def test_verification_attempts_are_bounded():
+    conversations = [_conversation(f'c{i}', segments=[_segment('speech', 0, 10, 20)]) for i in range(8)]
+    attempts = []
+    prompts = selection.select_prompts(
+        conversations,
+        now=NOW,
+        owner_has_voice=False,
+        named_allowed=True,
+        answered=set(),
+        people={},
+        verify=lambda row, prompt, text: attempts.append(row['id']) or False,
+        max_verifications=4,
+    )
+    assert prompts == [] and len(attempts) == 4

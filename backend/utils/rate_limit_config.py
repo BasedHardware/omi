@@ -113,6 +113,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "stt:transcribe": (60, 3600),
     # Speaker tag prompts: each clip merges stored audio chunks; each answer may
     # queue voice-sample extraction. A daily set holds at most a handful.
+    "speaker_tag_prompts:list": (20, 3600),
     "speaker_tag_prompts:clip": (60, 3600),
     "speaker_tag_prompts:answer": (60, 3600),
     # Agent/MCP — bursty tool calls

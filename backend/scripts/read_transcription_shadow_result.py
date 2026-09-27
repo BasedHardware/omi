@@ -21,6 +21,8 @@ SCALAR_FIELDS = (
     'latency_seconds',
     'measured_at',
     'audio_seconds',
+    'audio_origin_offset_seconds',
+    'audio_timeline_v2',
     'coverage',
     'tail_gap_seconds',
     'word_distance',
@@ -32,6 +34,7 @@ SCALAR_FIELDS = (
     'pass_speakers',
     'clock_offset_seconds',
     'remap_success_rate',
+    'remap_ambiguous_count',
     'remap_safe',
 )
 
