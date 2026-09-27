@@ -71,15 +71,31 @@ def test_hintable_arm_prefers_soniox_but_respects_exclude_key_and_breaker(monkey
     monkeypatch.setenv('SONIOX_API_KEY', 'local-test-key')
     circuit.record_failure()
     assert selected() == st.STTService.modulate
+    account_circuit = ProviderCircuitBreaker(failure_threshold=1, cooldown_seconds=30)
+    monkeypatch.setattr(st, '_soniox_circuit', account_circuit)
+    account_circuit.record_account_rejection()
+    assert selected() == st.STTService.modulate
     monkeypatch.setenv('STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT', '0')
     control = LiveLanguageProfile.create('pt', multi=True, uid='u')
     assert control.arm == 'control'
     assert st.get_stt_service_for_language('pt', language_profile=control)[0] == st.STTService.modulate
 
 
+def test_hintable_arm_respects_provider_enablement(monkeypatch):
+    from utils.stt import language_policy
+
+    monkeypatch.setenv('STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT', '100')
+    monkeypatch.setenv('SONIOX_API_KEY', 'local-test-key')
+    monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
+    monkeypatch.setattr(language_policy, 'provider_is_enabled', lambda provider, _surface: provider != SONIOX_PROVIDER)
+    profile = LiveLanguageProfile.create('pt', multi=True, uid='u')
+    assert st.get_stt_service_for_language('pt', language_profile=profile)[0] == st.STTService.modulate
+
+
 @pytest.mark.parametrize('configured_order', [True, False])
 @pytest.mark.asyncio
 async def test_failed_preferred_soniox_falls_into_normal_chain(monkeypatch, configured_order):
+    monkeypatch.setattr('utils.stt.provider_resilience.STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0)
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
     monkeypatch.setattr(st, '_soniox_circuit', ProviderCircuitBreaker(failure_threshold=2, cooldown_seconds=30))
     calls = []

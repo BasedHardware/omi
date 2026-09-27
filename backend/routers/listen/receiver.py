@@ -649,7 +649,7 @@ class ListenReceiver:
                     return
                 if self.vad_gate is not None and not passthrough:
                     self.vad_gate.remap_segments(translated)
-                self._enqueue_clock_positioned_segments(translated)
+                self._enqueue_clock_positioned_segments(translated, provider=epoch.provider_label)
 
             return translate_remap_enqueue
 
