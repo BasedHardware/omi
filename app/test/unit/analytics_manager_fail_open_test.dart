@@ -53,6 +53,8 @@ void main() {
 
     expect(adapter.events, hasLength(1));
     expect(adapter.events.single.eventName, 'Queued Event');
+    // platform/trigger stamping lives at the PostHog SDK boundary now, so the
+    // manager's governed emission payload carries only the main-contract globals.
     expect(adapter.events.single.properties, {
       'count': 1,
       'app_platform': 'unknown',
@@ -72,6 +74,38 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 20));
     await AnalyticsManager.flushPending(force: true);
     expect(adapter.events.map((e) => e.eventName), ['late-ready']);
+  });
+
+  test('manager emissions stay attribution-free; classification lives at the SDK boundary', () async {
+    // The governed manager payload is pinned exactly by the C7 spine contract, so
+    // platform/trigger enrichment must NOT appear at this boundary.
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().track('Mobile Background Resource Session');
+    AnalyticsManager().track('custom background event', properties: {'trigger': 'background'});
+    await AnalyticsManager.flushPending(force: true);
+
+    final byName = {for (final e in adapter.events) e.eventName: e.properties};
+    expect(byName['Mobile Background Resource Session']?['trigger'], isNull);
+    expect(byName['Mobile Background Resource Session']?['platform'], isNull);
+    expect(byName['custom background event']?['trigger'], 'background'); // explicit caller property passes through
+  });
+
+  test('account created event carries platform for signup cohort analysis', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().accountCreated(authProvider: 'apple');
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events, hasLength(1));
+    expect(adapter.events.single.eventName, 'Account Created');
+    // attribution now stamps at the PostHog SDK boundary, not the governed emission
+    expect(adapter.events.single.properties['platform'], isNull);
+    expect(adapter.events.single.properties['trigger'], isNull);
   });
 
   test('awaited retry preserves occurrence identity and session context', () async {

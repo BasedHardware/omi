@@ -495,6 +495,12 @@ async def _persist_collected(stack, store, monkeypatch):
     processor.speaker_id_allocator = transcripts_module.ConversationSpeakerIdAllocator()
     processor.translation_coordinator = None
     processor.translation_language = None
+    processor._v2_committed_ids = set()
+    processor._v2_photos_committed = False
+    processor._v2_photos_requeued = False
+    processor._v2_retry_counts = {}
+    processor._v2_retry_until = 0.0
+    processor.segment_buffer = deque()
 
     segments = list(stack.segments_collected)
     stack.segments_collected.clear()

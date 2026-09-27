@@ -141,6 +141,10 @@ class LiveChainSession:
                     component='vad', from_mode='gated', to_mode='direct', reason='config_incomplete', outcome='degraded'
                 )
             passthrough = service == st.STTService.modulate
+            if epoch is not None:
+                epoch.set_validation_callback(
+                    lambda provider, interval: self.receiver._record_elapsed_validation(provider, interval, gate)
+                )
 
             def callback(segments: list[dict[str, Any]]) -> None:
                 if generation != self.generation and not (epoch is not None and epoch.project_times):
@@ -222,6 +226,10 @@ class LiveChainSession:
                     )
                 if raw is None:
                     raise RuntimeError('Provider returned no socket')
+                if epoch is not None:
+                    # The selected fallback may differ from the receiver's
+                    # initial service. Set its clock policy before first send.
+                    epoch.provider_label = service.value
                 leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough, send_tracker=epoch)
                 return leg
             except BaseException:
