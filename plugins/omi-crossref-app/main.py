@@ -389,10 +389,10 @@ async def search_crossref_works(payload: SearchWorksInput):
     except httpx.HTTPStatusError as exc:
         code = exc.response.status_code if exc.response is not None else "unknown"
         return ChatToolResponse(error=f"Crossref API error: HTTP {code}")
-    except httpx.RequestError as exc:
-        return ChatToolResponse(error=f"Crossref network error: {exc}")
-    except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+    except httpx.RequestError:
+        return ChatToolResponse(error="Crossref network error. Please try again.")
+    except Exception:
+        return ChatToolResponse(error="Crossref request failed. Please try again.")
 
     message = data.get("message") if isinstance(data, dict) else {}
     items = (message or {}).get("items", []) if isinstance(message, dict) else []
@@ -425,10 +425,10 @@ async def get_crossref_work(payload: GetWorkInput):
         if code == 404:
             return ChatToolResponse(error=f"Work not found for DOI: {normalized}")
         return ChatToolResponse(error=f"Crossref API error: HTTP {code}")
-    except httpx.RequestError as exc:
-        return ChatToolResponse(error=f"Crossref network error: {exc}")
-    except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+    except httpx.RequestError:
+        return ChatToolResponse(error="Crossref network error. Please try again.")
+    except Exception:
+        return ChatToolResponse(error="Crossref request failed. Please try again.")
 
     item = data.get("message", {}) if isinstance(data, dict) else {}
     if not isinstance(item, dict) or not item:
@@ -472,10 +472,10 @@ async def get_crossref_works_by_author(payload: AuthorWorksInput):
     except httpx.HTTPStatusError as exc:
         code = exc.response.status_code if exc.response is not None else "unknown"
         return ChatToolResponse(error=f"Crossref API error: HTTP {code}")
-    except httpx.RequestError as exc:
-        return ChatToolResponse(error=f"Crossref network error: {exc}")
-    except Exception as exc:
-        return ChatToolResponse(error=f"Crossref request failed: {exc}")
+    except httpx.RequestError:
+        return ChatToolResponse(error="Crossref network error. Please try again.")
+    except Exception:
+        return ChatToolResponse(error="Crossref request failed. Please try again.")
 
     message = data.get("message") if isinstance(data, dict) else {}
     items = (message or {}).get("items", []) if isinstance(message, dict) else []

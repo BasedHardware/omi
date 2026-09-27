@@ -531,5 +531,43 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(len(manifest_res["tools"]), 3)
 
 
+class TestErrorResponseSanitization(unittest.TestCase):
+    """测试异常返回不泄露任何内部堆栈、网络细节或敏感异常对象。"""
+
+    def test_search_works_network_and_generic_error_sanitization(self):
+        with mock.patch.object(main, "crossref_get", side_effect=main.httpx.RequestError("sensitive connection refuse: 10.0.0.1")):
+            res = _run(main.search_crossref_works(SearchWorksInput(query="biology")))
+            self.assertEqual(res.error, "Crossref network error. Please try again.")
+            self.assertNotIn("sensitive", res.error)
+
+        with mock.patch.object(main, "crossref_get", side_effect=ValueError("internal db or secret key leaked")):
+            res = _run(main.search_crossref_works(SearchWorksInput(query="biology")))
+            self.assertEqual(res.error, "Crossref request failed. Please try again.")
+            self.assertNotIn("secret", res.error)
+
+    def test_get_work_network_and_generic_error_sanitization(self):
+        with mock.patch.object(main, "crossref_get", side_effect=main.httpx.RequestError("sensitive proxy timeout 127.0.0.1")):
+            res = _run(main.get_crossref_work(GetWorkInput(doi="10.1000/182")))
+            self.assertEqual(res.error, "Crossref network error. Please try again.")
+            self.assertNotIn("sensitive", res.error)
+
+        with mock.patch.object(main, "crossref_get", side_effect=RuntimeError("internal stack overflow crash")):
+            res = _run(main.get_crossref_work(GetWorkInput(doi="10.1000/182")))
+            self.assertEqual(res.error, "Crossref request failed. Please try again.")
+            self.assertNotIn("internal", res.error)
+
+    def test_author_works_network_and_generic_error_sanitization(self):
+        with mock.patch.object(main, "crossref_get", side_effect=main.httpx.RequestError("sensitive dns leak")):
+            res = _run(main.get_crossref_works_by_author(AuthorWorksInput(author="Alice")))
+            self.assertEqual(res.error, "Crossref network error. Please try again.")
+            self.assertNotIn("sensitive", res.error)
+
+        with mock.patch.object(main, "crossref_get", side_effect=KeyError("internal dict key missing")):
+            res = _run(main.get_crossref_works_by_author(AuthorWorksInput(author="Alice")))
+            self.assertEqual(res.error, "Crossref request failed. Please try again.")
+            self.assertNotIn("internal", res.error)
+
+
 if __name__ == "__main__":
     unittest.main()
+
