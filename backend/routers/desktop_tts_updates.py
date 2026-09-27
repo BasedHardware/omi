@@ -204,10 +204,18 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
             raise HTTPException(status_code=400, detail="voice_id is not supported")
     elif not _is_valid_voice_name(voice_id):
         raise HTTPException(status_code=400, detail="voice_id is not supported")
-    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop", required_byok_provider="openai"):
+    legacy_openai = provider == 'legacy'
+    if await run_blocking(
+        db_executor,
+        is_desktop_trial_paywalled,
+        uid,
+        "desktop",
+        required_byok_provider="openai" if legacy_openai else None,
+        byok_exempt=legacy_openai,
+    ):
         raise HTTPException(status_code=403, detail="A paid subscription is required")
-    openai_byok_key = get_byok_key("openai")
-    if not openai_byok_key:
+    openai_byok_key = get_byok_key("openai") if legacy_openai else None
+    if not (legacy_openai and openai_byok_key):
         status, _ = await run_blocking(
             critical_executor,
             redis_db.check_tts_rate_limit,
@@ -234,7 +242,11 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
         except TtsConfigurationError as exc:
             raise HTTPException(status_code=503, detail="TTS service is not configured") from exc
         except TtsUpstreamError as exc:
-            raise HTTPException(status_code=exc.status_code, detail="Gemini TTS request failed") from exc
+            # Released macOS clients treat an endpoint 401 as an expired Omi
+            # session. A Gemini credential rejection is a server/provider fault,
+            # not user auth, so keep it on the ordinary system-TTS fallback path.
+            status_code = 502 if exc.status_code == 401 else exc.status_code
+            raise HTTPException(status_code=status_code, detail="Gemini TTS request failed") from exc
         except (TtsUnavailableError, TtsResponseError) as exc:
             raise HTTPException(status_code=502, detail="Gemini TTS request failed") from exc
         return StreamingResponse(audio_stream, media_type="audio/mpeg")

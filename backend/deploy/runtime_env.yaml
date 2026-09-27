@@ -45,6 +45,10 @@ environments:
             secret:
               name: dev-omi-backend-secrets
               key: GEMINI_API_KEY
+          ELEVENLABS_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: ELEVENLABS_API_KEY
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -1662,6 +1666,10 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: GEMINI_API_KEY
+          ELEVENLABS_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: ELEVENLABS_API_KEY
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy

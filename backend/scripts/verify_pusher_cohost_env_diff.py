@@ -71,6 +71,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "DEEPGRAM_SELF_HOSTED_ENABLED",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
+            # Legacy mobile HTTP TTS rollback; pusher mounts no TTS router.
+            "ELEVENLABS_API_KEY",
             "FAIR_USE_3DAY_SPEECH_MS",
             "FAIR_USE_BUCKET_SECONDS",
             "FAIR_USE_CHECK_INTERVAL_SECONDS",
@@ -146,6 +148,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "BETA_PROMOTION_TOKEN",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
+            # Legacy mobile HTTP TTS rollback; pusher mounts no TTS router.
+            "ELEVENLABS_API_KEY",
             "FAIR_USE_3DAY_SPEECH_MS",
             "FAIR_USE_BUCKET_SECONDS",
             "FAIR_USE_CHECK_INTERVAL_SECONDS",

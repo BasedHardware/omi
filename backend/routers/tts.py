@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from database import redis_db
-from models.tts import TtsSynthesizeRequest
+from models.tts import DEFAULT_MODEL_ID, TtsSynthesizeRequest
 from utils.http_client import get_tts_client, get_tts_semaphore
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
@@ -137,7 +137,10 @@ async def tts_synthesize(
         return StreamingResponse(audio_stream, media_type="audio/mpeg")
 
     api_key = os.getenv('ELEVENLABS_API_KEY')
-    metrics = TtsRequestLog(provider='elevenlabs', model=req.model_id, chars=char_count)
+    # model_id is client-controlled for released-client compatibility. Keep it
+    # out of logs unless it is the known shipped default.
+    model_label = DEFAULT_MODEL_ID if req.model_id == DEFAULT_MODEL_ID else 'client-selected'
+    metrics = TtsRequestLog(provider='elevenlabs', model=model_label, chars=char_count)
     if not api_key:
         metrics.finish('not_configured')
         logger.error("tts_synthesize: ELEVENLABS_API_KEY not configured")

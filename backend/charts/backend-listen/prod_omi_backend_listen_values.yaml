@@ -125,6 +125,11 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GEMINI_API_KEY
+  - name: ELEVENLABS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: ELEVENLABS_API_KEY
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles"
   - name: GITHUB_TOKEN

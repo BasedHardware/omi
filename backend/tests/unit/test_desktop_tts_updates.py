@@ -96,3 +96,42 @@ async def test_desktop_legacy_rollback_keeps_openai_voice_validation(monkeypatch
     with pytest.raises(HTTPException) as exc_info:
         await router.tts_synthesize(router.TtsSynthesizeRequest(text='hello', voice_id='future_voice'), uid='u')
     assert exc_info.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_desktop_gemini_does_not_treat_openai_byok_as_funding(monkeypatch):
+    calls = []
+
+    async def run_blocking(_executor, function, *_args, **kwargs):
+        calls.append((function, kwargs))
+        return False if function is router.is_desktop_trial_paywalled else (0, None)
+
+    async def open_stream(**_kwargs):
+        return _audio_chunks()
+
+    monkeypatch.setattr(router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(router, 'get_byok_key', lambda _provider: 'user-openai-key')
+    monkeypatch.setattr(router, 'get_tts_provider', lambda: 'gemini')
+    monkeypatch.setattr(router, 'open_gemini_mp3_stream', open_stream)
+
+    await router.tts_synthesize(router.TtsSynthesizeRequest(text='hello', voice_id='shimmer'), uid='u')
+
+    paywall_call = next(call for call in calls if call[0] is router.is_desktop_trial_paywalled)
+    assert paywall_call[1] == {'required_byok_provider': None, 'byok_exempt': False}
+    assert any(function is router.redis_db.check_tts_rate_limit for function, _kwargs in calls)
+
+
+@pytest.mark.asyncio
+async def test_desktop_gemini_provider_401_cannot_invalidate_omi_session(monkeypatch):
+    async def fail_stream(**_kwargs):
+        raise router.TtsUpstreamError(401)
+
+    monkeypatch.setattr(router, 'run_blocking', _run_blocking)
+    monkeypatch.setattr(router, 'get_byok_key', lambda _provider: None)
+    monkeypatch.setattr(router, 'get_tts_provider', lambda: 'gemini')
+    monkeypatch.setattr(router, 'open_gemini_mp3_stream', fail_stream)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.tts_synthesize(router.TtsSynthesizeRequest(text='hello', voice_id='shimmer'), uid='u')
+
+    assert exc_info.value.status_code == 502

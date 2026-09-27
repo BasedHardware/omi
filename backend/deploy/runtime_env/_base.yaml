@@ -38,6 +38,10 @@ environment_shared:
           secret:
             name: '{env}-omi-backend-secrets'
             key: GEMINI_API_KEY
+        ELEVENLABS_API_KEY:
+          secret:
+            name: '{env}-omi-backend-secrets'
+            key: ELEVENLABS_API_KEY
         STT_PRERECORDED_MODEL:
           value: parakeet,modulate-velma-2
           category: stt_policy
