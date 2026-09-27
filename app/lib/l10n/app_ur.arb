@@ -11157,5 +11157,7 @@
     "appearance": "ظاہری شکل",
     "appearanceSystem": "سسٹم",
     "appearanceLight": "روشن",
-    "appearanceDark": "گہرا"
+    "appearanceDark": "گہرا",
+    "chatDiscardRecording": "رد کریں",
+    "voiceQuestionNoSpeech": "سمجھ نہیں آیا — دوبارہ کوشش کریں"
 }

@@ -11157,5 +11157,7 @@
     "appearance": "दृश्य",
     "appearanceSystem": "सिस्टम",
     "appearanceLight": "हलका",
-    "appearanceDark": "गडद"
+    "appearanceDark": "गडद",
+    "chatDiscardRecording": "टाकून द्या",
+    "voiceQuestionNoSpeech": "ऐकू आले नाही — पुन्हा प्रयत्न करा"
 }

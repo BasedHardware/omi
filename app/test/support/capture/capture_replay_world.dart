@@ -212,7 +212,14 @@ class ScriptedUploads {
     return SyncUploadGate(
       limiter: SyncRateLimiter.instance,
       uploader: (files,
-          {onUploadProgress, conversationId, captureEvidence, claimLiveCapture = false, geolocation}) async {
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
         attempts.add(
           UploadAttempt(
             at: clock.now(),

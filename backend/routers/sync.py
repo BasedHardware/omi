@@ -882,6 +882,16 @@ async def sync_local_files_v2(
     conversation_id: str = Query(
         None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
     ),
+    recording_session_id: Optional[str] = Query(
+        None,
+        description=(
+            "Client recording session id. When conversation_id is omitted and one "
+            "conversation for this user, source, and device already carries this id, "
+            "attach the audio to that conversation."
+        ),
+    ),
+    audio_start_seconds: Optional[float] = Query(None),
+    audio_end_seconds: Optional[float] = Query(None),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
@@ -896,6 +906,10 @@ async def sync_local_files_v2(
     immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
+    if isinstance(recording_session_id, str):
+        recording_session_id = recording_session_id.strip() or None
+    else:
+        recording_session_id = None
     sync_app_build = sanitize_app_build(x_app_version)
     ledger_fence_mode = await run_blocking(db_executor, get_sync_ledger_fence_mode)
     if ledger_fence_mode is SyncLedgerFenceMode.STANDBY:
@@ -1237,6 +1251,9 @@ async def sync_local_files_v2(
                 'source': source.value,
                 'should_lock': should_lock,
                 'conversation_id': conversation_id,
+                'recording_session_id': recording_session_id,
+                'audio_start_seconds': audio_start_seconds,
+                'audio_end_seconds': audio_end_seconds,
                 'geolocation': geolocation.model_dump(mode='json') if geolocation else None,
                 'client_device_id': client_device_context.client_device_id,
                 'client_platform': client_device_context.platform,
@@ -1484,6 +1501,9 @@ async def sync_local_files_v2(
                             content_run_bound=ledger_fence_active,
                             ledger_fence_active=ledger_fence_active,
                             **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
+                            recording_session_id=recording_session_id,
+                            audio_start_seconds=audio_start_seconds,
+                            audio_end_seconds=audio_end_seconds,
                         ),
                         name=f'sync_pipeline:{job_id}',
                     )
@@ -1894,6 +1914,17 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
         source = ConversationSource(payload.get('source') or 'omi')
         should_lock = bool(payload.get('should_lock', False))
         conversation_id = payload.get('conversation_id')
+        recording_session_id = payload.get('recording_session_id')
+        if isinstance(recording_session_id, str):
+            recording_session_id = recording_session_id.strip() or None
+        else:
+            recording_session_id = None
+        audio_start_seconds = payload.get('audio_start_seconds')
+        audio_end_seconds = payload.get('audio_end_seconds')
+        if not isinstance(audio_start_seconds, (int, float)) or isinstance(audio_start_seconds, bool):
+            audio_start_seconds = None
+        if not isinstance(audio_end_seconds, (int, float)) or isinstance(audio_end_seconds, bool):
+            audio_end_seconds = None
         geolocation = geolocation_from_private_header(
             json.dumps(payload.get('geolocation')) if payload.get('geolocation') else None
         )
@@ -2070,6 +2101,9 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
                 content_run_bound=ledger_fence_active,
                 ledger_fence_active=ledger_fence_active,
                 **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
+                recording_session_id=recording_session_id,
+                audio_start_seconds=audio_start_seconds,
+                audio_end_seconds=audio_end_seconds,
             )
         except SyncConversationPersistenceFenced:
             latest_job = await run_blocking(db_executor, get_sync_job, job_id) or job

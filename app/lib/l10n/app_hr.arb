@@ -11157,5 +11157,7 @@
     "appearance": "Izgled",
     "appearanceSystem": "Sustav",
     "appearanceLight": "Svijetlo",
-    "appearanceDark": "Tamno"
+    "appearanceDark": "Tamno",
+    "chatDiscardRecording": "Odbaci",
+    "voiceQuestionNoSpeech": "Nisam razumio — pokušajte ponovno"
 }

@@ -26,7 +26,14 @@ void main() {
         return {'stage': 'none'};
       },
       uploader: (files,
-              {onUploadProgress, conversationId, captureEvidence, claimLiveCapture = false, geolocation}) async =>
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async =>
           UploadFilesResult.queued('unused'),
     );
     final provider = SyncProvider(walService: WalService(), uploadGate: gate, startBackgroundSync: false);
@@ -48,7 +55,14 @@ void main() {
       limiter: limiter,
       fairUseStatusLoader: () async => {'stage': 'none'},
       uploader: (files,
-              {onUploadProgress, conversationId, captureEvidence, claimLiveCapture = false, geolocation}) async =>
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async =>
           UploadFilesResult.queued('unused'),
     );
     var startupWakes = 0;

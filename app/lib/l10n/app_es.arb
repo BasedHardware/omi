@@ -3597,5 +3597,7 @@
     "appearance": "Apariencia",
     "appearanceSystem": "Sistema",
     "appearanceLight": "Claro",
-    "appearanceDark": "Oscuro"
+    "appearanceDark": "Oscuro",
+    "chatDiscardRecording": "Descartar",
+    "voiceQuestionNoSpeech": "No entendí eso — inténtalo de nuevo"
 }

@@ -1508,6 +1508,7 @@ class ListenReceiver:
             decision = max(decisions, key=lambda value: value.get('generation', 0))
             self.host.speakers.segment_assignments[sid] = 'user' if decision['is_user'] else decision['person_id']
         self.host.state.speaker_map_dirty = True
+        self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
         person_id = payload.get('person_id')
         if (
             isinstance(person_id, str)

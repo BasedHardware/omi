@@ -11483,4 +11483,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Σκοτεινό';
+
+  @override
+  String get chatDiscardRecording => 'Απόρριψη';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Δεν το κατάλαβα — δοκιμάστε ξανά';
 }

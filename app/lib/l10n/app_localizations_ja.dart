@@ -11216,4 +11216,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get appearanceDark => 'ダーク';
+
+  @override
+  String get chatDiscardRecording => '破棄';
+
+  @override
+  String get voiceQuestionNoSpeech => '聞き取れませんでした — もう一度お試しください';
 }

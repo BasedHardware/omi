@@ -3,9 +3,9 @@
 //
 //  The server is the source of truth for everything past selection: what got approved, the cap,
 //  the banner, deletion, promotion after a delete. This store's job is narrower than it looks —
-//  run on-device selection, hand the survivors to `MeetingFrameJudge`, and render exactly the
-//  `ConversationScreenFrameSet` the server returns. It never re-derives a verdict from what comes
-//  back, and every failure path (no network, 4xx/5xx, an empty set) collapses to the same `.failed`
+//  run on-device selection, hand the survivors to `MeetingFrameJudge`, and render the server's
+//  verdict only when each frame remains inside the trusted transcript content window. It never
+//  re-derives a quality verdict, and every failure path (no network, 4xx/5xx, an empty set) collapses to the same `.failed`
 //  / `.noCapture` state a view renders as nothing — never an error card. A gate the user cannot see
 //  the far side of must fail toward silence, not toward a broken-looking note.
 //
@@ -83,9 +83,11 @@ final class MeetingScreenshotsStore: ObservableObject {
   private static var inFlight: [String: Task<Void, Never>] = [:]
 
   private var conversationID = ""
+  private var cacheKey = ""
+  private var selectionWindow: MeetingScreenshotSelectionWindow?
   private var task: Task<Void, Never>?
   private let featureEnabled: () -> Bool
-  private let selectCandidates: (Date, Date) async -> MeetingFrameSelector.Outcome
+  private let selectCandidates: (MeetingScreenshotSelectionWindow) async -> MeetingFrameSelector.Outcome
   private let adjudicateAndCommit:
     @Sendable ([MeetingFrameCandidate], String) async throws -> ConversationScreenFrameSet
   private let fetchPersistedSet: @Sendable (String) async throws -> ConversationScreenFrameSet
@@ -93,8 +95,8 @@ final class MeetingScreenshotsStore: ObservableObject {
 
   init(
     featureEnabled: @escaping () -> Bool = { MeetingNoteScreenshotsFeature.isEnabled },
-    selectCandidates: @escaping (Date, Date) async -> MeetingFrameSelector.Outcome = {
-      await MeetingFrameSelector.selectCandidates(from: $0, to: $1)
+    selectCandidates: @escaping (MeetingScreenshotSelectionWindow) async -> MeetingFrameSelector.Outcome = {
+      await MeetingFrameSelector.selectCandidates(in: $0)
     },
     adjudicateAndCommit:
       @escaping @Sendable (
@@ -128,15 +130,40 @@ final class MeetingScreenshotsStore: ObservableObject {
     }
   }
 
-  func load(conversationID: String, start: Date, end: Date) {
+  func load(conversationID: String, selectionWindow: MeetingScreenshotSelectionWindow?) {
     guard featureEnabled() else {
       phase = .disabled
       return
     }
-    guard task == nil, self.conversationID.isEmpty || self.conversationID == conversationID else { return }
+    guard let selectionWindow else {
+      self.conversationID = conversationID
+      self.selectionWindow = nil
+      cacheKey = "\(conversationID):untrusted"
+      task?.cancel()
+      task = nil
+      frames = []
+      banner = nil
+      publish(notes: ["no trustworthy transcript content window; screenshots hidden"])
+      phase = .noCapture
+      return
+    }
+    let requestedCacheKey = "\(conversationID):\(selectionWindow.fingerprint)"
+    guard self.conversationID.isEmpty || self.conversationID == conversationID else { return }
+    if task != nil {
+      guard cacheKey != requestedCacheKey else { return }
+      // Detail hydration can replace an omitted/untrusted transcript with a trusted window while
+      // selection is in flight. Fence the old result and immediately start the newly trusted run.
+      self.selectionWindow = selectionWindow
+      task?.cancel()
+      task = nil
+    }
     self.conversationID = conversationID
-    log("MeetingScreenshots: load requested for \(conversationID)")
-    if let hit = Self.cache[conversationID] {
+    self.selectionWindow = selectionWindow
+    cacheKey = requestedCacheKey
+    log(
+      "MeetingScreenshots: load requested for \(conversationID), selection "
+        + selectionWindow.fingerprint)
+    if let hit = Self.cache[requestedCacheKey] {
       frames = hit.frames
       banner = hit.banner
       diagnostics = hit.diagnostics
@@ -144,12 +171,12 @@ final class MeetingScreenshotsStore: ObservableObject {
       return
     }
 
-    if let existing = Self.inFlight[conversationID] {
+    if let existing = Self.inFlight[requestedCacheKey] {
       // Someone else is already doing this. Wait for them, then read what they cached.
       task = Task { [weak self] in
         _ = await existing.value
-        guard let self else { return }
-        self.adopt(cached: Self.cache[conversationID])
+        guard let self, self.cacheKey == requestedCacheKey else { return }
+        self.adopt(cached: Self.cache[requestedCacheKey])
         self.task = nil
       }
       return
@@ -157,13 +184,15 @@ final class MeetingScreenshotsStore: ObservableObject {
 
     let work = Task { [weak self] in
       guard let self else { return }
-      await self.run(start: start, end: end)
+      await self.run(selectionWindow: selectionWindow)
     }
-    Self.inFlight[conversationID] = work
+    Self.inFlight[requestedCacheKey] = work
     task = Task { [weak self] in
       _ = await work.value
-      Self.inFlight[conversationID] = nil
-      self?.task = nil
+      Self.inFlight[requestedCacheKey] = nil
+      if self?.cacheKey == requestedCacheKey {
+        self?.task = nil
+      }
     }
   }
 
@@ -192,10 +221,10 @@ final class MeetingScreenshotsStore: ObservableObject {
   /// since it never decides that itself — and to recover from an expired signed URL rather than
   /// leave a broken image on screen (`url_expires_at` is 60 minutes).
   func refreshPersistedSet() async {
-    guard !conversationID.isEmpty else { return }
+    guard !conversationID.isEmpty, let selectionWindow else { return }
     do {
       let set = try await fetchPersistedSet(conversationID)
-      apply(frameSet: set, notes: diagnostics)
+      apply(frameSet: set, within: selectionWindow, notes: diagnostics)
     } catch {
       log("MeetingScreenshots: refresh failed for \(conversationID) — \(error.localizedDescription)")
       // Leave whatever is currently displayed in place. A transient refresh failure must not
@@ -229,18 +258,22 @@ final class MeetingScreenshotsStore: ObservableObject {
     phase = cached.frames.isEmpty && cached.banner == nil ? .noCapture : .ready
   }
 
-  private func apply(frameSet: ConversationScreenFrameSet, notes: [String]) {
-    frames = frameSet.strip
-    banner = frameSet.banner
+  private func apply(
+    frameSet: ConversationScreenFrameSet,
+    within selectionWindow: MeetingScreenshotSelectionWindow,
+    notes: [String]
+  ) {
+    frames = frameSet.strip.filter { selectionWindow.contains($0.capturedAt) }
+    banner = frameSet.banner.flatMap { selectionWindow.contains($0.capturedAt) ? $0 : nil }
     log(
-      "MeetingScreenshots: set has \(frameSet.strip.count) strip frame(s), banner="
-        + "\(frameSet.banner?.id ?? "none")")
+      "MeetingScreenshots: trusted set has \(frames.count) strip frame(s), banner="
+        + "\(banner?.id ?? "none")")
     publish(notes: notes)
-    phase = frameSet.isEmpty ? .noCapture : .ready
-    Self.cache[conversationID] = (frameSet.strip, frameSet.banner, notes)
+    phase = (frames.isEmpty && banner == nil) ? .noCapture : .ready
+    Self.cache[cacheKey] = (frames, banner, notes)
   }
 
-  private func run(start: Date, end: Date) async {
+  private func run(selectionWindow: MeetingScreenshotSelectionWindow) async {
     // Ask the server what it already knows before offering it anything. `GET` is the source of
     // truth for what this conversation currently shows (contract §1).
     //
@@ -256,16 +289,25 @@ final class MeetingScreenshotsStore: ObservableObject {
     //
     // `revision` is still what tells the *view* something changed; it is a mutation counter,
     // not a record of having asked.
-    if let existing = try? await fetchPersistedSet(conversationID), existing.adjudicatedAt != nil {
+    if let existing = try? await fetchPersistedSet(conversationID), existing.adjudicatedAt != nil,
+      existing.selectionFingerprint == selectionWindow.fingerprint
+    {
+      guard self.selectionWindow == selectionWindow else { return }
       log("MeetingScreenshots: loaded existing revision \(existing.revision) for \(conversationID)")
-      apply(frameSet: existing, notes: ["loaded this conversation's existing screenshots"])
+      apply(
+        frameSet: existing,
+        within: selectionWindow,
+        notes: ["loaded screenshots selected for this transcript content window"])
       return
     }
 
     phase = .selecting
-    log("MeetingScreenshots: selecting for \(conversationID) window \(start) -> \(end)")
+    log(
+      "MeetingScreenshots: selecting for \(conversationID) trusted window "
+        + "\(selectionWindow.start) -> \(selectionWindow.end)")
 
-    let outcome = await selectCandidates(start, end)
+    let outcome = await selectCandidates(selectionWindow)
+    guard self.selectionWindow == selectionWindow else { return }
     var notes: [String] = []
     notes.append("\(outcome.framesInWindow) frame(s) captured during this conversation")
     for (reason, count) in outcome.drops.sorted(by: { $0.value > $1.value }) {
@@ -279,7 +321,7 @@ final class MeetingScreenshotsStore: ObservableObject {
     guard !outcome.candidates.isEmpty else {
       publish(notes: notes)
       phase = .noCapture
-      Self.cache[conversationID] = ([], nil, notes)
+      Self.cache[cacheKey] = ([], nil, notes)
       return
     }
 
@@ -289,6 +331,7 @@ final class MeetingScreenshotsStore: ObservableObject {
     do {
       frameSet = try await adjudicateAndCommit(outcome.candidates, conversationID)
     } catch {
+      guard self.selectionWindow == selectionWindow else { return }
       // No network, a 4xx/5xx, a timeout — all of it fails the same way: the view for `.failed`
       // renders nothing, never an error card, so an unprovisioned or unreachable backend simply
       // looks like a note with no screenshots.
@@ -298,6 +341,7 @@ final class MeetingScreenshotsStore: ObservableObject {
       return
     }
 
-    apply(frameSet: frameSet, notes: notes)
+    guard self.selectionWindow == selectionWindow else { return }
+    apply(frameSet: frameSet, within: selectionWindow, notes: notes)
   }
 }

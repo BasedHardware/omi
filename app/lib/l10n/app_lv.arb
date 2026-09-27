@@ -3597,5 +3597,7 @@
     "appearance": "Izskats",
     "appearanceSystem": "Sistēma",
     "appearanceLight": "Gaišs",
-    "appearanceDark": "Tumšs"
+    "appearanceDark": "Tumšs",
+    "chatDiscardRecording": "Atmest",
+    "voiceQuestionNoSpeech": "Nesadzirdēju — mēģiniet vēlreiz"
 }

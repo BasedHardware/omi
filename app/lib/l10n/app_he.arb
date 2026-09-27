@@ -11157,5 +11157,7 @@
     "appearance": "מראה",
     "appearanceSystem": "מערכת",
     "appearanceLight": "בהיר",
-    "appearanceDark": "כהה"
+    "appearanceDark": "כהה",
+    "chatDiscardRecording": "מחיקה",
+    "voiceQuestionNoSpeech": "לא הבנתי — נסה שוב"
 }

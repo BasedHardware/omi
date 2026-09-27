@@ -3632,5 +3632,7 @@
     "appearance": "Tampilan",
     "appearanceSystem": "Sistem",
     "appearanceLight": "Terang",
-    "appearanceDark": "Gelap"
+    "appearanceDark": "Gelap",
+    "chatDiscardRecording": "Buang",
+    "voiceQuestionNoSpeech": "Tidak terdengar — coba lagi"
 }

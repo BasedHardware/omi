@@ -110,6 +110,8 @@ class TranscriptProcessor:
                 translation_service=self.translation_service,
                 on_translation_ready=self._on_translation_ready,
                 language_state=ConversationLanguageState(host.translation_language or 'en'),
+                expected_languages=getattr(getattr(host, 'language_profile', None), 'expected', ()),
+                realtime_interpreter=getattr(getattr(host, 'request', None), 'source', None) == 'phone_call',
             )
         self._flush_failures = 0
         self._flush_backoff_until = 0.0
@@ -340,9 +342,11 @@ class TranscriptProcessor:
             # Preserve unmerged speech until the transaction reads the current receipt.
             fresh = [segment.model_dump() for segment in segments]
             speaker = self.host.speakers
+            speaker_version = getattr(self.host.state, 'speaker_map_version', 0)
+            speaker_dirty = self.host.state.speaker_map_dirty
             targets = (
                 [*conversation.transcript_segments, *segments]
-                if self.host.state.speaker_map_dirty
+                if speaker_dirty
                 else [*conversation.transcript_segments[-1:], *segments]
             )
             process_speaker_assigned_segments(targets, speaker.segment_assignments, speaker.speaker_to_person)
@@ -392,9 +396,10 @@ class TranscriptProcessor:
             serialised = written.segments
             by_id = {s['id']: TranscriptSegment(**s) for s in serialised}
             conversation.transcript_segments = list(by_id.values())
-            updated = [s for sid, s in by_id.items() if sid in written.updated_ids or self.host.state.speaker_map_dirty]
+            updated = [s for sid, s in by_id.items() if sid in written.updated_ids or speaker_dirty]
             removed = written.removed_ids
-            self.host.state.speaker_map_dirty = False
+            if speaker_dirty and getattr(self.host.state, 'speaker_map_version', 0) == speaker_version:
+                self.host.state.speaker_map_dirty = False
             self.cache.update_segments(serialised)
         if photos:
             stored = await self.host.persistence.call(
@@ -426,16 +431,20 @@ class TranscriptProcessor:
             )
         return conversation, updated, removed
 
-    async def flush_speaker_assignments(self, conversation_id: Optional[str]) -> None:
+    async def flush_speaker_assignments(self, conversation_id: Optional[str], *, _retry: int = 0) -> None:
         speaker = self.host.speakers
         if not conversation_id or not (
-            speaker.speaker_to_person or speaker.segment_assignments or speaker.segment_identity_status
+            speaker.speaker_to_person
+            or speaker.segment_assignments
+            or speaker.segment_identity_status
+            or getattr(speaker, 'voice_identity_status', None)
         ):
             return
         data = await self.cache.get(conversation_id, force_refresh=True)
         if not data:
             return
         conversation = deserialize_conversation(data)
+        speaker_version = getattr(self.host.state, 'speaker_map_version', 0)
         before = {
             cast(str, segment.id): (segment.person_id, segment.is_user, str(segment.speaker_identity_status))
             for segment in conversation.transcript_segments
@@ -456,7 +465,7 @@ class TranscriptProcessor:
             # transaction still clears a projection that is actually on the
             # document (a finalize overlapping capture).
             invalidate_client_processing=False,
-            segment_update_fields=('person_id', 'is_user', 'speaker_identity_status'),
+            segment_update_fields=('person_id', 'is_user', 'speaker_identity_status', 'speaker_match_source'),
             return_segments=True,
         )
         if not written:
@@ -467,7 +476,9 @@ class TranscriptProcessor:
         if isinstance(written, list):
             serialised = written
         self.cache.update_segments(serialised)
-        self.host.state.speaker_map_dirty = False
+        changed_while_writing = getattr(self.host.state, 'speaker_map_version', 0) != speaker_version
+        if not changed_while_writing:
+            self.host.state.speaker_map_dirty = False
         self._flush_failures = 0
         self._flush_backoff_until = 0.0
         changed = [
@@ -478,6 +489,8 @@ class TranscriptProcessor:
         ]
         if self.host.state.active and changed:
             await self._deliver_segments(changed)
+        if changed_while_writing and _retry < 1:
+            await self.flush_speaker_assignments(conversation_id, _retry=_retry + 1)
 
     def _apply_speaker_identity_statuses(self, segments: List[TranscriptSegment]) -> None:
         speaker = self.host.speakers
@@ -489,9 +502,26 @@ class TranscriptProcessor:
                 segment.speaker_identity_status = (
                     SpeakerIdentityStatus.user if is_user_self_match(person_id) else SpeakerIdentityStatus.not_user
                 )
+                if segment.id not in speaker.segment_assignments and segment.speaker_id in getattr(
+                    speaker, 'voice_identity_status', {}
+                ):
+                    segment.speaker_match_source = 'live_embedding'
                 continue
-            status = speaker.segment_identity_status.get(cast(str, segment.id))
+            status = getattr(speaker, 'voice_identity_status', {}).get(segment.speaker_id)
+            if status is None:
+                status = speaker.segment_identity_status.get(cast(str, segment.id))
             if status is not None:
+                if status == SpeakerIdentityStatus.ambiguous:
+                    # Clear an earlier automatic accept on *every* segment of
+                    # this voice. Manual receipts are re-applied by the writer.
+                    if segment.speaker_match_source == 'live_embedding' or (
+                        not segment.is_user and not segment.person_id
+                    ):
+                        segment.is_user = False
+                        segment.person_id = None
+                        segment.speaker_match_source = 'live_embedding'
+                    else:
+                        continue
                 segment.speaker_identity_status = status
 
     async def _translate(self, segments: List[TranscriptSegment], conversation_id: str, removed: List[str]) -> None:
@@ -1042,6 +1072,7 @@ class TranscriptProcessor:
                             'id': segment.id,
                             'conversation_id': self.host.state.current_conversation_id,
                             'speaker_id': segment.speaker_id,
+                            'speaker_id_scope': segment.speaker_id_scope,
                             'abs_start': abs_start,
                             'abs_end': abs_end,
                             'duration': segment.end - segment.start,
@@ -1088,6 +1119,7 @@ class TranscriptProcessor:
                     speaker.speaker_to_person[cast(int, segment.speaker_id)] = (person_id, name)
                 speaker.segment_assignments[segment_id] = person_id
                 self.host.state.speaker_map_dirty = True
+                self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
                 self.suggested_segments.add(segment_id)
         if queue_from_raw is not None:
             self._queue_raw_detections(queue_from_raw, capture_windows, abs_base)
@@ -1130,6 +1162,7 @@ class TranscriptProcessor:
                             'id': raw.get('id'),
                             'conversation_id': self.host.state.current_conversation_id,
                             'speaker_id': speaker_id,
+                            'speaker_id_scope': raw.get('speaker_id_scope'),
                             'abs_start': abs_start,
                             'abs_end': abs_end,
                             'duration': float(raw['end']) - float(raw['start']),

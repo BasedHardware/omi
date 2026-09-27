@@ -196,6 +196,11 @@ class Wal {
   /// arrives so WALs survive app kill and can be recovered on startup.
   String? conversationId;
 
+  /// Client recording id (`activeRecordingId` / `external_data.recording_session_id`).
+  /// Stamped when the WAL is created so a safety copy that misses
+  /// ConversationProcessingStarted can still bind to the live conversation.
+  String? recordingSessionId;
+
   /// The account that created this recording, stamped from the signed-in uid
   /// at creation (or back-filled at logout). Loaded records owned by another
   /// account are parked durably instead of being loaded, so a session never
@@ -323,6 +328,7 @@ class Wal {
     this.syncedFrameOffset = 0,
     this.originalStorage,
     this.conversationId,
+    this.recordingSessionId,
     this.ownerUid,
     this.captureRoot,
     this.sourceFrameStart,
@@ -356,6 +362,7 @@ class Wal {
       originalStorage:
           json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       conversationId: json['conversation_id'],
+      recordingSessionId: json['recording_session_id'],
       ownerUid: json['owner_uid'],
       captureRoot: json['capture_root'],
       sourceFrameStart: json['source_frame_start'],
@@ -389,6 +396,7 @@ class Wal {
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
       'conversation_id': conversationId,
+      'recording_session_id': recordingSessionId,
       'owner_uid': ownerUid,
       if (captureRoot != null) 'capture_root': captureRoot,
       if (sourceFrameStart != null) 'source_frame_start': sourceFrameStart,

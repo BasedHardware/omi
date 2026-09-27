@@ -11157,5 +11157,7 @@
     "appearance": "Изглед",
     "appearanceSystem": "Систем",
     "appearanceLight": "Светло",
-    "appearanceDark": "Темно"
+    "appearanceDark": "Темно",
+    "chatDiscardRecording": "Отфрли",
+    "voiceQuestionNoSpeech": "Не разбрав — обидете се повторно"
 }

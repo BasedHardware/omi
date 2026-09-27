@@ -3597,5 +3597,7 @@
     "appearance": "Aparença",
     "appearanceSystem": "Sistema",
     "appearanceLight": "Clar",
-    "appearanceDark": "Fosc"
+    "appearanceDark": "Fosc",
+    "chatDiscardRecording": "Descarta",
+    "voiceQuestionNoSpeech": "No ho he entès — torna-ho a provar"
 }

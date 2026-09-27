@@ -281,9 +281,16 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
         'discarded': False,
         'started_at': NOW,
         'finished_at': NOW + timedelta(seconds=MIN_MEETING_DURATION_SECONDS),
-        # Duration is the transcript span (#19391), so the span must clear the
-        # five-minute bar even though the wall window already does.
-        'transcript_segments': [{'text': 'A substantive exchange', 'start': 0, 'end': MIN_MEETING_DURATION_SECONDS}],
+        # Duration is the transcript span (#19391), so include opening and
+        # closing transcript evidence whose span clears the five-minute bar.
+        'transcript_segments': [
+            {'text': 'Opening exchange', 'start': 0, 'end': 30},
+            {
+                'text': 'Closing exchange',
+                'start': MIN_MEETING_DURATION_SECONDS - 30,
+                'end': MIN_MEETING_DURATION_SECONDS,
+            },
+        ],
         'structured': {'title': 'Ambient capture'},
         'external_data': {'conversation_role': 'ambient'},
     }
@@ -348,9 +355,13 @@ def test_meeting_treatment_requires_five_minutes_and_deduplicated_speech():
         'external_data': {'conversation_role': 'meeting'},
         'transcript_segments': [
             {'text': 'first exchange', 'start': 0, 'end': 35},
-            # Duration is the transcript span (#19391): the last segment must
-            # reach the five-minute bar, not merely the deduplicated-speech bar.
-            {'text': 'second exchange', 'start': 265, 'end': MIN_MEETING_DURATION_SECONDS},
+            # Duration is the transcript span (#19391); the two intervals also
+            # provide exactly the required sixty seconds of distinct speech.
+            {
+                'text': 'second exchange',
+                'start': MIN_MEETING_DURATION_SECONDS - 25,
+                'end': MIN_MEETING_DURATION_SECONDS,
+            },
         ],
     }
     assert is_meeting_treatment_eligible(eligible) is True
@@ -358,8 +369,8 @@ def test_meeting_treatment_requires_five_minutes_and_deduplicated_speech():
     short_call = {
         **eligible,
         'transcript_segments': [
-            {'text': 'first exchange', 'start': 0, 'end': 35},
-            {'text': 'second exchange', 'start': 265, 'end': MIN_MEETING_DURATION_SECONDS - 1},
+            *eligible['transcript_segments'][:-1],
+            {**eligible['transcript_segments'][-1], 'end': MIN_MEETING_DURATION_SECONDS - 1},
         ],
     }
     assert is_meeting_treatment_eligible(short_call) is False

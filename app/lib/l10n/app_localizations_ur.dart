@@ -11416,4 +11416,10 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get appearanceDark => 'گہرا';
+
+  @override
+  String get chatDiscardRecording => 'رد کریں';
+
+  @override
+  String get voiceQuestionNoSpeech => 'سمجھ نہیں آیا — دوبارہ کوشش کریں';
 }

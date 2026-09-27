@@ -3632,5 +3632,7 @@
     "appearance": "Görünüm",
     "appearanceSystem": "Sistem",
     "appearanceLight": "Açık",
-    "appearanceDark": "Koyu"
+    "appearanceDark": "Koyu",
+    "chatDiscardRecording": "Vazgeç",
+    "voiceQuestionNoSpeech": "Anlayamadım — tekrar deneyin"
 }

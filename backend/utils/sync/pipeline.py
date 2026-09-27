@@ -144,6 +144,7 @@ from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
+from utils.sync.recording_session_target import resolve_recording_session_sync_target
 from utils.sync.bridge import finish_sync_segment
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
@@ -162,6 +163,7 @@ from utils.sync.assignment import fragment_rule, needs_fragment_review
 from utils.sync.speaker_identity import SpeakerIdentityDependencies, USER_SELF_PERSON_ID
 from utils.sync.speaker_identity import build_person_embeddings_cache as _build_person_embeddings_cache
 from utils.sync.speaker_identity import identify_speakers_for_segments as _identify_speakers_for_segments
+from utils.manual_speaker_assignments import manual_owner_reserved
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL, record_conversation_relevance
 
@@ -1034,6 +1036,8 @@ def identify_speakers_for_segments(
     person_embeddings_cache: Dict[str, dict],
     uid: str,
     language: Optional[str] = None,
+    *,
+    owner_reserved: bool = False,
 ) -> None:
     _identify_speakers_for_segments(
         transcript_segments,
@@ -1041,6 +1045,7 @@ def identify_speakers_for_segments(
         person_embeddings_cache,
         uid,
         language,
+        owner_reserved=owner_reserved,
         dependencies=_speaker_identity_dependencies(),
     )
 
@@ -1184,28 +1189,6 @@ def process_segment(
             empty_retried = True
             _log_empty_retry('started')
 
-        # Download the segment audio once — used for speaker ID and/or to persist the
-        # conversation's audio as a private-cloud chunk (realtime parity, below).
-        phase = 'download'
-        audio_bytes = _download_audio_bytes(url) if (person_embeddings_cache or private_cloud_sync_enabled) else None
-        try:
-            identify_speakers_for_segments(
-                transcript_segments,
-                audio_bytes if person_embeddings_cache else None,
-                person_embeddings_cache or {},
-                uid,
-                language=language,
-            )
-        except Exception as e:
-            logger.warning(
-                'event=sync_speaker_id outcome=failed exception_type=%s',
-                _bounded_exception_type(e),
-            )
-        finally:
-            # Keep audio_bytes for chunk storage when private cloud sync is on; free it now otherwise.
-            if audio_bytes is not None and not private_cloud_sync_enabled:
-                audio_bytes = None
-
         # Chronological scheduling reduces bridge work; the transaction remains
         # correct when independent jobs or a timed-out worker arrive out of order.
         phase = 'assignment'
@@ -1225,6 +1208,33 @@ def process_segment(
             if target_conversation_id
             else get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
         )
+        candidate_id = target_conversation_id or (closest_memory['id'] if closest_memory else None)
+        owner_reserved = False
+        if candidate_id:
+            try:
+                owner_reserved = manual_owner_reserved(conversations_db.get_manual_speaker_receipt(uid, candidate_id))
+            except Exception as error:
+                # A receipt read failure cannot authorize an automatic owner.
+                owner_reserved = True
+                logger.warning('event=sync_speaker_receipt outcome=failed exception_type=%s', type(error).__name__)
+
+        # Download once for matching and optional private-cloud chunk storage.
+        phase = 'download'
+        audio_bytes = _download_audio_bytes(url) if (person_embeddings_cache or private_cloud_sync_enabled) else None
+        try:
+            identify_speakers_for_segments(
+                transcript_segments,
+                audio_bytes if person_embeddings_cache else None,
+                person_embeddings_cache or {},
+                uid,
+                language=language,
+                owner_reserved=owner_reserved,
+            )
+        except Exception as e:
+            logger.warning('event=sync_speaker_id outcome=failed exception_type=%s', _bounded_exception_type(e))
+        finally:
+            if audio_bytes is not None and not private_cloud_sync_enabled:
+                audio_bytes = None
         started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         create_memory = CreateConversation(
             started_at=started_at,
@@ -1738,6 +1748,32 @@ async def _run_sync_vad_phase(
     return vad_errors, vad_ms
 
 
+async def _resolve_safety_wal_target(
+    uid: str,
+    stamped_target: Optional[str],
+    recording_session_id: Optional[str],
+    source: ConversationSource,
+    client_device_id: Optional[str],
+    should_lock: bool,
+    audio_start_seconds: Optional[float],
+    audio_end_seconds: Optional[float],
+) -> Optional[str]:
+    """Use server recording proof over the phone's possibly stale local stamp."""
+    if not recording_session_id or audio_start_seconds is None or audio_end_seconds is None:
+        return stamped_target
+    return await run_blocking(
+        db_executor,
+        resolve_recording_session_sync_target,
+        uid,
+        recording_session_id,
+        source,
+        client_device_id,
+        bool(should_lock),
+        audio_start_seconds,
+        audio_end_seconds,
+    )
+
+
 async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -1757,6 +1793,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     content_run_bound: bool = False,
     ledger_fence_active: bool = True,
     capture_evidence_claims: dict[str, dict] | None = None,
+    recording_session_id: Optional[str] = None,
+    audio_start_seconds: Optional[float] = None,
+    audio_end_seconds: Optional[float] = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -1781,6 +1820,19 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # keeps the caller's exact coordinates and returns the input unchanged on
     # any geocode failure, so a miss never drops the user's location.
     geolocation = await async_resolve_geolocation(geolocation)
+    # Resolve before segment intake. A unique server-side match is authoritative
+    # over a local stamp from another silence-rollover generation; no safe match
+    # invalidates the stamp. Old clients without this proof retain their stamp.
+    target_conversation_id = await _resolve_safety_wal_target(
+        uid,
+        target_conversation_id,
+        recording_session_id,
+        source,
+        client_device_id,
+        should_lock,
+        audio_start_seconds,
+        audio_end_seconds,
+    )
 
     sync_provider = 'unknown'
     sync_model = 'unknown'

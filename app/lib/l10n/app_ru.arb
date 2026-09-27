@@ -3632,5 +3632,7 @@
     "appearance": "Внешний вид",
     "appearanceSystem": "Система",
     "appearanceLight": "Светлая",
-    "appearanceDark": "Тёмная"
+    "appearanceDark": "Тёмная",
+    "chatDiscardRecording": "Отменить",
+    "voiceQuestionNoSpeech": "Не удалось расслышать — попробуйте ещё раз"
 }

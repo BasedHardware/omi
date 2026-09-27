@@ -190,11 +190,14 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      event.title,
-                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Tooltip(
+                      message: event.title,
+                      child: Text(
+                        event.title,
+                        style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const SizedBox(height: OmiSpacing.xxs),
                     Text(when, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
