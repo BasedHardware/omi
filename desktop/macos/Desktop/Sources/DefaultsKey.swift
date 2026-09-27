@@ -39,6 +39,7 @@ enum DefaultsKey: String {
   case automationOwnerABackup = "automation_swap_owner_a_backup"
   case chatBridgeMode = "chatBridgeMode"
   case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
+  /// Retired "Multiple Chat Sessions" toggle; only cleared from disk, never written now.
   case multiChatEnabled = "multiChatEnabled"
   /// Opt-in: proactive notifications are also spoken out loud on delivery.
   case speakNotificationsAloud = "speakNotificationsAloud"
@@ -139,6 +140,10 @@ enum DefaultsKey: String {
   case transcriptionPaused = "transcriptionPaused"
   case shortcutToggleListeningEnabled = "shortcut_toggleListeningEnabled"
   case shortcutToggleListeningKey = "shortcut_toggleListeningKey"
+  /// Current local day's per-bundle call-audio aggregates. The meeting detector
+  /// flushes the previous day as `Desktop Call App Audio Summary` on the first
+  /// tick of a new day and when it starts after a relaunch.
+  case callAppAudioDailyLedger = "callAppAudioDailyLedger"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
@@ -244,6 +249,14 @@ struct ScopedDefaultsKey {
     Self(rawValue: "dailySummary.lastSeenID.v1.\(ownerID)")
   }
 
+  /// Owner-scoped id of the newest daily summary the memory_v1 postcard-first
+  /// landing has already opened on. Separate from the notch-announcement latch
+  /// so neither consumes the other; the arm lands on the postcard exactly once
+  /// per summary.
+  static func dailySummaryPostcardLandedID(ownerID: String) -> Self {
+    Self(rawValue: "dailySummary.postcardLandedID.v1.\(ownerID)")
+  }
+
   /// Owner-scoped id of the daily summary that was on screen when the owner last cleared Chat.
   /// The card is chrome rather than a turn (INV-CHAT-1), so clearing the transcript cannot
   /// delete it — this is what makes Clear take it away anyway, until a newer summary arrives.
@@ -291,6 +304,7 @@ struct ScopedDefaultsKey {
 /// compiler-checked.
 extension UserDefaults {
   func string(forKey key: DefaultsKey) -> String? { string(forKey: key.rawValue) }
+  func data(forKey key: DefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }

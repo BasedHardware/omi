@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
@@ -13,6 +13,23 @@ from utils.stt.live_rollout import window_allocation, window_language_supported
 from utils.stt.socket import STTSocket
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
 from utils.transcribe_decisions import should_initialize_vad_gate, vad_gate_mode
+
+if TYPE_CHECKING:
+    from utils.stt.parakeet_window import SessionPcmGain
+
+# Windowed TDT admits speech-only audio with a short hangover. The billed Deepgram
+# gate keeps VAD_GATE_SPEECH_THRESHOLD (0.65) and a 4s tail; this leg keeps the same
+# start threshold but a much shorter tail, because a growing window re-posts its own
+# prefix and does not need 4s of trailing silence to avoid clipping a word.
+#
+# The threshold was briefly lowered to 0.5/0.35 to admit quiet far-field speech. That
+# is no longer what admits it: the gate now scores a level-corrected copy (see
+# SessionPcmGain), which lifts far-field admission from 73.7s to 91.7s on its own. The
+# extra hysteresis bought only 5.6s more on that clip while costing words on dense
+# speech, so the start threshold stays at the Deepgram value and gain does the work.
+WINDOW_VAD_HANGOVER_MS = 300
+WINDOW_VAD_SPEECH_THRESHOLD = 0.65
+WINDOW_VAD_CONTINUE_THRESHOLD = 0.65
 
 
 class LiveChainSession:
@@ -35,7 +52,7 @@ class LiveChainSession:
     def to_json_log(self) -> dict[str, Any]:
         return {'event': 'managed_live_vad_metrics', **self.get_metrics()}
 
-    async def connect(self, sample_rate: int) -> STTSocket:
+    async def connect(self, sample_rate: int, epoch: Any = None) -> STTSocket:
         host = self.receiver.host
         language = host.stt_language
         uid = host.request.uid
@@ -80,10 +97,16 @@ class LiveChainSession:
 
         def build_gate(is_window: bool) -> VADStreamingGate | None:
             if is_window:
-                gate = VADStreamingGate(sample_rate=sample_rate, channels=1, mode='active')
                 # No four-second silence tail: each early-flushed window must
                 # contain speech, with only a short boundary hangover.
-                gate._hangover_ms = 300  # type: ignore[reportPrivateUsage]  # TDT has a speech-only admission contract
+                gate = VADStreamingGate(
+                    sample_rate=sample_rate,
+                    channels=1,
+                    mode='active',
+                    speech_threshold=WINDOW_VAD_SPEECH_THRESHOLD,
+                    continue_threshold=WINDOW_VAD_CONTINUE_THRESHOLD,
+                    hangover_ms=WINDOW_VAD_HANGOVER_MS,
+                )
                 self.vad_mode = 'active'
                 return gate
             override = getattr(getattr(host, 'request', None), 'vad_gate_override', None)
@@ -118,9 +141,55 @@ class LiveChainSession:
                     component='vad', from_mode='gated', to_mode='direct', reason='config_incomplete', outcome='degraded'
                 )
             passthrough = service == st.STTService.modulate
+            if epoch is not None:
+                epoch.set_validation_callback(
+                    lambda provider, interval: self.receiver._record_elapsed_validation(provider, interval, gate)
+                )
 
             def callback(segments: list[dict[str, Any]]) -> None:
-                if generation != self.generation:
+                if generation != self.generation and not (epoch is not None and epoch.project_times):
+                    return
+                if epoch is not None:
+                    epoch.provider_label = service.value
+                if epoch is not None and epoch.project_times:
+                    # Audio-timeline v2: the translator maps provider
+                    # times through its accepted send spans onto the capture
+                    # timeline's wall axis. It replaces this leg's own
+                    # offset/last_end clock, so no generation offset is added.
+                    # The translate itself reads unsynchronized timeline state,
+                    # so it runs on the listen loop (Deepgram calls this from
+                    # its SDK thread); the enqueue then follows the receiver's
+                    # pinned persistence mode (v2 owner fencing vs clock-only).
+                    def translate_on_loop(seg_list: list[dict[str, Any]]) -> None:
+                        translated = epoch.translate(seg_list)
+                        if translated:
+                            leg.note_selection_transcript(translated)
+                            self.receiver._enqueue_epoch_segments(translated, provider=service.value)
+
+                    self.receiver._run_on_listen_loop(translate_on_loop, segments)
+                    return
+                if epoch is not None:
+                    # Clock-only capture clock: attach the window from the
+                    # provider's own timestamps, then keep this leg's legacy
+                    # offset/last_end rebase (and gate remap) exactly as the
+                    # pre-timeline managed chain did — flag-off emitted times
+                    # stay monotonic across legs and byte-identical to main.
+                    def attach_then_rebase(seg_list: list[dict[str, Any]]) -> None:
+                        translated = epoch.translate(seg_list)
+                        if not translated:
+                            return
+                        if gate is not None and not passthrough:
+                            gate.remap_segments(translated)
+                        translated.sort(key=lambda item: item['start'])
+                        for segment in translated:
+                            start = max(self.last_end, offset + max(0.0, float(segment['start'])))
+                            end = max(start, offset + max(0.0, float(segment['end'])))
+                            segment['start'], segment['end'] = start, end
+                            self.last_end = end
+                        leg.note_selection_transcript(translated)
+                        self.receiver._enqueue_epoch_segments(translated, provider=service.value)
+
+                    self.receiver._run_on_listen_loop(attach_then_rebase, segments)
                     return
                 if gate is not None and not passthrough:
                     gate.remap_segments(segments)
@@ -142,7 +211,7 @@ class LiveChainSession:
                 elif service == st.STTService.parakeet:
                     raw = await st.process_audio_parakeet(callback, language, sample_rate, 1, keywords=keywords)
                 elif service == st.STTService.soniox:
-                    raw = await st.process_audio_soniox(callback, sample_rate, language)
+                    raw = await st.process_audio_soniox(callback, sample_rate, language, profile=host.language_profile)
                 elif service == st.STTService.modulate:
                     raw = await st.process_audio_modulate(callback, sample_rate, language)
                 else:
@@ -157,7 +226,11 @@ class LiveChainSession:
                     )
                 if raw is None:
                     raise RuntimeError('Provider returned no socket')
-                leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough)
+                if epoch is not None:
+                    # The selected fallback may differ from the receiver's
+                    # initial service. Set its clock policy before first send.
+                    epoch.provider_label = service.value
+                leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough, send_tracker=epoch)
                 return leg
             except BaseException:
                 if raw is not None:
@@ -217,12 +290,22 @@ class LiveLegSocket(STTSocket):
         sample_rate: int,
         window: bool,
         passthrough: bool,
+        send_tracker: Any = None,
     ) -> None:
         self.raw, self.gate, self.session = raw, gate, session
         self.service, self.sample_rate, self.window, self.passthrough = service, sample_rate, window, passthrough
+        # Audio-timeline v2: the provider epoch translator that records
+        # accepted sends and maps provider times to the capture timeline.
+        self._send_tracker = send_tracker
         self._dead = False
         self._seconds = 0.0
         self._pending_selection: PendingLiveFailover | None = None
+        self._ingest_gain: SessionPcmGain | None = None
+        if window:
+            from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC
+
+            if WINDOW_INGEST_AGC:
+                self._ingest_gain = SessionPcmGain()
 
     @property
     def is_connection_dead(self) -> bool:
@@ -256,15 +339,25 @@ class LiveLegSocket(STTSocket):
         if isinstance(self.raw, WindowedParakeetSocket):
             self.raw.set_health_callbacks(on_success, on_close)
 
-    def send(self, data: bytes) -> bool:
+    def send(self, data: bytes, start_sample: int | None = None) -> bool:
         if self.is_connection_dead:
             return False
+        from utils.stt.parakeet_window import WindowedParakeetSocket
+
+        score_pcm: bytes | None = None
+        if self._ingest_gain is not None:
+            # Gain a copy for Silero only. Stored / posted bytes stay original
+            # so the posted stage is the only scale the decoder sees.
+            score_pcm = self._ingest_gain.apply(data)
+            if isinstance(self.raw, WindowedParakeetSocket):
+                self.raw.observe_session_peak(self._ingest_gain.peak)
         output = None
         if self.gate is not None:
             try:
                 # Synthetic wall clock follows received audio. Positive epoch
-                # avoids VAD's zero sentinel.
-                output = self.gate.process_audio(data, 1.0 + self._seconds)
+                # avoids VAD's zero sentinel. Silero scores the level-corrected
+                # copy; pre-roll and audio_to_send stay original-level.
+                output = self.gate.process_audio(data, 1.0 + self._seconds, score_pcm, start_sample=start_sample)
             except Exception:
                 if self.window:
                     self._dead = True
@@ -285,10 +378,14 @@ class LiveLegSocket(STTSocket):
                 self.session.vad_mode = 'off'
         audio = data if output is None or self.passthrough else output.audio_to_send
         if self.window and output is not None and output.is_speech:
-            from utils.stt.parakeet_window import WindowedParakeetSocket
-
             if isinstance(self.raw, WindowedParakeetSocket):
                 self.raw.mark_speech()
+        sent_spans: tuple[tuple[int, int], ...] = ()
+        if start_sample is not None and audio:
+            if audio is data:
+                sent_spans = ((start_sample, len(data) // 2),)
+            else:
+                sent_spans = tuple(output.send_spans) if output is not None else ()
         try:
             if audio and self.raw.send(audio) is not True:
                 self.finish()
@@ -300,6 +397,9 @@ class LiveLegSocket(STTSocket):
             self._dead = True
             self.finish()
             return False
+        if sent_spans and self._send_tracker is not None:
+            self._send_tracker.send_path = 'managed_chain'
+            self._send_tracker.note_accepted_spans(sent_spans)
         duration = len(data) / (self.sample_rate * 2)
         self._seconds += duration
         self.session.audio_seconds += duration

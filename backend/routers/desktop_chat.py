@@ -270,7 +270,7 @@ _MANAGED_STRUCTURED_ALIASES = {
 }
 # The realtime voice `think_deeper` escalation: a single-shot, no-tools Luna
 # completion with an explicit reasoning effort. OpenAI rejects function tools
-# combined with a non-none reasoning_effort on gpt-5.6-luna (/v1/chat/completions),
+# combined with a non-none reasoning_effort on gpt-x-luna (/v1/chat/completions),
 # so this alias deliberately carries no client tools and the effort travels as a
 # per-request parameter instead of the tooled chat-agent lane's pinned `none`.
 THINKING_MODEL_ALIAS = 'omi-luna-think'
@@ -758,7 +758,7 @@ def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LAN
         result['messages'] = _append_web_search_retrieval_appendix(_with_public_web_routing_instruction(translated))
     if _is_thinking_escalation(body):
         # Single-shot Luna reasoning: OpenAI rejects function tools combined
-        # with a non-none reasoning_effort on gpt-5.6-luna, so the escalation
+        # with a non-none reasoning_effort on gpt-x-luna, so the escalation
         # never carries client tools. The validated effort is server-authored
         # here, not a verbatim client passthrough.
         result.pop('tools', None)

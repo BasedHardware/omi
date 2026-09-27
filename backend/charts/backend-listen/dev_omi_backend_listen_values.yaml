@@ -16,8 +16,8 @@ image:
 
 # GKE host / image project. Chart defaults keep GOOGLE_CLOUD_PROJECT aligned with
 # composed runtime_env gke.backend-listen (compute). Customer Firestore must not
-# rely on this env: database/_client.py pins SERVICE_ACCOUNT_JSON + its
-# project_id (based-hardware). Deploy may still --set runtimeGcpProjectId from
+# rely on this env: database/_client.py pins OMI_CUSTOMER_DATA_PROJECT
+# (based-hardware). Deploy may still --set runtimeGcpProjectId from
 # vars.RUNTIME_GCP_PROJECT_ID (manifest runtime_gcp_project = based-hardware).
 gcpProjectId: based-hardware-dev
 runtimeGcpProjectId: based-hardware-dev
@@ -35,11 +35,13 @@ serviceAccount:
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
   # Annotations to add to the service account.
-  # Development-only parity-pack exporter GSA (WI). Customer-data Firestore and
-  # Firebase Admin must use nik-164 via SERVICE_ACCOUNT_JSON — never this pack
-  # WI identity. Both have objectAdmin on the pack bucket for cassette export.
+  # Keyless runtime identity (Workload Identity). It replaces the prod nik-164
+  # JSON key: production customer data via narrow grants in based-hardware
+  # (Firestore, Firebase Auth, FCM, one bucket), dev Cloud Tasks, the dev
+  # buckets and the parity-pack bucket. OMI_CUSTOMER_DATA_PROJECT pins the
+  # customer project, since GOOGLE_CLOUD_PROJECT here is the compute project.
   annotations:
-    iam.gke.io/gcp-service-account: dev-omi-listen-parity-pack@based-hardware-dev.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
@@ -104,6 +106,22 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  # Keep these aligned with the development GitHub environment variables used
+  # by the Cloud Run backend; api.omiapi.com is served by backend-listen.
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+    value: "https://backend-dt5lrfkkoa-uc.a.run.app"
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+    value: "1031333818730-compute@developer.gserviceaccount.com"
+  - name: TRANSCRIPTION_SHADOW_ENABLED
+    value: "false"
+  - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
+    value: "false"
+  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+    value: ""
+  - name: TRANSCRIPTION_SHADOW_PERCENT
+    value: "0"
+  - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
+    value: "0"
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://api.omiapi.com"
   - name: FREE_TIER_LOCAL_PROCESSING
@@ -125,6 +143,8 @@ env:
     value: "0.01"
   - name: USE_VERTEX_AI
     value: "true"
+  - name: TTS_PROVIDER
+    value: "gemini"
   # Direct-provider surfaces (desktop_proxy, omni_relay) write their attempts
   # to the gateway ledger under this switch; the manifest declares it, this is
   # where it actually reaches the pod.
@@ -135,6 +155,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GEMINI_API_KEY
+  - name: ELEVENLABS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: ELEVENLABS_API_KEY
   - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -187,16 +212,28 @@ env:
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
     value: "true"
+  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
+    value: "true"
+  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
+    value: "true"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "true"
-  - name: WAKE_WORD_ADJUDICATION_ENABLED
+  - name: CONVERSATION_RELEVANCE_JEV_ENABLED
     value: "true"
-  - name: GOOGLE_CALENDAR_AUTO_LINK_ENABLED
+  - name: MEMORY_OWNER_JEV_FLIP_ENABLED
+    value: "true"
+  - name: CAPTURE_JEV_SHADOW_ENABLED
+    value: "true"
+  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: CAPTURE_JEV_SHADOW_PERCENT
+    value: "0"
+  - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
-    value: "off"
+    value: "gateway"
   - name: ACCOUNT_CUTOVER_ENFORCEMENT
     value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
@@ -278,15 +315,14 @@ env:
     value: "http://parakeet.omiapi.com"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: STT_CONNECT_ORDER_FROM_CONFIG
     value: "true"
+  - name: STT_MULTI_LANGUAGE_HINTS
+    value: "true"
+  - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
+    value: "100"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
     value: "100"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
@@ -315,11 +351,6 @@ env:
     value: "http://pusher.omiapi.com"
   - name: BUCKET_PLUGINS_LOGOS
     value: "plugin_resources"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
   - name: DD_SERVICE
     value: "backend-listen"
   - name: DD_ENV
@@ -397,11 +428,8 @@ env:
     value: "2025-08-21"
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-dev-private-cloud-sync"
-  - name: SERVICE_ACCOUNT_JSON
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: SERVICE_ACCOUNT_JSON
+  - name: OMI_CUSTOMER_DATA_PROJECT
+    value: "based-hardware"
   - name: GOOGLE_CLOUD_PROJECT
     # Template substitutes runtimeGcpProjectId (chart default = compute project).
     value: "based-hardware-dev"
@@ -426,6 +454,11 @@ env:
         key: TWILIO_API_KEY_SECRET
   - name: VAD_GATE_MODE
     value: "active"
+  # Audio-timeline v2: one capture coordinate for segments and stored audio.
+  # Admits new eligible recordings only (single-channel, server STT);
+  # existing v1 sessions and resumed v1 conversations are unaffected.
+  - name: AUDIO_TIMELINE_V2
+    value: "true"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"
@@ -446,7 +479,7 @@ env:
   - name: FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
     value: "43200"
   - name: FAIR_USE_CLASSIFIER_MODEL
-    value: "gpt-5.6-luna"
+    value: "gpt-6-luna"
   - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
     value: "7"
   - name: FAIR_USE_CHECK_INTERVAL_SECONDS

@@ -82,6 +82,8 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         ".github/workflows/gcp_backend_pusher.yml": "tests/unit/test_verify_pusher_rollout_budget.py",
         "backend/scripts/pusher_prod_canary.py": "tests/unit/test_pusher_deployment_control_workflow.py",
         "backend/scripts/verify_pusher_rollout_budget.py": "tests/unit/test_verify_pusher_rollout_budget.py",
+        "backend/scripts/verify_pusher_live_alert_route.py": "tests/unit/test_verify_pusher_live_alert_route.py",
+        "backend/charts/monitoring/live-alert-gate.json": "tests/unit/test_verify_pusher_live_alert_route.py",
         "backend/scripts/validate_rendered_deployment_contract.py": "tests/unit/test_rendered_deployment_contract.py",
         ".github/workflows/gcp_backend_auto_dev.yml": "tests/unit/test_llm_gateway_deploy_contract.py",
         ".github/workflows/gcp_llm_gateway.yml": "tests/unit/test_preflight_cloud_run_deploy.py",
@@ -133,6 +135,7 @@ def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector
     assert "tests/unit/test_monitoring_telemetry_contract.py" in selected
     assert "tests/unit/test_monitoring_alert_rule_contract.py" in selected
     assert "tests/unit/test_journey_observability.py" in selected
+    assert "tests/unit/test_verify_pusher_live_alert_route.py" in selected
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
     selected, reason = selector.tests_for_changed_paths(["backend/utils/metrics.py"], all_tests)

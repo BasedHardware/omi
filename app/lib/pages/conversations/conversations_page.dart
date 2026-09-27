@@ -9,14 +9,16 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/pages/conversations/conversation_map_page.dart';
 import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
+import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
+import 'package:omi/pages/conversations/widgets/pending_transcriptions_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
+import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -24,19 +26,20 @@ import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/pages/conversations/capture_gaps_controller.dart';
 import 'package:omi/pages/conversations/widgets/capture_gap_list_item.dart';
 import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/conversations/widgets/date_filter_chip.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 
 enum _ConversationListRowKind {
@@ -70,8 +73,6 @@ typedef _ConversationPageSnapshot = ({
   DateTime? selectedStartDate,
   DateTime? selectedEndDate,
   bool showStarredOnly,
-  bool showDailySummaries,
-  bool hasDailySummaries,
   bool isSelectionModeActive,
   bool isLoadingConversations,
   bool isFetchingConversations,
@@ -132,8 +133,6 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     selectedStartDate: conversations.selectedStartDate,
     selectedEndDate: conversations.selectedEndDate,
     showStarredOnly: conversations.showStarredOnly,
-    showDailySummaries: conversations.showDailySummaries,
-    hasDailySummaries: conversations.hasDailySummaries,
     isSelectionModeActive: conversations.isSelectionModeActive,
     isLoadingConversations: conversations.isLoadingConversations,
     isFetchingConversations: conversations.isFetchingConversations,
@@ -267,7 +266,6 @@ class ConversationsPage extends StatefulWidget {
 
 class _ConversationsPageState extends State<ConversationsPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
-  final AppReviewService _appReviewService = AppReviewService();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
   String? _loadMoreFilterKey;
@@ -315,13 +313,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       if (folderProvider.folders.isEmpty) {
         _scheduleDeferred(folderProvider.loadFolders);
       }
-
-      // Check if we should show the app review prompt for first conversation
-      if (mounted && conversationProvider.conversations.isNotEmpty) {
-        _scheduleDeferred(
-          () => _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true),
-        );
-      }
     });
   }
 
@@ -348,7 +339,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       provider.selectedStartDate == null &&
       provider.selectedEndDate == null &&
       !provider.showStarredOnly &&
-      !provider.showDailySummaries &&
       !provider.showDiscardedConversations &&
       !provider.showShortConversations;
 
@@ -438,12 +428,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         children: [
           // Date header shimmer
           ShimmerWithTimeout(
-            baseColor: AppStyles.backgroundSecondary,
-            highlightColor: AppStyles.backgroundTertiary,
+            baseColor: OmiColors.surface1,
+            highlightColor: OmiColors.surface3,
             child: Container(
               width: 100,
               height: 16,
-              decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(8)),
             ),
           ),
           const SizedBox(height: 12),
@@ -453,12 +443,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             (index) => Padding(
               padding: const EdgeInsets.only(bottom: 16.0),
               child: ShimmerWithTimeout(
-                baseColor: AppStyles.backgroundSecondary,
-                highlightColor: AppStyles.backgroundTertiary,
+                baseColor: OmiColors.surface1,
+                highlightColor: OmiColors.surface3,
                 child: Container(
                   height: 80,
                   decoration: BoxDecoration(
-                    color: AppStyles.backgroundSecondary,
+                    color: OmiColors.surface1,
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
@@ -485,66 +475,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   Widget _buildNoConversationsHero(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Layered icon: soft purple aura behind a tactile glassy tile.
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 160,
-                height: 160,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [Colors.deepPurple.withValues(alpha: 0.35), Colors.deepPurple.withValues(alpha: 0.0)],
-                    stops: const [0.0, 1.0],
-                  ),
-                ),
-              ),
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(26),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF7B5CFF), Color(0xFF5733E0)],
-                  ),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.deepPurple.withValues(alpha: 0.45),
-                      blurRadius: 30,
-                      spreadRadius: 2,
-                      offset: const Offset(0, 12),
-                    ),
-                  ],
-                ),
-                child: const Icon(Icons.forum_rounded, size: 42, color: Colors.white),
-              ),
-            ],
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'No conversations yet',
-            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.3),
-          ),
-          const SizedBox(height: 10),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 280),
-            child: Text(
-              'Conversations you record show up here. Tap a tile on the home tab to start your first one.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 15, height: 1.5),
-            ),
-          ),
-        ],
+      padding: const EdgeInsets.only(bottom: 120),
+      child: OmiEmptyState(
+        icon: Icons.forum_rounded,
+        title: context.l10n.noConversationsYet,
+        message: context.l10n.noConversationsHeroMessage,
       ),
     );
   }
@@ -562,12 +497,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     return Padding(
       padding: const EdgeInsets.only(top: 16.0),
       child: ShimmerWithTimeout(
-        baseColor: AppStyles.backgroundSecondary,
-        highlightColor: AppStyles.backgroundTertiary,
+        baseColor: OmiColors.surface1,
+        highlightColor: OmiColors.surface3,
         child: Container(
           height: 60,
           margin: const EdgeInsets.symmetric(horizontal: 16.0),
-          decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
@@ -587,8 +522,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // starred/daily-summaries filter).
         final bool showRecordings = convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
-            !convoProvider.showStarredOnly &&
-            !convoProvider.showDailySummaries;
+            !convoProvider.showStarredOnly;
         final recordingsByDate = <DateTime, List<LocalRecording>>{};
         if (showRecordings) {
           // Batch/offline-mode recordings captured locally — a separate subsystem
@@ -600,6 +534,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           }
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
+        final bool hasProcessingConversations = snapshot.processingConversations.isNotEmpty;
         final apiPhase = snapshot.apiViewPhase;
         final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
@@ -644,8 +579,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             _captureGaps.invalidate();
             await _refreshCaptureGapsIfNeeded(convoProvider);
           },
-          color: Colors.deepPurpleAccent,
-          backgroundColor: Colors.white,
+          color: OmiColors.onAccent,
+          backgroundColor: OmiColors.accent,
           child: CustomScrollView(
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
@@ -654,6 +589,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               const SliverToBoxAdapter(child: ActiveCallBanner()),
+              const SliverToBoxAdapter(child: SpeakerTagPromptCard()),
+              // Local recordings waiting to be uploaded for transcription.
+              const SliverToBoxAdapter(child: PendingTranscriptionsBanner()),
+              const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
 
               // Search bar
               Selector<HomeProvider, bool>(
@@ -669,7 +608,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 },
               ),
               const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
-              getProcessingConversationsWidget(convoProvider.processingConversations),
 
               // Today's Tasks and Goals widgets - hide when showing daily recaps, search bar is active, or calendar filter is active
               Selector<HomeProvider, bool>(
@@ -678,7 +616,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   final isSearchActive = showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
                   final hasCalendarFilter = convoProvider.selectedStartDate != null;
                   final prefs = SharedPreferencesUtil();
-                  if (convoProvider.showDailySummaries || isSearchActive || hasCalendarFilter) {
+                  if (isSearchActive || hasCalendarFilter) {
                     return const SliverToBoxAdapter(child: SizedBox.shrink());
                   }
                   final showGoals = prefs.showGoalTrackerEnabled;
@@ -698,12 +636,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 },
               ),
 
-              // Section header - show "Daily Recaps" or "Conversations" with optional recording pill.
-              // Hidden entirely when the user has zero non-discarded
-              // conversations (and isn't on the Daily Recaps view) — those
-              // users get the empty-state hero below instead.
-              if (convoProvider.showDailySummaries ||
-                  _nonDiscardedConversationCount(convoProvider) > 0 ||
+              // One date filter, shown as a removable chip (hub audit #23).
+              const SliverToBoxAdapter(child: ConversationDateFilterChip()),
+
+              // Section header. Hidden entirely when the user has zero
+              // non-discarded conversations — those users get the
+              // empty-state hero below instead. Daily Recaps is its own page.
+              // A pending Process Now row still counts: it lands in this list.
+              if (_nonDiscardedConversationCount(convoProvider) > 0 ||
+                  hasProcessingConversations ||
                   isShowingConversationSkeleton ||
                   _hasActiveFilter(convoProvider))
                 SliverToBoxAdapter(
@@ -714,36 +655,34 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text(
-                            convoProvider.showDailySummaries ? context.l10n.dailyRecaps : context.l10n.conversations,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                          Semantics(
+                            header: true,
+                            child: Text(context.l10n.conversations, style: OmiType.headline),
                           ),
-                          if (!convoProvider.showDailySummaries)
-                            IconButton(
-                              key: const Key('conversation_map_button'),
-                              tooltip: '${context.l10n.conversations} · ${context.l10n.location}',
-                              icon: const Icon(Icons.map_outlined, color: Colors.white),
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      ConversationMapPage(conversations: convoProvider.displayedConversations),
-                                ),
-                              ),
+                          OmiIconButton(
+                            key: const Key('conversation_map_button'),
+                            label: context.l10n.conversationMap,
+                            icon: const Icon(Icons.map_outlined),
+                            onPressed: () => routeToPage(
+                              context,
+                              ConversationMapPage(conversations: convoProvider.displayedConversations),
                             ),
+                          ),
                         ],
                       ),
                     ),
                   ),
                 ),
 
-              // Folder tabs - hide when showing daily recaps OR when the user
-              // has no conversations yet (matches the title). Keep chips
-              // visible whenever a filter is active so the user can always
-              // clear it, even when the filtered result is empty.
-              if (!convoProvider.showDailySummaries &&
-                  (_nonDiscardedConversationCount(convoProvider) > 0 ||
-                      isShowingConversationSkeleton ||
-                      _hasActiveFilter(convoProvider)))
+              // Folder tabs - hide when the user has no conversations yet
+              // (matches the title). Keep chips visible whenever a filter is
+              // active so the user can always clear it, even when the
+              // filtered result is empty. A pending Process Now row counts as
+              // having conversations.
+              if (_nonDiscardedConversationCount(convoProvider) > 0 ||
+                  hasProcessingConversations ||
+                  isShowingConversationSkeleton ||
+                  _hasActiveFilter(convoProvider))
                 Consumer<FolderProvider>(
                   builder: (context, folderProvider, _) {
                     return SliverToBoxAdapter(
@@ -755,32 +694,34 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         },
                         showStarredOnly: convoProvider.showStarredOnly,
                         onStarredToggle: convoProvider.toggleStarredFilter,
-                        showDailySummaries: convoProvider.showDailySummaries,
-                        onDailySummariesToggle: convoProvider.toggleDailySummaries,
-                        hasDailySummaries: convoProvider.hasDailySummaries,
                       ),
                     );
                   },
                 ),
+              // Process Now belongs to the Conversations list, below Goals and
+              // its heading/filters, where the completed conversation will land.
+              if (hasProcessingConversations) getProcessingConversationsWidget(snapshot.processingConversations),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
               if (showTypedStatus &&
                   snapshot.conversations.isEmpty &&
+                  !hasProcessingConversations &&
                   !hasRecordings &&
                   !_hasActiveFilter(convoProvider))
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(child: ConversationApiStatus(provider: convoProvider)),
                 )
-              else if (convoProvider.showDailySummaries)
-                const DailySummariesList()
               else if (_nonDiscardedConversationCount(convoProvider) == 0 &&
+                  !hasProcessingConversations &&
                   !hasRecordings &&
                   !isShowingConversationSkeleton &&
                   !_hasActiveFilter(convoProvider))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
                 SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildNoConversationsHero(context)))
+              else if (hasProcessingConversations && convoProvider.groupedConversations.isEmpty && !hasRecordings)
+                const SliverToBoxAdapter(child: SizedBox(height: 20))
               else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && !isShowingConversationSkeleton)
                 SliverToBoxAdapter(
                   child: Center(

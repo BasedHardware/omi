@@ -84,3 +84,34 @@ def test_migration_reencodes_receipt_and_transcript_from_current_transaction(
     )
     db.migrate_conversations_level_batch('u', ['c'], target)
     assert store.rows[path] == before
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_automatic_review_is_emitted_after_commit_and_not_on_retry(world, monkeypatch, level):
+    store, path, _ = world
+    store.rows[path]['data_protection_level'] = level
+    store.rows[path]['transcript_segments'][1]['speaker_match_source'] = 'sync_embedding'
+    store.rows[path] = db._prepare_conversation_for_write(store.rows[path], 'u', level)
+    observed = []
+
+    def observe(uid, conversation_id, before, after):
+        # The callback sees a durably committed manual label and cleared marker.
+        saved = read(world)['transcript_segments'][1]
+        assert saved['person_id'] == 'new' and saved['speaker_match_source'] is None
+        observed.append(before[0].get('speaker_match_source'))
+
+    monkeypatch.setattr(db, 'record_speaker_review', observe)
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
+    assert observed == ['sync_embedding', None]
+
+
+@pytest.mark.parametrize('field,error', [('is_locked', PermissionError), ('deleted', LookupError)])
+def test_blocked_manual_write_never_emits_review(world, monkeypatch, field, error):
+    store, path, _ = world
+    store.rows[path][field] = True
+    observed = []
+    monkeypatch.setattr(db, 'record_speaker_review', lambda *args: observed.append(args))
+    with pytest.raises(error):
+        db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
+    assert observed == []

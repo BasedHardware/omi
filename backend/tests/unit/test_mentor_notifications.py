@@ -131,6 +131,8 @@ def _apply_fakes(monkeypatch):
 
     # app_integrations local bindings (from X import Y).
     monkeypatch.setattr(app_int, 'get_user_goals', mock_get_user_goals)
+    # Date grounding reads a user timezone in production; this lane is hermetic.
+    monkeypatch.setattr(app_int, 'current_date_for_uid', lambda uid: '2026-09-21')
     monkeypatch.setattr(app_int, 'get_prompt_memories', mock_get_prompt_memories)
     monkeypatch.setattr(app_int, 'get_app_messages', mock_get_app_messages)
     monkeypatch.setattr(app_int, 'get_user_language_preference', mock_get_user_language)
@@ -1081,7 +1083,9 @@ def test_app_proactive_notification_increments_shared_budget():
     result = app_int._process_proactive_notification("uid_send", app, {"prompt": "hello", "params": []})
 
     assert result == "Here is a useful nudge."
-    redis_mod.incr_daily_notification_count.assert_called_once_with("uid_send")
+    # The count is bucketed by the user's own calendar day, so the resolved zone rides along.
+    redis_mod.incr_daily_notification_count.assert_called_once()
+    assert redis_mod.incr_daily_notification_count.call_args.args[0] == "uid_send"
 
 
 def test_frequency_guidance_all_levels():

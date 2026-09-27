@@ -609,8 +609,7 @@ def test_force_and_reprocess_do_not_rescue_basic_minimum(monkeypatch, pc) -> Non
         'basic-uid',
         'en',
         _desktop_create(),
-        force_process=True,
-        is_reprocess=True,
+        trigger=pc.ProcessingTrigger.USER_REPROCESS,
     )
 
     assert result.deferred is False
@@ -759,8 +758,7 @@ def test_minimum_store_clears_pending_jit_obligation_so_first_open_dispatches_no
         uid,
         'en',
         _existing_desktop(conv_id),
-        force_process=True,
-        is_reprocess=True,
+        trigger=pc.ProcessingTrigger.USER_REPROCESS,
     )
 
     assert result.status == ConversationStatus.completed
@@ -1170,8 +1168,7 @@ def test_paid_reprocess_clears_stale_terminal_marker_and_runs_derived_effects(mo
         uid,
         'en',
         _existing_desktop(conv_id),
-        force_process=True,
-        is_reprocess=True,
+        trigger=pc.ProcessingTrigger.USER_REPROCESS,
         derived_effects_disposition_observer=dispositions.append,
     )
 
@@ -1421,9 +1418,7 @@ def _drive_reprocess(pc, conversation: Any, uid: str = 'paid-uid') -> Any:
         uid,
         'en',
         conversation,
-        force_process=True,
-        is_reprocess=True,
-        bypass_jit_first_open=True,
+        trigger=pc.ProcessingTrigger.USER_REPROCESS,
         persistence_observer=lambda _owned: None,
         defer_derived_effects=True,
         derived_effects_observer=lambda _runner: None,
@@ -1658,7 +1653,7 @@ def test_flag_off_first_open_basic_is_deterministic_minimum(monkeypatch, pc) -> 
     persisted = MagicMock()
     monkeypatch.setattr(pc.lifecycle_service, 'persist_processed_conversation', persisted)
 
-    result = pc.process_conversation('basic-uid', 'en', _desktop_create(), force_process=True)
+    result = pc.process_conversation('basic-uid', 'en', _desktop_create(), trigger=pc.ProcessingTrigger.FIRST_OPEN)
 
     assert result.deferred is False
     assert result.status == ConversationStatus.completed
@@ -1682,7 +1677,9 @@ def test_flag_off_manual_reprocess_basic_is_deterministic_minimum(monkeypatch, p
     persisted = MagicMock()
     monkeypatch.setattr(pc.lifecycle_service, 'persist_processed_conversation', persisted)
 
-    result = pc.process_conversation('basic-uid', 'en', _existing_desktop(), is_reprocess=True)
+    result = pc.process_conversation(
+        'basic-uid', 'en', _existing_desktop(), trigger=pc.ProcessingTrigger.USER_REPROCESS
+    )
 
     marker_field = pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD
 
@@ -1725,7 +1722,7 @@ def test_flag_off_identification_failure_fails_open_on_first_open(monkeypatch, p
     )
     _stub_completed_for_normal_path(monkeypatch, pc)
 
-    pc.process_conversation('blip-uid', 'en', _desktop_create(), force_process=True)
+    pc.process_conversation('blip-uid', 'en', _desktop_create(), trigger=pc.ProcessingTrigger.FIRST_OPEN)
 
     spies['get_structured'].assert_called_once()
 
@@ -1744,7 +1741,7 @@ def test_flag_off_paid_first_open_processes_normally(monkeypatch, pc) -> None:
     )
     _stub_completed_for_normal_path(monkeypatch, pc)
 
-    pc.process_conversation('paid-uid', 'en', _desktop_create(), force_process=True)
+    pc.process_conversation('paid-uid', 'en', _desktop_create(), trigger=pc.ProcessingTrigger.FIRST_OPEN)
 
     spies['get_structured'].assert_called_once()
 
@@ -1759,7 +1756,7 @@ def test_flag_off_non_desktop_basic_keeps_eager_extraction(monkeypatch, pc) -> N
     omi_create = _desktop_create()
     omi_create.source = 'omi'
 
-    pc.process_conversation('basic-uid', 'en', omi_create, force_process=True)
+    pc.process_conversation('basic-uid', 'en', omi_create, trigger=pc.ProcessingTrigger.FIRST_OPEN)
 
     spies['get_structured'].assert_called_once()
 
@@ -1783,7 +1780,7 @@ def test_eager_extraction_switch_off_first_open_basic_reaches_structured_without
     )
     _stub_completed_for_normal_path(monkeypatch, pc)
 
-    pc.process_conversation('basic-uid', 'en', _desktop_create(), force_process=True)
+    pc.process_conversation('basic-uid', 'en', _desktop_create(), trigger=pc.ProcessingTrigger.FIRST_OPEN)
 
     spies['get_structured'].assert_called_once()
     assert auth_calls == []

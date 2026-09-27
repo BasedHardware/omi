@@ -2653,6 +2653,7 @@ actor RewindDatabase {
     Self.registerClientProcessingProjectionMigration(on: &migrator)
     Self.registerConversationSummarySectionsMigration(on: &migrator)
     Self.registerConversationLocalSummaryMigration(on: &migrator)
+    Self.registerConversationCaptureGroupMigration(on: &migrator)
     LocalEmbeddingStore.registerMigration(on: &migrator)
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
@@ -2723,6 +2724,13 @@ actor RewindDatabase {
   static func registerConversationLocalSummaryMigration(on migrator: inout DatabaseMigrator) {
     migrator.registerMigration("addConversationLocalSummary") { db in
       try Self.addTranscriptionSessionColumnIfMissing(db, name: "localSummaryJson", type: .text)
+    }
+  }
+
+  /// Cross-surface event membership, so a cached list collapses the same way before the server answers.
+  static func registerConversationCaptureGroupMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationCaptureGroup") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "captureGroupJson", type: .text)
     }
   }
 

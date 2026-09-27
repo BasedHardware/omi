@@ -181,7 +181,7 @@ resurrecting a recreated account.
 
 ## Operational boundary
 
-`MEMORY_MODE`, maintenance/consolidation switches, and cursor settings are
+`MEMORY_ENABLED`, maintenance/consolidation switches, and cursor settings are
 global readiness, incident, cost, and integrity controls. There is no
 `MEMORY_ENABLED_USERS` runtime binding and no product enrollment command.
 

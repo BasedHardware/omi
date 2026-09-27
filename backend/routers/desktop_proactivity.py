@@ -23,6 +23,7 @@ from utils.env_loader import EnvStage, resolve_stage_from_env
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.desktop_llm_stub import llm_stub_enabled
+from utils.llm.model_config import LUNA_MODEL
 from utils.llm.gateway_client import llm_gateway_headers
 from utils.llm.gateway_observability import record_direct_exception_surface
 from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS, has_cacheable_prefix
@@ -63,7 +64,7 @@ _OPERATION_LANES = {
 }
 _DIRECT_MODELS = {
     "proactive_extraction": "gpt-5-nano",
-    "proactive_reasoning": "gpt-5.6-luna",
+    "proactive_reasoning": LUNA_MODEL,
 }
 # Must match generated_route_overrides.yaml for these features. The direct
 # recovery path previously used medium for reasoning, which let luna spend a

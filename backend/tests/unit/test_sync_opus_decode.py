@@ -169,6 +169,7 @@ _ensure_attrs(
         'get_sync_tasks_max_attempts',
         'is_audio_merge_dispatch_enabled',
         'is_cloud_tasks_dispatch_enabled',
+        'verify_audio_merge_cloud_tasks_oidc',
         'verify_cloud_tasks_oidc',
     ],
 )

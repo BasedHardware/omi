@@ -36,8 +36,12 @@ serviceAccount:
   create: true
   # Automatically mount a ServiceAccount's API credentials?
   automount: false
-  # Annotations to add to the service account
-  annotations: {}
+  # Annotations to add to the service account.
+  # Keyless runtime identity (Workload Identity) that replaces the nik-164
+  # SERVICE_ACCOUNT_JSON key once the key env is removed; while the key env is
+  # present the JSON still wins.
+  annotations:
+    iam.gke.io/gcp-service-account: pusher-runtime@based-hardware.iam.gserviceaccount.com
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
@@ -142,6 +146,11 @@ env:
     value: "http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080"
   - name: OMI_ENV_STAGE
     value: "prod"
+  # Audio-timeline v2: one capture coordinate for segments and stored audio.
+  # Admits new eligible recordings only (single-channel, server STT);
+  # existing v1 sessions and resumed v1 conversations are unaffected.
+  - name: AUDIO_TIMELINE_V2
+    value: "false"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -169,8 +178,29 @@ env:
     value: "false"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
     value: "false"
+  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
+    value: "false"
+  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
+    value: "false"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
+  # Phase-1 final-pass shadow runs only for the owner UID on this pusher.
+  - name: TRANSCRIPTION_SHADOW_ENABLED
+    value: "true"
+  - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
+    value: "false"
+  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: TRANSCRIPTION_SHADOW_PERCENT
+    value: "0"
+  - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
+    value: "1"
+  - name: CAPTURE_JEV_SHADOW_ENABLED
+    value: "true"
+  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: CAPTURE_JEV_SHADOW_PERCENT
+    value: "0"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -353,6 +383,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: SERVICE_ACCOUNT_JSON
+  - name: OMI_CUSTOMER_DATA_PROJECT
+    value: "based-hardware"
   - name: METRICS_SECRET
     valueFrom:
       secretKeyRef:

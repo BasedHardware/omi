@@ -36,6 +36,7 @@ def chunk(key, timestamp, text='A narrated explanation of this chapter.', device
         'source': 'omi',
         'client_device_id': device,
         'discarded': False,
+        'status': 'completed',
         'transcript_segments': [{'start': 0.0, 'end': 9.5, 'text': text, 'speaker_id': 0, 'is_user': False}],
     }
 
@@ -147,16 +148,70 @@ def test_filler_is_preserved_and_promoted_regardless_of_speakers(is_user, speake
     short['transcript_segments'][0].update(is_user=is_user, speaker_id=speaker_id)
     review, _, _ = intake(store, short)
     assert review['sync_relevance'] == 'review'
-    assert review['discarded'] is False
+    assert review['discarded'] is True
     assert review['transcript_segments'][0]['text'] == 'Mm-hmm. Ha ha ha.'
     promoted, created, _ = intake(store, chunk('meaningful', 1060, 'Please call the doctor tomorrow.'))
     assert not created and promoted['id'] == review['id']
     assert promoted['sync_relevance'] == 'keep'
+    assert promoted['discarded'] is False
 
 
 @pytest.mark.parametrize('text', ['Help!', 'Yes', 'No', '嗯，请明天联系我', 'I love you', 'Mm 1234', '1234', ''])
 def test_ambiguous_or_meaningful_content_fails_open(text):
     assert not needs_fragment_review(chunk('a', 1000, text)['transcript_segments'])
+
+
+@pytest.mark.parametrize('text', ['Help!', 'No', 'Yes', 'Call me', '明天见', '1234'])
+def test_subsecond_meaningful_speech_is_kept(text):
+    short = chunk('short', 1000, text)
+    short['transcript_segments'][0]['end'] = 0.24
+    short['finished_at'] = datetime.fromtimestamp(1000.24, timezone.utc)
+    result, _, _ = intake(StrictFirestore(), short)
+    assert result['sync_relevance'] == 'keep'
+    assert result['discarded'] is False
+
+
+def test_separated_fillers_are_hidden_without_deleting_transcript_or_audio():
+    store = StrictFirestore()
+    short = chunk('filler', 1000, 'Mm-hmm.')
+    short['transcript_segments'][0]['end'] = 0.24
+    short['transcript_segments'].append({'start': 65.0, 'end': 65.32, 'text': 'Hmm.', 'speaker_id': 0})
+    short['finished_at'] = datetime.fromtimestamp(1065.32, timezone.utc)
+    short['audio_files'] = [{'id': 'retained-audio'}]
+    result, _, _ = intake(store, short)
+    assert result['discarded'] is True
+    assert len(result['transcript_segments']) == 2
+    assert result['audio_files'] == short['audio_files']
+    assert not result.get('deleted')
+
+
+@pytest.mark.parametrize(
+    'curation',
+    [
+        {'user_title': 'Saved note'},
+        {'starred': True},
+        {'folder_user_set': True},
+        {'has_photos': True},
+        {'visibility': 'public'},
+        {'sync_relevance_user_kept': True},
+    ],
+)
+def test_curated_filler_is_not_automatically_hidden(curation):
+    short = chunk('filler', 1000, 'Mm-hmm.')
+    short.update(curation)
+    result, _, _ = intake(StrictFirestore(), short)
+    assert result['discarded'] is False
+
+
+def test_explicitly_restored_fragment_stays_kept_when_live_target_gets_more_filler():
+    store = StrictFirestore()
+    intake(store, chunk('filler', 1000, 'Mm-hmm.'))
+    stored = store.rows[('users', 'u', 'conversations', 'filler')]
+    stored.update(discarded=False, sync_relevance='keep', sync_relevance_user_kept=True)
+    result, _, _ = intake(store, chunk('more', 1060, 'Hmm.'), target_id='filler')
+    assert result['discarded'] is False
+    assert result['sync_relevance'] == 'keep'
+    assert result['sync_relevance_user_kept'] is True
 
 
 def test_real_process_segment_two_independent_job_responses(monkeypatch):
@@ -236,6 +291,19 @@ def test_real_process_segment_two_independent_job_responses(monkeypatch):
         pipeline.process_conversation = MagicMock()
         pipeline._reprocess_conversation_after_update('u', 'a', 'en')
         pipeline.process_conversation.assert_not_called()
+
+        # Everything the rules cannot settle is assessed as a sync update, with
+        # the stored restore marker the wire model does not carry.
+        pipeline.conversations_db.get_conversation = lambda *a: {
+            'sync_relevance': 'keep',
+            'sync_relevance_user_kept': True,
+            'transcript_segments': chunk('a', 1000, 'Oh')['transcript_segments'],
+        }
+        pipeline.deserialize_conversation = MagicMock()
+        pipeline._reprocess_conversation_after_update('u', 'a', 'en')
+        kwargs = pipeline.process_conversation.call_args.kwargs
+        assert kwargs['trigger'] is pipeline.ProcessingTrigger.SYNC_UPDATE
+        assert kwargs['user_kept'] is True
 
         pipeline._reprocess_conversation_after_update = MagicMock()
         pipeline._reprocess_merged_conversations('u', {'_merged': {'new': 'en', 'old': 'en'}, 'new_memories': {'new'}})

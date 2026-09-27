@@ -33,6 +33,42 @@ enum TranscriptionFinalizationReason: String, Codable, CaseIterable {
   case maxDurationRotation = "max_duration_rotation"
   case crashRecovery = "crash_recovery"
   case retry = "retry"
+  /// Audio Recording mode switched to Off (user or settings sync).
+  case recordingDisabled = "recording_disabled"
+  /// System sleep tore the session down; the wake handler re-arms it.
+  case systemSleep = "system_sleep"
+  /// App termination teardown.
+  case appTerminated = "app_terminated"
+  /// `freemium_threshold_reached` admission stop.
+  case paywall = "paywall"
+  /// Microphone could not start or lost authorization mid-session.
+  case microphoneUnavailable = "microphone_unavailable"
+  /// BLE audio source had no live connection when capture armed.
+  case deviceUnavailable = "device_unavailable"
+  /// Repeated silent-mic recoveries failed and the session was stopped.
+  case silentMicExhausted = "silent_mic_exhausted"
+  /// A meeting-boundary conversation rotation failed and the session was
+  /// torn down rather than left half-rotated.
+  case rotationFailed = "rotation_failed"
+  /// Session stopped to switch STT engines (local↔cloud fallback restart).
+  case sttFallback = "stt_fallback"
+  /// Settings-driven capture restart (e.g. input-device change) stopped the
+  /// old session before re-arming.
+  case settingsChange = "settings_change"
+
+  /// Reasons that name a forced termination rather than an intended boundary:
+  /// the attempt died because capture could not continue, so the outcome funnel
+  /// must count it as `error` even if the call site forgot `noteErrorTerminal()`.
+  var isForcedTermination: Bool {
+    switch self {
+    case .paywall, .microphoneUnavailable, .deviceUnavailable, .silentMicExhausted,
+      .rotationFailed, .sttFallback:
+      return true
+    case .userStop, .finishAndContinue, .meetingStarted, .meetingEnded, .maxDurationRotation,
+      .crashRecovery, .retry, .recordingDisabled, .systemSleep, .appTerminated, .settingsChange:
+      return false
+    }
+  }
 }
 
 /// Conversation processing status (from backend)
@@ -94,6 +130,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   var eventsJson: String?  // JSON-encoded [Event]
   var sectionsJson: String?  // JSON-encoded [SummarySection]
   var localSummaryJson: String?  // Selected display attribution; never the upload/retry blob
+  var captureGroupJson: String?  // Server-owned cross-surface event membership (ServerCaptureGroup)
 
   // MARK: - Additional Conversation Data
   var geolocationJson: String?  // JSON-encoded Geolocation
@@ -147,6 +184,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     eventsJson: String? = nil,
     sectionsJson: String? = nil,
     localSummaryJson: String? = nil,
+    captureGroupJson: String? = nil,
     // Additional data
     geolocationJson: String? = nil,
     photosJson: String? = nil,
@@ -192,6 +230,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     self.eventsJson = eventsJson
     self.sectionsJson = sectionsJson
     self.localSummaryJson = localSummaryJson
+    self.captureGroupJson = captureGroupJson
     // Additional data
     self.geolocationJson = geolocationJson
     self.photosJson = photosJson
@@ -436,6 +475,7 @@ extension TranscriptionSessionRecord {
       eventsJson: eventsJson,
       sectionsJson: sectionsJson,
       localSummaryJson: conversation.localSummary.flatMap { try? String(data: encoder.encode($0), encoding: .utf8) },
+      captureGroupJson: conversation.captureGroup.flatMap { try? String(data: encoder.encode($0), encoding: .utf8) },
       geolocationJson: geolocationJson,
       photosJson: photosJson,
       appsResultsJson: appsResultsJson,
@@ -468,6 +508,8 @@ extension TranscriptionSessionRecord {
     self.inputDeviceName = conversation.inputDeviceName
 
     updateSummary(from: conversation)
+    // Membership is server-owned and independent of the summary's projection rules.
+    self.captureGroupJson = conversation.captureGroup.flatMap { try? String(data: encoder.encode($0), encoding: .utf8) }
 
     // Update additional data
     self.geolocationJson = try? String(data: encoder.encode(conversation.geolocation), encoding: .utf8)
@@ -734,7 +776,10 @@ extension TranscriptionSessionRecord {
       starred: starred,
       folderId: folderId,
       inputDeviceName: inputDeviceName,
-      localSummary: localSummary
+      localSummary: localSummary,
+      captureGroup: captureGroupJson?.data(using: .utf8).flatMap {
+        try? decoder.decode(ServerCaptureGroup.self, from: $0)
+      }
     )
   }
 }

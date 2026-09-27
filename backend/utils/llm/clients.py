@@ -52,6 +52,7 @@ from utils.llm.model_config import (
     is_structured_output_feature,
     supports_cache_retention,
     supports_prompt_cache,
+    uses_explicit_cache_and_chat_sanitizer,
     _get_model_config,
 )  # noqa: F401 - legacy clients-module QoS re-exports
 from utils.llm.providers import (
@@ -814,7 +815,7 @@ def get_llm(
     cache_params: Dict[str, Any] = {}
     if cache_key and supports_prompt_cache(model):
         cache_params['prompt_cache_key'] = cache_key
-    if prompt_cache_options and model.startswith('gpt-5.6'):
+    if prompt_cache_options and uses_explicit_cache_and_chat_sanitizer(model):
         # This is a provider request field, not a ChatOpenAI constructor field.
         # extra_body lets the OpenAI client merge it into the wire payload. It
         # must be sent even without a cache key: explicit mode with no

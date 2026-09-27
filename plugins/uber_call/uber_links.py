@@ -39,7 +39,17 @@ def _clean_text(value: str | None) -> str | None:
 def _normalize_float(value: float | int | str | None) -> float | None:
     if value in (None, ""):
         return None
-    return float(value)
+    try:
+        return float(value)
+    except TypeError as exc:
+        # The Omi backend forwards ``geolocation`` as free-form JSON, so a
+        # coordinate can arrive as a list or object. float() raises TypeError
+        # for those, which is not part of this module's contract and would
+        # escape the caller's ValueError handling.
+        raise ValueError(
+            "Coordinates must be a number or a numeric string, got "
+            f"{type(value).__name__}."
+        ) from exc
 
 
 def _valid_lat_lng(lat: float | None, lng: float | None) -> bool:

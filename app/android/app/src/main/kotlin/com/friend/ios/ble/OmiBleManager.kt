@@ -224,7 +224,12 @@ class OmiBleManager private constructor(private val application: Application) {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val device = result.device
                 val address = device.address.uppercase()
-                val name = device.name ?: ""
+                val record = result.scanRecord
+                val name = discoveredPeripheralName(
+                    advertisedName = record?.deviceName,
+                    cachedName = device.name,
+                    manufacturerData = record?.getManufacturerSpecificData(PLAUD_MANUFACTURER_ID),
+                )
                 val rssi = result.rssi
                 val advServiceUuids = result.scanRecord?.serviceUuids?.map { it.uuid.toString() } ?: emptyList()
 

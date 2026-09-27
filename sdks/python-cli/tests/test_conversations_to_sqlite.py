@@ -145,5 +145,36 @@ class TestConversationsToSqlite(unittest.TestCase):
         self.assertEqual(total, 2)
 
 
+    def test_path_traversal_rejected(self):
+        """Paths containing '..' must be rejected before any DB is opened."""
+        json_file = self.dir_path / "conversations.json"
+        json_file.write_text(json.dumps(SAMPLE_CONVERSATIONS), encoding="utf-8")
+
+        escape = self.dir_path.parent / "escape.db"
+        existed = escape.exists()
+        try:
+            with self.assertRaises(ValueError, msg="Expected ValueError for '..' in path"):
+                load(str(self.dir_path / ".." / "escape.db"), [str(json_file)])
+            if not existed:
+                self.assertFalse(escape.exists())
+        finally:
+            if not existed and escape.exists():
+                escape.unlink()
+
+    def test_non_sqlite_file_rejected(self):
+        """Overwriting an existing file that is not a SQLite database must raise ValueError."""
+        not_a_db = self.dir_path / "output.db"
+        original = b"This is not a SQLite file at all"
+        not_a_db.write_bytes(original)
+
+        json_file = self.dir_path / "conversations.json"
+        json_file.write_text(json.dumps(SAMPLE_CONVERSATIONS), encoding="utf-8")
+
+        with self.assertRaises(ValueError, msg="Expected ValueError when output is not SQLite"):
+            load(str(not_a_db), [str(json_file)])
+
+        self.assertEqual(not_a_db.read_bytes(), original)
+
+
 if __name__ == "__main__":
     unittest.main()

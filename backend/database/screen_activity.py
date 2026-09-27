@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional, Union, cast
+from typing import List, Dict, Any, Optional, Tuple, Union, cast
 
 from google.cloud import firestore
 
@@ -116,6 +116,57 @@ def get_screen_activity(
         results.append(data)
 
     return results
+
+
+def get_screen_activity_page(
+    uid: str,
+    *,
+    start_date: Optional[DateInput] = None,
+    end_date: Optional[DateInput] = None,
+    app_filter: Optional[str] = None,
+    limit: int = 500,
+    after: Optional[Tuple[str, str]] = None,
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """Keyset-paginated screen activity ordered by (timestamp, doc id) ascending.
+
+    ``after`` is the ``(timestamp, doc_id)`` pair of the last row from the
+    prior page; ordering by ``__name__`` makes resume positions stable even
+    when many rows share one timestamp. The app-filtered shape is served by
+    the existing ``screen_activity_app_timestamp`` composite index, and the
+    unfiltered shape by the automatic single-field timestamp index — both
+    index families store ``__name__`` as their final key.
+
+    Fetches ``limit + 1`` rows and returns ``(rows[:limit], has_more)`` so the
+    caller can emit a next_cursor only when another row actually exists.
+    """
+    collection_ref = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
+
+    query = collection_ref.order_by('timestamp', direction=firestore.Query.ASCENDING).order_by('__name__')
+
+    if start_date:
+        ts = normalize_screen_activity_timestamp(start_date)
+        query = query.where(filter=firestore.FieldFilter('timestamp', '>=', ts))
+    if end_date:
+        ts = normalize_screen_activity_timestamp(end_date, end_of_second=True)
+        query = query.where(filter=firestore.FieldFilter('timestamp', '<=', ts))
+    if app_filter:
+        query = query.where(filter=firestore.FieldFilter('appName', '==', app_filter))
+    if after is not None:
+        timestamp, doc_id = after
+        if not doc_id.strip() or '/' in doc_id:
+            raise ValueError('screen activity cursor doc id is invalid')
+        query = query.start_after({'timestamp': timestamp, '__name__': collection_ref.document(doc_id)})
+
+    query = query.limit(limit + 1)
+
+    results: List[Dict[str, Any]] = []
+    for doc in query.stream():
+        raw: object = doc.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+        data['id'] = doc.id
+        results.append(data)
+
+    return results[:limit], len(results) > limit
 
 
 def get_screen_activity_summary(

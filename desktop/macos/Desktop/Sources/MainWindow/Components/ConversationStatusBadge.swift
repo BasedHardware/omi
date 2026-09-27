@@ -38,9 +38,9 @@ struct ConversationStatusBadge: View {
     case .untitledRecoverable:
       Pill(
         icon: "wand.and.stars",
-        text: "Needs reprocess",
+        text: ConversationProcessingProgress.untitledRecoverableBadgeText,
         color: Ink.accent,
-        help: "The transcript was captured but no title was generated. Try Reprocess."
+        help: ConversationProcessingProgress.untitledRecoverableBadgeHelp
       )
     case .titled, .untitledEmpty:
       // Titled state — no badge needed. Empty-state untitled also stays

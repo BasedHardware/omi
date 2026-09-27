@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-unresolved-lookup-persisted-as-denial",
+  "violated_contract": "A gate that cannot resolve whether an entitlement holds must not collapse 'could not resolve' into 'denied' and then write that denial as a durable record nothing routinely re-evaluates. routers/sync.py wrote is_locked=True onto a synced conversation whenever resolve_transcription_allowance() failed closed, whether the plan's minutes were genuinely exhausted or a single Firestore read inside the resolver timed out; only three subscription-transition handlers ever call unlock_all_conversations, so a paying subscriber whose plan never changes stayed 402'd on that conversation on every future read (app, folders, search, MCP, developer API) forever.",
+  "canonical_prevention": "At the point a fail-closed answer is about to be written durably rather than consulted live, read the resolver's specific reason and persist the denial only for reasons that mean genuine exhaustion (plan_allowance_exhausted, subscription_inactive, ...); reasons meaning the lookup itself could not be trusted (allowance_unavailable, usage_invalid) resolve to not-denied instead, matching the fail-open policy the codebase already applies to the sibling gate that IS re-evaluated on every call (resolve_conversation_processing_allowance, #12663). Pin the transient-reason set with a regression test so it cannot silently absorb a real-exhaustion reason or drop a transient one.",
+  "canonical_prevention_artifact": [
+    "backend/utils/subscription.py",
+    "backend/tests/unit/test_transcription_allowance.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/sync.py",
+    "backend/utils/subscription.py"
+  ],
+  "status": "open"
+}

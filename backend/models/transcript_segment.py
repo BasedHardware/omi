@@ -20,6 +20,10 @@ SENTENCE_FINDALL_RE = re.compile(
     r'[^' + re.escape(''.join(SENTENCE_ENDERS)) + r']+(?:' + SENTENCE_ENDERS_CLASS + r'\s*|\s*$)'
 )
 
+# Maximum gap between the end of one segment and the start of the next for the two to still be
+# treated as one continuing utterance. Mirrors the window _should_merge_same_speaker uses.
+CROSS_SPEAKER_REPAIR_MAX_GAP_SECONDS = 3
+
 
 def legacy_conversation_segment_id(conversation_id: str, index: int) -> str:
     """Stable IDs for legacy stored transcripts, shared by reads and manual writes."""
@@ -75,13 +79,33 @@ class TranscriptSegment(BaseModel):
     # the generated OpenAPI/Dart/Swift client schema while validation and
     # model_dump (Firestore persistence, and the pusher transcript frames that
     # document them) stay intact.
+    # Cleared atomically on the first manual review; never authorizes teaching.
+    speaker_match_source: SkipJsonSchema[Optional[str]] = None
     speaker_id_scope: SkipJsonSchema[Optional[str]] = None
     speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
+    # Only present for v2 text whose provider position could not be proven.
+    # Absence keeps every v1 serialized segment byte-identical.
+    audio_alignment: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
+    # V2 accepted-send run start in capture samples. Stops live text merging
+    # from turning two valid windows across a VAD skip into one false window.
+    audio_capture_run: SkipJsonSchema[Optional[int]] = Field(default=None, exclude=True)
     # In-memory only: True when neither speaker nor speaker_id was in the
     # construction payload, so speaker_id is the SPEAKER_00 default rather
     # than persisted diarization. Not dumped; a stored synthesized 0 still
     # looks real after a round-trip.
     _speaker_id_synthesized: bool = PrivateAttr(default=False)
+
+    def model_dump(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        # The ordinary model schema and every v1 dump stay unchanged. Only a
+        # v2 unplaced segment carries this internal marker into persistence
+        # and WebSocket payloads; Pydantic's model serializer would erase the
+        # public TranscriptSegment OpenAPI shape entirely.
+        data = super().model_dump(*args, **kwargs)
+        if self.audio_alignment is not None:
+            data['audio_alignment'] = self.audio_alignment
+        if self.audio_capture_run is not None:
+            data['audio_capture_run'] = self.audio_capture_run
+        return data
 
     def __init__(self, **data: Any):
         if 'speaker_identity_status' not in data and data.get('is_user') is True:
@@ -102,6 +126,13 @@ class TranscriptSegment(BaseModel):
                 self.speaker_id = 0
         else:
             self.speaker_id = 0
+
+    def assign_resolved_speaker(self, speaker_id: int, scope: str) -> None:
+        """Adopt a conversation-wide speaker id; it is real diarization, not the SPEAKER_00 default."""
+        self.speaker_id = speaker_id
+        self.speaker = f'SPEAKER_{speaker_id}'
+        self.speaker_id_scope = scope
+        self._speaker_id_synthesized = False
 
     def get_timestamp_string(self) -> str:
         start_duration = timedelta(seconds=int(self.start))
@@ -200,6 +231,15 @@ class TranscriptSegment(BaseModel):
                 return False
             return len(first_sentence) < len(last_incomplete)
 
+        def _is_chronological_continuation(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
+            # Cross-speaker sentence repair rewrites timestamps and can delete a segment, so it
+            # must only run when b really is a's successor. Segments arrive out of order across
+            # batches (a late arrival from an earlier batch is appended after a newer tail), and
+            # without this guard such a pair is "repaired" into a segment whose end precedes its
+            # start, or the older segment is dropped and its words reattributed to the newer
+            # speaker. Same-speaker merging already uses the same 3 second continuity window.
+            return b.start >= a.start and b.end >= a.end and (b.start - a.end) < CROSS_SPEAKER_REPAIR_MAX_GAP_SECONDS
+
         def _should_merge_same_speaker(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
             return (
                 (a.speaker == b.speaker or (a.is_user and b.is_user))
@@ -239,10 +279,24 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if b.stt_provider != a.stt_provider:
                 return a, b
+            if b.speaker_match_source != a.speaker_match_source:
+                return a, b
             if b.speaker_id_scope != a.speaker_id_scope:
                 return a, b
+            # An unplaced point must not merge into a covered segment and
+            # silently inherit that segment's audio provenance.
+            if b.audio_alignment != a.audio_alignment:
+                return a, b
+            if b.audio_capture_run != a.audio_capture_run:
+                return a, b
 
-            if a.speaker != b.speaker and not (a.is_user and b.is_user) and a.text and b.text:
+            if (
+                a.speaker != b.speaker
+                and not (a.is_user and b.is_user)
+                and a.text
+                and b.text
+                and _is_chronological_continuation(a, b)
+            ):
                 last_incomplete, prefix = _extract_last_incomplete_sentence(a.text)
                 if last_incomplete:
                     first_sentence, rest = _split_first_sentence(b.text)

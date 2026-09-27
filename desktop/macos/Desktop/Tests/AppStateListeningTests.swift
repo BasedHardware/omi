@@ -5,10 +5,12 @@ import XCTest
 final class AppStateListeningTests: XCTestCase {
   override func setUp() {
     super.setUp()
+    // omi-test-quality: shared-defaults -- integration: AppState reads the pause overlay from standard defaults at init, no seam
     UserDefaults.standard.removeObject(forKey: .transcriptionPaused)
   }
 
   override func tearDown() {
+    // omi-test-quality: shared-defaults -- integration: AppState reads the pause overlay from standard defaults at init, no seam
     UserDefaults.standard.removeObject(forKey: .transcriptionPaused)
     super.tearDown()
   }

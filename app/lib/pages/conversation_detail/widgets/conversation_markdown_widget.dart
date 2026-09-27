@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import 'package:omi/ui/ui.dart';
+
 /// Vertical space above conversation-summary headers (#5622).
 ///
 /// `flutter_markdown` defaults every `h*Padding` to zero, so #–######
@@ -11,7 +13,7 @@ import 'package:markdown/markdown.dart' as md;
 const EdgeInsets conversationMarkdownHeaderPadding = EdgeInsets.only(top: 20, bottom: 8);
 
 MarkdownStyleSheet _conversationMarkdownStyle(BuildContext context) {
-  const style = TextStyle(color: Colors.white, fontSize: 16, height: 1.5);
+  final style = OmiType.callout.copyWith(height: 1.5);
 
   return MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
     a: style,
@@ -23,12 +25,13 @@ MarkdownStyleSheet _conversationMarkdownStyle(BuildContext context) {
     h4Padding: conversationMarkdownHeaderPadding,
     h5Padding: conversationMarkdownHeaderPadding,
     h6Padding: conversationMarkdownHeaderPadding,
-    blockquote: style.copyWith(backgroundColor: Colors.transparent, color: Colors.white),
-    blockquoteDecoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(4)),
+    blockquote: style.copyWith(backgroundColor: Colors.transparent, color: OmiColors.textPrimary),
+    blockquoteDecoration:
+        BoxDecoration(color: OmiColors.surface3, borderRadius: const BorderRadius.all(Radius.circular(4))),
     code: style.copyWith(
       backgroundColor: Colors.transparent,
       decoration: TextDecoration.none,
-      color: Colors.white,
+      color: OmiColors.textPrimary,
       fontWeight: FontWeight.w500,
     ),
     strong: style.copyWith(fontWeight: FontWeight.bold),
@@ -524,8 +527,8 @@ class _SearchHighlightBuilder extends MarkdownElementBuilder {
       text: TextSpan(
         text: element.textContent,
         style: (preferredStyle ?? const TextStyle()).copyWith(
-          backgroundColor: isCurrent ? Colors.orange : Colors.deepPurple,
-          color: Colors.white,
+          backgroundColor: isCurrent ? OmiColors.warning : OmiColors.textTertiary,
+          color: OmiColors.textPrimary,
         ),
       ),
     );

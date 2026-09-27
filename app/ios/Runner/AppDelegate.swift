@@ -85,6 +85,24 @@ final class QuickActionsIconPatcher: NSObject {
   private static let unusedForegroundTaskRefreshIdentifier = "com.pravera.flutter_foreground_task.refresh"
   private var methodChannel: FlutterMethodChannel?
   private var capturePolicyChannel: FlutterMethodChannel?
+  private var syncTransferChannel: FlutterMethodChannel?
+  private var syncTransferBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+  private lazy var syncTransferLease = SyncTransferBackgroundLease(
+      begin: { [weak self] expirationHandler in
+          guard let self else { return false }
+          self.syncTransferBackgroundTask = UIApplication.shared.beginBackgroundTask(
+              withName: "omi-live-capture-wal-drain",
+              expirationHandler: expirationHandler
+          )
+          return self.syncTransferBackgroundTask != .invalid
+      },
+      end: { [weak self] in
+          self?.endNativeSyncTransferBackgroundTask()
+      },
+      notifyExpired: { [weak self] reason in
+          self?.syncTransferChannel?.invokeMethod("expired", arguments: ["reason": reason])
+      }
+  )
   private var appleRemindersChannel: FlutterMethodChannel?
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
@@ -120,6 +138,22 @@ final class QuickActionsIconPatcher: NSObject {
       return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
     GeneratedPluginRegistrant.register(with: self)
+    // Read-only admission evidence for the separately signed capture lane.
+    // Missing flags stay nil so Dart fails closed before app-owned networking.
+    FlutterMethodChannel(name: "omi/physical_qualification", binaryMessenger: controller.binaryMessenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "isolation" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        let info = Bundle.main.infoDictionary ?? [:]
+        result([
+          "bundle_id": Bundle.main.bundleIdentifier ?? "",
+          "firebase_messaging_auto_init": info["FirebaseMessagingAutoInitEnabled"] ?? NSNull(),
+          "firebase_crashlytics_collection": info["FirebaseCrashlyticsCollectionEnabled"] ?? NSNull(),
+          "firebase_data_collection": info["FirebaseDataCollectionDefaultEnabled"] ?? NSNull()
+        ])
+      }
     QuickActionsIconPatcher.shared.startObserving()
       
       
@@ -217,6 +251,30 @@ final class QuickActionsIconPatcher: NSObject {
                   message: "unmute requires the matching durable capture policy",
                   details: nil
               ))
+          }
+      }
+
+      // A live-capture WAL drain gets only iOS's bounded background execution
+      // window. Dart limits background work to bounded phone-local drain passes
+      // and releases this lease when the pass finishes.
+      syncTransferChannel = FlutterMethodChannel(
+          name: "com.friend.ios/sync_transfer",
+          binaryMessenger: controller.binaryMessenger
+      )
+      syncTransferChannel?.setMethodCallHandler { [weak self] call, result in
+          guard let self else {
+              result(nil)
+              return
+          }
+          switch call.method {
+          case "start":
+              self.syncTransferLease.start()
+              result(nil)
+          case "stop":
+              self.syncTransferLease.stop()
+              result(nil)
+          default:
+              result(FlutterMethodNotImplemented)
           }
       }
 
@@ -336,6 +394,13 @@ final class QuickActionsIconPatcher: NSObject {
       )
     }
     return launched
+  }
+
+  private func endNativeSyncTransferBackgroundTask() {
+    guard syncTransferBackgroundTask != .invalid else { return }
+    let task = syncTransferBackgroundTask
+    syncTransferBackgroundTask = .invalid
+    UIApplication.shared.endBackgroundTask(task)
   }
 
   /// Swaps the engine-less storyboard controller for a plain notice before the
