@@ -168,10 +168,21 @@ export function setConversationVisibility(
   });
 }
 
-export function conversationShareUrl(id: string): string {
-  const uuidHex = Array.from({length: 32}, () =>
-    Math.floor(Math.random() * 16).toString(16),
-  ).join('');
+export async function conversationShareUrl(
+  backend: Pick<OmiBackend, 'createWriteId'>,
+  id: string,
+): Promise<string> {
+  // The sid is a random per-share tag (classic uses Random.secure()), never
+  // derived from the sender or content. createWriteId is the bridge CSPRNG:
+  // SecRandomCopyBytes (Apple), SecureRandom (Android), WebCrypto (web).
+  if (backend.createWriteId === undefined) {
+    throw new Error('Share id entropy is unavailable');
+  }
+  const writeId = await backend.createWriteId();
+  const uuidHex = writeId.replace(/[^0-9a-f]/g, '').slice(0, 32);
+  if (uuidHex.length !== 32) {
+    throw new Error('Share id entropy is unavailable');
+  }
   return `https://h.omi.me/conversations/${encodedId(id)}?s=mac&sid=${uuidHex}`;
 }
 

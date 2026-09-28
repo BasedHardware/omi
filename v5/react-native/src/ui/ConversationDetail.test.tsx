@@ -28,7 +28,7 @@ jest.mock('../omiNative', () => ({
 }));
 jest.mock('../legacyOmiWrites', () => ({
   conversationShareUrl: jest.fn(
-    () => 'https://h.omi.me/conversations/id?s=mac&sid=abcd',
+    async () => 'https://h.omi.me/conversations/id?s=mac&sid=abcd',
   ),
   deleteConversation: jest.fn(async () => ({ok: true, value: {status: 'Ok'}})),
   listFolders: jest.fn(async () => ({
