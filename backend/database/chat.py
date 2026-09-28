@@ -29,6 +29,7 @@ from database.read_boundary import parse_snapshot_or_none
 logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # Firestore hard limit
+FILES_BATCH_LIMIT = 499  # Safe Firestore batch limit leaving headroom under 500
 DELETE_MESSAGES_BATCH_LIMIT = 200  # Leaves room for one session-counter write per deleted message.
 DELETE_MESSAGES_CONFLICT_RETRIES = 3
 CHAT_HISTORY_BASE_VISIBLE_MESSAGES = 10
@@ -679,14 +680,24 @@ def clear_chat(
 
 
 def add_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
+    if not files_data:
+        return
+
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
+    count = 0
 
     for file_data in files_data:
         file_ref = user_ref.collection('files').document(file_data['id'])
         batch.set(file_ref, file_data)
+        count += 1
+        if count >= FILES_BATCH_LIMIT:
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
-    batch.commit()
+    if count > 0:
+        batch.commit()
 
 
 def get_chat_files(uid: str, files_id: Optional[List[str]] = None) -> List[Dict[str, Any]]:
@@ -751,14 +762,24 @@ def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: i
 
 
 def delete_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
+    if not files_data:
+        return
+
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
+    count = 0
 
     for file_data in files_data:
         file_ref = user_ref.collection('files').document(file_data["id"])
         batch.delete(file_ref)
+        count += 1
+        if count >= FILES_BATCH_LIMIT:
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
-    batch.commit()
+    if count > 0:
+        batch.commit()
 
 
 def add_chat_session(uid: str, chat_session_data: Dict[str, Any]) -> Dict[str, Any]:
