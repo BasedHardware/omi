@@ -59,30 +59,42 @@ def test_secret_headers_are_resolved_in_memory_and_never_in_diff_output():
     assert "never-print-me" not in str(fields)
 
 
-def test_manifest_declares_both_projects_and_paused_agent_vm_job():
+def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retired_agent_vm():
     manifest = reconcile.load_manifest()
     assert manifest["environments"]["dev"]["project"] == "based-hardware-dev"
     assert manifest["environments"]["prod"]["project"] == "based-hardware"
-    assert {job["name"] for job in manifest["environments"]["dev"]["jobs"]} == {
-        "agent-vm-reconciler-5m",
+    dev_jobs = {job["name"]: job for job in manifest["environments"]["dev"]["jobs"]}
+    prod_jobs = {job["name"]: job for job in manifest["environments"]["prod"]["jobs"]}
+    assert set(dev_jobs) == {
         "daily-memory-sweep-hourly",
         "day3-reengagement-email-daily",
+        "frame-request-retention-hourly",
         "knowledge-ledger-drain-hourly",
         "memory-maintenance-hourly",
         "sync-backfill-uid-sequencer",
     }
-    assert {job["name"] for job in manifest["environments"]["prod"]["jobs"]} == {
+    assert set(prod_jobs) == {
         "day3-reengagement-email-daily",
         "finops-unit-cost-daily",
+        "frame-request-retention-hourly",
         "notifications-job-scheduler-trigger",
         "omi-admin-stats-precompute",
         "sentry-feedback-poll",
         "sync-backfill-uid-sequencer",
     }
-    agent_vm = next(
-        item for item in manifest["environments"]["dev"]["jobs"] if item["name"] == "agent-vm-reconciler-5m"
-    )
-    assert agent_vm["state"] == "PAUSED"
+    assert "agent-vm-reconciler-5m" not in dev_jobs
+    for env_jobs, project in ((dev_jobs, "based-hardware-dev"), (prod_jobs, "based-hardware")):
+        job = env_jobs["frame-request-retention-hourly"]
+        assert job["schedule"] == "0 * * * *"
+        assert job["time_zone"] == "Etc/UTC"
+        assert job["state"] == "ENABLED"
+        assert job["target"]["uri"] == (
+            f"https://run.googleapis.com/v2/projects/{project}/locations/us-central1/"
+            "jobs/frame-request-retention-job:run"
+        )
+        assert job["target"]["oauth"]["service_account"] == (
+            f"frame-retention-scheduler@{project}.iam.gserviceaccount.com"
+        )
 
 
 def test_project_is_pinned_and_apply_only_updates_declared_jobs():
