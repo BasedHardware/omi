@@ -16,6 +16,14 @@ import type {OmiTheme} from './tokens';
 
 type PressState = PressableStateCallbackType & {hovered?: boolean};
 
+/** Grows a visually smaller control's touch area to the density's hit target. */
+function hitSlopFor(theme: OmiTheme, visual: number) {
+  const extra = Math.max(0, (theme.size.hitTarget - visual) / 2);
+  return extra > 0
+    ? {top: extra, bottom: extra, left: extra, right: extra}
+    : undefined;
+}
+
 export type OmiButtonVariant =
   | 'primary'
   | 'secondary'
@@ -156,6 +164,7 @@ export function OmiIconButton({
       {...({tooltip: label, title: label} as object)}
       disabled={disabled}
       onPress={onPress}
+      hitSlop={hitSlopFor(theme, box)}
       style={state => [
         styles.base,
         {width: box, height: box},
@@ -190,12 +199,14 @@ export function OmiChip({
   onPress,
   icon,
   count,
+  accessibilityLabel,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
   icon?: MaterialIconName;
   count?: number;
+  accessibilityLabel?: string;
 }) {
   const theme = useOmiTheme();
   const styles = useOmiStyles(createChipStyles);
@@ -203,9 +214,10 @@ export function OmiChip({
   return (
     <FocusPressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{selected}}
       onPress={onPress}
+      hitSlop={hitSlopFor(theme, theme.size.controlCompact)}
       style={state => [
         styles.base,
         selected

@@ -12,6 +12,7 @@ import {RecordingTranscript} from './RecordingTranscript';
 import {ChatConversationHistory} from './ChatConversationHistory';
 import {MAIN_CHAT_CONVERSATION_ID} from '../chatConversationHistory';
 import {useDesktopTheme} from '../desktop/DesktopTheme';
+import {useOmiTheme} from '../design/OmiTheme';
 import {styles} from './styles';
 import {FocusPressable} from './Pressable';
 import {useLegacyConversationDetail} from '../useLegacyConversationDetail';
@@ -75,6 +76,7 @@ export function ConversationDetail({
   onDeleted?: () => void;
 }) {
   const {tokens: desktopTokens} = useDesktopTheme();
+  const omi = useOmiTheme();
   if (apiContract === 'omi') {
     return (
       <LegacyConversationBody
@@ -86,7 +88,12 @@ export function ConversationDetail({
       />
     );
   }
-  const ink = desktop ? {color: desktopTokens.color.ink} : undefined;
+  // Mobile light reads the Omi theme ink; dark keeps the kit's white text.
+  const ink = desktop
+    ? {color: desktopTokens.color.ink}
+    : omi.scheme === 'light'
+    ? {color: omi.color.ink}
+    : undefined;
   return (
     <>
       <Text style={[styles.conversationDetailTitle, ink]}>
@@ -172,7 +179,13 @@ function LegacyConversationBody({
   const [folders, setFolders] = React.useState<LegacyFolder[]>([]);
   const [showFolders, setShowFolders] = React.useState(false);
   const writePending = useRef(false);
-  const ink = desktop ? {color: desktopTokens.color.ink} : undefined;
+  const omi = useOmiTheme();
+  // Mobile light reads the Omi theme ink; dark keeps the kit's white text.
+  const ink = desktop
+    ? {color: desktopTokens.color.ink}
+    : omi.scheme === 'light'
+    ? {color: omi.color.ink}
+    : undefined;
   React.useEffect(() => {
     setTitle(conversation.title);
   }, [conversation.id, conversation.title]);
@@ -221,7 +234,13 @@ function LegacyConversationBody({
     return (
       <View>
         <ActivityIndicator
-          color={desktop ? desktopTokens.color.inkMuted : '#aaaaaa'}
+          color={
+            desktop
+              ? desktopTokens.color.inkMuted
+              : omi.scheme === 'light'
+              ? omi.color.inkSecondary
+              : '#aaaaaa'
+          }
         />
         <Text style={[styles.conversationDetailSummary, ink]}>
           Loading conversation…
@@ -445,6 +464,7 @@ function WriteAction({
   disabled?: boolean;
   onPress: () => void;
 }) {
+  const omi = useOmiTheme();
   return (
     <FocusPressable
       accessibilityRole="button"
@@ -452,7 +472,13 @@ function WriteAction({
       disabled={disabled}
       onPress={onPress}
       style={styles.conversationTranscriptAction}>
-      <Text style={styles.conversationDetailField}>{label}</Text>
+      <Text
+        style={[
+          styles.conversationDetailField,
+          omi.scheme === 'light' && {color: omi.color.ink},
+        ]}>
+        {label}
+      </Text>
     </FocusPressable>
   );
 }

@@ -1,6 +1,6 @@
 import React, {memo, useEffect, useRef} from 'react';
 import {Animated, Easing, StyleSheet, Text, View} from 'react-native';
-import {useOmiStyles} from '../design/OmiTheme';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
 import type {OmiTheme} from '../design/tokens';
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {OmiAvatar} from './OmiAvatar';
@@ -41,6 +41,10 @@ const ChatMessageRow = memo(function ChatMessageRow({
   const desktopStyles = useDesktopStyleSheets(createDesktopStyles);
   const transcriptStyles = useDesktopStyleSheets(createTranscriptStyles);
   const mobileBubbles = useOmiStyles(createMobileBubbleStyles);
+  const omiTheme = useOmiTheme();
+  // The mark keeps its own white on dark; light mobile reads theme ink.
+  const mobileInk =
+    omiTheme.scheme === 'light' ? omiTheme.color.ink : undefined;
   const opacity = useRef(new Animated.Value(animate ? 0 : 1)).current;
   const translateY = useRef(
     new Animated.Value(animate && !reduceMotion ? 10 : 0),
@@ -92,7 +96,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
         <OmiAvatar
           tone={desktop || compact ? 'ink' : 'identity'}
           size={compact && !desktop ? 28 : 40}
-          inkColor={desktop ? token.color.ink : undefined}
+          inkColor={desktop ? token.color.ink : mobileInk}
           animate={streaming}
           reduceMotion={reduceMotion}
         />
@@ -124,7 +128,10 @@ const ChatMessageRow = memo(function ChatMessageRow({
           {message.generationOutcome === 'failed' ? (
             <Text
               selectable
-              style={[styles.failedLabel, desktop && desktopStyles.text]}>
+              style={[
+                styles.failedLabel,
+                desktop ? desktopStyles.text : mobileBubbles.text,
+              ]}>
               {message.generationRetryable === true
                 ? 'Response failed. Try again.'
                 : 'Response failed.'}
@@ -132,7 +139,10 @@ const ChatMessageRow = memo(function ChatMessageRow({
           ) : human ? (
             <Text
               selectable
-              style={[styles.message, desktop && desktopStyles.text]}>
+              style={[
+                styles.message,
+                desktop ? desktopStyles.text : mobileBubbles.text,
+              ]}>
               {message.text}
             </Text>
           ) : waiting ? (
@@ -142,7 +152,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
                   key={width}
                   style={[
                     transcriptStyles.line,
-                    desktop && transcriptStyles.desktopLine,
+                    desktop ? transcriptStyles.desktopLine : mobileBubbles.line,
                     {width: `${width}%`},
                   ]}
                 />
@@ -151,21 +161,26 @@ const ChatMessageRow = memo(function ChatMessageRow({
           ) : (
             <ChatMessageContent
               text={message.text}
-              style={[styles.message, desktop && desktopStyles.text]}
+              style={[
+                styles.message,
+                desktop ? desktopStyles.text : mobileBubbles.text,
+              ]}
               streaming={streaming}
               reduceMotion={reduceMotion}
             />
           )}
         </View>
         {message.generationOutcome === 'cancelled' && (
-          <Text style={styles.cancelledLabel}>Response stopped</Text>
+          <Text style={[styles.cancelledLabel, !desktop && mobileBubbles.time]}>
+            Response stopped
+          </Text>
         )}
         {message.generationOutcome === 'failed' &&
           message.generationRetryable === true &&
           onRetry !== undefined && (
             <FocusPressable
               accessibilityRole="button"
-              accessibilityLabel="Try again"
+              accessibilityLabel="Try Again"
               onPress={onRetry}
               style={[styles.retryButton, desktop && styles.macRetryButton]}>
               <Text
@@ -173,7 +188,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
                   styles.retryButtonText,
                   desktop && styles.macRetryButtonText,
                 ]}>
-                Try again
+                Try Again
               </Text>
             </FocusPressable>
           )}
@@ -181,7 +196,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
           style={[
             styles.chatTimestamp,
             human && styles.chatTimestampHuman,
-            desktop && desktopStyles.time,
+            desktop ? desktopStyles.time : mobileBubbles.time,
           ]}>
           {formatChatTime(message.createdAt)}
         </Text>
@@ -201,6 +216,9 @@ function ChatThinking({
   const desktopStyles = useDesktopStyleSheets(createDesktopStyles);
   const transcriptStyles = useDesktopStyleSheets(createTranscriptStyles);
   const mobileBubbles = useOmiStyles(createMobileBubbleStyles);
+  const omiTheme = useOmiTheme();
+  const mobileInk =
+    omiTheme.scheme === 'light' ? omiTheme.color.ink : undefined;
   const opacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (reduceMotion) {
@@ -233,7 +251,7 @@ function ChatThinking({
       style={[styles.chatMessageRow, styles.chatMessageRowAi]}>
       <OmiAvatar
         tone="ink"
-        inkColor={desktop ? token.color.ink : undefined}
+        inkColor={desktop ? token.color.ink : mobileInk}
         animate
         reduceMotion={reduceMotion}
       />
@@ -251,7 +269,7 @@ function ChatThinking({
             key={width}
             style={[
               transcriptStyles.line,
-              desktop && transcriptStyles.desktopLine,
+              desktop ? transcriptStyles.desktopLine : mobileBubbles.line,
               {width: `${width}%`},
             ]}
           />
@@ -296,6 +314,10 @@ const createMobileBubbleStyles = (t: OmiTheme) => ({
     paddingHorizontal: 0,
     paddingVertical: t.space.xs,
   },
+  // Mobile text reads the Omi theme so both appearances stay legible.
+  text: {color: t.color.ink},
+  time: {color: t.color.inkTertiary},
+  line: {backgroundColor: t.color.fillSelected},
 });
 
 const createTranscriptStyles = (token: DesktopTokens) =>

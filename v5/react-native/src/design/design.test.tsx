@@ -235,3 +235,19 @@ describe('Omi primitives', () => {
     ).toHaveLength(1);
   });
 });
+
+test('small mobile controls keep a 44-pt touch target', () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <OmiThemeProvider scheme="dark" density="mobile">
+        <OmiChip label="Installed" selected={false} onPress={() => {}} />
+      </OmiThemeProvider>,
+    );
+  });
+  const chip = renderer.root.findByProps({accessibilityRole: 'button'});
+  const theme = omiTheme('dark', 'mobile');
+  expect(theme.size.controlCompact + chip.props.hitSlop.top * 2).toBe(
+    theme.size.hitTarget,
+  );
+});

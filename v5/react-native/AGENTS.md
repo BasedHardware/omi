@@ -91,8 +91,9 @@ index.js → App.tsx → src/app/AppOrchestrator.tsx
   captured store with old Omi history. Native capture dedupe lives in
   `apple/OmiRewindCapture.mm` (600 s same-app+window repeat window).
 - **Theme**: `DesktopTheme.tsx` provides glass tokens (`src/desktop/tokens.ts`)
-  and remaps the shared kit palette for light. `src/ui/tokens.ts` stays
-  static-dark by design — mobile renders without the provider.
+  and remaps the shared kit palette for light; it also mounts the Omi design
+  language (`src/design/`, rules in `../docs/design-language.md`). Mobile
+  mounts it through `src/mobile/MobileTheme.tsx` (System/Light/Dark).
 - **Preferences**: `src/desktopSettingsClient.ts` `desktopPreferenceKeys`
   and the `OmiDesktopDefaultsKey` whitelist in
   `macos/RnRuntime-macOS/OmiDesktopCommandsModule.mm` must stay in sync —
