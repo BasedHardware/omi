@@ -50,6 +50,7 @@ class HomeDeepLink {
   /// The home tab the link belongs to, so the parent (the tab) shows before the child (the page
   /// pushed over it). Null keeps the current tab.
   int? get tabIndex => switch (alias) {
+        'conversations' => 1,
         'action-items' => 2,
         'apps' => 3,
         'memories' || 'facts' => 0,

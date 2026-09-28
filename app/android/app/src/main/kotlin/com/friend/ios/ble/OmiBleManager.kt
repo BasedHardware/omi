@@ -36,7 +36,7 @@ class OmiBleManager private constructor(private val application: Application) {
 
     companion object {
         private const val TAG = "OmiBle"
-        private const val RSSI_HISTORY_LIMIT = 10
+        private const val RSSI_HISTORY_LIMIT = 120
         private const val BOND_TIMEOUT_MS = 15000L // 15s — bond request timeout
         private const val PREFS_BATTERY = "battery_history"
         private val BATTERY_LEVEL_CHAR_UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
@@ -116,7 +116,7 @@ class OmiBleManager private constructor(private val application: Application) {
     private var isProcessingCommand = false
 
     private var rssiKeepAliveRunnable: Runnable? = null
-    private val rssiKeepAliveInterval = 3000L // ms
+    private val rssiKeepAliveInterval = 10_000L // ms; only one low-cost local radio read per interval.
     @Volatile
     var isRssiStreamingEnabled = false
 
@@ -128,6 +128,7 @@ class OmiBleManager private constructor(private val application: Application) {
     /// by the foreground service to classify RSSI trajectory at disconnect time.
     /// Synchronized on the deque itself for reader/writer safety.
     val rssiHistory = java.util.concurrent.ConcurrentHashMap<String, java.util.ArrayDeque<Pair<Long, Int>>>()
+    val chargingState = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
     private var bondCompletionCallback: ((Boolean) -> Unit)? = null
     private var bondTimeoutRunnable: Runnable? = null
@@ -468,19 +469,38 @@ class OmiBleManager private constructor(private val application: Application) {
 
     fun startRssiKeepAlive(address: String) {
         stopRssiKeepAlive()
+        val normalizedAddress = address.uppercase()
         val runnable = object : Runnable {
             override fun run() {
-                connectedGatts[address]?.readRemoteRssi()
-                mainHandler.postDelayed(this, rssiKeepAliveInterval)
+                val gatt = connectedGatts[normalizedAddress]
+                synchronized(this@OmiBleManager) {
+                    if (rssiKeepAliveRunnable !== this || gatt == null || connectedGatts[normalizedAddress] !== gatt) {
+                        if (rssiKeepAliveRunnable === this) rssiKeepAliveRunnable = null
+                        return
+                    }
+                    gatt.readRemoteRssi()
+                    mainHandler.postDelayed(this, rssiKeepAliveInterval)
+                }
             }
         }
-        rssiKeepAliveRunnable = runnable
-        mainHandler.postDelayed(runnable, rssiKeepAliveInterval)
+        synchronized(this) {
+            rssiKeepAliveRunnable = runnable
+            connectedGatts[normalizedAddress]?.let { gatt ->
+                gatt.readRemoteRssi()
+                mainHandler.postDelayed(runnable, rssiKeepAliveInterval)
+            }
+        }
+    }
+
+    fun sampleRssi(address: String) {
+        connectedGatts[address.uppercase()]?.readRemoteRssi()
     }
 
     fun stopRssiKeepAlive() {
-        rssiKeepAliveRunnable?.let { mainHandler.removeCallbacks(it) }
-        rssiKeepAliveRunnable = null
+        synchronized(this) {
+            rssiKeepAliveRunnable?.let { mainHandler.removeCallbacks(it) }
+            rssiKeepAliveRunnable = null
+        }
     }
 
     // ── State & utility ──
@@ -581,7 +601,7 @@ class OmiBleManager private constructor(private val application: Application) {
     }
 
     private fun persistBatteryReading(address: String, level: Int) {
-        batteryHistoryRecorder.record(batteryHistoryKey(address), level, System.currentTimeMillis())
+        batteryHistoryRecorder.record(batteryHistoryKey(address), level, System.currentTimeMillis(), chargingState[address.uppercase()])
     }
 
     fun getBatteryHistory(address: String): List<BleBatteryPoint> {

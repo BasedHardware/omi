@@ -60,7 +60,7 @@ class _PhoneSync {
 
   Future<void> finalizeCurrentSession() async {}
 
-  Future<void> stampConversationId(int start, String id) async {}
+  Future<void> stampConversationId(int start, String id, {String? recordingSessionId}) async {}
 }
 
 class _Wal implements IWalService {

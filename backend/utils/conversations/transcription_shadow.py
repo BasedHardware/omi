@@ -323,7 +323,9 @@ def _make_pass(
             segments, vectors, manual_speakers={}, voiceprints=load_voiceprints_for_resolution(uid)
         )
         if resolution is not None:
-            apply_speaker_resolution(conversation, resolution.speaker_ids, resolution.voice_identities)
+            apply_speaker_resolution(
+                conversation, resolution.speaker_ids, resolution.voice_identities, resolution.voice_identity_statuses
+            )
             conversation.speaker_resolution = ConversationSpeakers(
                 status='resolved' if resolution.coverage >= 0.9 else 'unavailable',
                 participant_speaker_ids=resolution.significant_speaker_ids if resolution.coverage >= 0.9 else [],

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -61,6 +62,69 @@ void main() {
       expect(sync.testFrames[0].payload, [0xAA, 0xBB]);
       expect(sync.testFrameSynced.length, 1);
       expect(sync.testFrameSynced[0], false);
+    });
+
+    test('capture root and ordinal survive WAL serialization', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])), captureRoot: 'root-a');
+      sync.onFrameCaptured(WalFrame(payload: [2], syncKey: FrameSyncKey([2])), captureRoot: 'root-a');
+      await sync.finalizeCurrentSession();
+
+      final stored = Wal.fromJson(sync.testWals.single.toJson());
+      expect(stored.captureRoot, 'root-a');
+      expect(stored.sourceFrameStart, 0);
+      expect(stored.sourceClockEpoch, 0);
+      expect(
+        Wal(timerStart: 0, codec: BleAudioCodec.opus, seconds: 0).toJson().containsKey('capture_root'),
+        false,
+      );
+      expect(stored.totalFrames, 2);
+      sync.onFrameCaptured(WalFrame(payload: [3], syncKey: FrameSyncKey([3])), captureRoot: 'root-b');
+      expect(sync.testFrames.single.sourceFramePosition, 0);
+      expect(sync.testFrames.single.sourceClockEpoch, 0);
+    });
+
+    test('socket and WAL receive the same allocated unit after reload', () async {
+      const root = '12345678-1234-4234-8234-123456789abc';
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final first = sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])), captureRoot: root);
+      final second = sync.onFrameCaptured(WalFrame(payload: [2], syncKey: FrameSyncKey([2])), captureRoot: root);
+      expect((first.sourceFramePosition, second.sourceFramePosition), (0, 1));
+      await sync.finalizeCurrentSession();
+      final persisted = Wal.fromJson(sync.testWals.single.toJson());
+      expect(persisted.sourceFrameStart, first.sourceFramePosition);
+
+      final restored = LocalWalSyncImpl(listener)..testWals = [persisted];
+      final next = restored.onFrameCaptured(WalFrame(payload: [3], syncKey: FrameSyncKey([3])), captureRoot: root);
+      expect(next.sourceFramePosition, 2);
+      expect(next.sourceClockEpoch, persisted.sourceClockEpoch);
+      await restored.onAudioCodecChanged(BleAudioCodec.pcm16);
+      final changed = restored.onFrameCaptured(WalFrame(payload: [4], syncKey: FrameSyncKey([4])), captureRoot: root);
+      expect(changed.sourceClockEpoch, greaterThan(next.sourceClockEpoch!));
+      expect(changed.sourceFramePosition, 0);
+    });
+
+    test('upload header is versioned and bounded only in dark-write builds', () {
+      const root = '12345678-1234-4234-8234-123456789abc';
+      final wal = Wal(
+        timerStart: 1710000000,
+        codec: BleAudioCodec.pcm16,
+        seconds: 1,
+        totalFrames: 100,
+        sampleRate: 16000,
+        captureRoot: root,
+        sourceFrameStart: 42,
+        sourceClockEpoch: 3,
+      );
+      final file = File('${Directory.systemTemp.path}/audio_phonemic_pcm16_16000_1_fs160_1710000000.bin');
+      final header = captureEvidenceUploadHeader([wal], [file]);
+      if (const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE')) {
+        final parsed = jsonDecode(header!) as Map<String, dynamic>;
+        expect(parsed['version'], 1);
+        expect((parsed['files'] as List).single['source_frame_start'], 42);
+      } else {
+        expect(header, isNull);
+      }
     });
 
     test('preserves insertion order for multiple frames', () {
@@ -270,6 +334,32 @@ void main() {
       final batch = nextSyncUploadBatch([oldNewest, liveOlder, oldOldest, liveNewest], now);
 
       expect(batch.map((wal) => wal.timerStart), [liveNewest.timerStart, liveOlder.timerStart]);
+    });
+
+    test('does not mix safety WALs from different recording sessions', () {
+      const now = 2000000000;
+      final newest = Wal(
+        timerStart: now - 30,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        recordingSessionId: 'recording-b',
+      );
+      final olderSame = Wal(
+        timerStart: now - 90,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        recordingSessionId: 'recording-b',
+      );
+      final otherRecording = Wal(
+        timerStart: now - 20,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        recordingSessionId: 'recording-a',
+      );
+
+      final batch = nextSyncUploadBatch([otherRecording, newest, olderSame], now);
+
+      expect(batch.map((wal) => wal.recordingSessionId), ['recording-a']);
     });
 
     test('recent ID-less WAL counts as live capture but cannot claim an existing manifest', () {
@@ -496,6 +586,49 @@ void main() {
 
       sync.testWals[0].geolocation!.latitude = 42.0;
       expect(sync.testWals[1].geolocation?.latitude, 40.7128);
+    });
+
+    test('a finalized safety WAL carries the active recording session id', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      sync.setActiveRecordingSessionId('  recording-live  ');
+      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])));
+
+      await sync.finalizeCurrentSession();
+
+      expect(sync.testWals, hasLength(1));
+      expect(sync.testWals.single.recordingSessionId, 'recording-live');
+      final encoded = sync.testWals.single.toJson();
+      expect(encoded['recording_session_id'], 'recording-live');
+      final restored = Wal.fromJson({...encoded, 'codec': 'opus'});
+      expect(restored.recordingSessionId, 'recording-live');
+    });
+
+    test('stampConversationId follows the recording id when timerStart is before the session', () async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      sync.testWals = [
+        Wal(
+          timerStart: now - 200,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          recordingSessionId: 'recording-live',
+        ),
+        Wal(
+          timerStart: now - 180,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          recordingSessionId: 'recording-other',
+        ),
+      ];
+
+      sync.prepareConversationStamp('recording-live');
+      await sync.stampConversationId(now - 100, 'conv-live');
+
+      expect(sync.testWals[0].conversationId, 'conv-live');
+      expect(sync.testWals[1].conversationId, isNull);
     });
 
     test('cleared session location is not inherited by external WALs', () async {

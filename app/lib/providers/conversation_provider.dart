@@ -1457,6 +1457,34 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Replace a sync donor after the detail endpoint returns its bridged survivor.
+  /// Remove the donor from both list projections so the open page and list agree.
+  void replaceBridgedConversation(String donorId, ServerConversation survivor) {
+    conversations.removeWhere((conversation) => conversation.id == donorId);
+    final survivorIndex = conversations.indexWhere((conversation) => conversation.id == survivor.id);
+    if (survivorIndex == -1) {
+      conversations.add(survivor);
+    } else {
+      conversations[survivorIndex] = survivor;
+    }
+    conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+
+    final searchedDonorIndex = searchedConversations.indexWhere((conversation) => conversation.id == donorId);
+    searchedConversations.removeWhere((conversation) => conversation.id == donorId);
+    final searchedSurvivorIndex = searchedConversations.indexWhere((conversation) => conversation.id == survivor.id);
+    if (searchedSurvivorIndex != -1) {
+      searchedConversations[searchedSurvivorIndex] = survivor;
+    } else if (searchedDonorIndex != -1) {
+      searchedConversations.insert(searchedDonorIndex.clamp(0, searchedConversations.length), survivor);
+    }
+    if (hasActiveSearch) {
+      _groupSearchConvosByDateWithoutNotify();
+    } else {
+      _groupConversationsByDateWithoutNotify();
+    }
+    notifyListeners();
+  }
+
   ////////// Delete with Undo (docs/ux-contract.md §4, D5) ///////////////
 
   /// Conversations removed in the UI whose server DELETE has not settled: first held for

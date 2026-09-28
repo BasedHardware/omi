@@ -150,7 +150,8 @@ struct ConversationScreenFrame: Codable, Sendable, Equatable, Identifiable {
 
 /// Everything a conversation currently has to show — at most one banner plus up to six strip
 /// frames, already capped, already ordered, already the only survivors of the server's own
-/// enforcement (contract §7). The client draws exactly this; it does not re-derive any of it.
+/// enforcement (contract §7). The client does not re-derive the server's quality verdict, but it
+/// still intersects these frames with its trusted transcript content window before display.
 struct ConversationScreenFrameSet: Codable, Sendable, Equatable {
   let revision: Int
   let banner: ConversationScreenFrame?
@@ -162,16 +163,19 @@ struct ConversationScreenFrameSet: Codable, Sendable, Equatable {
   /// indistinguishable from never having tried. Optional because a record written before the
   /// server carried this field has none.
   let adjudicatedAt: Date?
+  /// Selection policy + trusted content interval used by the adjudication pass.
+  let selectionFingerprint: String?
 
   enum CodingKeys: String, CodingKey {
     case revision
     case banner
     case strip
     case adjudicatedAt = "adjudicated_at"
+    case selectionFingerprint = "selection_fingerprint"
   }
 
   static let empty = ConversationScreenFrameSet(
-    revision: 0, banner: nil, strip: [], adjudicatedAt: nil)
+    revision: 0, banner: nil, strip: [], adjudicatedAt: nil, selectionFingerprint: nil)
 
   var isEmpty: Bool { banner == nil && strip.isEmpty }
 }

@@ -11441,4 +11441,23 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get appearanceDark => 'ಕತ್ತಲೆ';
+
+  @override
+  String get chatDiscardRecording => 'ತ್ಯಜಿಸಿ';
+
+  @override
+  String get voiceQuestionNoSpeech => 'ಕೇಳಿಸಲಿಲ್ಲ — ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
 }

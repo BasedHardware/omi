@@ -11499,4 +11499,23 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Dunkel';
+
+  @override
+  String get chatDiscardRecording => 'Verwerfen';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Das habe ich nicht verstanden — versuche es erneut';
+
+  @override
+  String get sendToSupport => 'An Support senden';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Prüfe die Diagnosedaten im JSON unten. Sie enthalten Gerätekennung, Verbindungen, Akkuwerte, Firmwarediagnose und Bluetooth-Ereignisse. Audio und Transkripte sind nicht enthalten.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support-Ticketcode';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Diagnosedaten konnten nicht gesendet werden. Bitte erneut versuchen.';
 }

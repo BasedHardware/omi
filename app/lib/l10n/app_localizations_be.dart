@@ -11435,4 +11435,23 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Цёмны';
+
+  @override
+  String get chatDiscardRecording => 'Адхіліць';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Не ўдалося распазнаць — паспрабуйце яшчэ раз';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
 }
