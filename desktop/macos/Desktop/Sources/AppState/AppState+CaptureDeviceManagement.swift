@@ -192,6 +192,9 @@ extension AppState {
       }
       let exhaustedLaunchContext = captureAttempt?.launchContext
       let exhaustedUpdateAttemptID = captureAttempt?.updateAttemptID
+      let exhaustedInputIsBuiltIn = (audioCaptureService?.activeDeviceID).flatMap {
+        CaptureInputPresence.builtIn(deviceID: $0)
+      }
       captureAttempt?.noteErrorTerminal()
       if shouldArm { armedMicrophoneTransitionInFlight = true }
       let teardown = stopTranscription(finalizationReason: .silentMicExhausted)
@@ -201,7 +204,7 @@ extension AppState {
         guard !isTranscribing, AssistantSettings.shared.audioRecordingMode != .off else { return }
         armedMicrophoneRecovery.enter(
           appState: self, launchContext: exhaustedLaunchContext,
-          updateAttemptID: exhaustedUpdateAttemptID)
+          updateAttemptID: exhaustedUpdateAttemptID, inputIsBuiltIn: exhaustedInputIsBuiltIn)
         log("Transcription: automatic capture waiting for a live microphone")
         return
       }

@@ -10,6 +10,11 @@ final class CaptureProbeAudioGate: @unchecked Sendable {
 
   var isOpen: Bool { lock.withLock { open } }
   func setOpen(_ value: Bool) { lock.withLock { open = value } }
+
+  func forward(_ audio: Data, to sink: (Data) -> Void) {
+    guard isOpen else { return }
+    sink(audio)
+  }
 }
 
 /// Owns only a waiting timer and change listeners. AppState owns capture teardown
@@ -27,8 +32,8 @@ final class ArmedMicrophoneRecoveryCoordinator {
   private(set) var episodeID = UUID().uuidString.lowercased()
   private var episodeLaunchContext = "other"
   private var episodeUpdateAttemptID: String?
-  private var lifecycleHourStart = Date()
-  private var lifecycleHourlyCount = 0
+  private var lastInputIsBuiltIn: Bool?
+  private var lifecycleEventPolicy = ArmedLifecycleEventPolicy()
   let outboundAudioGate = CaptureProbeAudioGate()
 
   var isWaitingOrProbing: Bool { policy.state != .idle }
@@ -37,7 +42,10 @@ final class ArmedMicrophoneRecoveryCoordinator {
     CaptureLaunchContext.Kind(rawValue: episodeLaunchContext) ?? .other
   }
 
-  func enter(appState: AppState, launchContext: String? = nil, updateAttemptID: String? = nil) {
+  func enter(
+    appState: AppState, launchContext: String? = nil, updateAttemptID: String? = nil,
+    inputIsBuiltIn: Bool? = nil
+  ) {
     // Enter only after stopTranscription's local tail flush has finished.
     guard
       ArmedCaptureRecoveryPolicy.canEnterWaiting(
@@ -50,6 +58,7 @@ final class ArmedMicrophoneRecoveryCoordinator {
       return
     }
     self.appState = appState
+    lastInputIsBuiltIn = inputIsBuiltIn
     if policy.state == .idle {
       episodeID = UUID().uuidString.lowercased()
       trigger = "initial"
@@ -69,8 +78,23 @@ final class ArmedMicrophoneRecoveryCoordinator {
   }
 
   func signal(_ signal: ArmedCaptureRecoveryPolicy.Signal) {
-    let action = policy.signal(signal, now: Date())
+    guard policy.state == .waiting else { return }
+    if signal == .inputChanged { lastInputIsBuiltIn = nil }
+    let presence = CapturePresence.current()
+    let inputIsBuiltIn =
+      presence.lidClosed == true
+      ? lastInputIsBuiltIn ?? CaptureInputPresence.builtInForNextProbe() : nil
+    let action = policy.signal(signal, now: Date(), presence: presence, inputIsBuiltIn: inputIsBuiltIn)
+    if case .retrySkipped(let reason, _) = action {
+      emitLifecycle(
+        phase: "retry_skipped", trigger: signal.rawValue,
+        duration: CaptureLaunchContext.timeBucket(policy.enteredAt.map { Date().timeIntervalSince($0) }),
+        presenceReason: reason.rawValue, presenceReasonValue: reason)
+      schedule(action)
+      return
+    }
     guard action == .probe else { return }
+    lifecycleEventPolicy.presenceReturned()
     trigger = signal.rawValue
     timer?.cancel()
     timer = nil
@@ -116,7 +140,11 @@ final class ArmedMicrophoneRecoveryCoordinator {
   }
 
   private func schedule(_ action: ArmedCaptureRecoveryPolicy.Action) {
-    guard case .releaseAndWait(let deadline) = action else { return }
+    let deadline: Date
+    switch action {
+    case .releaseAndWait(let until), .retrySkipped(_, let until): deadline = until
+    default: return
+    }
     timer?.cancel()
     timer = Task { @MainActor [weak self] in
       let remaining = max(0, deadline.timeIntervalSinceNow)
@@ -204,20 +232,19 @@ final class ArmedMicrophoneRecoveryCoordinator {
       mElement: kAudioObjectPropertyElementMain)
   }
 
-  private func emitLifecycle(phase: String, trigger: String, duration: String) {
+  private func emitLifecycle(
+    phase: String, trigger: String, duration: String, presenceReason: String? = nil,
+    presenceReasonValue: ArmedCaptureRecoveryPolicy.PresenceReason? = nil
+  ) {
     let now = Date()
-    if now.timeIntervalSince(lifecycleHourStart) >= 3_600 {
-      lifecycleHourStart = now
-      lifecycleHourlyCount = 0
-    }
-    if phase == "entered" || phase == "retry" {
-      guard lifecycleHourlyCount < 24 else { return }
-      lifecycleHourlyCount += 1
-    }
+    guard
+      lifecycleEventPolicy.shouldEmit(
+        phase: phase, presenceReason: presenceReasonValue, now: now)
+    else { return }
     let properties = SilentMicDiagnosticTelemetry.armedProperties(
       attemptID: episodeID, phase: phase, trigger: trigger,
       launchContext: episodeLaunchContext,
-      updateAttemptID: episodeUpdateAttemptID, duration: duration)
+      updateAttemptID: episodeUpdateAttemptID, duration: duration, presenceReason: presenceReason)
     PostHogManager.shared.track(SilentMicDiagnosticTelemetry.armedEventName, properties: properties)
   }
 }
