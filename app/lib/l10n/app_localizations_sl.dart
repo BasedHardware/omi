@@ -933,9 +933,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Dodaj v claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopiraj konfigurацију';
 
   @override
@@ -2484,13 +2481,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Počisti vse vozlišča in povezave';
 
   @override
-  String get addToClaudeDesktopConfig => 'Dodaj v claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Povežite AI asistente s svojimi podatki';
-
-  @override
-  String get useYourMcpApiKey => 'Uporabite svoj MCP API ključ';
 
   @override
   String get realTimeTranscript => 'Prepis v realnem času';
@@ -2503,12 +2494,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'Podrobna diagnostična sporočila';
-
-  @override
-  String get autoCreateSpeakers => 'Samodejno ustvari govorce';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Samodejno ustvari, ko je ime zaznano';
 
   @override
   String get followUpQuestions => 'Nadaljujoča vprašanja';
@@ -9998,7 +9983,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripcija ne prejema zvoka';
 
   @override
-  String get tapPlusToStartRecording => 'Tapnite + za začetek snemanja';
+  String get tapPlusToStartRecording => 'Tapnite gumb za snemanje za začetek snemanja';
 
   @override
   String get chatBlockTask => 'Opravilo';
@@ -10241,7 +10226,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Posneti pogovori se prikažejo tukaj. Za prvi posnetek tapnite + na začetnem zaslonu.';
+      'Posneti pogovori se prikažejo tukaj. Za prvi posnetek tapnite gumb za snemanje na začetnem zaslonu.';
 
   @override
   String get conversationMap => 'Zemljevid pogovorov';
@@ -10720,7 +10705,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get deviceConnecting => 'Povezovanje…';
 
   @override
-  String get recordOptionsTip => 'Namig: pridržite gumb za snemanje, da posnamete telefonski klic.';
+  String get recordOptionsTip => 'Namig: tapnite puščico na gumbu za snemanje, da posnamete telefonski klic.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Posodobitev ni uspela';
@@ -11121,4 +11106,414 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Pomoč in o aplikaciji';
+
+  @override
+  String get speakerTagPromptTitle => 'Pomagajte Omiju prepoznavati glasove';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Hiter pregled glasov iz zadnjih dveh dni';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Ste to vi?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Je to $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Kdo je to?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'To sem jaz';
+
+  @override
+  String get speakerTagPromptNotMe => 'Nisem jaz';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Nekdo nov';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Nekdo, ki ga ne poznam';
+
+  @override
+  String get speakerTagPromptNotSure => 'Nisem prepričan';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Predvajaj posnetek';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current od $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Zapomni si glasove oseb, ki jih poimenuješ';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi shrani kratek vzorec glasu, da jih naslednjič prepozna. To lahko kadar koli spremenite v Nastavitvah.';
+
+  @override
+  String get speakerTagPromptThanks => 'Hvala! Omi bo glasove prepoznaval vedno bolje.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Ime osebe';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Posnetka ni bilo mogoče predvajati';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Shranjevanje ni uspelo. Poskusite znova.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Prosi me za označevanje glasov';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Občasno vas Omi vpraša, kdo je govoril v vaših nedavnih pogovorih';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Ko nekoga poimenujete, Omi shrani kratek vzorec glasu, da ga naslednjič prepozna';
+
+  @override
+  String get leaveBlank => 'Pustite prazno';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Na claude.ai dodajte prirojeni konektor in prilepite URL strežnika. Če Claude zahteva napredni OAuth Client ID, uporabite spodnjo vrednost in pustite skrivnost prazno — nikoli ne uporabljajte svojega MCP API ključa kot OAuth skrivnost.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Dodaj v ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Na Claude Desktop → Settings → Connectors dodajte prirojeni konektor in prilepite URL strežnika. Če Claude zahteva napredni OAuth Client ID, uporabite spodnjo vrednost in pustite skrivnost prazno — nikoli ne uporabljajte svojega MCP API ključa kot OAuth skrivnost.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkripcije niso na voljo, snemanje se nadaljuje v napravi in bo obdelano pozneje';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkripcije v čakanju $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripcije v čakanju $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Klic';
+
+  @override
+  String get captureSourcePhoneMic => 'Mikrofon telefona';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Nadaljuj';
+
+  @override
+  String get finish => 'Končaj';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Obesek je ustavljen · nadaljuje, ko končate';
+
+  @override
+  String get pendantIsListeningTitle => 'Vaš obesek posluša';
+
+  @override
+  String get oneSourceAtATime => 'Omi snema samo iz enega vira hkrati.';
+
+  @override
+  String get recordWithPhoneInstead => 'Raje snemaj s telefonom';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Obesek je ustavljen, dokler ne končate';
+
+  @override
+  String get pendantPausesDuringCall => 'Obesek je med klicem ustavljen';
+
+  @override
+  String get keepUsingPendant => 'Še naprej uporabljaj obesek';
+
+  @override
+  String get recordWith => 'Snemaj z';
+
+  @override
+  String get moreWaysToRecord => 'Več načinov snemanja';
+
+  @override
+  String get openCall => 'Odpri klic';
+
+  @override
+  String get captureRecoveryBanner => 'Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => 'Pred snemanjem s telefonom ustavite Transcribe Later na obesku.';
+
+  @override
+  String get captureNotTranscribing => 'Ni prepisa';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Zvok shranjen, prepis pozneje';
+
+  @override
+  String get captureStillRecording => 'Snemanje se nadaljuje';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon uporablja druga aplikacija';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Klic ali druga aplikacija je prevzela mikrofon, zato Omi trenutno ne sliši. Omi bo sam nadaljeval, ko bo mikrofon prost. Vse, kar je bilo posneto prej, je varno.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Vaša storitev za pretvorbo govora v besedilo ni dosegljiva. Omi hrani zvok v tem telefonu in ga pošlje, ko bo storitev spet na voljo. Nič se ne izgubi.';
+
+  @override
+  String get captureStarting => 'Zaganjanje…';
+
+  @override
+  String get capturePhoneStorageFull => 'Pomnilnik telefona je poln';
+
+  @override
+  String get captureStorageAlmostFull => 'Pomnilnik je skoraj poln';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name in drugi';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Poslušajte Omijeve odgovore';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Razumem. Vaš naslednji sestanek se začne čez dvajset minut.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Vse je pripravljeno';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tapnite vrstico, da jo pregledate ali spremenite.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Ko vprašate z gumbom, lahko Omi glasno prebere svoj odgovor.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Poslušaj svoj zadnji odgovor';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Predvajam vaš zadnji odgovor ...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Prek $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Preko zvočnika telefona';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Prek trenutnega zvočnega izhoda';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Odgovori ostanejo na zaslonu. Nič se ne govori.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Zasebno. Govori samo prek AirPods, Bluetooth ali žičnih slušalk.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Uporablja zvočnik telefona, ko niso priključene slušalke.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi bo molčal. Odgovori so še vedno prikazani v aplikaciji.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device povezan. Omi bo govoril tukaj.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Slušalke niso priključene. Omi ostane tiho, dokler jih ne povežete.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Igra prek $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Predvaja na glas prek zvočnika telefona.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'To lahko kadar koli spremenite v $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Predvajajte to turnejo kadar koli v $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Slušalke';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minut';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Naloge';
+
+  @override
+  String get usageMonth => 'Ta mesec';
+
+  @override
+  String get usageYear => 'To leto';
+
+  @override
+  String get usageAll => 'Ves čas';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Videz';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Svetlo';
+
+  @override
+  String get appearanceDark => 'Temno';
+
+  @override
+  String get chatDiscardRecording => 'Zavrzi';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nisem razumel — poskusite znova';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Iskanje oseb';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Dodaj \"$query\" kot novo osebo';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Pokaži vse osebe ($count)';
+  }
 }

@@ -17,6 +17,8 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
+from models.transcript_segment import SpeakerIdentityStatus
+
 
 def _read_text(path):
     return Path(path).read_text(encoding='utf-8')
@@ -308,6 +310,7 @@ class TestDeepgramRetryBehavioral:
         sys.modules['deepgram'].DeepgramClient = MagicMock()
         sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
+        sys.modules['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
         sys.modules['utils.other.endpoints'].timeit = lambda f: f
         sys.modules['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
         sys.modules['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
@@ -741,6 +744,7 @@ _STUB_MODULES = [
     'database.user_usage',
     'database.conversations',
     'database.sync_ledger',
+    'database.sync_dead_letters',
     'firebase_admin',
     'firebase_admin.messaging',
     'opuslib',
@@ -858,6 +862,9 @@ class TestProcessSegmentReal:
         sys.modules['utils.cloud_tasks'].verify_audio_merge_cloud_tasks_oidc = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
         sys.modules['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)
+        sys.modules['database.sync_dead_letters'].record_dead_letter_pending = MagicMock()
+        sys.modules['database.sync_dead_letters'].confirm_dead_letter = MagicMock()
+        sys.modules['database.sync_dead_letters'].dead_letter_failure_code = MagicMock(return_value='unknown')
         sys.modules['database.sync_ledger'].bind_sync_content_run_token = MagicMock()
         sys.modules['database.sync_ledger'].checkpoint_sync_content_partial_result = MagicMock()
         sys.modules['database.sync_ledger'].get_processed_sync_segment_ids = MagicMock(return_value=set())
@@ -930,6 +937,7 @@ class TestProcessSegmentReal:
         sys.modules['models.conversation'].CreateConversation = _CreateConversation
         sys.modules['models.conversation'].Conversation = _Conversation
         sys.modules['models.transcript_segment'].TranscriptSegment = _TranscriptSegment
+        sys.modules['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
 
         # The deterministic §1.7 minimum is pure and cheap: run the REAL module
         # against minimal enum/model stand-ins so intake exercises the true
@@ -1609,6 +1617,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['models.app'].App = MagicMock()
         sys.modules['models.app'].UsageHistoryType = MagicMock()
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
+        sys.modules['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
 
         # STT stubs
         sys.modules['utils.stt.pre_recorded'].PrerecordedSTTConfigurationError = type(

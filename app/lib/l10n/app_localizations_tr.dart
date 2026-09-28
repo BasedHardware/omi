@@ -936,9 +936,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get claudeDesktop => 'Claude Masaüstü';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.json\'a ekle';
-
-  @override
   String get copyConfig => 'Yapılandırmayı Kopyala';
 
   @override
@@ -2483,13 +2480,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Tüm düğümleri ve bağlantıları temizle';
 
   @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.json dosyasına ekle';
-
-  @override
   String get connectAiAssistantsToData => 'AI asistanlarını verilerinize bağlayın';
-
-  @override
-  String get useYourMcpApiKey => 'MCP API anahtarınızı kullanın';
 
   @override
   String get realTimeTranscript => 'Gerçek Zamanlı Transkript';
@@ -2502,12 +2493,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'Ayrıntılı tanılama mesajları';
-
-  @override
-  String get autoCreateSpeakers => 'Konuşmacıları Otomatik Oluştur';
-
-  @override
-  String get autoCreateWhenNameDetected => 'İsim algılandığında otomatik oluştur';
 
   @override
   String get followUpQuestions => 'Takip Soruları';
@@ -9979,7 +9964,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripsiyon ses almıyor';
 
   @override
-  String get tapPlusToStartRecording => 'Kaydı başlatmak için + simgesine dokunun';
+  String get tapPlusToStartRecording => 'Kaydı başlatmak için kayıt düğmesine dokunun';
 
   @override
   String get chatBlockTask => 'Görev';
@@ -10222,7 +10207,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Kaydettiğin konuşmalar burada görünür. İlkini kaydetmek için Ana Sayfa\'da + simgesine dokun.';
+      'Kaydettiğin konuşmalar burada görünür. İlkini kaydetmek için Ana Sayfa\'da kayıt düğmesine dokun.';
 
   @override
   String get conversationMap => 'Konuşma Haritası';
@@ -10699,7 +10684,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceConnecting => 'Bağlanıyor…';
 
   @override
-  String get recordOptionsTip => 'İpucu: telefon görüşmesi kaydetmek için kayıt düğmesini basılı tutun.';
+  String get recordOptionsTip => 'İpucu: telefon görüşmesi kaydetmek için kayıt düğmesindeki oka dokunun.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Güncelleme Başarısız';
@@ -11101,4 +11086,416 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Yardım ve Hakkında';
+
+  @override
+  String get speakerTagPromptTitle => 'Omi\'nin sesleri tanımasına yardım edin';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Son iki günün seslerine hızlı bir bakış';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Bu siz misiniz?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Bu $name mi?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Bu kim?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Bu benim';
+
+  @override
+  String get speakerTagPromptNotMe => 'Ben değilim';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Yeni biri';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Tanımadığım biri';
+
+  @override
+  String get speakerTagPromptNotSure => 'Emin değilim';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Klibi oynat';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Adlandırdığın kişilerin seslerini hatırla';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi, onları bir dahaki sefere tanıyabilmek için kısa bir ses örneği saklar. Bunu istediğin zaman Ayarlar\'dan değiştirebilirsin.';
+
+  @override
+  String get speakerTagPromptThanks => 'Teşekkürler! Omi sesleri daha iyi tanıyacak.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Adı';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Bu klip oynatılamadı';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Kaydedilemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Sesleri etiketlememi iste';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Omi arada bir, son konuşmalarında kimin konuştuğunu sorar';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Birine ad verdiğinde Omi, onu bir dahaki sefere tanıyabilmek için kısa bir ses örneği saklar';
+
+  @override
+  String get leaveBlank => 'Boş bırakın';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai\'de özel bir bağlayıcı ekleyin ve sunucu URL\'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.json dosyasına ekle';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors\'de özel bir bağlayıcı ekleyin ve sunucu URL\'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkriptler kullanılamıyor, kayıt cihazda devam ediyor ve daha sonra işlenecek';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Bekleyen transkriptler $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Bekleyen transkriptler $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Arama';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefon mikrofonu';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Sürdür';
+
+  @override
+  String get finish => 'Bitir';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Kolye duraklatıldı · bitirdiğinde devam eder';
+
+  @override
+  String get pendantIsListeningTitle => 'Kolyen dinliyor';
+
+  @override
+  String get oneSourceAtATime => 'Omi aynı anda yalnızca bir kaynaktan kayıt yapar.';
+
+  @override
+  String get recordWithPhoneInstead => 'Bunun yerine telefonla kaydet';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Sen bitirene kadar kolye duraklar';
+
+  @override
+  String get pendantPausesDuringCall => 'Arama sırasında kolye duraklar';
+
+  @override
+  String get keepUsingPendant => 'Kolyeyi kullanmaya devam et';
+
+  @override
+  String get recordWith => 'Kayıt yöntemi';
+
+  @override
+  String get moreWaysToRecord => 'Diğer kayıt yöntemleri';
+
+  @override
+  String get openCall => 'Aramayı aç';
+
+  @override
+  String get captureRecoveryBanner => 'Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Telefonunuzla kaydetmeden önce kolyenizdeki Transcribe Later\'ı durdurun.';
+
+  @override
+  String get captureNotTranscribing => 'Metne dökülmüyor';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Ses kaydedildi, sonra metne dökülecek';
+
+  @override
+  String get captureStillRecording => 'Kayıt sürüyor';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon başka bir uygulamada';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Bir arama veya başka bir uygulama mikrofonu aldı, bu yüzden Omi şu an duyamıyor. Mikrofon boşalınca Omi kendiliğinden devam eder. Bundan önce kaydedilen her şey güvende.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Özel konuşmadan metne hizmetine ulaşılamıyor. Omi sesi bu telefonda tutar ve hizmet geri geldiğinde gönderir. Hiçbir şey kaybolmaz.';
+
+  @override
+  String get captureStarting => 'Başlatılıyor…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefon depolama alanı dolu';
+
+  @override
+  String get captureStorageAlmostFull => 'Depolama neredeyse dolu';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ve diğerleri';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Omi\'nin yanıtlarını dinleyin';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Anladım. Sonraki toplantınız yirmi dakika içinde başlıyor.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Her Şey Hazır';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'İncelemek veya değiştirmek için bir satıra dokunun.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Buton ile sorduğunuz zaman Omi cevabını sesli olarak okuyabilir.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Son yanıtını duy';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Son cevabınız çalınıyor...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device aracılığıyla';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Telefonun hoparlörü aracılığıyla';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Geçerli ses çıkışı aracılığıyla';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Cevaplar ekranda kalır. Hiçbir şey konuşulmuyor.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Özel. Yalnızca AirPods, Bluetooth veya kablolu kulaklık aracılığıyla konuşur.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Hiçbir kulaklık bağlı olmadığında telefonun hoparlörünü kullanır.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi sessiz kalacak. Cevaplar hâlâ uygulamada görünüyor.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device bağlandı. Omi burada konuşacak.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Kulaklık bağlı değil. Omi siz bazılarını bağlayana kadar sessiz kalır.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '$device\'e kadar oynatır.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Telefonun hoparlöründen yüksek sesle çalar.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Bunu istediğiniz zaman $settings › $voiceResponse numaralı telefondan değiştirebilirsiniz.';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Bu turu istediğiniz zaman $settings › $deviceSettings › $deviceTutorial\'da tekrar oynatın';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kulaklıklar';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'dakika';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Görevler';
+
+  @override
+  String get usageMonth => 'Bu Ay';
+
+  @override
+  String get usageYear => 'Bu Yıl';
+
+  @override
+  String get usageAll => 'Tüm Zamanlar';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Görünüm';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Açık';
+
+  @override
+  String get appearanceDark => 'Koyu';
+
+  @override
+  String get chatDiscardRecording => 'Vazgeç';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Anlayamadım — tekrar deneyin';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Geri bildirim ver';
+
+  @override
+  String get feedbackAllGood => 'Her şey yolunda';
+
+  @override
+  String get feedbackChatWithUs => 'Detay paylaşmak ister misin? Bizimle yazış';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Hatalı';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Eksik';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Alakasız';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Yanlış bağlam';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Başka bir şey';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Ses eksik';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Kötü transkripsiyon';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Yanlış konuşmacı';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Gecikmeli veya takılı';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Parçalı veya tekrarlı';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Başka bir şey';
+
+  @override
+  String get searchPeople => 'Kişi ara';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" adlı yeni bir kişi ekle';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Tüm $count kişiyi göster';
+  }
 }

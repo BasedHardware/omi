@@ -15,7 +15,12 @@ from utils.stt.outcomes import (
     failure_from_exception,
 )
 from utils.observability.fallback import record_fallback
-from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED
+from utils.stt.stream_close import (
+    ACCOUNT_REJECTION_REASONS,
+    PROVIDER_AUTH_REJECTED,
+    PROVIDER_BUDGET_EXHAUSTED,
+    PROVIDER_RATE_LIMITED,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +46,10 @@ _KNOWN_FAILURE_REASONS = frozenset(
         # (utils.stt.streaming.modulate_death_reason).
         'modulate_serve_error',
         *ACCOUNT_REJECTION_REASONS,
+        PROVIDER_RATE_LIMITED,
         'soniox_idle_timeout',
         'soniox_rotation',
+        'provider_5xx',
         'soniox_invalid_hint',
     }
 )
@@ -57,8 +64,10 @@ _FAILURE_PHASE_BY_REASON = {
     'modulate_serve_error': 'connection',
     PROVIDER_BUDGET_EXHAUSTED: 'connection',
     PROVIDER_AUTH_REJECTED: 'connection',
+    PROVIDER_RATE_LIMITED: 'connection',
     'soniox_idle_timeout': 'connection',
     'soniox_rotation': 'connection',
+    'provider_5xx': 'connection',
     # The config frame was rejected after the WebSocket upgrade succeeded:
     # the session died at session setup, before any audio flowed.
     'soniox_invalid_hint': 'initialization',
@@ -385,6 +394,7 @@ async def send_live_stt_audio(
     provider: str | None,
     platform: str | None,
     attempt_failover: Callable[[], Awaitable[bool]] | None = None,
+    start_sample: int | None = None,
 ) -> bool:
     """Send one audio chunk, terminating the client if the provider is unusable.
 
@@ -431,7 +441,16 @@ async def send_live_stt_audio(
         return False
 
     try:
-        accepted = stt_socket.send(audio)
+        accepted = (
+            stt_socket.send(audio, start_sample=start_sample) if start_sample is not None else stt_socket.send(audio)
+        )
+    except TypeError:
+        # A socket that predates the capture-position seam: send without it.
+        try:
+            accepted = stt_socket.send(audio)
+        except Exception:
+            await _recoverable_failure('send_failed')
+            return False
     except Exception:
         await _recoverable_failure('send_failed')
         return False
@@ -458,6 +477,7 @@ async def flush_live_stt_buffer(
     provider: str | None,
     platform: str | None,
     attempt_failover: Callable[[], Awaitable[bool]] | None = None,
+    start_sample: int | None = None,
 ) -> bool:
     """Send and clear a buffer only after the provider accepted its contents."""
 
@@ -469,6 +489,7 @@ async def flush_live_stt_buffer(
         provider=provider,
         platform=platform,
         attempt_failover=attempt_failover,
+        start_sample=start_sample,
     )
     if sent:
         buffer.clear()

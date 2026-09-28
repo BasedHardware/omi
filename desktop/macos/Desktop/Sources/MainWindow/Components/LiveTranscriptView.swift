@@ -14,6 +14,10 @@ struct LiveTranscriptPanel: View {
   }
 
   var body: some View {
+    content.reportsLiveTranscriptVisibility()
+  }
+
+  @ViewBuilder private var content: some View {
     if displaySegments.isEmpty {
       VStack(spacing: OmiSpacing.lg) {
         Image(systemName: "waveform")
@@ -121,6 +125,10 @@ struct ConversationsLiveTranscript: View {
   @State private var isHovered = false
 
   var body: some View {
+    content.reportsLiveTranscriptVisibility()
+  }
+
+  @ViewBuilder private var content: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       HStack(spacing: OmiSpacing.xs) {
         Circle().fill(Ink.errorRed).frame(width: 7, height: 7)
@@ -257,6 +265,10 @@ struct ConversationsLiveTranscriptFullScreen: View {
   var onCollapse: () -> Void
 
   var body: some View {
+    content.reportsLiveTranscriptVisibility()
+  }
+
+  @ViewBuilder private var content: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: OmiSpacing.sm) {
         Circle().fill(Ink.errorRed).frame(width: 8, height: 8)

@@ -4,6 +4,21 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: feature-flag-registry
+    command: ["python3", "scripts/check_feature_flag_registry.py"]
+    triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/render_feature_flag_registry.py", "scripts/posthog_flag_sync.py", "scripts/test_posthog_flag_sync.py", "backend/docs/feature-flag-registry.md", "backend/**/*.py", "backend/deploy/runtime_env/**", "backend/charts/**", "desktop/macos/Desktop/Sources/**/*.swift", "app/lib/services/experiments/**", "web/**/*.ts", "web/**/*.tsx", "desktop/windows/src/**/*.ts", "desktop/windows/src/**/*.tsx", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py"]
+    lanes: ["local", "ci"]
+    reason: "The 2026-09-24 inventory found an incorrect notes-v2 default and missing calendar, memory and JIT gates in the handwritten catalog; code reads and deploy declarations now require reviewed registry entries and a deterministic rendered doc"
+  - id: feature-flag-registry-fixtures
+    command: ["python3", "scripts/test_check_feature_flag_registry.py"]
+    triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/render_feature_flag_registry.py", ".github/scripts/run_checks.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Registry extraction, uniqueness, date warnings, retirement and rendered-doc drift must remain covered by hermetic fixtures"
+  - id: posthog-flag-sync-fixtures
+    command: ["python3", "scripts/test_posthog_flag_sync.py"]
+    triggers: ["config/feature-flags.yaml", "scripts/posthog_flag_sync.py", "scripts/test_posthog_flag_sync.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PostHog sync remains read-only by default and creation may only arm a missing kill switch at zero percent"
   - id: openfoodfacts-robustness-and-coercion-tests
     command: ["python3", "plugins/omi-openfoodfacts-app/test_robustness_and_coercion.py"]
     triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
@@ -139,6 +154,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Graph null collections and HTTP-date Retry-After crashed mail/teams/sharepoint/calendar tools (#14247)"
+  - id: file-tools-sanitization-tests
+    command: ["python3", "backend/tests/unit/test_file_tools_sanitization.py"]
+    triggers: ["backend/utils/retrieval/tools/file_tools.py", "backend/tests/unit/test_file_tools_sanitization.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "File search chat tools must safely handle config and session errors without leaking internal tracebacks or exception strings"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
@@ -170,6 +190,11 @@ checks:
     triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", "app/test.sh", "backend/testing/e2e/test_client_compat_replay.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Mobile self-driving explicitly requires visible strict pending contracts and marker-only builder edits; a shared Python/Dart primitive binds the V1 builder to the reviewed spine"
+  - id: python-device-sdk-tests
+    command: ["bash", "sdks/python/test.sh"]
+    triggers: ["sdks/python/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Python SDK's Deepgram handshake uses the websockets 14 API; exercise the actual client at the minimum supported version so an incompatible dependency floor cannot silently disable transcription"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
@@ -566,6 +591,40 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "iOS BLE diagnostics must not poll RSSI while closed, and frequent battery notifications must not rewrite the complete history on every packet"
+  - id: ios-safe-foundation-sinks
+    command: ["ruby", "app/ios/test/safe_foundation_sinks_test.rb"]
+    triggers: ["app/ios/Runner/SafeFoundationSinks.swift", "app/ios/test/safe_foundation_sinks_test.rb", "app/ios/Runner.xcodeproj/project.pbxproj"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Hostile plist, JSON, record, and floating-point inputs must fail safely at the native sinks"
+  - id: ios-swiftlint
+    command: ["bash", "app/ios/scripts/swiftlint-wrapper.sh", "lint"]
+    triggers: ["app/ios/**/*.swift", "app/ios/.swiftlint.yml", "app/ios/.swiftlint-baseline.json", "app/ios/scripts/swiftlint-wrapper.sh", "app/ios/scripts/prepare-swiftlint-baseline.py"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Pinned SwiftLint rejects new iOS native safety violations outside the committed baseline"
+  - id: ios-swiftlint-baseline
+    command: ["python3", "app/ios/scripts/check-swiftlint-baseline.py", "--base", "{base}"]
+    triggers: ["app/ios/**/*.swift", "app/ios/.swiftlint-baseline.json", "app/ios/scripts/check-swiftlint-baseline.py"]
+    lanes: ["local", "ci"]
+    reason: "iOS SwiftLint baseline may only shrink and suppressions need a named rule and reason"
+  - id: ios-userdefaults-plist-values
+    command: ["python3", "app/ios/test/check_userdefaults_plist_values.py"]
+    triggers: ["app/ios/**/*.swift", "app/ios/test/check_userdefaults_plist_values.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "TestFlight 1.0.553 crashed when battery history wrote NSNull to UserDefaults; future Swift null placeholders and Optional<Any> coalescing require review before merge"
+  - id: ios-ble-connection-policy
+    command: ["ruby", "app/ios/test/omi_ble_connection_policy_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/test/omi_ble_connection_policy_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "pairing recovery must fire only for ATT authentication/encryption failures so ordinary Omi notification noise never tears down a healthy GATT link"
+  - id: ios-dev-build-configuration
+    command: ["ruby", "app/ios/test/omi_dev_build_configuration_test.rb"]
+    triggers: ["app/ios/Flutter/devProfile.xcconfig", "app/ios/Flutter/devRelease.xcconfig", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/omi_dev_build_configuration_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Debug-dev must keep watch signing disabled for account-free simulator builds while Profile-dev/Release-dev stay signed with the dev identity and per-flavor CocoaPods configuration"
   - id: ios-ble-pairing-policy
     command: ["ruby", "app/ios/test/omi_ble_pairing_policy_test.rb"]
     triggers: ["app/ios/Runner/Ble/OmiBlePairingPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/test/omi_ble_pairing_policy_test.rb", "app/ios/Runner.xcodeproj/project.pbxproj", ".github/checks-manifest.yaml"]
@@ -1001,6 +1060,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "the release lane shared the dev lane's blind spot: a present-but-empty pi-mono-extension satisfied its directory-exists check and still shipped an artifact that failed every chat turn"
+  - id: desktop-bundle-signatures
+    command: ["bash", "desktop/macos/scripts/tests/test-desktop-bundle-signatures.sh"]
+    triggers: ["codemagic.yaml", "desktop/macos/scripts/check-desktop-bundle-signatures.sh", "desktop/macos/scripts/tests/test-desktop-bundle-signatures.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "PR #19133's Xcode 27 release left nested ffmpeg unsigned; the pre-notarization guard must reject any unsigned Mach-O and ad-hoc release signature"
   - id: desktop-release-artifact-helpers
     command: ["bash", "desktop/macos/tests/test-desktop-release-artifact-helpers.sh"]
     triggers: ["codemagic.yaml", "desktop/macos/scripts/create-desktop-dmgs.sh", "desktop/macos/scripts/create-omi-beta-variant.sh", "desktop/macos/scripts/notarize-desktop-artifacts.sh", "desktop/macos/tests/test-desktop-release-artifact-helpers.sh", ".github/checks-manifest.yaml"]
@@ -1090,6 +1155,11 @@ checks:
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check_desktop_test_quality.py", "desktop/macos/scripts/swift-test-suites.sh"]
     lanes: ["local", "ci"]
     reason: "desktop Swift production or test structure changed"
+  - id: desktop-test-quality-fixtures
+    command: ["python3", "desktop/macos/scripts/tests/test_check_desktop_test_quality.py"]
+    triggers: ["desktop/macos/scripts/check_desktop_test_quality.py", "desktop/macos/scripts/tests/test_check_desktop_test_quality.py", "desktop/macos/scripts/tests/fixtures/desktop_test_quality/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "fixture and CLI regressions prove desktop quality ratchets reject new shared defaults mutations and malformed exceptions"
   - id: desktop-chat-selection-boundary
     command: ["python3", ".github/scripts/check_chat_selection_boundary.py"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", ".github/scripts/check_chat_selection_boundary.py", ".github/failure-classes/FC-selection-overlay-layout-loop.json", ".github/checks-manifest.yaml"]
@@ -1375,6 +1445,11 @@ checks:
     triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "process_segments persisted a nullable TweetDetector result and then attempted += on a null legacy accumulator; the hermetic suite covers bare triggers, legacy state recovery, multi-segment collection, posting/reset, and passive listening"
+  - id: twitter-chat-tools-disconnect-auth-tests
+    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_twitter_link_auth.py"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "GET /disconnect deleted Twitter tokens for any uid in the query string; the suite rejects a missing or wrong HMAC and only then allows delete_twitter_tokens"
   - id: twitter-chat-tools-max-results-tests
     command: ["python3", "plugins/omi-twitter-chat-tools-app/test_max_results.py"]
     triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
@@ -1465,6 +1540,11 @@ checks:
     triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#15120: persist refreshed tokens to database, guard search metadata extraction, and validate chat tool inputs"
+  - id: omi-dropbox-app-hardening-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_main.py"]
+    triggers: ["plugins/omi-dropbox-app/main.py", "plugins/omi-dropbox-app/test_main.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14130: harden error handling, type validation, audio buffer bounding, sample rate validation, timezone-aware datetime"
   - id: desktop-build-source-identity
     command: ["bash", "desktop/macos/tests/test-desktop-build-identity.sh"]
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/desktop-build-identity.sh", "desktop/macos/scripts/desktop-health-check.py", "desktop/macos/scripts/desktop-core-harness.sh", "desktop/macos/tests/test-desktop-build-identity.sh", "desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
@@ -1510,6 +1590,11 @@ checks:
     triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Open Food Facts app must guard _safe_int, sanitize barcodes (4-18 digits, URL extraction), handle 404s gracefully, and test hermetically"
+  - id: omi-zap-tests
+    command: ["bash", "plugins/zapier/omi-zap/run-tests.sh"]
+    triggers: ["plugins/zapier/omi-zap/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#13541: the create-memory action shipped a body that resolved to undefined, so every Zap run POSTed empty and the API 422'd; the jest suite pins the request shape against ZapierActionCreateConversation and must run in CI to catch a regression"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"

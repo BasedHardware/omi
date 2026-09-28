@@ -2215,6 +2215,398 @@
         "mobile-conversation-actions"
       ],
       "correlation": null
+    },
+    {
+      "id": "speakerTagPromptsViewed",
+      "wire_name": "Speaker Tag Prompts Viewed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "promptCount": {
+          "type": "int",
+          "wire_name": "prompt_count"
+        },
+        "firstTime": {
+          "type": "bool",
+          "wire_name": "first_time"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speakerTagPromptClipPlayed",
+      "wire_name": "Speaker Tag Prompt Clip Played",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "wire_name": "kind",
+          "values": [
+            "owner_check",
+            "confirm_person",
+            "identify",
+            "unknown"
+          ]
+        },
+        "loaded": {
+          "type": "bool",
+          "wire_name": "loaded"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speakerTagPromptAnswerSubmitted",
+      "wire_name": "Speaker Tag Prompt Answer Submitted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "wire_name": "kind",
+          "values": [
+            "owner_check",
+            "confirm_person",
+            "identify",
+            "unknown"
+          ]
+        },
+        "answer": {
+          "type": "enum",
+          "wire_name": "answer",
+          "values": [
+            "me",
+            "not_me",
+            "person",
+            "new_person",
+            "someone_else",
+            "skip",
+            "unknown"
+          ]
+        },
+        "clipPlayed": {
+          "type": "bool",
+          "wire_name": "clip_played"
+        },
+        "firstTime": {
+          "type": "bool",
+          "wire_name": "first_time"
+        },
+        "succeeded": {
+          "type": "bool",
+          "wire_name": "succeeded"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speakerTagPromptsClosed",
+      "wire_name": "Speaker Tag Prompts Closed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "answeredCount": {
+          "type": "int",
+          "wire_name": "answered_count"
+        },
+        "promptCount": {
+          "type": "int",
+          "wire_name": "prompt_count"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "voiceProfileSettingToggled",
+      "wire_name": "Voice Profile Setting Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "setting": {
+          "type": "enum",
+          "wire_name": "setting",
+          "values": [
+            "tag_prompts",
+            "save_other_voices"
+          ]
+        },
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        },
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": [
+            "settings",
+            "first_prompt"
+          ]
+        },
+        "succeeded": {
+          "type": "bool",
+          "wire_name": "succeeded"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "voiceReplyPlayback",
+      "wire_name": "Voice Reply Playback",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "played",
+            "played_with_fallback",
+            "fallback_only",
+            "skipped",
+            "interrupted",
+            "failed"
+          ]
+        },
+        "skipReason": {
+          "type": "enum",
+          "wire_name": "skip_reason",
+          "values": [
+            "mode_off",
+            "no_headphones",
+            "headphone_check_failed",
+            "none"
+          ]
+        },
+        "mode": {
+          "type": "enum",
+          "wire_name": "mode",
+          "values": [
+            "off",
+            "headphones_only",
+            "always",
+            "unknown"
+          ]
+        },
+        "outputRoute": {
+          "type": "enum",
+          "wire_name": "output_route",
+          "values": [
+            "bluetooth",
+            "wired",
+            "airplay",
+            "usb",
+            "speaker",
+            "unknown"
+          ]
+        },
+        "chunksRequested": {
+          "type": "int",
+          "wire_name": "chunks_requested"
+        },
+        "chunksPlayed": {
+          "type": "int",
+          "wire_name": "chunks_played"
+        },
+        "chunksDropped": {
+          "type": "int",
+          "wire_name": "chunks_dropped"
+        },
+        "fallbackReason": {
+          "type": "enum",
+          "wire_name": "fallback_reason",
+          "values": [
+            "none",
+            "rate_limited_429",
+            "unavailable_503",
+            "no_response"
+          ]
+        },
+        "firstAudioLatencyMs": {
+          "type": "int",
+          "wire_name": "first_audio_latency_ms"
+        },
+        "interruptSource": {
+          "type": "enum",
+          "wire_name": "interrupt_source",
+          "values": [
+            "none",
+            "user_typed",
+            "new_voice_query",
+            "audio_interruption",
+            "headphones_unplugged",
+            "quota_error",
+            "stream_error",
+            "mode_off"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "pendantVoiceQuestionDropped",
+      "wire_name": "Pendant Voice Question Dropped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "invalid_button_payload",
+            "actions_disabled",
+            "empty_frames",
+            "no_device",
+            "cancelled",
+            "send_in_flight",
+            "audio_save_failed",
+            "auto_end_grace",
+            "codec_lookup_failed"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "siriIntentPerformed",
+      "wire_name": "Siri Intent Performed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "intent": {
+          "type": "enum",
+          "wire_name": "intent",
+          "values": [
+            "remember",
+            "create_note",
+            "open",
+            "search",
+            "complete_task",
+            "create_task",
+            "start_listening",
+            "stop_listening"
+          ]
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "macos",
+            "ios"
+          ]
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "ok",
+            "auth",
+            "network",
+            "rate_limited",
+            "quota",
+            "server",
+            "cancelled"
+          ]
+        },
+        "latencyMs": {
+          "type": "int",
+          "wire_name": "latency_ms"
+        },
+        "invokedVia": {
+          "type": "enum",
+          "wire_name": "invoked_via",
+          "values": [
+            "siri",
+            "shortcuts",
+            "spotlight",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "siri-intents"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "siriIndexRebuilt",
+      "wire_name": "Siri Index Rebuilt",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "macos",
+            "ios"
+          ]
+        },
+        "entityCounts": {
+          "type": "int",
+          "wire_name": "entity_counts"
+        },
+        "durationMs": {
+          "type": "int",
+          "wire_name": "duration_ms"
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "ok",
+            "auth",
+            "network",
+            "rate_limited",
+            "quota",
+            "server",
+            "cancelled"
+          ]
+        }
+      },
+      "consumers": [
+        "siri-index-health"
+      ],
+      "correlation": null
     }
   ]
 }

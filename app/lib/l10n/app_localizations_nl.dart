@@ -937,9 +937,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Toevoegen aan claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Configuratie kopiëren';
 
   @override
@@ -2485,13 +2482,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Alle knooppunten en verbindingen wissen';
 
   @override
-  String get addToClaudeDesktopConfig => 'Toevoegen aan claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Verbind AI-assistenten met je gegevens';
-
-  @override
-  String get useYourMcpApiKey => 'Gebruik je MCP API-sleutel';
 
   @override
   String get realTimeTranscript => 'Realtime transcriptie';
@@ -2504,12 +2495,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'Gedetailleerde diagnostische berichten';
-
-  @override
-  String get autoCreateSpeakers => 'Sprekers automatisch aanmaken';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automatisch aanmaken wanneer naam gedetecteerd wordt';
 
   @override
   String get followUpQuestions => 'Vervolgvragen';
@@ -9995,7 +9980,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get transcriptionNoAudio => 'Transcriptie ontvangt geen audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tik op + om de opname te starten';
+  String get tapPlusToStartRecording => 'Tik op de opnameknop om de opname te starten';
 
   @override
   String get chatBlockTask => 'Taak';
@@ -10238,7 +10223,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Gesprekken die je opneemt verschijnen hier. Tik op + op Home om je eerste op te nemen.';
+      'Gesprekken die je opneemt verschijnen hier. Tik op Home op de opnameknop om je eerste op te nemen.';
 
   @override
   String get conversationMap => 'Gesprekskaart';
@@ -10718,7 +10703,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deviceConnecting => 'Verbinden…';
 
   @override
-  String get recordOptionsTip => 'Tip: houd de opnameknop ingedrukt om een telefoongesprek op te nemen.';
+  String get recordOptionsTip => 'Tip: tik op de pijl op de opnameknop om een telefoongesprek op te nemen.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Update mislukt';
@@ -11123,4 +11108,418 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Help en over';
+
+  @override
+  String get speakerTagPromptTitle => 'Help Omi stemmen te herkennen';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Een snelle check van stemmen uit de afgelopen twee dagen';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Ben jij dit?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Is dit $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Wie is dit?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Dat ben ik';
+
+  @override
+  String get speakerTagPromptNotMe => 'Niet ik';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Iemand nieuws';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Iemand die ik niet ken';
+
+  @override
+  String get speakerTagPromptNotSure => 'Weet ik niet';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Fragment afspelen';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current van $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Stemmen onthouden van mensen die je een naam geeft';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi bewaart een kort stemfragment om ze de volgende keer te herkennen. Je kunt dit altijd wijzigen in Instellingen.';
+
+  @override
+  String get speakerTagPromptThanks => 'Bedankt! Omi wordt beter in het herkennen van stemmen.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Naam';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Kan dit fragment niet afspelen';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Opslaan mislukt. Probeer het opnieuw.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Vraag me stemmen te taggen';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Af en toe vraagt Omi wie er sprak in je recente gesprekken';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Als je iemand een naam geeft, bewaart Omi een kort stemfragment om diegene de volgende keer te herkennen';
+
+  @override
+  String get leaveBlank => 'Leeg laten';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Voeg op claude.ai een aangepaste connector toe en plak de server-URL. Als Claude om een geavanceerde OAuth Client ID vraagt, gebruik dan de waarde hieronder en laat het geheim leeg — gebruik je MCP API-sleutel nooit als OAuth-geheim.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Toevoegen aan ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Voeg op Claude Desktop → Settings → Connectors een aangepaste connector toe en plak de server-URL. Als Claude om een geavanceerde OAuth Client ID vraagt, gebruik dan de waarde hieronder en laat het geheim leeg — gebruik je MCP API-sleutel nooit als OAuth-geheim.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transcripties zijn niet beschikbaar, de opname gaat door op het apparaat en wordt later verwerkt';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transcripties in behandeling $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transcripties in behandeling $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Gesprek';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefoonmicrofoon';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Hervatten';
+
+  @override
+  String get finish => 'Afronden';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Hanger gepauzeerd · gaat verder als je klaar bent';
+
+  @override
+  String get pendantIsListeningTitle => 'Je hanger luistert';
+
+  @override
+  String get oneSourceAtATime => 'Omi neemt steeds van één bron tegelijk op.';
+
+  @override
+  String get recordWithPhoneInstead => 'In plaats daarvan met telefoon opnemen';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Hanger pauzeert tot je klaar bent';
+
+  @override
+  String get pendantPausesDuringCall => 'Hanger pauzeert tijdens het gesprek';
+
+  @override
+  String get keepUsingPendant => 'Hanger blijven gebruiken';
+
+  @override
+  String get recordWith => 'Opnemen met';
+
+  @override
+  String get moreWaysToRecord => 'Meer manieren om op te nemen';
+
+  @override
+  String get openCall => 'Gesprek openen';
+
+  @override
+  String get captureRecoveryBanner => 'De audio van de hanger komt niet aan in de app — tik om te repareren';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Stop Transcribe Later op je hanger voordat je met je telefoon opneemt.';
+
+  @override
+  String get captureNotTranscribing => 'Geen transcriptie';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio opgeslagen, later getranscribeerd';
+
+  @override
+  String get captureStillRecording => 'Neemt nog op';
+
+  @override
+  String get captureMicInUseElsewhere => 'Microfoon in gebruik door andere app';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Een gesprek of andere app gebruikt de microfoon, dus Omi kan nu niet luisteren. Omi gaat vanzelf verder zodra de microfoon vrij is. Alles wat eerder is opgenomen, is veilig.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Je eigen spraak-naar-tekstdienst is niet bereikbaar. Omi bewaart de audio op deze telefoon en verstuurt die zodra de dienst terug is. Er gaat niets verloren.';
+
+  @override
+  String get captureStarting => 'Starten…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefoonopslag vol';
+
+  @override
+  String get captureStorageAlmostFull => 'Opslag bijna vol';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name en anderen';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Luister naar Omi\'s antwoorden';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Begrepen. Je volgende vergadering begint over twintig minuten.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Alles is ingesteld';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tik op een rij om deze te bekijken of te wijzigen.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Wanneer u met de knop vraagt, kan Omi het antwoord hardop voorlezen.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Luister naar je laatste antwoord';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Je laatste antwoord afspelen...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Via $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Via de telefoonluidspreker';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Via de huidige audio-uitvoer';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Antwoorden blijven op het scherm. Er wordt niets gesproken.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privé. Spreekt alleen via AirPods, Bluetooth of bedrade hoofdtelefoons.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Gebruikt de telefoonluidspreker als er geen hoofdtelefoon is aangesloten.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi blijft stil. Antwoorden verschijnen nog steeds in de app.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device aangesloten. Omi zal hier spreken.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Geen hoofdtelefoon aangesloten. Omi blijft stil totdat u er een paar aansluit.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Speelt via $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Wordt hardop afgespeeld via de luidspreker van de telefoon.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Je kunt dit op elk moment wijzigen via $settings ›$voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Speel deze tour op elk gewenst moment opnieuw af in $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Koptelefoon';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minuten';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Taken';
+
+  @override
+  String get usageMonth => 'Deze maand';
+
+  @override
+  String get usageYear => 'Dit jaar';
+
+  @override
+  String get usageAll => 'Altijd';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Uiterlijk';
+
+  @override
+  String get appearanceSystem => 'Systeem';
+
+  @override
+  String get appearanceLight => 'Licht';
+
+  @override
+  String get appearanceDark => 'Donker';
+
+  @override
+  String get chatDiscardRecording => 'Verwerpen';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Dat heb ik niet verstaan — probeer het opnieuw';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Feedback geven';
+
+  @override
+  String get feedbackAllGood => 'Alles goed';
+
+  @override
+  String get feedbackChatWithUs => 'Meer te melden? Chat met ons';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Niet nauwkeurig';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Onvolledig';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Niet relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Verkeerde context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Iets anders';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Audio ontbreekt';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Slechte transcriptie';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Verkeerde spreker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Vertraagd of vastgelopen';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Gefragmenteerd of gedupliceerd';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Iets anders';
+
+  @override
+  String get searchPeople => 'Personen zoeken';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" toevoegen als nieuwe persoon';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Alle $count personen weergeven';
+  }
 }

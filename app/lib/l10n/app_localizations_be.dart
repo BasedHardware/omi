@@ -935,9 +935,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Дадаць у claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Скапіяваць канфіг';
 
   @override
@@ -2486,13 +2483,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Очыстіць усе вузлы і злучэнні';
 
   @override
-  String get addToClaudeDesktopConfig => 'Дадайце да claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Падлучыце AI асістэнтаў да вашых дадзеных';
-
-  @override
-  String get useYourMcpApiKey => 'Выкарыстоўвайце ваш MCP ключ API';
 
   @override
   String get realTimeTranscript => 'Стэнаграма ў рэальным часе';
@@ -2505,12 +2496,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'Дэтальныя дыягностычныя паведамленні';
-
-  @override
-  String get autoCreateSpeakers => 'Аўтаматычна ствараць дыктарыў';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Аўтаматычна ствараць пры выяўленні імя';
 
   @override
   String get followUpQuestions => 'Наступныя пытанні';
@@ -9998,7 +9983,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get transcriptionNoAudio => 'Транскрыпцыя не атрымлівае аўдыё';
 
   @override
-  String get tapPlusToStartRecording => 'Націсніце +, каб пачаць запіс';
+  String get tapPlusToStartRecording => 'Націсніце кнопку запісу, каб пачаць запіс';
 
   @override
   String get chatBlockTask => 'Задача';
@@ -10240,7 +10225,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Тут з\'яўляюцца размовы, якія вы запісваеце. Націсніце + на галоўнай, каб запісаць першую.';
+      'Тут з\'яўляюцца размовы, якія вы запісваеце. Націсніце кнопку запісу на галоўнай, каб запісаць першую.';
 
   @override
   String get conversationMap => 'Карта размоў';
@@ -10717,7 +10702,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deviceConnecting => 'Падключэнне…';
 
   @override
-  String get recordOptionsTip => 'Парада: націсніце і ўтрымлівайце кнопку запісу, каб запісаць тэлефонны званок.';
+  String get recordOptionsTip => 'Парада: націсніце стрэлку на кнопцы запісу, каб запісаць тэлефонны званок.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Абнаўленне не ўдалося';
@@ -11119,4 +11104,416 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Дапамога і пра праграму';
+
+  @override
+  String get speakerTagPromptTitle => 'Дапамажыце Omi распазнаваць галасы';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Хуткая праверка галасоў за апошнія два дні';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Гэта вы?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Гэта $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Хто гэта?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Гэта я';
+
+  @override
+  String get speakerTagPromptNotMe => 'Не я';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Хтосьці новы';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Незнаёмы чалавек';
+
+  @override
+  String get speakerTagPromptNotSure => 'Не ўпэўнены';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Прайграць фрагмент';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current з $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Запамінаць галасы людзей, якіх вы назвалі';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi захоўвае кароткі ўзор голасу, каб пазнаць іх наступным разам. Гэта можна змяніць у любы час у Наладах.';
+
+  @override
+  String get speakerTagPromptThanks => 'Дзякуй! Omi будзе лепш распазнаваць галасы.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Імя';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Не ўдалося прайграць гэты фрагмент';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Не ўдалося захаваць. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Прасіць мяне пазначаць галасы';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Час ад часу Omi пытаецца, хто гаварыў у вашых нядаўніх размовах';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Калі вы называеце кагосьці, Omi захоўвае кароткі ўзор голасу, каб пазнаць яго наступным разам';
+
+  @override
+  String get leaveBlank => 'Пакіньце пустым';
+
+  @override
+  String get mcpOAuthSetup =>
+      'На claude.ai дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Дадайце да ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'На Claude Desktop → Settings → Connectors дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Транскрыпцыя недаступная, запіс працягваецца на прыладзе і будзе апрацаваны пазней';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Транскрыпцый у чаканні $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Транскрыпцый у чаканні $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Званок';
+
+  @override
+  String get captureSourcePhoneMic => 'Мікрафон тэлефона';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Працягнуць';
+
+  @override
+  String get finish => 'Завяршыць';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Кулон на паўзе · працягне пасля завяршэння';
+
+  @override
+  String get pendantIsListeningTitle => 'Ваш кулон слухае';
+
+  @override
+  String get oneSourceAtATime => 'Omi запісвае толькі з адной крыніцы за раз.';
+
+  @override
+  String get recordWithPhoneInstead => 'Запісаць тэлефонам замест кулона';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Кулон на паўзе да завяршэння запісу';
+
+  @override
+  String get pendantPausesDuringCall => 'Кулон на паўзе падчас званка';
+
+  @override
+  String get keepUsingPendant => 'Працягнуць з кулонам';
+
+  @override
+  String get recordWith => 'Запісаць праз';
+
+  @override
+  String get moreWaysToRecord => 'Іншыя спосабы запісу';
+
+  @override
+  String get openCall => 'Адкрыць званок';
+
+  @override
+  String get captureRecoveryBanner => 'Гук кулона не даходзіць да праграмы — націсніце, каб выправіць';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => 'Спыніце Transcribe Later на падвесцы перад запісам на тэлефоне.';
+
+  @override
+  String get captureNotTranscribing => 'Няма транскрыпцыі';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Аўдыя захавана, транскрыпцыя пазней';
+
+  @override
+  String get captureStillRecording => 'Запіс працягваецца';
+
+  @override
+  String get captureMicInUseElsewhere => 'Мікрафон заняты іншай праграмай';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Званок або іншая праграма заняла мікрафон, таму Omi зараз не чуе. Omi адновіць запіс сам, калі мікрафон вызваліцца. Усё, што запісана да гэтага, захавана.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Ваш уласны сэрвіс распазнавання маўлення недаступны. Omi захоўвае аўдыя на гэтым тэлефоне і адправіць яго, калі сэрвіс вернецца. Нічога не страціцца.';
+
+  @override
+  String get captureStarting => 'Запуск…';
+
+  @override
+  String get capturePhoneStorageFull => 'Памяць тэлефона запоўнена';
+
+  @override
+  String get captureStorageAlmostFull => 'Памяць амаль запоўнена';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name і іншыя';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Слухайце адказы Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Гатова. Ваша наступная сустрэча пачнецца праз дваццаць хвілін.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Усё гатова';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Націсніце на радок, каб праглядзець або змяніць яго.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Калі вы пытаецеся з дапамогай кнопкі, Omi можа прачытаць свой адказ услых.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Слухайце свой апошні адказ';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Прайграванне вашага апошняга адказу...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Праз $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Праз дынамік тэлефона';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Праз бягучы гукавы выхад';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Адказы застаюцца на экране. Нічога не гавораць.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Прыватны. Размаўляе толькі праз AirPods, Bluetooth або праз правадныя навушнікі.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Выкарыстоўвае дынамік тэлефона, калі навушнікі не падключаны.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi будзе маўчаць. Адказы па-ранейшаму з\'яўляюцца ў праграме.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device падлучаны. Тут будзе гаварыць Omi.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Навушнікі не падключаны. Omi маўчыць, пакуль вы не падключыце некаторыя.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Гуляе праз $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Прайграванне ўслых праз дынамік тэлефона.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Вы можаце змяніць гэта ў любы час у $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Паўтарыце гэты тур у любы час у $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Навушнікі';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'хвіліны';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Задачы';
+
+  @override
+  String get usageMonth => 'Гэты месяц';
+
+  @override
+  String get usageYear => 'Гэты год';
+
+  @override
+  String get usageAll => 'Ўсё час';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Выгляд';
+
+  @override
+  String get appearanceSystem => 'Сістэма';
+
+  @override
+  String get appearanceLight => 'Светлы';
+
+  @override
+  String get appearanceDark => 'Цёмны';
+
+  @override
+  String get chatDiscardRecording => 'Адхіліць';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Не ўдалося распазнаць — паспрабуйце яшчэ раз';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Пошук людзей';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Дадаць «$query» як новага чалавека';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Паказаць усіх людзей ($count)';
+  }
 }

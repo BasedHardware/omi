@@ -223,7 +223,6 @@ class Stack:
                 'HOSTED_PUSHER_API_URL': f'http://127.0.0.1:{self.pusher_port}',
                 'HOSTED_PARAKEET_API_URL': f'http://127.0.0.1:{self.parakeet_port}',
                 'STT_SERVICE_MODELS': 'parakeet',
-                'TRIAL_PAYWALL_ENABLED': 'false',
                 'CONVERSATION_APPS_OPT_IN_ONLY': 'true',
                 'LISTEN_FINALIZATION_DISPATCH_MODE': self.finalization_mode,
                 'RECORDING_SESSION_MODE': self.recording_session_mode,
@@ -1399,7 +1398,7 @@ async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
     if (
         dead_letter.get('status') != 'dead_letter'
         or dead_letter.get('terminal_outcome') != 'failure'
-        or dead_letter.get('attempt_count') != 1
+        or dead_letter.get('attempt_count') != 2
         or dead_letter.get('task_retry_count') != 2
     ):
         raise StackFailure('exhausted worker delivery did not record its terminal durable state')
@@ -1407,7 +1406,7 @@ async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
         'status': conversation.get('status'),
         'discarded': conversation.get('discarded'),
         'finalization_status': conversation.get('finalization_status'),
-    } != {'status': 'failed', 'discarded': True, 'finalization_status': 'dead_letter'}:
+    } != {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'}:
         raise StackFailure('dead-lettering did not atomically close the processing conversation')
     projection = await stack.finalization_status(uid, conversation_id)
     if projection.get('status') != 'dead_letter' or not projection.get('terminal') or projection.get('retryable'):

@@ -223,10 +223,22 @@ def test_deploy_contract_routes_both_backfill_budget_alerts():
     )
     assert 'provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}' in composite
     assert 'for THRESHOLD in 70 90' in action
-    assert 'gcloud monitoring policies create' in action
+    assert '.github/scripts/ensure_monitoring_metric_alert_policy.py' in action
+    assert 'reconcile_sync_backfill_alert_policy.py' in action
+    assert 'verify_sync_backfill_alert_policy.py' in action
     assert '--notification-channels="$ALERT_CHANNELS"' in action
     assert 'METRIC="sync_backfill_dispatch_abort"' in action
     assert 'The request was aborted because there was no available instance' in action
+
+
+def test_sync_backfill_lifecycle_alerts_on_scheduler_failure_and_missing_sweep():
+    action = (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
+    assert 'sync_backfill_uid_sequencer_scheduler_failure' in action or 'scheduler_${KIND}' in action
+    assert 'resource.labels.job_id=\"sync-backfill-uid-sequencer\"' in action
+    assert 'AttemptFinished' in action
+    assert 'action=sweep_summary outcome=done' in action
+    assert "CONDITION='absent'" in action
+    assert "DURATION='600s'" in action
 
 
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
@@ -240,7 +252,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
         assert 'uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle' in workflow
         assert 'id: sync-backfill' in workflow
         assert 'mode: worker' in workflow
-        assert 'mode: platform' in workflow
+        assert "'platform' || 'dispatch'" in workflow
         assert '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}' in workflow
         assert '${{ steps.sync-backfill.outputs.revision }}' in workflow
         assert 'provision_sync_ledger_ttl: \'true\'' in workflow
@@ -265,16 +277,59 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     # instance keeps a scale-from-zero poke from being rejected outright.
     assert '--min-instances=1' in action
     assert '--max-instances=30' in action
+    assert '--max=30' in action
     assert '--concurrency=1' in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     assert 'gcloud tasks queues create sync-backfill' in action
     assert '--max-concurrent-dispatches=30' in action
+    assert '--max-dispatches-per-second=30' in action
     assert '--max-backoff=60s' in action
     assert 'collection-group=sync_content_ledger' in action
     assert "inputs.provision_sync_ledger_ttl == 'true'" in action
     assert 'firestore_project_id:' in action
     assert 'FIRESTORE_PROJECT_ID' in action
     assert "inputs.provision_budget_alerts == 'true'" in action
+
+
+def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation():
+    """cloud-run-only deploys keep the bounded lane without IAM/TTL writes."""
+    composite = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
+    steps = composite['runs']['steps']
+    lane = next(step for step in steps if step.get('name') == 'Provision sync-backfill lane')
+    assert 'if' not in lane
+    mode = lane['with']['mode']
+    assert "deploy_profile == 'auto-dev'" in mode
+    assert "deploy_targets == 'all'" in mode
+    assert "'platform'" in mode and "'dispatch'" in mode
+
+    lifecycle = yaml.safe_load(
+        (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(encoding='utf-8')
+    )
+    lsteps = {step['name']: step for step in lifecycle['runs']['steps']}
+    iam = lsteps['Bind backend-sync invoker to backfill worker']
+    queue = lsteps['Reconcile bounded sync backfill queue']
+    ttl = lsteps['Provision and verify sync ledger TTL']
+    budget = lsteps['Provision routed backfill budget alerts']
+    abort = lsteps['Provision sync-backfill dispatch-abort alert']
+
+    assert 'dispatch' not in iam['if'] and 'platform' in iam['if']
+    assert 'dispatch' not in ttl['if'] and 'platform' in ttl['if']
+    assert 'dispatch' not in budget['if'] and 'platform' in budget['if']
+    assert 'dispatch' in queue['if'] and 'platform' in queue['if']
+    assert 'dispatch' in abort['if'] and 'platform' in abort['if']
+    assert "provision_budget_alerts == 'true'" in abort['if']
+
+    run = queue['run']
+    for flag in (
+        '--max-concurrent-dispatches=30',
+        '--max-dispatches-per-second=30',
+        '--min-backoff=5s',
+        '--max-backoff=60s',
+    ):
+        assert run.count(flag) == 2
+    assert 'sync_backfill_dispatch_abort' in abort['run']
+    assert 'THRESHOLD=30' in abort['run'] and 'WINDOW=1800s' in abort['run']
+    assert abort['run'].count('--threshold-value="$THRESHOLD" --alignment-period="$WINDOW"') == 2
 
 
 def test_cloud_run_default_service_lists_include_sync_backfill():

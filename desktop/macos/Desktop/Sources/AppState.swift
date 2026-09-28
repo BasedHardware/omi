@@ -317,6 +317,7 @@ class AppState: ObservableObject {
       } else {
         preferredMicrophoneReconnectMonitor.stop()
       }
+      publishMeetingCaptureActivity()
     }
   }
   /// A terminal live-STT failure reported by `/v4/listen`. Audio capture can
@@ -505,7 +506,19 @@ class AppState: ObservableObject {
   /// transcription session. This lives above `AudioCaptureService` because each
   /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
   var silentMicRecoveryAttempts = 0
-  var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient
+  var armedMicrophoneTransitionInFlight = false
+  @Published var isWaitingForMicrophone = false
+  let armedMicrophoneRecovery = ArmedMicrophoneRecoveryCoordinator()
+  var silentMicDiagnosticLimit = SilentMicDiagnosticRateLimit()
+  var lastCaptureWakeAt: Date?
+  var lastCaptureUnlockAt: Date?
+  var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient {
+    didSet { publishMeetingCaptureActivity() }
+  }
+  /// A relaunch mid-meeting splits the call into two conversations; the updater defers on this.
+  func publishMeetingCaptureActivity() {
+    UpdateInstallActivity.setMeetingCaptureActive(isLiveCapturing && currentConversationRole == .meeting)
+  }
   var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
   var meetingBoundaryInProgress = false
   var pendingMeetingState: Bool?
@@ -538,14 +551,16 @@ class AppState: ObservableObject {
   /// user gets an alert, then it starts over.
   var silentMicHealedDeviceID: AudioDeviceID?
   var meetingEndFinalizationInProgress = false
-  @Published var isAwaitingMeeting = false
+  @Published var isAwaitingMeeting = false {
+    didSet { publishMeetingCaptureActivity() }
+  }
 
   /// Audio is actually reaching STT — not merely that a transcription session is armed.
   ///
   /// Only Meetings keeps `isTranscribing` true while waiting for a call so capture can start
   /// instantly, and sets `isAwaitingMeeting` while the mic is paused. Live UI (the Conversations
   /// card, the expanded transcript, the top-bar mic dot) must follow this, not `isTranscribing`.
-  var isLiveCapturing: Bool { isTranscribing && !isAwaitingMeeting }
+  var isLiveCapturing: Bool { isTranscribing && !isAwaitingMeeting && !isWaitingForMicrophone }
 
   var audioRecordingMode: AssistantSettings.AudioRecordingMode {
     AssistantSettings.shared.audioRecordingMode
@@ -744,7 +759,7 @@ class AppState: ObservableObject {
     // didSet writes the new value. Only basic-tier users have a legitimate
     // pre-fetch paywalled state to preserve.
     // Freemium: the desktop trial paywall is disabled by default
-    // (backend TRIAL_PAYWALL_ENABLED off), so a stale cached
+    // (backend paywall permanently off), so a stale cached
     // `desktop_isPaywalled=true` from a pre-freemium session must not gate
     // anything on launch. Previously basic-tier users trusted that cache and
     // flashed the "monthly limit" popup until fetchTrialMetadata refreshed
@@ -927,13 +942,15 @@ class AppState: ObservableObject {
       // Restart transcription if it was active before sleep
       Task { @MainActor in
         guard let self = self else { return }
+        self.lastCaptureWakeAt = Date()
         if self.wasTranscribingBeforeSleep && AssistantSettings.shared.audioRecordingMode != .off {
           log("System wake: Restarting transcription (was active before sleep)")
           // Brief delay to let audio subsystem settle after wake
           try? await Task.sleep(for: .seconds(2))
           if !self.isTranscribing {
             self.startTranscription(
-              conversationRole: self.conversationRoleBeforeSleep, userInitiated: false)
+              conversationRole: self.conversationRoleBeforeSleep, userInitiated: false,
+              launchContext: .wake)
           }
         }
         self.wasTranscribingBeforeSleep = false
@@ -969,6 +986,7 @@ class AppState: ObservableObject {
           return  // Ignore duplicate within 1 second
         }
         self?.lastScreenUnlockTime = now
+        self?.lastCaptureUnlockAt = now
         log("Screen unlocked")
         NotificationCenter.default.post(name: .screenDidUnlock, object: nil)
       }

@@ -932,9 +932,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Add to claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Copy Config';
 
   @override
@@ -2479,13 +2476,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Clear all nodes and connections';
 
   @override
-  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Connect AI assistants to your data';
-
-  @override
-  String get useYourMcpApiKey => 'Use your MCP API key';
 
   @override
   String get realTimeTranscript => 'Real-time Transcript';
@@ -2498,12 +2489,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'Detailed diagnostic messages';
-
-  @override
-  String get autoCreateSpeakers => 'Auto-create Speakers';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
 
   @override
   String get followUpQuestions => 'Follow-up Questions';
@@ -9956,7 +9941,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcriptionNoAudio => 'Transcription not receiving audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Tap the record button to start recording';
 
   @override
   String get chatBlockTask => 'Task';
@@ -10199,7 +10184,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Conversations you record show up here. Tap + on Home to record your first one.';
+      'Conversations you record show up here. Tap the record button on Home to record your first one.';
 
   @override
   String get conversationMap => 'Conversation Map';
@@ -10676,7 +10661,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceConnecting => 'Connecting…';
 
   @override
-  String get recordOptionsTip => 'Tip: press and hold the record button to record a phone call.';
+  String get recordOptionsTip => 'Tip: tap the arrow on the record button to record a phone call.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Update Failed';
@@ -11078,4 +11063,415 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Help & About';
+
+  @override
+  String get speakerTagPromptTitle => 'Help Omi recognize voices';
+
+  @override
+  String get speakerTagPromptSubtitle => 'A quick check on voices from the last two days';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Is this you?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Is this $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Who is this?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'That\'s me';
+
+  @override
+  String get speakerTagPromptNotMe => 'Not me';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Someone new';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Someone I don\'t know';
+
+  @override
+  String get speakerTagPromptNotSure => 'Not sure';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Play clip';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current of $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Remember voices of people you name';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi keeps a short voice sample so it can recognize them next time. You can change this anytime in Settings.';
+
+  @override
+  String get speakerTagPromptThanks => 'Thanks! Omi will get better at recognizing voices.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Their name';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Couldn\'t play this clip';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Couldn\'t save that. Please try again.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Ask me to tag voices';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Once in a while, Omi asks who was speaking in your recent conversations';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'When you name someone, Omi keeps a short voice sample so it can recognize them next time';
+
+  @override
+  String get leaveBlank => 'Leave blank';
+
+  @override
+  String get mcpOAuthSetup =>
+      'On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Add to ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'On Claude Desktop → Settings → Connectors, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transcriptions are unavailable, recording continues on device and will process later';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transcriptions pending $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transcriptions pending $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Call';
+
+  @override
+  String get captureSourcePhoneMic => 'Phone mic';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Resume';
+
+  @override
+  String get finish => 'Finish';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Pendant paused · resumes when you finish';
+
+  @override
+  String get pendantIsListeningTitle => 'Your pendant is listening';
+
+  @override
+  String get oneSourceAtATime => 'Omi records from one source at a time.';
+
+  @override
+  String get recordWithPhoneInstead => 'Record with phone instead';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Pendant pauses until you finish';
+
+  @override
+  String get pendantPausesDuringCall => 'Pendant pauses during the call';
+
+  @override
+  String get keepUsingPendant => 'Keep using pendant';
+
+  @override
+  String get recordWith => 'Record with';
+
+  @override
+  String get moreWaysToRecord => 'More ways to record';
+
+  @override
+  String get openCall => 'Open call';
+
+  @override
+  String get captureRecoveryBanner => 'Pendant audio is not reaching the app — tap to repair';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Stop Transcribe Later on your pendant before recording with your phone.';
+
+  @override
+  String get captureNotTranscribing => 'Not transcribing';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio saved, transcribes later';
+
+  @override
+  String get captureStillRecording => 'Still recording';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mic in use by another app';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'A call or another app took the microphone, so Omi can\'t hear right now. Omi resumes on its own when the microphone is free. Everything recorded before this is safe.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Your custom speech-to-text service can\'t be reached. Omi keeps your audio on this phone and sends it when the service is back. Nothing is lost.';
+
+  @override
+  String get captureStarting => 'Starting…';
+
+  @override
+  String get capturePhoneStorageFull => 'Phone storage full';
+
+  @override
+  String get captureStorageAlmostFull => 'Storage almost full';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name + others';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Hear Omi\'s Answers';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'I\'ve got it. Your next meeting starts in twenty minutes.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'You\'re All Set';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tap a row to review or change it.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'When you ask with the button, Omi can read its answer out loud.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Hear your last answer';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Playing your last answer...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Through $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Through the phone speaker';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Through the current audio output';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Answers stay on screen. Nothing is spoken.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Private. Speaks only through AirPods, Bluetooth or wired headphones.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Uses the phone speaker when no headphones are connected.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi will stay silent. Answers still appear in the app.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device connected. Omi will speak here.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'No headphones connected. Omi stays silent until you connect some.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Plays through $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Plays out loud through the phone speaker.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'You can change this anytime in $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Replay this tour anytime in $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Headphones';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'Minutes';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tasks';
+
+  @override
+  String get usageMonth => 'Month';
+
+  @override
+  String get usageYear => 'Year';
+
+  @override
+  String get usageAll => 'All time';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Appearance';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Light';
+
+  @override
+  String get appearanceDark => 'Dark';
+
+  @override
+  String get chatDiscardRecording => 'Discard';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Didn\'t catch that — try again';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Search people';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Add \"$query\" as a new person';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Show all $count people';
+  }
 }

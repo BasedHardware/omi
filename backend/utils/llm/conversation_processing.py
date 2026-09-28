@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, cast
@@ -17,12 +17,13 @@ from models.app import App
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
-from models.structured import ActionItem, Event, Structured
-from models.structured_extraction import ActionItemsExtraction, StructuredExtraction
+from models.structured import ActionItem, Event, Participant, Structured
+from models.structured_extraction import ActionItemsExtraction, RichStructuredExtraction, StructuredExtraction
 from .clients import get_llm, get_llm_gateway_chat_structured, parser
 from .discard_parser import DiscardConversation, LenientDiscardParser
 from .gateway_error_contract import is_byok_rate_limit_gateway_error
 from utils.byok import has_byok_keys
+from utils.conversations.meeting_participants import MeetingRoster
 from utils.conversations.wake_word import (
     WAKE_WORD_DISCARD_PROMPT_RULES,
     WAKE_WORD_PROMPT_RULES,
@@ -32,6 +33,15 @@ from utils.conversations.relevance_rules import KEEP_WORD_COUNT, transcript_word
 from utils.conversations.summary_selection import render_sections_markdown
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
+from utils.llm.action_item_normalization import normalize_action_item_due_dates as _normalize_action_item_due_dates
+from utils.llm.meeting_notes_rich_prompts import rich_static_instructions, rich_volatile_instructions
+from utils.llm.meeting_notes_presentation import enforce_conversation_note_presentation
+from utils.llm.meeting_notes_validation import (
+    sanitize_structured_speaker_placeholders,
+    strip_speaker_placeholders,
+    validate_rich_meeting_notes,
+    validate_structured_source_segment_ids,
+)
 from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_MINIMUM_TOKENS,
@@ -135,29 +145,6 @@ def _coerce_structured(response: Structured | StructuredExtraction) -> Structure
     if isinstance(response, StructuredExtraction):
         return response.to_structured()
     return response
-
-
-def _normalize_action_item_due_dates(
-    action_items: List[ActionItem],
-    *,
-    user_tz: Any,
-    now: datetime,
-    log_past_due_clears: bool,
-) -> List[ActionItem]:
-    for action_item in action_items:
-        if action_item.due_at is None:
-            continue
-        if action_item.due_at.tzinfo is None:
-            action_item.due_at = action_item.due_at.replace(tzinfo=user_tz).astimezone(timezone.utc)
-        else:
-            action_item.due_at = action_item.due_at.astimezone(timezone.utc)
-        if action_item.due_at < now - timedelta(days=1):
-            if log_past_due_clears:
-                logger.warning(
-                    f'Clearing past due_at {action_item.due_at.isoformat()} for action item: {action_item.description}'
-                )
-            action_item.due_at = None
-    return action_items
 
 
 def _record_chat_extraction_comparison(*, feature: str, field: str, outcome: str) -> None:
@@ -1138,75 +1125,6 @@ def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
     return aware.astimezone(user_tz).replace(tzinfo=None).isoformat()
 
 
-def _validate_source_segment_ids(values: Any, valid_ids: set[str]) -> list[str]:
-    """Keep valid, unique source IDs in model order; reject all other values."""
-
-    if not valid_ids or not values:
-        return []
-    validated: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        if not isinstance(value, str) or value not in valid_ids or value in seen:
-            continue
-        seen.add(value)
-        validated.append(value)
-    return validated
-
-
-def validate_structured_source_segment_ids(
-    structured: Structured, transcript_segment_ids: Optional[Iterable[str]]
-) -> Structured:
-    """Drop fabricated/duplicate evidence references from any summary output.
-
-    The caller supplies IDs from typed ``TranscriptSegment`` objects. This
-    boundary intentionally has no transcript-string parser: external text and
-    bracket-like content are not evidence of a persisted segment identity.
-    """
-
-    valid_ids = {
-        segment_id for segment_id in (transcript_segment_ids or ()) if isinstance(segment_id, str) and segment_id
-    }
-    for section in structured.sections:
-        section.source_segment_ids = _validate_source_segment_ids(section.source_segment_ids, valid_ids)
-    for action_item in structured.action_items:
-        action_item.source_segment_ids = _validate_source_segment_ids(action_item.source_segment_ids, valid_ids)
-    return structured
-
-
-# Diarization placeholders are transcript machinery, not people. Prompt wording alone
-# does not hold — v2 already forbade "Speaker 1 said that" and still leaked the token.
-# `spk N` is the compact speaker-map key (SCA-454) and leaks the same way.
-_SPEAKER_PLACEHOLDER_RE = re.compile(r'(?i)\b(?:spk|speaker)[ _]\d+\b:?[ \t]*')
-
-
-def strip_speaker_placeholders(text: str) -> str:
-    """Drop leftover Speaker N / SPEAKER_00 tokens rather than inventing a name."""
-    if not text:
-        return text
-    cleaned = _SPEAKER_PLACEHOLDER_RE.sub('', text)
-    cleaned = re.sub(r'[^\S\n]+', ' ', cleaned)
-    cleaned = re.sub(r' *\n *', '\n', cleaned)
-    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
-    return cleaned.strip()
-
-
-def sanitize_structured_speaker_placeholders(structured: Structured) -> Structured:
-    """Strip diarization placeholders from every user-visible notes field."""
-    structured.title = strip_speaker_placeholders(structured.title)
-    structured.overview = strip_speaker_placeholders(structured.overview)
-    for section in structured.sections:
-        section.heading = strip_speaker_placeholders(section.heading)
-        section.body_markdown = strip_speaker_placeholders(section.body_markdown)
-    for item in structured.action_items:
-        item.description = strip_speaker_placeholders(item.description)
-        if item.owner_name:
-            cleaned_owner = strip_speaker_placeholders(item.owner_name)
-            item.owner_name = cleaned_owner or None
-        if item.context:
-            item.context = strip_speaker_placeholders(item.context)
-    return structured
-
-
 # Whole-transcript structuring produces the title and summary a conversation cannot be finalized
 # without, so like the test-prompt summary above it must not inherit the shared gateway transport
 # deadline (15s to first response byte), which is sized for background feature calls. In prod on
@@ -1354,8 +1272,18 @@ def get_conversation_notes(
     task_intelligence_capture: bool,
     existing_action_items: Optional[List[Dict[str, Any]]] = None,
     trusted_wake_word_markers: bool = False,
+    meeting_context: Optional[str] = None,
+    rich_context_enabled: bool = False,
+    roster: Optional[MeetingRoster] = None,
 ) -> Structured:
-    """Generate sections, actions, and events in one coherent model call."""
+    """Generate sections, actions, and events in one coherent model call.
+
+    ``rich_context_enabled`` switches to the extended extraction schema and the
+    rich instruction blocks; ``meeting_context`` is the rendered BACKGROUND
+    CONTEXT block appended to the volatile suffix only. With the flag off all
+    three new arguments must be absent/default and the prompt is byte-identical
+    to the legacy notes prompt.
+    """
     if not prefix.context.strip():
         return Structured()
 
@@ -1368,13 +1296,14 @@ def get_conversation_notes(
         user_tz = timezone.utc
     started_local = (started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)).astimezone(user_tz)
     current_local = current_time.astimezone(user_tz)
+    rich_mode = rich_context_enabled
     transcript_word_count = _word_count(prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
     if transcript_word_count < 500:
-        density = 'Use 1-2 sections; target ~80 words across the entire note.'
+        density = f'Use 1-2 sections; target ~{95 if rich_mode else 80} words across the entire note.'
     elif transcript_word_count < 2500:
-        density = 'Use 2-4 sections; target ~200 words across the entire note.'
+        density = f'Use 2-4 sections; target ~{240 if rich_mode else 200} words across the entire note.'
     else:
-        density = 'Use 4-6 sections; target ~400 words across the entire note.'
+        density = f'Use 4-6 sections; target ~{480 if rich_mode else 400} words across the entire note.'
 
     existing_lines: List[str] = []
     for item in existing_action_items or []:
@@ -1385,12 +1314,19 @@ def get_conversation_notes(
         existing_lines.append(f'- {label}{item.get("description", "")}')
     existing_context = '\n'.join(existing_lines) or 'None supplied.'
 
-    extraction_parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
-    static_instructions = _conversation_notes_static_instructions(extraction_parser.get_format_instructions())
+    extraction_parser = PydanticOutputParser(
+        pydantic_object=RichStructuredExtraction if rich_mode else StructuredExtraction
+    )
+    if rich_mode:
+        static_instructions = rich_static_instructions(
+            extraction_parser.get_format_instructions(), _conversation_notes_static_instructions
+        )
+    else:
+        static_instructions = _conversation_notes_static_instructions(extraction_parser.get_format_instructions())
     wake_word_rules = ''
     if trusted_wake_word_markers and has_structural_wake_word_marker(prefix.context):
         wake_word_rules = WAKE_WORD_PROMPT_RULES
-    volatile_instructions = _conversation_notes_volatile_instructions(
+    volatile_kwargs = dict(
         response_language=response_language,
         density=density,
         task_intelligence_capture=task_intelligence_capture,
@@ -1401,6 +1337,14 @@ def get_conversation_notes(
         conversation_context=prefix.context,
         wake_word_rules=wake_word_rules,
     )
+    if rich_mode:
+        volatile_instructions = rich_volatile_instructions(
+            legacy_volatile=_conversation_notes_volatile_instructions,
+            meeting_context=meeting_context,
+            **volatile_kwargs,
+        )
+    else:
+        volatile_instructions = _conversation_notes_volatile_instructions(**volatile_kwargs)
     explicit_cache_enabled = shared_conversation_cache_supported() and explicit_cache_switch_enabled()
     cache_enabled = explicit_cache_enabled and has_cacheable_prefix(static_instructions)
     messages = [
@@ -1415,9 +1359,39 @@ def get_conversation_notes(
         prompt_cache_options=cache_options,
         request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
     )
-    response = extraction_parser.parse(_content_str(model.invoke(messages)))
+    raw_response = _content_str(model.invoke(messages))
+    response = extraction_parser.parse(raw_response)
     structured = response.to_structured()
-    validate_structured_source_segment_ids(structured, prefix.transcript_segment_ids)
+    if rich_mode:
+        validate_rich_meeting_notes(
+            structured,
+            transcript_body=prefix.context.split('FULL TRANSCRIPT\n', 1)[-1],
+            roster=roster,
+            has_background_context=bool(meeting_context and meeting_context.strip()),
+            background_body=meeting_context or '',
+        )
+
+    structured = enforce_conversation_note_presentation(
+        structured,
+        raw_response=raw_response,
+        model=model,
+        messages=messages,
+        extraction_parser=extraction_parser,
+        transcript_segment_ids=prefix.transcript_segment_ids,
+        post_parse_validator=(
+            lambda value: (
+                validate_rich_meeting_notes(
+                    value,
+                    transcript_body=prefix.context.split('FULL TRANSCRIPT\n', 1)[-1],
+                    roster=roster,
+                    has_background_context=bool(meeting_context and meeting_context.strip()),
+                    background_body=meeting_context or '',
+                )
+                if rich_mode
+                else None
+            )
+        ),
+    )
 
     for action_item in structured.action_items:
         if action_item.created_at is None:
@@ -1434,7 +1408,6 @@ def get_conversation_notes(
     projected_overview = render_sections_markdown(structured.sections)
     if projected_overview:
         structured.overview = projected_overview
-    sanitize_structured_speaker_placeholders(structured)
     return structured
 
 

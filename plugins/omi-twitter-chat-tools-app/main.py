@@ -11,7 +11,7 @@ import hashlib
 import base64
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import requests
 from dotenv import load_dotenv
@@ -30,6 +30,7 @@ from db import (
     get_user_setting,
 )
 from models import ChatToolResponse
+from twitter_link_auth import require_signed_link, sign_uid
 
 load_dotenv()
 
@@ -1051,6 +1052,7 @@ async def root(uid: str = Query(None)):
 
     # User is connected
     username = tokens.get("username", "Unknown")
+    disconnect_url = f"/disconnect?uid={quote(uid, safe='')}&sig={sign_uid(uid)}"
 
     return HTMLResponse(content=f"""
     <html>
@@ -1074,7 +1076,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Who mentioned me on Twitter?"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="{disconnect_url}" class="btn btn-secondary btn-block">
                     Disconnect Twitter
                 </a>
 
@@ -1269,10 +1271,11 @@ async def check_setup(uid: str = Query(...)):
 
 
 @app.get("/disconnect")
-async def disconnect(uid: str = Query(...)):
-    """Disconnect Twitter."""
+async def disconnect(uid: str = Query(...), sig: str = Query("")):
+    """Disconnect Twitter. The uid must carry the settings-page HMAC."""
+    require_signed_link(uid, sig)
     delete_twitter_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
 
 @app.get("/health")

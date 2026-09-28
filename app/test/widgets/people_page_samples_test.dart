@@ -4,11 +4,14 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 
 class _People extends PeopleProvider {
   _People(List<Person> seeded) : super(loadPeople: () async => seeded);
@@ -55,6 +58,12 @@ void main() {
         providers: [
           ChangeNotifierProvider<PeopleProvider>.value(value: people),
           ChangeNotifierProvider<ConnectivityProvider>(create: (_) => ConnectivityProvider()),
+          ChangeNotifierProvider<SpeakerTagPromptsProvider>(
+            create: (_) => SpeakerTagPromptsProvider(
+              fetchSettings: () async =>
+                  const ApiFailure<GeneratedVoiceProfileSettings>(ApiProblem(ApiProblemKind.transport)),
+            ),
+          ),
         ],
         child: const MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -65,10 +74,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Voice Profile'), findsOneWidget);
+    expect(find.text('Sample 1'), findsOneWidget);
     expect(find.text('Tap to delete'), findsNothing);
 
-    await tester.tap(find.text('Voice Profile'));
+    await tester.tap(find.text('Sample 1'));
     await tester.pumpAndSettle();
     expect(people.played, [(0, 0)]);
     expect(find.text('Delete Sample?'), findsNothing, reason: 'a tap plays, it never deletes');

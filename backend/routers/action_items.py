@@ -359,22 +359,24 @@ def create_action_item(
 
     if not action_item:
         raise HTTPException(status_code=500, detail="Failed to create action item")
+    response = ActionItemResponse(**action_item)
     _wake_task_changes(uid, [action_item_id], action_item.get('updated_at'))
 
-    # Schedule a reminder only for an open task with a due date — an already-completed item must
-    # not arm a reminder (#5085).
-    if request.due_at and not request.completed:
-        _schedule_action_item_reminder(uid, action_item_id, request.description, request.due_at)
+    # A keyed retry can return a task edited or completed since the original POST.
+    # Project its saved state, never re-arm reminders or export the stale request.
+    if response.due_at and not response.completed:
+        _schedule_action_item_reminder(uid, action_item_id, response.description, response.due_at)
 
-    upsert_action_item_vector(uid, action_item_id, request.description)
+    upsert_action_item_vector(uid, action_item_id, response.description)
 
     def _run_auto_sync():
-        asyncio.run(auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}, skip_apple_reminders=True))
+        asyncio.run(auto_sync_action_item(uid, action_item, skip_apple_reminders=True))
 
-    submit_with_context(postprocess_executor, _run_auto_sync)
+    if not response.completed:
+        submit_with_context(postprocess_executor, _run_auto_sync)
 
     record_product_event('action_item_created', request=http_request)
-    return ActionItemResponse(**action_item)
+    return response
 
 
 def _ensure_aware(value: datetime) -> datetime:
@@ -1067,12 +1069,18 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     sender_uid = share_data['uid']
     task_ids = share_data['task_ids']
 
-    # Pre-validate: check which items are eligible (exist and not locked)
+    # Pre-validate: check which items exist and which are locked
     eligible_ids = []
+    existing_items_count = 0
     for task_id in task_ids:
         item = action_items_db.get_action_item(sender_uid, task_id)
-        if item and not item.get('is_locked', False):
-            eligible_ids.append(task_id)
+        if item:
+            existing_items_count += 1
+            if not item.get('is_locked', False):
+                eligible_ids.append(task_id)
+
+    if existing_items_count == 0:
+        raise HTTPException(status_code=404, detail="Shared tasks were deleted or not found")
 
     if not eligible_ids:
         raise HTTPException(status_code=402, detail="All shared tasks are locked. A paid plan is required.")
@@ -1084,33 +1092,46 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     if not accepted:
         raise HTTPException(status_code=409, detail="You have already accepted this share")
 
-    # Copy each eligible task to recipient's list
-    created_ids = []
-    for task_id in eligible_ids:
-        original = action_items_db.get_action_item(sender_uid, task_id)
-        if not original or original.get('is_locked', False):
-            continue
+    # Resolve every copy before writing, then commit the bounded share as one batch.
+    # A per-item write loop can consume the acceptance after only a prefix is saved,
+    # permanently preventing the recipient from retrying the missing tasks.
+    items_to_create = []
+    try:
+        for task_id in eligible_ids:
+            original = action_items_db.get_action_item(sender_uid, task_id)
+            if not original or original.get('is_locked', False):
+                continue
 
-        new_item = {
-            'description': original.get('description', ''),
-            'completed': False,
-            'due_at': original.get('due_at'),
-            'shared_from': {
-                'token': request.token,
-                'sender_uid': sender_uid,
-                'sender_name': share_data['display_name'],
-                'original_task_id': task_id,
-            },
-        }
-        new_id = action_items_db.create_action_item(uid, new_item)
-        created_ids.append(new_id)
-        upsert_action_item_vector(uid, new_id, new_item['description'])
-        if isinstance(new_item['due_at'], datetime):
-            _schedule_action_item_reminder(uid, new_id, new_item['description'], new_item['due_at'])
+            new_item = {
+                'description': original.get('description', ''),
+                'completed': False,
+                'due_at': original.get('due_at'),
+                'shared_from': {
+                    'token': request.token,
+                    'sender_uid': sender_uid,
+                    'sender_name': share_data['display_name'],
+                    'original_task_id': task_id,
+                },
+            }
+            items_to_create.append(new_item)
+
+        created_ids = action_items_db.create_action_items_batch(uid, items_to_create) if items_to_create else []
+    except Exception:
+        # Reads/preparation and rejected transactions leave no copied prefix.
+        redis_db.undo_accept_task_share(request.token, uid)
+        raise
 
     # If race condition caused all items to become locked after pre-check, rollback token
     if not created_ids:
         redis_db.undo_accept_task_share(request.token, uid)
         raise HTTPException(status_code=402, detail="Shared tasks are no longer available.")
+
+    # Derived delivery must not interrupt persistence of the remaining shared tasks.
+    for new_id, new_item in zip(created_ids, items_to_create):
+        upsert_action_item_vector(uid, new_id, new_item['description'])
+        if isinstance(new_item['due_at'], datetime):
+            _schedule_action_item_reminder(uid, new_id, new_item['description'], new_item['due_at'])
+
+    _wake_task_changes(uid, created_ids, datetime.now(timezone.utc))
 
     return {"created": created_ids, "count": len(created_ids)}

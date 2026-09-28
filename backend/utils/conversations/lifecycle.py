@@ -450,6 +450,7 @@ def open_recording_session(
     proposed_conversation_id: str,
     *,
     firestore_client: Any = None,
+    include_conversation_snapshot: bool = False,
 ) -> dict[str, Any]:
     """Open or resume a durable session through the single lifecycle owner.
 
@@ -462,6 +463,7 @@ def open_recording_session(
             recording_session_id,
             proposed_conversation_id,
             firestore_client=firestore_client,
+            include_conversation_snapshot=include_conversation_snapshot,
         )
     except Exception:
         if recording_session_mode() == 'enforce':
@@ -587,6 +589,33 @@ def record_recording_session_event(
     return None
 
 
+def renew_live_recording_session_lease(
+    uid: str,
+    recording_session_id: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """Keep an actively audio-producing recording fenced from stale recovery."""
+    try:
+        return recording_sessions_db.renew_recording_session_lease(
+            uid,
+            recording_session_id,
+            conversation_id,
+            firestore_client=firestore_client,
+        )
+    except Exception:
+        if recording_session_mode() == 'enforce':
+            raise
+        logger.exception(
+            'recording session lease renewal failed uid=%s session=%s conversation=%s',
+            uid,
+            recording_session_id,
+            conversation_id,
+        )
+        return False
+
+
 def tombstone_recording_session(
     uid: str,
     recording_session_id: str,
@@ -701,13 +730,22 @@ def open_live_recording_session(
         recording_session_id,
         proposed_conversation_id,
         firestore_client=firestore_client,
+        include_conversation_snapshot=True,
     )
+    transactional_conversation_known = bool(binding.get('conversation_snapshot_known'))
+    transactional_conversation = binding.get('conversation_snapshot')
     if existing is None:
-        return dict(binding) | {'requires_rollover': False}
+        result = dict(binding) | {'requires_rollover': False}
+        if transactional_conversation_known:
+            result['conversation_snapshot'] = transactional_conversation
+            result['conversation_snapshot_known'] = True
+        return result
 
-    conversation = conversations_db.get_conversation(
-        uid, existing['conversation_id'], read_site=FirestoreReadSite.LIFECYCLE_OPEN_LIVE_SESSION_BINDING
-    )
+    conversation = transactional_conversation
+    if not transactional_conversation_known:
+        conversation = conversations_db.get_conversation(
+            uid, existing['conversation_id'], read_site=FirestoreReadSite.LIFECYCLE_OPEN_LIVE_SESSION_BINDING
+        )
     if conversation is not None:
         return dict(binding) | {
             'requires_rollover': False,
@@ -799,10 +837,13 @@ def request_finalization(
     require_cloud_tasks: bool = False,
     client_kind: object = 'unknown',
     app_build: object = 'unknown',
+    recovery_cutoff: datetime | None = None,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
-    if require_cloud_tasks and not is_listen_finalization_dispatch_configured():
+    if require_cloud_tasks and not (
+        is_listen_finalization_dispatch_configured() and is_listen_finalization_dispatch_enabled()
+    ):
         # A REST request has no pusher session to execute an inline handoff.
         # Reject before mutating the conversation instead of persisting work
         # that this deployment cannot recover or dispatch.
@@ -816,6 +857,7 @@ def request_finalization(
             finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
             trigger=trigger,
             extra_updates=extra_updates,
+            recovery_cutoff=recovery_cutoff if trigger is ProcessingTrigger.SERVER_RECOVERY else None,
             firestore_client=firestore_client,
         )
     except FirestoreContentionExhausted as error:
@@ -829,7 +871,6 @@ def request_finalization(
         record_client_journey_accepted(
             'conversation_finalization',
             bounded_client_kind(client_kind),
-            app_build if isinstance(app_build, str) else 'unknown',
         )
         record_product_event(
             'conversation_finalized',

@@ -9,7 +9,10 @@ import numpy as np
 
 from database import conversations as conversations_db
 from database import users as users_db
+from database import voice_profiles as voice_profiles_db
+from utils.audio_timeline import coverage_outcome, is_audio_timeline_v2
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
+from utils.metrics import OMI_AUDIO_TIMELINE_COVERAGE_TOTAL
 from utils.other.storage import (
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
@@ -765,6 +768,13 @@ async def extract_speaker_samples(
     Processes each segment one by one, stops when sample limit reached.
     """
     try:
+        # The user can turn off saving other people's voices; this is the one choke
+        # point every teaching path (tag sheet, tag prompts, live socket) reaches.
+        settings = await run_blocking(db_executor, voice_profiles_db.get_voice_profile_settings, uid)
+        if not settings['save_other_voice_profiles']:
+            logger.info('Speaker sample extraction skipped reason=user_disabled_other_voice_profiles')
+            return
+
         # Snapshot the person before slow audio work. Publishing compares this version
         # so a correction, deletion or replacement cannot resurrect stale teaching.
         person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
@@ -830,6 +840,8 @@ async def extract_speaker_samples(
             if not seg or seg.get('person_id') != person_id or seg.get('is_user'):
                 logger.warning(f"Segment {seg_id} not found in conversation {uid} {conversation_id}")
                 continue
+            if seg.get('audio_alignment') == 'unplaced':
+                continue
 
             segment_start = seg.get('start')
             segment_end = seg.get('end')
@@ -850,6 +862,7 @@ async def extract_speaker_samples(
                             prev_seg.get('speaker_id') != speaker_id
                             or prev_seg.get('person_id') != person_id
                             or prev_seg.get('is_user')
+                            or prev_seg.get('audio_alignment') == 'unplaced'
                         ):
                             break
                         prev_start = prev_seg.get('start')
@@ -877,6 +890,18 @@ async def extract_speaker_samples(
             # Calculate absolute timestamps using the sample window
             abs_start = started_at_ts + sample_start
             abs_end = started_at_ts + sample_end
+
+            if is_audio_timeline_v2(conversation):
+                # v2: extract only from validated coverage; an uncovered
+                # window is unavailable, never an embedding of other audio.
+                outcome = coverage_outcome(conversation, sample_start, sample_end)
+                OMI_AUDIO_TIMELINE_COVERAGE_TOTAL.labels(mode='v2', outcome=outcome).inc()
+                if outcome != 'covered':
+                    logger.info(
+                        f"Skipping speaker sample, v2 coverage={outcome} "
+                        f"window={sample_start:.1f}-{sample_end:.1f}s {uid} {conversation_id}"
+                    )
+                    continue
 
             # Find relevant chunks
             sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])

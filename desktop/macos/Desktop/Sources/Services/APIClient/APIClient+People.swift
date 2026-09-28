@@ -369,4 +369,74 @@ extension APIClient {
     return data
   }
 
+  /// Streams the desktop TTS response in bounded chunks. The request and status
+  /// mapping intentionally mirror `synthesizeSpeech` so progressive playback is
+  /// compatible with both buffered and chunked backend implementations.
+  func synthesizeSpeechStream(
+    request body: TtsSynthesizeRequest,
+    stallTimeout: TimeInterval = 10
+  ) async throws -> AsyncThrowingStream<Data, Error> {
+    let base = rustBackendURL
+    guard !base.isEmpty, let url = URL(string: base + "v1/tts/synthesize") else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    // Foundation resets the request timer whenever response data arrives. This
+    // bounds a silent upstream stall without imposing a whole-response deadline.
+    request.timeoutInterval = stallTimeout
+    request.allHTTPHeaderFields = try await buildHeaders()
+    request.httpBody = try JSONEncoder().encode(body)
+
+    return AsyncThrowingStream { continuation in
+      let task = Task {
+        do {
+          let (errorBody, httpResponse) = try await self.performAuthenticatedStreamingData(
+            for: request,
+            authPolicy: .providerCredentialBoundary,
+            onChunk: { continuation.yield($0) }
+          )
+
+          if httpResponse.statusCode == 401 {
+            let detail = (try? JSONDecoder().decode(APIErrorPayload.self, from: errorBody))?.preferredMessage
+            if detail?.hasPrefix("OpenAI TTS request failed:") == true {
+              let mode: CredentialAuthMode =
+                APIKeyService.selectedBYOKLLMProvider == .openai ? .byok : .managed
+              throw CredentialHealthError.providerAuth(
+                provider: .openai,
+                mode: mode,
+                message: mode == .byok
+                  ? "Your OpenAI key was rejected. Update it in Settings."
+                  : "OpenAI authentication failed. Voice responses are using fallback."
+              )
+            }
+            await self.invalidateSessionAfterUnauthorized(
+              endpoint: self.endpointLabel(for: request),
+              signOutOn401: true
+            )
+            throw APIError.unauthorized
+          }
+
+          if httpResponse.statusCode == 429 {
+            let detail = (try? JSONDecoder().decode(APIErrorPayload.self, from: errorBody))?.preferredMessage
+            if detail?.hasPrefix("OpenAI TTS request failed:") == true {
+              throw CredentialHealthError.providerQuota(
+                provider: .openai,
+                message: "OpenAI voice quota was exceeded. Voice responses are using fallback."
+              )
+            }
+            throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
+          }
+          guard (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.httpError(statusCode: httpResponse.statusCode)
+          }
+          continuation.finish()
+        } catch {
+          continuation.finish(throwing: error)
+        }
+      }
+      continuation.onTermination = { @Sendable _ in task.cancel() }
+    }
+  }
+
 }

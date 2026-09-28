@@ -43,7 +43,7 @@ from models.product_memory import (
     RESTRICTED_SENSITIVITY_LABELS,
     SourceState,
 )
-from utils.log_sanitizer import sanitize_validation_error
+from utils.log_sanitizer import sanitize, sanitize_validation_error
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
 from utils.memory.canonical_memory_adapter import (
     CanonicalBatchMutationLimitError,
@@ -4008,7 +4008,15 @@ class MemoryService:
         except HTTPException:
             raise
         except CanonicalBatchMutationLimitError as exc:
-            raise HTTPException(status_code=413, detail=str(exc)) from exc
+            logger.error(
+                "Canonical memory batch delete exceeded the transaction limit: %s",
+                sanitize(str(exc)),
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=413,
+                detail="Memory batch exceeds the supported size limit",
+            ) from exc
         except CanonicalMemoryNotFoundError as exc:
             # A concurrent canonical change can invalidate the prevalidation;
             # expose the same released not-found contract without per-ID fallback.
@@ -4327,13 +4335,8 @@ class MemoryService:
         upsert_vector: bool = True,
     ) -> MemoryDB:
         del memory_system, consumer, operation, upsert_vector
-        self.ensure_canonical_mutation_ready(uid)
-        materialized = self._ensure_canonical_target(uid, memory_id)
-        try:
-            updated = self._canonical.update_content(uid, memory_id, content)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail="Memory not found") from exc
-        if materialized:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
-        self._invalidate_prompt_cache(uid)
-        return updated
+        # Route through ``update_content`` so ledger-schema memories are
+        # corrected through the ledger path rather than a blind canonical
+        # content overwrite; it performs the same readiness/materialization and
+        # historical cleanup internally.
+        return self.update_content(uid, memory_id, content)

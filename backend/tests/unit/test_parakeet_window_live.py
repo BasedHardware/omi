@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from utils.stt import parakeet_window as window, provider_resilience, streaming as st, vad_gate
-from utils.stt.live_metrics import WINDOW_FORCED_CUTS, WINDOW_POSTS
+from utils.stt.live_metrics import WINDOW_FIRST_TEXT, WINDOW_FORCED_CUTS, WINDOW_POSTS, WINDOW_SESSION_OUTCOME
 from utils.stt.live_session import (
     WINDOW_VAD_CONTINUE_THRESHOLD,
     WINDOW_VAD_HANGOVER_MS,
@@ -29,6 +29,8 @@ def runtime(monkeypatch):
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '1')
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://tdt.invalid')
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_POOL_HOST', 'tdt-headless.invalid')
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2')
     # The scheduling tests below are written in 6 s steps (one 6 s send = one POST).
     # Pin that unit here so they test mechanics, not the shipped default, which
     # test_default_pace_waits_for_fifteen_seconds_of_speech pins on its own.
@@ -37,6 +39,8 @@ def runtime(monkeypatch):
     monkeypatch.setenv('MODULATE_API_KEY', 'test')
     monkeypatch.setenv('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://embedding.invalid')
     monkeypatch.setattr(window, 'admission', window.WindowAdmission())
+    monkeypatch.setattr(window, 'batch_pressure', window.BatchPressure())
+    window.batch_pressure._observed_at = window.time.monotonic()
     monkeypatch.setattr(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0)
     for provider in ('parakeet', 'modulate', 'deepgram', 'soniox'):
         monkeypatch.setattr(
@@ -80,6 +84,85 @@ class Client:
         return httpx.Response(self.status, json=self.data, request=httpx.Request('POST', url))
 
 
+@pytest.mark.asyncio
+async def test_batch_pressure_cache_never_waits_at_admission_and_stands_down(monkeypatch):
+    pressure = window.BatchPressure()
+    began = asyncio.Event()
+    release = asyncio.Event()
+
+    async def refresh(_host, _replicas):
+        began.set()
+        await release.wait()
+        pressure._busy = True
+        pressure._observed_at = window.time.monotonic()
+
+    monkeypatch.setattr(pressure, '_refresh', refresh)
+    assert not pressure.allows('tdt-headless.invalid', 2)  # schedules a poll without waiting
+    await began.wait()
+    assert not pressure.allows('tdt-headless.invalid', 2)
+    release.set()
+    await pressure._task
+    assert not pressure.allows('tdt-headless.invalid', 2)
+    pressure._observed_at -= pressure.STALE_SECONDS + 1
+    assert not pressure.allows('tdt-headless.invalid', 2)  # stale signal: fleet stands down
+
+
+@pytest.mark.asyncio
+async def test_batch_pressure_endpoint_thresholds_and_unavailable_signal(monkeypatch):
+    pressure = window.BatchPressure()
+    loop = asyncio.get_running_loop()
+    ips = ['10.0.0.1', '10.0.0.2']
+    monkeypatch.setattr(
+        loop,
+        'getaddrinfo',
+        AsyncMock(side_effect=lambda *_args, **_kwargs: [(None, None, None, None, (ip, 8080)) for ip in ips]),
+    )
+    payloads = {
+        '10.0.0.1': {'pending_requests': 2, 'oldest_pending_seconds': 0},
+        '10.0.0.2': {'pending_requests': 2, 'oldest_pending_seconds': 0},
+    }
+
+    class Response:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    class ClientContext:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url):
+            return Response(payloads[url.split('/')[2].split(':')[0]])
+
+    monkeypatch.setattr(window.httpx, 'AsyncClient', ClientContext)
+    await pressure._refresh('tdt-headless.invalid', 2)
+    assert not pressure.allows('tdt-headless.invalid', 2)  # 2 + 2 trips pool cutoff
+    payloads['10.0.0.2']['pending_requests'] = 0
+    await pressure._refresh('tdt-headless.invalid', 2)
+    assert pressure.allows('tdt-headless.invalid', 2)
+    payloads['10.0.0.2']['oldest_pending_seconds'] = 1
+    await pressure._refresh('tdt-headless.invalid', 2)
+    assert not pressure.allows('tdt-headless.invalid', 2)
+    payloads['10.0.0.2']['oldest_pending_seconds'] = 0
+    ips.pop()
+    await pressure._refresh('tdt-headless.invalid', 2)
+    assert not pressure.allows('tdt-headless.invalid', 2)  # incomplete DNS set
+    pressure._observed_at -= pressure.STALE_SECONDS + 1
+    assert not pressure.allows('tdt-headless.invalid', 2)
+    await pressure._task
+
+
 class SeqClient:
     def __init__(self, payloads):
         self.payloads = list(payloads)
@@ -108,6 +191,7 @@ def receiver():
         language='en',
         stt_language='multi',
         multi_lang_enabled=True,
+        language_profile=None,
         stt_model='parakeet-window',
         stt_service=st.STTService.parakeet,
         vocabulary=[],
@@ -127,6 +211,8 @@ def receiver():
 
 @pytest.mark.asyncio
 async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypatch):
+    before_text = WINDOW_SESSION_OUTCOME.labels(outcome='text')._value.get()
+    before_first = WINDOW_FIRST_TEXT._sum.get()
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     from utils.stt import live_session
@@ -148,7 +234,8 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert len(client.requests) == 1
     url, kwargs = client.requests[0]
     assert url.endswith('/v1/transcribe')
-    assert list(kwargs) == ['files']  # the batch endpoint takes no language parameter
+    assert list(kwargs) == ['files', 'headers']  # no language parameter; exclude live from prerecorded metrics
+    assert kwargs['headers'] == {'X-Omi-STT-Surface': 'live-window'}
     assert kwargs['files']['file'][1].startswith(b'RIFF')
     assert recv.emitted[0]['text'] == 'hello'
     assert recv.emitted[0]['start'] >= 1.0
@@ -156,6 +243,18 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert session.consume_speech_ms_delta() == 1000
     assert session.consume_speech_ms_delta() == 0
     assert window.admission.active == 0
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='text')._value.get() == before_text + 1
+    assert WINDOW_FIRST_TEXT._sum.get() > before_first
+
+
+@pytest.mark.asyncio
+async def test_speech_with_empty_tdt_output_counts_no_text(monkeypatch):
+    monkeypatch.setattr(window, 'get_stt_client', lambda: Client(data={'text': ''}))
+    before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get()
+    sock = await LiveChainSession(receiver()).connect(16000)
+    assert sock.send(b'\x01\x00' * 16000)
+    await sock.drain_and_close()
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get() == before + 1
 
 
 @pytest.mark.asyncio
@@ -335,7 +434,7 @@ async def test_soniox_primary_can_reach_window_and_old_callbacks_are_fenced(monk
     await asyncio.gather(first.raw._pump_task, return_exceptions=True)
     callbacks = []
 
-    async def soniox(callback, *args):
+    async def soniox(callback, *args, **kwargs):
         callbacks.append(callback)
         return SimpleNamespace(is_connection_dead=False, finish=lambda: None)
 
@@ -362,7 +461,9 @@ async def test_receiver_dispatches_all_primary_branches_through_managed_chain(mo
     connect = AsyncMock(return_value=sentinel)
     monkeypatch.setattr(LiveChainSession, 'connect', connect)
     assert await ListenReceiver._create_stt_socket(recv, lambda _: None, 16000) is sentinel
-    connect.assert_awaited_once_with(16000)
+    # Audio-timeline v2: the managed chain connect carries the receiver's
+    # provider epoch translator (None on legacy sessions).
+    connect.assert_awaited_once_with(16000, epoch=None)
 
 
 @pytest.mark.asyncio
@@ -424,7 +525,7 @@ async def test_real_receiver_initializes_window_and_survives_post_failure(monkey
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     callbacks = []
 
-    async def tail(callback, *args):
+    async def tail(callback, *args, **kwargs):
         callbacks.append(callback)
         return SimpleNamespace(
             is_connection_dead=False, send=lambda _: True, finalize=lambda: None, finish=lambda: None
@@ -530,7 +631,10 @@ async def test_rebuilt_window_recovers_only_on_text_not_empty_post(monkeypatch, 
     host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
     actual = ListenReceiver(host, [], {})
     actual.stt_socket = SimpleNamespace(is_connection_dead=True, typed_death_reason=None, finish=lambda: None)
-    actual._stt_rebuild = (lambda _: None, lambda _: None, 16000)
+    # Audio-timeline v2: _stt_rebuild holds a callback factory plus the
+    # sample rate; the factory returns fresh callbacks bound to a new
+    # provider epoch's translator on each rebuild.
+    actual._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 16000)
     now = [0.0]
     cb = provider_resilience.ProviderCircuitBreaker(failure_threshold=1, cooldown_seconds=1, clock=lambda: now[0])
     cb.record_failure()
@@ -627,6 +731,7 @@ async def _release_after_audio(sock, client: HoldClient, during_seconds: int) ->
 @pytest.mark.asyncio
 async def test_repeated_slow_posts_stay_up(monkeypatch):
     monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    monkeypatch.setattr(window.batch_pressure, 'allows', lambda *_: True)
     for _ in range(5):
         client = HoldClient()
         monkeypatch.setattr(window, 'get_stt_client', lambda current=client: current)
@@ -1255,6 +1360,7 @@ async def test_finalize_after_terminal_emits_and_reanchors(monkeypatch):
 async def test_idle_flush_emits_held_sentence_once(monkeypatch):
     from utils.stt.window_anchor import IDLE_FLUSH_SECONDS
 
+    monkeypatch.setattr(window.batch_pressure, 'allows', lambda *_: True)
     posted = []
     clock = {'now': 1000.0}
     monkeypatch.setattr(window.time, 'monotonic', lambda: clock['now'])
@@ -1532,6 +1638,7 @@ async def test_catchup_burst_does_not_shed_and_posts_max_context_jobs(monkeypatc
 async def test_idle_remainder_posts_without_close(monkeypatch):
     from utils.stt.window_anchor import IDLE_FLUSH_SECONDS
 
+    monkeypatch.setattr(window.batch_pressure, 'allows', lambda *_: True)
     posted = []
     clock = {'now': 1000.0}
     monkeypatch.setattr(window.time, 'monotonic', lambda: clock['now'])

@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -25,6 +26,9 @@ from utils.product_metrics import extract_app_build, extract_client_kind, record
 from utils.goals_response import normalize_goal_history_entry
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.client_processing import ClientProcessing
+from config.capture_evidence import capture_evidence_dark_write_enabled
+from utils.capture_evidence import MAX_ENVELOPE_BYTES
+from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 from models.conversation import (
     Conversation as OmiConversation,
     CreateConversation,
@@ -1172,6 +1176,21 @@ class DevTranscriptSegment(BaseModel):
     end: float = Field(description="End time in seconds (e.g., 1.5, 3.0, 65.8)")
 
 
+class CaptureEvidenceLineageUnit(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+
+
+class CaptureEvidenceLineage(BaseModel):
+    version: Literal[1] = 1
+    capability: Literal['stable_artifact']
+    capture_root: str = Field(min_length=1, max_length=200)
+    clock_domain: Literal['desktop_session_ms']
+    lineage: Literal['complete', 'incomplete']
+    units: List[CaptureEvidenceLineageUnit] = Field(max_length=64)
+
+
 class CreateConversationFromTranscriptRequest(BaseModel):
     model_config = ConfigDict(title='CreateConversationFromTranscriptRequest')
 
@@ -1186,6 +1205,7 @@ class CreateConversationFromTranscriptRequest(BaseModel):
             "conversation still lands. Display only — never an input to intelligence."
         ),
     )
+    capture_evidence: Optional[CaptureEvidenceLineage] = None
     client_session_id: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices('client_session_id', 'client_conversation_id', 'session_id', 'client_id'),
@@ -1208,18 +1228,11 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     conversation_role: Literal['ambient', 'meeting'] = 'ambient'
     # Optional for backwards compatibility. When supplied, rotation fragments
     # are persisted but do not create a notes-ready receipt.
-    conversation_finalization_reason: (
-        Literal[
-            'user_stop',
-            'finish_and_continue',
-            'meeting_started',
-            'meeting_ended',
-            'max_duration_rotation',
-            'crash_recovery',
-            'retry',
-        ]
-        | None
-    ) = None
+    # Plain string, not a Literal: this is opaque client-versioned metadata
+    # (only 'max_duration_rotation' is ever compared downstream), and a closed
+    # enum here previously fell out of sync with the desktop client's finalization
+    # reasons, causing every upload carrying a newer reason to fail with a 422.
+    conversation_finalization_reason: Optional[str] = None
 
     @field_validator('client_session_id')
     @classmethod
@@ -1361,7 +1374,23 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     those paths, so the empty-list case here only affects users who have never opened the
     conversations tab nor created a single conversation.
     """
-    return folders_db.get_folders(uid)
+    folders = folders_db.get_folders(uid)
+    valid_folders = []
+    for folder in folders:
+        if not folder or not folder.get('id'):
+            logger.warning('Skipping malformed folder in Developer API folder list')
+            continue
+        try:
+            DeveloperFolder.model_validate(folder)
+            valid_folders.append(folder)
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid folder doc {folder.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_folders
 
 
 class DeveloperAskRequest(BaseModel):
@@ -1998,6 +2027,35 @@ def _create_conversation_from_segments(
     # never write this field.
     client_projection = _accepted_client_projection(request, transcript_segments)
 
+    # Keep original desktop segment IDs before client compaction. Only a bounded,
+    # validated metadata payload enters the existing conversation write.
+    capture_evidence = None
+    evidence_status = 'missing'
+    evidence_enabled = capture_evidence_dark_write_enabled()
+    if evidence_enabled and request.capture_evidence is not None:
+        candidate = request.capture_evidence.model_dump()
+        if (
+            candidate['capture_root'] != request.client_session_id
+            or not all(unit['end_ms'] > unit['start_ms'] for unit in candidate['units'])
+            or (candidate['lineage'] == 'complete' and not candidate['units'])
+        ):
+            evidence_status = 'ineligible'
+        elif len(json.dumps(candidate, separators=(',', ':')).encode()) > MAX_ENVELOPE_BYTES:
+            evidence_status = 'overflow'
+        else:
+            capture_evidence = candidate
+            evidence_status = 'lineage' if candidate['lineage'] == 'complete' else 'incomplete'
+    if evidence_enabled and capture_evidence is None:
+        capture_evidence = {
+            'version': 1,
+            'capability': 'unknown',
+            'coverage': 'unknown',
+            'origin': 'from_segments',
+            'reason': evidence_status,
+        }
+    if evidence_enabled:
+        OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='from_segments', status=evidence_status).inc()
+
     # Create conversation object with transcript segments
     if conversation_id:
         create_conversation_obj = OmiConversation(
@@ -2016,6 +2074,7 @@ def _create_conversation_from_segments(
                 'from_segments_client_session_id': request.client_session_id,
                 'from_segments_claimed_at': datetime.now(timezone.utc),
                 'conversation_role': request.conversation_role,
+                **({'capture_evidence': capture_evidence} if capture_evidence is not None else {}),
                 **(
                     {'conversation_finalization_reason': request.conversation_finalization_reason}
                     if request.conversation_finalization_reason is not None
@@ -2058,6 +2117,7 @@ def _create_conversation_from_segments(
             client_platform=resolved_client_platform,
             external_data={
                 'conversation_role': request.conversation_role,
+                **({'capture_evidence': capture_evidence} if capture_evidence is not None else {}),
                 **(
                     {'conversation_finalization_reason': request.conversation_finalization_reason}
                     if request.conversation_finalization_reason is not None
@@ -2331,7 +2391,7 @@ class GoalResponse(BaseModel):
 
 
 class CreateGoalRequest(BaseModel):
-    model_config = ConfigDict(title='CreateGoalRequest')
+    model_config = ConfigDict(title='CreateGoalRequest', allow_inf_nan=False)
 
     title: str = Field(description="The goal title/description", min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -2347,7 +2407,7 @@ class CreateGoalRequest(BaseModel):
 
 
 class UpdateGoalRequest(BaseModel):
-    model_config = ConfigDict(title='UpdateGoalRequest')
+    model_config = ConfigDict(title='UpdateGoalRequest', allow_inf_nan=False)
 
     title: Optional[str] = Field(default=None, description="New title", min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -2518,7 +2578,7 @@ def update_goal(
 )
 def update_goal_progress(
     goal_id: str,
-    current_value: float = Query(..., description="New progress value"),
+    current_value: float = Query(..., description="New progress value", allow_inf_nan=False),
     uid: str = Depends(get_uid_with_goals_write),
 ):
     """

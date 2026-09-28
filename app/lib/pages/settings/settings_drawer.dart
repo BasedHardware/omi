@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/pages/settings/settings_groups.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -94,6 +95,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     required FaIconData icon,
     required String title,
     String? subtitle,
+    String? value,
     Widget? tag,
   }) {
     return OmiSettingsRow(
@@ -101,14 +103,23 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       leading: FaIcon(icon),
       title: title,
       subtitle: subtitle,
+      value: value,
       trailing: tag,
       showChevron: true,
       onTap: () => _open(destination),
     );
   }
 
+  /// "Pro" on the Plan & Usage row for a paid plan.
+  String? _planValue(UsageProvider usage) {
+    final plan = usage.subscription?.subscription.plan;
+    if (plan == null || !plan.isPaid) return null;
+    return context.l10n.pro;
+  }
+
   Widget _buildSettings(BuildContext context) {
     final l10n = context.l10n;
+    final planValue = _planValue(context.watch<UsageProvider>());
     final prefs = SharedPreferencesUtil();
     final name = prefs.givenName;
     final email = prefs.email;
@@ -122,6 +133,22 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 icon: FontAwesomeIcons.solidUser,
                 title: name.isEmpty ? l10n.account : name,
                 subtitle: email.isEmpty ? null : email),
+          ],
+        ),
+        const SizedBox(height: OmiSpacing.xl),
+        // Plan, referrals and feedback stay one tap from the sheet (David, 2026-09-24).
+        OmiSettingsGroup(
+          children: [
+            _row(SettingsDestination.planAndUsage,
+                key: 'settings_row_planAndUsage',
+                icon: FontAwesomeIcons.chartLine,
+                title: l10n.planAndUsage,
+                value: planValue),
+            _row(SettingsDestination.referral,
+                key: 'settings_row_referral',
+                icon: FontAwesomeIcons.gift,
+                title: l10n.referralProgram,
+                tag: SettingsTag(l10n.newTag, OmiColors.success)),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
@@ -151,6 +178,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           children: [
             _row(SettingsDestination.helpGroup,
                 key: 'settings_group_help', icon: FontAwesomeIcons.circleQuestion, title: l10n.helpAndAbout),
+            if (PlatformService.isIntercomSupported)
+              _row(SettingsDestination.feedback,
+                  key: 'settings_row_feedback', icon: FontAwesomeIcons.solidEnvelope, title: l10n.feedbackBug),
+          ],
+        ),
+        const SizedBox(height: OmiSpacing.xl),
+        OmiSettingsGroup(
+          children: [
             _row(SettingsDestination.developer,
                 key: 'settings_group_developer', icon: FontAwesomeIcons.code, title: l10n.developerSettings),
           ],

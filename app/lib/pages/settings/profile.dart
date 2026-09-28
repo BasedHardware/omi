@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/pages/settings/settings_groups.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
-import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -39,18 +37,11 @@ class _ProfilePageState extends State<ProfilePage> {
     if (mounted) setState(() {});
   }
 
-  String? _planValue(UsageProvider usage) {
-    final plan = usage.subscription?.subscription.plan;
-    if (plan == null || !plan.isPaid) return null;
-    return context.l10n.pro;
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final uid = _prefs.uid;
     final truncatedUid = uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
-    final planValue = _planValue(context.watch<UsageProvider>());
 
     return Scaffold(
       key: const ValueKey('settings_page_account'),
@@ -72,21 +63,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 leading: const FaIcon(FontAwesomeIcons.solidEnvelope),
                 title: l10n.email,
                 value: _prefs.email.isEmpty ? l10n.notSet : _prefs.email,
-              ),
-              OmiSettingsRow(
-                key: settingsRowKey(SettingsDestination.planAndUsage),
-                leading: const FaIcon(FontAwesomeIcons.chartLine),
-                title: l10n.planAndUsage,
-                value: planValue,
-                onTap: () => _open(SettingsDestination.planAndUsage),
-              ),
-              OmiSettingsRow(
-                key: settingsRowKey(SettingsDestination.referral),
-                leading: const FaIcon(FontAwesomeIcons.gift),
-                title: l10n.referralProgram,
-                trailing: SettingsTag(l10n.newTag, OmiColors.success),
-                showChevron: true,
-                onTap: () => _open(SettingsDestination.referral),
               ),
               OmiSettingsRow(
                 key: const ValueKey('settings_row_userId'),

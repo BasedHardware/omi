@@ -938,9 +938,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Idagdag sa claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopyahin ang Config';
 
   @override
@@ -2498,13 +2495,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Burahin ang lahat ng nodes at connections';
 
   @override
-  String get addToClaudeDesktopConfig => 'Idagdag sa claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Ikonekta ang mga AI assistant sa iyong data';
-
-  @override
-  String get useYourMcpApiKey => 'Gamitin ang iyong MCP API key';
 
   @override
   String get realTimeTranscript => 'Real-time Transcript';
@@ -2517,12 +2508,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'Detailed na mga diagnostic messages';
-
-  @override
-  String get autoCreateSpeakers => 'Awtomatikong Lumikha ng Speakers';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Awtomatikong lumikha kapag ang pangalan ay natuklasan';
 
   @override
   String get followUpQuestions => 'Follow-up Questions';
@@ -10058,7 +10043,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcriptionNoAudio => 'Hindi tumatanggap ng audio ang transkripsyon';
 
   @override
-  String get tapPlusToStartRecording => 'I-tap ang + para magsimulang mag-record';
+  String get tapPlusToStartRecording => 'I-tap ang record button para magsimulang mag-record';
 
   @override
   String get chatBlockTask => 'Gawain';
@@ -10301,7 +10286,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Lalabas dito ang mga usapang nire-record mo. I-tap ang + sa Home para i-record ang una.';
+      'Lalabas dito ang mga usapang nire-record mo. I-tap ang record button sa Home para i-record ang una.';
 
   @override
   String get conversationMap => 'Mapa ng mga Usapan';
@@ -10779,7 +10764,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deviceConnecting => 'Kumokonekta…';
 
   @override
-  String get recordOptionsTip => 'Tip: pindutin nang matagal ang record button para mag-record ng tawag.';
+  String get recordOptionsTip => 'Tip: i-tap ang arrow sa record button para mag-record ng tawag.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Nabigo ang Update';
@@ -11186,4 +11171,420 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Tulong at Tungkol';
+
+  @override
+  String get speakerTagPromptTitle => 'Tulungan ang Omi na makilala ang mga boses';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Mabilisang pagsuri sa mga boses mula sa nakaraang dalawang araw';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Ikaw ba ito?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Si $name ba ito?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Sino ito?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Ako iyan';
+
+  @override
+  String get speakerTagPromptNotMe => 'Hindi ako';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Bagong tao';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Taong hindi ko kilala';
+
+  @override
+  String get speakerTagPromptNotSure => 'Hindi sigurado';
+
+  @override
+  String get speakerTagPromptPlayClip => 'I-play ang clip';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current sa $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Tandaan ang boses ng mga taong pinangalanan mo';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Nagtatago ang Omi ng maikling sample ng boses para makilala sila sa susunod. Mababago mo ito anumang oras sa Settings.';
+
+  @override
+  String get speakerTagPromptThanks => 'Salamat! Mas gagaling ang Omi sa pagkilala ng mga boses.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Pangalan nila';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Hindi ma-play ang clip na ito';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Hindi ito ma-save. Pakisubukang muli.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Hilingin sa akin na i-tag ang mga boses';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'Paminsan-minsan, itatanong ng Omi kung sino ang nagsasalita sa mga kamakailan mong pag-uusap';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Kapag pinangalanan mo ang isang tao, nagtatago ang Omi ng maikling sample ng boses para makilala siya sa susunod';
+
+  @override
+  String get leaveBlank => 'Iwanang blangko';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Sa claude.ai, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Idagdag sa ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Sa Claude Desktop → Settings → Connectors, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Mga transcript na naghihintay $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Mga transcript na naghihintay $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Tawag';
+
+  @override
+  String get captureSourcePhoneMic => 'Mic ng telepono';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Ituloy';
+
+  @override
+  String get finish => 'Tapusin';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Naka-pause ang pendant · magpapatuloy pagkatapos mo';
+
+  @override
+  String get pendantIsListeningTitle => 'Nakikinig ang iyong pendant';
+
+  @override
+  String get oneSourceAtATime => 'Isang source lang ang nire-record ng Omi sa bawat pagkakataon.';
+
+  @override
+  String get recordWithPhoneInstead => 'Sa telepono na lang mag-record';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Naka-pause ang pendant hanggang matapos ka';
+
+  @override
+  String get pendantPausesDuringCall => 'Naka-pause ang pendant habang may tawag';
+
+  @override
+  String get keepUsingPendant => 'Ituloy ang paggamit ng pendant';
+
+  @override
+  String get recordWith => 'Mag-record gamit ang';
+
+  @override
+  String get moreWaysToRecord => 'Iba pang paraan ng pag-record';
+
+  @override
+  String get openCall => 'Buksan ang tawag';
+
+  @override
+  String get captureRecoveryBanner => 'Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Itigil ang Transcribe Later sa iyong pendant bago mag-record gamit ang telepono.';
+
+  @override
+  String get captureNotTranscribing => 'Hindi nagta-transcribe';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Na-save ang audio, ita-transcribe mamaya';
+
+  @override
+  String get captureStillRecording => 'Nagre-record pa rin';
+
+  @override
+  String get captureMicInUseElsewhere => 'Ginagamit ng ibang app ang mic';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Kinuha ng isang tawag o ibang app ang mikropono, kaya hindi nakakarinig ang Omi ngayon. Kusang magpapatuloy ang Omi kapag malaya na ang mikropono. Ligtas ang lahat ng na-record bago nito.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Hindi maabot ang iyong custom na speech-to-text na serbisyo. Itinatabi ng Omi ang audio sa teleponong ito at ipapadala kapag bumalik ang serbisyo. Walang mawawala.';
+
+  @override
+  String get captureStarting => 'Nagsisimula…';
+
+  @override
+  String get capturePhoneStorageFull => 'Puno na ang storage ng telepono';
+
+  @override
+  String get captureStorageAlmostFull => 'Halos puno na ang storage';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name at iba pa';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Pakinggan ang mga sagot ni Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample =>
+      'Nakuha ko. Magsisimula ang susunod mong meeting sa loob ng dalawampung minuto.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Handa Ka Na';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'I-tap ang isang row para suriin o baguhin ito.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Kapag nagtanong ka gamit ang button, mababasa ng Omi ang sagot nito nang malakas.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Pakinggan ang iyong huling sagot';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Pinapatugtog ang iyong huling sagot...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Sa pamamagitan ng $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Sa pamamagitan ng speaker ng telepono';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Sa pamamagitan ng kasalukuyang output ng audio';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Mananatili sa screen ang mga sagot. Walang sinasabi.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Pribado. Nagsasalita lamang sa pamamagitan ng AirPods, Bluetooth o wired headphones.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Ginagamit ang speaker ng telepono kapag walang nakakonektang headphone.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi mananatiling tahimik. Lumalabas pa rin ang mga sagot sa app.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device konektado. Omi ang magsasalita dito.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Walang nakakonektang headphone. Omi mananatiling tahimik hanggang sa kumonekta ka ng ilan.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Nagpe-play sa pamamagitan ng $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Tumutugtog nang malakas sa pamamagitan ng speaker ng telepono.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Maaari mo itong baguhin anumang oras sa $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'I-replay ang tour na ito anumang oras sa $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Mga headphone';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutes';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Mga Gawain';
+
+  @override
+  String get usageMonth => 'Sa Buwan Na Ito';
+
+  @override
+  String get usageYear => 'Sa Taong Ito';
+
+  @override
+  String get usageAll => 'Lahat ng Panahon';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Hitsura';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Maliwanag';
+
+  @override
+  String get appearanceDark => 'Madilim';
+
+  @override
+  String get chatDiscardRecording => 'Itapon';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Hindi ko narinig iyon — subukan ulit';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Maghanap ng mga tao';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Idagdag ang \"$query\" bilang bagong tao';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Ipakita ang lahat ng $count na tao';
+  }
 }

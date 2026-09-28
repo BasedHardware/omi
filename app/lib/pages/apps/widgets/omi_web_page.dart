@@ -96,7 +96,7 @@ class _OmiWebPageState extends State<OmiWebPage> {
                 child: OmiErrorState(message: context.l10n.couldNotLoadPage, onRetry: _retry),
               )
             else if (_loading)
-              const ColoredBox(color: OmiColors.surface0, child: OmiLoadingState()),
+              ColoredBox(color: OmiColors.surface0, child: const OmiLoadingState()),
           ],
         ),
       ),

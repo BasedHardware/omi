@@ -97,7 +97,7 @@ class StartupFailureApp extends StatelessWidget {
                       // Selectable so the message can be copied off a device
                       // that has no debugger attached — which is the situation
                       // this screen exists for.
-                      kDebugMode || kProfileMode ? '$error\n\n$stack' : '$error',
+                      (kDebugMode || kProfileMode) && stack != null ? '$error\n\n$stack' : '$error',
                       style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, height: 1.4),
                     ),
                   ),

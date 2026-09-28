@@ -12,10 +12,13 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/conversation_map_page.dart';
 import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
+import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
+import 'package:omi/pages/conversations/widgets/pending_transcriptions_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
+import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -25,7 +28,6 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/pages/conversations/capture_gaps_controller.dart';
@@ -426,12 +428,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         children: [
           // Date header shimmer
           ShimmerWithTimeout(
-            baseColor: AppStyles.backgroundSecondary,
-            highlightColor: AppStyles.backgroundTertiary,
+            baseColor: OmiColors.surface1,
+            highlightColor: OmiColors.surface3,
             child: Container(
               width: 100,
               height: 16,
-              decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(8)),
             ),
           ),
           const SizedBox(height: 12),
@@ -441,12 +443,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             (index) => Padding(
               padding: const EdgeInsets.only(bottom: 16.0),
               child: ShimmerWithTimeout(
-                baseColor: AppStyles.backgroundSecondary,
-                highlightColor: AppStyles.backgroundTertiary,
+                baseColor: OmiColors.surface1,
+                highlightColor: OmiColors.surface3,
                 child: Container(
                   height: 80,
                   decoration: BoxDecoration(
-                    color: AppStyles.backgroundSecondary,
+                    color: OmiColors.surface1,
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
@@ -495,12 +497,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     return Padding(
       padding: const EdgeInsets.only(top: 16.0),
       child: ShimmerWithTimeout(
-        baseColor: AppStyles.backgroundSecondary,
-        highlightColor: AppStyles.backgroundTertiary,
+        baseColor: OmiColors.surface1,
+        highlightColor: OmiColors.surface3,
         child: Container(
           height: 60,
           margin: const EdgeInsets.symmetric(horizontal: 16.0),
-          decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
@@ -532,6 +534,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           }
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
+        final bool hasProcessingConversations = snapshot.processingConversations.isNotEmpty;
         final apiPhase = snapshot.apiViewPhase;
         final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
@@ -586,6 +589,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               const SliverToBoxAdapter(child: ActiveCallBanner()),
+              const SliverToBoxAdapter(child: SpeakerTagPromptCard()),
+              // Local recordings waiting to be uploaded for transcription.
+              const SliverToBoxAdapter(child: PendingTranscriptionsBanner()),
+              const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
 
               // Search bar
               Selector<HomeProvider, bool>(
@@ -601,7 +608,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 },
               ),
               const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
-              getProcessingConversationsWidget(convoProvider.processingConversations),
 
               // Today's Tasks and Goals widgets - hide when showing daily recaps, search bar is active, or calendar filter is active
               Selector<HomeProvider, bool>(
@@ -636,7 +642,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // Section header. Hidden entirely when the user has zero
               // non-discarded conversations — those users get the
               // empty-state hero below instead. Daily Recaps is its own page.
+              // A pending Process Now row still counts: it lands in this list.
               if (_nonDiscardedConversationCount(convoProvider) > 0 ||
+                  hasProcessingConversations ||
                   isShowingConversationSkeleton ||
                   _hasActiveFilter(convoProvider))
                 SliverToBoxAdapter(
@@ -669,8 +677,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // Folder tabs - hide when the user has no conversations yet
               // (matches the title). Keep chips visible whenever a filter is
               // active so the user can always clear it, even when the
-              // filtered result is empty.
+              // filtered result is empty. A pending Process Now row counts as
+              // having conversations.
               if (_nonDiscardedConversationCount(convoProvider) > 0 ||
+                  hasProcessingConversations ||
                   isShowingConversationSkeleton ||
                   _hasActiveFilter(convoProvider))
                 Consumer<FolderProvider>(
@@ -688,10 +698,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     );
                   },
                 ),
+              // Process Now belongs to the Conversations list, below Goals and
+              // its heading/filters, where the completed conversation will land.
+              if (hasProcessingConversations) getProcessingConversationsWidget(snapshot.processingConversations),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
               if (showTypedStatus &&
                   snapshot.conversations.isEmpty &&
+                  !hasProcessingConversations &&
                   !hasRecordings &&
                   !_hasActiveFilter(convoProvider))
                 SliverFillRemaining(
@@ -699,12 +713,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   child: Center(child: ConversationApiStatus(provider: convoProvider)),
                 )
               else if (_nonDiscardedConversationCount(convoProvider) == 0 &&
+                  !hasProcessingConversations &&
                   !hasRecordings &&
                   !isShowingConversationSkeleton &&
                   !_hasActiveFilter(convoProvider))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
                 SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildNoConversationsHero(context)))
+              else if (hasProcessingConversations && convoProvider.groupedConversations.isEmpty && !hasRecordings)
+                const SliverToBoxAdapter(child: SizedBox(height: 20))
               else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && !isShowingConversationSkeleton)
                 SliverToBoxAdapter(
                   child: Center(

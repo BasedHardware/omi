@@ -15,6 +15,8 @@ from pydantic import BaseModel, Field
 
 from database import conversations as conversations_db
 from database import fair_use as fair_use_db
+from database import sync_dead_letters
+from database import sync_backfill_sequencer
 from database import users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
@@ -26,13 +28,16 @@ from database.sync_jobs import (
     fenced_mark_job_queued_for_retry,
     get_sync_ledger_fence_mode,
     get_sync_job,
+    get_raw_sync_job,
     is_sync_job_stale,
     mark_job_completed,
+    mark_job_failed,
     mark_job_queued_for_retry,
     sync_job_uses_ledger_fence,
     try_acquire_sync_job_run_lock,
     try_acquire_job_run_lock,
     release_job_run_lock,
+    update_sync_job,
 )
 from database.sync_ledger import (
     claim_sync_content,
@@ -43,6 +48,7 @@ from models.conversation_enums import ConversationSource
 from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.geolocation import geolocation_from_private_header
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
+from routers.listen.contracts import persisted_started_seconds
 from utils.analytics import record_usage
 from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
@@ -101,6 +107,8 @@ from utils.subscription import (
     resolve_transcription_allowance,
 )
 from utils.sync import playback as sync_playback
+from config.capture_evidence import capture_evidence_dark_write_enabled
+from utils.capture_evidence import parse_sync_file_claims
 from utils.sync.files import (
     decode_files_to_wav,
     detect_source_from_filenames,
@@ -151,6 +159,8 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import SyncLane, classify_sync_lane
+from utils.sync import uid_sequencer
+from utils.sync import backfill_cutover
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 logger = logging.getLogger(__name__)
@@ -872,12 +882,23 @@ async def sync_local_files_v2(
     conversation_id: str = Query(
         None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
     ),
+    recording_session_id: Optional[str] = Query(
+        None,
+        description=(
+            "Client recording session id. When conversation_id is omitted and one "
+            "conversation for this user, source, and device already carries this id, "
+            "attach the audio to that conversation."
+        ),
+    ),
+    audio_start_seconds: Optional[float] = Query(None),
+    audio_end_seconds: Optional[float] = Query(None),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
     x_request_id: Optional[str] = Header(None, alias='X-Request-ID'),
     x_cloud_trace_context: Optional[str] = Header(None, alias='X-Cloud-Trace-Context'),
     x_omi_sync_capture_manifest: Optional[str] = Header(None, alias='X-Omi-Sync-Capture-Manifest'),
+    x_omi_capture_evidence: Optional[str] = Header(None, alias='X-Omi-Capture-Evidence', include_in_schema=False),
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
 ):
     """
@@ -885,6 +906,10 @@ async def sync_local_files_v2(
     immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
+    if isinstance(recording_session_id, str):
+        recording_session_id = recording_session_id.strip() or None
+    else:
+        recording_session_id = None
     sync_app_build = sanitize_app_build(x_app_version)
     ledger_fence_mode = await run_blocking(db_executor, get_sync_ledger_fence_mode)
     if ledger_fence_mode is SyncLedgerFenceMode.STANDBY:
@@ -911,6 +936,9 @@ async def sync_local_files_v2(
     geolocation = geolocation_from_private_header(x_omi_conversation_geolocation)
 
     filenames = [f.filename or '' for f in files]
+    capture_claims = (
+        parse_sync_file_claims(x_omi_capture_evidence, filenames) if capture_evidence_dark_write_enabled() else {}
+    )
     manifest_claims = verify_capture_manifest(
         x_omi_sync_capture_manifest,
         uid,
@@ -1012,33 +1040,12 @@ async def sync_local_files_v2(
     job_dir = f'syncing/{uid}/{job_id}'
 
     backfill_slot_acquired = False
-    if lane_decision.lane == SyncLane.BACKFILL:
-        try:
-            backfill_slot_acquired = await run_blocking(db_executor, try_acquire_backfill_slot, uid, job_id)
-        except Exception as e:
-            logger.error('sync_v2: backfill admission unavailable uid=%s error=%s', uid, type(e).__name__)
-            return JSONResponse(
-                status_code=503,
-                headers={'Retry-After': '30', 'X-Omi-Rate-Limit-Reason': 'backfill_capacity'},
-                content={'code': 'backfill_capacity', 'detail': 'Historical recovery is temporarily unavailable'},
-            )
-        if not backfill_slot_acquired:
-            try:
-                OMI_SYNC_LANE_JOBS_TOTAL.labels(
-                    lane=lane_decision.lane.value,
-                    trust=lane_decision.trust.value,
-                    outcome='paced',
-                ).inc()
-            except Exception:
-                pass
-            return JSONResponse(
-                status_code=429,
-                headers={'Retry-After': '30', 'X-Omi-Rate-Limit-Reason': 'backfill_paced'},
-                content={'code': 'backfill_paced', 'detail': 'Another historical recovery job is still in flight'},
-            )
+    # V2 admission never acquires the historical Redis slot. The kill switch
+    # changes worker dispatch only; neither setting can pace uploads with 429.
 
     paths = []
     content_id: Optional[str] = None
+    sequencer_registration_started = False
 
     try:
         # --- Fast path: save raw files only (< 2s typical) ---
@@ -1077,7 +1084,11 @@ async def sync_local_files_v2(
             # A named enqueue can lose its acknowledgement after Cloud Tasks
             # accepts it. Mark eligible jobs as Cloud Tasks-owned before that
             # call so the ambiguity never starts an unfenced inline twin.
-            dispatch_mode='cloud_tasks' if cloud_task_eligible else 'inline',
+            dispatch_mode=(
+                'sequenced'
+                if cloud_task_eligible and lane_decision.lane == SyncLane.BACKFILL and uid_sequencer.enabled()
+                else 'cloud_tasks' if cloud_task_eligible else 'inline'
+            ),
             ledger_fence_mode=(
                 SyncLedgerFenceMode.ACTIVE.value if ledger_fence_active else SyncLedgerFenceMode.LEGACY.value
             ),
@@ -1103,6 +1114,38 @@ async def sync_local_files_v2(
                     'status': 'completed',
                     'total_files': len(files),
                     'total_segments': cached_result.get('total_segments', 0),
+                    'poll_after_ms': 0,
+                    'lane': lane_decision.lane.value,
+                },
+            )
+        if claim.get('outcome') == 'capped':
+            # Keep the ordinary 202 -> failed-job contract: the shipped WAL
+            # reconciler retries this content with its per-file budget. An
+            # upload 400 strands it, while a scoped 503 pauses the whole account.
+            await run_blocking(
+                db_executor,
+                mark_job_failed,
+                job_id,
+                'Repeated content failure paused',
+                reason_code='sync_repeat_failure_paused',
+            )
+            if backfill_slot_acquired:
+                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
+                backfill_slot_acquired = False
+            failure_key = claim.get('failure_key')
+            logger.warning(
+                'event=sync_repeat_failure_cap outcome=paused lane=%s failure_key=%s device_hash=%s',
+                lane_decision.lane.value,
+                failure_key if failure_key in {'invalid_audio', 'persistent_persistence'} else 'unknown',
+                client_device_context.client_device_id[-8:] if client_device_context.client_device_id else 'none',
+            )
+            return JSONResponse(
+                status_code=202,
+                content={
+                    'job_id': job_id,
+                    'status': 'failed',
+                    'total_files': len(files),
+                    'total_segments': 0,
                     'poll_after_ms': 0,
                     'lane': lane_decision.lane.value,
                 },
@@ -1145,8 +1188,9 @@ async def sync_local_files_v2(
                 model='unknown',
                 lane=lane_decision.lane.value,
             )
-            await run_blocking(db_executor, release_backfill_slot, uid, job_id)
-            backfill_slot_acquired = False
+            if backfill_slot_acquired:
+                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
+                backfill_slot_acquired = False
             return JSONResponse(
                 status_code=503,
                 headers={'Retry-After': '30', 'X-Omi-Rate-Limit-Reason': 'backfill_capacity'},
@@ -1203,9 +1247,13 @@ async def sync_local_files_v2(
                 'job_id': job_id,
                 'uid': uid,
                 'raw_blob_paths': owned_paths,
+                **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
                 'source': source.value,
                 'should_lock': should_lock,
                 'conversation_id': conversation_id,
+                'recording_session_id': recording_session_id,
+                'audio_start_seconds': audio_start_seconds,
+                'audio_end_seconds': audio_end_seconds,
                 'geolocation': geolocation.model_dump(mode='json') if geolocation else None,
                 'client_device_id': client_device_context.client_device_id,
                 'client_platform': client_device_context.platform,
@@ -1218,8 +1266,75 @@ async def sync_local_files_v2(
                     SyncLedgerFenceMode.ACTIVE.value if ledger_fence_active else SyncLedgerFenceMode.LEGACY.value
                 ),
             }
+            if lane_decision.lane == SyncLane.BACKFILL and uid_sequencer.enabled():
+                # The Firestore record, not a Cloud Task acknowledgement, is
+                # the durable 202 boundary. Waiting jobs hold no HTTP worker.
+                # An ambiguous Firestore acknowledgement may already have
+                # committed. Never release its content claim on that path.
+                sequencer_registration_started = True
+                try:
+                    await run_blocking(
+                        db_executor,
+                        sync_backfill_sequencer.register_job,
+                        uid,
+                        job_id,
+                        enqueue_payload,
+                        lane_decision.oldest_capture_at,
+                    )
+                except Exception as error:
+                    # A committed Firestore transaction can lose its reply.
+                    # An authoritative read converts that to a safe 202.
+                    # If the read also fails, keep all recovery material and
+                    # refuse to assert that the job was accepted.
+                    registered = await run_blocking(db_executor, sync_backfill_sequencer.is_registered, uid, job_id)
+                    if not registered:
+                        # A fast worker may have consumed the last pending
+                        # document and removed its owner before this read.
+                        observed_job = await run_blocking(db_executor, get_raw_sync_job, job_id)
+                        registered = bool(observed_job and observed_job.get('status') in TERMINAL_STATUSES)
+                    if not registered:
+                        sequencer_registration_started = False
+                        await _delete_staged_blobs_async(owned_paths)
+                        await run_blocking(sync_executor, _cleanup_files, owned_paths)
+                        await _finalize_sync_job_failure(
+                            job_id=job_id,
+                            uid=uid,
+                            content_id=content_id,
+                            error_code='sync_sequencer_registration_failed',
+                            outcome=TranscriptionOutcome.UPSTREAM_ERROR,
+                            provider='unknown',
+                            model='unknown',
+                            lane=lane_decision.lane.value,
+                        )
+                        logger.error(
+                            'event=sync_uid_sequencer action=registered outcome=failed exception_type=%s',
+                            type(error).__name__,
+                        )
+                        return JSONResponse(
+                            status_code=503,
+                            headers={'Retry-After': '30'},
+                            content={
+                                'code': 'sync_dispatch_unavailable',
+                                'detail': 'Historical recovery is temporarily unavailable',
+                            },
+                        )
+                try:
+                    await run_blocking(db_executor, uid_sequencer.kick, uid)
+                except Exception as error:
+                    # The accepted record is durable. A Scheduler tick will
+                    # rediscover it; returning 503 here would trigger a second
+                    # phone upload for the same content.
+                    logger.error(
+                        'event=sync_uid_sequencer action=kick outcome=deferred exception_type=%s',
+                        type(error).__name__,
+                    )
+                dispatched = True
             enqueue_error = None
-            for enqueue_attempt in range(2):
+            if lane_decision.lane == SyncLane.BACKFILL and not dispatched:
+                # Register the direct path before its task can run. A later
+                # flag-on revision waits for this bounded direct-work window.
+                await run_blocking(db_executor, backfill_cutover.note_direct_admission, uid, job_id)
+            for enqueue_attempt in range(0 if dispatched else 2):
                 try:
                     await run_blocking(db_executor, enqueue_sync_job, enqueue_payload)
                     dispatched = True
@@ -1385,6 +1500,10 @@ async def sync_local_files_v2(
                             inline_run_lock_token=inline_run_lock_token,
                             content_run_bound=ledger_fence_active,
                             ledger_fence_active=ledger_fence_active,
+                            **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
+                            recording_session_id=recording_session_id,
+                            audio_start_seconds=audio_start_seconds,
+                            audio_end_seconds=audio_end_seconds,
                         ),
                         name=f'sync_pipeline:{job_id}',
                     )
@@ -1411,7 +1530,7 @@ async def sync_local_files_v2(
         raise
     except Exception as e:
         logger.error('event=sync_ingest outcome=failed exception_type=%s', type(e).__name__)
-        if content_id:
+        if content_id and not sequencer_registration_started:
             try:
                 await run_blocking(db_executor, release_sync_content_claim, uid, content_id, job_id)
             except Exception:
@@ -1427,6 +1546,29 @@ async def sync_local_files_v2(
         )
     finally:
         _cleanup_files(paths)
+
+
+def _sync_finalization_retrying() -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail='Sync recovery finalization is retrying; local audio remains available.',
+        headers={'Retry-After': '10'},
+    )
+
+
+def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
+    """Carry a terminal job's strike through racing poll/task claim cleanup."""
+    if job.get('status') != 'failed':
+        return {}
+    if job.get('reason_code') == 'sync_invalid_audio':
+        return {'failure_key': 'invalid_audio'}
+    result = job.get('result')
+    if isinstance(result, dict) and result.get('repeat_failure_key') == 'persistent_persistence':
+        return {
+            'failure_key': 'persistent_persistence',
+            'failure_fingerprint': result.get('repeat_failure_fingerprint'),
+        }
+    return {}
 
 
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
@@ -1498,10 +1640,8 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
                                 type(error).__name__,
                             )
             except SyncJobRunLeaseLost:
-                # A newer epoch owns the durable ledger. Polling is a
-                # read-side recovery path, so it must leave that owner's
-                # retry material and Redis state untouched rather than turn
-                # the ownership handoff into a client-visible 500.
+                # A newer epoch owns the durable ledger; polling must leave its
+                # retry material and Redis state untouched rather than 500.
                 logger.warning('event=sync_stale_finalize outcome=lease_lost retry_material=preserved')
             finally:
                 release_job_run_lock(job_id, stale_lock_token)
@@ -1511,27 +1651,59 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         and sync_job_uses_ledger_fence(job)
         and isinstance(job.get('content_id'), str)
     ):
-        # A fenced terminal write can land before its exact-job ledger release
-        # transiently fails (notably for inline/stale recovery, which has no
-        # Cloud Tasks duplicate delivery). Do not expose an ACKable terminal
-        # result until the retry claim is recoverable again: otherwise a WAL
-        # re-upload receives ``busy`` for the ledger stale window and looks
-        # permanently stuck to the client.
+        # Do not expose an ACKable terminal result until the retry claim is
+        # recoverable again: otherwise a WAL re-upload receives ``busy`` for
+        # the ledger stale window and looks permanently stuck to the client.
         try:
-            release_sync_content_claim_after_job_retired(uid, job['content_id'], job_id)
+            release_sync_content_claim_after_job_retired(
+                uid, job['content_id'], job_id, **_terminal_repeat_failure_kwargs(job)
+            )
         except Exception as error:
-            logger.error(
-                'event=sync_terminal_cleanup outcome=retrying exception_type=%s',
-                type(error).__name__,
-            )
-            raise HTTPException(
-                status_code=503,
-                detail='Sync recovery finalization is retrying; local audio remains available.',
-                headers={'Retry-After': '10'},
-            )
+            logger.error('event=sync_terminal_cleanup outcome=retrying exception_type=%s', type(error).__name__)
+            raise _sync_finalization_retrying()
         # Retaining an epoch counter after the durable claim is recoverable is
         # safe; never keep a client WAL pending solely for that optimization.
         delete_sync_job_run_lock_epoch(job_id)
+
+    if job.get('status') in ('failed', 'partial_failure') and job.get('lane') == SyncLane.BACKFILL.value:
+        try:
+            dead_letter = sync_dead_letters.get_dead_letter(job_id)
+        except Exception as error:
+            logger.error('event=sync_dead_letter_check outcome=read_failed exception_type=%s', type(error).__name__)
+            raise _sync_finalization_retrying()
+        if dead_letter is None:
+            # Every current terminal publisher writes the pending record before
+            # Redis turns terminal, so a missing record means the job failed
+            # before the ledger shipped and nothing else will ever write it.
+            # Record it here (pending only: no confirmed-cohort event, and no
+            # reader replays pending rows) instead of 503-looping forever.
+            try:
+                dead_letter = sync_dead_letters.record_dead_letter_pending(
+                    job_id=job_id,
+                    uid=uid,
+                    conversation_id=job.get('conversation_id'),
+                    failure_code=sync_dead_letters.dead_letter_failure_code(job.get('reason_code')),
+                )
+            except Exception as error:
+                logger.error(
+                    'event=sync_dead_letter_check outcome=legacy_record_failed exception_type=%s',
+                    type(error).__name__,
+                )
+                raise _sync_finalization_retrying()
+            logger.warning('event=sync_dead_letter_check outcome=legacy_recorded')
+        if (
+            dead_letter.get('job_id') != job_id
+            or dead_letter.get('uid') != uid
+            or dead_letter.get('status') not in ('pending', 'dead_letter')
+        ):
+            raise _sync_finalization_retrying()
+        try:
+            release_backfill_slot(uid, job_id)
+        except Exception as error:
+            logger.error(
+                'event=sync_stale_finalize outcome=release_slot_failed exception_type=%s',
+                type(error).__name__,
+            )
 
     # Build response — include result only when terminal
     resp = {
@@ -1556,10 +1728,167 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     return resp
 
 
-# response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
-# codes (200/409/500) drive the queue protocol, not a typed client-facing body.
+async def _maintain_uid_sequencer_lease(
+    uid: str, job_id: str, epoch: int, stop: asyncio.Event, owner: asyncio.Task | None
+) -> None:
+    while not stop.is_set():
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=sync_backfill_sequencer.HEARTBEAT_SECONDS)
+            return
+        except asyncio.TimeoutError:
+            pass
+        try:
+            renewed = await run_blocking(db_executor, sync_backfill_sequencer.renew_job, uid, job_id, epoch)
+        except Exception as error:
+            logger.error(
+                'event=sync_uid_sequencer action=heartbeat outcome=error exception_type=%s', type(error).__name__
+            )
+            renewed = False
+        if not renewed:
+            logger.error('event=sync_uid_sequencer action=heartbeat outcome=lease_lost')
+            if owner is not None:
+                owner.cancel()
+            return
+
+
+# response_model omitted: the OIDC worker/sweeper are not app API surfaces.
+@router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
+async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
+    return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
+
+
+@router.post('/v2/sync-backfill-sequencer/wake', include_in_schema=False)
+async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    payload = await request.json()
+    uid = payload.get('uid') if isinstance(payload, dict) else None
+    if not isinstance(uid, str) or not uid:
+        return JSONResponse(status_code=400, content={'status': 'invalid_uid'})
+    try:
+        dispatched = await run_blocking(db_executor, uid_sequencer.kick, uid)
+    except Exception as error:
+        logger.error(
+            'event=sync_uid_sequencer action=wake outcome=error uid_hash=%s exception_type=%s',
+            backfill_cutover.uid_hash(uid),
+            type(error).__name__,
+        )
+        return JSONResponse(status_code=500, content={'status': 'retry'})
+    return JSONResponse(status_code=200, content={'status': 'dispatched' if dispatched else 'deferred'})
+
+
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    """Persisted sequencer epochs survive the kill switch; old tasks keep their legacy path."""
+    if await run_blocking(db_executor, get_sync_ledger_fence_mode) is SyncLedgerFenceMode.STANDBY:
+        return JSONResponse(status_code=503, content={'status': 'cutover_standby'})
+    try:
+        payload = await request.json()
+    except Exception:
+        return await _run_sync_job_body(request, task_retry_count)
+    epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
+    if epoch is None:
+        if (
+            isinstance(payload, dict)
+            and payload.get('lane') == SyncLane.BACKFILL.value
+            and isinstance(payload.get('uid'), str)
+            and isinstance(payload.get('job_id'), str)
+        ):
+            legacy_job = await run_blocking(db_executor, get_raw_sync_job, payload['job_id'])
+            sequencer_on = uid_sequencer.enabled()
+            owner = (
+                await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
+                if legacy_job and legacy_job.get('status') == 'queued' and not sequencer_on
+                else {}
+            )
+            pending = (
+                await run_blocking(db_executor, sync_backfill_sequencer.has_pending, payload['uid'])
+                if legacy_job and legacy_job.get('status') == 'queued' and not sequencer_on and not owner
+                else False
+            )
+            if legacy_job and legacy_job.get('status') == 'processing':
+                active_owner = await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
+                if active_owner.get('active_job_id'):
+                    logger.error(
+                        'event=sync_uid_sequencer action=cutover_overlap outcome=direct_and_sequenced '
+                        'job_id=%s sequenced_job_id=%s uid_hash=%s',
+                        payload['job_id'],
+                        active_owner['active_job_id'],
+                        backfill_cutover.uid_hash(payload['uid']),
+                    )
+                elif sequencer_on:
+                    logger.info(
+                        'event=sync_uid_sequencer action=cutover_direct_active outcome=observed '
+                        'job_id=%s uid_hash=%s',
+                        payload['job_id'],
+                        backfill_cutover.uid_hash(payload['uid']),
+                    )
+            if legacy_job and legacy_job.get('status') == 'queued' and (sequencer_on or owner or pending):
+                # Polling's direct-task stale detector must stop once the
+                # durable UID registry owns a waiting legacy task.
+                marked = await run_blocking(
+                    db_executor, update_sync_job, payload['job_id'], {'dispatch_mode': 'sequenced'}
+                )
+                if marked is None:
+                    return await _run_sync_job_body(request, task_retry_count)
+                age = payload.get('recording_age_seconds')
+                captured_at = (
+                    float(payload.get('enqueued_at')) - float(age)
+                    if isinstance(payload.get('enqueued_at'), (int, float)) and isinstance(age, (int, float))
+                    else None
+                )
+                await run_blocking(
+                    db_executor,
+                    sync_backfill_sequencer.register_job,
+                    payload['uid'],
+                    payload['job_id'],
+                    payload,
+                    captured_at,
+                )
+                try:
+                    await run_blocking(db_executor, uid_sequencer.kick, payload['uid'])
+                except Exception as error:
+                    logger.error(
+                        'event=sync_uid_sequencer action=legacy_migration outcome=deferred exception_type=%s',
+                        type(error).__name__,
+                    )
+                logger.info('event=sync_uid_sequencer action=legacy_migration outcome=registered')
+                return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
+            if legacy_job and legacy_job.get('status') in ('queued', 'processing'):
+                await run_blocking(db_executor, backfill_cutover.refresh_direct_run, payload['uid'], payload['job_id'])
+        return await _run_sync_job_body(request, task_retry_count)
+    uid = payload.get('uid')
+    job_id = payload.get('job_id')
+    if not isinstance(uid, str) or not isinstance(job_id, str) or not isinstance(epoch, int) or epoch <= 0:
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_sequencer_identity'})
+    if not await run_blocking(db_executor, sync_backfill_sequencer.begin_job, uid, job_id, epoch):
+        logger.info('event=sync_uid_sequencer action=delivery outcome=stale_epoch')
+        return JSONResponse(status_code=200, content={'status': 'stale_sequencer_epoch'})
+    stop = asyncio.Event()
+    heartbeat = start_background_task(
+        _maintain_uid_sequencer_lease(uid, job_id, epoch, stop, asyncio.current_task()),
+        name=f'sync:uid-lease:{job_id}',
+    )
+    try:
+        prior_job = await run_blocking(db_executor, get_raw_sync_job, job_id)
+        prior_attempt = prior_job.get('attempt', 0) if isinstance(prior_job, dict) else 0
+        effective_retry_count = max(task_retry_count, prior_attempt if isinstance(prior_attempt, int) else 0)
+        response = await _run_sync_job_body(request, effective_retry_count)
+    finally:
+        stop.set()
+        await heartbeat
+    if response.status_code < 300:
+        job = await run_blocking(db_executor, get_raw_sync_job, job_id)
+        if job is not None and job.get('status') not in TERMINAL_STATUSES:
+            logger.error('event=sync_uid_sequencer action=delivery outcome=nonterminal_ack')
+            return JSONResponse(status_code=500, content={'status': 'nonterminal_ack'})
+        outcome = job.get('status') if job else 'expired'
+        released = await run_blocking(db_executor, sync_backfill_sequencer.finish_job, uid, job_id, epoch, outcome)
+        if released:
+            await run_blocking(db_executor, uid_sequencer.kick, uid)
+    return response
+
+
+async def _run_sync_job_body(request: Request, task_retry_count: int):
     """Cloud Tasks handler: runs one sync job inside the request.
 
     Auth is the Cloud Tasks OIDC token (verify_cloud_tasks_oidc), not Firebase.
@@ -1585,11 +1914,25 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         source = ConversationSource(payload.get('source') or 'omi')
         should_lock = bool(payload.get('should_lock', False))
         conversation_id = payload.get('conversation_id')
+        recording_session_id = payload.get('recording_session_id')
+        if isinstance(recording_session_id, str):
+            recording_session_id = recording_session_id.strip() or None
+        else:
+            recording_session_id = None
+        audio_start_seconds = payload.get('audio_start_seconds')
+        audio_end_seconds = payload.get('audio_end_seconds')
+        if not isinstance(audio_start_seconds, (int, float)) or isinstance(audio_start_seconds, bool):
+            audio_start_seconds = None
+        if not isinstance(audio_end_seconds, (int, float)) or isinstance(audio_end_seconds, bool):
+            audio_end_seconds = None
         geolocation = geolocation_from_private_header(
             json.dumps(payload.get('geolocation')) if payload.get('geolocation') else None
         )
         client_device_id = payload.get('client_device_id')
         client_platform = payload.get('client_platform')
+        capture_claims = payload.get('capture_evidence_claims')
+        if not isinstance(capture_claims, dict) or len(capture_claims) > 20:
+            capture_claims = {}
         sync_lane = payload.get('lane') if payload.get('lane') in ('fresh', 'backfill') else SyncLane.FRESH.value
         content_id = payload.get('content_id') if isinstance(payload.get('content_id'), str) else None
         payload_uses_fence = payload.get('ledger_fence_mode') == SyncLedgerFenceMode.ACTIVE.value
@@ -1653,14 +1996,30 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             # Duplicate delivery, stale-detector-failed job, or a prior attempt
             # that finished. Never re-run terminal jobs — the app may already be
             # re-uploading these files as a new job.
-            await _delete_staged_blobs_async(blob_paths)
-            if sync_lane == SyncLane.BACKFILL.value:
+            terminal_backfill_failure = job.get('lane') == SyncLane.BACKFILL.value and job['status'] in (
+                'failed',
+                'partial_failure',
+            )
+            if terminal_backfill_failure:
+                await run_blocking(
+                    db_executor,
+                    sync_dead_letters.ensure_dead_letter_confirmed,
+                    job_id,
+                    uid=job.get('uid'),
+                    conversation_id=job.get('conversation_id'),
+                    failure_code=job.get('reason_code') or 'unknown',
+                )
+            else:
+                await _delete_staged_blobs_async(blob_paths)
+            if job.get('lane') == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             if content_id and job['status'] in ('failed', 'partial_failure'):
                 release_claim = (
                     release_sync_content_claim_after_job_retired if ledger_fence_active else release_sync_content_claim
                 )
-                await run_blocking(db_executor, release_claim, uid, content_id, job_id)
+                await run_blocking(
+                    db_executor, release_claim, uid, content_id, job_id, **_terminal_repeat_failure_kwargs(job)
+                )
             if ledger_fence_active:
                 await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)
             return JSONResponse(status_code=200, content={'status': 'acked', 'job_status': job['status']})
@@ -1741,6 +2100,10 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                 run_lock_token=lock_token if ledger_fence_active else None,
                 content_run_bound=ledger_fence_active,
                 ledger_fence_active=ledger_fence_active,
+                **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
+                recording_session_id=recording_session_id,
+                audio_start_seconds=audio_start_seconds,
+                audio_end_seconds=audio_end_seconds,
             )
         except SyncConversationPersistenceFenced:
             latest_job = await run_blocking(db_executor, get_sync_job, job_id) or job
@@ -2057,8 +2420,12 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             if existing:
                 return JSONResponse(status_code=200, content={'status': 'exists'})
 
-        started_at = conversation.get('started_at') or conversation.get('created_at')
-        started_at_ts = started_at.timestamp()
+        started_at_ts = persisted_started_seconds(conversation.get('started_at') or conversation.get('created_at'))
+        if started_at_ts is None:
+            chunk_starts = [
+                min(af['chunk_timestamps']) for af in audio_files if isinstance(af, dict) and af.get('chunk_timestamps')
+            ]
+            started_at_ts = min(chunk_starts) if chunk_starts else 0.0
 
         try:
             mp3_data, spans = await run_blocking(

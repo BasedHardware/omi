@@ -935,9 +935,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Pievienot claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopēt konfigurāciju';
 
   @override
@@ -2481,13 +2478,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Notīrīt visus mezglus un savienojumus';
 
   @override
-  String get addToClaudeDesktopConfig => 'Pievienot claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Savienojiet AI asistentus ar saviem datiem';
-
-  @override
-  String get useYourMcpApiKey => 'Izmantojiet savu MCP API atslēgu';
 
   @override
   String get realTimeTranscript => 'Reāllaika transkripcija';
@@ -2500,12 +2491,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'Detalizēti diagnostikas ziņojumi';
-
-  @override
-  String get autoCreateSpeakers => 'Automātiski izveidot runātājus';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automātiski izveidot, kad konstatēts vārds';
 
   @override
   String get followUpQuestions => 'Turpinājuma jautājumi';
@@ -9991,7 +9976,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripcija nesaņem audio';
 
   @override
-  String get tapPlusToStartRecording => 'Pieskarieties +, lai sāktu ierakstīšanu';
+  String get tapPlusToStartRecording => 'Pieskarieties ieraksta pogai, lai sāktu ierakstīšanu';
 
   @override
   String get chatBlockTask => 'Uzdevums';
@@ -10234,7 +10219,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Šeit parādās jūsu ierakstītās sarunas. Lai ierakstītu pirmo, sākumlapā pieskarieties +.';
+      'Šeit parādās jūsu ierakstītās sarunas. Lai ierakstītu pirmo, sākumlapā pieskarieties ieraksta pogai.';
 
   @override
   String get conversationMap => 'Sarunu karte';
@@ -10713,7 +10698,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceConnecting => 'Savienojas…';
 
   @override
-  String get recordOptionsTip => 'Padoms: lai ierakstītu tālruņa zvanu, nospiediet un turiet ieraksta pogu.';
+  String get recordOptionsTip => 'Padoms: lai ierakstītu tālruņa zvanu, pieskarieties bultiņai uz ieraksta pogas.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Atjaunināšana neizdevās';
@@ -11116,4 +11101,414 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Palīdzība un par lietotni';
+
+  @override
+  String get speakerTagPromptTitle => 'Palīdziet Omi atpazīt balsis';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Ātra pēdējo divu dienu balsu pārbaude';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Vai tas esat jūs?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Vai tas ir $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Kas tas ir?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Tas esmu es';
+
+  @override
+  String get speakerTagPromptNotMe => 'Ne es';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Kāds jauns';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Kāds, ko nepazīstu';
+
+  @override
+  String get speakerTagPromptNotSure => 'Neesmu pārliecināts';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Atskaņot fragmentu';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current no $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Atcerēties to cilvēku balsis, kurus nosaucat';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi saglabā īsu balss paraugu, lai nākamreiz viņus atpazītu. To var mainīt jebkurā laikā iestatījumos.';
+
+  @override
+  String get speakerTagPromptThanks => 'Paldies! Omi labāk atpazīs balsis.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Vārds';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Neizdevās atskaņot šo fragmentu';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Neizdevās saglabāt. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Lūgt man atzīmēt balsis';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Laiku pa laikam Omi jautās, kurš runāja jūsu nesenajās sarunās';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Kad kādu nosaucat, Omi saglabā īsu balss paraugu, lai nākamreiz viņu atpazītu';
+
+  @override
+  String get leaveBlank => 'Atstājiet tukšu';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Vietnē claude.ai pievienojiet pielāgotu savienotāju un ielīmējiet servera URL. Ja Claude pieprasa uzlabotu OAuth Client ID, izmantojiet tālāk norādīto vērtību un atstājiet noslēpumu tukšu — nekad neizmantojiet savu MCP API atslēgu kā OAuth noslēpumu.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Pievienot ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Vietnē Claude Desktop → Settings → Connectors pievienojiet pielāgotu savienotāju un ielīmējiet servera URL. Ja Claude pieprasa uzlabotu OAuth Client ID, izmantojiet tālāk norādīto vērtību un atstājiet noslēpumu tukšu — nekad neizmantojiet savu MCP API atslēgu kā OAuth noslēpumu.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkripcijas nav pieejamas, ierakstīšana turpinās ierīcē un tiks apstrādāta vēlāk';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Gaidošas transkripcijas $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Gaidošas transkripcijas $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Zvans';
+
+  @override
+  String get captureSourcePhoneMic => 'Tālruņa mikrofons';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Atsākt';
+
+  @override
+  String get finish => 'Pabeigt';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Kulons apturēts · atsāksies, kad pabeigsiet';
+
+  @override
+  String get pendantIsListeningTitle => 'Jūsu kulons klausās';
+
+  @override
+  String get oneSourceAtATime => 'Omi vienlaikus ieraksta tikai no viena avota.';
+
+  @override
+  String get recordWithPhoneInstead => 'Tā vietā ierakstīt ar tālruni';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Kulons ir apturēts, līdz pabeigsiet';
+
+  @override
+  String get pendantPausesDuringCall => 'Kulons ir apturēts zvana laikā';
+
+  @override
+  String get keepUsingPendant => 'Turpināt ar kulonu';
+
+  @override
+  String get recordWith => 'Ierakstīt ar';
+
+  @override
+  String get moreWaysToRecord => 'Citi ierakstīšanas veidi';
+
+  @override
+  String get openCall => 'Atvērt zvanu';
+
+  @override
+  String get captureRecoveryBanner => 'Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => 'Pirms ierakstīšanas ar tālruni apturiet Transcribe Later piekari.';
+
+  @override
+  String get captureNotTranscribing => 'Netiek transkribēts';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio saglabāts, tiks transkribēts vēlāk';
+
+  @override
+  String get captureStillRecording => 'Ierakstīšana turpinās';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofonu izmanto cita lietotne';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Zvans vai cita lietotne aizņēma mikrofonu, tāpēc Omi pašlaik nedzird. Omi turpinās pats, kad mikrofons būs brīvs. Viss, kas ierakstīts līdz šim, ir drošībā.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Jūsu pielāgotais runas pārveides tekstā pakalpojums nav sasniedzams. Omi glabā audio šajā tālrunī un nosūtīs to, kad pakalpojums atjaunosies. Nekas netiek zaudēts.';
+
+  @override
+  String get captureStarting => 'Sāk…';
+
+  @override
+  String get capturePhoneStorageFull => 'Tālruņa krātuve ir pilna';
+
+  @override
+  String get captureStorageAlmostFull => 'Krātuve gandrīz pilna';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name un citi';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Klausieties Omi atbildes';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Sapratu. Jūsu nākamā sapulce sāksies pēc divdesmit minūtēm.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Viss ir gatavs';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Pieskarieties rindai, lai to pārskatītu vai mainītu.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Kad jautā ar pogu, Omi var nolasīt savu atbildi skaļi.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Klausieties savu pēdējo atbildi';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Tiek atskaņota jūsu pēdējā atbilde...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Caur $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Caur tālruņa skaļruni';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Izmantojot pašreizējo audio izvadi';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Atbildes paliek ekrānā. Nekas netiek runāts.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privāts. Runā tikai pa AirPods, Bluetooth vai vadu austiņām.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Lieto tālruņa skaļruni, ja nav pievienotas austiņas.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi klusēs. Atbildes joprojām tiek rādītas lietotnē.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device savienots. Šeit runās Omi.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Nav pievienotas austiņas. Omi klusē, līdz pievienojat dažus.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Spēlē pa $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Atskaņo skaļi caur tālruņa skaļruni.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'To jebkurā laikā varat mainīt pa tālruni $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Atkārtojiet šo ceļojumu jebkurā laikā $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Austiņas';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minūtes';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Uzdevumi';
+
+  @override
+  String get usageMonth => 'Šomēnes';
+
+  @override
+  String get usageYear => 'Šogad';
+
+  @override
+  String get usageAll => 'Visu laiku';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Izskats';
+
+  @override
+  String get appearanceSystem => 'Sistēma';
+
+  @override
+  String get appearanceLight => 'Gaišs';
+
+  @override
+  String get appearanceDark => 'Tumšs';
+
+  @override
+  String get chatDiscardRecording => 'Atmest';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nesadzirdēju — mēģiniet vēlreiz';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Meklēt cilvēkus';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Pievienot \"$query\" kā jaunu personu';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Rādīt visas personas ($count)';
+  }
 }

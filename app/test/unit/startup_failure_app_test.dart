@@ -39,6 +39,13 @@ void main() {
       expect(find.byType(SelectableText), findsOneWidget);
     });
 
+    testWidgets('no stack trace prints only the error, never a literal "null"', (tester) async {
+      await tester.pumpWidget(StartupFailureApp(error: Exception('no stack'), stack: null));
+
+      final text = tester.widget<SelectableText>(find.byType(SelectableText)).data!;
+      expect(text, 'Exception: no stack');
+    });
+
     testWidgets('a runtime failure offers Try Again, which re-runs start-up, and Contact Support', (tester) async {
       var retries = 0;
       await tester.pumpWidget(

@@ -18,6 +18,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -207,9 +208,6 @@ task_intelligence_stub.candidate_service = candidate_service_stub
 staged_migration_stub = _stub_module("utils.task_intelligence.staged_migration")
 staged_migration_stub.proposal_from_legacy_staged = MagicMock()
 staged_migration_stub.migrate_staged_tasks = MagicMock()
-rollout_stub = _stub_module("utils.task_intelligence.rollout")
-setattr(rollout_stub, "effective_task_workflow_control", lambda control, rollout: control)
-setattr(rollout_stub, "resolve_task_intelligence_for_user", MagicMock())
 request_validation_stub = _stub_module("utils.request_validation")
 request_validation_stub.validate_calendar_date = lambda value, field_name='date': value
 redis_stub = _stub_module("database.redis_db")
@@ -524,28 +522,15 @@ class TestDesktopMessagesWireCompat:
 
     def test_save_message_writes_expected_fields(self):
         """save_message writes plugin_id, chat_session_id, type='text', from_external_integration=False."""
-        mock_doc_ref = MagicMock()
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value.exists = True
-
-        # Mock the db.collection chain for messages and chat_sessions
-        def collection_side_effect(name):
-            col_mock = MagicMock()
-            doc_mock = MagicMock()
-            if name == 'users':
-                doc_mock.collection.return_value.document.return_value = mock_doc_ref
-            col_mock.document.return_value = doc_mock
-            return col_mock
+        store = StrictFirestore({('users', 'test-uid', 'chat_sessions', 'session-123'): {'message_count': 0}})
 
         with patch.object(chat_db, 'acquire_chat_session', return_value='session-123'):
-            with patch.object(chat_db, 'db') as patched_db:
-                patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                    mock_doc_ref
-                )
-                result = chat_db.save_message('test-uid', text='hello', sender='human', app_id='my-app')
+            result = chat_db.save_message(
+                'test-uid', text='hello', sender='human', app_id='my-app', firestore_client=store
+            )
 
         # Verify the doc written to Firestore
-        set_call = mock_doc_ref.set.call_args[0][0]
+        set_call = store.rows[('users', 'test-uid', 'messages', result['id'])]
         assert set_call['plugin_id'] == 'my-app'
         assert set_call['app_id'] == 'my-app'
         assert set_call['chat_session_id'] == 'session-123'
@@ -976,6 +961,12 @@ class TestDeleteChatSessionCascade:
 class TestSaveMessageSessionBehavior:
     """Verify save_message session acquisition and preview behavior."""
 
+    @pytest.fixture(autouse=True)
+    def client_lookup(self, monkeypatch):
+        # Legacy wire/revision mocks remain local; new transaction guards use the
+        # shared strict fixture and real SDK in test_chat_message_save_atomic.py.
+        monkeypatch.setattr(chat_db, 'get_firestore_client', lambda: chat_db.db)
+
     def test_client_message_id_retry_returns_same_row_without_second_write(self):
         payload_hash = chat_db._message_idempotency_payload_hash(
             text='hello',
@@ -1292,15 +1283,17 @@ class TestSaveMessageSessionBehavior:
         }
         message_ref = MagicMock()
         message_ref.get.side_effect = [missing, winner]
-        message_ref.create.side_effect = chat_db.AlreadyExists('concurrent writer won')
+        session_ref = MagicMock()
+        session_ref.get.return_value.exists = True
 
         with (
             patch.object(chat_db, 'acquire_chat_session', return_value='locally-acquired-session'),
             patch.object(chat_db, 'db') as patched_db,
         ):
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                message_ref
+            patched_db.collection.return_value.document.return_value.collection.side_effect = lambda name: MagicMock(
+                document=MagicMock(return_value=session_ref if name == 'chat_sessions' else message_ref)
             )
+            patched_db.transaction.return_value.create.side_effect = chat_db.AlreadyExists('concurrent writer won')
             result = chat_db.save_message(
                 'uid',
                 text='hello',
@@ -1311,47 +1304,26 @@ class TestSaveMessageSessionBehavior:
         assert result['id'] == 'turn-1'
         assert result['session_id'] == 'winner-session'
         assert result['created'] is False
-        message_ref.create.assert_called_once()
+        patched_db.transaction.return_value.create.assert_called_once()
 
     def test_explicit_session_id_skips_acquire(self):
         """save_message with explicit session_id doesn't call acquire_chat_session."""
-        mock_doc_ref = MagicMock()
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value.exists = True
+        store = StrictFirestore({('users', 'uid', 'chat_sessions', 'my-session'): {'message_count': 0}})
 
-        with patch.object(chat_db, 'acquire_chat_session') as mock_acquire, patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
-                mock_doc_ref
-            )
-            # Make session ref accessible for the session update path
-            mock_doc_ref.set.return_value = None
-            chat_db.save_message('uid', text='hello', sender='human', session_id='my-session')
+        with patch.object(chat_db, 'acquire_chat_session') as mock_acquire:
+            chat_db.save_message('uid', text='hello', sender='human', session_id='my-session', firestore_client=store)
 
         mock_acquire.assert_not_called()
 
     def test_preview_truncated_to_100_chars(self):
         """save_message truncates preview to 100 characters."""
         long_text = 'x' * 200
-        mock_msg_ref = MagicMock()
-        mock_session_ref = MagicMock()
-        mock_session_ref.get.return_value.exists = True
+        store = StrictFirestore({('users', 'uid', 'chat_sessions', 'sess-1'): {'message_count': 0}})
 
-        with (
-            patch.object(chat_db, 'acquire_chat_session', return_value='sess-1'),
-            patch.object(chat_db, 'db') as patched_db,
-        ):
-            # Mock message write
-            patched_db.collection.return_value.document.return_value.collection.side_effect = lambda name: (
-                MagicMock(document=MagicMock(return_value=mock_session_ref))
-                if name == 'chat_sessions'
-                else MagicMock(document=MagicMock(return_value=mock_msg_ref))
-            )
-            chat_db.save_message('uid', text=long_text, sender='human')
+        with patch.object(chat_db, 'acquire_chat_session', return_value='sess-1'):
+            chat_db.save_message('uid', text=long_text, sender='human', firestore_client=store)
 
-        # Check the session update call has truncated preview
-        if mock_session_ref.update.called:
-            update_call = mock_session_ref.update.call_args[0][0]
-            assert len(update_call['preview']) == 100
+        assert store.transactions[0].updates[0][1]['preview'] == 'x' * 100
 
 
 class TestDeleteMessagesCount:
@@ -2435,12 +2407,12 @@ class TestFocusStatsDurationBoundary:
     """Verify duration_seconds=0 and missing duration behavior."""
 
     def test_distracted_zero_duration_treated_as_default(self):
-        """duration_seconds=0 is treated as 60 via `or 60` in get_focus_stats."""
+        """Explicit duration_seconds=0 is preserved as 0 seconds in get_focus_stats."""
         sessions = [{'status': 'distracted', 'app_or_site': 'Twitter', 'duration_seconds': 0}]
         with patch.object(focus_sessions_db, 'get_focus_sessions', return_value=sessions):
             result = focus_sessions_db.get_focus_stats('uid', '2026-04-06')
-        # duration_seconds=0 is falsy, so `or 60` defaults to 60
-        assert result['distracted_minutes'] == 1  # 60 seconds = 1 minute
+        assert result['distracted_minutes'] == 0
+        assert result['top_distractions'][0]['total_seconds'] == 0
 
     def test_distracted_missing_duration_treated_as_default(self):
         """Missing duration_seconds defaults to 60 via `or 60`."""

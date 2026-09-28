@@ -1,8 +1,8 @@
 from datetime import datetime
 from collections.abc import Mapping
-from typing import Annotated, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
@@ -21,13 +21,14 @@ from models.conversation_enums import (
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.other import Person
-from models.structured import Structured
+from models.structured import MeetingType, Structured
 from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
 
 # Only locally-defined symbols are exported. Use canonical modules for moved types:
 #   models.conversation_enums, models.structured, models.audio_file, etc.
 __all__ = [
     'AppResult',
+    'AudioTimelineProvenance',
     'BulkAssignSegmentsRequest',
     'CalendarEventLink',
     'Conversation',
@@ -58,6 +59,7 @@ __all__ = [
     'SharedConversationChatResponse',
     'SharedConversationResponse',
     'SharedEvent',
+    'SharedParticipant',
     'SharedPerson',
     'SharedPluginResult',
     'SharedStructured',
@@ -113,6 +115,7 @@ class SharedConversationChatResponse(BaseModel):
     model_config = {'extra': 'forbid'}
 
     message: str = Field(min_length=1, strict=True)
+    remaining_free_questions: int | None = Field(default=None, ge=0)
 
 
 class SharedActionItem(BaseModel):
@@ -136,6 +139,18 @@ class SharedEvent(BaseModel):
     created: bool = False
 
 
+class SharedParticipant(BaseModel):
+    """Public share projection of a meeting participant — never an email."""
+
+    model_config = {'extra': 'ignore'}
+
+    name: Optional[str] = None
+    organization: Optional[str] = None
+    role: Optional[str] = None
+    is_ai_agent: bool = False
+    source: Optional[Literal['roster', 'transcript']] = None
+
+
 class SharedStructured(BaseModel):
     """Public share projection of conversation structure."""
 
@@ -147,6 +162,33 @@ class SharedStructured(BaseModel):
     category: CategoryEnum = CategoryEnum.other
     action_items: List[SharedActionItem] = Field(default_factory=list)
     events: List[SharedEvent] = Field(default_factory=list)
+    meeting_type: Optional[MeetingType] = None
+    participants: List[SharedParticipant] = Field(default_factory=list)
+
+    @model_serializer(mode='wrap')
+    def _omit_unset_rich_fields(self, handler):
+        # Same contract as Structured: rich-only keys absent from the source
+        # document must not materialize as null/[] on the public payload.
+        data = handler(self)
+        for field_name in ('meeting_type', 'participants'):
+            if field_name not in self.model_fields_set:
+                data.pop(field_name, None)
+        return data
+
+    @field_validator('participants', mode='before')
+    @classmethod
+    def drop_unidentifiable_participants(cls, value):
+        # A participant with no public name carries no identifying public
+        # information (emails never leave the private note), so it drops out of
+        # the share projection rather than surfacing as an empty shell.
+        if not isinstance(value, list):
+            return value
+        kept = []
+        for item in value:
+            name = item.get('name') if isinstance(item, Mapping) else getattr(item, 'name', None)
+            if isinstance(name, str) and name.strip():
+                kept.append(item)
+        return kept
 
 
 class SharedTranscriptSegment(BaseModel):
@@ -259,6 +301,20 @@ class ConversationAudioSpan(BaseModel):
     len: float
 
 
+class AudioTimelineProvenance(BaseModel):
+    """Audio-timeline v2 provenance marker on eligible conversation rows.
+
+    Present only on single-channel, server-STT live captures admitted under
+    AUDIO_TIMELINE_V2: both transcript segment offsets and audio chunk starts
+    are projections of one capture sample cursor anchored at the conversation's
+    first accepted audio sample (started_at is that origin, pinned once).
+    Absent on legacy, resumed-v1, multi-channel, custom-STT, sync-merged or
+    mixed-source rows.
+    """
+
+    version: int
+
+
 class ConversationAudio(BaseModel):
     """Stamp for the conversation-level playback artifact (playback/{uid}/{conv}/conversation.mp3).
 
@@ -309,6 +365,41 @@ class CaptureGroup(BaseModel):
     members: List[CaptureGroupMember] = []
 
 
+class ConversationSpeakers(BaseModel):
+    """Server-authored meaning of this conversation's ``speaker_id`` values.
+
+    ``resolved``: re-diarized from the stored audio, so each ``speaker_id`` is one
+    voice for the whole conversation. ``capture``: one uninterrupted capture
+    diarized it, so capture's ids are that diarization. ``unavailable``: capture
+    restarted its numbering (reconnects, failovers, uploaded chunks) and no
+    stored audio could resolve it, so ids are not people and must not be counted.
+    ``participant_speaker_ids`` lists the voices that spoke enough to count as
+    participants; it is empty when the status is ``unavailable``.
+    """
+
+    status: Literal['resolved', 'capture', 'unavailable']
+    version: int = 1
+    participant_speaker_ids: List[int] = []
+
+
+class CaptureEvidenceMetadata(BaseModel):
+    """Internal S1 receipt. Missing source positions are explicitly unknown."""
+
+    version: Literal[1] = 1
+    capability: Literal['source_position', 'stable_artifact', 'unknown']
+    coverage: Optional[Literal['unknown', 'incomplete', 'mapped']] = None
+    origin: Optional[str] = None
+    reason: Optional[str] = None
+    capture_root: Optional[str] = None
+    channel: Optional[str] = None
+    clock_epoch: Optional[str] = None
+    source_start: Optional[int] = None
+    source_end: Optional[int] = None
+    runs: Optional[List[Dict[str, Any]]] = None
+    receipts: Optional[List[Dict[str, Any]]] = None
+    conflicts: Optional[int] = None
+
+
 class Conversation(BaseModel):
     sync_content_revision: Optional[int] = None
     sync_relevance: Optional[Literal['keep', 'review']] = None
@@ -345,6 +436,12 @@ class Conversation(BaseModel):
     audio_files: List[AudioFile] = []
     conversation_audio: Optional[ConversationAudio] = None
     private_cloud_sync_enabled: bool = False
+    # Audio-timeline v2 provenance (absent on legacy and ineligible rows).
+    audio_timeline: Optional[AudioTimelineProvenance] = None
+    # S1 internal receipt is written explicitly at existing persistence seams.
+    capture_evidence: Optional[CaptureEvidenceMetadata] = Field(default=None, exclude=True)
+    # Absent on conversations processed before speakers were resolved: count no ids as people.
+    speaker_resolution: Optional[ConversationSpeakers] = None
 
     # Meeting-note screenshots are deliberately NOT a field here. Building the set means minting
     # fresh 60-minute signed URLs for every persisted frame, which no ordinary conversation read

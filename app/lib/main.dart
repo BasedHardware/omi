@@ -1,7 +1,6 @@
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'dart:ui';
-// trigger rebuild
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +22,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 import 'package:omi/app_globals.dart';
@@ -42,16 +42,22 @@ import 'package:omi/startup_auth.dart';
 import 'package:omi/startup_failure_app.dart';
 import 'package:omi/startup_firebase.dart';
 import 'package:omi/startup_routing.dart';
+import 'package:omi/startup/boot_crash_handlers.dart';
+import 'package:omi/startup/boot_journal.dart';
+import 'package:omi/startup/boot_recovery.dart';
+import 'package:omi/startup/boot_recovery_app.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/providers/announcement_provider.dart';
+import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_composition.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -67,6 +73,7 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -75,6 +82,7 @@ import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/omi_theme.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
@@ -167,6 +175,31 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// failure screen re-runs [_init].
 bool _serviceManagerInitialized = false;
 
+Future<void> _reportBootCrash(String kind, Object error, StackTrace? stack, {FlutterErrorDetails? details}) async {
+  if (PhysicalQualification.enabled) return;
+  try {
+    await BootJournal.instance.record(kind, 'observed', error: error);
+    final breadcrumbs = await BootJournal.instance.breadcrumbs();
+    if (Firebase.apps.isEmpty) {
+      debugPrint('Boot diagnostics: $breadcrumbs');
+      return;
+    }
+    final crashlytics = FirebaseCrashlytics.instance;
+    try {
+      await crashlytics.log('boot_stages: $breadcrumbs');
+    } catch (_) {
+      // A breadcrumb transport failure must not suppress the crash report.
+    }
+    if (details != null) {
+      await crashlytics.recordFlutterError(details);
+    } else {
+      await crashlytics.recordError(error, stack, fatal: true);
+    }
+  } catch (_) {
+    // Reporting must not recursively fail startup or the global error handler.
+  }
+}
+
 Future _init() async {
   // Env. A rejected configuration cannot be fixed by retrying; the failure screen says so.
   try {
@@ -194,6 +227,36 @@ Future _init() async {
   // Firebase
   await PhysicalQualification.startupStage('firebase_init', _ensureFirebaseApp);
 
+  if (!PhysicalQualification.enabled) {
+    await BootCrashHandlers.install(
+      initialize: CrashlyticsManager.init,
+      flutterError: (details) {
+        if (PhysicalQualification.enabled) {
+          unawaited(
+              PhysicalQualification.runtimeEvent('flutter_error', error: details.exception, stack: details.stack));
+          return;
+        }
+        unawaited(_reportBootCrash('flutter_error', details.exception, details.stack, details: details));
+        try {
+          AnalyticsManager().recordProductError(ProductErrorKind.flutterFramework);
+          Logger.instance.talker.handle(details.exception, details.stack);
+          DebugLogManager.logError(details.exception, details.stack, 'FlutterError');
+        } catch (_) {}
+      },
+      platformError: (error, stack) {
+        if (PhysicalQualification.enabled) {
+          unawaited(PhysicalQualification.runtimeEvent('platform_error', error: error, stack: stack));
+        } else {
+          unawaited(_reportBootCrash('platform_error', error, stack));
+          try {
+            AnalyticsManager().recordProductError(ProductErrorKind.uncaughtDart);
+          } catch (_) {}
+        }
+        return true;
+      },
+    );
+  }
+
   if (Env.profile.usesFirebaseAuthEmulator) {
     await PhysicalQualification.startupStage('auth_emulator',
         () => FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort));
@@ -209,6 +272,7 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  SiriIntegration.instance.installEvents();
 
   // TestFlight remains a distribution/telemetry signal; production-family
   // builds always use the established production backend.
@@ -253,13 +317,22 @@ Future _init() async {
   initOpus(await PhysicalQualification.startupStage<dynamic>('opus_load', opus_flutter.load));
 
   // Register native BLE bridge
-  BleFlutterApi.setUp(BleBridge.instance);
-
-  BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
-    Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
-  };
-
-  await PhysicalQualification.startupStage('crash_reporter', CrashlyticsManager.init);
+  if (PhysicalQualification.enabled) {
+    BleFlutterApi.setUp(BleBridge.instance);
+    BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
+      Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
+    };
+  } else {
+    await PhysicalQualification.startupStage('ble_setup', () async {
+      BleFlutterApi.setUp(BleBridge.instance);
+      BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
+        Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
+      };
+    });
+  }
+  if (PhysicalQualification.enabled) {
+    await PhysicalQualification.startupStage('crash_reporter', CrashlyticsManager.init);
+  }
   if (isAuth) {
     PlatformManager.instance.crashReporter.identifyUser(
       FirebaseAuth.instance.currentUser?.email ?? '',
@@ -269,37 +342,48 @@ Future _init() async {
   }
   if (!PhysicalQualification.enabled) {
     AnalyticsManager().bindIdentity(FirebaseAuth.instance.currentUser?.uid);
-  }
-  FlutterError.onError = (FlutterErrorDetails details) {
-    if (PhysicalQualification.enabled) {
+  } else {
+    FlutterError.onError = (details) {
       unawaited(PhysicalQualification.runtimeEvent('flutter_error', error: details.exception, stack: details.stack));
-      return;
-    }
-    AnalyticsManager().recordProductError(ProductErrorKind.flutterFramework);
-    unawaited(FirebaseCrashlytics.instance.recordFlutterError(details).catchError((Object _) {}));
-    Logger.instance.talker.handle(details.exception, details.stack);
-    DebugLogManager.logError(details.exception, details.stack, 'FlutterError');
-  };
-
-  PlatformDispatcher.instance.onError = (error, stack) {
-    if (PhysicalQualification.enabled) {
+    };
+    PlatformDispatcher.instance.onError = (error, stack) {
       unawaited(PhysicalQualification.runtimeEvent('platform_error', error: error, stack: stack));
-    } else {
-      AnalyticsManager().recordProductError(ProductErrorKind.uncaughtDart);
-      unawaited(FirebaseCrashlytics.instance.recordError(error, stack, fatal: true).catchError((Object _) {}));
-    }
-    return true;
-  };
-
+      return true;
+    };
+  }
   await PhysicalQualification.startupStage('service_manager_start', ServiceManager.instance().start);
   return;
 }
 
 /// Runs start-up and shows the app, or the failure screen (whose Try Again calls this again).
-Future<void> _start() async {
+Future<void> _start({bool forceFull = false}) async {
+  BootRecovery? recovery;
   try {
+    if (!PhysicalQualification.enabled) {
+      recovery = BootRecovery(await SharedPreferences.getInstance());
+      await recovery.countInterruptedBoot(BootJournal.instance);
+      await BootJournal.instance.record('boot', 'begin');
+      await recovery.recordSchemaUpgradeIfNeeded(BootJournal.instance);
+      BootRecovery.safeModeActive = !forceFull && recovery.shouldRecover;
+      if (BootRecovery.safeModeActive) {
+        await BootJournal.instance.record('safe_boot', 'begin');
+        await BootJournal.instance.record('full_startup', 'paused');
+        try {
+          AnalyticsManager().track('Mobile Recovery Mode Entered', properties: {'stage': recovery.failingStage});
+        } catch (_) {}
+        await BootJournal.instance.record('safe_boot', 'completed');
+        await BootJournal.instance.record('boot', 'completed');
+        runApp(BootRecoveryApp(onRetry: () => _start(forceFull: true)));
+        return;
+      }
+    }
     await _init();
+    if (!PhysicalQualification.enabled) {
+      await recovery!.fullBootSucceeded();
+      await BootJournal.instance.record('boot', 'completed');
+    }
   } catch (error, stack) {
+    if (!PhysicalQualification.enabled) await BootJournal.instance.record('boot', 'interrupted');
     if (PhysicalQualification.enabled) {
       unawaited(PhysicalQualification.runtimeEvent('startup_error', error: error, stack: stack));
     }
@@ -309,13 +393,39 @@ Future<void> _start() async {
     // profile/release builds. A misconfigured OMI_API_BASE_URL cost about a
     // day of investigation for exactly this reason — the app looked hung
     // when it had in fact thrown a precise, actionable StateError.
-    if (!PhysicalQualification.enabled && Firebase.apps.isNotEmpty) {
-      unawaited(FirebaseCrashlytics.instance.recordError(error, stack, fatal: true).catchError((Object _) {}));
-    }
+    if (!PhysicalQualification.enabled) unawaited(_reportBootCrash('startup_error', error, stack));
     if (!PhysicalQualification.enabled) {
-      AnalyticsManager().recordProductError(ProductErrorKind.startup);
+      try {
+        AnalyticsManager().recordProductError(ProductErrorKind.startup);
+      } catch (_) {}
     }
-    runApp(StartupFailureApp(error: error, stack: stack, onRetry: _start));
+    if (!PhysicalQualification.enabled && BootRecovery.countsFailure(error)) {
+      try {
+        recovery ??= BootRecovery(await SharedPreferences.getInstance());
+        final stage = BootJournal.instance.failureStage;
+        final failures = await recovery.failed(stage);
+        if (failures >= 3 && !BootRecovery.safeModeActive) {
+          BootRecovery.safeModeActive = true;
+          await BootJournal.instance.record('safe_boot', 'begin');
+          await BootJournal.instance.record('full_startup', 'paused');
+          try {
+            AnalyticsManager().track('Mobile Recovery Mode Entered', properties: {'stage': stage});
+          } catch (_) {}
+          await BootJournal.instance.record('safe_boot', 'completed');
+          await BootJournal.instance.record('boot', 'completed');
+          runApp(BootRecoveryApp(onRetry: () => _start(forceFull: true)));
+          return;
+        }
+        if (BootRecovery.safeModeActive) {
+          await BootJournal.instance.record('safe_boot', 'failed', error: error);
+          runApp(BootRecoveryApp(onRetry: () => _start(forceFull: true)));
+          return;
+        }
+      } catch (recoveryError) {
+        await BootJournal.instance.record('safe_boot', 'failed', error: recoveryError);
+      }
+    }
+    runApp(StartupFailureApp(error: error, stack: stack, onRetry: () => _start(forceFull: true)));
     return;
   }
   if (PhysicalQualification.enabled) {
@@ -325,6 +435,9 @@ Future<void> _start() async {
     });
   }
   runApp(const MyApp());
+  unawaited(SiriIntegration.instance.takePendingRoute().then((route) {
+    if (route != null) SiriIntegration.instance.openRoute(route);
+  }));
   if (PhysicalQualification.enabled) unawaited(PhysicalQualification.runtimeEvent('run_app_returned'));
 }
 
@@ -348,11 +461,11 @@ void main() {
       if (PhysicalQualification.enabled) {
         unawaited(PhysicalQualification.runtimeEvent('zone_error', error: error, stack: stack));
       } else {
-        debugPrint('Uncaught error: $error\n$stack');
-        AnalyticsManager().recordProductError(ProductErrorKind.uncaughtDart);
-      }
-      if (!PhysicalQualification.enabled && Firebase.apps.isNotEmpty) {
-        unawaited(FirebaseCrashlytics.instance.recordError(error, stack, fatal: true).catchError((Object _) {}));
+        unawaited(_reportBootCrash('platform_error', error, stack));
+        try {
+          debugPrint('Uncaught error: $error\n$stack');
+          AnalyticsManager().recordProductError(ProductErrorKind.uncaughtDart);
+        } catch (_) {}
       }
     },
   );
@@ -402,6 +515,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  @override
+  void didChangePlatformBrightness() {
+    setState(() {});
+  }
+
   void _deinit() {
     Logger.debug("App > _deinit");
     ServiceManager.instance().deinit();
@@ -431,7 +549,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         _appSessionTelemetry.recordResumed();
         _performanceTelemetry.setForeground(true);
         PlatformManager.instance.analytics.recordTelemetryHealth();
-        unawaited(PlatformManager.instance.analytics.refreshExperiments());
       }
       unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
@@ -460,6 +577,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) => createProductionConversationProvider()),
         ListenableProvider(create: (context) => AppProvider()),
         ChangeNotifierProvider(create: (context) => PeopleProvider()),
+        ChangeNotifierProvider(create: (context) => SpeakerTagPromptsProvider()),
         ChangeNotifierProvider(create: (context) => UsageProvider()),
         ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
           create: (context) => MessageProvider(),
@@ -525,10 +643,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(lazy: true, create: (context) => PaymentMethodProvider()),
         ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()..checkPendingRecording()),
         ChangeNotifierProvider(create: (context) => LocaleProvider()),
+        ChangeNotifierProvider(create: (context) => AppearanceProvider()),
         ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => PhoneCallProvider()),
       ],
       builder: (context, child) {
+        final mode = context.watch<AppearanceProvider>().mode;
+        final platformBrightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+        final brightness = resolveAppearanceBrightness(mode, platformBrightness);
+        OmiColors.active = OmiColors.forBrightness(brightness);
         return WithForegroundTask(
           child: MaterialApp(
             debugShowCheckedModeBanner: F.env == Environment.dev,
@@ -543,14 +666,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               GlobalCupertinoLocalizations.delegate,
             ],
             supportedLocales: AppLocalizations.supportedLocales,
-            theme: buildOmiTheme(),
-            themeMode: ThemeMode.dark,
+            theme: buildOmiTheme(brightness: Brightness.light),
+            darkTheme: buildOmiTheme(brightness: Brightness.dark),
+            themeMode: mode,
             builder: (context, child) {
               syncIntlDefaultLocale(Localizations.localeOf(context));
               ErrorWidget.builder = (errorDetails) {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };
-              final content = child!;
+              final content = AnnotatedRegion<SystemUiOverlayStyle>(
+                value: brightness == Brightness.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+                child: KeyedSubtree(key: ValueKey(brightness), child: child!),
+              );
               final guidedContent = BluetoothGuidanceListener(child: content);
               return PlatformService.isIOS && Env.posthogApiKey != null
                   ? RageClickContextTracker(child: guidedContent)

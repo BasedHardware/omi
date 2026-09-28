@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/pages/settings/widgets/voice_profile_settings_section.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -41,10 +42,10 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
             color: Colors.transparent,
             child: Theme(
               data: ThemeData(
-                textSelectionTheme: const TextSelectionThemeData(
-                  cursorColor: Colors.white,
-                  selectionColor: Colors.white24,
-                  selectionHandleColor: Colors.white,
+                textSelectionTheme: TextSelectionThemeData(
+                  cursorColor: OmiColors.textPrimary,
+                  selectionColor: OmiColors.textPrimary.withValues(alpha: 0.24),
+                  selectionHandleColor: OmiColors.textPrimary,
                 ),
               ),
               child: Form(
@@ -55,8 +56,8 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                   placeholder: context.l10n.name,
                   keyboardType: TextInputType.name,
                   textCapitalization: TextCapitalization.words,
-                  placeholderStyle: const TextStyle(color: OmiColors.textTertiary),
-                  style: const TextStyle(color: Colors.white),
+                  placeholderStyle: TextStyle(color: OmiColors.textTertiary),
+                  style: TextStyle(color: OmiColors.textPrimary),
                   validator: _nameValidator(context),
                 ),
               ),
@@ -70,9 +71,9 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
               textCapitalization: TextCapitalization.words,
               decoration: InputDecoration(
                 labelText: context.l10n.name,
-                labelStyle: const TextStyle(color: Colors.white),
-                focusColor: Colors.white,
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300)),
+                labelStyle: TextStyle(color: OmiColors.textPrimary),
+                focusColor: OmiColors.textPrimary,
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: OmiColors.border)),
               ),
               validator: _nameValidator(context),
             ),
@@ -191,71 +192,79 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
               ),
             ],
           ),
-          body: provider.loading
-              ? const OmiLoadingState()
-              : provider.people.isEmpty
-                  ? OmiEmptyState(
-                      icon: Icons.people_outline,
-                      title: l10n.noPeopleYet,
-                      message: l10n.createPersonHint,
-                      action: OmiButton(
-                        label: l10n.addPerson,
-                        icon: Icons.add,
-                        size: OmiButtonSize.compact,
-                        onPressed: () {
-                          _showPersonDialog(context, provider);
-                        },
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: provider.people.length,
-                      separatorBuilder: (context, index) => const Divider(height: 1, color: OmiColors.border),
-                      itemBuilder: (context, index) {
-                        final person = provider.people[index];
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ListTile(
-                              title: Text(person.name, style: OmiType.body.copyWith(fontWeight: FontWeight.w500)),
-                              subtitle: Text(
-                                l10n.voiceRecognitionStatus(person.voiceReadiness),
-                                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                              ),
-                              onTap: () => _showPersonDialog(context, provider, person: person),
-                              trailing: OmiIconButton(
-                                icon: const Icon(Icons.delete_outline, size: 20),
-                                label: l10n.deletePersonLabel,
-                                color: OmiColors.textSecondary,
-                                onPressed: () => _confirmDeletePerson(person, provider),
-                              ),
+          body: Column(
+            children: [
+              const VoiceProfileSettingsSection(),
+              Expanded(
+                child: provider.loading
+                    ? const OmiLoadingState()
+                    : provider.people.isEmpty
+                        ? OmiEmptyState(
+                            icon: Icons.people_outline,
+                            title: l10n.noPeopleYet,
+                            message: l10n.createPersonHint,
+                            action: OmiButton(
+                              label: l10n.addPerson,
+                              icon: Icons.add,
+                              size: OmiButtonSize.compact,
+                              onPressed: () {
+                                _showPersonDialog(context, provider);
+                              },
                             ),
-                            if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    for (final (j, sample) in person.speechSamples!.indexed)
-                                      _SampleRow(
-                                        title: j == 0 ? l10n.speechProfile : l10n.sampleNumber(j),
-                                        transcript: person.speechSampleTranscripts != null &&
-                                                j < person.speechSampleTranscripts!.length
-                                            ? person.speechSampleTranscripts![j]
-                                            : null,
-                                        playing: provider.currentPlayingPersonIndex == index &&
-                                            provider.currentPlayingIndex == j &&
-                                            provider.isPlaying,
-                                        // The row plays: a tap no longer deletes (it used to).
-                                        onPlayPause: () => provider.playPause(index, j, sample),
-                                        onDelete: () => _confirmDeleteSample(index, person, j, provider),
+                          )
+                        : ListView.separated(
+                            itemCount: provider.people.length,
+                            separatorBuilder: (context, index) => Divider(height: 1, color: OmiColors.border),
+                            itemBuilder: (context, index) {
+                              final person = provider.people[index];
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                                    title: Text(person.name, style: OmiType.body.copyWith(fontWeight: FontWeight.w500)),
+                                    subtitle: Text(
+                                      l10n.voiceRecognitionStatus(person.voiceReadiness),
+                                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                                    ),
+                                    onTap: () => _showPersonDialog(context, provider, person: person),
+                                    trailing: OmiIconButton(
+                                      icon: const Icon(Icons.delete_outline, size: 20),
+                                      label: l10n.deletePersonLabel,
+                                      color: OmiColors.textSecondary,
+                                      onPressed: () => _confirmDeletePerson(person, provider),
+                                    ),
+                                  ),
+                                  if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 6, right: 16, bottom: 8),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          for (final (j, sample) in person.speechSamples!.indexed)
+                                            _SampleRow(
+                                              title: l10n.sampleNumber(j + 1),
+                                              transcript: person.speechSampleTranscripts != null &&
+                                                      j < person.speechSampleTranscripts!.length
+                                                  ? person.speechSampleTranscripts![j]
+                                                  : null,
+                                              playing: provider.currentPlayingPersonIndex == index &&
+                                                  provider.currentPlayingIndex == j &&
+                                                  provider.isPlaying,
+                                              // The row plays: a tap no longer deletes (it used to).
+                                              onPlayPause: () => provider.playPause(index, j, sample),
+                                              onDelete: () => _confirmDeleteSample(index, person, j, provider),
+                                            ),
+                                        ],
                                       ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+              ),
+            ],
+          ),
         );
       },
     );

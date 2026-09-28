@@ -208,9 +208,8 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
 
 def is_exists_user(uid: str):
     user_ref = db.collection('users').document(uid)
-    if not user_ref.get().exists:
-        return False
-    return True
+    snapshot = user_ref.get(field_paths=['uid'])
+    return parse_snapshot_or_none(lambda _payload: True, snapshot) is not None
 
 
 def get_user_profile(uid: str) -> dict:
@@ -1022,9 +1021,13 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
 
 
 @transactional
-def _replace_speech_profile_transaction(transaction, person_ref, expected_updated_at, profile):
+def _replace_speech_profile_transaction(transaction, person_ref, expected_updated_at, profile, user_ref=None):
     snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
+        return None
+    if user_ref is not None and not (user_ref.get(transaction=transaction).to_dict() or {}).get(
+        'save_other_voice_profiles', True
+    ):
         return None
     person = snapshot.to_dict()
     if person.get('updated_at') != expected_updated_at:
@@ -1048,7 +1051,8 @@ def replace_person_speech_profile(
 
     None means the result lost its ownership/version fence; [] is a first enrollment.
     """
-    ref = db.collection('users').document(uid).collection('people').document(person_id)
+    user_ref = db.collection('users').document(uid)
+    ref = user_ref.collection('people').document(person_id)
     return _replace_speech_profile_transaction(
         db.transaction(),
         ref,
@@ -1060,6 +1064,7 @@ def replace_person_speech_profile(
             'speaker_embedding': embedding,
             'speech_sample_source': {'conversation_id': conversation_id, 'segment_ids': segment_ids},
         },
+        user_ref=user_ref,
     )
 
 

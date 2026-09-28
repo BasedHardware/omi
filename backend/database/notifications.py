@@ -166,8 +166,9 @@ def set_user_time_zone_if_missing(uid: str, time_zone: str) -> bool:
 
     ``save_token`` above is otherwise the only writer, and it runs from the mobile app's FCM
     registration. A desktop-only owner never registers a token, so their document never carried
-    the field — and ``get_users_for_daily_summary`` selects users *by* it, so the daily-summary
-    cron never saw them. Mobile stays authoritative: a zone already present is never replaced here.
+    the field — and ``get_users_for_daily_summary_indexed`` selects users *by* it, so the
+    daily-summary cron never saw them. Mobile stays authoritative: a zone already present is never
+    replaced here.
     """
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get()
@@ -387,77 +388,6 @@ def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str
     return _get_users_in_timezones(timezones, 'id')
 
 
-def get_users_for_daily_summary(timezones: list[str], target_local_hour: int) -> List[Tuple[str, List[str], Any]]:
-    """
-    Get users who should receive daily summary notifications.
-
-    This function queries users who:
-    1. Are in one of the provided timezones (where it's currently target_local_hour)
-    2. Have daily_summary_hour_local set to target_local_hour OR have no preference (uses default)
-    3. Have daily_summary_enabled not explicitly set to False
-
-    Args:
-        timezones: List of IANA timezone names where it's currently target_local_hour
-        target_local_hour: The local hour we're sending notifications for (0-23)
-
-    Returns:
-        List of (uid, [tokens], time_zone) tuples.
-    """
-    if not timezones:
-        return []
-
-    users: List[Tuple[str, List[str], Any]] = []
-
-    # 'Where in' query only supports 30 or fewer items in list so we split in chunks
-    timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
-
-    for chunk in timezone_chunks:
-        chunk_users: List[Tuple[str, List[str], Any]] = []
-        try:
-            # Query users in these timezones
-            query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
-
-            for user_doc in query.stream():
-                uid = str(user_doc.id)
-                user_data = _typed_doc(user_doc)
-
-                # Check if daily summary is enabled (default: True)
-                if user_data.get('daily_summary_enabled') is False:
-                    continue
-
-                # Check if user's preferred hour matches target hour
-                # If not set, use default (22 = 10 PM)
-                user_hour = user_data.get('daily_summary_hour_local', DEFAULT_DAILY_SUMMARY_HOUR_LOCAL)
-                if user_hour != target_local_hour:
-                    continue
-
-                # Collect tokens from subcollection
-                tokens: List[str] = []
-                token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
-                for token_doc in token_docs:
-                    token_data = _typed_doc(token_doc)
-                    token_value = token_data.get('token')
-                    if token_value:
-                        tokens.append(str(token_value))
-
-                # Add legacy token if exists and not already in list
-                legacy_token = user_data.get('fcm_token')
-                if legacy_token and legacy_token not in tokens:
-                    tokens.append(str(legacy_token))
-
-                # Tokenless users still get a record written. Generation is not
-                # push delivery: a desktop-only owner has no FCM token and must
-                # not be dropped here.
-                time_zone = user_data.get('time_zone')
-                chunk_users.append((uid, tokens, time_zone))
-
-        except Exception as e:
-            logger.error(f"Error querying chunk for daily summary: {e}")
-        users.extend(chunk_users)
-
-    return users
-
-
 def get_users_for_daily_summary_indexed(
     timezones: list[str], target_local_hour: int
 ) -> List[Tuple[str, List[str], Any]]:
@@ -469,7 +399,7 @@ def get_users_for_daily_summary_indexed(
     full ``time_zone IN`` pass. A user without those fields is invisible here
     until the backfill or a later write fills them. Chunks of >30 zones, token
     collection (subcollection + legacy ``fcm_token``), tokenless users, and
-    per-chunk try/except-log-and-continue match ``get_users_for_daily_summary``.
+    per-chunk try/except-log-and-continue match the retired full-scan selector it replaced.
     """
     if not timezones:
         return []

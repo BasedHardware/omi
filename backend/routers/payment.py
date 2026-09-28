@@ -70,6 +70,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _stripe_client_error_detail(e: stripe.error.StripeError, fallback: str) -> str:
+    """User-safe detail for a Stripe error HTTP response.
+
+    Stripe's `user_message` is written to be shown to end users; anything else on
+    the exception (internal error text, account/customer/subscription IDs) is
+    diagnostic detail that belongs in server logs (via `sanitize()`), not the
+    response body.
+    """
+    user_message = getattr(e, 'user_message', None)
+    return user_message if user_message else fallback
+
+
 class CreateCheckoutRequest(BaseModel):
     price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
@@ -884,8 +896,11 @@ def cancel_subscription_endpoint(
             return {"status": "ok", "message": "Subscription scheduled for cancellation."}
 
     except stripe.error.StripeError as e:
-        logger.error(f"Stripe error canceling subscription: {e}")
-        raise HTTPException(status_code=500, detail=f"Could not cancel subscription: {str(e)}")
+        logger.error(f"Stripe error canceling subscription: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=500,
+            detail=_stripe_client_error_detail(e, "Could not cancel subscription. Please try again."),
+        )
     except Exception as e:
         logger.error(f"Error canceling subscription: {e}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
@@ -1313,7 +1328,11 @@ def create_connect_account_endpoint(
 
         return account
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Stripe error creating connect account for {uid}: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=400,
+            detail=_stripe_client_error_detail(e, "Could not create Stripe account. Please try again."),
+        )
 
 
 @router.get('/v1/stripe/supported-countries', response_model=List[StripeSupportedCountryResponse])
@@ -1332,7 +1351,11 @@ def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
             return {"onboarding_complete": False}
         return {"onboarding_complete": is_onboarding_complete(account_id)}
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Stripe error checking onboarding status for {uid}: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=400,
+            detail=_stripe_client_error_detail(e, "Could not check onboarding status. Please try again."),
+        )
 
 
 @router.post("/v1/stripe/refresh/{account_id}", response_model=StripeConnectAccountResponse)
@@ -1344,7 +1367,11 @@ def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = 
         account = refresh_connect_account_link(account_id)
         return account
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Stripe error refreshing account link for {account_id}: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=400,
+            detail=_stripe_client_error_detail(e, "Could not refresh account link. Please try again."),
+        )
 
 
 @router.get("/v1/stripe/return/{account_id}", response_class=HTMLResponse)
@@ -1605,8 +1632,11 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             "current_period_end": updated_sub_dict.get('current_period_end'),
         }
     except stripe.error.StripeError as e:
-        logger.error(f"Stripe error canceling app subscription: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Stripe error canceling app subscription: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=400,
+            detail=_stripe_client_error_detail(e, "Could not cancel subscription. Please try again."),
+        )
     except Exception as e:
         logger.error(f"Error canceling app subscription: {e}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription")

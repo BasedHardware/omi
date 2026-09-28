@@ -18,7 +18,10 @@ These tests exercise the db-layer contract (idempotency hit / miss / no-key
 backwards compat) and the router-layer key handling.
 """
 
-from unittest.mock import MagicMock
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from google.api_core.exceptions import Aborted
 
@@ -34,7 +37,7 @@ from routers import action_items as action_items_router  # noqa: E402
 def _make_doc(doc_id, data=None):
     doc = MagicMock()
     doc.id = doc_id
-    doc.to_dict.return_value = data or {}
+    doc.to_dict.return_value = {'idempotency_key': 'abc123', **(data or {})}
     return doc
 
 
@@ -58,11 +61,13 @@ def _stub_collection(monkeypatch, existing_docs, *, control_generation=None):
     fake_query.limit.return_value = fake_query
 
     def _stream(**kwargs):
-        generation_filters = [value for field, operator, value in captured['filters'] if field == 'account_generation']
-        if not generation_filters:
-            return iter(existing_docs)
-        generation = generation_filters[-1]
-        return iter([doc for doc in existing_docs if doc.to_dict().get('account_generation') == generation])
+        # Match all equality filters, not just generation: ignoring completed
+        # made this fake certify a lookup that excludes finished tasks in Firestore.
+        return iter(
+            doc
+            for doc in existing_docs
+            if all(doc.to_dict().get(field) == value for field, _operator, value in captured['filters'])
+        )
 
     fake_query.stream.side_effect = _stream
 
@@ -150,6 +155,29 @@ def test_idempotency_hit_on_active_returns_existing_id(monkeypatch):
     )
     assert result == 'existing-id'
     assert captured['added'] == [], "no new document should be created on idempotency hit"
+
+
+@pytest.mark.parametrize('state', [{'completed': True}, {}])
+def test_idempotency_hit_does_not_depend_on_completion_field(monkeypatch, state):
+    captured = _stub_collection(monkeypatch, [_make_doc('existing-id', state)])
+    result = action_items_db.create_action_item(
+        'uid', {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+    assert result == 'existing-id'
+    assert captured['added'] == []
+
+
+def test_completed_key_match_still_respects_generation(monkeypatch):
+    captured = _stub_collection(
+        monkeypatch,
+        [
+            _make_doc('old', {'completed': True, 'account_generation': 6}),
+            _make_doc('current', {'completed': True, 'account_generation': 7}),
+        ],
+        control_generation=7,
+    )
+    assert action_items_db.create_action_item('uid', {'description': 'Task'}, idempotency_key='abc123') == 'current'
+    assert captured['added'] == []
 
 
 def test_idempotency_falls_through_when_only_match_is_deleted(monkeypatch):
@@ -255,7 +283,7 @@ def test_client_idempotency_key_strips_and_drops_blank():
     assert action_items_router._client_idempotency_key(' retry-1 ') == 'retry-1'
 
 
-def _stub_router_create(monkeypatch, *, capture):
+def _stub_router_create(monkeypatch, *, capture, saved_fields=None):
     monkeypatch.setattr(action_items_router.task_links, 'validate_task_links', lambda *args, **kwargs: None)
     monkeypatch.setattr(action_items_router, 'upsert_action_item_vector', lambda *args, **kwargs: None)
     monkeypatch.setattr(action_items_router, 'submit_with_context', lambda *args, **kwargs: None)
@@ -270,7 +298,13 @@ def _stub_router_create(monkeypatch, *, capture):
     monkeypatch.setattr(
         action_items_db,
         'get_action_item',
-        lambda uid, task_id: {'id': task_id, 'description': '123', 'completed': False, 'due_at': None},
+        lambda uid, task_id: {
+            'id': task_id,
+            'description': '123',
+            'completed': False,
+            'due_at': None,
+            **(saved_fields or {}),
+        },
     )
 
 
@@ -303,6 +337,38 @@ def test_router_honors_client_idempotency_key(monkeypatch):
     )
 
     assert capture[0]['idempotency_key'] == 'retry-1'
+
+
+@pytest.mark.parametrize('completed,has_due_date', [(False, True), (False, False), (True, True)])
+def test_router_replay_effects_use_persisted_state(monkeypatch, completed, has_due_date):
+    due = datetime(2030, 2, 1, 12, tzinfo=timezone.utc) if has_due_date else None
+    saved = {'description': 'Edited task', 'completed': completed, 'due_at': due}
+    _stub_router_create(monkeypatch, capture=[], saved_fields=saved)
+    reminder, vector, auto_sync = MagicMock(), MagicMock(), AsyncMock()
+    monkeypatch.setattr(action_items_router, '_schedule_action_item_reminder', reminder)
+    monkeypatch.setattr(action_items_router, 'upsert_action_item_vector', vector)
+    monkeypatch.setattr(action_items_router, 'auto_sync_action_item', auto_sync)
+    monkeypatch.setattr(action_items_router, 'submit_with_context', lambda _pool, fn: fn())
+
+    response = action_items_router.create_action_item(
+        action_items_router.CreateActionItemRequest(
+            description='Original task', due_at=datetime(2030, 1, 1, 12, tzinfo=timezone.utc)
+        ),
+        uid='user-1',
+        idempotency_key='retry-1',
+    )
+
+    assert response.description == 'Edited task'
+    assert response.completed == completed
+    vector.assert_called_once_with('user-1', 'task-1', 'Edited task')
+    if has_due_date and not completed:
+        reminder.assert_called_once_with('user-1', 'task-1', 'Edited task', due)
+    else:
+        reminder.assert_not_called()
+    if completed:
+        auto_sync.assert_not_called()
+    else:
+        auto_sync.assert_awaited_once_with('user-1', {'id': 'task-1', **saved}, skip_apple_reminders=True)
 
 
 def test_create_dispatches_auto_sync_outside_the_database_pool(monkeypatch):

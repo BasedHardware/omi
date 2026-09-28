@@ -178,7 +178,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
               TextFormField(
                 controller: _nameController,
                 decoration: appFormInputDecoration(label: l10n.appName, hint: 'e.g. Mixpanel Analytics'),
-                style: const TextStyle(color: OmiColors.textPrimary),
+                style: TextStyle(color: OmiColors.textPrimary),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return l10n.appName;
@@ -189,15 +189,16 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
               const SizedBox(height: OmiSpacing.md),
               TextFormField(
                 controller: _descriptionController,
-                decoration: appFormInputDecoration(label: l10n.descriptionOptional),
-                style: const TextStyle(color: OmiColors.textPrimary),
+                decoration: appFormInputDecoration(label: l10n.descriptionOptional).copyWith(hintMaxLines: 1),
+                style: TextStyle(color: OmiColors.textPrimary),
+                minLines: 1,
                 maxLines: 2,
               ),
               const SizedBox(height: OmiSpacing.md),
               TextFormField(
                 controller: _urlController,
-                decoration: appFormInputDecoration(label: l10n.mcpServerUrl, hint: 'https://mcp.example.com/sse'),
-                style: const TextStyle(color: OmiColors.textPrimary),
+                decoration: appFormInputDecoration(label: l10n.mcpServerUrl, hint: 'https://mcp.example.com/mcp'),
+                style: TextStyle(color: OmiColors.textPrimary),
                 keyboardType: TextInputType.url,
                 autocorrect: false,
                 validator: (value) {

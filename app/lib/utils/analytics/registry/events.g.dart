@@ -1378,3 +1378,290 @@ final class ConversationAction extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"action": action.wireName, "surface": surface.wireName};
 }
+
+final class SpeakerTagPromptsViewed extends RegisteredEvent {
+  const SpeakerTagPromptsViewed({required this.promptCount, required this.firstTime});
+  final int promptCount;
+  final bool firstTime;
+  @override
+  String get wireName => "Speaker Tag Prompts Viewed";
+  @override
+  Map<String, Object> get properties => {"prompt_count": promptCount, "first_time": firstTime};
+}
+
+enum SpeakerTagPromptClipPlayedKind {
+  ownerCheck("owner_check"),
+  confirmPerson("confirm_person"),
+  identify("identify"),
+  unknown("unknown");
+  const SpeakerTagPromptClipPlayedKind(this.wireName);
+  final String wireName;
+}
+
+final class SpeakerTagPromptClipPlayed extends RegisteredEvent {
+  const SpeakerTagPromptClipPlayed({required this.kind, required this.loaded});
+  final SpeakerTagPromptClipPlayedKind kind;
+  final bool loaded;
+  @override
+  String get wireName => "Speaker Tag Prompt Clip Played";
+  @override
+  Map<String, Object> get properties => {"kind": kind.wireName, "loaded": loaded};
+}
+
+enum SpeakerTagPromptAnswerSubmittedKind {
+  ownerCheck("owner_check"),
+  confirmPerson("confirm_person"),
+  identify("identify"),
+  unknown("unknown");
+  const SpeakerTagPromptAnswerSubmittedKind(this.wireName);
+  final String wireName;
+}
+
+enum SpeakerTagPromptAnswerSubmittedAnswer {
+  me("me"),
+  notMe("not_me"),
+  person("person"),
+  newPerson("new_person"),
+  someoneElse("someone_else"),
+  skip("skip"),
+  unknown("unknown");
+  const SpeakerTagPromptAnswerSubmittedAnswer(this.wireName);
+  final String wireName;
+}
+
+final class SpeakerTagPromptAnswerSubmitted extends RegisteredEvent {
+  const SpeakerTagPromptAnswerSubmitted({required this.kind, required this.answer, required this.clipPlayed, required this.firstTime, required this.succeeded});
+  final SpeakerTagPromptAnswerSubmittedKind kind;
+  final SpeakerTagPromptAnswerSubmittedAnswer answer;
+  final bool clipPlayed;
+  final bool firstTime;
+  final bool succeeded;
+  @override
+  String get wireName => "Speaker Tag Prompt Answer Submitted";
+  @override
+  Map<String, Object> get properties => {"kind": kind.wireName, "answer": answer.wireName, "clip_played": clipPlayed, "first_time": firstTime, "succeeded": succeeded};
+}
+
+final class SpeakerTagPromptsClosed extends RegisteredEvent {
+  const SpeakerTagPromptsClosed({required this.answeredCount, required this.promptCount});
+  final int answeredCount;
+  final int promptCount;
+  @override
+  String get wireName => "Speaker Tag Prompts Closed";
+  @override
+  Map<String, Object> get properties => {"answered_count": answeredCount, "prompt_count": promptCount};
+}
+
+enum VoiceProfileSettingToggledSetting {
+  tagPrompts("tag_prompts"),
+  saveOtherVoices("save_other_voices");
+  const VoiceProfileSettingToggledSetting(this.wireName);
+  final String wireName;
+}
+
+enum VoiceProfileSettingToggledSource {
+  settings("settings"),
+  firstPrompt("first_prompt");
+  const VoiceProfileSettingToggledSource(this.wireName);
+  final String wireName;
+}
+
+final class VoiceProfileSettingToggled extends RegisteredEvent {
+  const VoiceProfileSettingToggled({required this.setting, required this.enabled, required this.source, required this.succeeded});
+  final VoiceProfileSettingToggledSetting setting;
+  final bool enabled;
+  final VoiceProfileSettingToggledSource source;
+  final bool succeeded;
+  @override
+  String get wireName => "Voice Profile Setting Toggled";
+  @override
+  Map<String, Object> get properties => {"setting": setting.wireName, "enabled": enabled, "source": source.wireName, "succeeded": succeeded};
+}
+
+enum VoiceReplyPlaybackOutcome {
+  played("played"),
+  playedWithFallback("played_with_fallback"),
+  fallbackOnly("fallback_only"),
+  skipped("skipped"),
+  interrupted("interrupted"),
+  failed("failed");
+  const VoiceReplyPlaybackOutcome(this.wireName);
+  final String wireName;
+}
+
+enum VoiceReplyPlaybackSkipReason {
+  modeOff("mode_off"),
+  noHeadphones("no_headphones"),
+  headphoneCheckFailed("headphone_check_failed"),
+  none("none");
+  const VoiceReplyPlaybackSkipReason(this.wireName);
+  final String wireName;
+}
+
+enum VoiceReplyPlaybackMode {
+  off("off"),
+  headphonesOnly("headphones_only"),
+  always("always"),
+  unknown("unknown");
+  const VoiceReplyPlaybackMode(this.wireName);
+  final String wireName;
+}
+
+enum VoiceReplyPlaybackOutputRoute {
+  bluetooth("bluetooth"),
+  wired("wired"),
+  airplay("airplay"),
+  usb("usb"),
+  speaker("speaker"),
+  unknown("unknown");
+  const VoiceReplyPlaybackOutputRoute(this.wireName);
+  final String wireName;
+}
+
+enum VoiceReplyPlaybackFallbackReason {
+  none("none"),
+  rateLimited429("rate_limited_429"),
+  unavailable503("unavailable_503"),
+  noResponse("no_response");
+  const VoiceReplyPlaybackFallbackReason(this.wireName);
+  final String wireName;
+}
+
+enum VoiceReplyPlaybackInterruptSource {
+  none("none"),
+  userTyped("user_typed"),
+  newVoiceQuery("new_voice_query"),
+  audioInterruption("audio_interruption"),
+  headphonesUnplugged("headphones_unplugged"),
+  quotaError("quota_error"),
+  streamError("stream_error"),
+  modeOff("mode_off");
+  const VoiceReplyPlaybackInterruptSource(this.wireName);
+  final String wireName;
+}
+
+final class VoiceReplyPlayback extends RegisteredEvent {
+  const VoiceReplyPlayback({required this.outcome, required this.skipReason, required this.mode, required this.outputRoute, required this.chunksRequested, required this.chunksPlayed, required this.chunksDropped, required this.fallbackReason, required this.firstAudioLatencyMs, required this.interruptSource});
+  final VoiceReplyPlaybackOutcome outcome;
+  final VoiceReplyPlaybackSkipReason skipReason;
+  final VoiceReplyPlaybackMode mode;
+  final VoiceReplyPlaybackOutputRoute outputRoute;
+  final int chunksRequested;
+  final int chunksPlayed;
+  final int chunksDropped;
+  final VoiceReplyPlaybackFallbackReason fallbackReason;
+  final int firstAudioLatencyMs;
+  final VoiceReplyPlaybackInterruptSource interruptSource;
+  @override
+  String get wireName => "Voice Reply Playback";
+  @override
+  Map<String, Object> get properties => {"outcome": outcome.wireName, "skip_reason": skipReason.wireName, "mode": mode.wireName, "output_route": outputRoute.wireName, "chunks_requested": chunksRequested, "chunks_played": chunksPlayed, "chunks_dropped": chunksDropped, "fallback_reason": fallbackReason.wireName, "first_audio_latency_ms": firstAudioLatencyMs, "interrupt_source": interruptSource.wireName};
+}
+
+enum PendantVoiceQuestionDroppedReason {
+  invalidButtonPayload("invalid_button_payload"),
+  actionsDisabled("actions_disabled"),
+  emptyFrames("empty_frames"),
+  noDevice("no_device"),
+  cancelled("cancelled"),
+  sendInFlight("send_in_flight"),
+  audioSaveFailed("audio_save_failed"),
+  autoEndGrace("auto_end_grace"),
+  codecLookupFailed("codec_lookup_failed");
+  const PendantVoiceQuestionDroppedReason(this.wireName);
+  final String wireName;
+}
+
+final class PendantVoiceQuestionDropped extends RegisteredEvent {
+  const PendantVoiceQuestionDropped({required this.reason});
+  final PendantVoiceQuestionDroppedReason reason;
+  @override
+  String get wireName => "Pendant Voice Question Dropped";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName};
+}
+
+enum SiriIntentPerformedIntent {
+  remember("remember"),
+  createNote("create_note"),
+  open("open"),
+  search("search"),
+  completeTask("complete_task"),
+  createTask("create_task"),
+  startListening("start_listening"),
+  stopListening("stop_listening");
+  const SiriIntentPerformedIntent(this.wireName);
+  final String wireName;
+}
+
+enum SiriIntentPerformedPlatform {
+  macos("macos"),
+  ios("ios");
+  const SiriIntentPerformedPlatform(this.wireName);
+  final String wireName;
+}
+
+enum SiriIntentPerformedOutcome {
+  ok("ok"),
+  auth("auth"),
+  network("network"),
+  rateLimited("rate_limited"),
+  quota("quota"),
+  server("server"),
+  cancelled("cancelled");
+  const SiriIntentPerformedOutcome(this.wireName);
+  final String wireName;
+}
+
+enum SiriIntentPerformedInvokedVia {
+  siri("siri"),
+  shortcuts("shortcuts"),
+  spotlight("spotlight"),
+  unknown("unknown");
+  const SiriIntentPerformedInvokedVia(this.wireName);
+  final String wireName;
+}
+
+final class SiriIntentPerformed extends RegisteredEvent {
+  const SiriIntentPerformed({required this.intent, required this.platform, required this.outcome, required this.latencyMs, required this.invokedVia});
+  final SiriIntentPerformedIntent intent;
+  final SiriIntentPerformedPlatform platform;
+  final SiriIntentPerformedOutcome outcome;
+  final int latencyMs;
+  final SiriIntentPerformedInvokedVia invokedVia;
+  @override
+  String get wireName => "Siri Intent Performed";
+  @override
+  Map<String, Object> get properties => {"intent": intent.wireName, "platform": platform.wireName, "outcome": outcome.wireName, "latency_ms": latencyMs, "invoked_via": invokedVia.wireName};
+}
+
+enum SiriIndexRebuiltPlatform {
+  macos("macos"),
+  ios("ios");
+  const SiriIndexRebuiltPlatform(this.wireName);
+  final String wireName;
+}
+
+enum SiriIndexRebuiltOutcome {
+  ok("ok"),
+  auth("auth"),
+  network("network"),
+  rateLimited("rate_limited"),
+  quota("quota"),
+  server("server"),
+  cancelled("cancelled");
+  const SiriIndexRebuiltOutcome(this.wireName);
+  final String wireName;
+}
+
+final class SiriIndexRebuilt extends RegisteredEvent {
+  const SiriIndexRebuilt({required this.platform, required this.entityCounts, required this.durationMs, required this.outcome});
+  final SiriIndexRebuiltPlatform platform;
+  final int entityCounts;
+  final int durationMs;
+  final SiriIndexRebuiltOutcome outcome;
+  @override
+  String get wireName => "Siri Index Rebuilt";
+  @override
+  Map<String, Object> get properties => {"platform": platform.wireName, "entity_counts": entityCounts, "duration_ms": durationMs, "outcome": outcome.wireName};
+}

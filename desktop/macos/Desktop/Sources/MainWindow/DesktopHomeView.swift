@@ -13,12 +13,13 @@ enum PersistedCaptureLaunchPolicy {
   static func shouldStartTranscription(
     intentEnabled: Bool,
     isTranscribing: Bool,
-    micPermissionAuthorized: Bool
+    micPermissionAuthorized: Bool,
+    isWaitingForMicrophone: Bool = false
   ) -> Bool {
     // Restores run on launch/reactivation/key-load/sync; without a mic grant an
     // attempted start would raise the TCC sheet (the skip-mic loop) or bounce a
     // denied alert. The intent waits for an explicit Listen/Grant action instead.
-    intentEnabled && !isTranscribing && micPermissionAuthorized
+    intentEnabled && !isTranscribing && !isWaitingForMicrophone && micPermissionAuthorized
   }
 
   static func shouldStartScreenAnalysis(intentEnabled: Bool, isMonitoring: Bool) -> Bool {
@@ -84,6 +85,8 @@ struct DesktopHomeView: View {
   /// Server-authoritative capability for the one shell. It never decides which
   /// shell mounts — only whether the capability-gated kernel features engage.
   @State private var chatFirstCapability = ChatFirstCapabilitySample()
+  /// EXP-002 arm state; the body gate holds the shell until it resolves.
+  @ObservedObject private var desktopExperiment = DesktopExperimentCoordinator.shared
 
   // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
   private static let heroLogoImage: NSImage? = {
@@ -336,6 +339,13 @@ struct DesktopHomeView: View {
             .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
               await resolveChatFirstCapabilityIfNeeded()
             }
+            // EXP-002: enrollment (both arms, one server code path) resolves
+            // alongside the capability. `isMemoryV1` stays false (control)
+            // until it completes, so treatment UI never renders ahead of
+            // assignment.
+            .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
+              await resolveDesktopExperimentIfNeeded()
+            }
 
           if !viewModelContainer.isInitialLoadComplete {
             TransparentWindowStatusPanel {
@@ -433,6 +443,9 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
       reconcileOnboardingCompletionOwner()
       chatFirstCapability.ownerDidChange(to: RuntimeOwnerIdentity.currentOwnerId())
+      // EXP-002: the previous owner's arm must not leak into the next
+      // owner's chrome; the body gate re-resolves from pending.
+      DesktopExperimentCoordinator.shared.ownerDidChange()
       // The provider's owner-bound gate rejects the previous sample for this
       // owner; no replacement sample is persisted or inferred locally.
       reportAutomationState()
@@ -913,12 +926,23 @@ struct DesktopHomeView: View {
     if PersistedCaptureLaunchPolicy.shouldStartTranscription(
       intentEnabled: settings.audioRecordingMode != .off,
       isTranscribing: appState.isTranscribing,
-      micPermissionAuthorized: appState.hasMicrophonePermission
+      micPermissionAuthorized: appState.hasMicrophonePermission,
+      isWaitingForMicrophone: appState.isWaitingForMicrophone
     ) {
       log("DesktopHomeView: Restoring transcription from persisted intent (\(reason))")
       // Local transcription does not require remote API keys. AppState owns the
       // permission and provider checks, so it remains the single start boundary.
-      appState.startTranscription(userInitiated: false)
+      let presence = CapturePresence.current()
+      if ArmedCaptureRecoveryPolicy.shouldWaitForUpdateRelaunch(
+        isUpdateRelaunch: CaptureLaunchContext.kindForStart() == .updateRelaunch,
+        consoleActive: presence.consoleSessionActive,
+        screenLocked: presence.screenLocked,
+        displaysAsleep: presence.displaysAsleep
+      ) {
+        appState.armedMicrophoneRecovery.enter(appState: appState)
+      } else {
+        appState.startTranscription(userInitiated: false)
+      }
     }
 
     let plugin = ProactiveAssistantsPlugin.shared
@@ -1060,6 +1084,20 @@ struct DesktopHomeView: View {
       "DesktopHomeView: chat-first capability resolved outcome=\(capabilityOutcome) "
         + "generation=\(projection.map { String($0.controlGeneration) } ?? "none")")
     reportAutomationState()
+  }
+
+  /// EXP-002: resolve the identity-experiment arm for this owner before the
+  /// main shell paints. Non-production bundles use the local environment
+  /// override (never enrolled); the Beta bundle enrolls server-side
+  /// (idempotent); every other channel paints control. Failures resolve
+  /// control — a treatment arm is never applied unconfirmed.
+  private func resolveDesktopExperimentIfNeeded() async {
+    guard DesktopExperimentCoordinator.shared.phase == .pending else { return }
+    if AppBuild.isNonProduction {
+      DesktopExperimentCoordinator.shared.resolveFromLaunchEnvironment()
+      return
+    }
+    await DesktopExperimentCoordinator.shared.resolveForCurrentOwner()
   }
 
   private func navigateAfterOnboarding() {

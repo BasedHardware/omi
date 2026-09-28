@@ -5,6 +5,9 @@ metadata:
   labels:
     {{- include "parakeet.labels" . | nindent 4 }}
 spec:
+  {{- with .Values.progressDeadlineSeconds }}
+  progressDeadlineSeconds: {{ . }}
+  {{- end }}
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
