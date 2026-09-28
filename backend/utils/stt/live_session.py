@@ -10,7 +10,7 @@ from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_rollout import window_allocation, window_language_supported
-from utils.stt.socket import STTSocket
+from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
 from utils.transcribe_decisions import should_initialize_vad_gate, vad_gate_mode
 
@@ -52,7 +52,9 @@ class LiveChainSession:
     def to_json_log(self) -> dict[str, Any]:
         return {'event': 'managed_live_vad_metrics', **self.get_metrics()}
 
-    async def connect(self, sample_rate: int, epoch: Any = None) -> STTSocket:
+    async def connect(
+        self, sample_rate: int, epoch: Any = None, *, same_provider: bool = False, replay_start_sample: int = 0
+    ) -> STTSocket:
         host = self.receiver.host
         language = host.stt_language
         uid = host.request.uid
@@ -93,7 +95,7 @@ class LiveChainSession:
                 outcome='degraded',
             )
         generation = self.generation + 1
-        offset = self.audio_seconds
+        offset = replay_start_sample / sample_rate if same_provider else self.audio_seconds
 
         def build_gate(is_window: bool) -> VADStreamingGate | None:
             if is_window:
@@ -178,12 +180,15 @@ class LiveChainSession:
                         translated = epoch.translate(seg_list)
                         if not translated:
                             return
-                        if gate is not None and not passthrough:
+                        if epoch.replay_origin_sample is not None:
+                            epoch.stitch_replayed_timestamps(translated)
+                        elif gate is not None and not passthrough:
                             gate.remap_segments(translated)
                         translated.sort(key=lambda item: item['start'])
                         for segment in translated:
-                            start = max(self.last_end, offset + max(0.0, float(segment['start'])))
-                            end = max(start, offset + max(0.0, float(segment['end'])))
+                            segment_offset = 0.0 if epoch.replay_origin_sample is not None else offset
+                            start = max(self.last_end, segment_offset + max(0.0, float(segment['start'])))
+                            end = max(start, segment_offset + max(0.0, float(segment['end'])))
                             segment['start'], segment['end'] = start, end
                             self.last_end = end
                         leg.note_selection_transcript(translated)
@@ -250,22 +255,28 @@ class LiveChainSession:
             st.STTService.deepgram: (lambda: build(st.STTService.deepgram)) if dg_model else None,
         }
         primary = callbacks.get(host.stt_service)
-        if primary is None:
+        primary_missing = primary is None
+        if primary_missing:
 
             async def unavailable() -> STTSocket:
                 raise st.ParakeetConnectionError('config_incomplete')
 
             primary = unavailable
-        socket, actual = await st.connect_stt_socket_with_fallback(
-            primary_service=host.stt_service,
-            connect_primary=primary,
-            connect_parakeet=callbacks[st.STTService.parakeet],
-            connect_soniox=callbacks[st.STTService.soniox],
-            connect_modulate=callbacks[st.STTService.modulate],
-            connect_deepgram=callbacks[st.STTService.deepgram],
-            failed=self.receiver._stt_failed_providers,
-            use_config=True,
-        )
+        if same_provider:
+            if primary_missing:
+                raise st.ParakeetConnectionError('config_incomplete')
+            socket, actual = await primary(), host.stt_service
+        else:
+            socket, actual = await st.connect_stt_socket_with_fallback(
+                primary_service=host.stt_service,
+                connect_primary=primary,
+                connect_parakeet=callbacks[st.STTService.parakeet],
+                connect_soniox=callbacks[st.STTService.soniox],
+                connect_modulate=callbacks[st.STTService.modulate],
+                connect_deepgram=callbacks[st.STTService.deepgram],
+                failed=self.receiver._stt_failed_providers,
+                use_config=True,
+            )
         host.stt_service = actual
         host.stt_model = {
             st.STTService.parakeet: 'parakeet-window' if window else 'parakeet',
@@ -299,8 +310,11 @@ class LiveLegSocket(STTSocket):
         self._send_tracker = send_tracker
         self._dead = False
         self._seconds = 0.0
+        self._replaying = False
         self._pending_selection: PendingLiveFailover | None = None
         self._ingest_gain: SessionPcmGain | None = None
+        self._open_gauge_released = False
+        record_live_stt_socket_open(service.value)
         if window:
             from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC
 
@@ -313,6 +327,11 @@ class LiveLegSocket(STTSocket):
         if dead and self._pending_selection is not None:
             self._pending_selection.note_failure(self.typed_death_reason)
         return dead
+
+    def _release_open_gauge(self) -> None:
+        if not self._open_gauge_released:
+            self._open_gauge_released = True
+            record_live_stt_socket_closed(self.service.value)
 
     @property
     def death_reason(self) -> str | None:
@@ -361,7 +380,10 @@ class LiveLegSocket(STTSocket):
             except Exception:
                 if self.window:
                     self._dead = True
-                    self.raw.finish()
+                    try:
+                        self.raw.finish()
+                    finally:
+                        self._release_open_gauge()
                     record_fallback(
                         component='vad',
                         from_mode='gated',
@@ -402,11 +424,12 @@ class LiveLegSocket(STTSocket):
             self._send_tracker.note_accepted_spans(sent_spans)
         duration = len(data) / (self.sample_rate * 2)
         self._seconds += duration
-        self.session.audio_seconds += duration
         speech_ms = self.gate.consume_speech_ms_delta() if self.gate is not None else 0
-        self.session.speech_ms += speech_ms
-        self.session.total_speech_ms += speech_ms
-        if speech_ms:
+        if not self._replaying:
+            self.session.audio_seconds += duration
+            self.session.speech_ms += speech_ms
+            self.session.total_speech_ms += speech_ms
+        if speech_ms and not self._replaying:
             record_live_stt_audio_seconds(
                 provider=self.service.value,
                 platform=self.session.receiver._telemetry_platform(),
@@ -414,13 +437,23 @@ class LiveLegSocket(STTSocket):
             )
         return True
 
+    def replay_send(self, data: bytes, start_sample: int) -> bool:
+        self._replaying = True
+        try:
+            return self.send(data, start_sample=start_sample)
+        finally:
+            self._replaying = False
+
     def finalize(self) -> None:
         self.raw.finalize()
 
     def finish(self) -> None:
-        if self.is_connection_dead and self._pending_selection is not None:
-            self._pending_selection.note_failure(self.typed_death_reason)
-        self.raw.finish()
+        try:
+            if self.is_connection_dead and self._pending_selection is not None:
+                self._pending_selection.note_failure(self.typed_death_reason)
+            self.raw.finish()
+        finally:
+            self._release_open_gauge()
 
     async def drain_and_close(self) -> None:
         try:

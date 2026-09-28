@@ -85,7 +85,13 @@ environments:
           STT_CONNECT_ORDER_FROM_CONFIG:
             value: 'true'
             category: rollout
+          STT_RESILIENT_RECONNECT:
+            value: 'false'
+            category: rollout
           STT_MULTI_LANGUAGE_HINTS:
+            value: 'true'
+            category: rollout
+          STT_LEARNED_LANGUAGE_PROFILE:
             value: 'true'
             category: rollout
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
@@ -1773,8 +1779,14 @@ environments:
           STT_CONNECT_ORDER_FROM_CONFIG:
             value: 'true'
             category: rollout
+          STT_RESILIENT_RECONNECT:
+            value: 'false'
+            category: rollout
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
+            category: rollout
+          STT_LEARNED_LANGUAGE_PROFILE:
+            value: 'false'
             category: rollout
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
             value: '25'
@@ -2579,6 +2591,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
+              value: 'true'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:

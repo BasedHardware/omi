@@ -25,7 +25,9 @@ no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.pro
 │                                                                           │
 │  ┌──────────────┐   scrape    ┌─────────────┐   query   ┌────────────┐  │
 │  │ Pod metrics   │──────────►│  Prometheus   │◄─────────│  Grafana   │  │
-│  │ (app /metrics)│           │  (10d, 50Gi)  │          │ prod: monitor│ │
+│  │ (app /metrics)│           │  (10d, prod  │          │ prod: monitor│ │
+│  │               │           │  100Gi; dev  │          │              │ │
+│  │               │           │   50Gi)       │          │              │ │
 │  └──────────────┘           └───────┬───────┘          │   .omi.me   │ │
 │                                      │                   │ dev: monitor│ │
 │  ┌──────────────┐   scrape          │                   │  .omiapi.com│ │
@@ -68,7 +70,7 @@ Cloud Run application metrics take a push-then-pull bridge because a public URL 
 
 | Component | Chart | Purpose | Namespace |
 |-----------|-------|---------|-----------|
-| **Prometheus** | `kube-prometheus-stack` | Metrics collection, 10d retention, 50Gi storage | `{env}-omi-monitoring` |
+| **Prometheus** | `kube-prometheus-stack` | Metrics collection, 10d retention; prod 100Gi PVC, dev 50Gi | `{env}-omi-monitoring` |
 | **Grafana** | `kube-prometheus-stack` | Dashboards and alerting (prod: `monitor.omi.me`, dev: `monitor.omiapi.com`) | `{env}-omi-monitoring` |
 | **Alertmanager** | `kube-prometheus-stack` | Alert routing and notification | `{env}-omi-monitoring` |
 | **Grafana Image Renderer** | `kube-prometheus-stack` | Alert screenshot capture | `{env}-omi-monitoring` |
@@ -816,62 +818,146 @@ helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
 ```
 
+```bash
+PROD_CONTEXT=gke_based-hardware_us-central1_prod-omi-gke
+DEV_CONTEXT=gke_based-hardware-dev_us-central1_dev-omi-gke
+```
+
 **Prod** (release names use `prod-omi-` prefix):
 ```bash
 # kube-prometheus-stack
-helm -n prod-omi-monitoring upgrade --install prod-omi-kube-prometheus-stack \
-  prometheus-community/kube-prometheus-stack \
-  -f kube-prometheus-stack/prod_omi_monitoring_values.yaml
+helm upgrade prod-omi-kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+  --version 75.15.1 \
+  --namespace prod-omi-monitoring \
+  --kube-context gke_based-hardware_us-central1_prod-omi-gke \
+  --reset-values --skip-crds \
+  --values kube-prometheus-stack/prod_omi_monitoring_values.yaml \
+  --wait --timeout 10m
 
 # prometheus-adapter
-helm -n prod-omi-monitoring upgrade --install prod-omi-prometheus-adapter \
+helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install prod-omi-prometheus-adapter \
   prometheus-community/prometheus-adapter \
   -f prometheus-adapter/prod_omi_prometheus_adapter.yaml
 
 # Loki
-helm -n prod-omi-monitoring upgrade --install prod-omi-loki \
+helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install prod-omi-loki \
   grafana/loki \
   -f loki/prod_omi_loki_values.yaml
 
 # Alloy (k8s-monitoring) — release name is prod-omi-alloy (not prod-omi-k8s-monitoring)
-helm -n prod-omi-monitoring upgrade --install prod-omi-alloy \
+helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install prod-omi-alloy \
   grafana/k8s-monitoring \
   -f alloy/prod_omi_k8s_monitoring_values.yml
 
 # Stackdriver exporter
-helm -n prod-omi-monitoring upgrade --install prod-omi-prometheus-stackdriver-exporter \
+helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install prod-omi-prometheus-stackdriver-exporter \
   prometheus-community/prometheus-stackdriver-exporter \
   -f prometheus-stackdriver-exporter/prod_omi_stackdriver_exporter.yaml
 
 # Isolated Cloud Run application-metrics bridge
-helm -n prod-omi-monitoring upgrade --install prod-omi-cloud-run-metrics-exporter \
+helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install prod-omi-cloud-run-metrics-exporter \
   prometheus-community/prometheus-stackdriver-exporter \
   -f prometheus-stackdriver-exporter/prod_omi_cloud_run_metrics_exporter.yaml
 ```
 
+### Production kube-prometheus-stack review and rollback
+
+The production values file is the source for the Prometheus CR: 10d retention,
+1 CPU / 2Gi memory requests, 2 CPU / 8Gi memory limits, and a 100Gi
+`standard-rwo` claim. Keep the `app_build` metric relabel in that file while
+the client-journey series are being bounded in backend code.
+
+Before an upgrade, render the pinned chart with the same API capabilities as
+the cluster, then diff the normal (non-hook) resources. The EndpointSlice API
+capability matters: the chart conditionally adds its operator RBAC rule for
+that API. This command supplies the current cluster's server version and that
+resource capability explicitly:
+
+```bash
+PROD_CONTEXT=gke_based-hardware_us-central1_prod-omi-gke
+DEV_CONTEXT=gke_based-hardware-dev_us-central1_dev-omi-gke
+PROD_NAMESPACE=prod-omi-monitoring
+PROD_RELEASE=prod-omi-kube-prometheus-stack
+SERVER_VERSION=$(kubectl --context "$PROD_CONTEXT" version -o json | jq -r '.serverVersion.gitVersion')
+
+helm template "$PROD_RELEASE" prometheus-community/kube-prometheus-stack \
+  --version 75.15.1 \
+  --namespace "$PROD_NAMESPACE" \
+  --kube-context "$PROD_CONTEXT" \
+  --kube-version "$SERVER_VERSION" \
+  --api-versions discovery.k8s.io/v1/EndpointSlice \
+  --skip-crds --no-hooks \
+  --values kube-prometheus-stack/prod_omi_monitoring_values.yaml \
+  | kubectl diff --context "$PROD_CONTEXT" -f -
+```
+
+`--skip-crds` is required for upgrades. The chart's ten Prometheus Operator
+CRDs are not updated by Helm during an upgrade; review a CRD migration as a
+separate operation. `--no-hooks` excludes the admission create/patch Jobs and
+their hook-only RBAC objects from `kubectl diff`. Helm runs those Jobs as
+pre/post-upgrade hooks and removes successful Jobs per their hook delete
+policy. Do not apply rendered CRDs or manage those Jobs with `kubectl apply`.
+
+The expected production diff is the `additional-scrape-configs` Secret for the
+`app_build` relabel; generated labels or annotations may also differ. Prometheus
+resource values should match the live CR and must not trigger a StatefulSet
+restart. If another object changes, inspect its live object, stored release
+manifest, and chart template before applying; do not widen values to preserve
+unexplained RBAC or other out-of-band changes.
+
+Helm rollback creates a new revision. Before the relabel rollout, first create
+a deployed baseline revision that records the live 8Gi / 100Gi values while
+retaining the prior scrape configuration. This one-time bridge uses the
+currently deployed release values and changes only the two resource settings:
+
+```bash
+helm upgrade "$PROD_RELEASE" prometheus-community/kube-prometheus-stack \
+  --version 75.15.1 \
+  --namespace "$PROD_NAMESPACE" \
+  --kube-context "$PROD_CONTEXT" \
+  --reuse-values --skip-crds \
+  --set prometheus.prometheusSpec.resources.limits.memory=8Gi \
+  --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=100Gi \
+  --wait --timeout 10m
+
+helm history "$PROD_RELEASE" --namespace "$PROD_NAMESPACE" --kube-context "$PROD_CONTEXT"
+```
+
+Then apply the repo values. If the relabel rollout needs rollback, target the
+new bridge revision, not revision 13 (which records 4Gi / 50Gi). Record the
+bridge revision number from `helm history` and prepare the rollback command
+before applying:
+
+```bash
+helm rollback "$PROD_RELEASE" <baseline-revision> \
+  --namespace "$PROD_NAMESPACE" \
+  --kube-context "$PROD_CONTEXT" \
+  --wait --timeout 10m
+```
+
 **Dev** (note: kube-prometheus-stack release name is `dev-kube-prometheus-stack`, not `dev-omi-kube-prometheus-stack`):
 ```bash
-helm -n dev-omi-monitoring upgrade --install dev-kube-prometheus-stack \
+helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-kube-prometheus-stack \
   prometheus-community/kube-prometheus-stack \
   -f kube-prometheus-stack/dev_omi_monitoring_values.yaml
 
-helm -n dev-omi-monitoring upgrade --install dev-omi-prometheus-adapter \
+helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-omi-prometheus-adapter \
   prometheus-community/prometheus-adapter \
   -f prometheus-adapter/dev_omi_prometheus_adapter.yaml
 
-helm -n dev-omi-monitoring upgrade --install dev-omi-loki \
+helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-omi-loki \
   grafana/loki \
   -f loki/dev_omi_loki_values.yaml
 
-helm -n dev-omi-monitoring upgrade --install dev-omi-alloy \
+helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-omi-alloy \
   grafana/k8s-monitoring \
   -f alloy/dev_omi_k8s_monitoring_values.yml
 
-helm -n dev-omi-monitoring upgrade --install dev-omi-prometheus-stackdriver-exporter \
+helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-omi-prometheus-stackdriver-exporter \
   prometheus-community/prometheus-stackdriver-exporter \
   -f prometheus-stackdriver-exporter/dev_omi_stackdriver_exporter.yaml
 
-helm -n dev-omi-monitoring upgrade --install dev-omi-cloud-run-metrics-exporter \
+helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-omi-cloud-run-metrics-exporter \
   prometheus-community/prometheus-stackdriver-exporter \
   -f prometheus-stackdriver-exporter/dev_omi_cloud_run_metrics_exporter.yaml
 ```

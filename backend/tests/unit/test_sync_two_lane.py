@@ -277,6 +277,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     # instance keeps a scale-from-zero poke from being rejected outright.
     assert '--min-instances=1' in action
     assert '--max-instances=30' in action
+    assert '--max=30' in action
     assert '--concurrency=1' in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     assert 'gcloud tasks queues create sync-backfill' in action
@@ -327,6 +328,8 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     ):
         assert run.count(flag) == 2
     assert 'sync_backfill_dispatch_abort' in abort['run']
+    assert 'THRESHOLD=30' in abort['run'] and 'WINDOW=1800s' in abort['run']
+    assert abort['run'].count('--threshold-value="$THRESHOLD" --alignment-period="$WINDOW"') == 2
 
 
 def test_cloud_run_default_service_lists_include_sync_backfill():

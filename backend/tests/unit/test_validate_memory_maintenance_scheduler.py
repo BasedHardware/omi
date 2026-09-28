@@ -190,37 +190,18 @@ def test_main_rejects_invalid_json_without_cloud_calls(tmp_path):
         "gcp_memory_maintenance_job_auto_dev.yml",
     ],
 )
-def test_deploy_workflows_gate_success_on_read_only_scheduler_validation(workflow_name):
+def test_deploy_workflows_reconcile_and_check_the_shared_scheduler_manifest(workflow_name):
     workflow = (ROOT / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8")
 
-    assert "gcloud scheduler jobs describe" in workflow
+    assert "scheduler_reconcile.py" in workflow
     assert "memory-maintenance-hourly" in workflow
-    assert "validate_memory_maintenance_scheduler.py" in workflow
-    assert "--state-file" in workflow
+    assert "--check" in workflow
     assert "--project" in workflow
-    assert "--region" in workflow
-    assert "--scheduler-job" in workflow
-    assert "--cloud-run-job" in workflow
-    assert workflow.index("uses: google-github-actions/deploy-cloudrun@v3") < workflow.index(
-        "validate_memory_maintenance_scheduler.py"
-    )
-    assert "scheduler jobs create" not in workflow
-    assert "scheduler jobs update" not in workflow
-    assert "scheduler jobs resume" not in workflow
+    assert workflow.index("uses: google-github-actions/deploy-cloudrun@v3") < workflow.index("scheduler_reconcile.py")
 
 
-def test_frame_retention_workflow_resumes_only_a_verified_paused_scheduler():
-    # omi-test-quality: source-inspection -- static workflow recovery contract
+def test_frame_retention_workflow_uses_the_shared_scheduler_reconciler():
     workflow = (ROOT / ".github" / "workflows" / "gcp_frame_request_retention_job.yml").read_text(encoding="utf-8")
 
-    state_read = "scheduler_state=$(gcloud scheduler jobs describe"
-    paused_guard = 'if [[ "$scheduler_state" == "PAUSED" ]]; then'
-    resume = 'gcloud scheduler jobs resume "$SCHEDULER_JOB"'
-    unexpected_guard = 'elif [[ "$scheduler_state" != "ENABLED" ]]; then'
-    validation = "validate_memory_maintenance_scheduler.py"
-    assert state_read in workflow
-    assert paused_guard in workflow
-    assert resume in workflow
-    assert unexpected_guard in workflow
-    assert workflow.index(state_read) < workflow.index(paused_guard) < workflow.index(resume)
-    assert workflow.index(resume) < workflow.index(validation)
+    assert "scheduler_reconcile.py" in workflow
+    assert "--check" in workflow

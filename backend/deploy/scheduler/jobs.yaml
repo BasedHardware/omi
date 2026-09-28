@@ -1,0 +1,234 @@
+version: 1
+environments:
+  dev:
+    project: based-hardware-dev
+    jobs:
+      - name: day3-reengagement-email-daily
+        region: us-central1
+        schedule: "0 15 * * *"
+        time_zone: Etc/UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://run.googleapis.com/v2/projects/based-hardware-dev/locations/us-central1/jobs/day3-reengagement-email-job:run
+          method: POST
+          oauth:
+            service_account: memory-maintenance-scheduler@based-hardware-dev.iam.gserviceaccount.com
+            scope: https://www.googleapis.com/auth/cloud-platform
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: .github/workflows/gcp_day3_reengagement_email_job*.yml
+      - name: knowledge-ledger-drain-hourly
+        region: us-central1
+        schedule: "0 * * * *"
+        time_zone: Etc/UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://run.googleapis.com/v2/projects/based-hardware-dev/locations/us-central1/jobs/knowledge-ledger-drain-job:run
+          method: POST
+          oauth:
+            service_account: memory-maintenance-scheduler@based-hardware-dev.iam.gserviceaccount.com
+            scope: https://www.googleapis.com/auth/cloud-platform
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: .github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml
+      - name: agent-vm-reconciler-5m
+        region: us-central1
+        schedule: "*/5 * * * *"
+        time_zone: Etc/UTC
+        state: PAUSED
+        target:
+          type: http
+          uri: https://run.googleapis.com/v2/projects/based-hardware-dev/locations/us-central1/jobs/agent-vm-reconciler:run
+          method: POST
+          oauth:
+            service_account: agent-vm-reconciler-scheduler@based-hardware-dev.iam.gserviceaccount.com
+            scope: https://www.googleapis.com/auth/cloud-platform
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: unassigned; David decision required before resume
+      - name: sync-backfill-uid-sequencer
+        region: us-central1
+        schedule: "*/2 * * * *"
+        time_zone: UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://backend-sync-dt5lrfkkoa-uc.a.run.app/v2/sync-backfill-sequencer/sweep
+          method: POST
+          oidc:
+            service_account: sync-tasks-invoker@based-hardware-dev.iam.gserviceaccount.com
+            audience: https://backend-sync-dt5lrfkkoa-uc.a.run.app/v2/sync-jobs/run
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: .github/actions/sync-backfill-lifecycle/action.yml
+      - name: memory-maintenance-hourly
+        region: us-central1
+        schedule: "0 * * * *"
+        time_zone: Etc/UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://run.googleapis.com/v2/projects/based-hardware-dev/locations/us-central1/jobs/memory-maintenance-job:run
+          method: POST
+          oauth:
+            service_account: memory-maintenance-scheduler@based-hardware-dev.iam.gserviceaccount.com
+            scope: https://www.googleapis.com/auth/cloud-platform
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: .github/workflows/gcp_memory_maintenance_job_auto_dev.yml
+      - name: daily-memory-sweep-hourly
+        region: us-central1
+        schedule: "0 * * * *"
+        time_zone: Etc/UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://run.googleapis.com/v2/projects/based-hardware-dev/locations/us-central1/jobs/daily-memory-sweep-job:run
+          method: POST
+          oauth:
+            service_account: memory-maintenance-scheduler@based-hardware-dev.iam.gserviceaccount.com
+            scope: https://www.googleapis.com/auth/cloud-platform
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: .github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml
+  prod:
+    project: based-hardware
+    jobs:
+      - name: day3-reengagement-email-daily
+        region: us-central1
+        schedule: "0 15 * * *"
+        time_zone: Etc/UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://run.googleapis.com/v2/projects/based-hardware/locations/us-central1/jobs/day3-reengagement-email-job:run
+          method: POST
+          oauth:
+            service_account: memory-maintenance-scheduler@based-hardware.iam.gserviceaccount.com
+            scope: https://www.googleapis.com/auth/cloud-platform
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: .github/workflows/gcp_day3_reengagement_email_job.yml
+      - name: notifications-job-scheduler-trigger
+        region: us-central1
+        schedule: "*/1 * * * *"
+        time_zone: Etc/UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/based-hardware/jobs/notifications-job:run
+          method: POST
+          oauth:
+            service_account: 208440318997-compute@developer.gserviceaccount.com
+            scope: https://www.googleapis.com/auth/cloud-platform
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: .github/workflows/gcp_notifications_job.yml
+      - name: sync-backfill-uid-sequencer
+        region: us-central1
+        schedule: "*/2 * * * *"
+        time_zone: UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-backfill-sequencer/sweep
+          method: POST
+          oidc:
+            service_account: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
+            audience: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: .github/actions/sync-backfill-lifecycle/action.yml
+      - name: omi-admin-stats-precompute
+        region: us-central1
+        schedule: "*/30 * * * *"
+        time_zone: Etc/UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://admin.omi.me/api/internal/precompute
+          method: POST
+          headers:
+            x-cron-secret:
+              secret: WEB_ADMIN_CRON_SECRET
+              version: latest
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 1800s
+        owner: .github/workflows/gcp_admin.yml
+      - name: sentry-feedback-poll
+        region: us-central1
+        schedule: "*/5 * * * *"
+        time_zone: Etc/UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://desktop-backend-208440318997.us-central1.run.app/v1/webhooks/sentry/poll
+          method: POST
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 60s
+        owner: unassigned; manually created; David decision required
+      - name: finops-unit-cost-daily
+        region: us-central1
+        schedule: "30 10 * * *"
+        time_zone: America/New_York
+        state: ENABLED
+        target:
+          type: http
+          uri: https://run.googleapis.com/v2/projects/based-hardware/locations/us-central1/jobs/finops-unit-cost-job:run
+          method: POST
+          oauth:
+            service_account: finops-unit-cost-scheduler@based-hardware.iam.gserviceaccount.com
+            scope: https://www.googleapis.com/auth/cloud-platform
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: unassigned; manually created; David decision required

@@ -4,6 +4,12 @@ import Foundation
 enum OmiBleEnergyPolicy {
     static let batteryHistoryMinimumIntervalMs: Int64 = 60 * 60 * 1_000
 
+    static func batteryHistoryEntry(timestampMs: Int64, level: Int, charging: Bool?) -> [String: Any] {
+        var entry: [String: Any] = ["ts": timestampMs, "level": level]
+        if let charging { entry["charging"] = charging }
+        return entry
+    }
+
     static func shouldPersistBatteryReading(
         previousLevel: Int?,
         previousTimestampMs: Int64?,
@@ -25,9 +31,6 @@ enum OmiBleFirmwareDiagnostics {
             UInt32(data[offset]) | (UInt32(data[offset + 1]) << 8) |
                 (UInt32(data[offset + 2]) << 16) | (UInt32(data[offset + 3]) << 24)
         }
-        func known(_ value: UInt32) -> Any {
-            value == UInt32.max ? NSNull() : NSNumber(value: value)
-        }
         let reset = u32(1)
         let flags: [String] = [
             "RESET_PIN", "RESET_SOFTWARE", "RESET_BROWNOUT", "RESET_POR",
@@ -39,16 +42,19 @@ enum OmiBleFirmwareDiagnostics {
             reset & (UInt32(1) << bit) != 0 ? name : nil
         }
         let battery = Int(data[9]) | (Int(data[10]) << 8)
-        return [
+        var result: [String: Any] = [
             "ts": timestampMs, "version": Int(data[0]),
-            "reset_cause_raw": known(reset), "reset_cause_names": names,
+            "reset_cause_names": names,
             "uptime_s": u32(5),
-            "battery_mv": battery == 0xffff ? NSNull() : NSNumber(value: battery),
-            "charging": data[11] == 0xff ? NSNull() : NSNumber(value: data[11] == 1),
-            "mic_overrun_count": known(u32(13)),
-            "ble_tx_drop_count": known(u32(17)),
-            "storage_error_count": known(u32(21)),
         ]
+        if reset != UInt32.max { result["reset_cause_raw"] = NSNumber(value: reset) }
+        if battery != 0xffff { result["battery_mv"] = NSNumber(value: battery) }
+        if data[11] != 0xff { result["charging"] = NSNumber(value: data[11] == 1) }
+        for (key, offset) in [("mic_overrun_count", 13), ("ble_tx_drop_count", 17), ("storage_error_count", 21)] {
+            let value = u32(offset)
+            if value != UInt32.max { result[key] = NSNumber(value: value) }
+        }
+        return result
     }
 }
 

@@ -3,6 +3,23 @@ import XCTest
 @testable import Omi_Computer
 
 final class ConversationProjectionRenderingTests: XCTestCase {
+  func testNullVisibilityDoesNotRejectConversationPage() throws {
+    let ordinary = try ProjectionRenderingFixture.decode()
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    let encoded = try encoder.encode(ordinary)
+    var row = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    row["visibility"] = NSNull()
+    let normal = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let page = try decoder.decode(
+      [ServerConversation].self,
+      from: JSONSerialization.data(withJSONObject: [normal, row]))
+    XCTAssertEqual(page.count, 2)
+    XCTAssertEqual(page[1].visibility, "private")
+  }
+
   func testValidProjectionReplacesMinimumAndKeepsAttribution() throws {
     let conversation = try ProjectionRenderingFixture.decode()
     XCTAssertEqual(conversation.title, "On-device title")

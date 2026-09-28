@@ -618,6 +618,23 @@ jobs:
         # customLLDBInitFile; Flutter warns, the compile still proceeds.
         run: flutter build ios --simulator --debug --flavor dev --no-codesign -d "$IOS_SIMULATOR_UDID"
 
+      - name: Prove stable iOS compiler emits no Siri metadata
+        working-directory: app
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          bundle = Path('build/ios/iphonesimulator/Runner.app')
+          if not bundle.is_dir():
+              raise SystemExit(f'missing built Runner.app: {bundle}')
+          actions = bundle / 'Metadata.appintents/extract.actionsdata'
+          payload = json.loads(actions.read_text()) if actions.is_file() else {}
+          for kind in ('actions', 'entities'):
+              if payload.get(kind):
+                  raise SystemExit(f'Xcode 26.6 unexpectedly emitted {kind}: {sorted(payload[kind])}')
+          print('Xcode 26.6 Runner metadata: no Siri actions or entities')
+          PY
+
   dart-tests-kiritimati:
     # Parallel second pass of the hermetic Dart suite under the far timezones
     # the harness Z1 contract names. Not on the critical path (needs: changes
