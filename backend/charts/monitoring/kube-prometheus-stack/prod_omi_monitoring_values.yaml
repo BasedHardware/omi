@@ -153,15 +153,6 @@ prometheus:
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
-        metric_relabel_configs:
-          # The client-journey metric contract is bounded by journey, client kind,
-          # and issue class. These counters accidentally include app_build in the
-          # running backend image; collapse that extra dimension before ingest.
-          - source_labels: [__name__]
-            regex: "omi_client_journey_(accepted|terminal|issues)_(total|created)"
-            target_label: app_build
-            replacement: ""
-            action: replace
       - job_name: pusher-metrics
         scrape_interval: 15s
         metrics_path: /metrics
