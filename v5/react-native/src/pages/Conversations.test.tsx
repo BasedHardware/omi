@@ -16,6 +16,15 @@ import type {
 import {OmiAvatar} from '../ui/OmiAvatar';
 import {FocusPressable} from '../ui/Pressable';
 
+jest.mock('../omiNative', () => ({omiBackend: {}}));
+jest.mock('../legacyOmiWrites', () => ({
+  listFolders: jest.fn(async () => ({
+    ok: true,
+    value: [{id: 'work', name: 'Work'}],
+  })),
+  setConversationStarred: jest.fn(async () => ({ok: true, value: {}})),
+}));
+
 jest.mock('../app/useReduceMotion', () => ({useReduceMotion: () => true}));
 jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
   __esModule: true,
@@ -181,6 +190,73 @@ test('mobile detail Back stays outside the transcript and restores active search
   expect(control('Search loaded conversations').props.value).toBe('workspace');
   expect(control('Open conversation Shared workspace')).toBeDefined();
   act(() => tree.unmount());
+});
+
+test('star toggles optimistically and reverts when the legacy write fails permanently', async () => {
+  const {setConversationStarred} = require('../legacyOmiWrites');
+  let resolveWrite!: (value: {
+    ok: false;
+    failure: {kind: 'permanent'; reason: 'gone'; detail: string};
+  }) => void;
+  setConversationStarred.mockReturnValueOnce(
+    new Promise(resolve => {
+      resolveWrite = resolve;
+    }),
+  );
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    tree = ReactTestRenderer.create(
+      <ConversationsPage outcome={outcome} loading={false} embedded />,
+    );
+  });
+  const star = () =>
+    tree.root.findByProps({accessibilityLabel: 'Star conversation'});
+  const unstarCount = () =>
+    tree.root
+      .findAllByType(FocusPressable)
+      .filter(node => node.props.accessibilityLabel === 'Unstar conversation')
+      .length;
+  await act(async () => star().props.onPress({stopPropagation: jest.fn()}));
+  expect(setConversationStarred).toHaveBeenCalledWith(
+    expect.anything(),
+    'other',
+    true,
+  );
+  expect(unstarCount()).toBe(3);
+  await act(async () =>
+    resolveWrite({
+      ok: false,
+      failure: {
+        kind: 'permanent',
+        reason: 'gone',
+        detail: 'Conversation is gone',
+      },
+    }),
+  );
+  expect(unstarCount()).toBe(2);
+  act(() => tree.unmount());
+});
+
+test('folder chips appear only on the macOS desktop list', async () => {
+  const originalOS = require('react-native').Platform.OS;
+  Object.defineProperty(require('react-native').Platform, 'OS', {
+    configurable: true,
+    value: 'macos',
+  });
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    tree = ReactTestRenderer.create(
+      <ConversationsPage outcome={outcome} loading={false} />,
+    );
+  });
+  expect(
+    tree.root.findByProps({accessibilityLabel: 'Filter folder Work'}),
+  ).toBeDefined();
+  act(() => tree.unmount());
+  Object.defineProperty(require('react-native').Platform, 'OS', {
+    configurable: true,
+    value: originalOS,
+  });
 });
 
 test('loading keeps the reduced-motion mark and failures retry automatically without a refresh button', () => {

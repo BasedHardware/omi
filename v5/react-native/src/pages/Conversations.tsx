@@ -30,17 +30,27 @@ import {styles} from '../ui/styles';
 import {mobileColor} from '../mobile/mobileTokens';
 import {OmiAvatar} from '../ui/OmiAvatar';
 import {useReduceMotion} from '../app/useReduceMotion';
+import {omiBackend} from '../omiNative';
+import {
+  listFolders,
+  setConversationStarred,
+  type LegacyFolder,
+} from '../legacyOmiWrites';
 
 const ConversationRow = memo(function ConversationRow({
   item,
   selected,
   onPress,
   embedded,
+  starred,
+  onToggleStar,
 }: {
   item: ConversationProjection;
   selected: boolean;
   onPress: () => void;
   embedded: boolean;
+  starred: boolean;
+  onToggleStar: () => void;
 }) {
   return (
     <FocusPressable
@@ -59,13 +69,18 @@ const ConversationRow = memo(function ConversationRow({
           style={[styles.conversationRowTime, embedded && mobileStyles.meta]}>
           {formatConversationDate(item.startedAt ?? item.createdAt)}
         </Text>
-        <Text
+        <FocusPressable
           accessibilityLabel={
-            item.starred ? 'Starred conversation' : 'Not starred'
+            starred ? 'Unstar conversation' : 'Star conversation'
           }
-          style={styles.conversationRowStar}>
-          {item.starred ? '★' : '☆'}
-        </Text>
+          accessibilityRole="button"
+          onPress={event => {
+            event.stopPropagation();
+            onToggleStar();
+          }}
+          style={styles.conversationStarFilter}>
+          <Text style={styles.conversationRowStar}>{starred ? '★' : '☆'}</Text>
+        </FocusPressable>
       </View>
       <Text
         numberOfLines={2}
@@ -123,6 +138,19 @@ export function ConversationsPage({
   const query = search?.value ?? localQuery;
   const setQuery = search?.onChange ?? setLocalQuery;
   const [starredOnly, setStarredOnly] = useState(false);
+  const [starOverrides, setStarOverrides] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set());
+  const [folders, setFolders] = useState<LegacyFolder[]>([]);
+  const [folderFilter, setFolderFilter] = useState<string | null>(null);
+  const desktopFolders = !embedded && Platform.OS === 'macos';
+  useEffect(() => {
+    if (!desktopFolders || !omiBackend) return;
+    void listFolders(omiBackend).then(result => {
+      if (result.ok) setFolders(result.value);
+    });
+  }, [desktopFolders]);
   const nowEpochMilliseconds = useRef(Date.now()).current;
   const selected = conversations.find(item => item.id === selectedId) ?? null;
   const scrolledAway = useRef(false);
@@ -166,11 +194,20 @@ export function ConversationsPage({
   const filtered = useMemo(() => {
     return conversations.filter(
       item =>
-        (!starredOnly || item.starred) &&
+        !deletedIds.has(item.id) &&
+        (!starredOnly || (starOverrides[item.id] ?? item.starred)) &&
+        (folderFilter === null || item.folderId === folderFilter) &&
         (matchesSearchQuery(item.title, query) ||
           matchesSearchQuery(item.summary, query)),
     );
-  }, [conversations, query, starredOnly]);
+  }, [
+    conversations,
+    query,
+    starredOnly,
+    starOverrides,
+    deletedIds,
+    folderFilter,
+  ]);
   useEffect(() => {
     if (selectedId !== null && !filtered.some(item => item.id === selectedId)) {
       setSelectedId(null);
@@ -196,7 +233,18 @@ export function ConversationsPage({
       ),
     [filtered, nowEpochMilliseconds],
   );
-  const filtering = query.trim() !== '' || starredOnly;
+  const filtering = query.trim() !== '' || starredOnly || folderFilter !== null;
+  const toggleStar = async (item: ConversationProjection) => {
+    const next = !(starOverrides[item.id] ?? item.starred);
+    setStarOverrides(current => ({...current, [item.id]: next}));
+    if (!omiBackend) return;
+    const result = await setConversationStarred(omiBackend, item.id, next);
+    if (!result.ok) {
+      setStarOverrides(current => ({...current, [item.id]: item.starred}));
+      return;
+    }
+    onRefresh?.();
+  };
 
   return (
     <View
@@ -307,6 +355,32 @@ export function ConversationsPage({
               </Text>
             </FocusPressable>
           </View>
+        </View>
+      )}
+      {desktopFolders && folders.length > 0 && selected === null && (
+        <View
+          accessibilityLabel="Conversation folder filters"
+          style={mobileStyles.filters}>
+          {[{id: '', name: 'All folders'}, ...folders].map(folder => {
+            const isSelected = (folder.id || null) === folderFilter;
+            return (
+              <FocusPressable
+                key={folder.id || 'all'}
+                accessibilityRole="button"
+                accessibilityLabel={`Filter folder ${folder.name}`}
+                accessibilityState={{selected: isSelected}}
+                onPress={() => setFolderFilter(folder.id || null)}
+                style={mobileStyles.filter}>
+                <Text
+                  style={[
+                    mobileStyles.filterText,
+                    isSelected && mobileStyles.filterTextSelected,
+                  ]}>
+                  {folder.name}
+                </Text>
+              </FocusPressable>
+            );
+          })}
         </View>
       )}
       <View
@@ -421,6 +495,8 @@ export function ConversationsPage({
                       item={item}
                       embedded={embedded}
                       key={item.id}
+                      starred={starOverrides[item.id] ?? item.starred}
+                      onToggleStar={() => void toggleStar(item)}
                       onPress={() => {
                         if (compact) scrolledAway.current = false;
                         setSelectedId(item.id);
@@ -495,6 +571,15 @@ export function ConversationsPage({
                 <>
                   <ConversationDetail
                     conversation={selected}
+                    desktop={!embedded}
+                    onRefresh={onRefresh}
+                    onDeleted={() => {
+                      setDeletedIds(current =>
+                        new Set(current).add(selected.id),
+                      );
+                      setSelectedId(null);
+                      onRefresh?.();
+                    }}
                     apiContract={
                       outcome?.status === 'success'
                         ? outcome.value.apiContract

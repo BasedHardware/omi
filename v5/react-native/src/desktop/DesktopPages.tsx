@@ -39,19 +39,20 @@ export function LibraryPage({
   outcomes,
   query = '',
   onLoadMore,
+  onRefresh,
   loadingMore = false,
   notice = null,
-  onRefresh,
 }: {
   outcomes: DesktopReadOutcomes | null;
   query?: string;
   onLoadMore?: () => void;
+  onRefresh?: () => void | Promise<void>;
   loadingMore?: boolean;
   notice?: string | null;
-  onRefresh?: () => void | Promise<void>;
 }) {
   const styles = useDesktopStyleSheets(createStyles);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set());
   useEffect(
     () => subscribeOmiBackendSessionInvalidated(() => setSelectedId(null)),
     [],
@@ -62,7 +63,11 @@ export function LibraryPage({
     ...(outcome?.status === 'success' ? outcome.value.items : []),
     ...(memoryOutcome?.status === 'success' ? memoryOutcome.value.items : []),
   ]
-    .filter(item => matchesSearchQuery(item.searchableText, query))
+    .filter(
+      item =>
+        !(item.kind === 'conversation' && deletedIds.has(item.id)) &&
+        matchesSearchQuery(item.searchableText, query),
+    )
     .sort(
       (left, right) =>
         (projectionTimestamp(right) ?? 0) - (projectionTimestamp(left) ?? 0),
@@ -125,6 +130,12 @@ export function LibraryPage({
               <ConversationDetail
                 key={selected.id}
                 conversation={selected}
+                onRefresh={onRefresh}
+                onDeleted={() => {
+                  setDeletedIds(current => new Set(current).add(selected.id));
+                  setSelectedId(null);
+                  onRefresh?.();
+                }}
                 apiContract={
                   outcome?.status === 'success'
                     ? outcome.value.apiContract
