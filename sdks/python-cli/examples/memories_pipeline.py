@@ -22,7 +22,7 @@ from pathlib import Path
 import sys
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-# CSV 导出标准列
+# Standard columns for CSV export
 CSV_FIELDS: Tuple[str, ...] = (
     "id",
     "created_at",
@@ -35,7 +35,7 @@ CSV_FIELDS: Tuple[str, ...] = (
 
 
 def parse_utc_timestamp(val: Optional[str]) -> Optional[datetime]:
-    """安全解析 ISO-8601 时间戳并标准化为 UTC datetime 对象。"""
+    """Safely parse an ISO-8601 timestamp string and normalize to UTC datetime."""
     if not val or not isinstance(val, str):
         return None
     try:
@@ -48,7 +48,7 @@ def parse_utc_timestamp(val: Optional[str]) -> Optional[datetime]:
 
 
 def sanitize_csv_cell(value: Any) -> str:
-    """清洗字段以防御电子表格公式注入漏洞（Spreadsheet Formula Injection）。"""
+    """Sanitize cell value to defend against spreadsheet formula injection vulnerabilities."""
     if value is None:
         return ""
     if isinstance(value, list):
@@ -58,14 +58,14 @@ def sanitize_csv_cell(value: Any) -> str:
     else:
         text = str(value)
 
-    # 若以公式操作符开头，添加单引号前缀转义
+    # Prefix with single quote if text starts with formula triggers
     if text.lstrip().startswith(("=", "+", "-", "@")):
         return "'" + text
     return text
 
 
 def unwrap_memories_data(raw_data: Any, source_name: str = "input") -> List[Dict[str, Any]]:
-    """从纯列表或常见包装信封（memories, items, data, results）中提取记忆对象。"""
+    """Extract memory records from raw lists or enveloped dicts (memories, items, data, results)."""
     if isinstance(raw_data, dict):
         for envelope_key in ("memories", "items", "data", "results"):
             candidate = raw_data.get(envelope_key)
@@ -92,7 +92,7 @@ def load_and_deduplicate(
     categories: Optional[Set[str]] = None,
     include_private: bool = True,
 ) -> List[Dict[str, Any]]:
-    """加载一个或多个输入源（文件或 stdin），依据 ID 去重，并执行条件过滤。"""
+    """Load from one or more sources (files or stdin), deduplicate by ID, and apply filters."""
     dedup_map: Dict[str, Dict[str, Any]] = {}
     ordered_ids: List[str] = []
 
@@ -117,21 +117,21 @@ def load_and_deduplicate(
         for item in items:
             mem_id = str(item.get("id") or "").strip()
             if not mem_id:
-                # 若无 ID，以内容哈希或对象哈希作为临时键
+                # Use content hash if ID is missing
                 mem_id = f"anon-{hash(json.dumps(item, sort_keys=True))}"
 
-            # 类别过滤
+            # Category filtering
             item_cat = str(item.get("category") or "").strip().lower()
             if categories and item_cat not in categories:
                 continue
 
-            # 隐私过滤
+            # Privacy filtering
             vis = str(item.get("visibility") or "").strip().lower()
             if not include_private and vis == "private":
                 continue
 
             if mem_id in dedup_map:
-                # 冲突时比对 updated_at 或 created_at，保留最新者
+                # Retain the newest record by updated_at or created_at
                 existing = dedup_map[mem_id]
                 new_dt = parse_utc_timestamp(item.get("updated_at") or item.get("created_at"))
                 old_dt = parse_utc_timestamp(existing.get("updated_at") or existing.get("created_at"))
@@ -148,11 +148,11 @@ def load_and_deduplicate(
 
 
 def format_as_jsonl(memories: Iterable[Dict[str, Any]], schema_mode: str = "raw") -> str:
-    """将记忆数据转换为 JSONL (JSON Lines) 字符串。
+    """Format memory items as JSONL (JSON Lines) string.
 
     schema_mode:
-    - 'raw': 保持原始记忆实体结构，单行紧凑 JSON；
-    - 'chat': 适配 LLM 指令微调（OpenAI/Anthropic/Gemini 风格的 messages 格式）。
+    - 'raw': Preserves original memory entity dictionary, compact single-line JSON;
+    - 'chat': Standard messages format for LLM instruction fine-tuning.
     """
     buffer = io.StringIO()
     for item in memories:
@@ -181,7 +181,7 @@ def format_as_jsonl(memories: Iterable[Dict[str, Any]], schema_mode: str = "raw"
                 },
             }
         else:
-            # 保证按 key 排序或干净输出，确保紧凑单行
+            # Compact single-line representation
             record = item
 
         buffer.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -190,9 +190,9 @@ def format_as_jsonl(memories: Iterable[Dict[str, Any]], schema_mode: str = "raw"
 
 
 def format_as_csv(memories: Iterable[Dict[str, Any]]) -> str:
-    """将记忆数据转换为标准 CSV 字符串，内嵌单元格清洗。"""
+    """Format memory items as standard CSV string with cell sanitization."""
     buffer = io.StringIO()
-    writer = csv.writer(buffer, quoting=csv.QUOTE_MINIMAL)
+    writer = csv.writer(buffer, quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
     writer.writerow(CSV_FIELDS)
 
     for item in memories:
@@ -211,7 +211,7 @@ def format_as_csv(memories: Iterable[Dict[str, Any]]) -> str:
 
 
 def validate_destination_path(destination: str, force: bool = False) -> Path:
-    """路径安全检验：拒绝包含 '..' 的路径，且默认排他性创建。"""
+    """Validate path safety: reject '..' components and enforce non-destructive write by default."""
     p = Path(destination)
     if ".." in p.parts:
         raise ValueError(f"Output path {destination!r} contains '..'; refusing to write outside intended directory.")
@@ -231,18 +231,17 @@ def run_pipeline(
     include_private: bool = True,
     force: bool = False,
 ) -> str:
-    """运行流水线全流程：加载 -> 去重 -> 过滤 -> 转换 -> 输出。"""
-    # 类别集合
+    """Run full pipeline: load -> deduplicate -> filter -> format -> write."""
     cat_set = {c.strip().lower() for c in categories} if categories else None
 
-    # 1. 加载并去重
+    # 1. Load and deduplicate
     memories = load_and_deduplicate(
         sources=sources,
         categories=cat_set,
         include_private=include_private,
     )
 
-    # 2. 推断输出格式
+    # 2. Infer output format
     fmt = (output_format or "").strip().lower()
     if not fmt:
         if destination and destination != "-":
@@ -256,7 +255,7 @@ def run_pipeline(
         else:
             fmt = "jsonl"
 
-    # 3. 格式化数据
+    # 3. Format payload
     if fmt == "csv":
         result_text = format_as_csv(memories)
     elif fmt in ("jsonl", "ndjson"):
@@ -264,7 +263,7 @@ def run_pipeline(
     else:
         raise ValueError(f"Unsupported format: {fmt}. Must be 'jsonl' or 'csv'.")
 
-    # 4. 写入输出
+    # 4. Output handling
     if destination is None or destination == "-":
         return result_text
 
@@ -277,7 +276,7 @@ def run_pipeline(
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    """CLI 命令行入口点。"""
+    """CLI entrypoint."""
     parser = argparse.ArgumentParser(
         description="Batch processing pipeline for Omi memories exports to JSONL and CSV."
     )
