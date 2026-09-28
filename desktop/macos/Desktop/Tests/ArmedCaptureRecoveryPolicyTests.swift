@@ -41,14 +41,14 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
 
   func testProbeGateBlocksAllProviderAudioUntilLiveMicrophoneFrame() {
     let gate = CaptureProbeAudioGate()
-    var sent = 0
-    let liveSystemAudio = Data([10, 0])
+    var forwarded: [Data] = []
+    let chunks = [Data(repeating: 0, count: 64), Data([1, 0]), Data([10, 0])]
     gate.setOpen(false)
-    if gate.isOpen && AudioCaptureService.containsLivePCM(liveSystemAudio) { sent += 1 }
-    XCTAssertEqual(sent, 0)
+    for chunk in chunks { gate.forward(chunk) { forwarded.append($0) } }
+    XCTAssertTrue(forwarded.isEmpty)
     gate.setOpen(true)
-    if gate.isOpen && AudioCaptureService.containsLivePCM(liveSystemAudio) { sent += 1 }
-    XCTAssertEqual(sent, 1)
+    for chunk in chunks { gate.forward(chunk) { forwarded.append($0) } }
+    XCTAssertEqual(forwarded, chunks, "open capture forwards every chunk, including silence")
   }
 
   func testBackoffScheduleThenTenMinuteCeiling() {

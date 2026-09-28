@@ -70,15 +70,16 @@ extension AppState {
     // Cloud mode: the mixer sums mic + system into one mono stream for the WebSocket.
     // Local mode: bypass the mixer — mic and system are transcribed by SEPARATE Parakeet
     // instances so transcripts are diarized by source (mic = you, system = another speaker).
+    let probeAudioGate = armedMicrophoneRecovery.outboundAudioGate
     if !sttSession.useLocalSTT {
-      let probeAudioGate = armedMicrophoneRecovery.outboundAudioGate
       audioMixer?.start { [weak self] monoMixed in
         // While an armed retry is probing a possibly dead route, nothing is streamed until
         // the microphone proves live. Outside a probe every chunk is forwarded, quiet or not:
         // the stream's byte count is the transcript clock, so dropping quiet chunks would
         // shift every later timestamp and clip soft speech onsets.
-        guard probeAudioGate.isOpen else { return }
-        self?.transcriptionService?.sendAudio(monoMixed)
+        probeAudioGate.forward(monoMixed) { [weak self] audio in
+          self?.transcriptionService?.sendAudio(audio)
+        }
       }
     }
 

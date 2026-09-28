@@ -10,6 +10,11 @@ final class CaptureProbeAudioGate: @unchecked Sendable {
 
   var isOpen: Bool { lock.withLock { open } }
   func setOpen(_ value: Bool) { lock.withLock { open = value } }
+
+  func forward(_ audio: Data, to sink: (Data) -> Void) {
+    guard isOpen else { return }
+    sink(audio)
+  }
 }
 
 /// Owns only a waiting timer and change listeners. AppState owns capture teardown
