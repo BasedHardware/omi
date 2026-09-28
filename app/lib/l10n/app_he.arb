@@ -11159,5 +11159,9 @@
     "appearanceLight": "בהיר",
     "appearanceDark": "כהה",
     "chatDiscardRecording": "מחיקה",
-    "voiceQuestionNoSpeech": "לא הבנתי — נסה שוב"
+    "voiceQuestionNoSpeech": "לא הבנתי — נסה שוב",
+    "sendToSupport": "Send to support",
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again."
 }

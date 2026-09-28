@@ -12275,6 +12275,33 @@
         "title": "DeveloperTranscriptSegment",
         "type": "object"
       },
+      "DiagnosticsReceipt": {
+        "properties": {
+          "ticket": {
+            "title": "Ticket",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket"
+        ],
+        "title": "DiagnosticsReceipt",
+        "type": "object"
+      },
+      "DiagnosticsUpload": {
+        "properties": {
+          "bundle_base64": {
+            "maxLength": 5600000,
+            "title": "Bundle Base64",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_base64"
+        ],
+        "title": "DiagnosticsUpload",
+        "type": "object"
+      },
       "DismissAnnouncementRequest": {
         "description": "Request body for dismissing an announcement.",
         "properties": {
@@ -54184,6 +54211,93 @@
         "summary": "Extract Memory Log",
         "tags": [
           "memories"
+        ]
+      }
+    },
+    "/v1/mobile/device-diagnostics": {
+      "post": {
+        "operationId": "upload_device_diagnostics_v1_mobile_device_diagnostics_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticsUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticsReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Upload Device Diagnostics",
+        "tags": [
+          "device-diagnostics"
         ]
       }
     },

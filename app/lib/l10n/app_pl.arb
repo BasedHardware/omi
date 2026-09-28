@@ -3634,5 +3634,9 @@
     "appearanceLight": "Jasny",
     "appearanceDark": "Ciemny",
     "chatDiscardRecording": "Odrzuć",
-    "voiceQuestionNoSpeech": "Nie udało się usłyszeć — spróbuj ponownie"
+    "voiceQuestionNoSpeech": "Nie udało się usłyszeć — spróbuj ponownie",
+    "sendToSupport": "Send to support",
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again."
 }

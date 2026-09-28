@@ -186,7 +186,7 @@ class BleDisconnectEvent {
   /// RSSI trajectory over the ~15s before this event. One of:
   ///   "fading"  — signal declined ≥10 dB before the drop (walk-away)
   ///   "sudden"  — signal stable then link died (interference/stall/device off)
-  ///   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+  ///   "gap"     — no recent RSSI samples (radio read unavailable)
   ///   "unknown" — insufficient samples to classify
   /// Empty string on legacy records written before this field existed.
   String rssiTrend;
@@ -1539,6 +1539,35 @@ class BleHostApi {
       );
     } else {
       return (pigeonVar_replyList[0] as BleDeviceDiagnostics?)!;
+    }
+  }
+
+  /// Bounded native BLE-only diagnostics as JSON. No audio or transcript payloads.
+  Future<String> getExtendedDeviceDiagnostics(String uuid) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.omi_pigeon.BleHostApi.getExtendedDeviceDiagnostics$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as String?)!;
     }
   }
 
