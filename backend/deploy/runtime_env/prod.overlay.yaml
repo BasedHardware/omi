@@ -363,6 +363,9 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
+            value: 'true'
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:

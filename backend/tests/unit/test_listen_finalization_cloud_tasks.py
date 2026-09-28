@@ -711,6 +711,35 @@ async def test_worker_durable_failure_budget_survives_a_new_task_generation(monk
 
 
 @pytest.mark.anyio
+async def test_worker_closes_exhausted_crash_budget_before_processing(monkeypatch):
+    monkeypatch.setenv('LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED', 'true')
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
+    monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
+    claim = MagicMock(return_value={'status': 'claimed', 'lease_epoch': 9, 'attempt_count': 5})
+    monkeypatch.setattr(jobs_db, 'claim_finalization_job', claim)
+    monkeypatch.setattr(
+        jobs_db, 'get_finalization_job', lambda job_id: {'uid': 'uid-1', 'conversation_id': 'conversation-1'}
+    )
+    monkeypatch.setattr(finalization_router, 'should_skip_background_account_mutation', lambda uid: False)
+    finalizer = AsyncMock()
+    terminal = MagicMock(return_value=True)
+    monkeypatch.setattr(finalization_router, 'finalize_persisted_conversation', finalizer)
+    monkeypatch.setattr(finalization_router, 'final_attempt_failed', terminal)
+    monkeypatch.setattr(finalization_router, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 5)
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'job_id': 'job-1', 'dispatch_generation': 6}), task_retry_count=0
+    )
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'dead_letter'}
+    claim.assert_called_once_with('job-1', 6, count_worker_claim=True)
+    terminal.assert_called_once_with('job-1', 6, 9, 5)
+    finalizer.assert_not_awaited()
+
+
+@pytest.mark.anyio
 async def test_worker_completes_claimed_job(monkeypatch):
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')

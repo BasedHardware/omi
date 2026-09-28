@@ -471,8 +471,8 @@ def final_attempt_failed(
             # Dead-lettering is authoritative; a best-effort metric lookup must
             # never change its terminal outcome.
             logger.exception('listen finalization terminal metric lookup failed job=%s', job_id)
-        # Dead-lettering flips the bound conversation to discarded inside its
-        # own transaction, bypassing the update hooks; converge the search
+        # Dead-lettering closes the bound conversation inside its own
+        # transaction, bypassing the update hooks; converge the search
         # projection. Fail-open: never change the terminal outcome.
         try:
             job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)

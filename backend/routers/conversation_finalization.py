@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -35,6 +36,15 @@ from utils.observability.finalization import finalization_diagnostic_id
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _durable_attempt_cap_enabled() -> bool:
+    return os.getenv('LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED', 'true').strip().lower() in {
+        '1',
+        'true',
+        'yes',
+        'on',
+    }
 
 
 def _parse_task_payload(payload: Any) -> tuple[str, int] | None:
@@ -118,6 +128,7 @@ async def run_listen_finalization_job(
             jobs_db.claim_finalization_job,
             job_id,
             dispatch_generation,
+            count_worker_claim=True,
         )
         claim_status = claim['status']
         if claim_status == 'completed':
@@ -137,7 +148,7 @@ async def run_listen_finalization_job(
         if claim_status != 'claimed':
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
         claimed_lease_epoch = claim['lease_epoch']
-        failed_attempts = int(claim.get('attempt_count') or 0)
+        failed_attempts = int(claim.get('attempt_count') or 0) if _durable_attempt_cap_enabled() else 0
         if claimed_lease_epoch is None:
             logger.error('listen finalization claim returned no lease epoch job=%s', job_id)
             return JSONResponse(status_code=500, content={'status': 'retry'})
@@ -169,6 +180,25 @@ async def run_listen_finalization_job(
             record_capture_finalization_terminal('stale', job.get('created_at'))
             record_conversation_finalization_client_terminal('cancelled', job)
             return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
+
+        # A killed worker cannot record its failure. Its fenced claim still
+        # consumed a durable slot, so close an already exhausted generation
+        # before paying for another processing attempt.
+        if (
+            _durable_attempt_cap_enabled()
+            and failed_attempts >= get_listen_finalization_tasks_max_attempts_for_worker()
+        ):
+            terminal = await run_blocking(
+                db_executor, final_attempt_failed, job_id, dispatch_generation, claimed_lease_epoch, failed_attempts
+            )
+            if terminal:
+                logger.error(
+                    'listen finalization attempt budget exhausted job_hash=%s failed_attempts=%s',
+                    finalization_diagnostic_id(job_id),
+                    failed_attempts,
+                )
+                return JSONResponse(status_code=200, content={'status': 'dead_letter'})
+            return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
 
         try:
             disposition = await finalize_persisted_conversation(

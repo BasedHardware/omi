@@ -2579,6 +2579,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
+              value: 'true'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:

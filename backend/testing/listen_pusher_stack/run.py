@@ -1406,7 +1406,7 @@ async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
         'status': conversation.get('status'),
         'discarded': conversation.get('discarded'),
         'finalization_status': conversation.get('finalization_status'),
-    } != {'status': 'failed', 'discarded': True, 'finalization_status': 'dead_letter'}:
+    } != {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'}:
         raise StackFailure('dead-lettering did not atomically close the processing conversation')
     projection = await stack.finalization_status(uid, conversation_id)
     if projection.get('status') != 'dead_letter' or not projection.get('terminal') or projection.get('retryable'):
