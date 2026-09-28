@@ -2,6 +2,14 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.412",
+      "date": "2026-09-28",
+      "changes": [
+        "Add Siri and Apple Intelligence actions for memories, tasks, search and listening, with local Spotlight indexing controls.",
+        "Improved voice answers so they start speaking while audio is still being generated"
+      ]
+    },
+    {
       "version": "0.12.411",
       "date": "2026-09-28",
       "changes": [
