@@ -707,7 +707,7 @@ class AuthService {
     ).timeout(
       const Duration(seconds: 8),
       onTimeout: () => throw StateError(
-        'Cannot reach the local development server. Connect the iPhone to the same Wi-Fi as the Mac and try again.',
+        'Cannot reach the local development server. Connect the iPhone to the same Wi-Fi as the Mac and build with OMI_DEV_HOST set to the Mac address.',
       ),
     );
 
@@ -727,13 +727,26 @@ class AuthService {
       throw Exception('Local development sign-in returned no custom token');
     }
 
-    final credential = await FirebaseAuth.instance.signInWithCustomToken(customToken).timeout(
-          const Duration(seconds: 8),
-          onTimeout: () => throw StateError(
-            'Cannot reach the local Firebase Auth emulator. Connect the iPhone to the same Wi-Fi as the Mac and try again.',
-          ),
-        );
-    await _updateUserPreferences(credential, 'local_dev');
+    // Check reachability before the side-effecting Firebase sign-in. Timing out
+    // signInWithCustomToken would not cancel it: a late success could create a
+    // session after the UI has already reported failure.
+    try {
+      await http
+          .get(Uri(
+            scheme: 'http',
+            host: Env.firebaseAuthEmulatorHost,
+            port: Env.firebaseAuthEmulatorPort,
+          ))
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      throw StateError(
+        'Cannot reach the local Firebase Auth emulator. Connect the iPhone to the same Wi-Fi as the Mac and build with OMI_DEV_HOST set to the Mac address.',
+      );
+    }
+
+    final credential = await FirebaseAuth.instance.signInWithCustomToken(customToken);
+    await _updateUserPreferences(credential, 'local_dev', restoreOnboardingFromServer: false);
+    unawaited(_restoreOnboardingState());
     Logger.debug('Local development sign-in successful');
     return credential;
   }
@@ -766,7 +779,11 @@ class AuthService {
     }
   }
 
-  Future<void> _updateUserPreferences(UserCredential result, String provider) async {
+  Future<void> _updateUserPreferences(
+    UserCredential result,
+    String provider, {
+    bool restoreOnboardingFromServer = true,
+  }) async {
     try {
       final user = result.user;
       if (user == null) return;
@@ -833,7 +850,7 @@ class AuthService {
       Logger.debug('UID: ${SharedPreferencesUtil().uid}');
 
       // Restore onboarding state from server
-      await _restoreOnboardingState();
+      if (restoreOnboardingFromServer) await _restoreOnboardingState();
     } catch (e) {
       Logger.debug('Error updating user preferences: $e');
     }

@@ -854,7 +854,7 @@ final class OmiBleManager: NSObject {
         let cutoff = now - OmiBleManager.batteryHistoryRetentionMs
         history.removeAll { ($0["ts"] as? Int64 ?? 0) < cutoff }
 
-        history.append(["ts": now, "level": level, "charging": charging as Any? ?? NSNull()])
+        history.append(OmiBleEnergyPolicy.batteryHistoryEntry(timestampMs: now, level: level, charging: charging))
 
         if history.count > OmiBleManager.maxBatteryHistoryEntries {
             history = Array(history.suffix(OmiBleManager.maxBatteryHistoryEntries))

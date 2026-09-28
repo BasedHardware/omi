@@ -58,6 +58,16 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                     level: 19,
                     nowMs: minute
                 ))
+                let unknownCharging = OmiBleEnergyPolicy.batteryHistoryEntry(
+                    timestampMs: 123, level: 80, charging: nil
+                )
+                precondition(unknownCharging["charging"] == nil)
+                precondition(PropertyListSerialization.propertyList(unknownCharging, isValidFor: .binary))
+                let charging = OmiBleEnergyPolicy.batteryHistoryEntry(
+                    timestampMs: 124, level: 81, charging: true
+                )
+                precondition(charging["charging"] as? Bool == true)
+                precondition(PropertyListSerialization.propertyList(charging, isValidFor: .binary))
                 precondition(OmiBleFirmwareDiagnostics.parse(Data(repeating: 0, count: 24), timestampMs: 1) == nil)
                 precondition(OmiBleFirmwareDiagnostics.parse(Data(repeating: 0, count: 25), timestampMs: 1) == nil)
                 var diagnostic = Data(repeating: 0, count: 30)
@@ -73,6 +83,19 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                 precondition(parsed["uptime_s"] as? UInt32 == 42)
                 precondition(parsed["battery_mv"] as? NSNumber == 0x1234)
                 precondition(parsed["charging"] as? NSNumber == true)
+                precondition(PropertyListSerialization.propertyList(parsed, isValidFor: .binary))
+                diagnostic[1] = 0xff
+                diagnostic[2] = 0xff
+                diagnostic[3] = 0xff
+                diagnostic[4] = 0xff
+                diagnostic[9] = 0xff
+                diagnostic[10] = 0xff
+                diagnostic[11] = 0xff
+                let unknown = OmiBleFirmwareDiagnostics.parse(diagnostic, timestampMs: 124)!
+                precondition(unknown["reset_cause_raw"] == nil)
+                precondition(unknown["battery_mv"] == nil)
+                precondition(unknown["charging"] == nil)
+                precondition(PropertyListSerialization.propertyList(unknown, isValidFor: .binary))
                 precondition(OmiBleRssiDiagnostics.trend(samples: [], nowMs: 100_000) == "gap")
                 precondition(OmiBleRssiDiagnostics.trend(samples: [(99_000, -55)], nowMs: 100_000) == "unknown")
                 let samples: [(ts: Int64, rssi: Int64)] = [(90_000, -55), (99_000, -72)]
