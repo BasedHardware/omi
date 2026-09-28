@@ -125,7 +125,7 @@ function findOmiDots(renderer: ReactTestRenderer.ReactTestRenderer) {
   return renderer.root.find(
     node =>
       node.props.identity === 'omi' &&
-      node.props.size === 104 &&
+      node.props.size === 40 &&
       node.props.animate !== undefined,
   );
 }
@@ -243,7 +243,7 @@ describe('Onboarding chrome', () => {
     expect(output).not.toContain('Desktop application chrome');
   });
 
-  test('Onboarding renders the Omi dots above Welcome to Omi', () => {
+  test('Onboarding renders the Omi logo top-left, above the step title', () => {
     mockPlatformOS = 'ios';
     const renderer = render(
       <Onboarding onSignIn={() => undefined} signingIn={false} />,
@@ -258,7 +258,7 @@ describe('Onboarding chrome', () => {
       animate: true,
       identity: 'omi',
       reduceMotion: false,
-      size: 104,
+      size: 40,
       tone: 'ink',
     });
     expect(omiInkDotHosts(renderer)).toHaveLength(8);
@@ -273,12 +273,33 @@ describe('Onboarding chrome', () => {
       renderer.root.findAll(node => String(node.type) === 'Image'),
     ).toHaveLength(0);
     expect(title.props.children).toBe('Welcome to Omi');
-    const siblings = title.parent?.children ?? [];
-    const dotsSlot = dots.parent;
-    expect(dotsSlot).toBeTruthy();
-    expect(
-      siblings.indexOf(dotsSlot as (typeof siblings)[number]),
-    ).toBeLessThan(siblings.indexOf(title));
+    // The logo lives in the header row, which is the column's first child —
+    // above the step body that owns the title.
+    const header = renderer.root.find(
+      node => node.props.accessibilityLabel === 'Onboarding header',
+    );
+    const ancestors = (node: {parent?: unknown}) => {
+      const chain: unknown[] = [];
+      let cursor = node.parent;
+      while (cursor != null) {
+        chain.push(cursor);
+        cursor = (cursor as {parent?: unknown}).parent;
+      }
+      return chain;
+    };
+    const dotsChain = ancestors(dots);
+    expect(dotsChain).toContain(header);
+    const column = header.parent;
+    const titleChain = ancestors(title);
+    expect(dotsChain).toContain(column);
+    expect(titleChain).toContain(column);
+    const columnChildren = (column?.children ?? []) as unknown[];
+    const titleColumnChild = titleChain.find(
+      node => (node as {parent?: unknown}).parent === column,
+    );
+    expect(columnChildren.indexOf(header)).toBeLessThan(
+      columnChildren.indexOf(titleColumnChild),
+    );
     expect(output).toContain('Sign in');
     expect(output).not.toContain('Search Omi');
     expect(Animated.timing).toHaveBeenCalled();
@@ -297,7 +318,7 @@ describe('Onboarding chrome', () => {
       animate: false,
       identity: 'omi',
       reduceMotion: true,
-      size: 104,
+      size: 40,
       tone: 'ink',
     });
     expect(Animated.timing).not.toHaveBeenCalled();

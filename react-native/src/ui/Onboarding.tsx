@@ -54,11 +54,24 @@ import {PostSetupConfetti} from '../desktop/PostSetupOverlay';
 import type {OmiAuthDesktopHandoff} from '../omiNativeTypes';
 import {Button} from './Button';
 import {Field} from './Field';
+import {MaterialIcon} from './MaterialIcon';
 import {OmiAvatar} from './OmiAvatar';
 import {PermissionRow} from './PermissionRow';
 import {color as uiColor, tokens} from './tokens';
 
-const DOTS_SIZE = 104;
+// Header logo: small top-left mark; the step content is the visual hero.
+const DOTS_SIZE = 40;
+
+/** Short progress captions shown under the segmented step line. */
+const STEP_TITLES: Record<MobileOnboardingStep, string> = {
+  welcome: 'Welcome',
+  consent: 'Privacy',
+  language: 'Language',
+  source: 'About you',
+  permissions: 'Permissions',
+  speech: 'Voice',
+  complete: 'Done',
+};
 
 /** Collects the OS locale string on each platform; '' when unavailable. */
 function deviceLocaleSource(): string {
@@ -475,26 +488,91 @@ export function Onboarding({
     }
   }
 
-  const action = (
-    label: string,
-    onPress: () => void,
-    disabled = false,
-    variant: 'primary' | 'ghost' = 'primary',
-  ) => (
+  const ghost = (label: string, onPress: () => void, disabled = false) => (
     <Button
       accessibilityLabel={label}
       disabled={disabled}
+      labelStyle={desktop && styles.desktopTitle}
       onPress={onPress}
-      size="large"
-      variant={variant}
-      labelStyle={desktop && styles.desktopButtonLabel}
-      style={[
-        nativePhone && styles.actionStretch,
-        desktop && variant === 'primary' ? styles.desktopButton : undefined,
-      ]}>
+      variant="ghost">
       {label}
     </Button>
   );
+
+  // The anchored bottom bar carries each step's primary action (Continue and
+  // friends); secondary choices stay in the step body as ghost buttons.
+  const primary = (() => {
+    switch (step) {
+      case 'welcome':
+        return {
+          label: signingIn ? 'Signing in…' : 'Sign in',
+          onPress: onSignIn,
+          disabled: signingIn,
+        };
+      case 'consent':
+        return {
+          label: 'Agree & Continue',
+          onPress: () => {
+            void advanceFrom('consent');
+          },
+          disabled: false,
+        };
+      case 'language':
+        return {
+          label: saving ? 'Saving…' : 'Continue',
+          onPress: () => {
+            void persistLanguage();
+          },
+          disabled: saving,
+        };
+      case 'source':
+        return {
+          label: saving ? 'Saving…' : 'Continue',
+          onPress: () => {
+            void persistSource();
+          },
+          disabled: saving,
+        };
+      case 'permissions':
+        return {
+          label: "I'll do these later",
+          onPress: () => {
+            void advanceFrom('permissions');
+          },
+          disabled: false,
+        };
+      case 'speech':
+        return {
+          label: recordingVoice ? 'Listening…' : 'Start voice recording',
+          onPress: () => {
+            void enrollVoice();
+          },
+          disabled: recordingVoice,
+        };
+      default:
+        return nativePhone
+          ? {
+              label:
+                busy && connectAfterComplete ? 'Saving…' : 'Connect your Omi',
+              onPress: () => {
+                finish(true);
+              },
+              disabled: busy,
+            }
+          : {
+              label: busy ? 'Saving…' : 'Start Using Omi',
+              onPress: () => {
+                finish(false);
+              },
+              disabled: busy,
+            };
+    }
+  })();
+  const canGoBack =
+    step !== 'welcome' &&
+    step !== 'consent' &&
+    step !== 'complete' &&
+    !signingIn;
 
   const permissionRow = (
     kind: PermissionKind,
@@ -537,33 +615,53 @@ export function Onboarding({
       contentContainerStyle={styles.surface}
       keyboardShouldPersistTaps="handled">
       <View style={styles.column}>
-        <Animated.View
-          accessibilityLabel="Omi"
-          style={[styles.dots, {opacity, transform: [{scale}]}]}>
-          <OmiAvatar
-            animate={
-              !reduceMotion && (step === 'welcome' || step === 'complete')
-            }
-            identity="omi"
-            reduceMotion={reduceMotion}
-            size={DOTS_SIZE}
-            tone="ink"
-            inkColor={desktop ? desktopTokens.color.ink : undefined}
-          />
-        </Animated.View>
+        <View accessibilityLabel="Onboarding header" style={styles.header}>
+          <Animated.View
+            accessibilityLabel="Omi"
+            style={[styles.dots, {opacity, transform: [{scale}]}]}>
+            <OmiAvatar
+              animate={
+                !reduceMotion && (step === 'welcome' || step === 'complete')
+              }
+              identity="omi"
+              reduceMotion={reduceMotion}
+              size={DOTS_SIZE}
+              tone="ink"
+              inkColor={desktop ? desktopTokens.color.ink : undefined}
+            />
+          </Animated.View>
+          {setupRequired && onSignOut ? (
+            <Button
+              accessibilityLabel="Sign out"
+              disabled={busy}
+              labelStyle={desktop && styles.desktopTitle}
+              onPress={onSignOut}
+              size="compact"
+              variant="ghost">
+              Sign out
+            </Button>
+          ) : null}
+        </View>
         {setupIndex >= 0 ? (
           <View
             accessibilityLabel={`Step ${setupIndex + 1} of ${itinerary.length}`}
-            style={styles.progressRow}>
-            {itinerary.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.progressSegment,
-                  index <= setupIndex && styles.progressSegmentFill,
-                ]}
-              />
-            ))}
+            style={styles.progressBlock}>
+            <View style={styles.progressRow}>
+              {itinerary.map((_, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.progressSegment,
+                    index <= setupIndex && styles.progressSegmentFill,
+                  ]}
+                />
+              ))}
+            </View>
+            <Text
+              accessibilityLiveRegion="polite"
+              style={[styles.progressCaption, copyColor]}>
+              {STEP_TITLES[step]} · Step {setupIndex + 1} of {itinerary.length}
+            </Text>
           </View>
         ) : null}
         <Animated.View
@@ -609,11 +707,6 @@ export function Onboarding({
                   {displayError}
                 </Text>
               )}
-              {action(
-                signingIn ? 'Signing in…' : 'Sign in',
-                onSignIn,
-                signingIn,
-              )}
               {signingIn && onCancelSignIn ? (
                 <Button
                   accessibilityLabel="Cancel sign in"
@@ -653,9 +746,6 @@ export function Onboarding({
                   Terms of Service
                 </Button>
               </View>
-              {action('Agree & Continue', () => {
-                void advanceFrom('consent');
-              })}
             </>
           ) : null}
           {step === 'language' ? (
@@ -710,7 +800,22 @@ export function Onboarding({
                   No language matches “{languageQuery.trim()}”.
                 </Text>
               ) : null}
-              {action(saving ? 'Saving…' : 'Continue', persistLanguage, saving)}
+              <View style={styles.selectedRow}>
+                <Text style={[styles.selectedCaption, copyColor]}>
+                  Selected
+                </Text>
+                <View
+                  accessibilityLabel="Selected language"
+                  style={[styles.selectedChip, desktop && styles.desktopChip]}>
+                  <Text
+                    style={[
+                      styles.selectedChipLabel,
+                      desktop && styles.desktopChipLabel,
+                    ]}>
+                    {selectedLanguageName}
+                  </Text>
+                </View>
+              </View>
             </>
           ) : null}
           {step === 'source' ? (
@@ -748,7 +853,6 @@ export function Onboarding({
                   />
                 </View>
               ) : null}
-              {action(saving ? 'Saving…' : 'Continue', persistSource, saving)}
             </>
           ) : null}
           {step === 'permissions' ? (
@@ -775,9 +879,6 @@ export function Onboarding({
                     'Find your Omi, so it can record for you.',
                   )
                 : null}
-              {action("I'll do these later", () => {
-                void advanceFrom('permissions');
-              })}
             </>
           ) : null}
           {step === 'speech' ? (
@@ -790,18 +891,12 @@ export function Onboarding({
               {voiceSaved ? (
                 <Text style={[styles.copy, copyColor]}>Voice print saved.</Text>
               ) : null}
-              {action(
-                recordingVoice ? 'Listening…' : 'Start voice recording',
-                enrollVoice,
-                recordingVoice,
-              )}
-              {action(
+              {ghost(
                 'Skip for now',
                 () => {
                   setStep('complete');
                 },
                 recordingVoice,
-                'ghost',
               )}
             </>
           ) : null}
@@ -824,24 +919,14 @@ export function Onboarding({
                 </Text>
               )}
               {!desktop && !browser
-                ? action(
-                    busy && connectAfterComplete
-                      ? 'Saving…'
-                      : 'Connect your Omi',
-                    () => finish(true),
+                ? ghost(
+                    busy ? 'Saving…' : 'Continue without a device',
+                    () => {
+                      finish(false);
+                    },
                     busy,
                   )
                 : null}
-              {action(
-                busy && !connectAfterComplete
-                  ? 'Saving…'
-                  : desktop || browser
-                  ? 'Start Using Omi'
-                  : 'Continue without a device',
-                () => finish(false),
-                busy,
-                desktop || browser ? 'primary' : 'ghost',
-              )}
             </>
           ) : null}
         </Animated.View>
@@ -854,15 +939,32 @@ export function Onboarding({
             {displayError}
           </Text>
         )}
-        {step !== 'welcome' &&
-        step !== 'consent' &&
-        step !== 'complete' &&
-        !signingIn
-          ? action('Back', goBack, busy, 'ghost')
-          : null}
-        {setupRequired && onSignOut
-          ? action('Sign out', onSignOut, busy, 'ghost')
-          : null}
+        <View style={styles.bar}>
+          {canGoBack ? (
+            <Button
+              accessibilityLabel="Back"
+              disabled={busy}
+              onPress={goBack}
+              size="icon"
+              variant="secondary"
+              style={styles.backCircle}>
+              <MaterialIcon
+                name="arrow_back"
+                size={20}
+                color={desktop ? desktopTokens.color.ink : tokens.color.text}
+              />
+            </Button>
+          ) : null}
+          <Button
+            accessibilityLabel={primary.label}
+            disabled={primary.disabled}
+            labelStyle={desktop && styles.desktopButtonLabel}
+            onPress={primary.onPress}
+            size="large"
+            style={[styles.barPrimary, desktop && styles.desktopButton]}>
+            {primary.label}
+          </Button>
+        </View>
       </View>
     </ScrollView>
   );
@@ -874,16 +976,24 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       alignItems: 'center',
       alignSelf: 'stretch',
       flexGrow: 1,
-      justifyContent: 'center',
+      justifyContent: 'flex-start',
       paddingHorizontal: tokens.space.xxl,
       paddingVertical: tokens.space.xl,
     },
     links: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center'},
     column: {
       alignItems: 'center',
+      flexGrow: 1,
       gap: tokens.space.sm,
       maxWidth: tokens.size.content,
       width: '100%',
+    },
+    header: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      minHeight: DOTS_SIZE,
     },
     dots: {
       marginBottom: tokens.space.none,
@@ -891,15 +1001,25 @@ const createStyles = (desktopTokens: DesktopTokens) =>
     stepAnim: {
       alignItems: 'center',
       alignSelf: 'stretch',
+      flex: tokens.layout.grow,
       gap: tokens.space.sm,
+      justifyContent: 'center',
+    },
+    progressBlock: {
+      alignSelf: 'stretch',
+      gap: tokens.space.xs,
     },
     progressRow: {
       alignSelf: 'stretch',
       flexDirection: 'row',
       gap: tokens.space.xs,
-      height: tokens.space.xxs,
-      marginBottom: tokens.space.sm,
-      maxWidth: tokens.size.content,
+      height: tokens.space.xs,
+    },
+    progressCaption: {
+      color: tokens.color.menuText,
+      fontSize: 13,
+      letterSpacing: 0.2,
+      lineHeight: 16,
     },
     progressSegment: {
       backgroundColor: tokens.color.lineStrong,
@@ -907,6 +1027,37 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       flex: tokens.layout.grow,
     },
     progressSegmentFill: {backgroundColor: tokens.color.text},
+    bar: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      gap: tokens.space.md,
+    },
+    barPrimary: {flex: tokens.layout.grow},
+    backCircle: {borderRadius: tokens.radius.pill},
+    selectedRow: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: tokens.space.sm,
+      justifyContent: 'center',
+    },
+    selectedCaption: {
+      color: tokens.color.menuText,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    selectedChip: {
+      backgroundColor: tokens.color.primary,
+      borderRadius: tokens.radius.pill,
+      paddingHorizontal: tokens.space.lg,
+      paddingVertical: tokens.space.xs,
+    },
+    selectedChipLabel: {
+      color: tokens.color.textInverse,
+      ...tokens.type.label,
+    },
     title: {
       color: tokens.color.text,
       fontSize: 32,
@@ -916,7 +1067,6 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       marginBottom: tokens.space.xs,
       textAlign: 'center',
     },
-    actionStretch: {alignSelf: 'stretch'},
     stretch: {alignSelf: 'stretch'},
     copy: {
       color: tokens.color.menuText,
@@ -950,4 +1100,6 @@ const createStyles = (desktopTokens: DesktopTokens) =>
     desktopUnreachable: {color: desktopTokens.color.red},
     desktopButton: {backgroundColor: desktopTokens.color.dark},
     desktopButtonLabel: {color: desktopTokens.color.white},
+    desktopChip: {backgroundColor: desktopTokens.color.dark},
+    desktopChipLabel: {color: desktopTokens.color.white},
   });
