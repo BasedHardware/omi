@@ -1,8 +1,17 @@
 # Sync backfill UID sequencer environment boundary
 
-The legacy `sync_backfill_sequencer` and `sync_backfill_pending` collections are production-only. `OMI_ENV_STAGE=prod` plus the rollout flag enables the sequencer. Every registry read and write rejects a non-production stage, including owner leases, pending scans, claim, begin, renew, finish, defer, and redrive. Sweep and wake are inert in dev. A sequenced Cloud Task delivered to dev is ACKed as `foreign_stage` before reading a job or claiming a run lock. Dev admission and legacy direct tasks use direct dispatch.
+The legacy `sync_backfill_sequencer` and `sync_backfill_pending` collections are production-only. `OMI_ENV_STAGE=prod` plus the rollout flag enables the sequencer. Every registry read and write rejects a non-production stage, including owner leases, pending scans, claim, begin, renew, finish, defer, and redrive. Sweep and wake are inert in dev. A sequenced or legacy backfill Cloud Task delivered to dev is ACKed as `foreign_stage` before reading the sync fence, a job, a run lock, or the registry. Dev admission still uses direct dispatch, but the non-prod backfill handler ACKs those deliveries; do not resume the dev queues until the rollout checks below are complete.
 
-Prod retains the existing Firestore collections and Redis names for jobs, run locks, epochs, backfill slots, direct reservations, and the existing quiet deadline. Non-prod sync Redis keys receive a stage prefix. Non-prod sync content ledgers and dead letters use stage-suffixed collections; prod keeps its current paths. This keeps live prod state readable during the prod mixed-revision window. Roll out dev first and wait for its old Cloud Run revisions and in-flight requests to drain before rolling out prod; old dev code can still touch the shared registry until it is retired. Keep the already-paused dev sweep paused during this rollout. This code does not modify Scheduler state.
+Prod retains the existing Firestore collections and Redis names for jobs, run locks, epochs, backfill slots, direct reservations, and the existing quiet deadline. Non-prod sync Redis keys receive a stage prefix. Non-prod sync content ledgers and dead letters use stage-suffixed collections; prod keeps its current paths. This keeps live prod state readable during the prod mixed-revision window.
+
+Rollout order:
+
+1. Merge this PR. Keep the dev `sync-jobs` and `sync-backfill` queues and the dev sequencer Scheduler job paused while old dev revisions can serve requests.
+2. Deploy the new code to dev `backend-sync` and `backend-sync-backfill` at **100% traffic**.
+3. Verify no old dev revision serves traffic and no in-flight request remains on an old revision. Old code can still touch the shared prod registry until it is retired.
+4. Only then resume the dev queues. Keep the dev sequencer Scheduler job paused: the sequencer is prod-only. Roll out prod after the dev retirement check.
+
+This code does not change queues, Scheduler, traffic, or deploy state.
 
 The old `quiet_remaining()` wrote a 30-minute deadline for **all UIDs** whenever its global mode key was anything other than `on`, including missing. The observed shared deadlines and exact 30-minute resumptions follow from that branch. The old mode key has no TTL. Only `note_direct_admission()` writes `off`; available aggregates show no corresponding dev uploads. Redis eviction/reset or an unobserved direct admission cannot be distinguished from the supplied aggregates. The new guard never reads or writes the mode key and never creates a global deadline. It honors an already-written prod quiet deadline until it expires and then waits only for a direct job registered for the same UID. A missing or evicted mode key is inert.
 
@@ -18,4 +27,4 @@ From `backend/`, with separately authorized production credentials and a reviewe
 OMI_ENV_STAGE=prod .venv/bin/python scripts/recover_dev_failed_sync_backfill.py --manifest /secure/path/dev-failed-sync.jsonl
 ```
 
-The command above is a **dry run**. A later authorized recovery adds `--apply`. Apply creates a deterministic fresh job ID, claims the content ledger only if retryable, registers through the prod UID sequencer, and kicks it. A completed or busy content claim is skipped. The old terminal job is never rewritten. Review dry-run output, prod object retention, client re-upload status, and the new job's dispatch before any apply. Neither command was run against prod as part of this change.
+The command above is a **dry run**. A later authorized recovery adds `--apply`. Apply creates a deterministic fresh job ID, claims the content ledger only if retryable, registers through the prod UID sequencer, and kicks it. If an attempt stopped after a step, rerunning checks the existing job and completes the remaining steps. A completed or busy content claim is skipped. The old terminal job is never rewritten. Review dry-run output, prod object retention, client re-upload status, and the new job's dispatch before any apply. Neither command was run against prod as part of this change.

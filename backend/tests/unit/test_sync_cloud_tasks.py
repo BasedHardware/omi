@@ -3155,6 +3155,52 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'payload',
+    [
+        {'uid': 'test-uid', 'job_id': 'job-1', 'lane': 'backfill', 'sequencer_epoch': 3},
+        {'uid': 'test-uid', 'job_id': 'job-1', 'lane': 'backfill'},
+    ],
+    ids=['sequenced', 'legacy-backfill'],
+)
+async def test_dev_sync_job_route_acks_before_shared_state_access(payload):
+    module, saved_modules, mock_sync_jobs, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value=payload)
+    module.uid_sequencer.production_stage = MagicMock(return_value=False)
+    module.get_sync_ledger_fence_mode = MagicMock()
+    module._run_sync_job_body = AsyncMock()
+    module.get_raw_sync_job = MagicMock()
+    module.try_acquire_job_run_lock = MagicMock()
+    module.sync_backfill_sequencer.reset_mock()
+    module.backfill_cutover.reset_mock()
+    mock_sync_jobs.reset_mock()
+    redis_client = sys.modules['database.redis_db'].r
+    redis_client.reset_mock()
+    try:
+        route = next(route for route in module.router.routes if route.path == '/v2/sync-jobs/run')
+        response = await route.endpoint(request, task_retry_count=0)
+        assert response.status_code == 200
+        assert response.body == b'{"status":"foreign_stage"}'
+        module.get_sync_ledger_fence_mode.assert_not_called()
+        module.get_raw_sync_job.assert_not_called()
+        module.try_acquire_job_run_lock.assert_not_called()
+        module._run_sync_job_body.assert_not_awaited()
+        assert module.sync_backfill_sequencer.mock_calls == []
+        assert module.backfill_cutover.mock_calls == []
+        assert mock_sync_jobs.mock_calls == []
+        assert redis_client.mock_calls == []  # No sync_backfill:uid_sequencer:* writes.
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
 async def test_old_processing_backfill_emits_cutover_overlap_log(caplog):
     module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
     request = MagicMock()

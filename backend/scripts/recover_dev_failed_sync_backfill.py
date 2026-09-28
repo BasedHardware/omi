@@ -74,8 +74,8 @@ def _metadata_present(paths: list[str]) -> bool:
 
 
 def _requeue(row: dict[str, Any], old_job: dict[str, Any] | None) -> str:
-    from database.sync_jobs import create_sync_job, delete_sync_job, get_raw_sync_job
-    from database.sync_ledger import claim_sync_content, release_sync_content_claim_after_job_retired
+    from database.sync_jobs import TERMINAL_STATUSES, create_sync_job, get_raw_sync_job
+    from database.sync_ledger import claim_sync_content
     from database import sync_backfill_sequencer
     from utils.sync.uid_sequencer import kick
 
@@ -83,38 +83,53 @@ def _requeue(row: dict[str, Any], old_job: dict[str, Any] | None) -> str:
     old_id = row['job_id']
     old_job = old_job or {}
     new_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f'omi:dev-failed-backfill:{old_id}'))
-    if get_raw_sync_job(new_id) is not None:
-        return 'already_requeued'
     payload = dict(row['payload'])
     payload.pop('sequencer_epoch', None)
     payload['job_id'] = new_id
-    # Retain original staged paths and content identity; a new job ID avoids
-    # reviving a terminal client-visible result or an old lease epoch.
-    create_sync_job(
-        uid,
-        total_files=len(payload['raw_blob_paths']),
-        total_segments=0,
-        job_id=new_id,
-        lane='backfill',
-        capture_time_trust=old_job.get('capture_time_trust') or payload.get('capture_time_trust') or 'legacy',
-        recording_age_seconds=old_job.get('recording_age_seconds') or payload.get('recording_age_seconds'),
-        content_id=payload['content_id'],
-        dispatch_mode='sequenced',
-        ledger_fence_mode=old_job.get('ledger_fence_mode') or payload.get('ledger_fence_mode') or 'legacy',
-    )
+    existing = get_raw_sync_job(new_id)
+    if existing is not None:
+        if any(
+            existing.get(field) != value
+            for field, value in (
+                ('job_id', new_id),
+                ('uid', uid),
+                ('content_id', payload['content_id']),
+                ('lane', 'backfill'),
+                ('dispatch_mode', 'sequenced'),
+                ('created_stage', 'prod'),
+            )
+        ):
+            return 'recovery_job_mismatch'
+        if existing.get('status') in TERMINAL_STATUSES or existing.get('status') == 'processing':
+            return 'recovery_job_started_or_terminal'
+        if existing.get('status') != 'queued':
+            return 'recovery_job_unknown_status'
+    else:
+        # A retry after any later interruption keeps this deterministic job ID
+        # and completes the remaining steps below.
+        # Retain original staged paths and content identity; a new job ID avoids
+        # reviving a terminal client-visible result or an old lease epoch.
+        create_sync_job(
+            uid,
+            total_files=len(payload['raw_blob_paths']),
+            total_segments=0,
+            job_id=new_id,
+            lane='backfill',
+            capture_time_trust=old_job.get('capture_time_trust') or payload.get('capture_time_trust') or 'legacy',
+            recording_age_seconds=old_job.get('recording_age_seconds') or payload.get('recording_age_seconds'),
+            content_id=payload['content_id'],
+            dispatch_mode='sequenced',
+            ledger_fence_mode=old_job.get('ledger_fence_mode') or payload.get('ledger_fence_mode') or 'legacy',
+        )
     claimed = claim_sync_content(uid, payload['content_id'], new_id, 'backfill')
     if claimed.get('outcome') != 'owned':
-        delete_sync_job(new_id)
+        # A previous run may own this job and ledger. Keep its Redis metadata
+        # so an operator can retry after the competing claim resolves.
         return f'skipped_claim_{claimed.get("outcome", "unknown")}'
-    try:
+    if not sync_backfill_sequencer.is_registered(uid, new_id):
+        # A lost acknowledgement is safe to retry: the same job and claim
+        # remain, and registration is idempotent for this job ID.
         sync_backfill_sequencer.register_job(uid, new_id, payload, None)
-    except Exception:
-        # Registration acknowledgement may have been lost. Preserve the claim
-        # and job if it committed; the sweep can dispatch without this process.
-        if not sync_backfill_sequencer.is_registered(uid, new_id):
-            release_sync_content_claim_after_job_retired(uid, payload['content_id'], new_id)
-            delete_sync_job(new_id)
-        raise
     kick(uid)
     return new_id
 
