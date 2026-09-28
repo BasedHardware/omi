@@ -20786,6 +20786,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Didn\'t catch that — try again'**
   String get voiceQuestionNoSpeech;
+
+  /// No description provided for @siriIndexSetting.
+  ///
+  /// In en, this message translates to:
+  /// **'Use Omi with Siri & Apple Intelligence'**
+  String get siriIndexSetting;
+
+  /// No description provided for @siriIndexSettingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.'**
+  String get siriIndexSettingDescription;
+
+  /// Device diagnostics support upload
+  ///
+  /// In en, this message translates to:
+  /// **'Send to support'**
+  String get sendToSupport;
+
+  /// Device diagnostics support upload
+  ///
+  /// In en, this message translates to:
+  /// **'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.'**
+  String get deviceDiagnosticsUploadDescription;
+
+  /// Device diagnostics support upload
+  ///
+  /// In en, this message translates to:
+  /// **'Support ticket code'**
+  String get deviceDiagnosticsTicket;
+
+  /// Device diagnostics support upload
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send diagnostics to support. Please try again.'**
+  String get deviceDiagnosticsUploadFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

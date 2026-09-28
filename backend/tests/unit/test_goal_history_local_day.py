@@ -1,6 +1,6 @@
 """database.goals goal-history documents were keyed by UTC's calendar day, not the user's own.
 
-``_append_goal_progress_event`` and ``save_goal_progress_history`` both wrote/merged
+Progress writers previously wrote/merged
 ``goal_history/{date}`` with ``date = datetime.now(timezone.utc).strftime('%Y-%m-%d')``. A
 user west of UTC (e.g. US Pacific, UTC-7/8) whose local evening hasn't yet crossed UTC
 midnight has their progress update written into *tomorrow's* UTC-dated document; a user
@@ -75,25 +75,3 @@ def test_history_date_str_falls_back_to_utc_when_the_read_itself_fails():
     client.collection.return_value.document.return_value.get.side_effect = RuntimeError('boom')
     now = datetime(2026, 9, 21, 2, 30, tzinfo=timezone.utc)
     assert goals._history_date_str('u1', now, firestore_client=client) == '2026-09-21'
-
-
-def test_save_goal_progress_history_writes_the_users_local_date(monkeypatch):
-    """The document id and the stored `date` field must both be the local day, not UTC's."""
-    fixed_now = datetime(2026, 9, 21, 2, 30, tzinfo=timezone.utc)
-
-    class _FixedDatetime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return fixed_now
-
-    monkeypatch.setattr(goals, 'datetime', _FixedDatetime)
-
-    client = _client_with_time_zone('America/Los_Angeles')
-    goal_doc_ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
-    history_collection = goal_doc_ref.collection.return_value
-
-    goals.save_goal_progress_history('u1', 'g1', 42.0, firestore_client=client)
-
-    history_collection.document.assert_called_once_with('2026-09-20')
-    written_doc = history_collection.document.return_value
-    written_doc.set.assert_called_once_with({'date': '2026-09-20', 'value': 42.0, 'recorded_at': fixed_now}, merge=True)

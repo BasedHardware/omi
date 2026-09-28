@@ -522,6 +522,7 @@ jobs:
           path: |
             ~/Library/Caches/org.swift.swiftpm
           key: ${{ runner.os }}-desktop-swift-build-xcode266-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
+
           restore-keys: |
             ${{ runner.os }}-desktop-swift-build-xcode266-
 
@@ -548,6 +549,19 @@ jobs:
             ./scripts/run-swift-ci.sh --release-compile
           fi
 
+      - name: Prove stable compiler emits no Siri metadata
+        working-directory: desktop/macos
+        run: |
+          xcrun swift package --package-path Desktop describe --type json | python3 -c '
+          import json, sys
+          targets = {target["name"]: target for target in json.load(sys.stdin)["targets"]}
+          assert "SiriIntegration/SiriIntents.swift" not in targets["Omi Computer"]["sources"]
+          assert "SiriIntentServiceTests.swift" not in targets["Omi ComputerTests"]["sources"]
+          print("Xcode 26.6 SwiftPM source graph excludes Siri intents and tests")'
+          bundle="$RUNNER_TEMP/Omi-Stable-Compiler.app"
+          mkdir -p "$bundle/Contents/Resources"
+          ./scripts/embed-app-intents-metadata.sh Desktop "$bundle" Release arm64 --expect-absent
+
       # Runs here, not in the verify job: the regression needs release-mode
       # artifacts, and building them twice on two hosted Macs cost ~31 min per
       # notification-boundary change. The release planner requires this job's
@@ -566,3 +580,37 @@ jobs:
           path: |
             ~/Library/Caches/org.swift.swiftpm
           key: ${{ runner.os }}-desktop-swift-build-xcode266-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
+
+  # David's runner ruling: this previews the Siri release compiler without
+  # making every desktop PR wait for the capacity-limited xcode-27 pool.
+  desktop-siri-xcode27-advisory:
+    name: Desktop Siri Xcode 27 Advisory
+    needs: changes
+    if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
+    runs-on: xcode-27
+    continue-on-error: true
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Select Xcode 27 release toolchain
+        run: |
+          echo "DEVELOPER_DIR=/Applications/Xcode_27.0.app/Contents/Developer" >> "$GITHUB_ENV"
+          DEVELOPER_DIR=/Applications/Xcode_27.0.app/Contents/Developer xcodebuild -version | grep -Fx 'Xcode 27.0'
+      - name: Install Swift system dependencies
+        run: brew install pkg-config webp
+      - name: Build Siri and test targets with metadata constants
+        working-directory: desktop/macos/Desktop
+        run: xcrun swift build -c debug --triple arm64-apple-macosx --jobs 1 --build-tests -Xswiftc -emit-const-values
+      - name: Run Siri intent and eligibility tests
+        working-directory: desktop/macos/Desktop
+        run: xcrun swift test -c debug --triple arm64-apple-macosx --skip-build --filter SiriIntentServiceTests
+      - name: Check Metadata.appintents extraction
+        working-directory: desktop/macos
+        run: |
+          bundle="$RUNNER_TEMP/Omi-Siri-Advisory.app"
+          mkdir -p "$bundle/Contents/Resources"
+          ./scripts/embed-app-intents-metadata.sh Desktop "$bundle" Debug arm64
+          test -s "$bundle/Contents/Resources/Metadata.appintents/extract.actionsdata"

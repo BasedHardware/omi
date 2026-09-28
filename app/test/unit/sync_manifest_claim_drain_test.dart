@@ -51,6 +51,7 @@ void main() {
         uploader: (files,
             {onUploadProgress,
             conversationId,
+            captureEvidence,
             recordingSessionId,
             audioStartSeconds,
             audioEndSeconds,

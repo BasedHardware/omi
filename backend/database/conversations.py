@@ -2565,6 +2565,7 @@ def update_conversation_segments(
     *,
     started_at: datetime = None,
     audio_timeline: Optional[dict] = None,
+    capture_evidence: Optional[dict] = None,
     firestore_client: Any = None,
     invalidate_client_processing: bool = True,
     return_segments: bool = False,
@@ -2680,6 +2681,8 @@ def update_conversation_segments(
             # never reclaim it even if an older in-memory snapshot is empty.
             'has_content': bool(current.get('has_content')) or bool(accepted),
         }
+        if capture_evidence is not None:
+            update_payload['capture_evidence'] = capture_evidence
         if remap:
             update_payload['manual_speaker_assignments'] = receipt
         if finished_at:
@@ -2936,14 +2939,18 @@ def store_model_segments_result(uid: str, conversation_id: str, model_name: str,
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     segments_ref = conversation_ref.collection(model_name)
     batch = db.batch()
-    for i, segment in enumerate(segments):
+    count = 0
+    for segment in segments:
         segment_id = str(uuid.uuid4())
         segment_ref = segments_ref.document(segment_id)
         batch.set(segment_ref, segment.model_dump())
-        if i >= 400:
+        count += 1
+        if count >= 400:
             batch.commit()
             batch = db.batch()
-    batch.commit()
+            count = 0
+    if count > 0:
+        batch.commit()
 
 
 def store_model_emotion_predictions_result(
@@ -2972,7 +2979,8 @@ def store_model_emotion_predictions_result(
             batch.commit()
             batch = db.batch()
             count = 0
-    batch.commit()
+    if count > 0:
+        batch.commit()
 
 
 def get_conversation_transcripts_by_model(uid: str, conversation_id: str):

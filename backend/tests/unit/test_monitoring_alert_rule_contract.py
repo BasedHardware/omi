@@ -265,6 +265,28 @@ def test_parakeet_alerts_detect_fatal_cuda_and_ready_pod_black_holes():
         assert fatal_cuda["labels"]["impact"] == "infrastructure"
 
 
+def test_soniox_rate_limit_and_single_leg_alerts_use_live_capacity_signals():
+    rules = _rules(ALERT_SOURCES / "live-stt.json")
+    assert {"omi-soniox-rate-limited", "omi-stt-single-leg-risk"} <= rules.keys()
+
+    rate_limit = rules["omi-soniox-rate-limited"]
+    assert rate_limit["for"] == "10m"
+    assert "provider_rate_limited" in rate_limit["data"][0]["model"]["expr"]
+
+    single_leg = rules["omi-stt-single-leg-risk"]
+    expression = single_leg["data"][0]["model"]["expr"]
+    assert single_leg["for"] == "10m"
+    assert "omi_live_stt_open_streams" in expression
+    assert "omi_live_stt_accepted_total" in expression
+    assert "omi_live_stt_terminal_total" in expression
+    assert "omi_stt_provider_retired" in expression
+
+    dashboard = json.loads((MONITORING / "dashboards/gke/backend-listen.json").read_text(encoding="utf-8"))
+    panels = {panel["title"]: panel for panel in dashboard["panels"]}
+    assert "omi_live_stt_open_streams" in panels["Live STT open provider streams"]["targets"][0]["expr"]
+    assert "provider_rate_limited" in panels["Soniox rate-limited streams/sec"]["targets"][0]["expr"]
+
+
 def test_parakeet_dashboard_uses_application_request_status_labels():
     dashboard = json.loads(PARAKEET_CAPACITY_DASHBOARD.read_text(encoding="utf-8"))
 
@@ -799,7 +821,7 @@ def test_live_transcription_success_alert_measures_the_user_felt_outcome():
         assert rule["labels"]["severity"] == "critical", export_name
         assert rule["labels"]["impact"] == "user-experience", export_name
         assert rule["noDataState"] == "OK", export_name
-        assert rule["for"] == "5m", export_name
+        assert rule["for"] == "10m", export_name
         exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
         assert exprs[0] == LIVE_TRANSCRIPTION_SUCCESS_TOTAL_EXPR, export_name
         assert exprs[0] != exprs[1], export_name
@@ -810,6 +832,20 @@ def test_live_transcription_success_alert_measures_the_user_felt_outcome():
         assert math_nodes == ["$A >= 50 && $B < 0.90"], export_name
         assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
         assert (REPO / rule["annotations"]["runbook"]).is_file(), export_name
+
+
+def test_soniox_runway_and_modulate_fallback_alerts_name_the_operator_lever():
+    for export_name, rules in _all_rule_exports().items():
+        for percent in (70, 90):
+            rule = rules[f"omi-soniox-runway-{percent}"]
+            assert "top up Soniox" in rule["annotations"]["summary"], export_name
+            assert f"$B >= 0.{percent}" in rule["data"][2]["model"]["expression"], export_name
+            assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)"
+            assert (REPO / rule["annotations"]["runbook"]).is_file(), export_name
+        incident = rules["omi-modulate-failing-soniox"]
+        assert "Modulate failing" in incident["annotations"]["summary"], export_name
+        assert "traffic on Soniox" in incident["annotations"]["summary"], export_name
+        assert incident["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)"
 
 
 def test_live_transcription_success_alert_fires_when_no_transcribed_series_exists():

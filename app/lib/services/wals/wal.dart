@@ -207,6 +207,9 @@ class Wal {
   /// renders or uploads another account's recordings after an account switch.
   /// Null on records written before this field existed (pre-upgrade data).
   String? ownerUid;
+  String? captureRoot;
+  int? sourceFrameStart;
+  int? sourceClockEpoch;
 
   /// Canonical start-time location snapshot for delayed/offline finalization.
   Geolocation? geolocation;
@@ -327,6 +330,9 @@ class Wal {
     this.conversationId,
     this.recordingSessionId,
     this.ownerUid,
+    this.captureRoot,
+    this.sourceFrameStart,
+    this.sourceClockEpoch,
     this.geolocation,
     this.retryCount = 0,
     this.lastRetryAt = 0,
@@ -358,6 +364,9 @@ class Wal {
       conversationId: json['conversation_id'],
       recordingSessionId: json['recording_session_id'],
       ownerUid: json['owner_uid'],
+      captureRoot: json['capture_root'],
+      sourceFrameStart: json['source_frame_start'],
+      sourceClockEpoch: json['source_clock_epoch'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -389,6 +398,9 @@ class Wal {
       'conversation_id': conversationId,
       'recording_session_id': recordingSessionId,
       'owner_uid': ownerUid,
+      if (captureRoot != null) 'capture_root': captureRoot,
+      if (sourceFrameStart != null) 'source_frame_start': sourceFrameStart,
+      if (sourceClockEpoch != null) 'source_clock_epoch': sourceClockEpoch,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,

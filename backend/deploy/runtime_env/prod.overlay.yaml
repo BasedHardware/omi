@@ -14,6 +14,14 @@ overlay:
         # (STT_SERVICE_MODELS) puts Soniox second. Parakeet window allocation stays 0.
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
+        STT_RESILIENT_RECONNECT:
+          value: 'false'
+        STT_ROUTING_MODE:
+          value: shadow
+        SONIOX_MONTHLY_CEILING_USD:
+          value: '10000'
+        STT_LEARNED_LANGUAGE_PROFILE:
+          value: 'false'
         # 2026-09-27: first prod ramp of the Soniox-first arm for non-English multi-language
         # users (live STT language constraint, omi#19343). Compare arm=hintable vs control on
         # omi_stt_output_language_segments_total before ramping further.
@@ -363,6 +371,12 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
+            value: 'true'
+            category: rollout
+          LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED:
+            value: 'true'
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:

@@ -32,6 +32,10 @@ WINDOW_EMISSION_DROPS = Counter(
 )
 CHAIN_EXHAUSTED = Counter('omi_stt_chain_exhausted_total', 'Configured live chains that could not serve')
 LEG_ATTEMPTS = Counter('omi_stt_leg_attempts_total', 'Configured-chain connection results', ['to_mode', 'outcome'])
+RECONNECT = Counter(
+    'omi_stt_reconnect_total', 'Bounded live STT reconnect decisions', ['provider', 'reason', 'outcome']
+)
+REPLAY_SECONDS = Counter('omi_stt_replay_seconds_total', 'Live STT audio replayed after reconnect', ['provider'])
 LANGUAGE_CONSTRAINT = Counter(
     'omi_stt_language_constraint_total',
     'Language information sent on live STT connections',
@@ -40,5 +44,21 @@ LANGUAGE_CONSTRAINT = Counter(
 OUTPUT_LANGUAGE_SEGMENTS = Counter(
     'omi_stt_output_language_segments_total',
     'Finalized live STT segment language conformance',
-    ['provider', 'primary_group', 'arm', 'conformance'],
+    ['provider', 'primary_group', 'arm', 'conformance', 'profile_source'],
+)
+LEG_TRANSCRIPT_OUTCOME = Counter(
+    'omi_stt_leg_transcript_outcome_total',
+    'Provider leg outcome after VAD speech; text must arrive within the configured deadline',
+    ['provider', 'language', 'outcome'],
+)
+ROUTING_DECISION = Counter('omi_stt_routing_decisions_total', 'Health-weighted routing decisions', ['outcome'])
+FLEET_HEALTH_WRITE_DROPPED = Counter(
+    'omi_stt_fleet_health_write_dropped_total',
+    'Fleet outcome Redis writes dropped when the bounded background slots are full or unavailable',
+    ['kind'],
+)
+ROUTING_DECISION_LATENCY = Histogram(
+    'omi_stt_routing_decision_seconds',
+    'Time spent choosing the eligible live STT order without network operations',
+    buckets=(0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.05),
 )

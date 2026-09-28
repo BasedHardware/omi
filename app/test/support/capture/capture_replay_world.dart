@@ -214,6 +214,7 @@ class ScriptedUploads {
       uploader: (files,
           {onUploadProgress,
           conversationId,
+          captureEvidence,
           recordingSessionId,
           audioStartSeconds,
           audioEndSeconds,

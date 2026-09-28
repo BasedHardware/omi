@@ -73,7 +73,12 @@ from utils.conversations.deterministic_minimum import (
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
-from utils.conversations.recovery import RecoveryStructureUnavailableError, structured_is_rich
+from utils.conversations.recovery import (
+    RecoveryStructureUnavailableError,
+    recovery_minimum_terminal_enabled,
+    structured_is_rich,
+    verified_recovery_discard,
+)
 from utils.conversations.relevance import (
     RELEVANCE_DECISION_FIELD,
     Neighbor,
@@ -572,6 +577,29 @@ def _get_structured(
 
         # Only described photos reach the model (ConversationPhoto.photos_as_string).
         has_described_photos = any((photo.description or '').strip() for photo in main_conv.photos or [])
+        if trigger is ProcessingTrigger.SERVER_RECOVERY and recovery_minimum_terminal_enabled():
+            # Recovery must preserve the row, but a clear rule-level discard
+            # would never reach the notes model during ordinary capture-end
+            # processing. Return a minimum so the worker closes the job with
+            # the transcript visible, without paying for a futile LLM call.
+            ordinary = decide_relevance(
+                trigger=ProcessingTrigger.CAPTURE_END,
+                texts=[segment.text for segment in segments],
+                speech_seconds=None,
+                # An undescribed photo still contains user data, so never
+                # classify that capture as obvious transcript filler.
+                has_photos=bool(main_conv.photos),
+                user_kept=user_kept,
+                exempt=is_release_probe_uid(uid),
+                trusted_wake_word=has_wake_word_marker,
+                model_discards=None,
+                calendar_retains=lambda: _calendar_overlap_retains_conversation(
+                    uid, main_conv.started_at, main_conv.finished_at
+                ),
+            )
+            if ordinary.discard and ordinary.decided_by == 'rule':
+                logger.info('selfheal recovery skipped paid notes reason=ordinary_rule_discard')
+                return Structured(), False
         # Jev replaces conv_discard only for transcript-only conversations, the
         # population it was measured on; photos and wake-word invocations keep
         # the existing model prompt (#14835).
@@ -1602,7 +1630,7 @@ def _extract_memories_canonical(
         if _conversation_notes_v2_enabled() and conversation.started_at:
             person_ids = conversation.get_person_ids()
             people_records = users_db.get_people_by_ids(uid, list(set(person_ids))) if person_ids else []
-            prompt_people = [Person(**record) for record in people_records]
+            prompt_people = Person.deserialize_many_safe(people_records)
             calendar_context = _stored_meeting_context(conversation)
             prompt_transcript, prompt_speaker_map = conversation_transcript_and_speaker_map(
                 uid, conversation, prompt_people
@@ -2589,7 +2617,10 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
         and external_data.get('conversation_role') == 'meeting'
     ):
         try:
-            duration_s = (finished_at - started_at).total_seconds() if has_window else 0.0
+            # Transcript span, not the capture-session window (#4056): `started_at` is the
+            # streaming origin, so a short call inside a long socket would otherwise pay
+            # for calendar/screen reads the final treatment verdict then discards.
+            duration_s = conversation_duration_seconds(conversation) or 0.0
         except TypeError:
             duration_s = 0.0
         speech_s = deduplicated_transcribed_speech_seconds(getattr(conversation, 'transcript_segments', None) or [])
@@ -2613,7 +2644,12 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
             end_date=finished_at,
             limit=MAX_SCREEN_CONTEXT_ROWS,
         )
-        return context_from_screen_activity(rows, started_at=started_at, finished_at=finished_at)
+        return context_from_screen_activity(
+            rows,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=conversation_duration_seconds(conversation),
+        )
 
     context = resolve_meeting_context(
         direct=_stored_meeting_context(conversation),
@@ -2887,7 +2923,7 @@ def process_conversation(
     people: List[Person] = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     decisions: list[RelevanceDecision] = []
@@ -2909,13 +2945,22 @@ def process_conversation(
         relevance_discarded=discarded,
     )
     _attach_client_projection(conversation, client_projection)
-    if trigger is ProcessingTrigger.SERVER_RECOVERY and not structured_is_rich(structured):
+    relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
+    explicit_recovery_discard = verified_recovery_discard(
+        conversation.discarded, relevance.as_record() if relevance is not None else None
+    )
+    if (
+        trigger is ProcessingTrigger.SERVER_RECOVERY
+        and not structured_is_rich(structured)
+        and not explicit_recovery_discard
+    ):
         sys.stdout.write(
             json.dumps(
                 {
                     'event': 'selfheal_guard',
                     'outcome': 'refused',
                     'reason': 'empty_structured',
+                    'relevance_verdict': relevance.verdict if relevance is not None else 'missing',
                     'uid': uid,
                     'conversation_id': conversation.id,
                 },
@@ -2925,7 +2970,15 @@ def process_conversation(
         )
         sys.stdout.flush()
         raise RecoveryStructureUnavailableError('server recovery produced no enriched structure')
-    relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
+    if (
+        trigger is ProcessingTrigger.SERVER_RECOVERY
+        and explicit_recovery_discard
+        and not structured_is_rich(structured)
+    ):
+        sys.stdout.write(
+            json.dumps({'event': 'selfheal_guard', 'outcome': 'accepted', 'reason': 'explicit_discard'}) + '\n'
+        )
+        sys.stdout.flush()
     if relevance is not None:
         record_decision(relevance)
 

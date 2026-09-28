@@ -352,11 +352,15 @@ class ConversationApi {
     );
     return switch (sent) {
       ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data) => decodeApiRows<ServerConversation>(
+      ApiSuccess(:final data, :final truncated) => switch (decodeApiRows<ServerConversation>(
           data,
           ServerConversation.fromJson,
           fallback: recordFallback,
-        ),
+        )) {
+          ApiSuccess(:final data, :final rejectedRows) =>
+            ApiSuccess(data, rejectedRows: rejectedRows, truncated: truncated),
+          ApiFailure(:final problem) => ApiFailure(problem),
+        },
     };
   }
 
@@ -784,6 +788,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
+  String? captureEvidence,
   String? recordingSessionId,
   double? audioStartSeconds,
   double? audioEndSeconds,
@@ -810,6 +815,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     files: files,
     headers: {
       if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
+      if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
       if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
     },
     onUploadProgress: onUploadProgress,

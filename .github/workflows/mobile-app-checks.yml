@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
+      diff_base: ${{ steps.changes.outputs.diff_base }}
       has_app_codegen: ${{ steps.changes.outputs.has_app_codegen }}
       has_app_compile_smoke: ${{ steps.changes.outputs.has_app_compile_smoke }}
       has_app_ios_compile: ${{ steps.changes.outputs.has_app_ios_compile }}
@@ -521,10 +522,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Select and assert pinned Xcode
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
+
+      - name: Run macOS-scoped iOS manifest checks
+        run: |
+          python3 .github/scripts/run_checks.py --lane ci --platform macos \
+            --exclusive-platform --base "${{ needs.changes.outputs.diff_base }}" \
+            --skip-pr-body-checks
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -617,6 +624,23 @@ jobs:
         # Flavor scheme is `dev` (Debug-dev). omiWatchApp.xcscheme lacks
         # customLLDBInitFile; Flutter warns, the compile still proceeds.
         run: flutter build ios --simulator --debug --flavor dev --no-codesign -d "$IOS_SIMULATOR_UDID"
+
+      - name: Prove stable iOS compiler emits no Siri metadata
+        working-directory: app
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          bundle = Path('build/ios/iphonesimulator/Runner.app')
+          if not bundle.is_dir():
+              raise SystemExit(f'missing built Runner.app: {bundle}')
+          actions = bundle / 'Metadata.appintents/extract.actionsdata'
+          payload = json.loads(actions.read_text()) if actions.is_file() else {}
+          for kind in ('actions', 'entities'):
+              if payload.get(kind):
+                  raise SystemExit(f'Xcode 26.6 unexpectedly emitted {kind}: {sorted(payload[kind])}')
+          print('Xcode 26.6 Runner metadata: no Siri actions or entities')
+          PY
 
   dart-tests-kiritimati:
     # Parallel second pass of the hermetic Dart suite under the far timezones

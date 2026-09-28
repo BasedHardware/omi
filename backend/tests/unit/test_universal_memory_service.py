@@ -699,6 +699,46 @@ def test_locked_canonical_memory_rejects_every_mutation(service_mod, monkeypatch
     service._write_historical_overrides.assert_not_called()
 
 
+def test_delete_batch_limit_error_sanitizes_detail_and_preserves_413(service_mod, monkeypatch):
+    """The 413 detail must not disclose internal ids or data-layer limits.
+
+    The internal reason stays server-side: masked into the log line and chained
+    as the cause, while the client keeps the released 413 status with a static
+    message.
+    """
+    service = service_mod.MemoryService(db_client=_Db())
+    monkeypatch.setattr(service_mod, "read_canonical_memory_item", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        service_mod,
+        "memory_item_to_memorydb",
+        lambda _item: _memory(service_mod, "mem-1"),
+    )
+    service._write_historical_overrides = MagicMock()
+    internal_marker = "uid-secret-memory-987654321"
+    service._canonical.delete_batch = MagicMock(
+        side_effect=service_mod.CanonicalBatchMutationLimitError(
+            f"canonical memory {internal_marker} alone exceeds Firestore's 500-mutation transaction limit"
+        )
+    )
+    logged = MagicMock()
+    monkeypatch.setattr(service_mod, "logger", logged)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.delete_batch("uid-test", ["mem-1"])
+
+    error = exc_info.value
+    assert error.status_code == 413
+    assert error.detail == "Memory batch exceeds the supported size limit"
+    assert internal_marker not in error.detail
+    assert "Firestore" not in error.detail
+    assert isinstance(error.__cause__, service_mod.CanonicalBatchMutationLimitError)
+    logged.error.assert_called_once()
+    assert logged.error.call_args.kwargs["exc_info"] is True
+    logged_reason = logged.error.call_args.args[1]
+    assert internal_marker not in logged_reason
+    assert "***" in logged_reason
+
+
 def test_mixed_read_batches_canonical_suppression_status_lookups(service_mod, monkeypatch):
     db = _BatchStatusDb()
     service = service_mod.MemoryService(db_client=db)

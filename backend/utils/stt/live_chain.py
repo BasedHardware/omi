@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import logging
 import os
+import time
 from typing import TYPE_CHECKING, Awaitable, Callable
 
 if TYPE_CHECKING:
@@ -13,12 +16,14 @@ from config.stt_provider_policy import DEEPGRAM_PROVIDERS, provider_for_model_to
 from utils.observability.fallback import record_fallback
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_failure import PendingLiveFailover, fallback_reason_for_typed_death
-from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS
+from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY
+from utils.stt.live_health import health, mode as routing_mode, ordered_providers
 from utils.stt.provider_resilience import EXPECTED_REJECTIONS, close_rejected_socket, fallback_socket_is_serving
 from utils.stt.socket import STTSocket
-from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
+from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_RATE_LIMITED
 
 Connect = Callable[[], Awaitable[STTSocket | None]]
+logger = logging.getLogger(__name__)
 
 
 def failure_reason(error: BaseException) -> str:
@@ -30,6 +35,8 @@ def failure_reason(error: BaseException) -> str:
         return error.reason
     if isinstance(error, TimeoutError):
         return 'timeout'
+    if getattr(error, 'reason', None) == 'provider_rate_limited':
+        return 'provider_429'
     return 'provider_5xx'
 
 
@@ -46,6 +53,9 @@ async def connect_configured_chain(
     callbacks: dict[STTService, Connect | None],
     failed: set[str],
     models: list[str],
+    routing_uid: str | None = None,
+    routing_language: str | None = None,
+    routing_pin_primary: bool = False,
 ) -> tuple[STTSocket, STTService]:
     from utils.stt.streaming import STTService, _circuit_for_primary  # type: ignore[reportPrivateUsage]  # shared circuit owner
 
@@ -59,6 +69,28 @@ async def connect_configured_chain(
             ordered.append(service)
     callbacks = {**callbacks, primary_service: connect_primary}
     candidates = [primary_service, *ordered]
+    decision_started = time.perf_counter()
+    mode = routing_mode()
+    fleet_states = {}
+    if mode != 'off' and routing_uid:
+        configured = [service.value for service in candidates if callbacks.get(service) is not None]
+        fleet_states = health.cached_snapshot(configured, routing_language)
+        try:
+            probe_percent = float(os.getenv('STT_ROUTING_PROBE_PERCENT', '2'))
+        except ValueError:
+            probe_percent = 2.0
+        proposed = ordered_providers(configured, fleet_states, routing_uid, probe_percent=probe_percent)
+        if routing_pin_primary and primary_service.value in proposed:
+            proposed.remove(primary_service.value)
+            proposed.insert(0, primary_service.value)
+        if mode == 'on':
+            candidates = [STTService(provider) for provider in proposed]
+        elif proposed != configured:
+            # Sample a bounded diagnostic; never log uid or raw language.
+            digest = hashlib.sha256(routing_uid.encode()).digest()[0]
+            if digest < 3:
+                logger.info('live_stt_routing_shadow configured=%s proposed=%s', configured, proposed)
+    ROUTING_DECISION_LATENCY.observe(time.perf_counter() - decision_started)
     origin = primary_service.value
     prior_reason = 'circuit_open'
     attempted = False
@@ -81,7 +113,11 @@ async def connect_configured_chain(
                 # labels error_class=budget, not auth; 'auth' stays reserved
                 # for actual authentication refusals.
                 death_reason = getattr(socket, 'typed_death_reason', None)
-                raise RejectedStream(death_reason if death_reason in ACCOUNT_REJECTION_REASONS else 'provider_5xx')
+                if death_reason in ACCOUNT_REJECTION_REASONS:
+                    raise RejectedStream(death_reason)
+                if death_reason == PROVIDER_RATE_LIMITED:
+                    raise RejectedStream('provider_429')
+                raise RejectedStream('provider_5xx')
         except BaseException as error:
             if socket is not None:
                 close_rejected_socket(socket)
@@ -100,10 +136,13 @@ async def connect_configured_chain(
             record_stt_provider_connect(provider=service.value, outcome=CONNECT_FAILURE, reason=reason)
             if reason == 'auth' or account_rejection:
                 circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+                health.quarantine(service.value, 'account', circuit.account_cooldown_seconds_remaining)
             elif reason in EXPECTED_REJECTIONS:
                 on_close()
             else:
                 circuit.record_failure()
+                if circuit.state == 'open':
+                    health.quarantine(service.value, 'selection', circuit.account_cooldown_seconds_remaining)
             LEG_ATTEMPTS.labels(
                 to_mode=service.value, outcome='rejected' if reason in EXPECTED_REJECTIONS else 'error'
             ).inc()
@@ -157,6 +196,11 @@ async def connect_configured_chain(
                     outcome='degraded',
                 )
             continue
+        state = fleet_states.get(service.value)
+        if mode == 'on' and state is not None and state.bench and state.bench_until <= time.time():
+            if not health.try_admit_recovery_probe(service.value):
+                circuit.release_probe()
+                continue
         result = await attempt(service, connect)
         if result is not None:
             return result

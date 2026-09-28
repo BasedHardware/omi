@@ -5,11 +5,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
@@ -18,6 +20,10 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'guided_voice_controller.dart';
 
 class DeviceGuidedVoiceIO implements GuidedVoiceIO {
+  DeviceGuidedVoiceIO({Future<Memory?> Function(String, String, String)? createMemoryRequest})
+      : _createMemoryRequest = createMemoryRequest ?? createMemoryServer;
+
+  final Future<Memory?> Function(String, String, String) _createMemoryRequest;
   bool _local = false;
   bool _recording = false;
   bool _closed = false;
@@ -123,7 +129,10 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
     if (HardSecretDetector.contains(text)) return false;
     // The canonical create endpoint derives the memory identity from content;
     // retries keep the same confirmed content and successful answers are skipped.
-    return await createMemoryServer(text, 'private', 'system').timeout(const Duration(seconds: 30)) != null;
+    final memory = await _createMemoryRequest(text, 'private', 'system').timeout(const Duration(seconds: 30));
+    if (memory == null) return false;
+    await SiriIntegration.current.upsertMemories([memory]);
+    return true;
   }
 
   @override
