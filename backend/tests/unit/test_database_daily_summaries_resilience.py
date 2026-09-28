@@ -264,9 +264,9 @@ def test_get_daily_summaries_pagination_clamping():
     col.order_by.return_value.limit.assert_called_with(1)
     col.order_by.return_value.limit.return_value.offset.assert_called_with(0)
 
-    # Overflow limit clamped to 100
+    # Overflow limit clamped to 200 (accommodates MCP +1 pagination)
     ds_db.get_daily_summaries("u-1", limit=999, offset=20)
-    col.order_by.return_value.limit.assert_called_with(100)
+    col.order_by.return_value.limit.assert_called_with(200)
     col.order_by.return_value.limit.return_value.offset.assert_called_with(20)
 
 
