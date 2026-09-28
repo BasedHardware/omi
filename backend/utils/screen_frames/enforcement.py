@@ -162,18 +162,22 @@ def build_frame_set_response(uid: str, conversation_id: str) -> ConversationScre
     for doc in frames:
         try:
             api_frame = _to_api_frame(uid, conversation_id, doc)
-        except ValidationError:
+        except (ValidationError, KeyError, TypeError, ValueError) as e:
             # One unrepresentable stored frame must cost that frame, not the note.
             # ConversationScreenFrame still enforces the wire contract (caption
             # length, label count, two gradient stops), and a doc that violates it
             # — legacy data, a hand edit, a future write path that skips
             # ScreenFrameJudgement — used to raise straight out of this loop and
             # 500 the whole read. The user's other screenshots are fine; serve them.
+            # A partial doc fails before validation even runs: a missing id or
+            # captured_at is a KeyError, a non-numeric rank/width/height or
+            # non-iterable labels a ValueError/TypeError in _to_api_frame.
             logger.warning(
-                "screen_frame skipping unrepresentable stored frame uid=%s conversation_id=%s frame_id=%s",
+                "screen_frame skipping unrepresentable stored frame uid=%s conversation_id=%s frame_id=%s error=%s",
                 uid,
                 conversation_id,
                 doc.get('id'),
+                type(e).__name__,
             )
             continue
         if api_frame.role == 'banner':
