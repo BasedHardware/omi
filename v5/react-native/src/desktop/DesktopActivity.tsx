@@ -1,28 +1,25 @@
 import React, {useEffect, useState} from 'react';
-import {NativeModules, StyleSheet, Text, View} from 'react-native';
+import {NativeModules, Text, View} from 'react-native';
 import {FocusPressable} from '../ui/Pressable';
 import {MaterialIcon} from '../ui/MaterialIcon';
 import type {DesktopReadOutcomes} from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 
-import {DesktopReadBanner, GlanceCard} from './DesktopHome';
+import {DesktopReadBanner} from './DesktopHome';
 import {EXPLORE_CHECKLIST, type ExploreCheck} from './exploreChecklist';
 import {groupRewindFrames} from './rewindTimeline';
-import {SectionTitle} from './DesktopRows';
 import type {ActivityFilterId, TimelineGrouping} from './desktopChrome';
 import {
   UnifiedTimeline,
   type CaptureGroupSummary,
 } from './timeline/UnifiedTimeline';
-import {
-  type DesktopTokens,
-  useDesktopTheme,
-  useDesktopStyleSheets,
-} from './DesktopTheme';
+import {OmiSectionLabel} from '../design/primitives';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import type {OmiTheme} from '../design/tokens';
 
 // The Home page: one Activity timeline of conversations, recall captures, and
 // tasks. Filters and grouping live in the top chrome; this page renders the
-// merged feed, the glance line, and the getting-started checklist.
+// merged feed and the getting-started checklist.
 export const ACTIVITY_CAPTURE_PAGE = 60;
 
 /**
@@ -108,25 +105,29 @@ export function DesktopActivity({
   query: string;
   readsPhase: ReadsPhase;
 }) {
-  const styles = useDesktopStyleSheets(createStyles);
-  const {tokens: token} = useDesktopTheme();
+  const styles = useOmiStyles(createStyles);
+  const theme = useOmiTheme();
   const captures = useActivityCaptures(captureRevision);
+  // No page title and no filler hero: the filter chips already say where you
+  // are (design language: content before chrome). A read that failed outright
+  // becomes the timeline's own page state, so the inline notice only speaks
+  // for partial or in-flight reads.
+  const showNotice = !(outcomes === null && readsPhase === 'unavailable');
   return (
     <View style={styles.root} accessibilityLabel="Activity page">
-      <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
       <UnifiedTimeline
         captures={captures}
         filter={filter}
         groupBy={groupBy}
         header={
           <View>
-            <GlanceCard outcomes={outcomes} />
+            {showNotice ? (
+              <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
+            ) : null}
             {exploreDone !== null &&
             exploreDone.size < EXPLORE_CHECKLIST.length ? (
               <View accessibilityLabel="Home explore" style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <SectionTitle>Getting started</SectionTitle>
-                </View>
+                <OmiSectionLabel label="Getting started" />
                 {EXPLORE_CHECKLIST.map(item => {
                   const done = exploreDone.has(item.id);
                   return (
@@ -134,10 +135,13 @@ export function DesktopActivity({
                       key={item.id}
                       accessibilityRole="button"
                       accessibilityLabel={`Guide: ${item.label}`}
+                      accessibilityState={{checked: done}}
                       onPress={() => onExploreItem(item.id)}
-                      style={({pressed}) => [
+                      style={state => [
                         styles.exploreRow,
-                        pressed && styles.pressed,
+                        (state as {hovered?: boolean}).hovered &&
+                          styles.hovered,
+                        state.pressed && styles.pressed,
                       ]}>
                       <View
                         style={[
@@ -147,8 +151,8 @@ export function DesktopActivity({
                         {done ? (
                           <MaterialIcon
                             name="check"
-                            size={13}
-                            color={token.color.inkMuted}
+                            size={12}
+                            color={theme.color.onInk}
                           />
                         ) : null}
                       </View>
@@ -177,6 +181,7 @@ export function DesktopActivity({
             }
           }
         }}
+        onRetry={onRefresh}
         outcomes={outcomes}
         query={query}
       />
@@ -184,40 +189,32 @@ export function DesktopActivity({
   );
 }
 
-const createStyles = (token: DesktopTokens) =>
-  StyleSheet.create({
-    root: {flex: 1},
-    section: {
-      gap: 4,
-      marginTop: 14,
-    },
-    sectionHeader: {marginBottom: 4},
-    exploreRow: {
-      alignItems: 'center',
-      borderRadius: 10,
-      flexDirection: 'row',
-      gap: 10,
-      paddingVertical: 7,
-      paddingHorizontal: 6,
-    },
-    exploreTick: {
-      alignItems: 'center',
-      borderRadius: 7,
-      borderWidth: 1,
-      borderColor: token.color.inkFaint,
-      height: 18,
-      justifyContent: 'center',
-      width: 18,
-    },
-    exploreTickDone: {
-      backgroundColor: token.color.glassSelected,
-      borderColor: token.color.glassSelected,
-    },
-    exploreLabel: {
-      color: token.color.ink,
-      fontFamily: token.font,
-      fontSize: token.type.body,
-    },
-    exploreLabelDone: {color: token.color.inkMuted},
-    pressed: {opacity: 0.7},
-  });
+const createStyles = (t: OmiTheme) => ({
+  root: {flex: 1},
+  section: {marginBottom: t.space.xs},
+  exploreRow: {
+    alignItems: 'center' as const,
+    borderRadius: t.radius.row,
+    flexDirection: 'row' as const,
+    gap: t.space.md,
+    paddingVertical: t.space.sm,
+    paddingHorizontal: t.space.sm,
+  },
+  hovered: {backgroundColor: t.color.fill},
+  pressed: {backgroundColor: t.color.fillPressed},
+  exploreTick: {
+    alignItems: 'center' as const,
+    borderRadius: t.radius.pill,
+    borderWidth: 1.5,
+    borderColor: t.color.hairline,
+    height: 18,
+    justifyContent: 'center' as const,
+    width: 18,
+  },
+  exploreTickDone: {
+    backgroundColor: t.color.inkSecondary,
+    borderColor: 'transparent',
+  },
+  exploreLabel: {...t.type.body, color: t.color.ink},
+  exploreLabelDone: {color: t.color.inkSecondary},
+});

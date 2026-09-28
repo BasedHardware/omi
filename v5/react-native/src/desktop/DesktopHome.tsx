@@ -1,7 +1,6 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useMemo, useState} from 'react';
 import {
   ActivityIndicator,
-  NativeModules,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,7 +13,6 @@ import {
 } from '../desktopReadClient';
 import {matchesSearchQuery} from '../searchText';
 import type {ReadsPhase} from '../app/useDesktopReads';
-import {omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
 import {ReadStatus} from '../ui/ReadStatus';
 import {ShippingListInsert} from './ShippingStage';
@@ -23,7 +21,6 @@ import {MaterialIcon} from '../ui/MaterialIcon';
 import {EXPLORE_CHECKLIST, type ExploreCheck} from './exploreChecklist';
 import {
   EmptyCopy,
-  PageHeading,
   ReadRow,
   SectionTitle,
   TaskRow,
@@ -33,6 +30,9 @@ import {
   useDesktopTheme,
   useDesktopStyleSheets,
 } from './DesktopTheme';
+import {OmiButton} from '../design/primitives';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import type {OmiTheme} from '../design/tokens';
 
 type Props = {
   draft: string;
@@ -46,285 +46,11 @@ type Props = {
   readsPhase: ReadsPhase;
 };
 
-type GlanceFrame = {
-  capturedAtMs: number;
-  appName: string;
-  windowTitle: string;
-};
-
-const GLANCE_FRAME_FRESH_MS = 5 * 60 * 1000;
-const GLANCE_POLL_MS = 15000;
-const GLANCE_REFRESH_MS = 5 * 60 * 1000;
-
-type GlanceLine = {title: string; copy: string};
-
 /**
- * Asks the v5 worker for an AI-composed glance line (live Mac context, recent
- * topics, weather). Any failure — old backend, offline, malformed response —
- * simply leaves the local line in place, so the glance always renders
- * something.
+ * Inline read notice at the top of the list column: a quiet spinner while the
+ * day is read, and a notice with Try Again when some history failed to load.
+ * A read that failed outright is the page's own error state instead.
  */
-function useRemoteGlanceLine(input: {
-  frame: GlanceFrame | null;
-  counts: {conversations: number; memories: number; tasks: number};
-  topics: string[];
-}): GlanceLine | null {
-  const [line, setLine] = useState<GlanceLine | null>(null);
-  const fetchedAtRef = useRef(0);
-  const topicsKey = input.topics.join('\n');
-  const contextKey = `${input.frame?.appName ?? ''}|${
-    input.counts.conversations
-  }|${input.counts.memories}|${input.counts.tasks}|${topicsKey}`;
-  useEffect(() => {
-    let cancelled = false;
-    const fetchLine = async () => {
-      const backend = omiBackend;
-      if (backend === undefined || backend === null) {
-        return;
-      }
-      if ((await backend.getApiContract?.()) !== 'canonical') {
-        return;
-      }
-      const response = await backend.request({
-        id: 'desktop-glance',
-        method: 'POST',
-        expectedApiContract: 'canonical',
-        path: '/v1/desktop/glance',
-        body: JSON.stringify({
-          frontApp: input.frame?.appName.slice(0, 120) ?? '',
-          windowTitle: input.frame?.windowTitle.slice(0, 120) ?? '',
-          counts: input.counts,
-          topics: input.topics,
-          localTimeIso: new Date().toISOString(),
-        }),
-      });
-      if (cancelled || response.status !== 200 || response.body == null) {
-        return;
-      }
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(response.body);
-      } catch {
-        return;
-      }
-      if (
-        parsed !== null &&
-        typeof parsed === 'object' &&
-        typeof (parsed as {title?: unknown}).title === 'string' &&
-        typeof (parsed as {copy?: unknown}).copy === 'string'
-      ) {
-        const candidate = parsed as {title: string; copy: string};
-        if (candidate.title.length > 0 && candidate.copy.length > 0) {
-          setLine({title: candidate.title, copy: candidate.copy});
-        }
-      }
-    };
-    const now = Date.now();
-    if (now - fetchedAtRef.current >= GLANCE_REFRESH_MS) {
-      fetchedAtRef.current = now;
-      void fetchLine().catch(() => undefined);
-    }
-    const timer = setInterval(() => {
-      if (
-        !cancelled &&
-        Date.now() - fetchedAtRef.current >= GLANCE_REFRESH_MS
-      ) {
-        fetchedAtRef.current = Date.now();
-        void fetchLine().catch(() => undefined);
-      }
-    }, 30000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-    // contextKey refreshes the line when the user's live context shifts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextKey]);
-  return line;
-}
-
-// Local fun-fact fallback for when there is no live frame and the worker line
-// has not arrived: the glance is never placeholder filler, it is at least
-// genuinely fun. Deterministic rotation by time of day, no network needed.
-const GLANCE_FUN_LINES: {title: string; copy: string}[] = [
-  {
-    title: 'Three hearts',
-    copy: 'An octopus has three hearts, and two of them stop beating whenever it swims.',
-  },
-  {
-    title: 'Eternal honey',
-    copy: 'Honey found in ancient Egyptian tombs is still considered safe to eat.',
-  },
-  {
-    title: 'Older than trees',
-    copy: 'Sharks were already swimming the oceans before trees existed.',
-  },
-  {
-    title: 'Venus days',
-    copy: 'A single day on Venus stretches on longer than its whole year around the Sun.',
-  },
-  {
-    title: "Scotland's unicorn",
-    copy: 'The unicorn is the official national animal of Scotland.',
-  },
-  {
-    title: 'Shortest war',
-    copy: 'The Anglo-Zanzibar War of 1896 lasted around 38 minutes.',
-  },
-  {
-    title: 'Otter handholding',
-    copy: 'Sea otters hold hands while they sleep so they do not drift apart.',
-  },
-  {
-    title: 'Berry confusion',
-    copy: 'Bananas count as berries, while strawberries famously do not.',
-  },
-];
-
-/**
- * Reads the newest local Recall frame so At a glance can show live "now on
- * your Mac" activity. Polls cheaply while Home is mounted; any failure or a
- * stale frame simply falls back to the day summary.
- */
-function useGlanceFrame(): GlanceFrame | null {
-  const [frame, setFrame] = useState<GlanceFrame | null>(null);
-  useEffect(() => {
-    const bridge = NativeModules.OmiRewind as
-      | {
-          listFrames(input: {
-            source: 'captured';
-            query: string;
-            cursor: string | null;
-            limit: number;
-          }): Promise<{frames: GlanceFrame[]}>;
-        }
-      | undefined;
-    if (bridge == null) {
-      return;
-    }
-    let retired = false;
-    const read = async () => {
-      try {
-        const page = await bridge!.listFrames({
-          source: 'captured',
-          query: '',
-          cursor: null,
-          limit: 1,
-        });
-        if (!retired) {
-          setFrame(page.frames[0] ?? null);
-        }
-      } catch {
-        // Unavailable, auth, or owner change: Home already reports read
-        // health; the glance line just falls back.
-        if (!retired) {
-          setFrame(null);
-        }
-      }
-    };
-    void read();
-    const timer = setInterval(read, GLANCE_POLL_MS);
-    return () => {
-      retired = true;
-      clearInterval(timer);
-    };
-  }, []);
-  return frame;
-}
-
-function glanceLine({
-  frame,
-  minuteOfDay,
-}: {
-  frame: GlanceFrame | null;
-  minuteOfDay: number;
-}): {title: string; copy: string} {
-  if (
-    frame != null &&
-    Date.now() - frame.capturedAtMs < GLANCE_FRAME_FRESH_MS &&
-    frame.appName.length > 0
-  ) {
-    return {
-      title: 'Now on your Mac',
-      copy:
-        frame.windowTitle.length > 0
-          ? `${frame.appName} — ${frame.windowTitle}`
-          : frame.appName,
-    };
-  }
-  return GLANCE_FUN_LINES[
-    Math.floor(minuteOfDay / 30) % GLANCE_FUN_LINES.length
-  ];
-}
-
-export function GlanceCard({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
-  const frame = useGlanceFrame();
-  const [minuteOfDay, setMinuteOfDay] = useState(() => {
-    const now = new Date();
-    return now.getHours() * 60 + now.getMinutes();
-  });
-  const mounted = useRef(true);
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = new Date();
-      const next = now.getHours() * 60 + now.getMinutes();
-      if (mounted.current) {
-        setMinuteOfDay(next);
-      }
-    }, 20000);
-    return () => {
-      mounted.current = false;
-      clearInterval(timer);
-    };
-  }, []);
-  const conversations =
-    outcomes?.conversations?.status === 'success'
-      ? outcomes.conversations.value.items.length
-      : 0;
-  const memories =
-    outcomes?.memories?.status === 'success'
-      ? outcomes.memories.value.items.length
-      : 0;
-  const tasks =
-    outcomes?.tasks?.status === 'success'
-      ? outcomes.tasks.value.items.length
-      : 0;
-  // Recent conversation titles, then memory titles: trimmed, deduplicated,
-  // capped at six, so the worker can tailor the glance to what the user has
-  // actually been thinking about.
-  const topics = useMemo(() => {
-    const titles: string[] = [];
-    const push = (title: string) => {
-      const trimmed = title.trim();
-      if (trimmed.length > 0 && !titles.includes(trimmed)) {
-        titles.push(trimmed.slice(0, 80));
-      }
-    };
-    if (outcomes?.conversations?.status === 'success') {
-      for (const item of outcomes.conversations.value.items) {
-        push(item.title);
-      }
-    }
-    if (outcomes?.memories?.status === 'success') {
-      for (const item of outcomes.memories.value.items) {
-        push(item.title);
-      }
-    }
-    return titles.slice(0, 6);
-  }, [outcomes]);
-  const remote = useRemoteGlanceLine({
-    counts: {conversations, memories, tasks},
-    frame,
-    topics,
-  });
-  const line = remote ?? glanceLine({frame, minuteOfDay});
-  return (
-    <View accessibilityLabel="At a glance">
-      <PageHeading title={line.title} subtitle={line.copy} />
-    </View>
-  );
-}
-
 export function DesktopReadBanner({
   onRefresh,
   readsPhase,
@@ -332,13 +58,13 @@ export function DesktopReadBanner({
   onRefresh: () => void;
   readsPhase: ReadsPhase;
 }) {
-  const styles = useDesktopStyleSheets(createStyles);
-  const {tokens: token} = useDesktopTheme();
+  const notice = useOmiStyles(createNoticeStyles);
+  const theme = useOmiTheme();
   if (readsPhase === 'initial-loading' || readsPhase === 'refreshing') {
     return (
-      <View accessibilityLabel="Reading your day" style={styles.banner}>
-        <ActivityIndicator color={token.color.inkMuted} size="small" />
-        <Text style={styles.bannerText}>Reading your day…</Text>
+      <View accessibilityLabel="Reading your day" style={notice.row}>
+        <ActivityIndicator color={theme.color.inkSecondary} size="small" />
+        <Text style={notice.text}>Reading your day…</Text>
       </View>
     );
   }
@@ -347,20 +73,47 @@ export function DesktopReadBanner({
     readsPhase === 'saved-but-refresh-failed'
   ) {
     return (
-      <FocusPressable
-        accessibilityLabel="Try again"
-        accessibilityRole="button"
-        onPress={onRefresh}
-        style={({pressed}) => [styles.banner, pressed && styles.pressed]}>
-        <Text style={styles.bannerText}>
-          Some of your history isn't loaded yet.
-        </Text>
-        <Text style={styles.bannerAction}>Try again</Text>
-      </FocusPressable>
+      <View
+        accessibilityLabel="History notice"
+        style={[notice.row, notice.card]}>
+        <MaterialIcon
+          name="info"
+          size={theme.size.iconSmall}
+          color={theme.color.inkSecondary}
+        />
+        <Text style={notice.text}>Some of your history isn't loaded yet.</Text>
+        <OmiButton compact label="Try Again" onPress={onRefresh} />
+      </View>
     );
   }
   return null;
 }
+
+const createNoticeStyles = (t: OmiTheme) => ({
+  row: {
+    alignItems: 'center' as const,
+    alignSelf: 'center' as const,
+    flexDirection: 'row' as const,
+    gap: t.space.sm + 2,
+    marginTop: t.space.sm,
+    maxWidth: t.layout.listColumn,
+    minHeight: t.size.control,
+    paddingHorizontal: t.space.md,
+    paddingVertical: t.space.xs + 2,
+    width: '100%' as const,
+  },
+  card: {
+    backgroundColor: t.color.fill,
+    borderRadius: t.radius.row,
+  },
+  text: {
+    ...t.type.subhead,
+    color: t.color.inkSecondary,
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+});
 
 export function DesktopHome({
   draft,
@@ -428,7 +181,6 @@ export function DesktopHome({
           scrollEventThrottle={16}
           contentContainerStyle={styles.listContent}
           style={styles.list}>
-          <GlanceCard outcomes={outcomes} />
           {exploreDone !== null &&
           exploreDone.size < EXPLORE_CHECKLIST.length ? (
             <View accessibilityLabel="Home explore" style={styles.section}>

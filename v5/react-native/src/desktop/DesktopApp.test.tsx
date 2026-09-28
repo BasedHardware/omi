@@ -1198,7 +1198,7 @@ test('post-setup unavailable path keeps the honest banner without prove-it', () 
   });
   const tree = renderedText(renderer);
   expect(tree).toContain("Some of your history isn't loaded yet.");
-  expect(tree).toContain('Try again');
+  expect(tree).toContain('Try Again');
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Home prove-it',
@@ -1228,13 +1228,43 @@ test('keeps an unavailable read as an inline shell state', () => {
   });
   const tree = renderedText(renderer);
   expect(tree).toContain("Some of your history isn't loaded yet.");
-  expect(tree).toContain('Try again');
+  expect(tree).toContain('Try Again');
+  // Nothing loaded is an error state, never an empty timeline.
+  expect(tree).toContain('Couldn’t Load Your Activity');
+  expect(tree).not.toContain(
+    'Your timeline fills in as Omi captures your day.',
+  );
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
   ).toContain('Ask about your day…');
   expect(tree).not.toContain('Saved data unavailable');
   expect(tree).not.toContain('Sign in to Omi cloud');
   expect(tree).not.toContain('Offline · showing what is available on this Mac');
+});
+
+test('Try Again on the unavailable states retries the read', () => {
+  const onRefresh = jest.fn();
+  const failed = renderDesktop({
+    outcomes: null,
+    readsPhase: 'unavailable',
+    onRefresh,
+  });
+  act(() =>
+    failed.root
+      .find(node => node.props.accessibilityLabel === 'Try Again')
+      .props.onPress(),
+  );
+  expect(onRefresh).toHaveBeenCalledTimes(1);
+  const degraded = renderDesktop({
+    readsPhase: 'saved-but-refresh-failed',
+    onRefresh,
+  });
+  act(() =>
+    degraded.root
+      .find(node => node.props.accessibilityLabel === 'Try Again')
+      .props.onPress(),
+  );
+  expect(onRefresh).toHaveBeenCalledTimes(2);
 });
 
 test('keeps degraded read state visible away from Home', () => {

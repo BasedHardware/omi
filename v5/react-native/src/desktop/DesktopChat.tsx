@@ -1,5 +1,5 @@
 import React, {useCallback, useLayoutEffect, useRef, useState} from 'react';
-import {Platform, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Platform, ScrollView, Text, View} from 'react-native';
 import {MaterialIcon} from '../ui/MaterialIcon';
 
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
