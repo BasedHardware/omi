@@ -2035,9 +2035,9 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
     # Get suggested app models with full data (similar to /v1/apps endpoint)
     suggested_apps = []
     for app_id in conversation.suggested_summarization_apps:
-        app_data = get_available_app_by_id_with_reviews(app_id, uid)
-        if app_data:
-            app = App(**app_data)
+        # A malformed stored app is skipped, as the marketplace lists do, rather than failing the response.
+        app = App.deserialize_safe(get_available_app_by_id_with_reviews(app_id, uid))
+        if app:
             # Add user-specific data
             app.is_user_paid = get_is_user_paid_app(app.id, uid)
 
