@@ -61,7 +61,7 @@ from utils.stt.live_failure import (
 from config.stt_provider_policy import provider_for_service
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.live_metrics import RECONNECT
-from utils.stt.resilient_stream import ResilientAudio
+from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
@@ -191,7 +191,7 @@ def _get_lc3() -> Any:
     return lc3
 
 
-class ListenReceiver:
+class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.host = host
         self.channel_configs = channel_configs
@@ -238,8 +238,7 @@ class ListenReceiver:
             and int(getattr(host.request, 'sample_rate', 0) or 0) > 0
         ):
             self.capture_timeline = CaptureTimeline(sample_rate=int(host.request.sample_rate))
-            # Window admission is capped to one session per process. Its bounded
-            # 90s buffer matches the socket's maximum 2*context+2*pace (30/15).
+            # One 90s ring per session matches the maximum window buffer (30/15).
             self._window_replay_audio = ResilientAudio(int(host.request.sample_rate), ring_seconds=90)
             if resilient_reconnect_enabled():
                 self._resilient_audio = ResilientAudio(int(host.request.sample_rate))
@@ -450,33 +449,6 @@ class ListenReceiver:
                     continue
             segment['_capture_window_unavailable'] = True
         self._enqueue_stt_segments(segments, provider=provider)
-
-    def _filter_replayed_segments(
-        self, segments: List[Dict[str, Any]], provider: Optional[str]
-    ) -> List[Dict[str, Any]]:
-        ring = getattr(self, '_resilient_audio', None)
-        window_ring = getattr(self, '_window_replay_audio', None)
-        if (
-            provider == 'parakeet'
-            and window_ring is not None
-            and getattr(self.host, 'stt_model', None) == 'parakeet-window'
-        ):
-            for segment in segments:
-                end = segment.get('_capture_end_sample')
-                if isinstance(end, int):
-                    window_ring.finalize_through(end)
-        if ring is None or provider != 'soniox':
-            return segments
-        cutoff = getattr(self, '_replay_cutoff_sample', 0)
-        kept = []
-        for segment in segments:
-            end = segment.get('_capture_end_sample')
-            if isinstance(end, int) and end <= cutoff:
-                continue
-            if isinstance(end, int):
-                ring.finalize_through(end)
-            kept.append(segment)
-        return kept
 
     def _run_on_listen_loop(self, action, segments: List[Dict[str, Any]]) -> None:
         """Run a provider callback on the listen event loop.
@@ -1248,31 +1220,13 @@ class ListenReceiver:
             # Soniox drain_and_close() sets this before its final flush.  Treat a
             # finishing socket as receiver teardown even if its dead latch was
             # already set; opening a replacement here races the zero-audio close.
-            if self._stt_socket_is_finishing(self.stt_socket):
+            if socket_is_finishing(self.stt_socket):
                 return False
             if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
                 return True
             if await self._reconnect_stt_socket_locked():
                 return True
             return await self._rebuild_stt_socket_locked()
-
-    @staticmethod
-    def _stt_socket_is_finishing(socket: Any) -> bool:
-        """Read the Soniox teardown latch through managed and legacy wrappers."""
-        seen: set[int] = set()
-        pending = [socket]
-        while pending:
-            current = pending.pop()
-            if current is None or id(current) in seen:
-                continue
-            seen.add(id(current))
-            try:
-                if getattr(current, '_finishing', False):
-                    return True
-                pending.extend((getattr(current, '_conn', None), getattr(current, 'raw', None)))
-            except Exception:
-                continue
-        return False
 
     async def _reconnect_stt_socket_locked(self) -> bool:
         ring = self._resilient_audio
@@ -1287,7 +1241,7 @@ class ListenReceiver:
             or self.host.state.stt_terminal_failure
             or self._stt_rebuild is None
             or getattr(self, '_resilient_closing', False)
-            or self._stt_socket_is_finishing(socket)
+            or socket_is_finishing(socket)
         ):
             return False
         reason = getattr(socket, 'typed_death_reason', None)
@@ -1425,20 +1379,17 @@ class ListenReceiver:
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             return False
 
-        # Re-send only capture audio after the last emitted window segment.
-        # The replacement epoch maps its provider-local clock back to these
-        # original sample positions, including in the clock-only path.
-        for start, data in replay:
-            replay_send = getattr(raw, 'replay_send', None)
-            accepted = replay_send(data, start) if callable(replay_send) else raw.send(data, start_sample=start)
-            if not accepted:
-                close_rejected_socket(raw)
-                hop.note_failure('connection_lost')
-                return False
-            if self._resilient_audio is not None and self.host.stt_service == STTService.soniox:
-                self._resilient_audio.append(data, start)
-            if window_ring is not None:
-                window_ring.record_replay(dead_provider or 'parakeet', len(data) // 2)
+        # Replay capture positions after the last emitted segment.
+        if window_ring is not None and not replay_chunks(
+            raw,
+            replay,
+            source=window_ring,
+            provider=dead_provider or 'parakeet',
+            soniox=self._resilient_audio if self.host.stt_service == STTService.soniox else None,
+        ):
+            close_rejected_socket(raw)
+            hop.note_failure('connection_lost')
+            return False
 
         self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
         if window_ring is not None:
