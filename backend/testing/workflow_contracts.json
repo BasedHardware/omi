@@ -595,7 +595,7 @@
         "backend/scripts/firebase_release_probe_token.py",
         "backend/scripts/transcription_capability_probe.py",
         "backend/scripts/pre-deploy-check.sh",
-        "backend/scripts/validate_memory_maintenance_scheduler.py",
+        "backend/scripts/scheduler_reconcile.py",
         "backend/scripts/validate-backend-runtime-env.py"
       ],
       "tests": [
@@ -613,7 +613,7 @@
         "tests/unit/test_sync_two_lane.py",
         "tests/unit/test_firebase_release_probe_token.py",
         "tests/unit/test_transcription_capability_probe.py",
-        "tests/unit/test_validate_memory_maintenance_scheduler.py",
+        "tests/unit/test_scheduler_reconcile.py",
         "tests/unit/test_verify_sync_ledger_fence_transition.py"
       ],
       "checks": [],

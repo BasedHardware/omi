@@ -185,21 +185,17 @@ jobs:
           env_vars: ${{ steps.runtime-env.outputs.memory_maintenance_job_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.memory_maintenance_job_secrets }}
 
-      - name: Validate hourly Scheduler trigger
+      - name: Reconcile declared Scheduler trigger
+        env:
+          SCHEDULER_ENVIRONMENT: ${{ vars.ENV == 'prod' && 'prod' || 'dev' }}
         run: |
-          scheduler_state_file=$(mktemp)
-          trap 'rm -f "$scheduler_state_file"' EXIT
-          gcloud scheduler jobs describe "$SCHEDULER_JOB" \
-            --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" \
-            --format=json > "$scheduler_state_file"
-          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
-            --state-file "$scheduler_state_file" \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" \
-            --scheduler-job "$SCHEDULER_JOB" \
-            --cloud-run-job "$SERVICE" \
-            --scheduler-service-account "$SCHEDULER_SERVICE_ACCOUNT"
+          python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+          if [[ "$SCHEDULER_ENVIRONMENT" == dev ]]; then
+            python3 backend/scripts/scheduler_reconcile.py \
+              --environment dev --project "${{ vars.GCP_PROJECT_ID }}" --apply --jobs "$SCHEDULER_JOB"
+          fi
+          python3 backend/scripts/scheduler_reconcile.py \
+            --environment "$SCHEDULER_ENVIRONMENT" --project "${{ vars.GCP_PROJECT_ID }}" --check
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
