@@ -1,13 +1,5 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {
-  ActivityIndicator,
-  Linking,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {Linking, Platform, ScrollView, Text, View} from 'react-native';
 import {
   cloudSessionUnavailableCopy,
   loadAccountSettings,
@@ -25,15 +17,27 @@ import {
   desktopReadErrorCopy,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
-import {FocusPressable} from '../ui/Pressable';
-import {styles} from '../ui/styles';
+import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import {OmiButton, OmiPageState} from '../design/primitives';
+import type {OmiTheme} from '../design/tokens';
+import {
+  MobileGroup,
+  MobileInlineState,
+  MobileRow,
+  MobileSectionHeader,
+  MobileSegmented,
+} from '../mobile/MobileList';
+import {
+  mobileAppearanceOptions,
+  useMobileAppearanceControl,
+} from '../mobile/MobileTheme';
 import {parseSoftwarePlane, type SoftwarePlane} from '../v5BackendOrigin';
 import {
   loadDesktopPreferences,
   setDesktopPreference,
   type LiveVoiceProvider,
 } from '../desktopSettingsClient';
-import {mobileColor} from '../mobile/mobileTokens';
 
 const sections = ['Account', 'Privacy', 'Developer'] as const;
 type SettingsSection = (typeof sections)[number];
@@ -41,38 +45,105 @@ type SettingsSection = (typeof sections)[number];
 function SettingRow({
   action,
   actionLabel,
+  actionText,
   busy = false,
   copy,
   title,
 }: {
   action?: () => void;
+  /** Screen-reader name of the action; it contains the visible text. */
   actionLabel?: string;
+  /** Short Title Case button text (defaults to the action label). */
+  actionText?: string;
   busy?: boolean;
   copy: string;
   title: string;
 }) {
+  const local = useOmiStyles(createStyles);
   return (
-    <View style={[styles.cloudRow, settingsStyles.row]}>
-      <View style={[styles.cloudRowBody, settingsStyles.rowBody]}>
-        <Text style={styles.cloudRowTitle}>{title}</Text>
-        <Text style={styles.cloudRowMeta}>{copy}</Text>
-      </View>
-      {action !== undefined && actionLabel !== undefined && (
-        <FocusPressable
-          accessibilityLabel={actionLabel}
-          accessibilityRole="button"
+    <MobileRow
+      title={title}
+      subtitle={copy}
+      trailing={
+        action !== undefined && actionLabel !== undefined ? (
+          <View style={local.rowAction}>
+            <OmiButton
+              accessibilityLabel={actionLabel}
+              busy={busy}
+              compact
+              label={actionText ?? actionLabel}
+              onPress={action}
+            />
+          </View>
+        ) : undefined
+      }
+    />
+  );
+}
+
+/** A row that opens something elsewhere (the system Settings, a web page). */
+function LinkRow({
+  accessibilityLabel,
+  icon,
+  onPress,
+  subtitle,
+  title,
+}: {
+  accessibilityLabel: string;
+  icon: MaterialIconName;
+  onPress: () => void;
+  subtitle?: string;
+  title: string;
+}) {
+  const theme = useOmiTheme();
+  return (
+    <MobileRow
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      title={title}
+      subtitle={subtitle}
+      accessory={
+        <MaterialIcon
+          name={icon}
+          color={theme.color.inkTertiary}
+          size={theme.size.iconSmall}
+        />
+      }
+    />
+  );
+}
+
+function ChoiceRow<T extends string>({
+  busy,
+  copy,
+  onSelect,
+  options,
+  optionLabel,
+  title,
+  value,
+}: {
+  busy: boolean;
+  copy: string;
+  onSelect: (value: T) => void;
+  options: ReadonlyArray<{value: T; label: string}>;
+  optionLabel: (option: {value: T; label: string}) => string;
+  title: string;
+  value: T;
+}) {
+  const local = useOmiStyles(createStyles);
+  return (
+    <View>
+      <MobileRow title={title} subtitle={copy} />
+      <View style={local.choice}>
+        <MobileSegmented
+          role="button"
           disabled={busy}
-          onPress={action}
-          style={({pressed}) => [
-            styles.cloudAction,
-            settingsStyles.touchAction,
-            pressed && styles.pressed,
-          ]}>
-          <Text style={styles.cloudActionText}>
-            {busy ? 'Updating…' : actionLabel}
-          </Text>
-        </FocusPressable>
-      )}
+          options={options}
+          optionLabel={optionLabel}
+          value={value}
+          onChange={onSelect}
+        />
+      </View>
     </View>
   );
 }
@@ -95,35 +166,20 @@ function BackendPlaneRow({
         : 'New is selected, but no valid stamped v5 origin is configured.'
       : 'Old backend uses your existing Omi account and api.omi.me.';
   return (
-    <View style={[styles.cloudRow, settingsStyles.row]}>
-      <View style={[styles.cloudRowBody, settingsStyles.rowBody]}>
-        <Text style={styles.cloudRowTitle}>Backend</Text>
-        <Text style={styles.cloudRowMeta}>{copy}</Text>
-      </View>
-      <View style={settingsStyles.choices}>
-        {(['old', 'new'] as const).map(option => (
-          <FocusPressable
-            accessibilityLabel={
-              option === 'new' ? 'Use New backend' : 'Use Old backend'
-            }
-            accessibilityRole="button"
-            accessibilityState={{selected: plane === option}}
-            disabled={busy}
-            key={option}
-            onPress={() => onSelect(option)}
-            style={({pressed}) => [
-              styles.cloudAction,
-              settingsStyles.touchAction,
-              plane === option && settingsStyles.selectedChoice,
-              pressed && styles.pressed,
-            ]}>
-            <Text style={styles.cloudActionText}>
-              {option === 'new' ? 'New backend' : 'Old backend'}
-            </Text>
-          </FocusPressable>
-        ))}
-      </View>
-    </View>
+    <ChoiceRow<SoftwarePlane>
+      busy={busy}
+      copy={copy}
+      onSelect={onSelect}
+      options={[
+        {value: 'old', label: 'Old Backend'},
+        {value: 'new', label: 'New Backend'},
+      ]}
+      optionLabel={option =>
+        option.value === 'new' ? 'Use New backend' : 'Use Old backend'
+      }
+      title="Backend"
+      value={plane}
+    />
   );
 }
 
@@ -141,36 +197,18 @@ function LiveVoiceRow({
       ? 'Uses models/gemini-3.1-flash-live-preview over Gemini Live. Fails closed if GEMINI_API_KEY is missing on the server.'
       : 'Uses gpt-live-1 over OpenAI WebRTC. Fails closed if OPENAI_API_KEY is missing on the server.';
   return (
-    <View style={[styles.cloudRow, settingsStyles.row]}>
-      <View style={[styles.cloudRowBody, settingsStyles.rowBody]}>
-        <Text style={styles.cloudRowTitle}>Live voice</Text>
-        <Text style={styles.cloudRowMeta}>{copy}</Text>
-      </View>
-      <View style={settingsStyles.choices}>
-        {(
-          [
-            ['gpt_live', 'GPT Live 1'],
-            ['gemini_live', 'Gemini Live'],
-          ] as const
-        ).map(([value, label]) => (
-          <FocusPressable
-            accessibilityLabel={`Use ${label}`}
-            accessibilityRole="button"
-            accessibilityState={{selected: provider === value}}
-            disabled={busy}
-            key={value}
-            onPress={() => onSelect(value)}
-            style={({pressed}) => [
-              styles.cloudAction,
-              settingsStyles.touchAction,
-              provider === value && settingsStyles.selectedChoice,
-              pressed && styles.pressed,
-            ]}>
-            <Text style={styles.cloudActionText}>{label}</Text>
-          </FocusPressable>
-        ))}
-      </View>
-    </View>
+    <ChoiceRow<LiveVoiceProvider>
+      busy={busy}
+      copy={copy}
+      onSelect={onSelect}
+      options={[
+        {value: 'gpt_live', label: 'GPT Live 1'},
+        {value: 'gemini_live', label: 'Gemini Live'},
+      ]}
+      optionLabel={option => `Use ${option.label}`}
+      title="Live voice"
+      value={provider}
+    />
   );
 }
 
@@ -190,6 +228,9 @@ export function SettingsPage({
   signingIn?: boolean;
 }) {
   const browser = Platform.OS === 'web';
+  const theme = useOmiTheme();
+  const local = useOmiStyles(createStyles);
+  const appearance = useMobileAppearanceControl();
   const [serviceSettings, setServiceSettings] =
     useState<ServiceSettingsSnapshot | null>(null);
   const [section, setSection] = useState<SettingsSection>('Account');
@@ -277,7 +318,7 @@ export function SettingsPage({
         setError(
           code === 'service_unavailable'
             ? 'Account profile is unavailable until an owner-backed producer exists. Retry later.'
-            : 'Settings could not be loaded. Try again.',
+            : null,
         );
         setPhase('error');
       }
@@ -415,40 +456,51 @@ export function SettingsPage({
 
   const account =
     snapshot === null ? null : (
-      <>
+      <MobileGroup>
         {snapshot.profile === null ? (
-          <Text style={styles.projectionEmptyCopy}>
-            {snapshot.profileError ?? 'Account profile is unavailable.'}
-          </Text>
+          <MobileInlineState
+            label={snapshot.profileError ?? 'Account profile is unavailable.'}
+          />
         ) : (
-          <>
+          [
             <SettingRow
+              key="name"
               copy={snapshot.profile.name ?? 'Name not set on this account.'}
               title="Name"
-            />
+            />,
             <SettingRow
+              key="email"
               copy={snapshot.profile.email ?? 'Email not set on this account.'}
               title="Email"
-            />
-            <SettingRow copy={snapshot.profile.uid} title="Account id" />
-            {snapshot.profile.company !== null && (
-              <SettingRow copy={snapshot.profile.company} title="Company" />
-            )}
-            {snapshot.profile.job !== null && (
-              <SettingRow copy={snapshot.profile.job} title="Job" />
-            )}
-            {snapshot.profile.dataProtectionLevel !== null && (
+            />,
+            <SettingRow
+              key="uid"
+              copy={snapshot.profile.uid}
+              title="Account ID"
+            />,
+            snapshot.profile.company !== null && (
               <SettingRow
-                copy={snapshot.profile.dataProtectionLevel}
-                title="Data protection"
+                key="company"
+                copy={snapshot.profile.company}
+                title="Company"
               />
-            )}
-          </>
+            ),
+            snapshot.profile.job !== null && (
+              <SettingRow key="job" copy={snapshot.profile.job} title="Job" />
+            ),
+            snapshot.profile.dataProtectionLevel !== null && (
+              <SettingRow
+                key="protection"
+                copy={snapshot.profile.dataProtectionLevel}
+                title="Data Protection"
+              />
+            ),
+          ]
         )}
         {snapshot.subscription === null ? (
-          <Text style={styles.projectionEmptyCopy}>
-            {snapshot.subscriptionError ?? 'Plan is unavailable.'}
-          </Text>
+          <MobileInlineState
+            label={snapshot.subscriptionError ?? 'Plan is unavailable.'}
+          />
         ) : (
           <SettingRow
             copy={[
@@ -471,22 +523,25 @@ export function SettingsPage({
               runAction('sign-out', signOut).catch(() => undefined);
             }}
             actionLabel="Sign out"
+            actionText="Sign Out"
             busy={pending === 'sign-out'}
             copy="Leave this app's cloud session. Your Omi account stays in the cloud."
-            title="Sign out"
+            title="Sign Out"
           />
         )}
-      </>
+      </MobileGroup>
     );
 
   const privacy =
     snapshot === null ? null : (
-      <>
+      <MobileGroup>
         {snapshot.storeRecordingPermission === null ? (
-          <Text style={styles.projectionEmptyCopy}>
-            {snapshot.storeRecordingError ??
-              'Recording storage permission is unavailable.'}
-          </Text>
+          <MobileInlineState
+            label={
+              snapshot.storeRecordingError ??
+              'Recording storage permission is unavailable.'
+            }
+          />
         ) : (
           <SettingRow
             action={() => {
@@ -506,19 +561,22 @@ export function SettingsPage({
                 ? 'Turn off recording storage'
                 : 'Turn on recording storage'
             }
+            actionText={
+              snapshot.storeRecordingPermission ? 'Turn Off' : 'Turn On'
+            }
             busy={pending === 'recording'}
             copy={
               snapshot.storeRecordingPermission
                 ? 'Cloud recording storage is on.'
                 : 'Cloud recording storage is off.'
             }
-            title="Recording storage"
+            title="Recording Storage"
           />
         )}
         {snapshot.trainingOptedIn === null ? (
-          <Text style={styles.projectionEmptyCopy}>
-            {snapshot.trainingError ?? 'Training opt-in is unavailable.'}
-          </Text>
+          <MobileInlineState
+            label={snapshot.trainingError ?? 'Training opt-in is unavailable.'}
+          />
         ) : (
           <SettingRow
             action={
@@ -535,20 +593,23 @@ export function SettingsPage({
                   }
             }
             actionLabel={snapshot.trainingOptedIn ? undefined : 'Opt in'}
+            actionText="Opt In"
             busy={pending === 'training'}
             copy={
               snapshot.trainingOptedIn
                 ? 'This account has opted in to training data. The API does not expose an opt-out from here.'
                 : 'This account has not opted in to training data.'
             }
-            title="Training data"
+            title="Training Data"
           />
         )}
         {snapshot.privateCloudSync === null ? (
-          <Text style={styles.projectionEmptyCopy}>
-            {snapshot.privateCloudSyncError ??
-              'Private cloud sync is unavailable.'}
-          </Text>
+          <MobileInlineState
+            label={
+              snapshot.privateCloudSyncError ??
+              'Private cloud sync is unavailable.'
+            }
+          />
         ) : (
           <SettingRow
             action={() => {
@@ -565,201 +626,216 @@ export function SettingsPage({
                 ? 'Turn off private cloud sync'
                 : 'Turn on private cloud sync'
             }
+            actionText={snapshot.privateCloudSync ? 'Turn Off' : 'Turn On'}
             busy={pending === 'sync'}
             copy={
               snapshot.privateCloudSync
                 ? 'Private cloud sync is on.'
                 : 'Private cloud sync is off.'
             }
-            title="Private cloud sync"
+            title="Private Cloud Sync"
           />
         )}
-      </>
+      </MobileGroup>
     );
 
   const developer =
-    snapshot === null ? null : snapshot.webhooks === null ? (
-      <Text style={styles.projectionEmptyCopy}>
-        {snapshot.webhooksError ?? 'Developer webhook status is unavailable.'}
-      </Text>
-    ) : snapshot.webhooks.length === 0 ? (
-      <Text style={styles.projectionEmptyCopy}>
-        No developer webhooks were returned.
-      </Text>
-    ) : (
-      <>
-        {snapshot.webhooks.map(webhook => (
-          <SettingRow
-            copy={[
-              webhook.enabled === null
-                ? 'Status unknown'
-                : webhook.enabled
-                ? 'Enabled'
-                : 'Disabled',
-              webhook.url,
-            ]
-              .filter(item => item !== null)
-              .join(' · ')}
-            key={webhook.type}
-            title={webhook.type}
+    snapshot === null ? null : (
+      <MobileGroup>
+        {snapshot.webhooks === null ? (
+          <MobileInlineState
+            label={
+              snapshot.webhooksError ??
+              'Developer webhook status is unavailable.'
+            }
           />
-        ))}
-      </>
+        ) : snapshot.webhooks.length === 0 ? (
+          <MobileInlineState label="No developer webhooks were returned." />
+        ) : (
+          snapshot.webhooks.map(webhook => (
+            <SettingRow
+              copy={[
+                webhook.enabled === null
+                  ? 'Status unknown'
+                  : webhook.enabled
+                  ? 'Enabled'
+                  : 'Disabled',
+                webhook.url,
+              ]
+                .filter(item => item !== null)
+                .join(' · ')}
+              key={webhook.type}
+              title={webhook.type}
+            />
+          ))
+        )}
+      </MobileGroup>
     );
 
-  return (
-    <ScrollView
-      contentContainerStyle={[styles.destinationPage, settingsStyles.page]}>
-      {onOpenApps && (
+  const browserAccount =
+    serviceSettings === null ? null : (
+      <MobileGroup>
         <SettingRow
-          title="Apps"
-          copy="Manage your apps and connected services."
-          actionLabel="Open apps"
-          action={onOpenApps}
+          title="Connection Identity"
+          copy={
+            serviceSettings.identity === null
+              ? 'Identity unavailable for this connection.'
+              : [
+                  serviceSettings.identity.displayName,
+                  serviceSettings.identity.email,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || 'Identity unavailable for this connection.'
+          }
         />
-      )}
-      <View accessibilityRole="tablist" style={settingsStyles.tabs}>
-        {sections
-          .filter(label => !browser || label !== 'Developer')
-          .map(label => (
-            <FocusPressable
-              accessibilityLabel={`${label} settings`}
-              accessibilityRole="tab"
-              accessibilityState={{selected: section === label}}
-              key={label}
-              onPress={() => setSection(label)}
-              style={({pressed}) => [
-                styles.destinationTab,
-                settingsStyles.tab,
-                section === label && styles.destinationTabActive,
-                pressed && styles.pressed,
-              ]}>
-              <Text
-                style={[
-                  styles.destinationTabText,
-                  section === label && styles.destinationTabTextActive,
-                ]}>
-                {label}
-              </Text>
-            </FocusPressable>
-          ))}
-      </View>
-      {!browser && section === 'Developer' && (
-        <View style={[styles.destinationSection, settingsStyles.group]}>
-          <Text style={styles.destinationSectionTitle}>AI & connection</Text>
-          {softwarePlane !== null && (
-            <BackendPlaneRow
-              busy={pending === 'software-plane' || chatBusy}
-              onSelect={plane => {
-                selectSoftwarePlane(plane).catch(() => undefined);
-              }}
-              plane={softwarePlane}
-              stampedOrigin={stampedV5Origin}
-            />
-          )}
-          <LiveVoiceRow
-            busy={pending === 'live-voice'}
-            onSelect={provider => {
-              selectLiveVoiceProvider(provider).catch(() => undefined);
-            }}
-            provider={liveVoiceProvider}
+        {serviceSettings.entitlement !== null &&
+        ['chat', 'transcription_seconds'].includes(
+          serviceSettings.entitlement.limitKey,
+        ) ? (
+          <SettingRow
+            title={
+              serviceSettings.entitlement.limitKey === 'chat'
+                ? 'Chat Usage'
+                : 'Transcription Usage'
+            }
+            copy={`${serviceSettings.entitlement.used}${
+              serviceSettings.entitlement.limit === null
+                ? ''
+                : ` of ${serviceSettings.entitlement.limit}`
+            } ${
+              serviceSettings.entitlement.limitKey === 'chat'
+                ? 'requests'
+                : 'seconds'
+            } used`}
+          />
+        ) : (
+          <SettingRow
+            title="Usage"
+            copy="Usage allowance is unavailable for this connection."
+          />
+        )}
+      </MobileGroup>
+    );
+
+  const sectionOptions = sections
+    .filter(label => !browser || label !== 'Developer')
+    .map(label => ({value: label, label}));
+
+  return (
+    <ScrollView contentContainerStyle={local.page}>
+      {appearance !== null && (
+        <View style={local.block}>
+          <MobileSectionHeader title="Appearance" />
+          <MobileSegmented
+            accessibilityLabel="Appearance"
+            options={mobileAppearanceOptions}
+            optionLabel={option => `${option.label} appearance`}
+            value={appearance.appearance}
+            onChange={appearance.setAppearance}
           />
         </View>
       )}
-      <View style={[styles.destinationSection, settingsStyles.group]}>
-        <Text style={styles.destinationSectionTitle}>{section}</Text>
+      {onOpenApps && (
+        <MobileGroup>
+          <MobileRow
+            accessibilityLabel="Open apps"
+            onPress={onOpenApps}
+            leading={
+              <MaterialIcon
+                name="extension"
+                color={theme.color.inkSecondary}
+                size={theme.size.icon}
+              />
+            }
+            title="Apps"
+            subtitle="Manage your apps and connected services."
+            accessory={
+              <MaterialIcon
+                name="chevron_right"
+                color={theme.color.inkTertiary}
+                size={theme.size.icon}
+              />
+            }
+          />
+        </MobileGroup>
+      )}
+      <View style={local.block}>
+        <MobileSegmented
+          accessibilityLabel="Settings sections"
+          options={sectionOptions}
+          optionLabel={option => `${option.label} settings`}
+          value={section}
+          onChange={setSection}
+        />
+      </View>
+      {!browser && section === 'Developer' && (
+        <View style={local.block}>
+          <MobileSectionHeader title="AI & Connection" />
+          <MobileGroup>
+            {softwarePlane !== null && (
+              <BackendPlaneRow
+                busy={pending === 'software-plane' || chatBusy}
+                onSelect={plane => {
+                  selectSoftwarePlane(plane).catch(() => undefined);
+                }}
+                plane={softwarePlane}
+                stampedOrigin={stampedV5Origin}
+              />
+            )}
+            <LiveVoiceRow
+              busy={pending === 'live-voice'}
+              onSelect={provider => {
+                selectLiveVoiceProvider(provider).catch(() => undefined);
+              }}
+              provider={liveVoiceProvider}
+            />
+          </MobileGroup>
+        </View>
+      )}
+      <View style={local.block}>
         {phase === 'loading' && snapshot === null ? (
-          <>
-            <ActivityIndicator color="#888888" />
-            <Text style={styles.projectionEmptyCopy}>Loading account…</Text>
-          </>
-        ) : phase === 'signed-out' || phase === 'error' ? (
-          <>
-            <Text style={styles.projectionEmptyCopy}>
-              {error ?? desktopBackendUnauthorizedCopy}
-            </Text>
-            {phase === 'signed-out' && onSignIn !== undefined && (
-              <FocusPressable
-                accessibilityLabel="Sign in"
-                accessibilityRole="button"
-                disabled={signingIn}
+          <OmiPageState kind="loading" label="Loading account…" />
+        ) : phase === 'signed-out' ? (
+          <View style={local.state}>
+            <OmiPageState
+              kind="empty"
+              icon="person"
+              title="Signed Out"
+              message={error ?? desktopBackendUnauthorizedCopy}
+            />
+            {onSignIn !== undefined && (
+              <OmiButton
+                busy={signingIn}
+                label="Sign In"
+                variant="primary"
                 onPress={() => {
                   signIn().catch(() => undefined);
                 }}
-                style={({pressed}) => [
-                  styles.cloudAction,
-                  settingsStyles.touchAction,
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={styles.cloudActionText}>
-                  {signingIn ? 'Signing in…' : 'Sign in'}
-                </Text>
-              </FocusPressable>
+              />
             )}
-            {phase === 'error' && error !== desktopBackendConfigurationCopy && (
-              <FocusPressable
-                accessibilityLabel="Retry settings"
-                accessibilityRole="button"
-                onPress={() => {
-                  reload().catch(() => undefined);
-                }}
-                style={({pressed}) => [
-                  styles.cloudAction,
-                  settingsStyles.touchAction,
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={styles.cloudActionText}>Retry</Text>
-              </FocusPressable>
-            )}
-          </>
+          </View>
+        ) : phase === 'error' ? (
+          <View accessibilityRole="alert">
+            <OmiPageState
+              kind="error"
+              title="Couldn’t Load Settings"
+              message={error ?? undefined}
+              onRetry={
+                error === desktopBackendConfigurationCopy
+                  ? undefined
+                  : () => {
+                      reload().catch(() => undefined);
+                    }
+              }
+            />
+          </View>
         ) : browser ? (
           section === 'Account' && serviceSettings ? (
-            <>
-              <SettingRow
-                title="Connection identity"
-                copy={
-                  serviceSettings.identity === null
-                    ? 'Identity unavailable for this connection.'
-                    : [
-                        serviceSettings.identity.displayName,
-                        serviceSettings.identity.email,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ') ||
-                      'Identity unavailable for this connection.'
-                }
-              />
-              {serviceSettings.entitlement !== null &&
-              ['chat', 'transcription_seconds'].includes(
-                serviceSettings.entitlement.limitKey,
-              ) ? (
-                <SettingRow
-                  title={
-                    serviceSettings.entitlement.limitKey === 'chat'
-                      ? 'Chat usage'
-                      : 'Transcription usage'
-                  }
-                  copy={`${serviceSettings.entitlement.used}${
-                    serviceSettings.entitlement.limit === null
-                      ? ''
-                      : ` of ${serviceSettings.entitlement.limit}`
-                  } ${
-                    serviceSettings.entitlement.limitKey === 'chat'
-                      ? 'requests'
-                      : 'seconds'
-                  } used`}
-                />
-              ) : (
-                <SettingRow
-                  title="Usage"
-                  copy="Usage allowance is unavailable for this connection."
-                />
-              )}
-            </>
+            browserAccount
           ) : (
-            <Text style={styles.projectionEmptyCopy}>
-              Privacy preferences are unavailable for this connection.
-            </Text>
+            <MobileGroup>
+              <MobileInlineState label="Privacy preferences are unavailable for this connection." />
+            </MobileGroup>
           )
         ) : section === 'Account' ? (
           account
@@ -769,68 +845,67 @@ export function SettingsPage({
           developer
         )}
         {actionError !== null && (
-          <Text style={styles.cloudActionError}>{actionError}</Text>
+          <Text accessibilityRole="alert" style={local.actionError}>
+            {actionError}
+          </Text>
         )}
       </View>
-      <View style={[styles.destinationSection, settingsStyles.group]}>
+      <MobileGroup>
         {!browser && (
-          <SettingRow
-            title="App permissions"
-            copy="Review permissions for Omi in your device settings."
-            actionLabel="Open app permissions"
-            action={() => {
+          <LinkRow
+            accessibilityLabel="Open app permissions"
+            icon="open_in_new"
+            title="App Permissions"
+            subtitle="Review permissions for Omi in your device settings."
+            onPress={() => {
               Linking.openSettings().catch(() =>
                 setActionError('Device settings could not be opened.'),
               );
             }}
           />
         )}
-        <SettingRow
-          title="Privacy policy"
-          copy="How Omi handles your information."
-          actionLabel="Read privacy policy"
-          action={() => {
+        <LinkRow
+          accessibilityLabel="Read privacy policy"
+          icon="open_in_new"
+          title="Privacy Policy"
+          subtitle="How Omi handles your information."
+          onPress={() => {
             Linking.openURL('https://www.omi.me/pages/privacy').catch(() =>
               setActionError('The privacy policy could not be opened.'),
             );
           }}
         />
-        <SettingRow
-          title="Terms of service"
-          copy="Terms for using Omi."
-          actionLabel="Read terms of service"
-          action={() => {
+        <LinkRow
+          accessibilityLabel="Read terms of service"
+          icon="open_in_new"
+          title="Terms of Service"
+          subtitle="Terms for using Omi."
+          onPress={() => {
             Linking.openURL('https://www.omi.me/pages/terms-of-service').catch(
               () => setActionError('The terms of service could not be opened.'),
             );
           }}
         />
-      </View>
+      </MobileGroup>
     </ScrollView>
   );
 }
 
-const settingsStyles = StyleSheet.create({
-  page: {paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 16},
-  tabs: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
-  tab: {
-    minHeight: 44,
-    flexGrow: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+const createStyles = (t: OmiTheme) => ({
+  page: {
+    gap: t.space.xl,
+    paddingHorizontal: t.layout.pageGutter.mobile,
+    paddingTop: t.space.xs,
+    paddingBottom: t.space.xxl,
   },
-  group: {
-    borderRadius: 22,
-    backgroundColor: mobileColor.surface,
-    borderColor: mobileColor.border,
-    padding: 20,
+  block: {gap: t.space.xs},
+  state: {alignItems: 'center' as const, gap: t.space.md},
+  rowAction: {paddingRight: t.space.sm},
+  choice: {paddingHorizontal: t.space.lg, paddingBottom: t.space.md},
+  actionError: {
+    ...t.type.subhead,
+    color: t.color.danger,
+    paddingHorizontal: t.space.xs,
+    paddingTop: t.space.sm,
   },
-  row: {flexWrap: 'wrap', gap: 8, paddingTop: 16, marginTop: 16},
-  rowBody: {minWidth: 160},
-  choices: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
-  selectedChoice: {
-    backgroundColor: mobileColor.surfaceRaised,
-    borderColor: mobileColor.textMuted,
-  },
-  touchAction: {minHeight: 44, marginTop: 0},
 });
