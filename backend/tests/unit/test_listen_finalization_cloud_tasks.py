@@ -240,7 +240,7 @@ def test_durable_finalization_acceptance_counts_only_a_new_outbox_job(monkeypatc
 
     assert result['route'] == 'pusher'
     accepted.assert_called_once_with('capture_finalization')
-    client_accepted.assert_called_once_with('conversation_finalization', 'mobile_android', 'unknown')
+    client_accepted.assert_called_once_with('conversation_finalization', 'mobile_android')
 
 
 def test_durable_finalization_redelivery_does_not_count_as_new_traffic(monkeypatch):
