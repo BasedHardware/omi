@@ -83,6 +83,27 @@ final class CaptureAttemptOutcomeTelemetryTests: XCTestCase {
     XCTAssertEqual(attemptId.count, 36, "attempt_id is an opaque UUID string")
   }
 
+  func testArmedRetryOutcomeCarriesEpisodeAndDistinctFailureReason() {
+    var probe = CaptureAttemptOutcomeState(
+      attemptId: "probe-attempt", mode: "always", intent: .auto,
+      armedEpisodeID: "opaque-episode")
+    probe.noteErrorTerminal()
+    let failed = PostHogManager.captureAttemptOutcomeProperties(probe, finalizationReason: .silentMicExhausted)
+    XCTAssertEqual(failed["armed_retry"] as? Bool, true)
+    XCTAssertEqual(failed["armed_episode_id"] as? String, "opaque-episode")
+    XCTAssertEqual(failed["terminal_reason"] as? String, "armed_retry_silent")
+    XCTAssertEqual(failed["attempt_id"] as? String, "probe-attempt")
+
+    let otherFailure = PostHogManager.captureAttemptOutcomeProperties(probe, finalizationReason: .microphoneUnavailable)
+    XCTAssertEqual(otherFailure["terminal_reason"] as? String, "armed_retry_failed")
+    let recovered = PostHogManager.captureAttemptOutcomeProperties(
+      CaptureAttemptOutcomeState(mode: "always", intent: .auto, armedEpisodeID: "opaque-episode"),
+      finalizationReason: .userStop)
+    XCTAssertEqual(recovered["armed_retry"] as? Bool, true)
+    XCTAssertEqual(recovered["armed_episode_id"] as? String, "opaque-episode")
+    XCTAssertEqual(recovered["terminal_reason"] as? String, "cancelled")
+  }
+
   func testPendingPayloadCarriesOnlyTheSurvivingJoinKey() {
     let properties = PostHogManager.captureAttemptPendingProperties(attemptId: "fixed-attempt-id")
 

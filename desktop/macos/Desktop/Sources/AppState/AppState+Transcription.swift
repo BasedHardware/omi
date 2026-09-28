@@ -272,7 +272,8 @@ extension AppState {
         launchContext: captureContext.rawValue,
         secondsSinceLaunch: CaptureLaunchContext.timeBucket(
           Date().timeIntervalSince(CaptureLaunchContext.launchedAt)),
-        updateAttemptID: captureContext == .updateRelaunch ? CaptureLaunchContext.updateAttemptID : nil)
+        updateAttemptID: captureContext == .updateRelaunch ? CaptureLaunchContext.updateAttemptID : nil,
+        armedEpisodeID: armedRetry ? armedMicrophoneRecovery.episodeID : nil)
       CaptureLaunchContext.hasStartedCapture = true
       AudioLevelMonitor.shared.reset()
       RecordingTimer.shared.start()
@@ -507,6 +508,7 @@ extension AppState {
       let useLocalSTT = sttSession.useLocalSTT
       let localService = localMicService
       let mixer = audioMixer
+      let probeAudioGate = armedMicrophoneRecovery.outboundAudioGate
       // A dictation app holding the mic replaces the chunk with silence (`DictationMicSuppression`).
       let dictationGate = ensureDictationMicSuppressionMonitor().gate
       let firstAudioFrame = CaptureAttemptFirstAudioFrameLatch()
@@ -535,7 +537,9 @@ extension AppState {
             }
           }
           if useLocalSTT {
-            localService?.appendAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              localService?.appendAudio(chunk)
+            }
           } else {
             mixer?.setMicAudio(audioData)
           }
@@ -582,6 +586,7 @@ extension AppState {
       let useLocalSTT = sttSession.useLocalSTT
       let localSystem = localSystemService
       let mixer = audioMixer
+      let probeAudioGate = armedMicrophoneRecovery.outboundAudioGate
       let firstAudioFrame = CaptureAttemptFirstAudioFrameLatch()
       try await systemService.startCapture(
         onAudioChunk: { [weak self] audioData in
@@ -589,7 +594,9 @@ extension AppState {
             self?.captureAttempt?.noteFirstAudioFrame()
           }
           if useLocalSTT {
-            localSystem?.appendAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              localSystem?.appendAudio(chunk)
+            }
           } else {
             mixer?.setSystemAudio(audioData)
           }

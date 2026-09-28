@@ -1,0 +1,3 @@
+{
+  "change": "Fixed automatic microphone retries opening the mic while you are away and counting silent retry probes as recording errors"
+}
