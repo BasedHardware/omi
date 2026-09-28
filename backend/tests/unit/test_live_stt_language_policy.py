@@ -78,6 +78,7 @@ def test_hint_vocabulary_filters_each_code_and_preserves_identification(monkeypa
 
 def test_learned_thresholds_cap_and_hint_vocabulary(monkeypatch):
     assert learned_expected('en', [{'pt': 8, 'en': 2}, {'pt': 8, 'en': 2}]) == ()
+    assert learned_expected('en', [{'pt': 10}, {'en': 10}, {'en': 10}]) == ('en',)
     sessions = [{'pt': 7, 'en': 2, 'es': 1, 'mt': 4}] * 3
     assert learned_expected('en', sessions) == ('pt', 'en')
     assert learned_expected('fr', [{'pt': 4, 'es': 3, 'de': 2, 'en': 1}] * 3) == ('fr', 'pt', 'en')
@@ -214,6 +215,14 @@ def test_unknown_primary_can_learn_when_enabled(monkeypatch):
     monkeypatch.setenv('STT_LEARNED_LANGUAGE_PROFILE', 'true')
     unknown = LiveLanguageProfile.create('multi', multi=True, uid='u')
     assert classify_output('a' * 30, unknown, 'it') == ('undetermined', 'it')
+
+
+def test_unknown_primary_learning_stays_out_of_scope(monkeypatch):
+    monkeypatch.setenv('STT_LEARNED_LANGUAGE_PROFILE', 'true')
+    out_of_scope = LiveLanguageProfile.create('multi', multi=True, uid='u', in_scope=False)
+    single_language = LiveLanguageProfile.create('multi', multi=False, uid='u')
+    assert classify_output('a' * 30, out_of_scope, 'it') == ('undetermined', None)
+    assert classify_output('a' * 30, single_language, 'it') == ('undetermined', None)
 
 
 @pytest.mark.asyncio

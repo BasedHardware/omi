@@ -36,8 +36,10 @@ def learned_expected(primary: str, sessions: list[dict[str, int]]) -> tuple[str,
     if len(sessions) < MIN_LEARNED_SESSIONS:
         return ()
     counts = Counter[str]()
+    session_presence = Counter[str]()
     for session in sessions:
         counts.update(session)
+        session_presence.update(session.keys())
     total = sum(counts.values())
     if not total:
         return ()
@@ -46,7 +48,11 @@ def learned_expected(primary: str, sessions: list[dict[str, int]]) -> tuple[str,
         (
             code
             for code, count in counts.items()
-            if code != 'en' and count / total >= 0.2 and soniox_accepts_language_hint(code) and code not in declared
+            if code != 'en'
+            and count / total >= 0.2
+            and session_presence[code] >= MIN_LEARNED_SESSIONS
+            and soniox_accepts_language_hint(code)
+            and code not in declared
         ),
         key=lambda code: (-counts[code], code),
     )
@@ -65,6 +71,10 @@ class LiveLanguageProfile:
     multi: bool
     in_scope: bool = True
     source: str = 'declared'
+
+    @property
+    def learning_enabled(self) -> bool:
+        return self.in_scope and self.multi and os.getenv('STT_LEARNED_LANGUAGE_PROFILE', 'false').lower() == 'true'
 
     @classmethod
     def create(
@@ -147,7 +157,7 @@ def classify_output(
     text: str, profile: LiveLanguageProfile, provider_language: str | None = None
 ) -> tuple[str, str | None]:
     """Classify one finalized segment; caller runs uncertain detection off-loop."""
-    if not profile.expected and os.getenv('STT_LEARNED_LANGUAGE_PROFILE', 'false').lower() != 'true':
+    if not profile.expected and not profile.learning_enabled:
         return 'undetermined', None
     language = normalized_stt_language(provider_language)
     if not re.fullmatch(r'[a-z]{2,3}', language):
@@ -213,7 +223,7 @@ class LiveLanguageObservations:
         text = str(segment.get('text') or '')[:MAX_DETECTION_CHARS]
         if (
             language
-            or (not self.profile.expected and os.getenv('STT_LEARNED_LANGUAGE_PROFILE', 'false').lower() != 'true')
+            or (not self.profile.expected and not self.profile.learning_enabled)
             or sum(c.isalpha() for c in text) < MIN_LETTERS
         ):
             self._record(provider, classify_output(text, self.profile, language))
@@ -262,10 +272,13 @@ class LiveLanguageObservations:
             and self.profile.multi
             and self.language_counts
             and not self.learning_scheduled
-            and os.getenv('STT_LEARNED_LANGUAGE_PROFILE', 'false').lower() == 'true'
+            and self.profile.learning_enabled
         ):
             self.learning_scheduled = True
-            start_background_task(self._persist(uid, dict(self.language_counts)), name='stt_learned_language_write')
+            try:
+                start_background_task(self._persist(uid, dict(self.language_counts)), name='stt_learned_language_write')
+            except Exception:
+                self.warn_once()
 
     async def _persist(self, uid: str, counts: dict[str, int]) -> None:
         try:
