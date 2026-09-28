@@ -62,23 +62,26 @@ struct DesktopOmnibarRow: View {
             if captureAvailable, let onToggleCapture {
                 ChromeIconButton(
                     label: captureActive ? "Stop screen capture" : "Start screen capture",
-                    active: captureActive
+                    active: captureActive,
+                    action: onToggleCapture
                 ) {
                     DesktopIcon.monitor
                         .frame(width: 17, height: 17)
                         .foregroundStyle(captureActive ? tokens.red : tokens.ink)
                 }
-                .onTapGesture(perform: onToggleCapture)
             }
 
-            ChromeIconButton(label: "Settings", active: route == DesktopRoute.settings) {
+            ChromeIconButton(
+                label: "Settings",
+                active: route == DesktopRoute.settings,
+                action: {
+                    // The gear toggles: it opens Settings and also walks back Home.
+                    onNavigate(route == DesktopRoute.settings ? DesktopRoute.home : DesktopRoute.settings)
+                }
+            ) {
                 DesktopIcon.gear
                     .frame(width: 17, height: 17)
                     .foregroundStyle(tokens.ink)
-            }
-            .onTapGesture {
-                // The gear toggles: it opens Settings and also walks back Home.
-                onNavigate(route == DesktopRoute.settings ? DesktopRoute.home : DesktopRoute.settings)
             }
         }
         .frame(height: DesktopLayout.omnibarHeight)
@@ -104,9 +107,10 @@ struct DesktopOmnibarRow: View {
             .foregroundStyle(tokens.ink)
             .focused($omnibarFocused)
             .onSubmit {
-                if mode != OmnibarMode.ask || !store.composerText.trimmingCharacters(in: .whitespaces).isEmpty {
-                    onSend()
-                }
+                // Upstream fires onSend for both modes; the draft is the
+                // omnibar text (`store.searchQuery`), not the mobile
+                // composer. Ask answers inline, Search recalls.
+                onSend()
             }
             .frame(height: 32)
             .accessibilityLabel(mode == OmnibarMode.ask ? "Ask Omi" : "Search Recall")
@@ -170,7 +174,6 @@ struct DesktopOmnibarRow: View {
     private var sendButton: some View {
         let emptyAsk = mode == OmnibarMode.ask
             && store.searchQuery.trimmingCharacters(in: .whitespaces).isEmpty
-            && store.composerText.trimmingCharacters(in: .whitespaces).isEmpty
         return Button {
             if canStop {
                 onStop()
@@ -211,12 +214,13 @@ struct DesktopOmnibarRow: View {
 struct ChromeIconButton<Icon: View>: View {
     let label: String
     var active = false
+    let action: () -> Void
     @ViewBuilder let icon: () -> Icon
 
     @Environment(\.desktopTokens) private var tokens
 
     var body: some View {
-        Button(action: {}) {
+        Button(action: action) {
             icon()
                 .frame(width: 34, height: 34)
                 .background(

@@ -170,6 +170,7 @@ public struct DesktopSurface: View {
                         DesktopActivityPage(
                             filter: filter,
                             groupBy: groupBy,
+                            query: timelineQuery,
                             exploreDone: exploreDone,
                             onExploreItem: startExploreGuide,
                             onOpenCapture: { capture in
@@ -250,6 +251,23 @@ public struct DesktopSurface: View {
 
     private var v5Shell: some View {
         VStack(alignment: .leading, spacing: 14) {
+            // Row 1: the pages rail (DesktopChromeV5); the omnibar drops to
+            // row 2 and shares every control with the v5.1 chrome.
+            DesktopRailRow(activeId: v5Selection) { next in
+                withAnimation(DesktopMotion.navAnimation(reduceMotion)) {
+                    chatOpen = false
+                    inlineAnswerOpen = false
+                    v5Selection = next
+                    if next == "Chat" {
+                        mode = OmnibarMode.ask
+                    } else if next == "Rewind" {
+                        mode = OmnibarMode.search
+                    } else if mode == OmnibarMode.search {
+                        mode = OmnibarMode.ask
+                    }
+                }
+            }
+
             DesktopOmnibarRow(
                 store: store,
                 mode: mode,
@@ -263,7 +281,8 @@ public struct DesktopSurface: View {
                 },
                 onSend: {
                     if mode == OmnibarMode.ask {
-                        chatOpen = true
+                        // Upstream openChat: the ask lands on the Chat page.
+                        v5Selection = "Chat"
                         let text = store.searchQuery
                         Task {
                             await store.sendChat(text)
@@ -301,10 +320,13 @@ public struct DesktopSurface: View {
                 switch v5Selection {
                 case "Chat":
                     stagePage(key: "Chat") {
-                        DesktopChatTranscript(onSuggest: { prompt in
-                            mode = OmnibarMode.ask
-                            store.searchQuery = prompt
-                        })
+                        DesktopChatTranscript(
+                            notice: visibleChatError(session, store.chatErrorCopy),
+                            onSuggest: { prompt in
+                                mode = OmnibarMode.ask
+                                store.searchQuery = prompt
+                            }
+                        )
                     }
                 case "Conversations":
                     stagePage(key: "Conversations") {
@@ -327,6 +349,7 @@ public struct DesktopSurface: View {
                         DesktopActivityPage(
                             filter: filter,
                             groupBy: groupBy,
+                            query: timelineQuery,
                             exploreDone: exploreDone,
                             onExploreItem: startExploreGuide,
                             onOpenCapture: { _ in v5Selection = "Rewind" }
@@ -371,6 +394,12 @@ public struct DesktopSurface: View {
         parseExploreProgress(store.preferences.exploreProgress)
     }
 
+    /// The omnibar draft filters the timeline only in Search (Recall) mode —
+    /// upstream `query={mode === 'Search' ? draft : ''}`.
+    private var timelineQuery: String {
+        mode == OmnibarMode.search ? store.searchQuery : ""
+    }
+
     /// Arriving at a surface ticks its checklist item off, once, forever
     /// (progress persists through `omi.onboarding.exploreProgress`, per-IA).
     private func markArrival() {
@@ -391,6 +420,7 @@ public struct DesktopSurface: View {
         }
         if store.preferences.uiVersion == DesktopUiVersion.v5 {
             switch v5Selection {
+            case "Chat": record(ExploreCheck.chat)
             case "Rewind": record(ExploreCheck.recall)
             case "Conversations": record(ExploreCheck.conversations)
             case "Tasks": record(ExploreCheck.tasks)

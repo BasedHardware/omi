@@ -328,8 +328,16 @@ struct DesktopChatOverlay: View {
 
     var body: some View {
         ZStack {
-            // Scrim: tapping restores the previous page.
-            Color.black.opacity(0.16)
+            // Scrim: tapping restores the previous page. Upstream dims with
+            // the ink tint in dark (rgba(29,31,27,.24)) and black in light.
+            Group {
+                if tokens.isLight {
+                    Color.black.opacity(0.35)
+                } else {
+                    Color(red: 29 / 255.0, green: 31 / 255.0, blue: 27 / 255.0)
+                        .opacity(0.24)
+                }
+            }
                 .onTapGesture(perform: onClose)
                 .accessibilityLabel("Close chat")
             VStack(spacing: 0) {
@@ -341,7 +349,7 @@ struct DesktopChatOverlay: View {
             .frame(maxWidth: 720, maxHeight: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: DesktopLayout.glassCornerRadius)
-                    .fill(tokens.surfaceInk.opacity(tokens.isLight ? 1 : 0.001))
+                    .fill(tokens.surfaceInk)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: DesktopLayout.glassCornerRadius)
