@@ -1786,10 +1786,10 @@ environments:
             value: 'true'
             category: rollout
           STT_LEARNED_LANGUAGE_PROFILE:
-            value: 'false'
+            value: 'true'
             category: rollout
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
-            value: '25'
+            value: '50'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
             value: '0'
