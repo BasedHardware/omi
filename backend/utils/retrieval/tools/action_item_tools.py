@@ -19,6 +19,7 @@ from utils.notifications import (
 )
 from utils.conversations.render import format_local_time, resolve_display_tz
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
+from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -282,11 +283,8 @@ def get_action_items_tool(
 
         logger.info(f"🔍 Database call completed - received {len(action_items) if action_items else 0} items")
     except Exception as e:
-        logger.error(f"❌ Error getting action items: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Error retrieving action items: {str(e)}"
+        logger.error(f"❌ Error getting action items: {sanitize(str(e))}")
+        return "An error occurred while retrieving action items. Please try again later."
 
     action_items_count = len(action_items) if action_items else 0
     logger.info(f"📊 get_action_items_tool - found {action_items_count} action items")
@@ -507,8 +505,8 @@ def create_action_item_tool(
         return result
 
     except Exception as e:
-        logger.error(f"❌ Error creating action item: {e}")
-        return f"Error creating action item: {str(e)}"
+        logger.error(f"❌ Error creating action item: {sanitize(str(e))}")
+        return "An error occurred while creating the action item. Please try again later."
 
 
 @tool
@@ -670,5 +668,5 @@ def update_action_item_tool(
         return result
 
     except Exception as e:
-        logger.error(f"❌ Error updating action item: {e}")
-        return f"Error updating action item: {str(e)}"
+        logger.error(f"❌ Error updating action item: {sanitize(str(e))}")
+        return "An error occurred while updating the action item. Please try again later."
