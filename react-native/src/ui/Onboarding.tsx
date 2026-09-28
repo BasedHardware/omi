@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   I18nManager,
+  Keyboard,
   Linking,
   NativeModules,
   Platform,
@@ -49,6 +50,7 @@ import {
   useDesktopTheme,
   useDesktopStyleSheets,
 } from '../desktop/DesktopTheme';
+import {PostSetupConfetti} from '../desktop/PostSetupOverlay';
 import type {OmiAuthDesktopHandoff} from '../omiNativeTypes';
 import {Button} from './Button';
 import {Field} from './Field';
@@ -133,6 +135,10 @@ export function Onboarding({
   const nativePhone = Platform.OS === 'ios' || Platform.OS === 'android';
   const opacity = useRef(new Animated.Value(1)).current;
   const scale = useRef(new Animated.Value(1)).current;
+  // Step change: the new step's title + body rise in with a short fade.
+  const stepOpacity = useRef(new Animated.Value(1)).current;
+  const stepShift = useRef(new Animated.Value(0)).current;
+  const stepAnimatedOnce = useRef(false);
   const [step, setStep] = useState<MobileOnboardingStep>(
     setupRequired ? 'consent' : 'welcome',
   );
@@ -192,6 +198,37 @@ export function Onboarding({
   }, [opacity, reduceMotion, scale]);
 
   useEffect(() => {
+    // Skip the very first paint — the dots intro already covers it.
+    if (!stepAnimatedOnce.current) {
+      stepAnimatedOnce.current = true;
+      return;
+    }
+    if (reduceMotion) {
+      stepOpacity.setValue(1);
+      stepShift.setValue(0);
+      return;
+    }
+    stepOpacity.setValue(0);
+    stepShift.setValue(16);
+    const transition = Animated.parallel([
+      Animated.timing(stepOpacity, {
+        duration: 320,
+        easing: Easing.out(Easing.cubic),
+        toValue: 1,
+        useNativeDriver: false,
+      }),
+      Animated.timing(stepShift, {
+        duration: 320,
+        easing: Easing.out(Easing.cubic),
+        toValue: 0,
+        useNativeDriver: false,
+      }),
+    ]);
+    transition.start();
+    return () => transition.stop();
+  }, [reduceMotion, step, stepOpacity, stepShift]);
+
+  useEffect(() => {
     if (signedIn.current && !setupRequired) {
       operation.current += 1;
       setStep('welcome');
@@ -227,27 +264,32 @@ export function Onboarding({
     () => languages.find(item => item.code === language)?.name ?? language,
     [language, languages],
   );
-  // The full catalog as a chip cloud — the same list the desktop app offers —
-  // with the device language hoisted to the front. Searching filters it.
-  const languageChips = useMemo(() => {
-    const base: AvailableLanguage[] =
-      languages.length > 0
-        ? languages
-        : PRIMARY_LANGUAGES.map(item => ({code: item.code, name: item.name}));
+  // Search-first autocomplete: nothing until the user types, then at most
+  // five ranked matches as pills (exact → prefix → substring, catalog order
+  // preserved within each rank). The device-derived selection is the default.
+  const languageMatches = useMemo(() => {
     const query = languageQuery.trim().toLowerCase();
-    const matches = query.length
-      ? base.filter(
-          item =>
-            item.name.toLowerCase().includes(query) ||
-            item.code.toLowerCase().includes(query),
-        )
-      : base;
-    const selected = matches.find(item => item.code === language);
-    const rest = matches.filter(item => item.code !== language);
-    return selected
-      ? [{code: language, name: selectedLanguageName}, ...rest]
-      : rest;
-  }, [language, languageQuery, languages, selectedLanguageName]);
+    if (query.length === 0) {
+      return [];
+    }
+    const rank = (item: AvailableLanguage) => {
+      const name = item.name.toLowerCase();
+      const code = item.code.toLowerCase();
+      if (name === query || code === query) {
+        return 0;
+      }
+      if (name.startsWith(query) || code.startsWith(query)) {
+        return 1;
+      }
+      return name.includes(query) || code.includes(query) ? 2 : 3;
+    };
+    return languages
+      .map(item => ({item, rank: rank(item)}))
+      .filter(entry => entry.rank < 3)
+      .sort((a, b) => a.rank - b.rank)
+      .slice(0, 5)
+      .map(entry => entry.item);
+  }, [languageQuery, languages]);
 
   function goBack() {
     if (step === 'welcome' || signingIn) {
@@ -270,6 +312,14 @@ export function Onboarding({
     }
     setLocalError(null);
     setStep(next);
+  }
+
+  // Choosing a pill is a commit: take the language, clear the query, and
+  // collapse the results back to the resting search-only state.
+  function pickLanguage(code: string) {
+    setLanguage(code);
+    setLanguageQuery('');
+    Keyboard.dismiss();
   }
 
   async function persistLanguage() {
@@ -491,7 +541,9 @@ export function Onboarding({
           accessibilityLabel="Omi"
           style={[styles.dots, {opacity, transform: [{scale}]}]}>
           <OmiAvatar
-            animate={!reduceMotion}
+            animate={
+              !reduceMotion && (step === 'welcome' || step === 'complete')
+            }
             identity="omi"
             reduceMotion={reduceMotion}
             size={DOTS_SIZE}
@@ -500,250 +552,299 @@ export function Onboarding({
           />
         </Animated.View>
         {setupIndex >= 0 ? (
-          <Text style={[styles.meta, copyColor]}>
-            Step {setupIndex + 1} of {itinerary.length}
-          </Text>
-        ) : null}
-        <Text accessibilityRole="header" style={[styles.title, titleColor]}>
-          {step === 'welcome'
-            ? 'Welcome to Omi'
-            : step === 'consent'
-            ? 'Data & Privacy'
-            : step === 'language'
-            ? 'Select your primary language'
-            : step === 'source'
-            ? 'How did you find us?'
-            : step === 'permissions'
-            ? 'Grant permissions'
-            : step === 'speech'
-            ? 'Teach Omi your voice'
-            : 'You are all set!'}
-        </Text>
-        {step === 'welcome' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              Sign in to access your conversations and memories.
-            </Text>
-            {displayError == null ? null : (
-              <Text
-                accessibilityLabel={
-                  displayError === SESSION_UNREACHABLE_COPY
-                    ? 'Session unreachable'
-                    : 'Sign-in error'
-                }
+          <View
+            accessibilityLabel={`Step ${setupIndex + 1} of ${itinerary.length}`}
+            style={styles.progressRow}>
+            {itinerary.map((_, index) => (
+              <View
+                key={index}
                 style={[
-                  styles.error,
-                  copyColor,
-                  displayError === SESSION_UNREACHABLE_COPY &&
-                    (desktop ? styles.desktopUnreachable : styles.unreachable),
-                ]}>
-                {displayError}
-              </Text>
-            )}
-            {action(signingIn ? 'Signing in…' : 'Sign in', onSignIn, signingIn)}
-            {signingIn && onCancelSignIn ? (
-              <Button
-                accessibilityLabel="Cancel sign in"
-                onPress={onCancelSignIn}
-                labelStyle={desktop && styles.desktopTitle}
-                variant="ghost">
-                Cancel
-              </Button>
-            ) : null}
-          </>
-        ) : null}
-        {step === 'consent' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              By continuing, your conversations, recordings, and personal
-              information will be securely stored on our servers. Your audio
-              recordings and transcripts are processed by third-party AI
-              services — Deepgram for transcription and OpenAI for analysis — to
-              provide you with AI-powered insights and enable all app features.
-            </Text>
-            <Text style={[styles.copy, copyColor]}>
-              Your data is protected and governed by our Privacy Policy and
-              Terms of Service.
-            </Text>
-            <View style={styles.links}>
-              <Button
-                variant="ghost"
-                accessibilityRole="link"
-                onPress={() => openLink(PRIVACY_URL)}>
-                Privacy Policy
-              </Button>
-              <Button
-                variant="ghost"
-                accessibilityRole="link"
-                onPress={() => openLink(TERMS_URL)}>
-                Terms of Service
-              </Button>
-            </View>
-            {action('Agree & Continue', () => {
-              void advanceFrom('consent');
-            })}
-          </>
-        ) : null}
-        {step === 'language' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              {language === initialLanguage
-                ? `We set ${selectedLanguageName} from your device language. Continue, or pick another.`
-                : `Continue in ${selectedLanguageName}, or pick another language.`}
-            </Text>
-            <Field
-              accessibilityLabel="Search languages"
-              autoCapitalize="none"
-              autoCorrect={false}
-              label="Search languages"
-              onChangeText={setLanguageQuery}
-              placeholder="Search languages"
-              returnKeyType="search"
-              value={languageQuery}
-            />
-            <View style={styles.chips}>
-              {languageChips.map(item => (
-                <Button
-                  key={item.code}
-                  accessibilityLabel={item.name}
-                  accessibilityState={{selected: language === item.code}}
-                  onPress={() => setLanguage(item.code)}
-                  variant={language === item.code ? 'primary' : 'ghost'}>
-                  {item.name}
-                </Button>
-              ))}
-            </View>
-            {languageChips.length === 0 ? (
-              <Text style={[styles.copy, copyColor]}>
-                No language matches “{languageQuery.trim()}”.
-              </Text>
-            ) : null}
-            {action(saving ? 'Saving…' : 'Continue', persistLanguage, saving)}
-          </>
-        ) : null}
-        {step === 'source' ? (
-          <>
-            <View style={styles.choices}>
-              {ACQUISITION_SOURCES.map(item => (
-                <Button
-                  key={item}
-                  accessibilityLabel={item}
-                  accessibilityState={{selected: source === item}}
-                  onPress={() => setSource(item)}
-                  variant={source === item ? 'primary' : 'ghost'}>
-                  {item}
-                </Button>
-              ))}
-            </View>
-            {source === 'Other' ? (
-              <Field
-                accessibilityLabel="Please specify"
-                autoCorrect={false}
-                enablesReturnKeyAutomatically
-                label="Please specify"
-                onChangeText={setOtherSource}
-                onSubmitEditing={() => {
-                  if (otherSource.trim().length > 0) {
-                    void persistSource();
-                  }
-                }}
-                placeholder="Where did you hear about us?"
-                returnKeyType="done"
-                value={otherSource}
+                  styles.progressSegment,
+                  index <= setupIndex && styles.progressSegmentFill,
+                ]}
               />
-            ) : null}
-            {action(saving ? 'Saving…' : 'Continue', persistSource, saving)}
-          </>
+            ))}
+          </View>
         ) : null}
-        {step === 'permissions' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              {nativePhone
-                ? 'Tap one when you’re ready. Nothing is asked until you do.'
-                : 'Click one when you’re ready. Nothing is asked until you do.'}
-            </Text>
-            {permissionRow(
-              'notifications',
-              'Notifications',
-              'Notify you when something needs you.',
-            )}
-            {permissionRow(
-              'microphone',
-              'Microphone',
-              'Hear what you talk about, so Omi can help.',
-            )}
-            {nativePhone
-              ? permissionRow(
-                  'bluetooth',
-                  'Bluetooth',
-                  'Find your Omi, so it can record for you.',
-                )
-              : null}
-            {action("I'll do these later", () => {
-              void advanceFrom('permissions');
-            })}
-          </>
-        ) : null}
-        {step === 'speech' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              So Omi knows which voice is yours — talk for about 5 seconds about
-              anything. A successful upload, not this screen, is enrollment.
-            </Text>
-            {voiceSaved ? (
-              <Text style={[styles.copy, copyColor]}>Voice print saved.</Text>
-            ) : null}
-            {action(
-              recordingVoice ? 'Listening…' : 'Start voice recording',
-              enrollVoice,
-              recordingVoice,
-            )}
-            {action(
-              'Skip for now',
-              () => {
-                setStep('complete');
-              },
-              recordingVoice,
-              'ghost',
-            )}
-          </>
-        ) : null}
-        {step === 'complete' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              Just use Omi in the background for 2 days and you'll start getting
-              useful feedback after.
-            </Text>
-            {displayError == null || !setupRequired ? null : (
-              <Text
-                accessibilityLabel="Setup error"
-                style={[
-                  styles.error,
-                  copyColor,
-                  desktop ? styles.desktopUnreachable : styles.unreachable,
-                ]}>
-                {displayError}
+        <Animated.View
+          style={[
+            styles.stepAnim,
+            {opacity: stepOpacity, transform: [{translateY: stepShift}]},
+          ]}>
+          <Text accessibilityRole="header" style={[styles.title, titleColor]}>
+            {step === 'welcome'
+              ? 'Welcome to Omi'
+              : step === 'consent'
+              ? 'Data & Privacy'
+              : step === 'language'
+              ? 'Select your primary language'
+              : step === 'source'
+              ? 'How did you find us?'
+              : step === 'permissions'
+              ? 'Grant permissions'
+              : step === 'speech'
+              ? 'Teach Omi your voice'
+              : 'You are all set!'}
+          </Text>
+          {step === 'welcome' ? (
+            <>
+              <Text style={[styles.copy, copyColor]}>
+                Sign in to access your conversations and memories.
               </Text>
-            )}
-            {!desktop && !browser
-              ? action(
-                  busy && connectAfterComplete ? 'Saving…' : 'Connect your Omi',
-                  () => finish(true),
-                  busy,
-                )
-              : null}
-            {action(
-              busy && !connectAfterComplete
-                ? 'Saving…'
-                : desktop || browser
-                ? 'Start Using Omi'
-                : 'Continue without a device',
-              () => finish(false),
-              busy,
-              desktop || browser ? 'primary' : 'ghost',
-            )}
-          </>
-        ) : null}
+              {displayError == null ? null : (
+                <Text
+                  accessibilityLabel={
+                    displayError === SESSION_UNREACHABLE_COPY
+                      ? 'Session unreachable'
+                      : 'Sign-in error'
+                  }
+                  style={[
+                    styles.error,
+                    copyColor,
+                    displayError === SESSION_UNREACHABLE_COPY &&
+                      (desktop
+                        ? styles.desktopUnreachable
+                        : styles.unreachable),
+                  ]}>
+                  {displayError}
+                </Text>
+              )}
+              {action(
+                signingIn ? 'Signing in…' : 'Sign in',
+                onSignIn,
+                signingIn,
+              )}
+              {signingIn && onCancelSignIn ? (
+                <Button
+                  accessibilityLabel="Cancel sign in"
+                  onPress={onCancelSignIn}
+                  labelStyle={desktop && styles.desktopTitle}
+                  variant="ghost">
+                  Cancel
+                </Button>
+              ) : null}
+            </>
+          ) : null}
+          {step === 'consent' ? (
+            <>
+              <Text style={[styles.copy, copyColor]}>
+                By continuing, your conversations, recordings, and personal
+                information will be securely stored on our servers. Your audio
+                recordings and transcripts are processed by third-party AI
+                services — Deepgram for transcription and OpenAI for analysis —
+                to provide you with AI-powered insights and enable all app
+                features.
+              </Text>
+              <Text style={[styles.copy, copyColor]}>
+                Your data is protected and governed by our Privacy Policy and
+                Terms of Service.
+              </Text>
+              <View style={styles.links}>
+                <Button
+                  variant="ghost"
+                  accessibilityRole="link"
+                  onPress={() => openLink(PRIVACY_URL)}>
+                  Privacy Policy
+                </Button>
+                <Button
+                  variant="ghost"
+                  accessibilityRole="link"
+                  onPress={() => openLink(TERMS_URL)}>
+                  Terms of Service
+                </Button>
+              </View>
+              {action('Agree & Continue', () => {
+                void advanceFrom('consent');
+              })}
+            </>
+          ) : null}
+          {step === 'language' ? (
+            <>
+              <Text
+                accessibilityLiveRegion="polite"
+                style={[styles.copy, copyColor]}>
+                {language === initialLanguage
+                  ? `Using ${selectedLanguageName} from your device. Search to change it.`
+                  : `Using ${selectedLanguageName}. Search to change it.`}
+              </Text>
+              <View style={styles.stretch}>
+                <Field
+                  accessibilityLabel="Search languages"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  label="Search languages"
+                  onChangeText={setLanguageQuery}
+                  onSubmitEditing={() => {
+                    const first = languageMatches[0];
+                    if (first != null) {
+                      pickLanguage(first.code);
+                    }
+                  }}
+                  placeholder="Type a language or code"
+                  placeholderTextColor={tokens.color.textMuted}
+                  returnKeyType="search"
+                  value={languageQuery}
+                />
+              </View>
+              <View style={styles.chips}>
+                {languageMatches.map(item => (
+                  <Button
+                    key={item.code}
+                    accessibilityLabel={item.name}
+                    accessibilityState={{selected: language === item.code}}
+                    hitSlop={{bottom: 4, top: 4}}
+                    onPress={() => {
+                      pickLanguage(item.code);
+                    }}
+                    style={styles.pill}
+                    variant={language === item.code ? 'primary' : 'secondary'}>
+                    {item.name}
+                  </Button>
+                ))}
+              </View>
+              {languageQuery.trim().length > 0 &&
+              languageMatches.length === 0 ? (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[styles.copy, copyColor]}>
+                  No language matches “{languageQuery.trim()}”.
+                </Text>
+              ) : null}
+              {action(saving ? 'Saving…' : 'Continue', persistLanguage, saving)}
+            </>
+          ) : null}
+          {step === 'source' ? (
+            <>
+              <View style={[styles.chips, styles.sourceChips]}>
+                {ACQUISITION_SOURCES.map(item => (
+                  <Button
+                    key={item}
+                    accessibilityLabel={item}
+                    accessibilityState={{selected: source === item}}
+                    hitSlop={{bottom: 4, top: 4}}
+                    onPress={() => setSource(item)}
+                    style={styles.pill}
+                    variant={source === item ? 'primary' : 'secondary'}>
+                    {item}
+                  </Button>
+                ))}
+              </View>
+              {source === 'Other' ? (
+                <View style={styles.stretch}>
+                  <Field
+                    accessibilityLabel="Please specify"
+                    autoCorrect={false}
+                    enablesReturnKeyAutomatically
+                    label="Please specify"
+                    onChangeText={setOtherSource}
+                    onSubmitEditing={() => {
+                      if (otherSource.trim().length > 0) {
+                        void persistSource();
+                      }
+                    }}
+                    placeholder="Where did you hear about us?"
+                    returnKeyType="done"
+                    value={otherSource}
+                  />
+                </View>
+              ) : null}
+              {action(saving ? 'Saving…' : 'Continue', persistSource, saving)}
+            </>
+          ) : null}
+          {step === 'permissions' ? (
+            <>
+              <Text style={[styles.copy, copyColor]}>
+                {nativePhone
+                  ? 'Tap one when you’re ready. Nothing is asked until you do.'
+                  : 'Click one when you’re ready. Nothing is asked until you do.'}
+              </Text>
+              {permissionRow(
+                'notifications',
+                'Notifications',
+                'Notify you when something needs you.',
+              )}
+              {permissionRow(
+                'microphone',
+                'Microphone',
+                'Hear what you talk about, so Omi can help.',
+              )}
+              {nativePhone
+                ? permissionRow(
+                    'bluetooth',
+                    'Bluetooth',
+                    'Find your Omi, so it can record for you.',
+                  )
+                : null}
+              {action("I'll do these later", () => {
+                void advanceFrom('permissions');
+              })}
+            </>
+          ) : null}
+          {step === 'speech' ? (
+            <>
+              <Text style={[styles.copy, copyColor]}>
+                So Omi knows which voice is yours — talk for about 5 seconds
+                about anything. A successful upload, not this screen, is
+                enrollment.
+              </Text>
+              {voiceSaved ? (
+                <Text style={[styles.copy, copyColor]}>Voice print saved.</Text>
+              ) : null}
+              {action(
+                recordingVoice ? 'Listening…' : 'Start voice recording',
+                enrollVoice,
+                recordingVoice,
+              )}
+              {action(
+                'Skip for now',
+                () => {
+                  setStep('complete');
+                },
+                recordingVoice,
+                'ghost',
+              )}
+            </>
+          ) : null}
+          {step === 'complete' ? (
+            <>
+              <PostSetupConfetti onDone={() => undefined} />
+              <Text style={[styles.copy, copyColor]}>
+                Just use Omi in the background for 2 days and you'll start
+                getting useful feedback after.
+              </Text>
+              {displayError == null || !setupRequired ? null : (
+                <Text
+                  accessibilityLabel="Setup error"
+                  style={[
+                    styles.error,
+                    copyColor,
+                    desktop ? styles.desktopUnreachable : styles.unreachable,
+                  ]}>
+                  {displayError}
+                </Text>
+              )}
+              {!desktop && !browser
+                ? action(
+                    busy && connectAfterComplete
+                      ? 'Saving…'
+                      : 'Connect your Omi',
+                    () => finish(true),
+                    busy,
+                  )
+                : null}
+              {action(
+                busy && !connectAfterComplete
+                  ? 'Saving…'
+                  : desktop || browser
+                  ? 'Start Using Omi'
+                  : 'Continue without a device',
+                () => finish(false),
+                busy,
+                desktop || browser ? 'primary' : 'ghost',
+              )}
+            </>
+          ) : null}
+        </Animated.View>
         {displayError == null ||
         step === 'welcome' ||
         step === 'complete' ? null : (
@@ -787,15 +888,36 @@ const createStyles = (desktopTokens: DesktopTokens) =>
     dots: {
       marginBottom: tokens.space.none,
     },
+    stepAnim: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      gap: tokens.space.sm,
+    },
+    progressRow: {
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      gap: tokens.space.xs,
+      height: tokens.space.xxs,
+      marginBottom: tokens.space.sm,
+      maxWidth: tokens.size.content,
+    },
+    progressSegment: {
+      backgroundColor: tokens.color.lineStrong,
+      borderRadius: tokens.radius.pill,
+      flex: tokens.layout.grow,
+    },
+    progressSegmentFill: {backgroundColor: tokens.color.text},
     title: {
       color: tokens.color.text,
       fontSize: 32,
       fontWeight: '700',
       letterSpacing: -1,
       lineHeight: 38,
+      marginBottom: tokens.space.xs,
       textAlign: 'center',
     },
     actionStretch: {alignSelf: 'stretch'},
+    stretch: {alignSelf: 'stretch'},
     copy: {
       color: tokens.color.menuText,
       fontSize: 15,
@@ -811,17 +933,17 @@ const createStyles = (desktopTokens: DesktopTokens) =>
     unreachable: {
       color: uiColor.danger,
     },
-    meta: {color: tokens.color.textMuted, fontSize: 12, textAlign: 'center'},
-    choices: {
-      alignSelf: 'stretch',
-      gap: tokens.space.xs,
-    },
     chips: {
       alignSelf: 'stretch',
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: tokens.space.xs,
+      gap: tokens.space.sm,
       justifyContent: 'center',
+    },
+    sourceChips: {justifyContent: 'flex-start'},
+    pill: {
+      borderRadius: tokens.radius.pill,
+      paddingHorizontal: tokens.space.lg,
     },
     desktopTitle: {color: desktopTokens.color.ink},
     desktopCopy: {color: desktopTokens.color.inkMuted},
