@@ -139,7 +139,7 @@ def get_apple_health_steps_tool(
 
     except Exception as e:
         logger.error(f"Error in get_apple_health_steps_tool: {e}")
-        return f"Error retrieving step data: {str(e)}"
+        return "Error retrieving step data"
 
 
 @tool
@@ -205,7 +205,7 @@ def get_apple_health_sleep_tool(
 
     except Exception as e:
         logger.error(f"Error in get_apple_health_sleep_tool: {e}")
-        return f"Error retrieving sleep data: {str(e)}"
+        return "Error retrieving sleep data"
 
 
 @tool
@@ -265,7 +265,7 @@ def get_apple_health_heart_rate_tool(
 
     except Exception as e:
         logger.error(f"Error in get_apple_health_heart_rate_tool: {e}")
-        return f"Error retrieving heart rate data: {str(e)}"
+        return "Error retrieving heart rate data"
 
 
 @tool
@@ -347,7 +347,7 @@ def get_apple_health_workouts_tool(
 
     except Exception as e:
         logger.error(f"Error in get_apple_health_workouts_tool: {e}")
-        return f"Error retrieving workout data: {str(e)}"
+        return "Error retrieving workout data"
 
 
 @tool
@@ -464,4 +464,4 @@ def get_apple_health_summary_tool(
 
     except Exception as e:
         logger.error(f"Error in get_apple_health_summary_tool: {e}")
-        return f"Error retrieving health summary: {str(e)}"
+        return "Error retrieving health summary"
