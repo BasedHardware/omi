@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.411",
+      "date": "2026-09-28",
+      "changes": [
+        "Fixed automatic microphone retries opening the mic while you are away and counting silent retry probes as recording errors"
+      ]
+    },
+    {
       "version": "0.12.410",
       "date": "2026-09-28",
       "changes": [
