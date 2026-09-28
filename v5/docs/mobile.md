@@ -10,7 +10,11 @@ transport contract.
 
 - `src/mobile/MobileAppSurface.tsx` — shell: bottom destinations, Home,
   routing into pages.
-- `src/mobile/MobileChat.tsx`, `MobileOmnibar.tsx`, `mobileTokens.ts`.
+- `src/mobile/MobileChat.tsx`, `MobileOmnibar.tsx`.
+- `src/mobile/MobileTheme.tsx` — System / Light / Dark appearance and the
+  `OmiThemeProvider` for every mobile surface; `MobileList.tsx` — grouped
+  surfaces, the one mobile row shape, segmented control, inline states;
+  `mobileDates.ts` — day headers and row times.
 - `src/pages/` — Conversations, Memories, Tasks, Settings, Connectors.
 - `src/app/AppOrchestrator.tsx` — retains requests, drafts, chat history,
   and scroll-follow state across surface switches.
@@ -21,10 +25,16 @@ transport contract.
 
 ## Shell and navigation
 
-- On compact screens `MobileAppSurface` owns four bottom destinations: Home,
-  Conversations, Tasks, Settings; selection highlights both icon and label.
-  Apps opens from Settings and keeps Settings selected, with a Back to
-  Settings control. The shell has no large page headings.
+- On compact screens `MobileAppSurface` owns four icon-only bottom
+  destinations whose accessible labels are Home, Conversations, Tasks and
+  Settings; the selected icon is ink, the others tertiary ink, with no pill
+  behind them. Apps opens from Settings and keeps Settings selected, with a
+  Back to Settings control. The shell has no large page headings.
+- Every mobile surface reads the Omi design language
+  ([design-language.md](design-language.md)) from `useOmiTheme()`. Settings
+  offers Appearance: System (follows the OS), Light or Dark. The web build
+  keeps the choice in local storage; the phone shells keep it for the app
+  process until a native preference store exists.
 - The composer defaults to Search, with accessible Ask/Search icons inline to
   the left of the shared input. Its backing area is transparent and the
   rounded field is translucent. Non-interactive gradients blend the
@@ -41,11 +51,11 @@ transport contract.
 
 ## Home, Tasks, Conversations
 
-- Home groups up to three open action items with available due dates and
-  owners, followed by recent conversation summaries and dates, in compact
-  neutral panels without row dividers. See all and the Tasks tab open the
-  full action-items list (including completed items, edits, and pagination)
-  with Tasks selected. Saved memories appear in matching loaded-data Search
+- Home shows up to three open tasks with available due dates and owners,
+  then recent conversation summaries, each list a grouped surface with
+  hairline separators under a quiet section label (Tasks, Recent
+  Conversations) with See All. See All and the Tasks tab open the full task
+  list (To Do, then Done, with edits and pagination) with Tasks selected. Saved memories appear in matching loaded-data Search
   results, not as a Home shortcut.
 - Task completion, reopening, and description edits go through the ratified
   service-binding route. Writes require a current account epoch and
@@ -65,7 +75,9 @@ transport contract.
   without duplicate IDs; a stale cursor triggers one fresh first-page read
   that replaces prior rows; failed recovery stays explicitly retryable.
   Refresh, account changes, and unmount retire pending page results.
-  Loading and failed reads never claim an empty timeline.
+  Loading and failed reads never claim an empty timeline; a failed read also
+  offers Try Again. On mobile, day headers read Today, Yesterday or
+  "Wed, Sep 23" and rows under them show only the time.
 - Conversation detail keeps its Back control outside scrolling content and
   preserves the active search and All/Starred filter when returning to the
   list. Clearing search preserves Starred; Clear filters resets both.
@@ -83,7 +95,9 @@ specified in [native-recording-journal.md](native-recording-journal.md).
 
 For layout-only review without a device, run the PWA design preview
 (`bun run pwa:dev`, then `/design-preview.html?surface=mobile&data=example`)
-— see [pwa.md](pwa.md). It renders the real `MobileAppSurface` with labelled
+— see [pwa.md](pwa.md). Add `appearance=light` for the light scheme and
+`frame=390` to pin the phone frame to a width (the visual audit does this;
+headless Chrome never lays out narrower than 500 px). It renders the real `MobileAppSurface` with labelled
 simulated states; browser previews do not verify native permissions,
 Bluetooth, safe areas, or the software keyboard. Physical-device verification
 remains required.
