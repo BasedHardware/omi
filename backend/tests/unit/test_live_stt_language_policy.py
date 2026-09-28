@@ -93,23 +93,25 @@ def test_hint_vocabulary_filters_each_code_and_preserves_identification(monkeypa
 
 def test_soniox_hints_expand_equivalents_with_deduplication_and_cap():
     hindi = LiveLanguageProfile.create('hi', multi=True, uid='u')
-    assert soniox_hints('multi', hindi) == ['hi', 'ur', 'en']
+    assert soniox_hints('multi', hindi) == ['hi', 'en', 'ur']
 
     duplicate = LiveLanguageProfile('hi', ('hi', 'ur', 'en'), 'non_en', 'control', True)
-    assert soniox_hints('multi', duplicate) == ['hi', 'ur', 'en']
+    assert soniox_hints('multi', duplicate) == ['hi', 'en', 'ur']
 
     serbian = LiveLanguageProfile.create('sr', multi=True, uid='u')
     hints = soniox_hints('multi', serbian)
-    assert hints == ['sr', 'hr', 'bs']
+    assert hints == ['sr', 'en', 'hr']
     assert len(hints) <= 3
 
-    # Primary variants keep priority when learned languages and English also
-    # occupy the expected set; the three-hint provider cap still applies.
+    # Learned languages and English keep their expected order ahead of aliases.
     learned_serbian = LiveLanguageProfile('sr', ('sr', 'pt', 'en'), 'non_en', 'control', True, source='learned')
-    assert soniox_hints('multi', learned_serbian) == ['sr', 'hr', 'bs']
+    assert soniox_hints('multi', learned_serbian) == ['sr', 'pt', 'en']
+
+    learned_gujarati = LiveLanguageProfile('hi', ('hi', 'gu', 'en'), 'non_en', 'control', True, source='learned')
+    assert soniox_hints('multi', learned_gujarati) == ['hi', 'gu', 'en']
 
     learned = LiveLanguageProfile('pt', ('pt', 'hi', 'en'), 'non_en', 'control', True, source='learned')
-    assert soniox_hints('multi', learned) == ['pt', 'hi', 'ur']
+    assert soniox_hints('multi', learned) == ['pt', 'hi', 'en']
 
 
 def test_single_language_and_out_of_scope_hints_keep_the_declared_code():

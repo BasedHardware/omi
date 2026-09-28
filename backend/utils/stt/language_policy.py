@@ -160,18 +160,14 @@ def soniox_hints(language: str, profile: LiveLanguageProfile | None = None) -> l
         candidates = (normalized,) if normalized and normalized != 'multi' else ()
         return [code for code in candidates if soniox_accepts_language_hint(code)]
     normalized_candidates = list(dict.fromkeys(canonical_language(code) for code in candidates))
-    if not any(code in LANGUAGE_EQUIVALENCE.values() for code in normalized_candidates):
-        return [code for code in normalized_candidates if soniox_accepts_language_hint(code)]
-
-    # Keep each expected language beside its accepted variants; English stays
-    # after the declared/learned non-English languages within the existing cap.
-    ordered = []
-    for code in normalized_candidates:
-        if code == 'en':
-            continue
-        ordered.append(code)
-        ordered.extend(alias for alias, canonical in LANGUAGE_EQUIVALENCE.items() if canonical == code)
-    ordered.extend(code for code in normalized_candidates if code == 'en')
+    # Preserve every expected language's priority; equivalents only use spare
+    # slots after the primary, learned languages, and English have been added.
+    ordered = normalized_candidates + [
+        alias
+        for code in normalized_candidates
+        for alias, canonical in LANGUAGE_EQUIVALENCE.items()
+        if canonical == code
+    ]
     hints = []
     for code in ordered:
         if code not in hints and soniox_accepts_language_hint(code):
