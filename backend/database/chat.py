@@ -607,8 +607,8 @@ def report_message(uid: str, msg_doc_id: str) -> Dict[str, str]:
         message_ref.update({'reported': True})
         return {"message": "Message reported"}
     except Exception as e:
-        logger.error(f"Update failed: {e}")
-        return {"message": f"Update failed: {e}"}
+        logger.error(f"Update failed for message {msg_doc_id} user {uid}: {e}")
+        return {"message": "Update failed"}
 
 
 def update_message_rating(uid: str, message_id: str, rating: Optional[int]) -> Optional[Dict[str, Any]]:
@@ -677,7 +677,8 @@ def clear_chat(
         batch_delete_messages(user_ref, app_id=app_id, chat_session_id=chat_session_id)
         return None
     except Exception as e:
-        return {"message": str(e)}
+        logger.error(f"Error clearing chat messages for user {uid}: {e}")
+        return {"message": "Failed to clear chat messages"}
 
 
 def add_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
