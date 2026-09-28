@@ -11421,6 +11421,13 @@ class AppLocalizationsMr extends AppLocalizations {
   String get voiceQuestionNoSpeech => 'ऐकू आले नाही — पुन्हा प्रयत्न करा';
 
   @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
   String get sendToSupport => 'Send to support';
 
   @override

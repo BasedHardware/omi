@@ -20787,6 +20787,18 @@ abstract class AppLocalizations {
   /// **'Didn\'t catch that — try again'**
   String get voiceQuestionNoSpeech;
 
+  /// No description provided for @siriIndexSetting.
+  ///
+  /// In en, this message translates to:
+  /// **'Use Omi with Siri & Apple Intelligence'**
+  String get siriIndexSetting;
+
+  /// No description provided for @siriIndexSettingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.'**
+  String get siriIndexSettingDescription;
+
   /// Device diagnostics support upload
   ///
   /// In en, this message translates to:

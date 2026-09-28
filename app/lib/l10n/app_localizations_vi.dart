@@ -11408,6 +11408,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get voiceQuestionNoSpeech => 'Không nghe rõ — hãy thử lại';
 
   @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
   String get sendToSupport => 'Gửi cho bộ phận hỗ trợ';
 
   @override

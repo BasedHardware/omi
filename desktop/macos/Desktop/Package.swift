@@ -1,6 +1,30 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
+// Required macos-26 CI has Swift 6.3 and lacks the iOS/macOS 27 App Intents
+// schemas. Signed Codemagic releases and the advisory lane use Swift 6.4,
+// where these sources and their tests must be compiled and metadata extracted.
+#if compiler(>=6.4)
+  let siriSourceExclusions: [String] = []
+  let siriTestExclusions: [String] = []
+#else
+  let siriSourceExclusions = [
+    "SiriIntegration/SiriDevProbe.swift",
+    "SiriIntegration/SiriDonations.swift",
+    "SiriIntegration/SiriEntities.swift",
+    "SiriIntegration/SiriIndexHooks.swift",
+    "SiriIntegration/SiriIndexLifecycle.swift",
+    "SiriIntegration/SiriIndexer.swift",
+    "SiriIntegration/SiriIntentService.swift",
+    "SiriIntegration/SiriIntents.swift",
+    "SiriIntegration/SiriMemoryStorageQueries.swift",
+    "SiriIntegration/SiriMemoryCacheWriter.swift",
+    "SiriIntegration/SiriNavigation.swift",
+    "SiriIntegration/SiriViewAnnotations.swift",
+  ]
+  let siriTestExclusions = ["SiriIntentServiceTests.swift"]
+#endif
+
 // Frameworks such as Sparkle are built into Products/<config>/, but a test bundle's
 // generated rpaths only cover PackageFrameworks/. Without this the bundle builds and
 // then fails to dlopen, which reads as an unrelated test failure.
@@ -101,7 +125,7 @@ let package = Package(
         "Bluetooth/ARCHITECTURE.md",
         "FloatingControlBar/ARCHITECTURE.md",
         "MainWindow/Pages/MemoryGraph/ARCHITECTURE.md",
-      ],
+      ] + siriSourceExclusions,
       resources: [
         .process("GoogleService-Info.plist"),
         // Bundles everything under Resources/ (incl. *_logo.png brand marks,
@@ -135,7 +159,7 @@ let package = Package(
         "OmiSupportTests",
         "OmiWALTests",
         "VoiceTurnDomainTests",
-      ],
+      ] + siriTestExclusions,
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
       ],
