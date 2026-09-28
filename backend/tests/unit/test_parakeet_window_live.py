@@ -1360,6 +1360,7 @@ async def test_finalize_after_terminal_emits_and_reanchors(monkeypatch):
 async def test_idle_flush_emits_held_sentence_once(monkeypatch):
     from utils.stt.window_anchor import IDLE_FLUSH_SECONDS
 
+    monkeypatch.setattr(window.batch_pressure, 'allows', lambda *_: True)
     posted = []
     clock = {'now': 1000.0}
     monkeypatch.setattr(window.time, 'monotonic', lambda: clock['now'])
@@ -1637,6 +1638,7 @@ async def test_catchup_burst_does_not_shed_and_posts_max_context_jobs(monkeypatc
 async def test_idle_remainder_posts_without_close(monkeypatch):
     from utils.stt.window_anchor import IDLE_FLUSH_SECONDS
 
+    monkeypatch.setattr(window.batch_pressure, 'allows', lambda *_: True)
     posted = []
     clock = {'now': 1000.0}
     monkeypatch.setattr(window.time, 'monotonic', lambda: clock['now'])
