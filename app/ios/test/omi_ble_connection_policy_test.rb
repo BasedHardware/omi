@@ -19,6 +19,27 @@ class OmiBleConnectionPolicyTest < Minitest::Test
         @main
         struct OmiBleConnectionPolicyTestHarness {
             static func main() {
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: true,
+                    hasCompleteServices: true
+                ) == .replayReady)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: false,
+                    hasCompleteServices: true
+                ) == .discoverServices)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: true,
+                    hasCompleteServices: false
+                ) == .discoverServices)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .disconnected,
+                    nativeReady: true,
+                    hasCompleteServices: true
+                ) == .connect)
+
                 let recoveryCodes = [
                     CBATTError.insufficientAuthentication.rawValue,
                     CBATTError.insufficientAuthorization.rawValue,

@@ -1,9 +1,26 @@
 import CoreBluetooth
 import Foundation
 
-/// Pure classification for GATT failures that mean the phone and peripheral
-/// no longer share a usable encrypted bond.
+/// Pure decisions for connection recovery and GATT authentication failures.
 enum OmiBleConnectionPolicy {
+    enum ReadyRecoveryAction: Equatable {
+        case connect
+        case replayReady
+        case discoverServices
+    }
+
+    /// A Dart connection request can arrive after CoreBluetooth restored a link.
+    /// Reuse completed GATT discovery when possible; otherwise do one discovery
+    /// for this request instead of starting another physical connection.
+    static func readyRecoveryAction(
+        peripheralState: CBPeripheralState,
+        nativeReady: Bool,
+        hasCompleteServices: Bool
+    ) -> ReadyRecoveryAction {
+        guard peripheralState == .connected else { return .connect }
+        return nativeReady && hasCompleteServices ? .replayReady : .discoverServices
+    }
+
     static func requiresPairingRecovery(_ error: Error?) -> Bool {
         guard let error else { return false }
         let nsError = error as NSError

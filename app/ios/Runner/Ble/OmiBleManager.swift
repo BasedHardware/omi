@@ -52,7 +52,8 @@ final class OmiBleManager: NSObject {
     private var everConnected: Set<String> = []
 
     /// Characteristic discovery callbacks arrive once per service and may overlap.
-    /// Emit device-ready exactly once for each physical connection.
+    /// Deduplicate native setup for each physical connection; an explicit Dart
+    /// manageDevice call may still replay readiness to the current Flutter engine.
     private var readyNotified: Set<String> = []
 
     /// Suppresses duplicate recovery callbacks while CoreBluetooth tears down a
@@ -193,23 +194,65 @@ final class OmiBleManager: NSObject {
         manuallyDisconnected.remove(uuid)
         pairingLostBlocked.remove(uuid)
 
-        if let peripheral = peripherals[uuid] {
-            if peripheral.state == .connected {
-                NSLog("[OmiBle] connectPeripheral: \(uuid) already connected, skipping")
-                return
-            }
-            centralManager.connect(peripheral, options: nil)
-            return
+        let peripheral: CBPeripheral?
+        if let knownPeripheral = peripherals[uuid] {
+            peripheral = knownPeripheral
+        } else if let cbUuid = UUID(uuidString: uuid) {
+            peripheral = centralManager.retrievePeripherals(withIdentifiers: [cbUuid]).first
+        } else {
+            peripheral = nil
         }
 
-        // Try to retrieve a known peripheral
-        guard let cbUuid = UUID(uuidString: uuid) else { return }
-        let retrieved = centralManager.retrievePeripherals(withIdentifiers: [cbUuid])
-        if let peripheral = retrieved.first {
+        if let peripheral {
             peripheral.delegate = self
             peripherals[uuid] = peripheral
-            centralManager.connect(peripheral, options: nil)
+            let completedServices = completedBleServices(for: peripheral)
+            switch OmiBleConnectionPolicy.readyRecoveryAction(
+                peripheralState: peripheral.state,
+                nativeReady: readyNotified.contains(uuid),
+                hasCompleteServices: completedServices != nil
+            ) {
+            case .replayReady:
+                // A prior ready callback may have raced Dart startup or belonged
+                // to a retired Flutter engine. Reconcile on explicit manageDevice.
+                if let completedServices {
+                    notifyFlutterDeviceReady(uuid: uuid, services: completedServices, source: "replay")
+                }
+            case .discoverServices:
+                // Restored links may have no usable GATT snapshot yet. This is
+                // one request-bound discovery, with no polling or reconnect.
+                readyNotified.remove(uuid)
+                peripheral.delegate = self
+                peripheral.discoverServices(nil)
+            case .connect:
+                centralManager.connect(peripheral, options: nil)
+            }
+            return
         }
+    }
+
+    private func completedBleServices(for peripheral: CBPeripheral) -> [BleService]? {
+        guard let services = peripheral.services, !services.isEmpty,
+              services.allSatisfy({ $0.characteristics != nil }) else { return nil }
+        return services.map { service in
+            BleService(
+                uuid: fullUuidString(service.uuid),
+                characteristicUuids: service.characteristics?.map { fullUuidString($0.uuid) } ?? []
+            )
+        }
+    }
+
+    private func notifyFlutterDeviceReady(uuid: String, services: [BleService], source: String) {
+        guard let flutterApi else {
+            logBle(uuid: uuid, event: "ready_delivery_unavailable", detail: source)
+            return
+        }
+        flutterApi.onDeviceReady(peripheralUuid: uuid, services: services) { [weak self] result in
+            if case .failure(let error) = result {
+                self?.logBle(uuid: uuid, event: "ready_delivery_failed", detail: "\(source):\(error.code)")
+            }
+        }
+        if source == "replay" { logBle(uuid: uuid, event: "ready_replayed", detail: "") }
     }
 
     func disconnectPeripheral(uuid: String) {
@@ -958,17 +1001,8 @@ extension OmiBleManager: CBPeripheralDelegate {
 
         // Check if all services have had their characteristics discovered
         guard let services = peripheral.services else { return }
-        let allDiscovered = services.allSatisfy { $0.characteristics != nil }
-
-        if allDiscovered, readyNotified.insert(uuid).inserted {
-            let bleServices = services.map { svc in
-                BleService(
-                    uuid: self.fullUuidString(svc.uuid),
-                    characteristicUuids: svc.characteristics?.map { self.fullUuidString($0.uuid) } ?? []
-                )
-            }
-            
-            flutterApi?.onDeviceReady(peripheralUuid: uuid, services: bleServices) { _ in }
+        if let bleServices = completedBleServices(for: peripheral), readyNotified.insert(uuid).inserted {
+            notifyFlutterDeviceReady(uuid: uuid, services: bleServices, source: "discovery")
             LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
             if let diagnostic = services.first(where: { $0.uuid == Self.diagnosticsServiceUuid })?
                 .characteristics?.first(where: { $0.uuid == Self.diagnosticsCharUuid }) {
