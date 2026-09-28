@@ -34,7 +34,21 @@ def get_folders(uid: str = Depends(auth.get_current_user_uid)):
     folders = folders_db.get_folders(uid)
     if not folders:
         folders = folders_db.initialize_system_folders(uid)
-    return folders
+
+    valid_folders = []
+    for f in folders:
+        if not isinstance(f, dict) or not f.get('id'):
+            continue
+        try:
+            valid_folders.append(Folder.model_validate(f))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping malformed folder doc {f.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_folders
 
 
 @router.post('/v1/folders', response_model=Folder, tags=['folders'])

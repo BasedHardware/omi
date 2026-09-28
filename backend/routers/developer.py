@@ -1354,7 +1354,22 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     those paths, so the empty-list case here only affects users who have never opened the
     conversations tab nor created a single conversation.
     """
-    return folders_db.get_folders(uid)
+    folders = folders_db.get_folders(uid)
+    valid_folders = []
+    for folder in folders:
+        if not isinstance(folder, dict) or not folder.get('id'):
+            logger.warning('Skipping malformed folder in Developer API folder list')
+            continue
+        try:
+            valid_folders.append(DeveloperFolder.model_validate(folder))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid folder doc {folder.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_folders
 
 
 class DeveloperAskRequest(BaseModel):
