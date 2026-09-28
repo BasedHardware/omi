@@ -11469,6 +11469,48 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
 
   @override
+  String get feedbackGiveFeedback => 'Przekaż opinię';
+
+  @override
+  String get feedbackAllGood => 'Wszystko OK';
+
+  @override
+  String get feedbackChatWithUs => 'Więcej szczegółów? Napisz do nas';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Nieprawidłowe';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Niekompletne';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Nieistotne';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Zły kontekst';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Coś innego';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Brak audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Słaba transkrypcja';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Zła osoba mówiąca';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Opóźnione lub zacięte';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmentaryczne lub zduplikowane';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Coś innego';
+
+  @override
   String get searchPeople => 'Szukaj osób';
 
   @override
