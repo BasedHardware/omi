@@ -277,6 +277,7 @@ export function DesktopShellV5({
           <LibraryPage
             outcomes={outcomes}
             query={mode === 'Search' ? draft : ''}
+            onRefresh={onRefresh}
           />
         ) : route === 'Rewind' ? (
           <DesktopRewind

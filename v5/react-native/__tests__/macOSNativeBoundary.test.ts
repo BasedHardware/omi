@@ -7,6 +7,24 @@ function readNativeSource(fileName: string): string {
   return readFileSync(resolve(macOSRoot, fileName), 'utf8');
 }
 
+test('native HTTP accepts a bounded per-request timeout without lowering policy defaults', () => {
+  const backend = readNativeSource('OmiBackendModule.mm');
+  expect(backend).toContain('value[@"timeoutSeconds"]');
+  expect(backend).toContain('requestedTimeout.doubleValue > 600');
+  expect(backend).toContain(
+    'MAX((NSTimeInterval)plan.timeout_seconds, requestedTimeout.doubleValue)',
+  );
+});
+
+test('native clipboard command writes only caller-provided text to the macOS pasteboard', () => {
+  const backend = readNativeSource('OmiBackendModule.mm');
+  expect(backend).toContain('RCT_REMAP_METHOD(copyToClipboard');
+  expect(backend).toContain('NSPasteboard.generalPasteboard');
+  expect(backend).toContain(
+    '[pasteboard setString:text forType:NSPasteboardTypeString]',
+  );
+});
+
 test('keeps a transparent glass window over the desktop', () => {
   const source = readNativeSource('AppDelegate.mm');
 

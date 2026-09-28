@@ -4,12 +4,14 @@
 #import "OmiAuthModule.h"
 
 #include <stdio.h>
+#include <math.h>
 
 #include "omi_backend_http.h"
 #include "omi_backend_policy.h"
 
 #import <LocalAuthentication/LocalAuthentication.h>
 #import <Security/Security.h>
+#import <AppKit/AppKit.h>
 
 static NSString *const OmiContractVersion = @"1.0.0";
 static NSString *const OmiDevelopmentBackendUnsupportedBody = @"{\"error\":{\"code\":\"development_backend_unsupported\",\"retryable\":false,\"action\":\"none\"}}";
@@ -1133,6 +1135,22 @@ RCT_REMAP_METHOD(request,
   } else [self performNativeRequest:value receipt:nil expectedOrigin:nil expectedLogin:nil resolver:resolve rejecter:reject];
 }
 
+RCT_REMAP_METHOD(copyToClipboard,
+                 copyToClipboardWithText:(NSString *)text
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (![text isKindOfClass:NSString.class]) {
+    reject(@"OMI_CLIPBOARD_INVALID", @"Clipboard text is invalid", nil);
+    return;
+  }
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
+    [pasteboard clearContents];
+    if ([pasteboard setString:text forType:NSPasteboardTypeString]) resolve(@YES);
+    else reject(@"OMI_CLIPBOARD_WRITE", @"Could not copy the link", nil);
+  });
+}
+
 - (void)performNativeRequest:(NSDictionary *)value receipt:(NSString *)receipt expectedOrigin:(NSString *)origin expectedLogin:(NSString *)login resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject {
   [self resolveBackendPolicyWithCompletion:^(OmiBackendPolicy *policy, NSError *resolutionError) {
   if (self.disposed) { reject(@"OMI_HTTP_CANCELLED", @"Native backend is disposed", nil); return; }
@@ -1243,7 +1261,17 @@ RCT_REMAP_METHOD(request,
   }
   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
   request.HTTPMethod = method;
-  request.timeoutInterval = (NSTimeInterval)plan.timeout_seconds;
+  NSNumber *requestedTimeout = [value[@"timeoutSeconds"] isKindOfClass:NSNumber.class]
+      ? value[@"timeoutSeconds"] : nil;
+  if (value[@"timeoutSeconds"] != nil &&
+      (requestedTimeout == nil || !isfinite(requestedTimeout.doubleValue) ||
+       requestedTimeout.doubleValue < 1 || requestedTimeout.doubleValue > 600)) {
+    reject(@"OMI_HTTP_INVALID_REQUEST", @"Native HTTP timeout is invalid", nil);
+    return;
+  }
+  request.timeoutInterval = requestedTimeout != nil
+      ? MAX((NSTimeInterval)plan.timeout_seconds, requestedTimeout.doubleValue)
+      : (NSTimeInterval)plan.timeout_seconds;
   NSSet<NSString *> *forbidden = [NSSet setWithArray:@[
     @"authorization", @"cookie", @"proxy-authorization", @"x-omi-contract-version", @"x-omi-client-id", @"x-omi-capture-ownership"
   ]];

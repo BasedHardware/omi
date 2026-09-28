@@ -1,6 +1,6 @@
 import React from 'react';
 import Renderer, {act} from 'react-test-renderer';
-import {Text} from 'react-native';
+import {Alert, Platform, Text, TextInput} from 'react-native';
 import type {ConversationProjection} from '../desktopReadClient';
 import {MAIN_CHAT_CONVERSATION_ID} from '../chatConversationHistory';
 
@@ -23,6 +23,32 @@ const mockChat = jest.fn(() => ({
   reload: jest.fn(),
 }));
 const mockLegacy = jest.fn();
+jest.mock('../omiNative', () => ({
+  omiBackend: {copyToClipboard: jest.fn(async () => undefined)},
+}));
+jest.mock('../legacyOmiWrites', () => ({
+  conversationShareUrl: jest.fn(
+    () => 'https://h.omi.me/conversations/id?s=mac&sid=abcd',
+  ),
+  deleteConversation: jest.fn(async () => ({ok: true, value: {status: 'Ok'}})),
+  listFolders: jest.fn(async () => ({
+    ok: true,
+    value: [{id: 'folder-1', name: 'Work'}],
+  })),
+  moveConversationToFolder: jest.fn(async () => ({
+    ok: true,
+    value: {status: 'Ok'},
+  })),
+  reprocessConversation: jest.fn(async () => ({ok: true, value: {id: 'id'}})),
+  setConversationTitle: jest.fn(async () => ({
+    ok: true,
+    value: {status: 'Ok'},
+  })),
+  setConversationVisibility: jest.fn(async () => ({
+    ok: true,
+    value: {status: 'Ok'},
+  })),
+}));
 jest.mock('../recordingTranscript', () => ({
   useRecordingTranscript: (...args: unknown[]) =>
     mockRecording(...(args as [])),
@@ -121,7 +147,7 @@ test('legacy contract renders real detail sections and speaker transcript withou
   });
   const view = render({apiContract: 'omi', desktop: true});
   expect(mockLegacy).toHaveBeenCalledWith(conversation.id, null);
-  expect(text(view)).toContain('Loaded title');
+  expect(view.root.findByType(TextInput).props.value).toBe('Loaded title');
   expect(text(view)).toContain('Decisions');
   expect(text(view)).toContain('Ship the feature');
   expect(text(view)).toContain('Sam');
@@ -200,4 +226,138 @@ test('transcript formats numbered speakers, preserves names, and labels the user
   expect(text(view)).toContain('Sam');
   expect(text(view)).toContain('You');
   expect(text(view)).not.toContain('SPEAKER_');
+});
+
+function loadedDetail() {
+  mockLegacy.mockReturnValue({
+    result: {
+      status: 'loaded',
+      value: {
+        id: conversation.id,
+        title: 'Planning',
+        summary: 'Summary',
+        locked: false,
+        sections: [],
+        transcript: {status: 'loaded', segments: []},
+      },
+    },
+    reload: jest.fn(async () => undefined),
+  });
+}
+
+test('title saves on Enter through the typed legacy write', async () => {
+  loadedDetail();
+  const {setConversationTitle} = require('../legacyOmiWrites');
+  const view = render({apiContract: 'omi'});
+  const input = view.root.findByType(TextInput);
+  act(() => input.props.onChangeText('New title'));
+  await act(async () => input.props.onSubmitEditing());
+  expect(setConversationTitle).toHaveBeenCalledWith(
+    expect.anything(),
+    conversation.id,
+    'New title',
+  );
+});
+
+test('title saves on blur through the typed legacy write', async () => {
+  loadedDetail();
+  const {setConversationTitle} = require('../legacyOmiWrites');
+  const view = render({apiContract: 'omi'});
+  const input = view.root.findByType(TextInput);
+  act(() => input.props.onChangeText('Blur title'));
+  await act(async () => input.props.onBlur());
+  expect(setConversationTitle).toHaveBeenCalledWith(
+    expect.anything(),
+    conversation.id,
+    'Blur title',
+  );
+});
+
+test('reprocess refreshes detail and successful share copies the generated link', async () => {
+  loadedDetail();
+  const {
+    reprocessConversation,
+    setConversationVisibility,
+  } = require('../legacyOmiWrites');
+  const {omiBackend} = require('../omiNative');
+  const view = render({apiContract: 'omi'});
+  await act(async () =>
+    view.root.findByProps({accessibilityLabel: 'Reprocess'}).props.onPress(),
+  );
+  expect(reprocessConversation).toHaveBeenCalled();
+  await act(async () =>
+    view.root.findByProps({accessibilityLabel: 'Share'}).props.onPress(),
+  );
+  expect(setConversationVisibility).toHaveBeenCalledWith(
+    expect.anything(),
+    conversation.id,
+    'shared',
+  );
+  expect(omiBackend.copyToClipboard).toHaveBeenCalledWith(
+    'https://h.omi.me/conversations/id?s=mac&sid=abcd',
+  );
+  expect(text(view)).toContain('Copied');
+});
+
+test('reprocess shows a pending label until the synchronous legacy response arrives', async () => {
+  loadedDetail();
+  const writes = require('../legacyOmiWrites');
+  let resolveWrite!: (value: {ok: true; value: {id: string}}) => void;
+  writes.reprocessConversation.mockReturnValueOnce(
+    new Promise(resolve => {
+      resolveWrite = resolve;
+    }),
+  );
+  const view = render({apiContract: 'omi'});
+  act(() =>
+    view.root.findByProps({accessibilityLabel: 'Reprocess'}).props.onPress(),
+  );
+  expect(text(view)).toContain('Reprocessing…');
+  await act(async () => resolveWrite({ok: true, value: {id: conversation.id}}));
+  expect(text(view)).toContain('Reprocess');
+});
+
+test('delete asks for confirmation then deletes and navigates back', async () => {
+  loadedDetail();
+  const alert = jest
+    .spyOn(Alert, 'alert')
+    .mockImplementation((_title, _message, buttons) => {
+      const remove = buttons?.find(button => button.style === 'destructive');
+      remove?.onPress?.();
+    });
+  const {deleteConversation} = require('../legacyOmiWrites');
+  const onDeleted = jest.fn();
+  const view = render({apiContract: 'omi', onDeleted});
+  await act(async () =>
+    view.root.findByProps({accessibilityLabel: 'Delete'}).props.onPress(),
+  );
+  expect(alert).toHaveBeenCalled();
+  expect(deleteConversation).toHaveBeenCalled();
+  expect(onDeleted).toHaveBeenCalled();
+});
+
+test('desktop exposes folder move controls and moves the conversation', async () => {
+  loadedDetail();
+  const {moveConversationToFolder} = require('../legacyOmiWrites');
+  const originalOS = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'macos'});
+  const view = render({apiContract: 'omi', desktop: true});
+  await act(async () => Promise.resolve());
+  await act(async () =>
+    view.root
+      .findByProps({accessibilityLabel: 'Move to folder'})
+      .props.onPress(),
+  );
+  await act(async () =>
+    view.root.findByProps({accessibilityLabel: 'Work'}).props.onPress(),
+  );
+  expect(moveConversationToFolder).toHaveBeenCalledWith(
+    expect.anything(),
+    conversation.id,
+    'folder-1',
+  );
+  Object.defineProperty(Platform, 'OS', {
+    configurable: true,
+    value: originalOS,
+  });
 });

@@ -22,6 +22,8 @@ export type NativeHttpRequest = {
   path: `/${string}`;
   headers?: Record<string, string>;
   body?: string;
+  /** Optional per-request native transport timeout; bounded by the host. */
+  timeoutSeconds?: number;
   /** Binary multipart/form-data upload (offline-sync WAL audio). */
   multipart?: NativeHttpMultipartPart[];
 };
@@ -80,6 +82,7 @@ export type OmiBackend = {
   createWriteId?(): Promise<string>;
   createRecordingId?(): Promise<string>;
   request(request: NativeHttpRequest): Promise<NativeHttpResponse>;
+  copyToClipboard?(text: string): Promise<void>;
   generationEvents(
     generationId: string,
     lastEventId: string | null,
