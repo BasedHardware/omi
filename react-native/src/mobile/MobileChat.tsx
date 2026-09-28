@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect} from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -27,6 +27,7 @@ export function MobileChat({
   loadingOlder,
   onLoadOlder,
   onClose,
+  onRetry,
   onUsePrompt,
   prompts,
   scrollRef,
@@ -41,6 +42,7 @@ export function MobileChat({
   loadingOlder: boolean;
   onLoadOlder: () => void;
   onClose: () => void;
+  onRetry?: (message: ChatMessage) => void;
   onUsePrompt: (prompt: string) => void;
   prompts: readonly string[];
   scrollRef: React.RefObject<ScrollView | null>;
@@ -48,6 +50,11 @@ export function MobileChat({
   shouldAnimate: (id: string) => boolean;
 }) {
   const reduceMotion = useReduceMotion();
+  useEffect(() => {
+    if (error !== null) {
+      scrollRef.current?.scrollToEnd({animated: !reduceMotion});
+    }
+  }, [error, reduceMotion, scrollRef]);
   const resting =
     messages.length === 0 && !busy && !loadingHistory && error === null;
   return (
@@ -125,6 +132,7 @@ export function MobileChat({
             message={message}
             compact
             animate={shouldAnimate(message.id)}
+            onRetry={onRetry === undefined ? undefined : () => onRetry(message)}
             reduceMotion={reduceMotion}
           />
         ))}

@@ -28,7 +28,7 @@ export function MobileOmnibar({
   canStop: boolean;
   inputRef: React.RefObject<TextInput | null>;
 }) {
-  const stopping = mode === 'Ask' && canStop;
+  const stopping = canStop;
   const disabled =
     !stopping && (value.trim() === '' || (mode === 'Ask' && busy));
   const submit = () => {

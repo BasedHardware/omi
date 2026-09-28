@@ -68,19 +68,10 @@ async function finishMobileSetup(
     await act(async () => control(renderer, label).props.onPress());
   };
   await press('Agree & Continue');
-  await act(async () => {
-    renderer.root
-      .findAllByType(TextInput)
-      .find(node => node.props.accessibilityLabel === 'Enter your name')!
-      .props.onChangeText('Sam');
-  });
-  await press('Continue');
   await press('Continue');
   await press('TikTok');
   await press('Continue');
   await press("I'll do these later");
-  await press('Skip for now');
-  await press('Continue');
 }
 
 afterEach(() => {
@@ -296,9 +287,7 @@ test.each([true, false])(
       await act(async () =>
         control(
           renderer,
-          connect
-            ? 'Agree and connect Omi'
-            : 'Agree and continue without a device',
+          connect ? 'Connect your Omi' : 'Continue without a device',
         ).props.onPress(),
       );
       expect(control(renderer, 'First-run onboarding')).toBeUndefined();

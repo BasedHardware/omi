@@ -2,7 +2,9 @@ import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Animated,
   Easing,
+  I18nManager,
   Linking,
+  NativeModules,
   Platform,
   ScrollView,
   StyleSheet,
@@ -28,9 +30,10 @@ import {
   TERMS_URL,
 } from '../app/onboardingCopy';
 import {
+  mobileItinerary,
   mobileSetupIndex,
-  mobileSetupSteps,
   nextMobileSetupStep,
+  normalizeDeviceLanguage,
   previousMobileSetupStep,
   type MobileOnboardingStep,
   type MobileSetupStep,
@@ -54,6 +57,40 @@ import {PermissionRow} from './PermissionRow';
 import {color as uiColor, tokens} from './tokens';
 
 const DOTS_SIZE = 104;
+
+/** Collects the OS locale string on each platform; '' when unavailable. */
+function deviceLocaleSource(): string {
+  try {
+    if (Platform.OS === 'web') {
+      return typeof navigator !== 'undefined' && navigator.language
+        ? navigator.language
+        : '';
+    }
+    const settings = (
+      NativeModules.SettingsManager as
+        | {settings?: Record<string, unknown>}
+        | undefined
+    )?.settings;
+    const appleLanguages = settings?.AppleLanguages;
+    const apple =
+      Array.isArray(appleLanguages) && typeof appleLanguages[0] === 'string'
+        ? appleLanguages[0]
+        : typeof settings?.AppleLocale === 'string'
+        ? (settings.AppleLocale as string)
+        : '';
+    const i18nLocale = (I18nManager as {localeIdentifier?: unknown})
+      .localeIdentifier;
+    const raw =
+      Platform.OS === 'android'
+        ? typeof i18nLocale === 'string'
+          ? i18nLocale
+          : ''
+        : apple || (typeof i18nLocale === 'string' ? i18nLocale : '');
+    return typeof raw === 'string' ? raw : '';
+  } catch {
+    return '';
+  }
+}
 
 type PermissionKind = 'notifications' | 'microphone' | 'bluetooth';
 type PermissionState = 'unknown' | 'granted' | 'denied' | 'unsupported';
@@ -99,8 +136,11 @@ export function Onboarding({
   const [step, setStep] = useState<MobileOnboardingStep>(
     setupRequired ? 'consent' : 'welcome',
   );
-  const [name, setName] = useState('');
-  const [language, setLanguage] = useState('en');
+  const [initialLanguage] = useState(() =>
+    normalizeDeviceLanguage(deviceLocaleSource()),
+  );
+  const [language, setLanguage] = useState(initialLanguage);
+  const [languageQuery, setLanguageQuery] = useState('');
   const [languages, setLanguages] = useState<AvailableLanguage[]>(
     PRIMARY_LANGUAGES.map(item => ({code: item.code, name: item.name})),
   );
@@ -118,6 +158,9 @@ export function Onboarding({
   const [voiceSaved, setVoiceSaved] = useState(false);
   const operation = useRef(0);
   const signedIn = useRef(setupRequired);
+  // Native phones have no getUserMedia: their setup skips the speech step,
+  // and the step counter follows the same itinerary.
+  const itinerary = useMemo(() => mobileItinerary(nativePhone), [nativePhone]);
 
   useEffect(() => {
     if (reduceMotion) {
@@ -175,7 +218,7 @@ export function Onboarding({
     });
   }, [setupRequired, step]);
 
-  const setupIndex = mobileSetupIndex(step);
+  const setupIndex = mobileSetupIndex(step, itinerary);
   const busy = completingSetup || saving;
   const displayError = localError ?? error ?? null;
   const titleColor = desktop && styles.desktopTitle;
@@ -184,6 +227,29 @@ export function Onboarding({
     () => languages.find(item => item.code === language)?.name ?? language,
     [language, languages],
   );
+  // Compact defaults: the device language first, then the primary set —
+  // never the whole catalog. Searching swaps in filtered matches.
+  const suggestedLanguages = useMemo(() => {
+    const base: AvailableLanguage[] =
+      languages.length > 0
+        ? languages
+        : PRIMARY_LANGUAGES.map(item => ({code: item.code, name: item.name}));
+    const rest = base.filter(item => item.code !== language);
+    return [{code: language, name: selectedLanguageName}, ...rest].slice(0, 6);
+  }, [language, languages, selectedLanguageName]);
+  const matchingLanguages = useMemo(() => {
+    const query = languageQuery.trim().toLowerCase();
+    if (query.length === 0) {
+      return null;
+    }
+    return languages
+      .filter(
+        item =>
+          item.name.toLowerCase().includes(query) ||
+          item.code.toLowerCase().includes(query),
+      )
+      .slice(0, 8);
+  }, [languageQuery, languages]);
 
   function goBack() {
     if (step === 'welcome' || signingIn) {
@@ -192,7 +258,7 @@ export function Onboarding({
     if (step === 'consent') {
       return;
     }
-    const previous = previousMobileSetupStep(step);
+    const previous = previousMobileSetupStep(step, itinerary);
     if (previous != null) {
       setLocalError(null);
       setStep(previous);
@@ -200,7 +266,7 @@ export function Onboarding({
   }
 
   async function advanceFrom(current: MobileSetupStep) {
-    const next = nextMobileSetupStep(current);
+    const next = nextMobileSetupStep(current, itinerary);
     if (next == null) {
       return;
     }
@@ -256,6 +322,12 @@ export function Onboarding({
 
   async function request(kind: PermissionKind) {
     if (pendingPermission !== null) {
+      return;
+    }
+    // iOS/Android never re-prompt after a denial — the row's status says
+    // "Open Settings", so that is exactly what a denied tap must do.
+    if (permissions[kind] === 'denied') {
+      Linking.openSettings().catch(() => undefined);
       return;
     }
     const current = ++operation.current;
@@ -338,7 +410,7 @@ export function Onboarding({
       await uploadVoicePrint(omiBackend?.uploadAudioFile, wav);
       if (operation.current === current) {
         setVoiceSaved(true);
-        setStep('knowledge');
+        setStep('complete');
       }
     } catch (error) {
       if (operation.current === current) {
@@ -368,14 +440,19 @@ export function Onboarding({
       size="large"
       variant={variant}
       labelStyle={desktop && styles.desktopButtonLabel}
-      style={
-        desktop && variant === 'primary' ? styles.desktopButton : undefined
-      }>
+      style={[
+        nativePhone && styles.actionStretch,
+        desktop && variant === 'primary' ? styles.desktopButton : undefined,
+      ]}>
       {label}
     </Button>
   );
 
-  const permissionRow = (kind: PermissionKind, title: string) => {
+  const permissionRow = (
+    kind: PermissionKind,
+    title: string,
+    description: string,
+  ) => {
     const granted = permissions[kind] === 'granted';
     const status =
       pendingPermission === kind
@@ -401,6 +478,7 @@ export function Onboarding({
         }}
         status={status}
         title={title}
+        description={description}
       />
     );
   };
@@ -425,22 +503,14 @@ export function Onboarding({
         </Animated.View>
         {setupIndex >= 0 ? (
           <Text style={[styles.meta, copyColor]}>
-            Step {setupIndex + 1} of {mobileSetupSteps.length}
+            Step {setupIndex + 1} of {itinerary.length}
           </Text>
         ) : null}
-        <Text
-          accessibilityRole="header"
-          style={[
-            styles.title,
-            titleColor,
-            step === 'permissions' && styles.titleStart,
-          ]}>
+        <Text accessibilityRole="header" style={[styles.title, titleColor]}>
           {step === 'welcome'
             ? 'Welcome to Omi'
             : step === 'consent'
             ? 'Data & Privacy'
-            : step === 'name'
-            ? "What's your name?"
             : step === 'language'
             ? 'Select your primary language'
             : step === 'source'
@@ -449,8 +519,6 @@ export function Onboarding({
             ? 'Grant permissions'
             : step === 'speech'
             ? 'Teach Omi your voice'
-            : step === 'knowledge'
-            ? 'Here is what I know about you'
             : 'You are all set!'}
         </Text>
         {step === 'welcome' ? (
@@ -514,39 +582,19 @@ export function Onboarding({
               </Button>
             </View>
             {action('Agree & Continue', () => {
-              setStep('name');
-            })}
-          </>
-        ) : null}
-        {step === 'name' ? (
-          <>
-            <Field
-              accessibilityLabel="Enter your name"
-              autoCapitalize="words"
-              autoCorrect={false}
-              label="Name"
-              onChangeText={setName}
-              placeholder="Enter your name"
-              value={name}
-            />
-            {action('Continue', () => {
-              if (name.trim().length === 0) {
-                setLocalError('Enter your name to continue.');
-                return;
-              }
-              setLocalError(null);
-              setStep('language');
+              void advanceFrom('consent');
             })}
           </>
         ) : null}
         {step === 'language' ? (
           <>
             <Text style={[styles.copy, copyColor]}>
-              Set your language for sharper transcriptions and a personalized
-              experience. Selected: {selectedLanguageName}.
+              {language === initialLanguage
+                ? `We set ${selectedLanguageName} from your device language. Continue, or search if that is not right.`
+                : `Continue in ${selectedLanguageName}, or pick another language.`}
             </Text>
-            <View style={styles.choices}>
-              {languages.map(item => (
+            <View style={styles.chips}>
+              {(matchingLanguages ?? suggestedLanguages).map(item => (
                 <Button
                   key={item.code}
                   accessibilityLabel={item.name}
@@ -557,6 +605,21 @@ export function Onboarding({
                 </Button>
               ))}
             </View>
+            <Field
+              accessibilityLabel="Search languages"
+              autoCapitalize="none"
+              autoCorrect={false}
+              label="Search languages"
+              onChangeText={setLanguageQuery}
+              placeholder="Search languages"
+              returnKeyType="search"
+              value={languageQuery}
+            />
+            {matchingLanguages != null && matchingLanguages.length === 0 ? (
+              <Text style={[styles.copy, copyColor]}>
+                No language matches “{languageQuery.trim()}”.
+              </Text>
+            ) : null}
             {action(saving ? 'Saving…' : 'Continue', persistLanguage, saving)}
           </>
         ) : null}
@@ -577,9 +640,17 @@ export function Onboarding({
             {source === 'Other' ? (
               <Field
                 accessibilityLabel="Please specify"
+                autoCorrect={false}
+                enablesReturnKeyAutomatically
                 label="Please specify"
                 onChangeText={setOtherSource}
-                placeholder="Please specify"
+                onSubmitEditing={() => {
+                  if (otherSource.trim().length > 0) {
+                    void persistSource();
+                  }
+                }}
+                placeholder="Where did you hear about us?"
+                returnKeyType="done"
                 value={otherSource}
               />
             ) : null}
@@ -588,25 +659,30 @@ export function Onboarding({
         ) : null}
         {step === 'permissions' ? (
           <>
-            <Text style={[styles.copy, styles.copyStart, copyColor]}>
-              Click one when you’re ready. Nothing is asked until you do.
+            <Text style={[styles.copy, copyColor]}>
+              {nativePhone
+                ? 'Tap one when you’re ready. Nothing is asked until you do.'
+                : 'Click one when you’re ready. Nothing is asked until you do.'}
             </Text>
             {permissionRow(
               'notifications',
-              'I would like to notify you when something needs you.',
+              'Notifications',
+              'Notify you when something needs you.',
             )}
             {permissionRow(
               'microphone',
-              'I would like to use your microphone, so I can hear what you talk about.',
+              'Microphone',
+              'Hear what you talk about, so Omi can help.',
             )}
             {nativePhone
               ? permissionRow(
                   'bluetooth',
-                  'I would like to find your Omi, so I can record from it.',
+                  'Bluetooth',
+                  'Find your Omi, so it can record for you.',
                 )
               : null}
             {action("I'll do these later", () => {
-              setStep('speech');
+              void advanceFrom('permissions');
             })}
           </>
         ) : null}
@@ -627,21 +703,11 @@ export function Onboarding({
             {action(
               'Skip for now',
               () => {
-                setStep('knowledge');
+                setStep('complete');
               },
               recordingVoice,
               'ghost',
             )}
-          </>
-        ) : null}
-        {step === 'knowledge' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              This map updates as Omi learns from your conversations.
-            </Text>
-            {action('Continue', () => {
-              setStep('complete');
-            })}
           </>
         ) : null}
         {step === 'complete' ? (
@@ -663,9 +729,7 @@ export function Onboarding({
             )}
             {!desktop && !browser
               ? action(
-                  busy && connectAfterComplete
-                    ? 'Saving…'
-                    : 'Agree and connect Omi',
+                  busy && connectAfterComplete ? 'Saving…' : 'Connect your Omi',
                   () => finish(true),
                   busy,
                 )
@@ -675,7 +739,7 @@ export function Onboarding({
                 ? 'Saving…'
                 : desktop || browser
                 ? 'Start Using Omi'
-                : 'Agree and continue without a device',
+                : 'Continue without a device',
               () => finish(false),
               busy,
               desktop || browser ? 'primary' : 'ghost',
@@ -733,14 +797,13 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       lineHeight: 38,
       textAlign: 'center',
     },
-    titleStart: {alignSelf: 'stretch', textAlign: 'left'},
+    actionStretch: {alignSelf: 'stretch'},
     copy: {
       color: tokens.color.menuText,
       fontSize: 15,
       lineHeight: 22,
       textAlign: 'center',
     },
-    copyStart: {alignSelf: 'stretch', textAlign: 'left'},
     error: {
       color: tokens.color.menuText,
       fontSize: 13,
@@ -755,19 +818,12 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       alignSelf: 'stretch',
       gap: tokens.space.xs,
     },
-    choice: {
+    chips: {
       alignSelf: 'stretch',
-      alignItems: 'center',
-      borderColor: tokens.color.line,
-      borderRadius: tokens.radius.md,
-      borderWidth: tokens.border.width,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: tokens.space.xs,
-      padding: tokens.space.md,
-    },
-    choiceTitle: {
-      color: tokens.color.text,
-      fontSize: 16,
-      fontWeight: '600',
+      justifyContent: 'center',
     },
     desktopTitle: {color: desktopTokens.color.ink},
     desktopCopy: {color: desktopTokens.color.inkMuted},
