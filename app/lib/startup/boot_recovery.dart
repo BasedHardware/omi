@@ -22,6 +22,12 @@ class BootRecovery {
   String get failingStage => prefs.get(_stageKey) is String ? prefs.getString(_stageKey)! : '';
   int get previousSchema => prefs.get(schemaKey) is int ? prefs.getInt(schemaKey)! : 0;
   bool get needsMigration => previousSchema < schemaVersion;
+
+  /// The stamp is diagnostic; persisted-state loaders are tolerant on every boot.
+  Future<void> recordSchemaUpgradeIfNeeded(BootJournal journal) async {
+    if (needsMigration) await journal.record('schema_upgrade', 'needed');
+  }
+
   bool get shouldRecover {
     final lastFailure = prefs.get(_timeKey);
     final age = lastFailure is int ? _now().millisecondsSinceEpoch - lastFailure : -1;

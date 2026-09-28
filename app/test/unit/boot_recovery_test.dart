@@ -35,6 +35,28 @@ void main() {
     expect(recovery.shouldRecover, isFalse);
   });
 
+  test('absent or old schema stamp journals upgrade and successful boot writes current stamp', () async {
+    final directory = await Directory.systemTemp.createTemp('boot-recovery-');
+    try {
+      final journal = BootJournal(documents: () async => directory);
+      for (final oldStamp in <int?>[null, 0]) {
+        SharedPreferences.setMockInitialValues({if (oldStamp != null) BootRecovery.schemaKey: oldStamp});
+        final prefs = await SharedPreferences.getInstance();
+        final boot = BootRecovery(prefs, now: () => now);
+        await boot.recordSchemaUpgradeIfNeeded(journal);
+        expect(await journal.stage('shared_preferences', () async => 42), 42);
+        await boot.fullBootSucceeded();
+        expect(prefs.getInt(BootRecovery.schemaKey), BootRecovery.schemaVersion);
+        expect(boot.needsMigration, isFalse);
+      }
+      final upgrades = (await journal.read()).where((row) => row['stage'] == 'schema_upgrade').toList();
+      expect(upgrades, hasLength(2));
+      expect(upgrades.every((row) => row['state'] == 'needed'), isTrue);
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
   test('a different stage or expired window starts a new streak', () async {
     await recovery.failed('resolve_auth');
     expect(await recovery.failed('bind_owner'), 1);

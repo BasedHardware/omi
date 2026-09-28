@@ -361,7 +361,7 @@ Future<void> _start({bool forceFull = false}) async {
       recovery = BootRecovery(await SharedPreferences.getInstance());
       await recovery.countInterruptedBoot(BootJournal.instance);
       await BootJournal.instance.record('boot', 'begin');
-      if (recovery.needsMigration) await BootJournal.instance.record('schema_upgrade', 'needed');
+      await recovery.recordSchemaUpgradeIfNeeded(BootJournal.instance);
       BootRecovery.safeModeActive = !forceFull && recovery.shouldRecover;
       if (BootRecovery.safeModeActive) {
         await BootJournal.instance.record('safe_boot', 'begin');
