@@ -27,6 +27,14 @@ function isOwnerDoc(data: FirebaseFirestore.DocumentData | undefined) {
   return data?.owner === true;
 }
 
+function errorCode(error: unknown): string | undefined {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = (error as { code: unknown }).code;
+    if (typeof code === "string") return code;
+  }
+  return undefined;
+}
+
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -91,22 +99,30 @@ export async function POST(request: NextRequest) {
 
   try {
     let firebaseUser;
+    let provisioned = false;
     try {
       firebaseUser = await getAdminAuth().getUserByEmail(email);
     } catch (error) {
-      const code =
-        error && typeof error === "object" && "code" in error
-          ? error.code
-          : undefined;
-      if (code === "auth/user-not-found") {
-        return NextResponse.json(
-          {
-            error: `No Omi account found for ${email}. Ask them to sign in to Omi once, then try again.`,
-          },
-          { status: 404 }
-        );
+      if (errorCode(error) !== "auth/user-not-found") throw error;
+      // The invitee has never signed in to Omi, so no Firebase Auth user
+      // exists to key `adminData/{uid}` on. Reserve the uid now with an
+      // unverified, credential-less account: the project keeps Firebase's
+      // default one-account-per-email setting, so when they later sign in
+      // with Google for this address the provider links into this very uid
+      // and the admin grant below is already waiting for them.
+      try {
+        firebaseUser = await getAdminAuth().createUser({
+          email,
+          emailVerified: false,
+        });
+        provisioned = true;
+      } catch (createError) {
+        // Lost a race with a concurrent add (or with their first sign-in).
+        if (errorCode(createError) !== "auth/email-already-exists") {
+          throw createError;
+        }
+        firebaseUser = await getAdminAuth().getUserByEmail(email);
       }
-      throw error;
     }
 
     const db = getDb();
@@ -132,7 +148,7 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     });
 
-    return NextResponse.json({ teamMember }, { status: 201 });
+    return NextResponse.json({ teamMember, provisioned }, { status: 201 });
   } catch (error) {
     console.error("Error adding team member:", error);
     return NextResponse.json(
