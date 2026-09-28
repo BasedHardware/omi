@@ -202,6 +202,12 @@ async def _listen_sample(
         deadline = time.monotonic() + 60
         while not (session_bound and ready):
             payload = await _receive_json(websocket, deadline)
+            if (
+                isinstance(payload, dict)
+                and payload.get("type") == "service_status"
+                and payload.get("status") == "stt_failed"
+            ):
+                raise ProbeError("stt_unavailable")
             if isinstance(payload, dict) and payload.get("type") == "conversation_session":
                 session_bound = payload.get("conversation_id") == conversation_id
             if (
@@ -219,6 +225,12 @@ async def _listen_sample(
                     payload = await _receive_json(websocket, deadline)
                 except ProbeError:
                     return
+                if (
+                    isinstance(payload, dict)
+                    and payload.get("type") == "service_status"
+                    and payload.get("status") == "stt_failed"
+                ):
+                    raise ProbeError("stt_unavailable")
                 segments = (
                     payload
                     if isinstance(payload, list)
@@ -793,6 +805,21 @@ async def _terminal_readback(
     return conversation
 
 
+def _early_listen_failure(task: asyncio.Task[tuple[bool, str]]) -> ProbeError:
+    """Classify a socket that died before the durable conversation finalized."""
+    try:
+        task.result()
+    except websockets.exceptions.ConnectionClosed as error:
+        # The listen service uses 1011 when every STT leg has failed. Keep the
+        # provider's free-form close reason out of the bounded probe receipt.
+        return ProbeError("stt_unavailable" if error.code == 1011 else "listen_closed_early")
+    except ProbeError as error:
+        return error
+    except Exception:
+        return ProbeError("listen_failure")
+    return ProbeError("listen_closed_early")
+
+
 async def _observe_candidate_pusher(
     deployment_receipt: dict[str, Any], *, conversation_id: str, project: str, namespace: str
 ) -> int:
@@ -925,22 +952,35 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
                 hold_open=probe_socket_hold,
             )
         )
-        try:
-            conversation = await _terminal_readback(
+        readback_task = asyncio.create_task(
+            _terminal_readback(
                 args.api_url.rstrip("/"),
                 token,
                 conversation_id,
                 args.finalization_timeout_seconds,
                 expected_phrase=fixture.expected_phrase,
             )
+        )
+        readback_succeeded = False
+        try:
+            done, _ = await asyncio.wait({listen_task, readback_task}, return_when=asyncio.FIRST_COMPLETED)
+            if listen_task in done:
+                raise _early_listen_failure(listen_task)
+            conversation = readback_task.result()
             consumer_readback_passed = True
             live_word_count, expected_word_count = _alignment_word_counts(
                 conversation.get("transcript_segments") or [], fixture.expected_phrase, DISCARD_KEEP_AUDIO_PASSES
             )
             if not _base_word_count_ok(live_word_count, expected_word_count, len(fixture.expected_phrase.split())):
                 raise ProbeError("transcript_word_count")
+            readback_succeeded = True
         finally:
             probe_socket_hold.set()
+            if not readback_task.done():
+                readback_task.cancel()
+            if not readback_succeeded and not listen_task.done():
+                listen_task.cancel()
+            await asyncio.gather(readback_task, listen_task, return_exceptions=True)
         live_window_matched, live_window_transcript = await listen_task
         candidate_pod_count = await _observe_candidate_pusher(
             deployment_receipt,

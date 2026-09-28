@@ -71,6 +71,21 @@ can prioritize Parakeet only when that live-model capability matches; it never
 overrides the selected service/language/model tuple. All providers implement the
 `STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
 
+When `STT_ROUTING_MODE=shadow`, listen computes a fleet score from bounded
+provider/language transcript outcomes but still connects in configured order.
+`on` ranks only the legs that were already eligible for the session. The
+windowed Parakeet allocation and the language arm keep their selected primary;
+account benches exclude a provider regardless of score. A 2% deterministic
+probe floor lets lower-score eligible providers demonstrate recovery. The
+background Redis refresh has a 75 ms default deadline; stale cache falls back
+to process-local health. Neither Redis reads nor writes run on the connection
+path. `off` returns to configured
+order without a code change. Each leg emits `text` only when it produces its
+first nonempty text within `STT_NO_TEXT_SECONDS` of VAD-confirmed speech;
+eligible legs that miss the deadline emit `no_text`. The existing terminal
+session metric below remains the user-facing SLI. See the
+[live STT routing runbook](runbooks/live-stt-routing.md).
+
 Soniox streams final token deltas whose network-frame boundaries can split a
 word. Its adapter retains the pending word across frames, preserving subword
 text until whitespace, a speaker change, a gap of at least three seconds, or
@@ -689,6 +704,16 @@ capture confidence. Non-intersecting ambient items are untouched. Question
 verdicts are measured but deliberately produce nothing in v1 because the task
 extractor and capture policy have no question-routing destination. This path
 has no realtime wake-word state or notification surface.
+
+After `_write_action_items` persists extracted tasks, its background
+`auto_sync_action_items_batch` worker exports them to the configured default
+task integration. Cloud exports are independent: each item retains one result
+in input order, and a read, OAuth refresh, or export-marker failure does not
+erase earlier successes or skip later items. Per-item exceptions emit bounded
+degraded telemetry and a generic failure; shared configuration failures still
+stop the batch and cancellation propagates. Apple Reminders retains its single
+push. This is best-effort export, not a durable retry queue: the worker does not
+automatically repeat an uncertain provider create after a failed marker write.
 
 With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
 a normalized meeting roster in the CONVERSATION METADATA prefix: participant
@@ -1506,8 +1531,17 @@ only committed IDs drive live updates and `SegmentsDeletedEvent`.
 Translation and inference flushes use `segment_update_fields`: they can update
 existing IDs but cannot restore retired IDs or replace speech text/timestamps.
 Both lifecycle processor writers reapply the current receipt before committing.
-This preserves attribution while leaving summary refresh explicit; processor
-content freshness for non-sync rows is a separate pre-existing limitation.
+The processor also reads and applies that receipt to its in-memory transcript
+before building the summary prompt, including when audio-based speaker resolution
+is unavailable. The mobile detail page regenerates an existing summary after
+four seconds without a newly acknowledged speaker edit, or when the detail page
+closes. Saves still in flight keep their conversation ID and regenerate once
+after the final successful acknowledgement, even if the detail page was disposed.
+The reprocess response carries `X-Omi-Speaker-Receipt-Summary: 1` only after
+the processor successfully reads and applies the manual receipt (including a
+confirmed empty receipt); a failed receipt read or application sends no header.
+Without it, the detail page keeps the explicit retry action. Processor content
+freshness for non-sync rows remains a separate limitation.
 Protection migration re-encodes the receipt and transcript in one per-document
 transaction; the stored level outranks a live caller's cached hint.
 

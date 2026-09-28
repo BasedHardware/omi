@@ -224,12 +224,13 @@ final class QuickActionsIconPatcher: NSObject {
       
       
       if WCSession.isSupported() {
-          session = WCSession.default
-          session?.delegate = self
-          session?.activate();
+          let watchSession = WCSession.default
+          session = watchSession
+          watchSession.delegate = self
+          watchSession.activate()
 
             flutterWatchAPI = WatchRecorderFlutterAPI(binaryMessenger: messenger)
-            let api: WatchRecorderHostAPI = RecorderHostApiImpl(session: session!, flutterWatchAPI: flutterWatchAPI)
+            let api: WatchRecorderHostAPI = RecorderHostApiImpl(session: watchSession, flutterWatchAPI: flutterWatchAPI)
 
             WatchRecorderHostAPISetup.setUp(binaryMessenger: messenger, api: api)
       }
@@ -412,24 +413,24 @@ final class QuickActionsIconPatcher: NSObject {
       }
       switch call.method {
       case "updateBatteryInfo":
-        defaults?.set(args["deviceName"] as? String ?? "Omi", forKey: "widget_device_name")
-        defaults?.set(args["batteryLevel"] as? Int ?? -1, forKey: "widget_battery_level")
-        defaults?.set(args["deviceType"] as? String ?? "omi", forKey: "widget_device_type")
-        defaults?.set(args["isConnected"] as? Bool ?? false, forKey: "widget_is_connected")
-        defaults?.set(Date(), forKey: "widget_last_updated")
+        defaults.map { try? SafeDefaults.store(.string(args["deviceName"] as? String ?? "Omi"), forKey: "widget_device_name", in: $0) }
+        defaults.map { try? SafeDefaults.store(.int(args["batteryLevel"] as? Int ?? -1), forKey: "widget_battery_level", in: $0) }
+        defaults.map { try? SafeDefaults.store(.string(args["deviceType"] as? String ?? "omi"), forKey: "widget_device_type", in: $0) }
+        defaults.map { try? SafeDefaults.store(.bool(args["isConnected"] as? Bool ?? false), forKey: "widget_is_connected", in: $0) }
+        defaults.map { try? SafeDefaults.store(.date(Date()), forKey: "widget_last_updated", in: $0) }
         // NOTE: isMuted is intentionally NOT written here — only updateMuteState controls it
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadTimelines(ofKind: "OmiBatteryWidget")
         }
       case "updateChargingState":
         let isCharging = (args["isCharging"] as? Bool) ?? (args["isCharging"] as? NSNumber)?.boolValue ?? false
-        defaults?.set(isCharging, forKey: "widget_is_charging")
+        defaults.map { try? SafeDefaults.store(.bool(isCharging), forKey: "widget_is_charging", in: $0) }
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadTimelines(ofKind: "OmiBatteryWidget")
         }
       case "updateMuteState":
         let isMuted = (args["isMuted"] as? Bool) ?? (args["isMuted"] as? NSNumber)?.boolValue ?? false
-        defaults?.set(isMuted, forKey: "widget_is_muted")
+        defaults.map { try? SafeDefaults.store(.bool(isMuted), forKey: "widget_is_muted", in: $0) }
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadAllTimelines()
         }
@@ -445,7 +446,7 @@ final class QuickActionsIconPatcher: NSObject {
           return
         }
         if let json = args["json"] as? String {
-          defaults?.set(json, forKey: key)
+          defaults.map { try? SafeDefaults.store(.string(json), forKey: key, in: $0) }
         } else {
           defaults?.removeObject(forKey: key)
         }
@@ -460,7 +461,11 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     // Register Phone Calls plugin
-    OmiPhoneCallsPlugin.register(with: engineBridge.pluginRegistry.registrar(forPlugin: "OmiPhoneCallsPlugin")!)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OmiPhoneCallsPlugin") {
+      OmiPhoneCallsPlugin.register(with: registrar)
+    } else {
+      NSLog("[AppDelegate] Phone calls plugin registrar unavailable")
+    }
 
   }
 
@@ -621,13 +626,11 @@ final class QuickActionsIconPatcher: NSObject {
     OmiBleManager.shared.disconnectAllPeripherals()
 
     // If title and body are nil, then we don't need to show notification.
-    if notificationTitleOnKill == nil || notificationBodyOnKill == nil {
-      return
-    }
+    guard let title = notificationTitleOnKill, let body = notificationBodyOnKill else { return }
 
     let content = UNMutableNotificationContent()
-    content.title = notificationTitleOnKill!
-    content.body = notificationBodyOnKill!
+    content.title = title
+    content.body = body
     let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
     let request = UNNotificationRequest(identifier: "notification on app kill", content: content, trigger: trigger)
 
@@ -798,9 +801,9 @@ extension AppDelegate: WCSessionDelegate {
             case "batteryUpdate":
                 if let batteryLevel = message["batteryLevel"] as? Double,
                    let batteryState = message["batteryState"] as? Int {
-                    UserDefaults.standard.set(batteryLevel, forKey: "watch_battery_level")
-                    UserDefaults.standard.set(batteryState, forKey: "watch_battery_state")
-                    UserDefaults.standard.set(Date(), forKey: "watch_battery_last_updated")
+                    try? SafeDefaults.store(.double(batteryLevel), forKey: "watch_battery_level")
+                    try? SafeDefaults.store(.int(batteryState), forKey: "watch_battery_state")
+                    try? SafeDefaults.store(.date(Date()), forKey: "watch_battery_last_updated")
                     
                     DispatchQueue.main.async {
                         self.flutterWatchAPI?.onWatchBatteryUpdate(batteryLevel: batteryLevel, batteryState: Int64(batteryState)) { result in
@@ -819,11 +822,11 @@ extension AppDelegate: WCSessionDelegate {
                    let systemVersion = message["systemVersion"] as? String,
                    let localizedModel = message["localizedModel"] as? String {
 
-                    UserDefaults.standard.set(name, forKey: "watch_device_name")
-                    UserDefaults.standard.set(model, forKey: "watch_device_model")
-                    UserDefaults.standard.set(systemVersion, forKey: "watch_system_version")
-                    UserDefaults.standard.set(localizedModel, forKey: "watch_localized_model")
-                    UserDefaults.standard.set(Date(), forKey: "watch_info_last_updated")
+                    try? SafeDefaults.store(.string(name), forKey: "watch_device_name")
+                    try? SafeDefaults.store(.string(model), forKey: "watch_device_model")
+                    try? SafeDefaults.store(.string(systemVersion), forKey: "watch_system_version")
+                    try? SafeDefaults.store(.string(localizedModel), forKey: "watch_localized_model")
+                    try? SafeDefaults.store(.date(Date()), forKey: "watch_info_last_updated")
                 }
             default:
                 print("Unknown method: \(method)")
@@ -867,9 +870,9 @@ extension AppDelegate: WCSessionDelegate {
             case "batteryUpdate":
                 if let batteryLevel = userInfo["batteryLevel"] as? Double,
                    let batteryState = userInfo["batteryState"] as? Int {
-                    UserDefaults.standard.set(batteryLevel, forKey: "watch_battery_level")
-                    UserDefaults.standard.set(batteryState, forKey: "watch_battery_state")
-                    UserDefaults.standard.set(Date(), forKey: "watch_battery_last_updated")
+                    try? SafeDefaults.store(.double(batteryLevel), forKey: "watch_battery_level")
+                    try? SafeDefaults.store(.int(batteryState), forKey: "watch_battery_state")
+                    try? SafeDefaults.store(.date(Date()), forKey: "watch_battery_last_updated")
                     
                     DispatchQueue.main.async {
                         self.flutterWatchAPI?.onWatchBatteryUpdate(batteryLevel: batteryLevel, batteryState: Int64(batteryState)) { result in
@@ -887,11 +890,11 @@ extension AppDelegate: WCSessionDelegate {
                    let model = userInfo["model"] as? String,
                    let systemVersion = userInfo["systemVersion"] as? String,
                    let localizedModel = userInfo["localizedModel"] as? String {
-                    UserDefaults.standard.set(name, forKey: "watch_device_name")
-                    UserDefaults.standard.set(model, forKey: "watch_device_model")
-                    UserDefaults.standard.set(systemVersion, forKey: "watch_system_version")
-                    UserDefaults.standard.set(localizedModel, forKey: "watch_localized_model")
-                    UserDefaults.standard.set(Date(), forKey: "watch_info_last_updated")
+                    try? SafeDefaults.store(.string(name), forKey: "watch_device_name")
+                    try? SafeDefaults.store(.string(model), forKey: "watch_device_model")
+                    try? SafeDefaults.store(.string(systemVersion), forKey: "watch_system_version")
+                    try? SafeDefaults.store(.string(localizedModel), forKey: "watch_localized_model")
+                    try? SafeDefaults.store(.date(Date()), forKey: "watch_info_last_updated")
                 }
             default:
                 print("Unknown background method: \(method)")
@@ -1185,7 +1188,7 @@ class SpeechRecognitionHandler: NSObject {
     /// 16 kHz mono 16-bit PCM WAV of silence, for probing the recognizer.
     static func writeSilentWav(seconds: Double) -> URL? {
         let sampleRate = 16000
-        let sampleCount = Int(Double(sampleRate) * seconds)
+        let sampleCount = CheckedIntegerConversion.int(Double(sampleRate) * seconds) ?? 0
         let dataSize = sampleCount * 2
         var data = Data(capacity: 44 + dataSize)
         func append<T: FixedWidthInteger>(_ value: T) {

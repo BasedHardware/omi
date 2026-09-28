@@ -252,11 +252,11 @@ enum SiriTelemetry {
     }
     static func intent(_ name: String, outcome: String, started: Date) {
         append(kind: "intent", intent: name, outcome: outcome,
-               latencyMs: Int64(max(0, Date().timeIntervalSince(started) * 1000)), entityCounts: 0)
+               latencyMs: CheckedIntegerConversion.int64(max(0, Date().timeIntervalSince(started) * 1000)) ?? 0, entityCounts: 0)
     }
     static func index(outcome: String, started: Date, count: Int) {
         append(kind: "index", intent: "", outcome: outcome,
-               latencyMs: Int64(max(0, Date().timeIntervalSince(started) * 1000)), entityCounts: Int64(count))
+               latencyMs: CheckedIntegerConversion.int64(max(0, Date().timeIntervalSince(started) * 1000)) ?? 0, entityCounts: Int64(count))
     }
     private static func append(kind: String, intent: String, outcome: String,
                                latencyMs: Int64, entityCounts: Int64) {
@@ -265,7 +265,17 @@ enum SiriTelemetry {
         var rows = defaults.array(forKey: key) as? [[String: Any]] ?? []
         rows.append(["uid": uid, "kind": kind, "intent": intent, "outcome": outcome,
                      "latencyMs": latencyMs, "entityCounts": entityCounts])
-        defaults.set(Array(rows.suffix(100)), forKey: key)
+        let records: [[String: PlistValue]] = rows.suffix(100).map { row in
+            var record: [String: PlistValue] = [:]
+            record["uid"] = .string(row["uid"] as? String ?? "")
+            record["kind"] = .string(row["kind"] as? String ?? "")
+            record["intent"] = .string(row["intent"] as? String ?? "")
+            record["outcome"] = .string(row["outcome"] as? String ?? "")
+            record["latencyMs"] = .int64(row["latencyMs"] as? Int64 ?? 0)
+            record["entityCounts"] = .int64(row["entityCounts"] as? Int64 ?? 0)
+            return record
+        }
+        try? SafeDefaults.setPlistRecords(records, forKey: key, in: defaults)
     }
     static func take() -> [SiriTelemetryRecord] {
         guard let defaults, let uid = SiriSession.shared.currentConfig()?.uid else { return [] }

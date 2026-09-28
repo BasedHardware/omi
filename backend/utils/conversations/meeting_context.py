@@ -363,6 +363,7 @@ def context_from_screen_activity(
     *,
     started_at: datetime,
     finished_at: datetime,
+    duration_seconds: Optional[float] = None,
 ) -> Optional[CalendarMeetingContext]:
     """Extract corroborated participants and a title from conferencing rows.
 
@@ -385,13 +386,17 @@ def context_from_screen_activity(
     title = next((value for value in titles if value.casefold() not in _OCR_UI_WORDS), 'Video meeting')
     app_name = str(selected[0].get('appName') or '').strip() or None
 
+    # Callers that know the capture-session window is not the call length (#4056) pass the
+    # transcript-span duration; the window stays the fallback when only timestamps exist.
+    effective_seconds = duration_seconds if duration_seconds is not None else (finished_at - started_at).total_seconds()
+
     return CalendarMeetingContext(
         calendar_event_id='screen-activity',
         title=title,
         participants=participants,
         platform=app_name,
         start_time=started_at,
-        duration_minutes=max(1, int((finished_at - started_at).total_seconds() / 60)),
+        duration_minutes=max(1, int(effective_seconds / 60)),
         calendar_source='screen_activity',
     )
 
