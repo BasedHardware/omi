@@ -11257,7 +11257,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get openCall => 'Gesprek openen';
 
   @override
-  String get captureRecoveryBanner => 'De audio van de hanger komt niet aan in de app — tik om te repareren';
+  String get captureRecoveryBanner => 'Omi verzendt geen audio — tik om opnieuw verbinding te maken';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11384,6 +11384,144 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Koptelefoon';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minuten';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Taken';
+
+  @override
+  String get usageMonth => 'Deze maand';
+
+  @override
+  String get usageYear => 'Dit jaar';
+
+  @override
+  String get usageAll => 'Altijd';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Uiterlijk';
+
+  @override
+  String get appearanceSystem => 'Systeem';
+
+  @override
+  String get appearanceLight => 'Licht';
+
+  @override
+  String get appearanceDark => 'Donker';
+
+  @override
+  String get chatDiscardRecording => 'Verwerpen';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Dat heb ik niet verstaan — probeer het opnieuw';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Feedback geven';
+
+  @override
+  String get feedbackAllGood => 'Alles goed';
+
+  @override
+  String get feedbackChatWithUs => 'Meer te melden? Chat met ons';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Niet nauwkeurig';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Onvolledig';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Niet relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Verkeerde context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Iets anders';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Audio ontbreekt';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Slechte transcriptie';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Verkeerde spreker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Vertraagd of vastgelopen';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Gefragmenteerd of gedupliceerd';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Iets anders';
+
+  @override
+  String get searchPeople => 'Personen zoeken';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" toevoegen als nieuwe persoon';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Alle $count personen weergeven';
+  }
 
   @override
   String get singleTap => 'Enkel tikken';

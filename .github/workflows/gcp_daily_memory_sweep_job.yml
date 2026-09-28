@@ -294,46 +294,19 @@ jobs:
             --role="roles/run.invoker" \
             --quiet
 
-      - name: Provision hourly Scheduler trigger from admitted source
+      - name: Reconcile declared Scheduler triggers
+        env:
+          SCHEDULER_ENVIRONMENT: ${{ vars.ENV == 'prod' && 'prod' || 'dev' }}
         run: |
-          python3 backend/scripts/provision_daily_memory_sweep_scheduler.py \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" \
-            --scheduler-job "$SCHEDULER_JOB" \
-            --cloud-run-job "$SERVICE" \
-            --service-account "$SCHEDULER_SERVICE_ACCOUNT"
-          python3 backend/scripts/provision_daily_memory_sweep_scheduler.py \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" \
-            --scheduler-job "$LEDGER_DRAIN_SCHEDULER_JOB" \
-            --cloud-run-job "$LEDGER_DRAIN_SERVICE" \
-            --service-account "$SCHEDULER_SERVICE_ACCOUNT"
-
-      - name: Validate hourly Scheduler trigger
-        run: |
-          scheduler_state_file=$(mktemp)
-          ledger_scheduler_state_file=$(mktemp)
-          trap 'rm -f "$scheduler_state_file" "$ledger_scheduler_state_file"' EXIT
-          gcloud scheduler jobs describe "$SCHEDULER_JOB" \
-            --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" \
-            --format=json > "$scheduler_state_file"
-          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
-            --state-file "$scheduler_state_file" \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" \
-            --scheduler-job "$SCHEDULER_JOB" \
-            --cloud-run-job "$SERVICE"
-          gcloud scheduler jobs describe "$LEDGER_DRAIN_SCHEDULER_JOB" \
-            --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" \
-            --format=json > "$ledger_scheduler_state_file"
-          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
-            --state-file "$ledger_scheduler_state_file" \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" \
-            --scheduler-job "$LEDGER_DRAIN_SCHEDULER_JOB" \
-            --cloud-run-job "$LEDGER_DRAIN_SERVICE"
+          python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+          if [[ "$SCHEDULER_ENVIRONMENT" == dev ]]; then
+            python3 backend/scripts/scheduler_reconcile.py \
+              --environment dev --project "${{ vars.GCP_PROJECT_ID }}" \
+              --apply --jobs "$SCHEDULER_JOB" "$LEDGER_DRAIN_SCHEDULER_JOB"
+            python3 backend/scripts/scheduler_reconcile.py \
+              --environment dev --project "${{ vars.GCP_PROJECT_ID }}" --check \
+              --jobs "$SCHEDULER_JOB" "$LEDGER_DRAIN_SCHEDULER_JOB"
+          fi
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output

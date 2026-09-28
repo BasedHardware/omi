@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -109,6 +110,18 @@ class MobileFeedbackReceipt {
     return MobileFeedbackReceipt(feedbackId: expectedFeedbackId, eventId: payload.eventId, created: payload.created);
   }
 }
+
+/// Signature of [submitMobileFeedback]. Callers that surface the feedback flow
+/// accept an override of this shape so tests can observe the request path.
+typedef MobileFeedbackSubmit = Future<MobileFeedbackReceipt?> Function({
+  required MobileFeedbackKind kind,
+  required String targetId,
+  required int value,
+  MobileFeedbackReason? reason,
+  String? correlationId,
+  String? feedbackId,
+  required MobileFeedbackTargetKind targetKind,
+});
 
 Future<MobileFeedbackReceipt?> submitMobileFeedback({
   required MobileFeedbackKind kind,
@@ -291,8 +304,6 @@ Future<bool> deletePermissionAndRecordings() async {
   final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   return data.status == 'ok';
 }
-
-/**/
 
 Future<bool> setPrivateCloudSyncEnabled(bool value) async {
   var response = await makeApiCall(
@@ -548,9 +559,22 @@ Future<bool> setPreferredSummarizationAppServer(String appId) async {
   return data.status == 'ok';
 }
 
-Future<UserUsageResponse?> getUserUsage({required String period}) async {
+Future<String?> getUsageDeviceTimeZone() async {
+  try {
+    return (await FlutterTimezone.getLocalTimezone()).identifier;
+  } catch (_) {
+    // The server falls back to the stored timezone, then UTC.
+    return null;
+  }
+}
+
+Future<UserUsageResponse?> getUserUsage({required String period, required String? timeZone}) async {
+  final url = Uri.parse('${Env.apiBaseUrl}v1/users/me/usage').replace(queryParameters: {
+    'period': period,
+    if (timeZone != null) 'time_zone': timeZone,
+  });
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/me/usage?period=$period',
+    url: url.toString(),
     headers: {},
     method: 'GET',
     body: '',
@@ -840,9 +864,8 @@ Future<String?> generateDailySummary({String? date}) async {
 // Onboarding State
 
 Future<Map<String, dynamic>?> getUserOnboardingState() async {
-  print('DEBUG getUserOnboardingState: calling ${Env.apiBaseUrl}v1/users/onboarding');
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/users/onboarding', headers: {}, method: 'GET', body: '');
-  print('DEBUG getUserOnboardingState: response=${response?.statusCode}, body=${response?.body}');
+  Logger.debug('getUserOnboardingState status: ${response?.statusCode}');
   if (response == null) return null;
   if (response.statusCode == 200) {
     return wire.GeneratedOnboardingStateResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();

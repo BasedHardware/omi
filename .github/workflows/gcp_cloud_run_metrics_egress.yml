@@ -6,6 +6,8 @@ on:
     paths:
       - 'backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml'
       - 'backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml'
+      - 'backend/charts/monitoring/alerts/live-stt.json'
+      - 'backend/charts/monitoring/live-alert-gate.json'
       - '.github/workflows/gcp_cloud_run_metrics_egress.yml'
   workflow_dispatch:
     inputs:
@@ -147,3 +149,47 @@ jobs:
             --timeout=5m
           kubectl get service "$EXPORTER_RELEASE" \
             --namespace "$MONITORING_NAMESPACE"
+
+      - name: Import allowlisted live-STT Grafana alerts
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          case "${{ vars.ENV }}" in
+            dev|development) grafana_url=https://monitor.omiapi.com ;;
+            prod) grafana_url=https://monitor.omi.me ;;
+            *) echo "Unsupported Grafana environment." >&2; exit 1 ;;
+          esac
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url "$grafana_url" \
+            --token-file "$token_file" \
+            --mode import
+
+      - name: Verify imported live-STT Grafana alert coverage
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/omi-grafana-token.XXXXXX")"
+          cleanup() { rm -f "$token_file"; unset MONITOR_GRAFANA_TOKEN; }
+          trap cleanup EXIT
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          case "${{ vars.ENV }}" in
+            dev|development) grafana_url=https://monitor.omiapi.com ;;
+            prod) grafana_url=https://monitor.omi.me ;;
+            *) echo "Unsupported Grafana environment." >&2; exit 1 ;;
+          esac
+          printf '%s' "$MONITOR_GRAFANA_TOKEN" > "$token_file"
+          python3 backend/scripts/verify_pusher_live_alert_route.py \
+            --grafana-url "$grafana_url" \
+            --token-file "$token_file" \
+            --mode fleet \
+            --alert-set live-stt \
+            --fail-on gated

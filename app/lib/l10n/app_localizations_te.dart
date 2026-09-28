@@ -11271,7 +11271,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get openCall => 'కాల్‌ను తెరవండి';
 
   @override
-  String get captureRecoveryBanner => 'పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి';
+  String get captureRecoveryBanner => 'Omi ఆడియో పంపడం లేదు — మళ్లీ కనెక్ట్ చేయడానికి ట్యాప్ చేయండి';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11396,6 +11396,144 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'హెడ్‌ఫోన్‌లు';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'నిమిషాలు';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'పనులు';
+
+  @override
+  String get usageMonth => 'ఈ నెల';
+
+  @override
+  String get usageYear => 'ఈ సంవత్సరం';
+
+  @override
+  String get usageAll => 'అన్ని సమయం';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'రూపం';
+
+  @override
+  String get appearanceSystem => 'సిస్టమ్';
+
+  @override
+  String get appearanceLight => 'లైట్';
+
+  @override
+  String get appearanceDark => 'డార్క్';
+
+  @override
+  String get chatDiscardRecording => 'విస్మరించు';
+
+  @override
+  String get voiceQuestionNoSpeech => 'వినిపించలేదు — మళ్లీ ప్రయత్నించండి';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'వ్యక్తులను వెతకండి';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" ను కొత్త వ్యక్తిగా జోడించండి';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'అన్ని ($count) మందిని చూపించు';
+  }
 
   @override
   String get singleTap => 'సింగిల్ ట్యాప్';

@@ -41,6 +41,21 @@ def _leaf(name, **attrs):
     return mod
 
 
+def _wall_window_duration(conversation):
+    """Duration stub for this suite: every conversation here is transcript-free.
+
+    `utils.llm.external_integrations` imports the duration authority at module load, so the
+    fixture stubs that leaf like the others instead of letting the fresh load resolve it under
+    a fake parent package (which is order-dependent and failed CI's shard with
+    ModuleNotFoundError). The authority's wall-window fallback is what these stats consume.
+    """
+    started = getattr(conversation, 'started_at', None)
+    finished = getattr(conversation, 'finished_at', None)
+    if isinstance(started, datetime) and isinstance(finished, datetime):
+        return max(0.0, (finished - started).total_seconds())
+    return None
+
+
 def _real_pkg(name, *relpath):
     pkg = ModuleType(name)
     pkg.__path__ = [os.path.join(str(_BACKEND), *relpath)]  # type: ignore[attr-defined]
@@ -72,6 +87,9 @@ def ext():
         "models.other": _leaf("models.other"),
         "utils.conversations.render": _leaf("utils.conversations.render"),
         "utils.conversations.location": _leaf("utils.conversations.location"),
+        "utils.conversations.duration": _leaf(
+            "utils.conversations.duration", conversation_duration_seconds=_wall_window_duration
+        ),
         "utils.llm.clients": _leaf("utils.llm.clients"),
         "utils.llm.usage_tracker": _leaf("utils.llm.usage_tracker"),
         "utils.llms.memory": _leaf("utils.llms.memory"),

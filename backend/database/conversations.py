@@ -895,6 +895,30 @@ def get_conversation_raw_snapshot(
     return snapshot.to_dict()
 
 
+def resolve_sync_conversation_redirect(uid: str, conversation_id: str, *, max_hops: int = 16) -> Optional[str]:
+    """Resolve a server-authored sync bridge for an owner read.
+
+    User deletion is terminal, including deletion of the survivor. Do not
+    follow arbitrary deleted rows or expose another account's conversation.
+    """
+    seen: set[str] = set()
+    current_id = conversation_id
+    for _ in range(max_hops):
+        if current_id in seen:
+            return None
+        seen.add(current_id)
+        row = get_conversation_raw_snapshot(uid, current_id)
+        if not row:
+            return None
+        if not row.get('deleted'):
+            return current_id
+        successor = row.get('sync_merged_into')
+        if not isinstance(successor, str) or not successor:
+            return None
+        current_id = successor
+    return None
+
+
 def get_manual_speaker_receipt(uid: str, conversation_id: str, *, firestore_client: Any = None) -> dict:
     """The conversation's manual speaker receipt alone, without reading its transcript."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -2423,17 +2447,55 @@ def assign_conversation_speaker(
     """Commit the manual edit, provenance and invalidation in one transaction."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
-    ref = user_ref.collection(conversations_collection).document(conversation_id)
+    collection = user_ref.collection(conversations_collection)
 
     @firestore.transactional
     def assign(transaction):
-        raw = ref.get(transaction=transaction).to_dict()
-        if not raw or raw.get('deleted'):
+        source = collection.document(conversation_id).get(transaction=transaction).to_dict()
+        if not source:
             raise LookupError('Conversation not found')
+        source_segments = None
+        selected_segment_ids = segment_ids
+        selected_speaker_id = speaker_id
+        selected_segment_index = segment_index
+        current_id = conversation_id
+        raw = source
+        seen = set()
+        while raw.get('deleted') and raw.get('sync_merged_into'):
+            if current_id in seen or len(seen) >= 16:
+                raise LookupError('Conversation not found')
+            seen.add(current_id)
+            if source_segments is None:
+                source_segments = _decode_transcript_segments_strict(
+                    uid, source.get('transcript_segments', []), bool(source.get('transcript_segments_compressed'))
+                )
+            current_id = raw['sync_merged_into']
+            raw = collection.document(current_id).get(transaction=transaction).to_dict()
+            if not raw:
+                raise LookupError('Conversation not found')
+        if raw.get('deleted'):
+            raise LookupError('Conversation not found')
+        ref = collection.document(current_id)
         if raw.get('is_locked'):
             raise PermissionError('Conversation is locked')
+        # A donor's numeric speaker IDs may have been reassigned on bridge.
+        # Carry its stable segment identities across instead of applying the
+        # number to a different voice in the surviving conversation.
+        if source_segments is not None:
+            if segment_ids:
+                source_ids = set(segment_ids)
+                selected = [s for s in source_segments if s.get('id') in source_ids]
+            elif segment_index is not None:
+                selected = source_segments[segment_index : segment_index + 1]
+            elif speaker_id is not None:
+                selected = [s for s in source_segments if s.get('speaker_id') == speaker_id]
+            else:
+                selected = []
+            selected_segment_ids = [s['id'] for s in selected if s.get('id')]
+            selected_speaker_id = None
+            selected_segment_index = None
         current = copy.deepcopy(raw)
-        current['id'] = conversation_id
+        current['id'] = current_id
         current['transcript_segments'] = _decode_transcript_segments_strict(
             uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
         )
@@ -2441,13 +2503,18 @@ def assign_conversation_speaker(
             uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
         )
         before = copy.deepcopy(current['transcript_segments'])
+        if source_segments is not None:
+            surviving_ids = {s.get('id') for s in before}
+            selected_segment_ids = [sid for sid in selected_segment_ids or [] if sid in surviving_ids]
+            if not selected_segment_ids:
+                raise ValueError('Selected speaker is no longer in the merged conversation')
         segments, receipt, resolved, previous = manual_assignment(
             current,
             person_id=person_id,
             is_user=is_user,
-            segment_ids=segment_ids,
-            speaker_id=speaker_id,
-            segment_index=segment_index,
+            segment_ids=selected_segment_ids,
+            speaker_id=selected_speaker_id,
+            segment_index=selected_segment_index,
             use_for_speech_training=use_for_speech_training,
         )
         # Read every person before any write; corrections fence in-flight profiles
@@ -2465,7 +2532,7 @@ def assign_conversation_speaker(
                 continue
             update = {'updated_at': datetime.now(timezone.utc)}
             source = person.get('speech_sample_source') or {}
-            if source.get('conversation_id') == conversation_id and set(source.get('segment_ids', [])) & set(resolved):
+            if source.get('conversation_id') == current_id and set(source.get('segment_ids', [])) & set(resolved):
                 removed.extend(person.get('speech_samples', []))
                 update.update(
                     speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
@@ -2485,7 +2552,7 @@ def assign_conversation_speaker(
 
     result = run_transactional(client, assign)
     current, _, _, before = result
-    record_speaker_review(uid, conversation_id, before, current['transcript_segments'])
+    record_speaker_review(uid, current['id'], before, current['transcript_segments'])
     return result
 
 
@@ -2498,6 +2565,7 @@ def update_conversation_segments(
     *,
     started_at: datetime = None,
     audio_timeline: Optional[dict] = None,
+    capture_evidence: Optional[dict] = None,
     firestore_client: Any = None,
     invalidate_client_processing: bool = True,
     return_segments: bool = False,
@@ -2539,6 +2607,7 @@ def update_conversation_segments(
         'person_id',
         'is_user',
         'speaker_identity_status',
+        'speaker_match_source',
     }:
         raise ValueError('Field-only writers cannot change segment identity or speech boundaries')
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -2573,7 +2642,7 @@ def update_conversation_segments(
                         s,
                         **{
                             k: identities[s.get('id')][k]
-                            for k in ('person_id', 'is_user', 'speaker_identity_status')
+                            for k in ('person_id', 'is_user', 'speaker_identity_status', 'speaker_match_source')
                             if k in identities[s.get('id')]
                         },
                     )
@@ -2612,6 +2681,8 @@ def update_conversation_segments(
             # never reclaim it even if an older in-memory snapshot is empty.
             'has_content': bool(current.get('has_content')) or bool(accepted),
         }
+        if capture_evidence is not None:
+            update_payload['capture_evidence'] = capture_evidence
         if remap:
             update_payload['manual_speaker_assignments'] = receipt
         if finished_at:
@@ -2868,14 +2939,18 @@ def store_model_segments_result(uid: str, conversation_id: str, model_name: str,
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     segments_ref = conversation_ref.collection(model_name)
     batch = db.batch()
-    for i, segment in enumerate(segments):
+    count = 0
+    for segment in segments:
         segment_id = str(uuid.uuid4())
         segment_ref = segments_ref.document(segment_id)
         batch.set(segment_ref, segment.model_dump())
-        if i >= 400:
+        count += 1
+        if count >= 400:
             batch.commit()
             batch = db.batch()
-    batch.commit()
+            count = 0
+    if count > 0:
+        batch.commit()
 
 
 def store_model_emotion_predictions_result(
@@ -2904,7 +2979,8 @@ def store_model_emotion_predictions_result(
             batch.commit()
             batch = db.batch()
             count = 0
-    batch.commit()
+    if count > 0:
+        batch.commit()
 
 
 def get_conversation_transcripts_by_model(uid: str, conversation_id: str):

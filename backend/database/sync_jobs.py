@@ -60,7 +60,7 @@ _SYNC_JOB_OUTCOMES = (
 _SYNC_LANES = ('fresh', 'backfill')
 _SYNC_PROVIDERS = ('deepgram', 'modulate', 'parakeet')
 _SYNC_MODELS = ('nova-3', 'velma-2', 'parakeet')
-_SYNC_DISPATCH_MODES = ('inline', 'cloud_tasks')
+_SYNC_DISPATCH_MODES = ('inline', 'cloud_tasks', 'sequenced')
 SYNC_LEDGER_FENCE_MODE_ENV = 'SYNC_LEDGER_FENCE_MODE'
 
 RUN_LOCK_KEY_PREFIX = 'sync_job_lock:'
@@ -202,45 +202,24 @@ def delete_sync_job(job_id: str) -> None:
 
 
 def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
-    """Get a sync job by ID, self-healing a dead worker on read.
+    """Read a sync job without acquiring terminal-write authority.
 
-    A job stuck in 'processing' past STALE_THRESHOLD_SECONDS is finalized to
-    'failed' here, on every read and for every dispatch mode, so the client
-    reverts the WAL to 'miss' and re-uploads within ~10 minutes instead of
-    waiting out the 24h reconcile TTL. The pipeline heartbeats 'updated_at' at
-    every stage and per segment, so 600s of silence only ever means the worker
-    is gone — see is_sync_job_stale. 'queued' jobs are never finalized: no
-    worker has claimed them, and flipping them to 'failed' caused spurious
-    client "retrying" loops (#7469).
+    An old progress timestamp is not proof that the run lease has expired.
+    The authenticated status route owns stale Cloud Tasks recovery: acquire
+    the run lease, re-read, then use the fenced finalizer. Inline work owns
+    its own terminal transition, including executor leaves still in flight.
     """
-    key = f'{JOB_KEY_PREFIX}{job_id}'
-    data = r.get(key)
+    data = r.get(f'{JOB_KEY_PREFIX}{job_id}')
     if not data:
         return None
     try:
-        raw = json.loads(data)
+        raw = json.loads(_as_redis_text(data))
     except (TypeError, ValueError, json.JSONDecodeError):
         # A corrupt or legacy blob must not 500 the status poll. redis_db is fail-open and the
         # fenced mutation paths below already guard the identical json.loads; an unparseable job
         # is treated as an unknown job.
         return None
-    job: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-
-    if is_sync_job_stale(job):
-        updated_at = job.get('updated_at') or job.get('created_at') or time.time()
-        logger.warning(
-            "sync_job %s (uid=%s) stale after %.0fs in 'processing' — marking failed",
-            job_id,
-            job.get('uid'),
-            time.time() - updated_at,
-        )
-        job['status'] = 'failed'
-        job['error'] = 'Job timed out (background worker likely died)'
-        job['completed_at'] = time.time()
-        _backfill_dead_letter_pending(job_id, job, job.get('reason_code'))
-        r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
-
-    return job
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
 
 
 def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bool:
@@ -260,6 +239,11 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     and that pending retry must never be flipped terminal by a poll, however
     long its backoff.
     """
+    # The UID owner/sweeper, not a polling reader, owns liveness for accepted
+    # sequenced jobs. Waiting in the per-UID queue is expected to exceed the
+    # direct Cloud Tasks dispatch-stale threshold for a heavy account.
+    if job.get('dispatch_mode') == 'sequenced':
+        return False
     status = job.get('status')
     if status == 'processing':
         threshold = STALE_THRESHOLD_SECONDS
@@ -295,6 +279,16 @@ def _read_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
     except (TypeError, ValueError, json.JSONDecodeError):
         return None
     return cast(Dict[str, Any], job) if isinstance(job, dict) else None
+
+
+def get_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
+    """Read without the status-poll stale mutation; sequencer recovery owns its lease check."""
+    return _read_raw_sync_job(job_id)
+
+
+def sync_job_run_lock_present(job_id: str) -> bool:
+    """Conservatively refuse a replacement dispatch while a worker still owns its run lock."""
+    return bool(r.exists(f'{RUN_LOCK_KEY_PREFIX}{job_id}'))
 
 
 def _backfill_dead_letter_pending(job_id: str, job: Optional[Dict[str, Any]], reason_code: Any) -> None:
@@ -639,6 +633,9 @@ def _sync_job_finalization_updates(
             'failed_segments': failed,
             'processed_segments': total,
             'error': error,
+            'reason_code': (
+                'stt_invalid_input' if status == 'failed' and result.get('reason_code') == 'stt_invalid_input' else None
+            ),
         },
     )
 
@@ -700,7 +697,7 @@ def finalize_sync_job(
     status, total, failed, updates = _sync_job_finalization_updates(result, completed_at=time.time())
     dead_letter = status in ('failed', 'partial_failure')
     if dead_letter:
-        _backfill_dead_letter_pending(job_id, _read_raw_sync_job(job_id), result.get('reason_code'))
+        _backfill_dead_letter_pending(job_id, get_sync_job(job_id), result.get('reason_code'))
 
     finalized = update_sync_job(job_id, updates)
     if finalized is not None:
@@ -741,7 +738,7 @@ def _fenced_finalize_sync_job(
     status, total, failed, updates = _sync_job_finalization_updates(result, completed_at=completed_at)
     dead_letter = status in ('failed', 'partial_failure')
     if dead_letter:
-        _backfill_dead_letter_pending(job_id, _read_raw_sync_job(job_id), result.get('reason_code'))
+        _backfill_dead_letter_pending(job_id, get_sync_job(job_id), result.get('reason_code'))
     mutation = fenced_update_sync_job(
         job_id,
         run_lock_token,
@@ -830,7 +827,7 @@ def mark_job_failed(
     retry_after: Optional[int] = None,
 ) -> Optional[Dict[str, Any]]:
     """Mark job as failed with error message."""
-    _backfill_dead_letter_pending(job_id, _read_raw_sync_job(job_id), reason_code)
+    _backfill_dead_letter_pending(job_id, get_sync_job(job_id), reason_code)
     finalized = update_sync_job(
         job_id,
         {
@@ -857,7 +854,7 @@ def fenced_mark_job_failed(
 ) -> FencedSyncJobMutation:
     """Publish an explicit failure only while the caller retains the run lock."""
     completed_at = time.time() if now is None else now
-    _backfill_dead_letter_pending(job_id, _read_raw_sync_job(job_id), reason_code)
+    _backfill_dead_letter_pending(job_id, get_sync_job(job_id), reason_code)
     mutation = fenced_update_sync_job(
         job_id,
         run_lock_token,

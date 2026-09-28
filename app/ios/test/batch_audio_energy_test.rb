@@ -8,6 +8,7 @@ class BatchAudioEnergyTest < Minitest::Test
   def test_native_batch_writes_settings_and_location
     ios_root = File.expand_path('..', __dir__)
     sources = %w[
+      Runner/SafeFoundationSinks.swift
       Runner/Batch/BaseBatchAudioWriter.swift
       Runner/Batch/BatchAudioWriter.swift
       Runner/PhoneMic/PhoneMicBatchAudioWriter.swift

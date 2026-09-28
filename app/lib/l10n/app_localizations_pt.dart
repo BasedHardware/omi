@@ -11238,7 +11238,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get openCall => 'Abrir chamada';
 
   @override
-  String get captureRecoveryBanner => 'O áudio do pingente não chega à aplicação — toque para reparar';
+  String get captureRecoveryBanner => 'Omi não está enviando áudio — toque para reconectar';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11366,6 +11366,144 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Fones de ouvido';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutos';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tarefas';
+
+  @override
+  String get usageMonth => 'Este mês';
+
+  @override
+  String get usageYear => 'Este ano';
+
+  @override
+  String get usageAll => 'Tudo';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Aparência';
+
+  @override
+  String get appearanceSystem => 'Sistema';
+
+  @override
+  String get appearanceLight => 'Claro';
+
+  @override
+  String get appearanceDark => 'Escuro';
+
+  @override
+  String get chatDiscardRecording => 'Descartar';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Não entendi — tente novamente';
+
+  @override
+  String get siriIndexSetting => 'Usar Omi com Siri e Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Permita que a Siri encontre suas conversas, memórias e tarefas neste dispositivo. Desativar remove esses itens da busca da Apple.';
+
+  @override
+  String get sendToSupport => 'Enviar ao suporte';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Revise o JSON de diagnóstico abaixo. Ele inclui o identificador do dispositivo, histórico de conexão, bateria, firmware e eventos Bluetooth. Não inclui áudio nem transcrições.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Código do chamado';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Não foi possível enviar o diagnóstico. Tente novamente.';
+
+  @override
+  String get feedbackGiveFeedback => 'Dar feedback';
+
+  @override
+  String get feedbackAllGood => 'Tudo certo';
+
+  @override
+  String get feedbackChatWithUs => 'Mais detalhes? Fale com a gente';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inexato';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incompleto';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Não é relevante';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Contexto errado';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Outra coisa';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Áudio ausente';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Transcrição ruim';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Orador errado';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Atrasado ou travado';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmentado ou duplicado';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Outra coisa';
+
+  @override
+  String get searchPeople => 'Pesquisar pessoas';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Adicionar \"$query\" como nova pessoa';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Mostrar todas as $count pessoas';
+  }
 
   @override
   String get singleTap => 'Toque único';

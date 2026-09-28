@@ -141,6 +141,7 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   SettingsSearchEntry('homeScreen', (l) => l.homeScreen, SettingsDestination.homeScreen, _groups),
   SettingsSearchEntry(
       'conversationDisplay', (l) => l.conversationDisplay, SettingsDestination.conversationDisplay, _groups),
+  SettingsSearchEntry('appearance', (l) => l.appearance, SettingsDestination.notificationsGroup, _groups),
   SettingsSearchEntry(
       'notificationsAndDisplay', (l) => l.notificationsAndDisplay, SettingsDestination.notificationsGroup, _drawer),
 

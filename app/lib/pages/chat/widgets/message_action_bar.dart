@@ -102,7 +102,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: OmiSpacing.xxs),
-            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
             child: TextField(
               controller: _commentController,
               style: OmiType.subhead.copyWith(height: 1.4),

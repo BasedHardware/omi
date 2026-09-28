@@ -10,6 +10,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -86,6 +87,7 @@ void main() {
           ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
           ChangeNotifierProvider<UsageProvider>(create: (_) => _Usage()),
           ChangeNotifierProvider<CaptureProvider>(create: (_) => _Capture()),
+          ChangeNotifierProvider<AppearanceProvider>(create: (_) => AppearanceProvider()),
         ],
         child: const MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -270,7 +272,12 @@ void main() {
       en.conversationTimeout,
       en.transcribeLaterTitle,
     ]);
-    expect(pageTitles['settings_page_notifications'], [en.notifications, en.homeScreen, en.conversationDisplay]);
+    expect(pageTitles['settings_page_notifications'], [
+      en.notifications,
+      en.homeScreen,
+      en.conversationDisplay,
+      en.appearance,
+    ]);
     expect(pageTitles['settings_page_privacy'], [
       en.dataProtection,
       en.memories,

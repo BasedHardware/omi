@@ -83,7 +83,7 @@ abstract class LocalWalSync implements IWalSync {
 
   /// Ingest a pre-processed audio frame from an AudioSource.
   /// The frame contains headerless payload and a source-specific sync key.
-  void onFrameCaptured(WalFrame frame);
+  WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot});
 
   /// Mark a frame as synced (sent to server via WebSocket).
   /// Matches frames by sync key (source-agnostic).

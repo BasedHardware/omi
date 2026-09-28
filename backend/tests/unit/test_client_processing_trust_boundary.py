@@ -543,6 +543,11 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('routers/conversations.py', 'get_conversation_suggested_apps', 'model_dump'),
         DumpSite('database/conversations.py', 'store_model_segments_result', 'model_dump'),
         DumpSite('database/conversations.py', '_store', 'model_dump'),
+        # _get_goal_context / suggest_goal dump MemoryDB records (not
+        # Conversation) after switching the legacy memories read to the
+        # canonical MemoryService.read(). MemoryDB has no client_processing field.
+        DumpSite('utils/llm/goals.py', '_get_goal_context', 'dict'),
+        DumpSite('utils/llm/goals.py', 'suggest_goal', 'dict'),
         DumpSite('database/goals.py', 'normalize_goal_storage', 'model_dump'),
         DumpSite('database/goals.py', '_new_goal_payload', 'model_dump'),
         DumpSite('database/goals.py', 'update_goal', 'model_dump'),
@@ -556,6 +561,12 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('database/task_recommendations.py', 'replace_open_loop_snapshot', 'model_dump'),
         DumpSite('utils/apps.py', 'upsert_app_payment_link', 'model_dump'),
         DumpSite('utils/apps.py', 'update_persona_prompt', 'dict'),
+        # generate_persona_prompt / generate_persona_desc dump MemoryDB records
+        # (not Conversation) after switching the legacy memories read to the
+        # canonical MemoryService.read(), mirroring update_persona_prompt above.
+        # MemoryDB has no client_processing field.
+        DumpSite('utils/apps.py', 'generate_persona_prompt', 'dict'),
+        DumpSite('utils/apps.py', 'generate_persona_desc', 'dict'),
         DumpSite('utils/memory/daily_memory_sweep.py', 'digest', 'model_dump'),
         DumpSite('utils/memory/daily_memory_sweep.py', 'reconcile', 'model_dump'),
         DumpSite('utils/memory/daily_memory_sweep.py', '_bounded_candidate_channel', 'model_dump'),
@@ -603,6 +614,13 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # `structured` is the deterministic minimum; it carries no client text,
         # so the integration redactor must not strip it.
         'processing_state',
+        # S1 capture evidence: server-authored internal receipt, NOT
+        # projection-family. Pydantic-excluded (`Field(exclude=True)`), never
+        # serialized to any client, and written only at explicit persistence
+        # seams behind `CAPTURE_EVIDENCE_V1_DARK_WRITE`. Classifying it
+        # projection-family would make `_invalidate_client_processing` and
+        # `strip_client_processing` strip/delete the dark write itself.
+        'capture_evidence',
         'transcript_segments',
         'transcript_segments_compressed',
         'geolocation',

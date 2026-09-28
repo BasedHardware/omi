@@ -11287,7 +11287,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get openCall => 'Obre la trucada';
 
   @override
-  String get captureRecoveryBanner => 'L\'àudio del penjoll no arriba a l\'aplicació — toca\'l per reparar';
+  String get captureRecoveryBanner => 'Omi no envia àudio — toca per tornar a connectar';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11415,6 +11415,144 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Auriculars';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minuts';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tasques';
+
+  @override
+  String get usageMonth => 'Aquest mes';
+
+  @override
+  String get usageYear => 'Enguany';
+
+  @override
+  String get usageAll => 'Des de sempre';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Aparença';
+
+  @override
+  String get appearanceSystem => 'Sistema';
+
+  @override
+  String get appearanceLight => 'Clar';
+
+  @override
+  String get appearanceDark => 'Fosc';
+
+  @override
+  String get chatDiscardRecording => 'Descarta';
+
+  @override
+  String get voiceQuestionNoSpeech => 'No ho he entès — torna-ho a provar';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Cerca persones';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Afegeix \"$query\" com a persona nova';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Mostra totes les persones ($count)';
+  }
 
   @override
   String get singleTap => 'Toc simple';

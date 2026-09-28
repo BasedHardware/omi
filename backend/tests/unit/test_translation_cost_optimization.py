@@ -316,7 +316,7 @@ def test_observe_cached_noop_prefix_invalidates_pending_work_once_per_lifecycle(
     assert callbacks == []
 
 
-def test_cached_prefix_adoption_invalidates_work_queued_during_cache_io():
+def test_stale_cached_prefix_does_not_invalidate_newer_work_queued_during_cache_io():
     store = BlockingTranslationStore()
     store.values[(fingerprint_text('Merged.'), 'en')] = CachedTranslation('Merged.', 'en')
     provider = FakeProvider(TranslationProvider.google, responses=[])
@@ -348,10 +348,9 @@ def test_cached_prefix_adoption_invalidates_work_queued_during_cache_io():
     timer = asyncio.run(scenario())
 
     assert timer.cancelled()
-    assert coordinator._batch_task is None
-    assert coordinator._batch_buffer == []
-    assert state.version == 4
-    assert state.committed_text == 'Merged.'
+    assert coordinator._batch_buffer and coordinator._batch_buffer[0][1] == 'Newer.'
+    assert state.version == 3
+    assert state.committed_text == 'Old.'
 
 
 def test_observe_cached_translation_adopts_prefix_and_notifies_without_requeueing():
@@ -482,7 +481,7 @@ def test_coordinator_rejects_stale_work_before_calling_provider():
     assert state.committed_text == ''
 
 
-def test_coordinator_negative_caches_typed_noop_without_notifying():
+def test_coordinator_does_not_negative_cache_short_noop_from_echoed_target():
     store = DictTranslationStore()
     provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hello.', 'en'))])
     service, _cache = build_service({TranslationProvider.google: provider}, store=store)
@@ -501,7 +500,7 @@ def test_coordinator_negative_caches_typed_noop_without_notifying():
 
     assert callbacks == []
     assert state.committed_text == 'Hello.'
-    assert (fingerprint_text('Hello.'), 'en') in store.negative
+    assert (fingerprint_text('Hello.'), 'en') not in store.negative
 
 
 def test_coordinator_does_not_negative_cache_unchanged_foreign_text():

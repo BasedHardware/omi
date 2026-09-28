@@ -11321,7 +11321,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get openCall => 'Buksan ang tawag';
 
   @override
-  String get captureRecoveryBanner => 'Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin';
+  String get captureRecoveryBanner => 'Hindi nagpapadala ng audio ang Omi — i-tap para muling kumonekta';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11449,6 +11449,144 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Mga headphone';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutes';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Mga Gawain';
+
+  @override
+  String get usageMonth => 'Sa Buwan Na Ito';
+
+  @override
+  String get usageYear => 'Sa Taong Ito';
+
+  @override
+  String get usageAll => 'Lahat ng Panahon';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Hitsura';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Maliwanag';
+
+  @override
+  String get appearanceDark => 'Madilim';
+
+  @override
+  String get chatDiscardRecording => 'Itapon';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Hindi ko narinig iyon — subukan ulit';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Maghanap ng mga tao';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Idagdag ang \"$query\" bilang bagong tao';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Ipakita ang lahat ng $count na tao';
+  }
 
   @override
   String get singleTap => 'Single Tap';

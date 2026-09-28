@@ -33,9 +33,9 @@ import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
 
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
-from utils.stt.speaker_match import SPEAKER_MATCH_MIN_EVIDENCE_SECONDS, select_speaker_match
+from utils.stt.speaker_match import SPEAKER_MATCH_MIN_EVIDENCE_SECONDS, arbitrate_owner_matches, select_speaker_match
 
-RESOLUTION_VERSION = 1
+RESOLUTION_VERSION = 2
 
 # Average-linkage cut on cosine distance between segment embeddings.
 AHC_THRESHOLD = float(os.getenv('CONVERSATION_SPEAKER_AHC_THRESHOLD', '0.70'))
@@ -87,6 +87,8 @@ class SpeakerResolution:
     coverage: float
     """Share of embeddable speech that voice evidence or a manual label placed."""
     stats: Dict[str, Any] = field(default_factory=dict)
+    voice_identity_statuses: Dict[int, str] = field(default_factory=dict)
+    """Evidence states for automatic voices only; manual receipts remain authoritative."""
 
 
 def _seg(segment: Any, name: str, default: Any = None) -> Any:
@@ -257,11 +259,13 @@ def resolve_conversation_speakers(
                 cluster.members = []
         clusters = [c for c in clusters if c.members]
 
-    # Identify voices against enrolled voiceprints, then merge voices that
-    # resolve to the same identity: two clusters matching one voiceprint are one
-    # person the clustering split.
+    # Identify voices jointly before any identity-based merging. Sharing the
+    # owner voiceprint is not evidence that two acoustically distinct voices are
+    # one person, especially when it is the only enrolled print.
     prints = {key: v for key, v in ((k, _unit_vector(p)) for k, p in (voiceprints or {}).items()) if v is not None}
     voice_identity: Dict[int, Identity] = {}
+    distances = {}
+    decisions = {}
     for index, cluster in enumerate(clusters):
         if identities_of(cluster):
             continue
@@ -269,9 +273,14 @@ def resolve_conversation_speakers(
         vector = centroid(cluster)
         if vector is None or not prints or evidence < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS:
             continue
-        decision = select_speaker_match(
-            {key: _cosine(vector, p) for key, p in prints.items()}, threshold=VOICE_MATCH_THRESHOLD
-        )
+        distances[index] = {key: _cosine(vector, p) for key, p in prints.items()}
+        decisions[index] = select_speaker_match(distances[index], threshold=VOICE_MATCH_THRESHOLD)
+    decisions = arbitrate_owner_matches(
+        distances,
+        decisions,
+        owner_reserved=any(OWNER_IDENTITY in identities_of(cluster) for cluster in clusters),
+    )
+    for index, decision in decisions.items():
         if decision.accepted:
             matched = decision.person_id
             voice_identity[index] = (
@@ -303,6 +312,11 @@ def resolve_conversation_speakers(
         pos: voice_identity[index]
         for pos, index in enumerate(keep)
         if index in voice_identity and not identities_of(clusters[index])
+    }
+    final_status = {
+        pos: ('unknown' if index not in decisions else 'ambiguous' if decisions[index].owner_contended else 'no_match')
+        for pos, index in enumerate(keep)
+        if not identities_of(clusters[index]) and index not in voice_identity
     }
     clusters = [clusters[index] for index in keep]
 
@@ -397,10 +411,17 @@ def resolve_conversation_speakers(
         voice_identities={
             new_id_of[position]: identity for position, identity in final_identity.items() if position in new_id_of
         },
+        voice_identity_statuses={
+            new_id_of[position]: status for position, status in final_status.items() if position in new_id_of
+        },
         embedded_segments=len(vectors),
         input_speaker_ids=len({int(_seg(s, 'speaker_id')) for s in eligible}),
         coverage=_coverage(eligible, vectors, manual_speakers),
-        stats={'voices': len(members_of), 'eligible_segments': len(eligible)},
+        stats={
+            'voices': len(members_of),
+            'eligible_segments': len(eligible),
+            'owner_contended': sum(decision.owner_contended for decision in decisions.values()),
+        },
     )
 
 

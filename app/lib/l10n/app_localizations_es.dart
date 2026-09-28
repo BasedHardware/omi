@@ -11254,7 +11254,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get openCall => 'Abrir llamada';
 
   @override
-  String get captureRecoveryBanner => 'El audio del colgante no llega a la app — toca para reparar';
+  String get captureRecoveryBanner => 'Omi no está enviando audio — toca para volver a conectar';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11382,6 +11382,144 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'auriculares';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutos';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tareas';
+
+  @override
+  String get usageMonth => 'Este mes';
+
+  @override
+  String get usageYear => 'Este año';
+
+  @override
+  String get usageAll => 'Todo el tiempo';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Apariencia';
+
+  @override
+  String get appearanceSystem => 'Sistema';
+
+  @override
+  String get appearanceLight => 'Claro';
+
+  @override
+  String get appearanceDark => 'Oscuro';
+
+  @override
+  String get chatDiscardRecording => 'Descartar';
+
+  @override
+  String get voiceQuestionNoSpeech => 'No entendí eso — inténtalo de nuevo';
+
+  @override
+  String get siriIndexSetting => 'Usar Omi con Siri y Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Permite que Siri encuentre tus conversaciones, recuerdos y tareas en este dispositivo. Al desactivarlo, se eliminan de la búsqueda de Apple.';
+
+  @override
+  String get sendToSupport => 'Enviar a soporte';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Revisa los datos de diagnóstico JSON que aparecen abajo. Incluyen el identificador del dispositivo, el historial de conexiones, la batería, el firmware y los eventos Bluetooth. No incluyen audio ni transcripciones.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Código del ticket de soporte';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'No se pudieron enviar los datos de diagnóstico. Inténtalo de nuevo.';
+
+  @override
+  String get feedbackGiveFeedback => 'Enviar comentarios';
+
+  @override
+  String get feedbackAllGood => 'Todo bien';
+
+  @override
+  String get feedbackChatWithUs => '¿Más detalle? Chatea con nosotros';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inexacto';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incompleto';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'No es relevante';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Contexto equivocado';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Otra cosa';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Falta el audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Transcripción deficiente';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Orador equivocado';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Con retraso o atascado';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmentado o duplicado';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Otra cosa';
+
+  @override
+  String get searchPeople => 'Buscar personas';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Añadir \"$query\" como nueva persona';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Mostrar todas las personas ($count)';
+  }
 
   @override
   String get singleTap => 'Toque simple';

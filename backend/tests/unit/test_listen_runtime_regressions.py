@@ -51,6 +51,7 @@ def _deletion_teardown_runtime(request, persistence_call):
     runtime.persistence = SimpleNamespace(call=persistence_call)
     runtime.conversations = SimpleNamespace(process_conversation=AsyncMock())
     runtime.is_multi_channel = False
+    runtime.language_observations = None
     runtime.pusher_close = None
     runtime.onboarding_handler = None
     runtime.parity_capture = SimpleNamespace(persist=MagicMock())
@@ -215,7 +216,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     )
     selected_multi_language_options = []
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None):
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None):
         selected_multi_language_options.append((language, multi_lang_enabled, preferred_service))
         return 'test-stt', 'es', 'test-model'
 
@@ -578,7 +579,7 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
         fair_use_dg_budget_exhausted=False,
     )
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None):
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None):
         assert (language, multi_lang_enabled, preferred_service) == ('es', True, 'parakeet')
         return STTService.modulate, 'multi', 'velma-2'
 
@@ -884,6 +885,19 @@ async def test_teardown_with_empty_profiles_and_no_tasks_does_not_wait_on_speake
     host.speakers.drain.assert_awaited()
     processor.flush_speaker_assignments.assert_awaited()
     assert not host.state.speaker_id_done.is_set()
+
+
+def test_phone_call_processor_preserves_realtime_interpreter_admission():
+    host = SimpleNamespace(
+        limits=SimpleNamespace(max_segment_buffer_size=8, max_photo_buffer_size=8),
+        translation_language='en',
+        language_profile=SimpleNamespace(expected=('en',)),
+        request=SimpleNamespace(source='phone_call'),
+    )
+    coordinator = TranscriptProcessor(host).translation_coordinator
+    assert coordinator is not None
+    assert coordinator.expected_languages == ('en',)
+    assert coordinator.realtime_interpreter
 
 
 class _ProductTelemetryClient:
