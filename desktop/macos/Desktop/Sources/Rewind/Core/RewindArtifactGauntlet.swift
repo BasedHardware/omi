@@ -9,7 +9,9 @@ import Foundation
 /// then travels through the real indexer, HEVC encoder, SQLite store, and video
 /// frame reader. A protected frame proves that the admission boundary blocks an
 /// artifact before any persistence work begins. The database close/reopen step
-/// models the recovery path used after local storage failures.
+/// models the recovery path used after local storage failures; one seeded
+/// action item and one task-chat row must read back through their repositories
+/// on both sides of it.
 @MainActor
 enum RewindArtifactGauntlet {
   struct Result: Equatable {
@@ -47,7 +49,11 @@ enum RewindArtifactGauntlet {
     settings.excludeApp(protectedApp)
     defer { settings.excludedApps = originalExcludedApps }
 
+    let taskChatKey = "rewind-artifact-gauntlet-\(nonce)"
+    let taskChatMessageId = "rewind-artifact-gauntlet-message-\(nonce)"
+    let actionItemDescription = "Rewind artifact gauntlet task \(nonce)"
     var chunkPath: String?
+    var actionItemId: Int64?
     do {
       let protectedRowsBefore = try await rows(forApp: protectedApp, windowTitle: windowTitle)
       let protectedFrameBlocked =
@@ -120,13 +126,26 @@ enum RewindArtifactGauntlet {
         throw RewindError.storageError("Rewind artifact gauntlet video readback did not preserve frame order")
       }
 
-      // Prime both repositories against the current generation. Their next
-      // read must discover the replacement pool after the database reopens.
-      _ = try await ActionItemStorage.shared.getLocalActionItems(limit: 1)
-      _ = try await TaskChatMessageStorage.shared.legacyMessagePage(
-        fromTaskIds: ["rewind-artifact-gauntlet-\(nonce)"],
-        workstreamId: "rewind-artifact-gauntlet-\(nonce)"
+      // Seed one row per repository and read it back, which also primes both
+      // against the current generation. After the reopen they must find the
+      // same rows through the replacement pool, not just an empty result.
+      actionItemId = try await seedRepositoryFixtures(
+        actionItemDescription: actionItemDescription,
+        taskChatKey: taskChatKey,
+        taskChatMessageId: taskChatMessageId
       )
+      guard let actionItemId else {
+        throw RewindError.storageError("Rewind artifact gauntlet could not seed its action item")
+      }
+      let readableBeforeReopen = try await repositoryFixturesReadable(
+        actionItemId: actionItemId,
+        actionItemDescription: actionItemDescription,
+        taskChatKey: taskChatKey,
+        taskChatMessageId: taskChatMessageId
+      )
+      guard readableBeforeReopen.actionItem, readableBeforeReopen.taskChat else {
+        throw RewindError.storageError("Rewind artifact gauntlet could not read its seeded repository rows")
+      }
 
       await RewindDatabase.shared.close()
       guard !(await RewindDatabase.shared.isInitialized) else {
@@ -143,11 +162,16 @@ enum RewindArtifactGauntlet {
         throw RewindError.storageError("Rewind artifact gauntlet rows did not survive database reopen")
       }
 
-      _ = try await ActionItemStorage.shared.getLocalActionItems(limit: 1)
-      _ = try await TaskChatMessageStorage.shared.legacyMessagePage(
-        fromTaskIds: ["rewind-artifact-gauntlet-\(nonce)"],
-        workstreamId: "rewind-artifact-gauntlet-\(nonce)"
+      let readableAfterReopen = try await repositoryFixturesReadable(
+        actionItemId: actionItemId,
+        actionItemDescription: actionItemDescription,
+        taskChatKey: taskChatKey,
+        taskChatMessageId: taskChatMessageId
       )
+      guard readableAfterReopen.actionItem, readableAfterReopen.taskChat else {
+        throw RewindError.storageError("Rewind artifact gauntlet repository rows did not survive database reopen")
+      }
+      try await removeRepositoryFixtures(actionItemId: actionItemId, taskChatKey: taskChatKey)
 
       let cleanupRemovedRows = try await RewindDatabase.shared.deleteScreenshotsFromVideoChunk(
         videoChunkPath: storedChunkPath)
@@ -161,8 +185,8 @@ enum RewindArtifactGauntlet {
         readbackColors: readbackColors,
         databaseReopened: databaseReopened,
         rowsSurvivedReopen: rowsSurvivedReopen,
-        actionItemsReadableAfterReopen: true,
-        taskChatReadableAfterReopen: true,
+        actionItemsReadableAfterReopen: readableAfterReopen.actionItem,
+        taskChatReadableAfterReopen: readableAfterReopen.taskChat,
         cleanupRemovedRows: cleanupRemovedRows,
         artifactFileRemoved: artifactFileRemoved
       )
@@ -173,6 +197,7 @@ enum RewindArtifactGauntlet {
       if let chunkPath {
         await removeArtifact(chunkPath)
       }
+      try? await removeRepositoryFixtures(actionItemId: actionItemId, taskChatKey: taskChatKey)
       throw error
     }
   }
@@ -180,6 +205,64 @@ enum RewindArtifactGauntlet {
   private static func rows(forApp appName: String, windowTitle: String) async throws -> [Screenshot] {
     let allRows = try await RewindDatabase.shared.getRecentScreenshots(limit: 200)
     return allRows.filter { $0.appName == appName && $0.windowTitle == windowTitle }
+  }
+
+  /// Writes straight to the pool, as the migration tests do: task chat has no
+  /// write API, and the action item is stored soft-deleted without a backend ID
+  /// so task lists and backend sync never pick it up during the run.
+  private static func seedRepositoryFixtures(
+    actionItemDescription: String,
+    taskChatKey: String,
+    taskChatMessageId: String
+  ) async throws -> Int64? {
+    guard let pool = await RewindDatabase.shared.getDatabaseQueue() else {
+      throw RewindError.storageError("Rewind artifact gauntlet database is unavailable")
+    }
+    return try await pool.write { database in
+      let actionItem = try ActionItemRecord(
+        description: actionItemDescription,
+        deleted: true,
+        source: "rewind-artifact-gauntlet",
+        deletedBy: "rewind-artifact-gauntlet"
+      ).inserted(database)
+      let now = Date()
+      try database.execute(
+        sql: """
+            INSERT INTO task_chat_messages (
+              taskId, messageId, sender, messageText, createdAt, updatedAt, backendSynced
+            ) VALUES (?, ?, 'user', ?, ?, ?, 0)
+          """,
+        arguments: [taskChatKey, taskChatMessageId, "Rewind artifact gauntlet message", now, now]
+      )
+      return actionItem.id
+    }
+  }
+
+  private static func repositoryFixturesReadable(
+    actionItemId: Int64,
+    actionItemDescription: String,
+    taskChatKey: String,
+    taskChatMessageId: String
+  ) async throws -> (actionItem: Bool, taskChat: Bool) {
+    let actionItem = try await ActionItemStorage.shared.getActionItem(id: actionItemId)
+    let taskChat = try await TaskChatMessageStorage.shared.legacyMessagePage(
+      fromTaskIds: [taskChatKey],
+      workstreamId: taskChatKey
+    )
+    return (
+      actionItem?.description == actionItemDescription,
+      taskChat.rows.map(\.messageId) == [taskChatMessageId]
+    )
+  }
+
+  private static func removeRepositoryFixtures(actionItemId: Int64?, taskChatKey: String) async throws {
+    guard let pool = await RewindDatabase.shared.getDatabaseQueue() else { return }
+    try await pool.write { database in
+      if let actionItemId {
+        _ = try ActionItemRecord.deleteOne(database, key: actionItemId)
+      }
+      try database.execute(sql: "DELETE FROM task_chat_messages WHERE taskId = ?", arguments: [taskChatKey])
+    }
   }
 
   private static func videosDirectory() async throws -> URL {
