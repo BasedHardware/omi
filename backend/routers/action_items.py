@@ -671,11 +671,11 @@ def list_action_item_ids(
 def get_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get a specific action item by ID."""
     action_item = _get_valid_action_item(uid, action_item_id)
-
-    if not action_item:
+    # A malformed stored item is unavailable here, as the list endpoints skip it, rather than a 500.
+    responses = _safe_action_item_responses([action_item] if action_item else [], uid=uid, context='single fetch')
+    if not responses:
         raise HTTPException(status_code=404, detail="Action item not found")
-
-    return ActionItemResponse(**action_item)
+    return responses[0]
 
 
 @router.patch("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
@@ -1043,7 +1043,7 @@ def get_shared_action_items(token: str):
         if item and not item.get('is_locked', False):
             tasks.append(
                 {
-                    "description": item.get('description', ''),
+                    "description": item.get('description') or '',
                     "due_at": item.get('due_at'),
                 }
             )
@@ -1103,7 +1103,7 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
                 continue
 
             new_item = {
-                'description': original.get('description', ''),
+                'description': original.get('description') or '',
                 'completed': False,
                 'due_at': original.get('due_at'),
                 'shared_from': {
