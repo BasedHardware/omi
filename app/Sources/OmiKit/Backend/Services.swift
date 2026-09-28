@@ -218,10 +218,19 @@ public final class SettingsStore: SettingsStoring {
             case .string(let string): members.append((key, JSONValue.string(string)))
             }
         }
-        for key in desktopPreferenceKeys.all {
-            append(key, storage.value(forKey: key))
+        // Translate native defaults keys to JS record names (the upstream
+        // `OmiDesktopCommandsModule.mm` record shape that snapshotFromRecord
+        // parses). stampedV5Origin + the onboarding setup revision are
+        // native-only keys appended under their record names.
+        for (nativeKey, recordKey) in zip(
+            desktopPreferenceKeys.all, desktopPreferenceKeys.recordNames)
+        {
+            append(recordKey, storage.value(forKey: nativeKey))
         }
         append("stampedV5Origin", storage.value(forKey: "stampedV5Origin"))
+        append(
+            "onboardingSetupRevision",
+            storage.value(forKey: desktopPreferenceKeys.onboardingSetupRevision))
         return JSONValue.object(members)
     }
 

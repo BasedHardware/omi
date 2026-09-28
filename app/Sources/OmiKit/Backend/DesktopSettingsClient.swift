@@ -28,11 +28,28 @@ public enum desktopPreferenceKeys {
     public static let uiVersion = "omi.uiVersion"
     public static let exploreProgress = "omi.onboarding.exploreProgress"
 
+    /// Onboarding-completed marker — a native-only key outside the 17-entry
+    /// JS whitelist (`omi.onboarding.setupRevision == "1"`), mirroring the
+    /// upstream `OmiAuthModule` / `omiNative.web` storage. `exploreProgress`
+    /// stays a pure CSV of check ids.
+    public static let onboardingSetupRevision = "omi.onboarding.setupRevision"
+
     public static let all: [String] = [
         softwarePlane, screenCapture, audioMode, interfaceSounds, fontScale,
         notificationsEnabled, rewindRetentionDays, meetingNoteScreenshots,
         floatingBar, transcriptionAutoDetect, vadGate, openOmiShortcut,
         pushToTalk, liveVoiceProvider, appearance, uiVersion, exploreProgress,
+    ]
+
+    /// JS record names for the snapshot record, in `all` order. The native
+    /// defaults store translates its keys to these names when composing the
+    /// record (`OmiDesktopCommandsModule.mm` upstream).
+    public static let recordNames: [String] = [
+        "softwarePlane", "screenCapture", "audioMode", "interfaceSounds",
+        "fontScale", "notificationsEnabled", "rewindRetentionDays",
+        "meetingNoteScreenshots", "floatingBar", "transcriptionAutoDetect",
+        "vadGate", "openOmiShortcut", "pushToTalk", "liveVoiceProvider",
+        "appearance", "uiVersion", "exploreProgress",
     ]
 }
 
@@ -89,6 +106,8 @@ public struct DesktopPreferences: Sendable, Equatable {
     public var uiVersion: DesktopUiVersion
     public var exploreProgress: String
     public var stampedV5Origin: String?
+    /// `omi.onboarding.setupRevision == "1"` — onboarding completed.
+    public var onboardingSetupCompleted: Bool
 
     public init(
         softwarePlane: SoftwarePlane = .old, screenCapture: Bool = false,
@@ -99,7 +118,8 @@ public struct DesktopPreferences: Sendable, Equatable {
         vadGate: Bool = true, openOmiShortcut: Bool = true,
         pushToTalk: Bool = true, liveVoiceProvider: LiveVoiceProvider = .gptLive,
         appearance: DesktopAppearance = .dark, uiVersion: DesktopUiVersion = .v51,
-        exploreProgress: String = "", stampedV5Origin: String? = nil
+        exploreProgress: String = "", stampedV5Origin: String? = nil,
+        onboardingSetupCompleted: Bool = false
     ) {
         self.softwarePlane = softwarePlane
         self.screenCapture = screenCapture
@@ -119,6 +139,7 @@ public struct DesktopPreferences: Sendable, Equatable {
         self.uiVersion = uiVersion
         self.exploreProgress = exploreProgress
         self.stampedV5Origin = stampedV5Origin
+        self.onboardingSetupCompleted = onboardingSetupCompleted
     }
 }
 
@@ -185,6 +206,8 @@ public func snapshotFromRecord(_ record: JSONValue) -> DesktopPreferences {
         appearance: parseDesktopAppearance(record["appearance"]),
         uiVersion: parseDesktopUiVersion(record["uiVersion"]),
         exploreProgress: record["exploreProgress"]?.stringValue ?? "",
-        stampedV5Origin: stampedV5Origin
+        stampedV5Origin: stampedV5Origin,
+        onboardingSetupCompleted:
+            record["onboardingSetupRevision"]?.stringValue == "1"
     )
 }

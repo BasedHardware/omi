@@ -386,17 +386,33 @@ public func serviceApps(_ snapshot: ConnectorsSnapshot) -> [CloudApp] {
 public struct ServiceIdentity: Sendable, Equatable {
     public var displayName: String
     public var email: String
+
+    public init(displayName: String, email: String) {
+        self.displayName = displayName
+        self.email = email
+    }
 }
 
 public struct ServiceEntitlement: Sendable, Equatable {
     public var limitKey: String
     public var used: Double
     public var limit: Double?
+
+    public init(limitKey: String, used: Double, limit: Double?) {
+        self.limitKey = limitKey
+        self.used = used
+        self.limit = limit
+    }
 }
 
 public struct ServiceSettingsSnapshot: Sendable, Equatable {
     public var identity: ServiceIdentity?
     public var entitlement: ServiceEntitlement?
+
+    public init(identity: ServiceIdentity?, entitlement: ServiceEntitlement?) {
+        self.identity = identity
+        self.entitlement = entitlement
+    }
 }
 
 public func loadServiceSettings(

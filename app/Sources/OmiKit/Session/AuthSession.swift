@@ -108,7 +108,7 @@ public enum AuthCrypto {
     }
 }
 
-public final class OmiAuthSession: Authenticating, @unchecked Sendable {
+public final class OmiAuthSession: Authenticating, SessionProbeCapable, @unchecked Sendable {
     private let config: AuthSessionConfig
     private let credentials: CredentialStoring
     private let browserAuth: BrowserAuthControlling?

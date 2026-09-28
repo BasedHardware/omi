@@ -130,3 +130,10 @@ public protocol Authenticating: Sendable {
     /// Fired when the backend invalidates the active session.
     var sessionInvalidated: AsyncStream<Void> { get }
 }
+
+/// Optional session probe (the TS `OmiAuth.hasSession` capability).
+/// Authenticators without it get the optimistic default in the session
+/// gate; `OmiAuthSession` implements the real cloud check.
+public protocol SessionProbeCapable: Authenticating {
+    func hasCloudSession() async -> Bool
+}
