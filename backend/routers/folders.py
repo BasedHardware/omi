@@ -71,21 +71,31 @@ def create_folder(request: CreateFolderRequest, uid: str = Depends(auth.get_curr
     return folder
 
 
-@router.get('/v1/folders/{folder_id}', response_model=Folder, tags=['folders'])
-def get_folder(folder_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    """Get a specific folder by ID."""
+def _get_valid_folder(uid: str, folder_id: str) -> dict:
+    """Get a folder the Folder model can serve. Like GET /v1/folders, a malformed doc counts as not found."""
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
+    try:
+        Folder.model_validate(folder)
+    except ValidationError as e:
+        invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+        logger.warning(f"Malformed folder doc {folder_id} for uid {uid}: missing/invalid fields {invalid_fields}")
+        raise HTTPException(status_code=404, detail="Folder not found")
     return folder
+
+
+@router.get('/v1/folders/{folder_id}', response_model=Folder, tags=['folders'])
+def get_folder(folder_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Get a specific folder by ID."""
+    return _get_valid_folder(uid, folder_id)
 
 
 @router.patch('/v1/folders/{folder_id}', response_model=Folder, tags=['folders'])
 def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Update folder metadata (name, description, color, icon, order)."""
-    folder = folders_db.get_folder(uid, folder_id)
-    if not folder:
-        raise HTTPException(status_code=404, detail="Folder not found")
+    # Validate before writing: a malformed folder is rejected untouched instead of updated and then 500ing.
+    _get_valid_folder(uid, folder_id)
 
     update_data = request.model_dump(exclude_unset=True)
     # Released clients serialize an omitted field as null, not absent. The Folder model requires
