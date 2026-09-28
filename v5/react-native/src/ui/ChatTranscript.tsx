@@ -13,7 +13,7 @@ import type {OmiTheme} from '../design/tokens';
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {OmiAvatar} from './OmiAvatar';
 import {ChatMessageContent} from './ChatMessageContent';
-import {OmiButton} from '../design/primitives';
+import {OmiButton, OmiIconButton} from '../design/primitives';
 import {omiBackend} from '../omiNative';
 import {styles} from './styles';
 import {
@@ -225,38 +225,42 @@ const ChatMessageRow = memo(function ChatMessageRow({
               style={transcriptStyles.action}
             />
           )}
-        {!human && !waiting && message.text.trim() !== '' && (
-          <OmiButton
-            label={
-              copyState === 'copied'
-                ? 'Copied'
-                : copyState === 'shared'
-                ? 'Shared'
-                : copyState === 'failed'
-                ? 'Copy unavailable'
-                : Platform.OS === 'ios' || Platform.OS === 'android'
-                ? 'Share or Copy'
-                : 'Copy'
-            }
-            accessibilityLabel={
-              Platform.OS === 'ios' || Platform.OS === 'android'
-                ? 'Share or copy response'
-                : 'Copy response'
-            }
-            compact
-            variant="plain"
-            onPress={copy}
-            style={transcriptStyles.action}
-          />
-        )}
-        <Text
-          style={[
-            styles.chatTimestamp,
-            human && styles.chatTimestampHuman,
-            desktop ? desktopStyles.time : mobileBubbles.time,
-          ]}>
-          {formatChatTime(message.createdAt)}
-        </Text>
+        {/* Copy is a quiet icon beside the time, not a button per reply:
+            long threads stay readable. The label carries the state. */}
+        <View
+          style={[transcriptStyles.meta, human && transcriptStyles.metaHuman]}>
+          <Text
+            style={[
+              styles.chatTimestamp,
+              human && styles.chatTimestampHuman,
+              desktop ? desktopStyles.time : mobileBubbles.time,
+            ]}>
+            {formatChatTime(message.createdAt)}
+          </Text>
+          {!human && !waiting && message.text.trim() !== '' && (
+            <OmiIconButton
+              icon={
+                copyState === 'copied' || copyState === 'shared'
+                  ? 'check'
+                  : 'content_copy'
+              }
+              label={
+                copyState === 'copied'
+                  ? 'Copied'
+                  : copyState === 'shared'
+                  ? 'Shared'
+                  : copyState === 'failed'
+                  ? 'Copy unavailable'
+                  : Platform.OS === 'ios' || Platform.OS === 'android'
+                  ? 'Share or copy response'
+                  : 'Copy response'
+              }
+              size="small"
+              quiet
+              onPress={copy}
+            />
+          )}
+        </View>
       </View>
     </Animated.View>
   );
@@ -380,6 +384,8 @@ const createMobileBubbleStyles = (t: OmiTheme) => ({
 const createTranscriptStyles = (token: DesktopTokens) =>
   StyleSheet.create({
     action: {alignSelf: 'flex-start', marginTop: 4},
+    meta: {flexDirection: 'row', alignItems: 'center', gap: 2},
+    metaHuman: {justifyContent: 'flex-end'},
     mobileColumn: {flexShrink: 1, maxWidth: '85%'},
     skeleton: {width: 260, maxWidth: '80%', gap: 10},
     line: {

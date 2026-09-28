@@ -56,6 +56,7 @@ const GLYPHS = {
   open_in_new: 0xe89e,
   logout: 0xe9ba,
   bluetooth: 0xe1a7,
+  content_copy: 0xe14d,
 } as const;
 
 export type MaterialIconName = keyof typeof GLYPHS;

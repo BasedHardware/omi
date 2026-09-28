@@ -144,6 +144,7 @@ export function OmiIconButton({
   size = 'regular',
   selected = false,
   disabled = false,
+  quiet = false,
 }: {
   icon: MaterialIconName;
   label: string;
@@ -151,6 +152,8 @@ export function OmiIconButton({
   size?: 'small' | 'regular';
   selected?: boolean;
   disabled?: boolean;
+  /** Secondary ink, for supporting actions such as copy beside a timestamp. */
+  quiet?: boolean;
 }) {
   const theme = useOmiTheme();
   const styles = useOmiStyles(createIconButtonStyles);
@@ -175,7 +178,13 @@ export function OmiIconButton({
       <MaterialIcon
         name={icon}
         size={size === 'small' ? theme.size.iconSmall : theme.size.icon}
-        color={disabled ? theme.color.inkDisabled : theme.color.ink}
+        color={
+          disabled
+            ? theme.color.inkDisabled
+            : quiet
+            ? theme.color.inkSecondary
+            : theme.color.ink
+        }
       />
     </FocusPressable>
   );

@@ -197,6 +197,7 @@ export function DesktopChat({
         </View>
       )
     ) : null;
+  const sendDisabled = !canStop && (busy || !draft.trim());
   return (
     <View style={styles.root} accessibilityLabel="Chat with Omi">
       <View style={styles.history}>
@@ -311,11 +312,13 @@ export function DesktopChat({
               }}
               style={styles.input}
             />
-            <OmiButton
-              label={canStop ? 'Stop' : 'Send'}
-              compact
-              variant="primary"
-              disabled={!canStop && (busy || !draft.trim())}
+            {/* Send is an ink circle (stop square while Omi answers), the
+                same control as the mobile composer. */}
+            <FocusPressable
+              accessibilityRole="button"
+              accessibilityLabel={canStop ? 'Stop' : 'Send'}
+              accessibilityState={{disabled: sendDisabled}}
+              disabled={sendDisabled}
               onPress={
                 canStop
                   ? onStop
@@ -325,7 +328,19 @@ export function DesktopChat({
                       }
                     }
               }
-            />
+              style={state => [
+                styles.send,
+                sendDisabled && styles.sendDisabled,
+                state.pressed && styles.sendPressed,
+              ]}>
+              <MaterialIcon
+                name={canStop ? 'stop' : 'arrow_upward'}
+                size={16}
+                color={
+                  sendDisabled ? theme.color.inkSecondary : theme.color.onInk
+                }
+              />
+            </FocusPressable>
           </View>
         </View>
       ) : null}
@@ -366,6 +381,16 @@ const createStyles = (t: OmiTheme) => ({
     borderColor: t.color.hairline,
     backgroundColor: t.color.surfaceRaised,
   },
+  send: {
+    width: 30,
+    height: 30,
+    borderRadius: t.radius.pill,
+    backgroundColor: t.color.ink,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  sendDisabled: {backgroundColor: t.color.fillSelected},
+  sendPressed: {opacity: t.motion.pressedOpacity},
   input: {
     ...t.type.body,
     color: t.color.ink,
