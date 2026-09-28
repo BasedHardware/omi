@@ -102,6 +102,10 @@ callback even when the provider completion deadline expires. Off-loop finish
 and finalize calls schedule their work on the provider loop. These contracts
 are exercised in `tests/unit/test_soniox_token_boundaries.py`, including the
 downstream transcript merge that inserts spaces between distinct segments.
+The live transaction merges incoming words after applying current speaker
+identity, so their `speaker_match_source` matches the saved tail. It still
+reads manual speaker receipts inside the transaction before joining segments;
+receipt-covered words remain separate.
 
 The managed Soniox leg keeps active VAD gating: after speech it forwards the
 four-second hangover, then withholds silence and sends a keepalive control every
@@ -744,14 +748,21 @@ offline BYOK is not supported without a separately reviewed credential broker;
 the worker must never silently use Omi keys.
 
 A stale `in_progress` row with content can also be finalized by the always-on
-backend reconciliation sweep as a `SERVER_RECOVERY` admission on the same conversation id —
+backend reconciliation sweep (or the opt-in self-heal sweep) as a
+`SERVER_RECOVERY` admission on the same conversation id —
 never a new conversation — through this same durable job ledger. The recovery
 run reuses normal persistence but is fenced by a pre-persist structured guard:
-a kept output carrying only the deterministic minimum raises before the
-completed-status transaction, leaving the row's content for dead-letter review.
-An explicit relevance discard is a valid terminal outcome even without rich
-structure; the sweep verifies its persisted server-recovery verdict, a
-nonshrinking transcript byte count, and the original audio identifiers.
+kept output carrying only the deterministic minimum raises before the
+completed-status transaction. An explicit relevance discard is a valid
+terminal outcome without rich structure only when the sweep verifies its
+persisted server-recovery verdict and preserved transcript and audio IDs. With
+`LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED`, a clear rule-level
+ordinary discard skips the paid notes model, and the first minimal result ends
+the job instead of retrying the same content. The lease-fenced terminal write
+sets a still-bound conversation to completed and visible with its transcript
+retained; explicit reprocess remains available. Provider and parser failures
+stay on the ordinary retry budget. Turning the flag off restores the previous
+retry behavior.
 
 Live listen sessions also hold a five-minute lease on their user-scoped
 `recording_sessions` document. Accepted decoded audio renews it at most once a

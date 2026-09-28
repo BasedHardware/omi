@@ -1132,6 +1132,7 @@ def _mark_finalization_dead_letter_txn(
     now: datetime,
     conversation_ref_for_job: Callable[[str, str], Any] | None = None,
     projection_collection: Any | None = None,
+    failure_code: str = 'final_attempt_failed',
 ) -> bool:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
@@ -1174,7 +1175,7 @@ def _mark_finalization_dead_letter_txn(
             # Callers pass the inclusive terminal attempt. An exhausted crash
             # claim did no processing, so do not invent another failure here.
             'attempt_count': max(int(job.get('attempt_count') or 0), retry_count),
-            'last_failure_code': 'final_attempt_failed',
+            'last_failure_code': failure_code,
         },
     )
     _record_projection_delta(transaction, projection_collection, job, leased=-1, dead_letter=1, failure=1)
@@ -1201,7 +1202,13 @@ def _mark_finalization_dead_letter_txn(
 
 
 def mark_finalization_dead_letter(
-    job_id: str, dispatch_generation: int, lease_epoch: int, retry_count: int, *, firestore_client: Any = None
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    retry_count: int,
+    *,
+    failure_code: str = 'final_attempt_failed',
+    firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
     transaction = client.transaction()
@@ -1215,6 +1222,7 @@ def mark_finalization_dead_letter(
         _now(),
         lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
+        failure_code,
     )
 
 

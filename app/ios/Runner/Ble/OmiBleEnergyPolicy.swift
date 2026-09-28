@@ -4,6 +4,8 @@ import Foundation
 enum OmiBleEnergyPolicy {
     static let batteryHistoryMinimumIntervalMs: Int64 = 60 * 60 * 1_000
 
+    /// UserDefaults accepts property-list values only. Unknown charging state
+    /// is omitted until the device reports it.
     static func batteryHistoryEntry(timestampMs: Int64, level: Int, charging: Bool?) -> [String: Any] {
         var entry: [String: Any] = ["ts": timestampMs, "level": level]
         if let charging { entry["charging"] = charging }
