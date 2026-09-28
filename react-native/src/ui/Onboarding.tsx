@@ -152,6 +152,10 @@ export function Onboarding({
   const stepOpacity = useRef(new Animated.Value(1)).current;
   const stepShift = useRef(new Animated.Value(0)).current;
   const stepAnimatedOnce = useRef(false);
+  // The logo rides the progress line: it slides to the step's position.
+  const logoX = useRef(new Animated.Value(0)).current;
+  const [trackWidth, setTrackWidth] = useState(0);
+  const logoPlaced = useRef(false);
   const [step, setStep] = useState<MobileOnboardingStep>(
     setupRequired ? 'consent' : 'welcome',
   );
@@ -303,6 +307,34 @@ export function Onboarding({
       .slice(0, 5)
       .map(entry => entry.item);
   }, [languageQuery, languages]);
+
+  // The logo slides along the progress line to the current step's slot.
+  useEffect(() => {
+    if (trackWidth <= DOTS_SIZE) {
+      return;
+    }
+    const slots = itinerary.length;
+    const fraction =
+      setupIndex >= 0 ? (setupIndex + 0.5) / slots : 1 / (2 * slots);
+    const target = Math.max(
+      0,
+      Math.min(fraction * trackWidth - DOTS_SIZE / 2, trackWidth - DOTS_SIZE),
+    );
+    if (reduceMotion || !logoPlaced.current) {
+      // First placement and reduced motion snap; step changes travel.
+      logoX.setValue(target);
+      logoPlaced.current = true;
+      return;
+    }
+    const travel = Animated.spring(logoX, {
+      toValue: target,
+      speed: 18,
+      bounciness: 6,
+      useNativeDriver: false,
+    });
+    travel.start();
+    return () => travel.stop();
+  }, [itinerary.length, logoX, reduceMotion, setupIndex, trackWidth]);
 
   function goBack() {
     if (step === 'welcome' || signingIn) {
@@ -615,37 +647,12 @@ export function Onboarding({
       contentContainerStyle={styles.surface}
       keyboardShouldPersistTaps="handled">
       <View style={styles.column}>
-        <View accessibilityLabel="Onboarding header" style={styles.header}>
-          <Animated.View
-            accessibilityLabel="Omi"
-            style={[styles.dots, {opacity, transform: [{scale}]}]}>
-            <OmiAvatar
-              animate={
-                !reduceMotion && (step === 'welcome' || step === 'complete')
-              }
-              identity="omi"
-              reduceMotion={reduceMotion}
-              size={DOTS_SIZE}
-              tone="ink"
-              inkColor={desktop ? desktopTokens.color.ink : undefined}
-            />
-          </Animated.View>
-          {setupRequired && onSignOut ? (
-            <Button
-              accessibilityLabel="Sign out"
-              disabled={busy}
-              labelStyle={desktop && styles.desktopTitle}
-              onPress={onSignOut}
-              size="compact"
-              variant="ghost">
-              Sign out
-            </Button>
-          ) : null}
-        </View>
-        {setupIndex >= 0 ? (
+        <View accessibilityLabel="Onboarding header" style={styles.topBlock}>
           <View
-            accessibilityLabel={`Step ${setupIndex + 1} of ${itinerary.length}`}
-            style={styles.progressBlock}>
+            style={styles.progressTrack}
+            onLayout={event => {
+              setTrackWidth(event.nativeEvent.layout.width);
+            }}>
             <View style={styles.progressRow}>
               {itinerary.map((_, index) => (
                 <View
@@ -657,16 +664,60 @@ export function Onboarding({
                 />
               ))}
             </View>
-            <Text
-              accessibilityLiveRegion="polite"
-              style={[styles.progressCaption, copyColor]}>
-              {STEP_TITLES[step]} · Step {setupIndex + 1} of {itinerary.length}
-            </Text>
+            <Animated.View
+              accessibilityLabel="Omi"
+              style={[
+                styles.dots,
+                {opacity, transform: [{scale}, {translateX: logoX}]},
+              ]}>
+              <OmiAvatar
+                animate={
+                  !reduceMotion && (step === 'welcome' || step === 'complete')
+                }
+                identity="omi"
+                reduceMotion={reduceMotion}
+                size={DOTS_SIZE}
+                tone="ink"
+                inkColor={desktop ? desktopTokens.color.ink : undefined}
+              />
+            </Animated.View>
           </View>
-        ) : null}
+          <View
+            style={[
+              styles.captionRow,
+              !(setupRequired && onSignOut) && styles.captionRowCenter,
+            ]}>
+            <Text
+              accessibilityLabel={
+                setupIndex >= 0
+                  ? `Step ${setupIndex + 1} of ${itinerary.length}`
+                  : undefined
+              }
+              accessibilityLiveRegion="polite"
+              numberOfLines={1}
+              style={[styles.progressCaption, copyColor]}>
+              {setupIndex >= 0
+                ? `${STEP_TITLES[step]} · Step ${setupIndex + 1} of ${
+                    itinerary.length
+                  }`
+                : STEP_TITLES[step]}
+            </Text>
+            {setupRequired && onSignOut ? (
+              <Button
+                accessibilityLabel="Sign out"
+                disabled={busy}
+                labelStyle={desktop && styles.desktopTitle}
+                onPress={onSignOut}
+                size="compact"
+                variant="ghost">
+                Sign out
+              </Button>
+            ) : null}
+          </View>
+        </View>
         <Animated.View
           style={[
-            styles.stepAnim,
+            styles.titleAnim,
             {opacity: stepOpacity, transform: [{translateY: stepShift}]},
           ]}>
           <Text accessibilityRole="header" style={[styles.title, titleColor]}>
@@ -684,6 +735,12 @@ export function Onboarding({
               ? 'Teach Omi your voice'
               : 'You are all set!'}
           </Text>
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.stepAnim,
+            {opacity: stepOpacity, transform: [{translateY: stepShift}]},
+          ]}>
           {step === 'welcome' ? (
             <>
               <Text style={[styles.copy, copyColor]}>
@@ -988,15 +1045,31 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       maxWidth: tokens.size.content,
       width: '100%',
     },
-    header: {
+    topBlock: {
+      alignSelf: 'stretch',
+      gap: tokens.space.xs,
+    },
+    progressTrack: {
+      alignSelf: 'stretch',
+      height: DOTS_SIZE,
+      justifyContent: 'center',
+    },
+    captionRow: {
       alignItems: 'center',
       alignSelf: 'stretch',
       flexDirection: 'row',
+      gap: tokens.space.sm,
       justifyContent: 'space-between',
-      minHeight: DOTS_SIZE,
     },
+    captionRowCenter: {justifyContent: 'center'},
     dots: {
-      marginBottom: tokens.space.none,
+      left: 0,
+      position: 'absolute',
+      top: 0,
+    },
+    titleAnim: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
     },
     stepAnim: {
       alignItems: 'center',
@@ -1004,10 +1077,6 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       flex: tokens.layout.grow,
       gap: tokens.space.sm,
       justifyContent: 'center',
-    },
-    progressBlock: {
-      alignSelf: 'stretch',
-      gap: tokens.space.xs,
     },
     progressRow: {
       alignSelf: 'stretch',
