@@ -11,6 +11,8 @@ from html.parser import HTMLParser
 from typing import Any, Dict, List, Set, Tuple, cast
 from urllib.parse import urlparse, urljoin
 
+import httpx
+
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
 from utils.http_client import get_web_fetch_client
@@ -295,9 +297,15 @@ async def fetch_url_tool(url: str) -> str:
     except ValueError as e:
         logger.warning(f"fetch_url_tool blocked - {sanitize(str(e))}")
         return f'Error: {sanitize(str(e))}'
+    except (asyncio.TimeoutError, httpx.TimeoutException) as e:
+        logger.warning(f"fetch_url_tool - timeout fetching {sanitize(url)}: {sanitize(str(e))}")
+        return 'Error: The request to the specified URL timed out.'
+    except httpx.ConnectError as e:
+        logger.warning(f"fetch_url_tool - connection error fetching {sanitize(url)}: {sanitize(str(e))}")
+        return 'Error: Could not connect to the specified URL. Please check that the URL is valid and accessible.'
     except Exception as e:
         logger.error(f"fetch_url_tool - error fetching {sanitize(url)}: {sanitize(str(e))}")
-        return f'Error: Failed to fetch the URL. {sanitize(str(e))}'
+        return 'Error: An error occurred while fetching the URL. Please verify the URL and try again later.'
 
     if status != 200:
         logger.warning(f"fetch_url_tool - HTTP {status} for {sanitize(url)}")
