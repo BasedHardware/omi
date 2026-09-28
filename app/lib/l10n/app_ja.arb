@@ -3605,5 +3605,19 @@
     "sendToSupport": "Send to support",
     "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
     "deviceDiagnosticsTicket": "Support ticket code",
-    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again."
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
+    "feedbackGiveFeedback": "フィードバックを送る",
+    "feedbackAllGood": "問題なし",
+    "feedbackChatWithUs": "詳しくは？チャットでご連絡ください",
+    "feedbackReasonSummaryInaccurate": "正確でない",
+    "feedbackReasonSummaryIncomplete": "不完全",
+    "feedbackReasonSummaryIrrelevant": "関係がない",
+    "feedbackReasonSummaryWrongContext": "文脈が違う",
+    "feedbackReasonSummaryOther": "その他",
+    "feedbackReasonRecordingMissingAudio": "音声がない",
+    "feedbackReasonRecordingPoorTranscription": "文字起こしが不正確",
+    "feedbackReasonRecordingWrongSpeaker": "話者が違う",
+    "feedbackReasonRecordingDelayedOrStuck": "遅い・止まっている",
+    "feedbackReasonRecordingFragmentedOrDuplicated": "分断・重複している",
+    "feedbackReasonRecordingOther": "その他"
 }

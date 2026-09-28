@@ -11470,4 +11470,46 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Отправить отзыв';
+
+  @override
+  String get feedbackAllGood => 'Всё хорошо';
+
+  @override
+  String get feedbackChatWithUs => 'Подробнее? Напишите нам';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Неточно';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Неполно';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Не по теме';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Не тот контекст';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Другое';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Нет звука';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Плохая расшифровка';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Неверный спикер';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Задержка или зависание';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Фрагментация или дублирование';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Другое';
 }

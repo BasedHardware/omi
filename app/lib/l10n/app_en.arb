@@ -13583,5 +13583,61 @@
     "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
     "@deviceDiagnosticsUploadFailed": {
         "description": "Device diagnostics support upload"
+    },
+    "feedbackGiveFeedback": "Give feedback",
+    "@feedbackGiveFeedback": {
+        "description": "Button on the summary/recording feedback prompt that opens the quick feedback sheet."
+    },
+    "feedbackAllGood": "All good",
+    "@feedbackAllGood": {
+        "description": "Chip in the feedback sheet for a positive answer; submits helpful feedback."
+    },
+    "feedbackChatWithUs": "More detail? Chat with us",
+    "@feedbackChatWithUs": {
+        "description": "Secondary row in the feedback sheet that opens the support chat."
+    },
+    "feedbackReasonSummaryInaccurate": "Inaccurate",
+    "@feedbackReasonSummaryInaccurate": {
+        "description": "Quick reason chip: the summary was inaccurate."
+    },
+    "feedbackReasonSummaryIncomplete": "Incomplete",
+    "@feedbackReasonSummaryIncomplete": {
+        "description": "Quick reason chip: the summary was incomplete."
+    },
+    "feedbackReasonSummaryIrrelevant": "Not relevant",
+    "@feedbackReasonSummaryIrrelevant": {
+        "description": "Quick reason chip: the summary was not relevant."
+    },
+    "feedbackReasonSummaryWrongContext": "Wrong context",
+    "@feedbackReasonSummaryWrongContext": {
+        "description": "Quick reason chip: the summary mixed up context."
+    },
+    "feedbackReasonSummaryOther": "Something else",
+    "@feedbackReasonSummaryOther": {
+        "description": "Quick reason chip: some other summary problem."
+    },
+    "feedbackReasonRecordingMissingAudio": "Missing audio",
+    "@feedbackReasonRecordingMissingAudio": {
+        "description": "Quick reason chip: the recording is missing audio."
+    },
+    "feedbackReasonRecordingPoorTranscription": "Poor transcription",
+    "@feedbackReasonRecordingPoorTranscription": {
+        "description": "Quick reason chip: the transcription was poor."
+    },
+    "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
+    "@feedbackReasonRecordingWrongSpeaker": {
+        "description": "Quick reason chip: the speaker attribution was wrong."
+    },
+    "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
+    "@feedbackReasonRecordingDelayedOrStuck": {
+        "description": "Quick reason chip: processing was delayed or stuck."
+    },
+    "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
+    "@feedbackReasonRecordingFragmentedOrDuplicated": {
+        "description": "Quick reason chip: the recording was fragmented or duplicated."
+    },
+    "feedbackReasonRecordingOther": "Something else",
+    "@feedbackReasonRecordingOther": {
+        "description": "Quick reason chip: some other recording problem."
     }
 }

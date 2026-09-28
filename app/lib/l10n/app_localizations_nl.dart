@@ -11467,4 +11467,46 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Feedback geven';
+
+  @override
+  String get feedbackAllGood => 'Alles goed';
+
+  @override
+  String get feedbackChatWithUs => 'Meer te melden? Chat met ons';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Niet nauwkeurig';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Onvolledig';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Niet relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Verkeerde context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Iets anders';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Audio ontbreekt';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Slechte transcriptie';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Verkeerde spreker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Vertraagd of vastgelopen';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Gefragmenteerd of gedupliceerd';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Iets anders';
 }
