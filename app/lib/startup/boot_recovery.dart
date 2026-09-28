@@ -49,13 +49,20 @@ class BootRecovery {
     safeModeActive = false;
   }
 
-  /// A process killed inside a stage has no Dart catch. Count its last begin on next launch.
+  /// A process killed after any stage has no Dart catch. Count an unclosed boot once.
   Future<void> countInterruptedBoot(BootJournal journal) async {
     final entries = await journal.read();
-    if (entries.isNotEmpty && entries.last['state'] == 'begin' && entries.last['stage'] is String) {
-      final stage = entries.last['stage'] as String;
-      await failed(stage);
-      await journal.record(stage, 'interrupted');
+    final begin = entries.lastIndexWhere((entry) => entry['stage'] == 'boot' && entry['state'] == 'begin');
+    if (begin < 0) return;
+    final pending = entries.skip(begin + 1).toList();
+    if (pending.any((entry) => entry['stage'] == 'boot' && ['completed', 'interrupted'].contains(entry['state']))) {
+      return;
     }
+    final failedStage = pending.lastWhere(
+      (entry) => entry['state'] == 'failed' && entry['stage'] is String,
+      orElse: () => <String, dynamic>{},
+    )['stage'];
+    await failed(failedStage is String ? failedStage : 'boot');
+    await journal.record('boot', 'interrupted');
   }
 }

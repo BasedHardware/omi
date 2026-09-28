@@ -35,6 +35,16 @@ void main() {
     expect(journal.failureStage, 'resolve_auth');
   });
 
+  test('retains an unclosed boot boundary across a long startup', () async {
+    await journal.record('boot', 'begin');
+    for (var i = 0; i < BootJournal.capacity + 4; i++) {
+      await journal.record('stage_$i', 'completed');
+    }
+    final entries = await journal.read();
+    expect(entries.length, BootJournal.capacity);
+    expect(entries.first['stage'], 'boot');
+  });
+
   test('diagnostic IO failures do not break the stage operation', () async {
     final unavailable = BootJournal(documents: () async => throw const FileSystemException('unavailable'));
     expect(await unavailable.stage('shared_preferences', () async => 7), 7);

@@ -48,16 +48,62 @@ void main() {
     expect(BootRecovery.countsFailure(StateError('recoverable stage')), isTrue);
   });
 
-  test('interrupted stage is counted on next launch', () async {
+  test('unclosed boot counts even when the final stage completed, only once', () async {
     final directory = await Directory.systemTemp.createTemp('boot-recovery-');
     try {
       final journal = BootJournal(documents: () async => directory);
+      await journal.record('boot', 'begin');
       await journal.record('service_manager_start', 'begin');
+      await journal.record('service_manager_start', 'completed');
       await recovery.countInterruptedBoot(journal);
-      expect(recovery.failingStage, 'service_manager_start');
+      expect(recovery.failingStage, 'boot');
       expect(recovery.count, 1);
       await recovery.countInterruptedBoot(journal);
       expect(recovery.count, 1);
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('closed boot is not counted as interrupted', () async {
+    final directory = await Directory.systemTemp.createTemp('boot-recovery-');
+    try {
+      final journal = BootJournal(documents: () async => directory);
+      await journal.record('boot', 'begin');
+      await journal.record('resolve_auth', 'completed');
+      await journal.record('boot', 'completed');
+      await recovery.countInterruptedBoot(journal);
+      expect(recovery.count, 0);
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('interrupted boot retains its failed stage attribution', () async {
+    final directory = await Directory.systemTemp.createTemp('boot-recovery-');
+    try {
+      final journal = BootJournal(documents: () async => directory);
+      await journal.record('boot', 'begin');
+      await journal.record('resolve_auth', 'failed');
+      await recovery.countInterruptedBoot(journal);
+      expect(recovery.failingStage, 'resolve_auth');
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('three unclosed boots enter recovery', () async {
+    final directory = await Directory.systemTemp.createTemp('boot-recovery-');
+    try {
+      final journal = BootJournal(documents: () async => directory);
+      for (var i = 0; i < 3; i++) {
+        await journal.record('boot', 'begin');
+        await journal.record('resolve_auth', 'completed');
+        await recovery.countInterruptedBoot(journal);
+      }
+      expect(recovery.failingStage, 'boot');
+      expect(recovery.count, 3);
+      expect(recovery.shouldRecover, isTrue);
     } finally {
       await directory.delete(recursive: true);
     }

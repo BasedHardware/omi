@@ -54,7 +54,14 @@ class BootJournal {
         'error_type': error?.runtimeType.toString(),
         'at_ms': DateTime.now().millisecondsSinceEpoch,
       });
-      if (history.length > capacity) history = history.sublist(history.length - capacity);
+      if (history.length > capacity) {
+        final lastBootBegin = history.lastIndexWhere((row) => row['stage'] == 'boot' && row['state'] == 'begin');
+        final tail = history.sublist(history.length - capacity + 1);
+        // Keep the boot boundary even when a long startup fills the bounded journal.
+        history = lastBootBegin >= 0 && lastBootBegin < history.length - capacity + 1
+            ? [history[lastBootBegin], ...tail]
+            : history.sublist(history.length - capacity);
+      }
       final temporary = File('${file.path}.tmp');
       await temporary.writeAsString(jsonEncode(history), flush: true);
       await temporary.rename(file.path);

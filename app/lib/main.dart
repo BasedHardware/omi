@@ -360,6 +360,7 @@ Future<void> _start({bool forceFull = false}) async {
     if (!PhysicalQualification.enabled) {
       recovery = BootRecovery(await SharedPreferences.getInstance());
       await recovery.countInterruptedBoot(BootJournal.instance);
+      await BootJournal.instance.record('boot', 'begin');
       if (recovery.needsMigration) await BootJournal.instance.record('schema_upgrade', 'needed');
       BootRecovery.safeModeActive = !forceFull && recovery.shouldRecover;
       if (BootRecovery.safeModeActive) {
@@ -369,6 +370,7 @@ Future<void> _start({bool forceFull = false}) async {
           AnalyticsManager().track('Mobile Recovery Mode Entered', properties: {'stage': recovery.failingStage});
         } catch (_) {}
         await BootJournal.instance.record('safe_boot', 'completed');
+        await BootJournal.instance.record('boot', 'completed');
         runApp(BootRecoveryApp(onRetry: () => _start(forceFull: true)));
         return;
       }
@@ -376,8 +378,10 @@ Future<void> _start({bool forceFull = false}) async {
     await _init();
     if (!PhysicalQualification.enabled) {
       await recovery!.fullBootSucceeded();
+      await BootJournal.instance.record('boot', 'completed');
     }
   } catch (error, stack) {
+    if (!PhysicalQualification.enabled) await BootJournal.instance.record('boot', 'interrupted');
     if (PhysicalQualification.enabled) {
       unawaited(PhysicalQualification.runtimeEvent('startup_error', error: error, stack: stack));
     }
@@ -406,6 +410,7 @@ Future<void> _start({bool forceFull = false}) async {
             AnalyticsManager().track('Mobile Recovery Mode Entered', properties: {'stage': stage});
           } catch (_) {}
           await BootJournal.instance.record('safe_boot', 'completed');
+          await BootJournal.instance.record('boot', 'completed');
           runApp(BootRecoveryApp(onRetry: () => _start(forceFull: true)));
           return;
         }
