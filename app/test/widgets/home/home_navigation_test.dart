@@ -25,10 +25,12 @@ void main() {
       expect(link.query['share'], '1');
     });
 
-    test('preserves an encoded Siri question as a chat draft', () {
-      final link = HomeDeepLink.parse('/chat?draft=What%20did%20Sam%20say%3F')!;
+    test('preserves reserved characters in an encoded Siri chat draft', () {
+      final link = HomeDeepLink.parse(
+        '/chat?draft=What%20is%20A%26B%20%3D%20C%2BD%20%23100%25%3F%20%F0%9F%98%80',
+      )!;
       expect(link.alias, 'chat');
-      expect(link.query['draft'], 'What did Sam say?');
+      expect(link.query['draft'], 'What is A&B = C+D #100%? 😀');
     });
 
     test('accepts a route without a leading slash and ignores empty segments', () {

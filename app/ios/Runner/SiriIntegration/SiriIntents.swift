@@ -107,14 +107,28 @@ struct OpenOmiChatIntent: AppIntent {
     @Parameter(title: "Owner") var ownerUID: String?
     @Parameter(title: "Owner generation") var ownerGeneration: String?
 
+    static func route(draft: String?) throws -> String {
+        guard let draft else { return "omi://chat" }
+        var components = URLComponents()
+        components.scheme = "omi"
+        components.host = "chat"
+        components.queryItems = [URLQueryItem(name: "draft", value: draft)]
+        // URLComponents leaves a literal plus in a query value. Dart treats it
+        // as a space, so encode it explicitly after URLQueryItem escapes the
+        // other reserved characters.
+        components.percentEncodedQuery = components.percentEncodedQuery?
+            .replacingOccurrences(of: "+", with: "%2B")
+        guard let route = components.string else { throw SiriSession.Failure.invalidConfiguration }
+        return route
+    }
+
     func perform() async throws -> some IntentResult {
         guard let ownerUID, let ownerGeneration,
               let config = SiriSession.shared.currentConfig(),
               config.uid == ownerUID,
               String(config.generation ?? 0) == ownerGeneration else { throw SiriSession.Failure.auth }
         try SiriSession.shared.validateOwner(config)
-        let encoded = draft?.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
-        SiriBridge.shared.navigate(encoded.map { "omi://chat?draft=\($0)" } ?? "omi://chat")
+        SiriBridge.shared.navigate(try Self.route(draft: draft))
         return .result()
     }
 }
@@ -529,7 +543,10 @@ struct OmiAppShortcuts: AppShortcutsProvider {
         AppShortcut(intent: AskOmiIntent(), phrases: [
             "Ask \(.applicationName)",
             "Ask \(.applicationName) a question",
-            "Ask a question in \(.applicationName)"
+            "Ask a question in \(.applicationName)",
+            "Ask \(.applicationName) something",
+            "I have a question for \(.applicationName)",
+            "Ask \(.applicationName) to do something"
         ], shortTitle: "Ask Omi", systemImageName: "bubble.left.and.text.bubble.right")
         AppShortcut(intent: RememberIntent(), phrases: [
             "Remember something in \(.applicationName)",

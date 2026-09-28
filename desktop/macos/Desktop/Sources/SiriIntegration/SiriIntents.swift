@@ -297,6 +297,9 @@ struct OmiAppShortcuts: AppShortcutsProvider {
         "Ask \(.applicationName)",
         "Ask \(.applicationName) a question",
         "Ask a question in \(.applicationName)",
+        "Ask \(.applicationName) something",
+        "I have a question for \(.applicationName)",
+        "Ask \(.applicationName) to do something",
       ], shortTitle: "Ask Omi", systemImageName: "bubble.left.and.text.bubble.right")
     AppShortcut(
       intent: RememberIntent(),

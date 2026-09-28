@@ -58,6 +58,11 @@ enum SiriDebugProbe {
             let emptyRejected = (try? OmiNativeAPI.terminalChatAnswer("done: e30=")) == nil
             NSLog("[SiriProbe] askOmiTerminalAnswer=%@",
                   answerValid && partialIgnored && emptyRejected ? "PASS" : "FAIL")
+            let reservedDraft = "What is A&B = C+D #100%? 😀"
+            let encodedRoute = try? OpenOmiChatIntent.route(draft: reservedDraft)
+            let decodedDraft = encodedRoute.flatMap { URLComponents(string: $0)?.queryItems?.first?.value }
+            NSLog("[SiriProbe] askOmiDraftEncoding=%@",
+                  decodedDraft == reservedDraft && encodedRoute?.contains("%2B") == true ? "PASS" : "FAIL")
             let production = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12")
             let development = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12.development")
             let productionKeys = [production.ownerKey, production.pendingWipeOwnersKey,
