@@ -99,6 +99,7 @@ environments:
         attempt_deadline: 180s
         owner: .github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml
       - name: frame-request-retention-hourly
+        lifecycle: planned
         region: us-central1
         schedule: "0 * * * *"
         time_zone: Etc/UTC
@@ -233,6 +234,7 @@ environments:
         attempt_deadline: 180s
         owner: unassigned; manually created; David decision required
       - name: frame-request-retention-hourly
+        lifecycle: planned
         region: us-central1
         schedule: "0 * * * *"
         time_zone: Etc/UTC

@@ -185,4 +185,4 @@ jobs:
             --project "${{ vars.GCP_PROJECT_ID }}" --apply --jobs "$SCHEDULER_JOB"
           python3 backend/scripts/scheduler_reconcile.py \
             --environment "$SCHEDULER_ENVIRONMENT" \
-            --project "${{ vars.GCP_PROJECT_ID }}" --check
+            --project "${{ vars.GCP_PROJECT_ID }}" --check --jobs "$SCHEDULER_JOB"

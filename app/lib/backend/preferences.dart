@@ -1150,6 +1150,24 @@ class SharedPreferencesUtil {
     }
   }
 
+  // Speaker label recency — person id -> epoch millis of the last speaker
+  // assignment made from the tag-speaker sheet. Used to surface recently
+  // tagged people first. Format: { "personId": 1712345678000 }
+  Map<String, int> get speakerLabelLastUsedMs {
+    final encoded = getString('speaker_label_last_used_ms');
+    if (encoded.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+      return decoded.map((key, value) => MapEntry(key, (value as num).toInt()));
+    } catch (e) {
+      return {};
+    }
+  }
+
+  set speakerLabelLastUsedMs(Map<String, int> value) {
+    saveString('speaker_label_last_used_ms', jsonEncode(value));
+  }
+
   ServerConversation? get modifiedConversationDetails {
     final String conversation = getString('modifiedConversationDetails');
     if (conversation.isEmpty) return null;

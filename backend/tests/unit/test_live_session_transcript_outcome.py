@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from routers.listen.runtime import ListenSessionRuntime
+from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME
 
 
 def _runtime(
@@ -60,6 +61,17 @@ def _outcome(runtime):
 def test_transcript_delivered_wins_over_everything():
     runtime = _runtime(delivered=True, terminal=True, close_code=1011)
     assert _outcome(runtime) == 'transcribed'
+
+
+def test_canary_outcome_uses_stable_allocation_arm(monkeypatch):
+    monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
+    runtime = _runtime(delivered=True)
+    for percent, arm in [('100', 'window'), ('0', 'control')]:
+        monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', percent)
+        before = WINDOW_CANARY_OUTCOME.labels(arm=arm, outcome='transcribed')._value.get()
+        runtime._session_transcript_outcome_recorded = False
+        _outcome(runtime)
+        assert WINDOW_CANARY_OUTCOME.labels(arm=arm, outcome='transcribed')._value.get() == before + 1
 
 
 def test_terminal_failure_is_never_excused_as_too_short():

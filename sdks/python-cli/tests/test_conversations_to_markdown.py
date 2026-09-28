@@ -180,6 +180,21 @@ class TestConversationsToMarkdown(unittest.TestCase):
         # Single conversation dictionary
         self.assertEqual(c2m.extract_conversations(conv1), [conv1])
 
+    def test_extract_conversations_invalid_payload_guard(self):
+        """Invalid dict payloads (error responses, unrelated dicts, empty dicts) return empty list."""
+        self.assertEqual(c2m.extract_conversations({}), [])
+        self.assertEqual(c2m.extract_conversations({"detail": "Not authenticated"}), [])
+        self.assertEqual(c2m.extract_conversations({"status": "error", "message": "unauthorized"}), [])
+        self.assertEqual(c2m.extract_conversations({"error": {"code": 404}}), [])
+
+        # Single conversation with various valid fields unwraps properly
+        self.assertEqual(c2m.extract_conversations({"id": "c1"}), [{"id": "c1"}])
+        self.assertEqual(c2m.extract_conversations({"transcript_segments": []}), [{"transcript_segments": []}])
+        self.assertEqual(c2m.extract_conversations({"structured": {"title": "Test"}}), [{"structured": {"title": "Test"}}])
+        self.assertEqual(c2m.extract_conversations({"started_at": "2026-09-28T00:00:00Z"}), [{"started_at": "2026-09-28T00:00:00Z"}])
+        self.assertEqual(c2m.extract_conversations({"created_at": "2026-09-28T00:00:00Z"}), [{"created_at": "2026-09-28T00:00:00Z"}])
+
+
     def test_empty_conversations_export_produces_no_files(self):
         """Exporting an empty list must create 0 files and leave the directory clean."""
         with tempfile.TemporaryDirectory() as tmp_dir:

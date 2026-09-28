@@ -1478,6 +1478,7 @@ def migrate_memories_level_batch(
     doc_refs = [memories_ref.document(mem_id) for mem_id in memory_ids]
     doc_snapshots = database.get_all(doc_refs)
 
+    batch_count = 0
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Memory {doc_snapshot.id} not found, skipping.")
@@ -1501,8 +1502,14 @@ def migrate_memories_level_batch(
         # Update the document with the migrated data and the new protection level.
         update_data = {'data_protection_level': target_level, 'content': migrated_content}
         batch.update(doc_snapshot.reference, update_data)
+        batch_count += 1
+        if batch_count >= BATCH_LIMIT:
+            batch.commit()
+            batch = database.batch()
+            batch_count = 0
 
-    batch.commit()
+    if batch_count > 0:
+        batch.commit()
 
 
 @_destination_account_write_gated

@@ -11475,4 +11475,17 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get searchPeople => 'Személyek keresése';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '„$query” hozzáadása új személyként';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Az összes ($count) személy megjelenítése';
+  }
 }

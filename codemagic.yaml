@@ -2333,20 +2333,32 @@ workflows:
 
           xattr -cr "$APP_BUNDLE"
 
-          # Sign ffmpeg (inside SPM resource bundle)
-          FFMPEG_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/ffmpeg"
-          if [ -f "$FFMPEG_PATH" ]; then
-            codesign --force --options runtime --timestamp \
-              --sign "$SIGN_IDENTITY" "$FFMPEG_PATH"
+          # SwiftPM can place resources at the bundle root or under
+          # Contents/Resources. Sign every native payload in either layout.
+          RESOURCE_BUNDLE="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle"
+          if [ ! -d "$RESOURCE_BUNDLE" ]; then
+            echo "ERROR: SwiftPM resource bundle is missing: $RESOURCE_BUNDLE" >&2
+            exit 1
           fi
 
           # Sign node with JIT entitlements (V8 requires MAP_JIT under Hardened Runtime)
           NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
-          if [ -f "$NODE_BUNDLE_PATH" ]; then
-            codesign --force --options runtime --timestamp \
-              --sign "$SIGN_IDENTITY" \
-              --entitlements Desktop/Node.entitlements \
-              "$NODE_BUNDLE_PATH"
+          while IFS= read -r -d '' native_bin; do
+            if file "$native_bin" | grep -q 'Mach-O'; then
+              if [ "$native_bin" = "$NODE_BUNDLE_PATH" ]; then
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" \
+                  --entitlements Desktop/Node.entitlements \
+                  "$native_bin"
+              else
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" "$native_bin"
+              fi
+            fi
+          done < <(find "$RESOURCE_BUNDLE" -type f -print0)
+          if [ ! -f "$NODE_BUNDLE_PATH" ]; then
+            echo "ERROR: bundled node is missing: $NODE_BUNDLE_PATH" >&2
+            exit 1
           fi
 
           # Sign agent native binaries
@@ -2454,6 +2466,10 @@ workflows:
       - name: Notarize stable and Beta apps concurrently
         script: |
           set -euo pipefail
+          scripts/check-desktop-bundle-signatures.sh "$APP_BUNDLE"
+          if [[ "${PREVIEW_MODE:-false}" != "true" ]]; then
+            scripts/check-desktop-bundle-signatures.sh "$BUILD_DIR/$BETA_APP_NAME.app"
+          fi
           NOTARIZE_ARGS=(
             --kind app
             --work-dir "$BUILD_DIR/notarization"

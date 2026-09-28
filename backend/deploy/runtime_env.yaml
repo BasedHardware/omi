@@ -88,6 +88,24 @@ environments:
           STT_RESILIENT_RECONNECT:
             value: 'false'
             category: rollout
+          STT_ROUTING_MODE:
+            value: shadow
+            category: rollout
+          STT_ROUTING_REDIS_TIMEOUT_SECONDS:
+            value: '0.075'
+            category: rollout
+          STT_ROUTING_PROBE_PERCENT:
+            value: '2'
+            category: rollout
+          STT_NO_TEXT_SECONDS:
+            value: '30'
+            category: rollout
+          SONIOX_MONTHLY_CEILING_USD:
+            value: '0'
+            category: rollout
+          SONIOX_ESTIMATED_USD_PER_HOUR:
+            value: '0.07537'
+            category: rollout
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
             category: rollout
@@ -98,7 +116,7 @@ environments:
             value: '100'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '100'
+            value: '1'
             category: rollout
           PARAKEET_WINDOW_MAX_SESSIONS:
             value: '1'
@@ -115,6 +133,12 @@ environments:
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
             value: '24'
             category: rollout
+          PARAKEET_BATCH_PRESSURE_POOL_HOST:
+            value: dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local
+            category: service_discovery
+          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+            value: '1'
+            category: rollout
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
             value: '1800'
             category: rollout
@@ -128,7 +152,7 @@ environments:
             value: '30'
             category: rollout
           STT_SERVICE_MODELS:
-            value: parakeet-window,soniox
+            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1782,6 +1806,24 @@ environments:
           STT_RESILIENT_RECONNECT:
             value: 'false'
             category: rollout
+          STT_ROUTING_MODE:
+            value: shadow
+            category: rollout
+          STT_ROUTING_REDIS_TIMEOUT_SECONDS:
+            value: '0.075'
+            category: rollout
+          STT_ROUTING_PROBE_PERCENT:
+            value: '2'
+            category: rollout
+          STT_NO_TEXT_SECONDS:
+            value: '30'
+            category: rollout
+          SONIOX_MONTHLY_CEILING_USD:
+            value: '10000'
+            category: rollout
+          SONIOX_ESTIMATED_USD_PER_HOUR:
+            value: '0.07537'
+            category: rollout
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
             category: rollout
@@ -1792,7 +1834,7 @@ environments:
             value: '25'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '0'
+            value: '1'
             category: rollout
           PARAKEET_WINDOW_MAX_SESSIONS:
             value: '1'
@@ -1809,6 +1851,12 @@ environments:
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
             value: '24'
             category: rollout
+          PARAKEET_BATCH_PRESSURE_POOL_HOST:
+            value: prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local
+            category: service_discovery
+          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+            value: '2'
+            category: rollout
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
             value: '1800'
             category: rollout
@@ -1822,7 +1870,7 @@ environments:
             value: '30'
             category: rollout
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -2125,7 +2173,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:

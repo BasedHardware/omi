@@ -233,7 +233,7 @@ jobs:
             --project "${{ vars.GCP_PROJECT_ID }}" --apply --jobs "$SCHEDULER_JOB"
           python3 backend/scripts/scheduler_reconcile.py \
             --environment "${{ vars.ENV == 'prod' && 'prod' || 'dev' }}" \
-            --project "${{ vars.GCP_PROJECT_ID }}" --check
+            --project "${{ vars.GCP_PROJECT_ID }}" --check --jobs "$SCHEDULER_JOB"
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output

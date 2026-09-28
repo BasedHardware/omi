@@ -1630,7 +1630,7 @@ def _extract_memories_canonical(
         if _conversation_notes_v2_enabled() and conversation.started_at:
             person_ids = conversation.get_person_ids()
             people_records = users_db.get_people_by_ids(uid, list(set(person_ids))) if person_ids else []
-            prompt_people = [Person(**record) for record in people_records]
+            prompt_people = Person.deserialize_many_safe(people_records)
             calendar_context = _stored_meeting_context(conversation)
             prompt_transcript, prompt_speaker_map = conversation_transcript_and_speaker_map(
                 uid, conversation, prompt_people
@@ -2617,7 +2617,10 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
         and external_data.get('conversation_role') == 'meeting'
     ):
         try:
-            duration_s = (finished_at - started_at).total_seconds() if has_window else 0.0
+            # Transcript span, not the capture-session window (#4056): `started_at` is the
+            # streaming origin, so a short call inside a long socket would otherwise pay
+            # for calendar/screen reads the final treatment verdict then discards.
+            duration_s = conversation_duration_seconds(conversation) or 0.0
         except TypeError:
             duration_s = 0.0
         speech_s = deduplicated_transcribed_speech_seconds(getattr(conversation, 'transcript_segments', None) or [])
@@ -2641,7 +2644,12 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
             end_date=finished_at,
             limit=MAX_SCREEN_CONTEXT_ROWS,
         )
-        return context_from_screen_activity(rows, started_at=started_at, finished_at=finished_at)
+        return context_from_screen_activity(
+            rows,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=conversation_duration_seconds(conversation),
+        )
 
     context = resolve_meeting_context(
         direct=_stored_meeting_context(conversation),
@@ -2672,6 +2680,7 @@ def process_conversation(
     client_projection: ClientProcessing | None = None,
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
+    speaker_receipt_observer: Callable[[bool], None] | None = None,
 ) -> Conversation:
     """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
     fixes run-now, reprocess, JIT bypass, and relevance policy together.
@@ -2909,13 +2918,15 @@ def process_conversation(
 
     _enrich_meeting_context(uid, conversation)
     # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
-    resolve_speakers_for_processing(uid, conversation)
+    speaker_receipt_applied = resolve_speakers_for_processing(uid, conversation)
+    if speaker_receipt_observer is not None:
+        speaker_receipt_observer(speaker_receipt_applied)
 
     person_ids = conversation.get_person_ids()
     people: List[Person] = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     decisions: list[RelevanceDecision] = []

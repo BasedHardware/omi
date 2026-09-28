@@ -11220,4 +11220,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get searchPeople => '搜索人员';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '将“$query”添加为新人员';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return '显示全部 $count 人';
+  }
 }

@@ -11498,4 +11498,17 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get searchPeople => 'Cerca persones';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Afegeix \"$query\" com a persona nova';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Mostra totes les persones ($count)';
+  }
 }

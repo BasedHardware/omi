@@ -11241,4 +11241,17 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get searchPeople => '人物を検索';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '「$query」を新しい人物として追加';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'すべての人物（$count）を表示';
+  }
 }
