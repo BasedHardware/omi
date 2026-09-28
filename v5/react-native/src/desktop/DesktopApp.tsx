@@ -57,6 +57,7 @@ import type {DesktopTokens} from './tokens';
 import {FocusPressable} from '../ui/Pressable';
 import {MaterialIcon} from '../ui/MaterialIcon';
 import {useOmiStyles} from '../design/OmiTheme';
+import {OmiButton} from '../design/primitives';
 import type {OmiTheme} from '../design/tokens';
 
 export type {DesktopSession};
@@ -680,13 +681,12 @@ function InlineAskCard({
           </Text>
         </View>
       )}
-      <FocusPressable
-        accessibilityLabel="Open chat"
-        accessibilityRole="button"
+      <OmiButton
+        compact
+        label="Open Chat"
         onPress={onOpenChat}
-        style={({pressed}) => [styles.openChat, pressed && styles.pressed]}>
-        <Text style={styles.openChatText}>Open chat</Text>
-      </FocusPressable>
+        style={styles.openChat}
+      />
     </View>
   );
 }
@@ -696,10 +696,10 @@ const createInlineStyles = (token: DesktopTokens) =>
     card: {
       backgroundColor: token.color.dark,
       borderColor: token.color.lineStrong,
-      borderRadius: 14,
+      borderRadius: 18,
       borderWidth: 1,
       gap: 8,
-      padding: 12,
+      padding: 14,
     },
     cardHead: {
       alignItems: 'center',
@@ -709,10 +709,8 @@ const createInlineStyles = (token: DesktopTokens) =>
     cardTitle: {
       color: token.color.inkMuted,
       fontFamily: token.font,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
-      letterSpacing: 0.4,
-      textTransform: 'uppercase',
     },
     close: {
       alignItems: 'center',
@@ -744,19 +742,7 @@ const createInlineStyles = (token: DesktopTokens) =>
       fontSize: 13,
       lineHeight: 18,
     },
-    openChat: {
-      alignSelf: 'flex-start',
-      backgroundColor: token.color.glassSelected,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-    },
-    openChatText: {
-      color: token.color.ink,
-      fontFamily: token.font,
-      fontSize: 12,
-      fontWeight: '600',
-    },
+    openChat: {alignSelf: 'flex-start'},
     pressed: {opacity: 0.7},
   });
 
