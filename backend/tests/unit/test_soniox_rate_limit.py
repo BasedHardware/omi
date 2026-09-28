@@ -93,11 +93,66 @@ def test_connect_rate_limit_does_not_enter_account_rejection_or_quota_path():
     assert _classify_provider_account_rejection('soniox', str(error)) is None
     assert _fallback_failure_reason(error) == 'provider_429'
     assert live_chain.failure_reason(error) == 'provider_429'
+    assert live_chain.failure_reason(RuntimeError('unrelated failure containing request 429')) == 'provider_5xx'
     from utils.stt.live_failure import note_typed_provider_death
 
     assert not note_typed_provider_death(
         type('Socket', (), {'typed_death_reason': 'provider_rate_limited'})(), 'soniox'
     )
+
+
+@pytest.mark.asyncio
+async def test_legacy_primary_connect_preserves_typed_rate_limit_reason(monkeypatch):
+    class Circuit:
+        account_failures = 0
+        selection_failures = 0
+
+        def allow_request(self, **_kwargs):
+            return True
+
+        def account_cooldown_elapsed(self):
+            return True
+
+        def record_account_rejection(self):
+            self.account_failures += 1
+
+        def record_failure(self):
+            self.selection_failures += 1
+
+        def record_success(self, **_kwargs):
+            pass
+
+    circuits = {service: Circuit() for service in STTService}
+    monkeypatch.setattr(streaming, '_circuit_for_primary', lambda service: circuits[service])
+    monkeypatch.setattr(streaming, 'fallback_socket_is_serving', lambda _socket: _serving())
+    recorded = []
+    monkeypatch.setattr(streaming, 'record_stt_provider_connect', lambda **kwargs: recorded.append(kwargs))
+
+    async def _serving():
+        return True
+
+    async def connect_primary():
+        raise SonioxRateLimitError('transient')
+
+    fallback = FakeSocket()
+    socket, service = await streaming.connect_stt_socket_with_fallback(
+        use_config=False,
+        primary_service=STTService.soniox,
+        connect_primary=connect_primary,
+        connect_modulate=lambda: _connected(fallback),
+    )
+
+    assert (socket, service) == (fallback, STTService.modulate)
+    assert any(
+        event['provider'] == 'soniox' and event['outcome'] == 'failure' and event['reason'] == 'provider_429'
+        for event in recorded
+    )
+    assert circuits[STTService.soniox].selection_failures == 1
+    assert circuits[STTService.soniox].account_failures == 0
+
+
+async def _connected(socket):
+    return socket
 
 
 @pytest.mark.asyncio
@@ -168,4 +223,24 @@ async def test_receiver_drain_releases_gauge_when_close_raises():
     track_live_stt_socket(socket, 'soniox')
     assert gauge._value.get() == before + 1
     await receiver._drain_stt_sockets()
+    assert gauge._value.get() == before
+
+
+def test_managed_socket_gauge_tracks_physical_close_not_death_latch():
+    from utils.metrics import OMI_LIVE_STT_OPEN_STREAMS
+    from utils.stt.live_session import LiveLegSocket
+
+    gauge = OMI_LIVE_STT_OPEN_STREAMS.labels(provider='soniox')
+    before = gauge._value.get()
+    record_live_stt_socket_open('soniox')
+    socket = LiveLegSocket.__new__(LiveLegSocket)
+    socket.raw = FakeSocket(dead=True)
+    socket._dead = False
+    socket._pending_selection = None
+    socket._open_gauge_released = False
+    socket.service = STTService.soniox
+
+    assert socket.is_connection_dead
+    assert gauge._value.get() == before + 1
+    socket.finish()
     assert gauge._value.get() == before

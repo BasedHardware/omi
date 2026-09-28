@@ -457,8 +457,8 @@ async def connect_stt_socket_with_fallback(
         except (asyncio.TimeoutError, TimeoutError):
             reason = 'timeout'
             circuit.record_failure()
-        except Exception:
-            reason = 'provider_5xx'
+        except Exception as error:
+            reason = _fallback_failure_reason(error)
             circuit.record_failure()
         # One attempt, one increment: the not-serving branches left their typed
         # death reason in typed_connect_reason, everything else lands here with

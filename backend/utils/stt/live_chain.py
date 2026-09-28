@@ -30,7 +30,7 @@ def failure_reason(error: BaseException) -> str:
         return error.reason
     if isinstance(error, TimeoutError):
         return 'timeout'
-    if getattr(error, 'reason', None) == 'provider_rate_limited' or '429' in str(error):
+    if getattr(error, 'reason', None) == 'provider_rate_limited':
         return 'provider_429'
     return 'provider_5xx'
 

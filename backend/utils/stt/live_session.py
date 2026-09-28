@@ -312,8 +312,6 @@ class LiveLegSocket(STTSocket):
     @property
     def is_connection_dead(self) -> bool:
         dead = self._dead or self.raw.is_connection_dead
-        if dead:
-            self._release_open_gauge()
         if dead and self._pending_selection is not None:
             self._pending_selection.note_failure(self.typed_death_reason)
         return dead
