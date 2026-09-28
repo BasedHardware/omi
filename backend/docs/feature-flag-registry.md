@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-09-24 -->
+<!-- feature-flag-registry as-of: 2026-09-28 -->
 
 # Feature-flag authority registry
 
@@ -96,7 +96,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-09-24.
+None as of 2026-09-28.
 
 ## Flags
 
@@ -173,6 +173,7 @@ and an explicit empty literal renders as `''`.
 | `STT_LEARNED_LANGUAGE_PROFILE` | Use a bounded per-user spoken-language history for live STT routing and Soniox hints | backend | env | closed | false | true (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | backend |
 | `STT_MULTI_LANGUAGE_HINTS` | Send primary and English hints to Soniox in non-English multilingual live sessions | backend | env | closed | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-27 | backend |
 | `STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT` | Prefer Soniox for allocated non-English multilingual live sessions | backend | env | closed | 0 | 100 (backend-listen (chart), gke/backend-listen) | 25 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-27 | backend |
+| `STT_RESILIENT_RECONNECT` | Replay bounded live audio on eligible Soniox reconnects | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | backend |
 | `SYNC_BACKFILL_INFLIGHT_LIMIT` | One in-flight backfill upload per uid; excess uploads get 429 backfill_paced | backend | env | closed | false | false | false | — | pending | 2026-10-27 | dazheng |
 | `SYNC_BACKFILL_ROUTING_ENABLED` | Route eligible sync work to backfill lane | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `SYNC_BACKFILL_UID_SEQUENCER` | Accept backfill uploads then dispatch one worker job per uid from durable queue | backend | env | closed | on | on | on | — | pending | 2026-10-27 | dazheng |
@@ -220,6 +221,7 @@ and an explicit empty literal renders as `''`.
 | `FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY` | Skip shared retention when independent job is healthy | backend | env | closed | false | false | false | — | keep | — | unowned |
 | `FREE_TIER_EMERGENCY_STOP` | Stop all free-tier cohorts | backend | env | inverted | declared | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | — | unowned |
 | `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED` | Abandon finalization after BYOK failure | backend | env | open | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | keep | — | unowned |
+| `LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED` | Cap durable listen worker attempts while retaining transcript-only conversations | backend | env | open | — | — | true | — | keep | — | dazheng |
 | `LLM_GATEWAY_ACCOUNTING_ENABLED` | Record gateway-managed usage accounting | backend, llm-gateway | env | closed | true | true (backend-listen (chart), cloud_run/backend, desktop-backend, gke/backend-listen, gke/pusher, llm-gateway (chart), pusher (chart)) | true (backend-listen (chart), cloud_run/backend, desktop-backend, gke/backend-listen, gke/pusher, llm-gateway (chart), pusher (chart)) | — | keep | — | unowned |
 | `LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS` | Expose provider error details from gateway | llm-gateway | env | closed | — | true (llm-gateway (chart)) | — | — | keep | — | unowned |
 | `MEMORY_BELIEF_AUTOMATION_PAUSED` | Pause automated belief processing | backend | env | inverted | false | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, job/daily-memory-sweep-job, job/memory-maintenance-job, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, job/daily-memory-sweep-job, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
