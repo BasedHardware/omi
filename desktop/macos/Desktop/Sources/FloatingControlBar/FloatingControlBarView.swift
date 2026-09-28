@@ -1613,7 +1613,7 @@ struct FloatingControlBarView: View {
           )
           .frame(width: 6, height: 6)
         Image(systemName: pill == .listening ? "ear.fill" : "ear.slash.fill")
-          .scaledFont(size: 10, weight: .semibold)
+          .scaledFont(size: OmiType.micro, weight: .semibold)
           .foregroundColor(.white.opacity(0.9))
         Text(pill.title)
           .scaledFont(size: OmiType.caption, weight: .medium)
