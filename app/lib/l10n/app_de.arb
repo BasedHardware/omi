@@ -3605,5 +3605,8 @@
     "sendToSupport": "An Support senden",
     "deviceDiagnosticsUploadDescription": "Prüfe die Diagnosedaten im JSON unten. Sie enthalten Gerätekennung, Verbindungen, Akkuwerte, Firmwarediagnose und Bluetooth-Ereignisse. Audio und Transkripte sind nicht enthalten.",
     "deviceDiagnosticsTicket": "Support-Ticketcode",
-    "deviceDiagnosticsUploadFailed": "Diagnosedaten konnten nicht gesendet werden. Bitte erneut versuchen."
+    "deviceDiagnosticsUploadFailed": "Diagnosedaten konnten nicht gesendet werden. Bitte erneut versuchen.",
+    "searchPeople": "Personen suchen",
+    "addQueryAsNewPerson": "„{query}“ als neue Person hinzufügen",
+    "showAllPeople": "Alle {count} Personen anzeigen"
 }

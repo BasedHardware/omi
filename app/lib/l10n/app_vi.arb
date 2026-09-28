@@ -3605,5 +3605,8 @@
     "sendToSupport": "Gửi cho bộ phận hỗ trợ",
     "deviceDiagnosticsUploadDescription": "Xem lại dữ liệu chẩn đoán JSON bên dưới. Dữ liệu gồm mã thiết bị, lịch sử kết nối, pin, firmware và sự kiện Bluetooth. Không có âm thanh hay bản chép lời.",
     "deviceDiagnosticsTicket": "Mã hỗ trợ",
-    "deviceDiagnosticsUploadFailed": "Không thể gửi dữ liệu chẩn đoán. Vui lòng thử lại."
+    "deviceDiagnosticsUploadFailed": "Không thể gửi dữ liệu chẩn đoán. Vui lòng thử lại.",
+    "searchPeople": "Tìm kiếm người",
+    "addQueryAsNewPerson": "Thêm \"{query}\" như một người mới",
+    "showAllPeople": "Hiển thị tất cả {count} người"
 }

@@ -11509,4 +11509,17 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get searchPeople => 'Αναζήτηση ατόμων';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Προσθήκη του «$query» ως νέο άτομο';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Εμφάνιση όλων των ατόμων ($count)';
+  }
 }
