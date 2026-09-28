@@ -441,6 +441,17 @@ void main() {
       expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerZeroByteStreak);
       monitor.dispose();
     });
+
+    test('a telemetry-only episode does not count as active for BLE reconnect', () async {
+      final monitor = makeMonitor(withRetry: true, transferRetry: () async {});
+      final handle = connectedSession(monitor);
+      monitor.onSocketBytesSent(handle, 640);
+      now = now.add(CaptureWedgeMonitor.connectedNoTranscriptWindow);
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+      expect(monitor.hasActiveEpisode('dev-a'), isFalse);
+      monitor.dispose();
+    });
   });
 
   group('upload silence', () {

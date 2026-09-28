@@ -404,10 +404,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool hasActiveEpisode(String deviceId) {
-    final state = _devices[deviceId];
-    return state?.episode != null || state?.telemetryEpisode != null;
-  }
+  /// Gates the BLE retry's reconnect, so only actionable episodes count;
+  /// telemetry-only episodes never own a BLE retry.
+  bool hasActiveEpisode(String deviceId) => _devices[deviceId]?.episode != null;
 
   CaptureWedgeEpisode? _episodeFor(String deviceId, {required bool telemetryOnly}) {
     final state = _devices[deviceId];
