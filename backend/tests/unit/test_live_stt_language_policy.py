@@ -14,6 +14,7 @@ from utils.stt.language_policy import (
     LiveLanguageProfile,
     classify_output,
     hintable_allocation,
+    learned_expected,
     observe_live_segments,
     record_live_connection,
     soniox_hints,
@@ -73,6 +74,39 @@ def test_hint_vocabulary_filters_each_code_and_preserves_identification(monkeypa
     assert soniox_hints('multi', profile) == ['en']
     monkeypatch.setenv('STT_MULTI_LANGUAGE_HINTS', 'false')
     assert soniox_hints('multi', profile) == []
+
+
+def test_learned_thresholds_cap_and_hint_vocabulary(monkeypatch):
+    assert learned_expected('en', [{'pt': 8, 'en': 2}, {'pt': 8, 'en': 2}]) == ()
+    sessions = [{'pt': 7, 'en': 2, 'es': 1, 'mt': 4}] * 3
+    assert learned_expected('en', sessions) == ('pt', 'en')
+    assert learned_expected('fr', [{'pt': 4, 'es': 3, 'de': 2, 'en': 1}] * 3) == ('fr', 'pt', 'en')
+    assert learned_expected('en', [{'pt': 7, 'en': 3}] * 3) == ('pt', 'en')
+    assert learned_expected('en', [{'pt': 9, 'en': 1}] * 3) == ('pt', 'en')
+    assert learned_expected('en', [{'pt': 9, 'en': 0}] * 3) == ('pt',)
+
+
+def test_english_primary_uses_learned_non_en_arm_and_flag_off(monkeypatch):
+    sessions = [{'pt': 7, 'en': 3}] * 3
+    monkeypatch.setenv('STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT', '100')
+    monkeypatch.setenv('STT_LEARNED_LANGUAGE_PROFILE', 'true')
+    learned = LiveLanguageProfile.create('en', multi=True, uid='u', learned_sessions=sessions)
+    assert (learned.expected, learned.primary_group, learned.arm, learned.source) == (
+        ('pt', 'en'),
+        'non_en',
+        'hintable',
+        'learned',
+    )
+    assert soniox_hints('multi', learned) == ['pt', 'en']
+    monkeypatch.setenv('STT_LEARNED_LANGUAGE_PROFILE', 'false')
+    declared = LiveLanguageProfile.create('en', multi=True, uid='u', learned_sessions=sessions)
+    assert (declared.expected, declared.primary_group, declared.arm, declared.source) == (
+        ('en',),
+        'en',
+        'na',
+        'declared',
+    )
+    assert soniox_hints('multi', declared) == []
 
 
 @pytest.mark.parametrize('configured_order', ['true', 'false'])
@@ -176,13 +210,19 @@ def test_classification_prefers_provider_language_and_keeps_short_segments_unkno
     assert classify_output('a' * 30, unknown, 'it') == ('undetermined', None)
 
 
+def test_unknown_primary_can_learn_when_enabled(monkeypatch):
+    monkeypatch.setenv('STT_LEARNED_LANGUAGE_PROFILE', 'true')
+    unknown = LiveLanguageProfile.create('multi', multi=True, uid='u')
+    assert classify_output('a' * 30, unknown, 'it') == ('undetermined', 'it')
+
+
 @pytest.mark.asyncio
 async def test_metric_labels_and_ephemeral_language_metadata(monkeypatch):
     monkeypatch.setattr('utils.stt.language_policy.detect_langs', lambda _: [SimpleNamespace(lang='it', prob=0.99)])
     profile = LiveLanguageProfile.create('pt', multi=True, uid='u')
     observations = LiveLanguageObservations(profile)
     constraint = LANGUAGE_CONSTRAINT.labels('soniox', 'hinted', 'non_en', profile.arm)
-    out = OUTPUT_LANGUAGE_SEGMENTS.labels('soniox', 'non_en', profile.arm, 'out_of_profile')
+    out = OUTPUT_LANGUAGE_SEGMENTS.labels('soniox', 'non_en', profile.arm, 'out_of_profile', 'declared')
     before_constraint, before_out = constraint._value.get(), out._value.get()
     observations.connected('soniox', 'multi')
     segment = {'text': 'a' * 24, '_provider_language': 'it'}
@@ -193,6 +233,20 @@ async def test_metric_labels_and_ephemeral_language_metadata(monkeypatch):
     assert constraint._value.get() == before_constraint + 1
     assert out._value.get() == before_out + 2
     assert observations.counts['out_of_profile'] == 2
+    assert observations.language_counts == {'it': 2}
+
+
+@pytest.mark.asyncio
+async def test_failed_learning_write_does_not_break_summary(monkeypatch):
+    monkeypatch.setenv('STT_LEARNED_LANGUAGE_PROFILE', 'true')
+    monkeypatch.setattr(
+        'utils.stt.language_policy.append_live_language_session', lambda *_: (_ for _ in ()).throw(RuntimeError())
+    )
+    observations = LiveLanguageObservations(LiveLanguageProfile.create('en', multi=True, uid='u'))
+    observations._record('soniox', ('in_profile', 'en'))
+    await observations.summarize('u')
+    await asyncio.sleep(0.05)
+    assert observations.telemetry_failure_logged
 
 
 @pytest.mark.asyncio
