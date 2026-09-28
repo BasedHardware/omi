@@ -11491,4 +11491,17 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Ieškoti žmonių';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Pridėti „$query“ kaip naują asmenį';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Rodyti visus asmenis ($count)';
+  }
 }

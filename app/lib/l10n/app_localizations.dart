@@ -20906,6 +20906,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Something else'**
   String get feedbackReasonRecordingOther;
+
+  /// Hint for the person search field in the tag-speaker sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Search people'**
+  String get searchPeople;
+
+  /// Row shown in the tag-speaker sheet when no existing person matches the search query
+  ///
+  /// In en, this message translates to:
+  /// **'Add \"{query}\" as a new person'**
+  String addQueryAsNewPerson(String query);
+
+  /// Expander chip in the tag-speaker sheet that reveals the capped person grid
+  ///
+  /// In en, this message translates to:
+  /// **'Show all {count} people'**
+  String showAllPeople(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

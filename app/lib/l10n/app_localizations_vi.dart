@@ -11468,4 +11468,17 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Vấn đề khác';
+
+  @override
+  String get searchPeople => 'Tìm kiếm người';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Thêm \"$query\" như một người mới';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Hiển thị tất cả $count người';
+  }
 }

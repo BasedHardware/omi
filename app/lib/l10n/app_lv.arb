@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
     "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
-    "feedbackReasonRecordingOther": "Something else"
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "Meklēt cilvēkus",
+    "addQueryAsNewPerson": "Pievienot \"{query}\" kā jaunu personu",
+    "showAllPeople": "Rādīt visas personas ({count})"
 }

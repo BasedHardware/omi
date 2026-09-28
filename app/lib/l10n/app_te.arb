@@ -11179,5 +11179,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
     "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
-    "feedbackReasonRecordingOther": "Something else"
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "వ్యక్తులను వెతకండి",
+    "addQueryAsNewPerson": "\"{query}\" ను కొత్త వ్యక్తిగా జోడించండి",
+    "showAllPeople": "అన్ని ({count}) మందిని చూపించు"
 }

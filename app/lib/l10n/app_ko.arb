@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "잘못된 화자",
     "feedbackReasonRecordingDelayedOrStuck": "지연 또는 중단",
     "feedbackReasonRecordingFragmentedOrDuplicated": "불완전하거나 중복됨",
-    "feedbackReasonRecordingOther": "기타"
+    "feedbackReasonRecordingOther": "기타",
+    "searchPeople": "사람 검색",
+    "addQueryAsNewPerson": "\"{query}\"을(를) 새 사람으로 추가",
+    "showAllPeople": "모두 {count}명 표시"
 }

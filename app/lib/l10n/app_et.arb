@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
     "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
-    "feedbackReasonRecordingOther": "Something else"
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "Otsi inimesi",
+    "addQueryAsNewPerson": "Lisa \"{query}\" uue inimesena",
+    "showAllPeople": "Kuva kõik inimesed ({count})"
 }

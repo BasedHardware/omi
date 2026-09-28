@@ -13639,5 +13639,27 @@
     "feedbackReasonRecordingOther": "Something else",
     "@feedbackReasonRecordingOther": {
         "description": "Quick reason chip: some other recording problem."
+    },
+    "searchPeople": "Search people",
+    "@searchPeople": {
+        "description": "Hint for the person search field in the tag-speaker sheet"
+    },
+    "addQueryAsNewPerson": "Add \"{query}\" as a new person",
+    "@addQueryAsNewPerson": {
+        "description": "Row shown in the tag-speaker sheet when no existing person matches the search query",
+        "placeholders": {
+            "query": {
+                "type": "String"
+            }
+        }
+    },
+    "showAllPeople": "Show all {count} people",
+    "@showAllPeople": {
+        "description": "Expander chip in the tag-speaker sheet that reveals the capped person grid",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

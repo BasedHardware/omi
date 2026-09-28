@@ -11476,4 +11476,17 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Etsi ihmisiä';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Lisää \"$query\" uutena henkilönä';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Näytä kaikki ($count) henkilöä';
+  }
 }

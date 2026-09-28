@@ -11469,4 +11469,17 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'جستجوی افراد';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'افزودن \"$query\" به عنوان فرد جدید';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'نمایش همه افراد ($count)';
+  }
 }

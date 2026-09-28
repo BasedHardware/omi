@@ -3654,5 +3654,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Pembicara salah",
     "feedbackReasonRecordingDelayedOrStuck": "Tertunda atau macet",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Terfragmentasi atau terduplikasi",
-    "feedbackReasonRecordingOther": "Hal lain"
+    "feedbackReasonRecordingOther": "Hal lain",
+    "searchPeople": "Cari orang",
+    "addQueryAsNewPerson": "Tambahkan \"{query}\" sebagai orang baru",
+    "showAllPeople": "Tampilkan semua {count} orang"
 }

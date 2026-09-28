@@ -3654,5 +3654,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Неверный спикер",
     "feedbackReasonRecordingDelayedOrStuck": "Задержка или зависание",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Фрагментация или дублирование",
-    "feedbackReasonRecordingOther": "Другое"
+    "feedbackReasonRecordingOther": "Другое",
+    "searchPeople": "Поиск людей",
+    "addQueryAsNewPerson": "Добавить «{query}» как нового человека",
+    "showAllPeople": "Показать всех людей ({count})"
 }

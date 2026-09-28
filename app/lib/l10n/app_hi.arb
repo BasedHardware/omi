@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "ग़लत वक्ता",
     "feedbackReasonRecordingDelayedOrStuck": "देरी या अटकना",
     "feedbackReasonRecordingFragmentedOrDuplicated": "टुकड़ों में या डुप्लिकेट",
-    "feedbackReasonRecordingOther": "कुछ और"
+    "feedbackReasonRecordingOther": "कुछ और",
+    "searchPeople": "लोगों को खोजें",
+    "addQueryAsNewPerson": "\"{query}\" को नए व्यक्ति के रूप में जोड़ें",
+    "showAllPeople": "सभी {count} लोग दिखाएँ"
 }

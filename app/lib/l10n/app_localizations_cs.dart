@@ -11471,4 +11471,17 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Hledat osoby';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Přidat „$query“ jako novou osobu';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Zobrazit všechny osoby ($count)';
+  }
 }

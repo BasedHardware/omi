@@ -11516,4 +11516,17 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Търсене на хора';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Добавяне на „$query“ като нов човек';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Показване на всички хора ($count)';
+  }
 }

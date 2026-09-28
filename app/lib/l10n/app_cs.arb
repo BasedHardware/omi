@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
     "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
-    "feedbackReasonRecordingOther": "Something else"
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "Hledat osoby",
+    "addQueryAsNewPerson": "Přidat „{query}“ jako novou osobu",
+    "showAllPeople": "Zobrazit všechny osoby ({count})"
 }

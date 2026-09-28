@@ -11179,5 +11179,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
     "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
-    "feedbackReasonRecordingOther": "Something else"
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "Пребарај луѓе",
+    "addQueryAsNewPerson": "Додај „{query}“ како ново лице",
+    "showAllPeople": "Прикажи сите луѓе ({count})"
 }

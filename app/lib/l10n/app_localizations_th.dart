@@ -11407,4 +11407,17 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'ค้นหาบุคคล';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'เพิ่ม \"$query\" เป็นบุคคลใหม่';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'แสดงทั้งหมด $count คน';
+  }
 }

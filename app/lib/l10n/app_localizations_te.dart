@@ -11521,4 +11521,17 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'వ్యక్తులను వెతకండి';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" ను కొత్త వ్యక్తిగా జోడించండి';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'అన్ని ($count) మందిని చూపించు';
+  }
 }

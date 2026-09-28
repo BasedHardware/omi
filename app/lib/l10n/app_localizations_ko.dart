@@ -11287,4 +11287,17 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => '기타';
+
+  @override
+  String get searchPeople => '사람 검색';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\"을(를) 새 사람으로 추가';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return '모두 $count명 표시';
+  }
 }

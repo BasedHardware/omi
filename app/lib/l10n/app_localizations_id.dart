@@ -11484,4 +11484,17 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Hal lain';
+
+  @override
+  String get searchPeople => 'Cari orang';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Tambahkan \"$query\" sebagai orang baru';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Tampilkan semua $count orang';
+  }
 }

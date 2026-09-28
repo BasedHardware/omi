@@ -11461,4 +11461,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Search people';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Add \"$query\" as a new person';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Show all $count people';
+  }
 }

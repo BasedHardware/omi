@@ -11179,5 +11179,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
     "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
-    "feedbackReasonRecordingOther": "Something else"
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "लोक शोधा",
+    "addQueryAsNewPerson": "\"{query}\" ला नवीन व्यक्ती म्हणून जोडा",
+    "showAllPeople": "सर्व {count} लोक दाखवा"
 }

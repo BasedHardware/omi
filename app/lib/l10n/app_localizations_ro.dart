@@ -11527,4 +11527,17 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Caută persoane';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Adaugă \"$query\" ca persoană nouă';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Afișează toate cele $count persoane';
+  }
 }

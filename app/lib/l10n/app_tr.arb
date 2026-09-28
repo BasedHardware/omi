@@ -3654,5 +3654,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Yanlış konuşmacı",
     "feedbackReasonRecordingDelayedOrStuck": "Gecikmeli veya takılı",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Parçalı veya tekrarlı",
-    "feedbackReasonRecordingOther": "Başka bir şey"
+    "feedbackReasonRecordingOther": "Başka bir şey",
+    "searchPeople": "Kişi ara",
+    "addQueryAsNewPerson": "\"{query}\" adlı yeni bir kişi ekle",
+    "showAllPeople": "Tüm {count} kişiyi göster"
 }

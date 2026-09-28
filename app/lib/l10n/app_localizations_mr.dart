@@ -11481,4 +11481,17 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'लोक शोधा';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" ला नवीन व्यक्ती म्हणून जोडा';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'सर्व $count लोक दाखवा';
+  }
 }

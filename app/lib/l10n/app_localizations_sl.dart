@@ -11503,4 +11503,17 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Iskanje oseb';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Dodaj \"$query\" kot novo osebo';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Pokaži vse osebe ($count)';
+  }
 }

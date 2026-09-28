@@ -11484,4 +11484,17 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'لوگوں کو تلاش کریں';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" کو نیے شخص کے طور پر شامل کریں';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'تمام ($count) افراد دکھائیں';
+  }
 }

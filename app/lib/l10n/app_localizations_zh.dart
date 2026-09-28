@@ -11262,4 +11262,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => '其他问题';
+
+  @override
+  String get searchPeople => '搜索人员';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '将“$query”添加为新人员';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return '显示全部 $count 人';
+  }
 }

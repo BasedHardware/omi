@@ -11509,4 +11509,17 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'ಜನರನ್ನು ಹುಡುಕಿ';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" ಅವರನ್ನು ಹೊಸ ವ್ಯಕ್ತಿಯಾಗಿ ಸೇರಿಸಿ';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'ಎಲ್ಲಾ ($count) ಜನರನ್ನು ತೋರಿಸಿ';
+  }
 }

@@ -11179,5 +11179,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
     "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
-    "feedbackReasonRecordingOther": "Something else"
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "Пошук людзей",
+    "addQueryAsNewPerson": "Дадаць «{query}» як новага чалавека",
+    "showAllPeople": "Паказаць усіх людзей ({count})"
 }

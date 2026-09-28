@@ -11574,4 +11574,17 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Maghanap ng mga tao';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Idagdag ang \"$query\" bilang bagong tao';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Ipakita ang lahat ng $count na tao';
+  }
 }

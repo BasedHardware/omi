@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Verkeerde spreker",
     "feedbackReasonRecordingDelayedOrStuck": "Vertraagd of vastgelopen",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Gefragmenteerd of gedupliceerd",
-    "feedbackReasonRecordingOther": "Iets anders"
+    "feedbackReasonRecordingOther": "Iets anders",
+    "searchPeople": "Personen zoeken",
+    "addQueryAsNewPerson": "\"{query}\" toevoegen als nieuwe persoon",
+    "showAllPeople": "Alle {count} personen weergeven"
 }

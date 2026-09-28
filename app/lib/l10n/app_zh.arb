@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "说话人错误",
     "feedbackReasonRecordingDelayedOrStuck": "延迟或卡住",
     "feedbackReasonRecordingFragmentedOrDuplicated": "断断续续或重复",
-    "feedbackReasonRecordingOther": "其他问题"
+    "feedbackReasonRecordingOther": "其他问题",
+    "searchPeople": "搜索人员",
+    "addQueryAsNewPerson": "将“{query}”添加为新人员",
+    "showAllPeople": "显示全部 {count} 人"
 }

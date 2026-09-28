@@ -11179,5 +11179,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
     "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
-    "feedbackReasonRecordingOther": "Something else"
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "ಜನರನ್ನು ಹುಡುಕಿ",
+    "addQueryAsNewPerson": "\"{query}\" ಅವರನ್ನು ಹೊಸ ವ್ಯಕ್ತಿಯಾಗಿ ಸೇರಿಸಿ",
+    "showAllPeople": "ಎಲ್ಲಾ ({count}) ಜನರನ್ನು ತೋರಿಸಿ"
 }

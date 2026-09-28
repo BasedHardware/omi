@@ -11535,4 +11535,17 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Пребарај луѓе';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Додај „$query“ како ново лице';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Прикажи сите луѓе ($count)';
+  }
 }

@@ -3654,5 +3654,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Mauvais orateur",
     "feedbackReasonRecordingDelayedOrStuck": "Retardé ou bloqué",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmenté ou dupliqué",
-    "feedbackReasonRecordingOther": "Autre chose"
+    "feedbackReasonRecordingOther": "Autre chose",
+    "searchPeople": "Rechercher des personnes",
+    "addQueryAsNewPerson": "Ajouter « {query} » comme nouvelle personne",
+    "showAllPeople": "Afficher les {count} personnes"
 }

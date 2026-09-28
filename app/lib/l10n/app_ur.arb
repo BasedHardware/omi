@@ -11179,5 +11179,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
     "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
-    "feedbackReasonRecordingOther": "Something else"
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "لوگوں کو تلاش کریں",
+    "addQueryAsNewPerson": "\"{query}\" کو نیے شخص کے طور پر شامل کریں",
+    "showAllPeople": "تمام ({count}) افراد دکھائیں"
 }

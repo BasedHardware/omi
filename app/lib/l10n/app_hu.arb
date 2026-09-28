@@ -3715,5 +3715,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
     "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
-    "feedbackReasonRecordingOther": "Something else"
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "Személyek keresése",
+    "addQueryAsNewPerson": "„{query}” hozzáadása új személyként",
+    "showAllPeople": "Az összes ({count}) személy megjelenítése"
 }

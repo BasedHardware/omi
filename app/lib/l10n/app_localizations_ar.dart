@@ -11403,4 +11403,17 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'ابحث عن الأشخاص';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'إضافة \"$query\" كشخص جديد';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'إظهار كل الأشخاص ($count)';
+  }
 }

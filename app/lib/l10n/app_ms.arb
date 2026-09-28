@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
     "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
-    "feedbackReasonRecordingOther": "Something else"
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "Cari orang",
+    "addQueryAsNewPerson": "Tambah \"{query}\" sebagai orang baru",
+    "showAllPeople": "Tunjukkan semua {count} orang"
 }

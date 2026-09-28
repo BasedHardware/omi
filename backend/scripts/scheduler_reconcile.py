@@ -10,11 +10,12 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import yaml
 
@@ -53,6 +54,9 @@ def load_manifest(path: Path = MANIFEST) -> Mapping[str, Any]:
             names.add(job["name"])
             if job.get("state") not in {"ENABLED", "PAUSED"}:
                 raise ReconcileError(f"{env}/{job['name']}: state must be ENABLED or PAUSED")
+            lifecycle = job.get("lifecycle")
+            if lifecycle is not None and lifecycle != "planned":
+                raise ReconcileError(f"{env}/{job['name']}: lifecycle must be planned when specified")
             if not all(job.get(field) for field in ("region", "schedule", "time_zone", "attempt_deadline")):
                 raise ReconcileError(f"{env}/{job['name']}: missing schedule fields")
             target = _mapping(job.get("target"))
@@ -79,8 +83,7 @@ def _secret_value(session: Any, project: str, reference: Mapping[str, Any]) -> s
     secret = quote(str(reference["secret"]), safe="-_.")
     version = quote(str(reference["version"]), safe="-_.")
     resource = f"projects/{project}/secrets/{secret}/versions/{version}:access"
-    response = session.get(f"{SECRET_API}/{resource}")
-    response.raise_for_status()
+    response = _request(session, "get", f"{SECRET_API}/{resource}")
     try:
         value = base64.b64decode(response.json()["payload"]["data"], validate=True).decode("utf-8")
     except (KeyError, ValueError, UnicodeError) as exc:
@@ -153,17 +156,24 @@ def diff_fields(current: Mapping[str, Any] | None, desired: Mapping[str, Any]) -
     return changed
 
 
-def _request(session: Any, method: str, url: str, **kwargs: Any) -> Any:
+def _redacted_resource_path(url: str) -> str:
+    path = urlsplit(url).path
+    # Secret identifiers and version names can be sensitive deployment metadata.
+    return re.sub(r"(/secrets/)[^/]+(/versions/)[^/:]+(:access)?$", r"\1[REDACTED]\2[REDACTED]\3", path)
+
+
+def _request(session: Any, method: str, url: str, *, allow_statuses: set[int] | None = None, **kwargs: Any) -> Any:
     response = getattr(session, method)(url, **kwargs)
-    response.raise_for_status()
+    status_code = int(response.status_code)
+    if status_code >= 400 and status_code not in (allow_statuses or set()):
+        raise ReconcileError(f"HTTP {method.upper()} {_redacted_resource_path(url)} returned status {status_code}")
     return response
 
 
 def _get_job(session: Any, resource_name: str) -> Mapping[str, Any] | None:
-    response = session.get(f"{SCHEDULER_API}/{resource_name}")
+    response = _request(session, "get", f"{SCHEDULER_API}/{resource_name}", allow_statuses={404})
     if response.status_code == 404:
         return None
-    response.raise_for_status()
     return response.json()
 
 
@@ -226,7 +236,13 @@ def reconcile(
     messages: list[str] = []
     for job in jobs:
         resource_name = _job_resource(project, job)
+        if apply and job.get("lifecycle") == "planned" and selected_jobs is None:
+            messages.append(f"PLANNED {resource_name}: skipped; select it explicitly with --jobs to deploy")
+            continue
         current = _get_job(session, resource_name)
+        if not apply and current is None and job.get("lifecycle") == "planned":
+            messages.append(f"PLANNED {resource_name}: not deployed")
+            continue
         desired = desired_resource(session, project, job)
         fields = diff_fields(current, desired)
         live_state = current.get("state") if current else None

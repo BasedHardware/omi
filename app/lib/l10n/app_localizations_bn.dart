@@ -11473,4 +11473,17 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'মানুষ খুঁজুন';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\"-কে নতুন ব্যক্তি হিসেবে যোগ করুন';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'সমস্ত ($count) জনকে দেখান';
+  }
 }

@@ -11498,4 +11498,17 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Meklēt cilvēkus';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Pievienot \"$query\" kā jaunu personu';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Rādīt visas personas ($count)';
+  }
 }

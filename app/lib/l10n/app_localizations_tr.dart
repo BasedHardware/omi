@@ -11485,4 +11485,17 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Başka bir şey';
+
+  @override
+  String get searchPeople => 'Kişi ara';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" adlı yeni bir kişi ekle';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Tüm $count kişiyi göster';
+  }
 }

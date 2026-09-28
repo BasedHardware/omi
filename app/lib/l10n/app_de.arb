@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Falscher Sprecher",
     "feedbackReasonRecordingDelayedOrStuck": "Verzögert oder hängengeblieben",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmentiert oder dupliziert",
-    "feedbackReasonRecordingOther": "Etwas anderes"
+    "feedbackReasonRecordingOther": "Etwas anderes",
+    "searchPeople": "Personen suchen",
+    "addQueryAsNewPerson": "„{query}“ als neue Person hinzufügen",
+    "showAllPeople": "Alle {count} Personen anzeigen"
 }

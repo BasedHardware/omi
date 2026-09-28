@@ -11382,4 +11382,17 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'חיפוש אנשים';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'הוספת \"$query\" כאדם חדש';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'הצג את כל האנשים ($count)';
+  }
 }

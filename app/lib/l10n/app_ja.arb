@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "話者が違う",
     "feedbackReasonRecordingDelayedOrStuck": "遅い・止まっている",
     "feedbackReasonRecordingFragmentedOrDuplicated": "分断・重複している",
-    "feedbackReasonRecordingOther": "その他"
+    "feedbackReasonRecordingOther": "その他",
+    "searchPeople": "人物を検索",
+    "addQueryAsNewPerson": "「{query}」を新しい人物として追加",
+    "showAllPeople": "すべての人物（{count}）を表示"
 }

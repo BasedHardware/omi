@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
     "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
-    "feedbackReasonRecordingOther": "Something else"
+    "feedbackReasonRecordingOther": "Something else",
+    "searchPeople": "Søk etter personer",
+    "addQueryAsNewPerson": "Legg til \"{query}\" som en ny person",
+    "showAllPeople": "Vis alle {count} personer"
 }

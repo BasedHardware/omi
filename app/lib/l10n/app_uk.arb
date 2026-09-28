@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Не той спікер",
     "feedbackReasonRecordingDelayedOrStuck": "Затримка або зависання",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Фрагментація або дублювання",
-    "feedbackReasonRecordingOther": "Інше"
+    "feedbackReasonRecordingOther": "Інше",
+    "searchPeople": "Пошук людей",
+    "addQueryAsNewPerson": "Додати «{query}» як нову людину",
+    "showAllPeople": "Показати всіх людей ({count})"
 }

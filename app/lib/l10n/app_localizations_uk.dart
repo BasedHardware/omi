@@ -11494,4 +11494,17 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Інше';
+
+  @override
+  String get searchPeople => 'Пошук людей';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Додати «$query» як нову людину';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Показати всіх людей ($count)';
+  }
 }

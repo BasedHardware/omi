@@ -11540,4 +11540,17 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Cerca persones';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Afegeix \"$query\" com a persona nova';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Mostra totes les persones ($count)';
+  }
 }

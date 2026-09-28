@@ -3619,5 +3619,8 @@
     "feedbackReasonRecordingWrongSpeaker": "Sai người nói",
     "feedbackReasonRecordingDelayedOrStuck": "Bị chậm hoặc treo",
     "feedbackReasonRecordingFragmentedOrDuplicated": "Đứt đoạn hoặc trùng lặp",
-    "feedbackReasonRecordingOther": "Vấn đề khác"
+    "feedbackReasonRecordingOther": "Vấn đề khác",
+    "searchPeople": "Tìm kiếm người",
+    "addQueryAsNewPerson": "Thêm \"{query}\" như một người mới",
+    "showAllPeople": "Hiển thị tất cả {count} người"
 }

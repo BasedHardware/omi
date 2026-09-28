@@ -11482,4 +11482,17 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Sök personer';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Lägg till \"$query\" som en ny person';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Visa alla $count personer';
+  }
 }
