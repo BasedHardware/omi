@@ -22,6 +22,7 @@
 		A1B2C3D4E5F60718293A4B60 /* omi_backend_policy.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B61 /* omi_backend_policy.cpp */; };
 		A1B2C3D4E5F60718293A4B62 /* omi_backend_http.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B63 /* omi_backend_http.cpp */; };
 		A1B2C3D4E5F60718293A4B64 /* omi_backend_recording.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B65 /* omi_backend_recording.cpp */; };
+		A1B2C3D4E5F60718293A4B66 /* omi_device.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B67 /* omi_device.cpp */; };
 		B3D4E5F60718293A4B5C6D7E /* OmiNativeModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = B3D4E5F60718293A4B5C6D7F /* OmiNativeModule.mm */; };
 		B3D4E5F60718293A4B5C6D81 /* OmiBackendModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = B3D4E5F60718293A4B5C6D82 /* OmiBackendModule.mm */; };
 		F3D4E5F60718293A4B5C6D81 /* OmiAuthModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = F3D4E5F60718293A4B5C6D82 /* OmiAuthModule.mm */; };
@@ -50,6 +51,7 @@
 		A1B2C3D4E5F60718293A4B61 /* omi_backend_policy.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_backend_policy.cpp; path = "../../native-core/src/omi_backend_policy.cpp"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B63 /* omi_backend_http.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_backend_http.cpp; path = "../../native-core/src/omi_backend_http.cpp"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B65 /* omi_backend_recording.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_backend_recording.cpp; path = "../../native-core/src/omi_backend_recording.cpp"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A4B67 /* omi_device.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_device.cpp; path = "../../native-core/src/omi_device.cpp"; sourceTree = "<group>"; };
 		B3D4E5F60718293A4B5C6D7F /* OmiNativeModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = OmiNativeModule.mm; path = RnRuntime/OmiNativeModule.mm; sourceTree = "<group>"; };
 		B3D4E5F60718293A4B5C6D80 /* OmiNativeModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OmiNativeModule.h; path = RnRuntime/OmiNativeModule.h; sourceTree = "<group>"; };
 		B3D4E5F60718293A4B5C6D82 /* OmiBackendModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = OmiBackendModule.mm; path = RnRuntime/OmiBackendModule.mm; sourceTree = "<group>"; };
@@ -95,6 +97,7 @@
 				A1B2C3D4E5F60718293A4B61 /* omi_backend_policy.cpp */,
 				A1B2C3D4E5F60718293A4B63 /* omi_backend_http.cpp */,
 				A1B2C3D4E5F60718293A4B65 /* omi_backend_recording.cpp */,
+				A1B2C3D4E5F60718293A4B67 /* omi_device.cpp */,
 			);
 			name = RnRuntime;
 			sourceTree = "<group>";
@@ -305,6 +308,7 @@
 				A1B2C3D4E5F60718293A4B60 /* omi_backend_policy.cpp in Sources */,
 				A1B2C3D4E5F60718293A4B62 /* omi_backend_http.cpp in Sources */,
 				A1B2C3D4E5F60718293A4B64 /* omi_backend_recording.cpp in Sources */,
+				A1B2C3D4E5F60718293A4B66 /* omi_device.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
