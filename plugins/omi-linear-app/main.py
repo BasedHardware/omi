@@ -581,8 +581,19 @@ async def tool_create_issue(request: Request):
             team_id = resolved["team"].id
         else:
             default = get_default_team(uid)
-            if default:
-                team_id = default["id"]
+            if default is not None:
+                default_id = default.get("id") if isinstance(default, dict) else None
+                matches = []
+                if isinstance(default_id, str) and default_id.strip():
+                    # A saved ID must still identify one available team; never
+                    # reinterpret stale configuration as a team key or name.
+                    matches = [team for team in get_user_teams(uid) if team.id == default_id]
+                if len(matches) != 1:
+                    return ChatToolResponse(
+                        error="Your saved default team is invalid or unavailable. "
+                              "Specify a team name or key, or update your default team in the app settings."
+                    )
+                team_id = matches[0].id
             else:
                 teams = get_user_teams(uid)
                 if not teams:
