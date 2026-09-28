@@ -159,6 +159,55 @@ class TestActionItemsToTodoTxt(unittest.TestCase):
         # real-done control item
         self.assertIn("x done task omi:real-done", lines)
 
+    def test_extract_action_items_envelopes(self):
+        extract = ai2todo.extract_action_items
+        sample = [{"id": "a1", "description": "Task 1", "completed": False}]
+
+        # Direct list
+        self.assertEqual(extract(sample), sample)
+        # Supported envelope wrappers
+        self.assertEqual(extract({"action_items": sample}), sample)
+        self.assertEqual(extract({"items": sample}), sample)
+        self.assertEqual(extract({"data": sample}), sample)
+        # Precedence: action_items > items > data
+        self.assertEqual(
+            extract({"action_items": sample, "items": [{"id": "other"}]}),
+            sample,
+        )
+        # Empty envelope preserves empty list
+        self.assertEqual(extract({"action_items": []}), [])
+        self.assertEqual(extract({"items": []}), [])
+        self.assertEqual(extract({"data": []}), [])
+        # Invalid inputs return None so convert() can raise ValueError
+        self.assertIsNone(extract({"id": "a1"}))
+        self.assertIsNone(extract({"other": sample}))
+        self.assertIsNone(extract("not-json"))
+        self.assertIsNone(extract(123))
+        self.assertIsNone(extract(None))
+
+    def test_export_wrapped_envelope(self):
+        counts, lines = self.export({
+            "action_items": [
+                {"id": "w1", "description": "Wrapped task", "completed": False}
+            ]
+        })
+        self.assertEqual(counts, (1, 1))
+        self.assertIn("Wrapped task omi:w1", lines)
+
+    def test_export_empty_envelope_produces_empty_file(self):
+        counts, lines = self.export({"action_items": []})
+        self.assertEqual(counts, (0, 0))
+        self.assertEqual(lines, [])
+
+    def test_export_utf8_bom(self):
+        source = self.tmp / "bom.json"
+        dest = self.tmp / "bom.txt"
+        data = [{"id": "b1", "description": "BOM task", "completed": False}]
+        source.write_bytes(b"\xef\xbb\xbf" + json.dumps(data).encode("utf-8"))
+        counts = ai2todo.convert(source, dest, JST)
+        self.assertEqual(counts, (1, 1))
+        self.assertIn("BOM task omi:b1", dest.read_text(encoding="utf-8").splitlines())
+
 
 if __name__ == "__main__":
     unittest.main()

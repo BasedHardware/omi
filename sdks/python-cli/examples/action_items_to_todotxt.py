@@ -102,9 +102,23 @@ def task_line(done, due, item, zone):
     return " ".join(parts)
 
 
+def extract_action_items(data):
+    """Normalize input to a list of action-item dicts or None if invalid."""
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        # Match documented wrapper precedence: action_items, items, data.
+        # Preserve empty lists from envelopes (e.g. {"action_items": []}).
+        for key in ("action_items", "items", "data"):
+            if isinstance(data.get(key), list):
+                return data[key]
+    return None
+
+
 def convert(source, destination, zone):
-    items = json.loads(Path(source).read_bytes())
-    if not isinstance(items, list):
+    raw = json.loads(Path(source).read_bytes().decode("utf-8-sig"))
+    items = extract_action_items(raw)
+    if items is None:
         raise ValueError("Expected the JSON array from omi --json action-item list")
     entries = []
     for item in items:
