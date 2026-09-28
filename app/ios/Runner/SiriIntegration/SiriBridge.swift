@@ -3,6 +3,8 @@ import Foundation
 import Flutter
 import UIKit
 import AppIntents
+import FirebaseAuth
+import FirebaseCore
 
 enum SiriListeningFailure: Error {
     case deviceAlreadyListening
@@ -55,6 +57,19 @@ final class SiriBridge: SiriIndexApi {
         }
     }
 
+    func installNativeAuthFence() {
+        #if OMI_SIRI_PROBE
+        let arguments = ProcessInfo.processInfo.arguments
+        // The ordinary no-engine probe deliberately binds a fake Siri UID
+        // without a Firebase user. The separate Auth-emulator probe exercises
+        // the real listener, so keep the synthetic fixture isolated from it.
+        if arguments.contains("-omi-siri-probe") &&
+            !arguments.contains("-omi-siri-probe-auth-seed") &&
+            !arguments.contains("-omi-siri-probe-auth-verify") { return }
+        #endif
+        SiriNativeAuthFence.shared.install()
+    }
+
     func attach(messenger: FlutterBinaryMessenger) {
         events = SiriEventsApi(binaryMessenger: messenger)
         SiriIndexApiSetup.setUp(binaryMessenger: messenger, api: self)
@@ -98,7 +113,10 @@ final class SiriBridge: SiriIndexApi {
         }
     }
     func prepareForSignOut(completion: @escaping (Result<Void, Error>) -> Void) {
-        complete({ try await SiriSnapshotStore.shared.prepareForSignOut() }, completion: completion)
+        do {
+            try SiriSnapshotStore.shared.prepareForSignOut()
+            completion(.success(()))
+        } catch { completion(.failure(error)) }
     }
     func generationForOwner(uid: String, completion: @escaping (Result<Int64?, Error>) -> Void) {
         completion(.success(SiriSnapshotStore.shared.generationForOwner(uid)))
@@ -175,6 +193,49 @@ final class SiriBridge: SiriIndexApi {
     }
 }
 
+/// Observes the native Auth instance used by FlutterFire. This remains active
+/// when a Pigeon request fails before it reaches Runner, and while no Flutter
+/// engine exists. It never waits for Spotlight work before revoking Siri access.
+private final class SiriNativeAuthFence {
+    static let shared = SiriNativeAuthFence()
+    private var listener: NSObjectProtocol?
+
+    func install() {
+        guard listener == nil else { return }
+        if FirebaseApp.app() == nil { FirebaseApp.configure() }
+        let auth = Auth.auth()
+        listener = auth.addStateDidChangeListener { [weak self] auth, _ in
+            self?.reconcile(auth)
+        }
+        // FirebaseAuth's first listener callback is asynchronous on main and
+        // can observe nil before its saved user is loaded. Its currentUser
+        // getter synchronizes with the SDK's global work queue, where saved
+        // user hydration was enqueued at Auth initialization (Auth.swift in
+        // the linked FirebaseAuth SDK). Resolve it before launch reindexing.
+        reconcile(auth)
+    }
+
+    private func reconcile(_ auth: Auth) {
+        let uid = auth.currentUser?.uid
+        guard let owner = SiriSession.shared.currentConfig()?.uid ?? SiriSnapshotStore.shared.owner else {
+            SiriSnapshotStore.shared.setAuthResolutionPending(false)
+            return
+        }
+        if uid == owner {
+            SiriSnapshotStore.shared.setAuthResolutionPending(false)
+            return
+        }
+        if uid == nil && !UIApplication.shared.isProtectedDataAvailable {
+            // Keychain hydration may resume after unlock. Deny current-process
+            // Siri without durably destroying a still-signed-in owner's index.
+            SiriSnapshotStore.shared.setAuthResolutionPending(true)
+            return
+        }
+        do { try SiriSnapshotStore.shared.prepareForSignOut() }
+        catch { NSLog("[SiriIndex] Native auth transition fence failed: %@", String(describing: error)) }
+    }
+}
+
 /// A bounded, account-scoped outbox for engine-free intent and index metrics.
 /// Records have enums/counts/durations only; user content never enters defaults.
 enum SiriTelemetry {
@@ -234,6 +295,7 @@ import Foundation
 /// unavailable. The Xcode 27 Codemagic build compiles the real bridge above.
 final class SiriBridge: SiriIndexApi {
     static let shared = SiriBridge()
+    func installNativeAuthFence() {}
     func retryPendingWipeOnLaunch() {}
     func attach(messenger: FlutterBinaryMessenger) {
         SiriIndexApiSetup.setUp(binaryMessenger: messenger, api: self)

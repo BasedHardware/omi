@@ -127,6 +127,7 @@ final class QuickActionsIconPatcher: NSObject {
     }
     UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    SiriBridge.shared.installNativeAuthFence()
     SiriBridge.shared.retryPendingWipeOnLaunch()
     BGTaskScheduler.shared.cancel(
       taskRequestWithIdentifier: AppDelegate.unusedForegroundTaskRefreshIdentifier

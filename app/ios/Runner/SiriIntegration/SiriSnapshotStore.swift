@@ -65,6 +65,7 @@ final class SiriSnapshotStore {
     }
     private var snapshot: Snapshot
     private var transitionGeneration: Int64?
+    private var authResolutionPending = false
     private var expiryTask: _Concurrency.Task<Void, Never>?
     #if OMI_SIRI_PROBE
     var simulateIndexDeleteFailure = false
@@ -100,7 +101,7 @@ final class SiriSnapshotStore {
         lock.lock(); defer { lock.unlock() }
         let sessionOwner = SiriSession.shared.currentConfig()?.uid
         guard !uid.isEmpty, owner == uid, snapshot.ownerUid == uid,
-              transitionGeneration == nil,
+              transitionGeneration == nil, !authResolutionPending,
               (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty,
               (sessionOwner == nil || sessionOwner == uid) else { return nil }
         return defaults.object(forKey: generationKey) as? Int64 ?? 0
@@ -116,8 +117,14 @@ final class SiriSnapshotStore {
         guard let uid = snapshot.ownerUid, !uid.isEmpty else { return false }
         return owner == uid && SiriSession.shared.currentConfig()?.uid == uid &&
             SiriSession.shared.hasMirroredToken() &&
-            transitionGeneration == nil &&
+            transitionGeneration == nil && !authResolutionPending &&
             (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty
+    }
+    /// While Firebase waits for protected Keychain data, deny Siri reads and
+    /// writes without deleting a possibly valid account's persisted index.
+    func setAuthResolutionPending(_ pending: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        authResolutionPending = pending
     }
     private func validOwnerLocked() -> Bool { enabled && accountOwnerLocked() }
     private static let conversationAgeMs: Int64 = 180 * 86_400_000
@@ -315,6 +322,7 @@ final class SiriSnapshotStore {
                   snapshot.ownerUid == config.uid,
                   owner == config.uid else { throw SiriSession.Failure.auth }
             try SiriSession.shared.publish(config)
+            authResolutionPending = false
 
         }
     }
@@ -333,7 +341,7 @@ final class SiriSnapshotStore {
     /// This fast privacy fence bypasses the Spotlight serialization gate.
     /// Each operation runs even if another fails; the queued wipe follows via
     /// the auth callback. Token absence alone denies a cold engine-free launch.
-    func prepareForSignOut() async throws {
+    func prepareForSignOut() throws {
         let tokenRemoved = SiriSession.shared.revokeMirroredTokenForSignOut()
         if !tokenRemoved { NSLog("[SiriIndex] Sign-out token revocation failed; attempting durable marker") }
         lock.lock()
