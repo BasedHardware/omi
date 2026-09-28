@@ -11,6 +11,7 @@ from google.cloud import firestore
 
 from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
 from database._client import get_firestore_client
+from utils.sync import stage as sync_stage
 
 LEDGER_RETENTION_DAYS = 45
 CLAIM_STALE_SECONDS = 2 * 24 * 60 * 60
@@ -91,7 +92,8 @@ class SyncContentRunBinding:
 
 
 def _ledger_ref(client: Any, uid: str, content_id: str) -> Any:
-    return client.collection('users').document(uid).collection('sync_content_ledger').document(content_id)
+    collection = sync_stage.collection_name('sync_content_ledger')
+    return client.collection('users').document(uid).collection(collection).document(content_id)
 
 
 def _ledger_owner_matches(

@@ -495,7 +495,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
       final success = await persistSummaryEdit(editedConversation.id, null, trimmed);
       if (success && ownerUid.isNotEmpty && ownerUid == SharedPreferencesUtil().uid) {
-        await SiriIntegration.current.upsertConversations([editedConversation], expectedUid: ownerUid);
+        SiriIntegration.current.queueUpsertConversations([editedConversation], expectedUid: ownerUid);
       }
       if (!success && !_isDisposed && identical(conversationOrNull, editedConversation)) {
         // A refresh or a newer edit may have replaced this state while the
@@ -638,7 +638,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
     final saved = await persistTitleEdit(target.id, title);
     if (saved && ownerUid.isNotEmpty && ownerUid == SharedPreferencesUtil().uid) {
-      await SiriIntegration.current.upsertConversations([target], expectedUid: ownerUid);
+      SiriIntegration.current.queueUpsertConversations([target], expectedUid: ownerUid);
     }
     if (!saved && !_isDisposed) {
       target.structured.title = previous;
