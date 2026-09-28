@@ -88,6 +88,9 @@ environments:
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
             category: rollout
+          STT_LEARNED_LANGUAGE_PROFILE:
+            value: 'true'
+            category: rollout
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
             value: '100'
             category: rollout
@@ -1775,6 +1778,9 @@ environments:
             category: rollout
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
+            category: rollout
+          STT_LEARNED_LANGUAGE_PROFILE:
+            value: 'false'
             category: rollout
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
             value: '25'

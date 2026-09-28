@@ -14,6 +14,7 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from database.firestore_read_metrics import FirestoreReadSite
+from database.live_language_profile import get_live_language_sessions
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
@@ -471,11 +472,25 @@ class ListenSessionRuntime:
         )
         # Retained so a mid-session failover reselects under the same language policy.
         self.multi_lang_enabled = not single_language_mode
+        language_profile_in_scope = not (self.is_multi_channel or self.use_custom_stt or get_byok_keys())
+        learned_sessions = None
+        if (
+            language_profile_in_scope
+            and self.multi_lang_enabled
+            and os.getenv('STT_LEARNED_LANGUAGE_PROFILE', 'false').lower() == 'true'
+        ):
+            try:
+                learned_sessions = await asyncio.wait_for(
+                    run_blocking(db_executor, get_live_language_sessions, request.uid), timeout=2.0
+                )
+            except Exception:
+                logger.warning('Live STT language profile read failed')
         self.language_profile = LiveLanguageProfile.create(
             self.language,
             multi=self.multi_lang_enabled,
             uid=request.uid,
-            in_scope=not (self.is_multi_channel or self.use_custom_stt or get_byok_keys()),
+            in_scope=language_profile_in_scope,
+            learned_sessions=learned_sessions,
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
@@ -1045,7 +1060,7 @@ class ListenSessionRuntime:
         if self.onboarding_handler:
             self.onboarding_handler.cleanup()
         if self.language_observations is not None:
-            await self.language_observations.summarize()
+            await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
         if not owner_persistence_blocked:
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
         self.receiver.clear()
