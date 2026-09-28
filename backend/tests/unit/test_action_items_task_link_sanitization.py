@@ -1,4 +1,4 @@
-"""Hermetic unit tests for TaskLink error sanitization in the action items router (#19589, #19590).
+"""Hermetic unit tests for TaskLink error sanitization in the action items router.
 
 Verifies that:
 1. Internal TaskLinkResolverUnavailableError (e.g. 'Ticket 04 ... resolver is not registered')
@@ -108,9 +108,13 @@ class ActionItemsTaskLinkSanitizationTests(unittest.TestCase):
 
         # Inject classes
         sys.modules["utils.task_intelligence.task_links"].TaskLinkValidationError = StubTaskLinkValidationError
-        sys.modules["utils.task_intelligence.task_links"].TaskLinkResolverUnavailableError = StubTaskLinkResolverUnavailableError
+        sys.modules["utils.task_intelligence.task_links"].TaskLinkResolverUnavailableError = (
+            StubTaskLinkResolverUnavailableError
+        )
         sys.modules["database.action_items"].TaskRelationshipConflictError = StubTaskRelationshipConflictError
-        sys.modules["database.firestore_transaction_retry"].FirestoreContentionExhausted = StubFirestoreContentionExhausted
+        sys.modules["database.firestore_transaction_retry"].FirestoreContentionExhausted = (
+            StubFirestoreContentionExhausted
+        )
 
         sys.modules["models.action_item"].ActionItem = StubModel
         sys.modules["models.action_item"].ActionItemCreateRequest = StubCreateRequest
@@ -179,7 +183,9 @@ class ActionItemsTaskLinkSanitizationTests(unittest.TestCase):
         with patch.object(
             router_mod.task_links,
             "validate_task_links",
-            side_effect=self._StubTaskLinkResolverUnavailableError("Ticket 04 workstream goal resolver is not registered"),
+            side_effect=self._StubTaskLinkResolverUnavailableError(
+                "Ticket 04 workstream goal resolver is not registered"
+            ),
         ):
             with self.assertRaises(HTTPException) as ctx:
                 create_fn(request=req, uid="u-1")
@@ -247,7 +253,9 @@ class ActionItemsTaskLinkSanitizationTests(unittest.TestCase):
         with patch.object(
             router_mod.task_links,
             "validate_task_links",
-            side_effect=self._StubTaskLinkResolverUnavailableError("Ticket 04 workstream goal resolver is not registered"),
+            side_effect=self._StubTaskLinkResolverUnavailableError(
+                "Ticket 04 workstream goal resolver is not registered"
+            ),
         ):
             with self.assertRaises(HTTPException) as ctx:
                 batch_fn(action_items=items, uid="u-1")
