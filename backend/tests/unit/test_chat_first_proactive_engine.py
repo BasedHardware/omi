@@ -18,7 +18,6 @@ from models.chat_first import (
 from utils.task_intelligence.chat_first_eligibility import ChatFirstEligibility
 from utils.conversations.meeting_treatment import (
     MIN_MEETING_DURATION_SECONDS,
-    MIN_TRANSCRIBED_SPEECH_SECONDS,
     deduplicated_transcribed_speech_seconds,
     is_meeting_treatment_eligible,
 )
@@ -282,14 +281,9 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
         'discarded': False,
         'started_at': NOW,
         'finished_at': NOW + timedelta(seconds=MIN_MEETING_DURATION_SECONDS),
-        'transcript_segments': [
-            {'text': 'Opening exchange', 'start': 0, 'end': 30},
-            {
-                'text': 'Closing exchange',
-                'start': MIN_MEETING_DURATION_SECONDS - 30,
-                'end': MIN_MEETING_DURATION_SECONDS,
-            },
-        ],
+        # Duration is the transcript span (#19391), so the transcript itself
+        # must clear the five-minute bar even though the wall window already does.
+        'transcript_segments': [{'text': 'A substantive exchange', 'start': 0, 'end': MIN_MEETING_DURATION_SECONDS}],
         'structured': {'title': 'Ambient capture'},
         'external_data': {'conversation_role': 'ambient'},
     }
@@ -312,7 +306,7 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
             'eligible': True,
             'reason': 'eligible',
             'duration_s': MIN_MEETING_DURATION_SECONDS,
-            'dedup_speech_s': MIN_TRANSCRIBED_SPEECH_SECONDS,
+            'dedup_speech_s': MIN_MEETING_DURATION_SECONDS,
             'firestore_client': None,
         }
     ]
@@ -354,6 +348,8 @@ def test_meeting_treatment_requires_five_minutes_and_deduplicated_speech():
         'external_data': {'conversation_role': 'meeting'},
         'transcript_segments': [
             {'text': 'first exchange', 'start': 0, 'end': 35},
+            # Duration is the transcript span (#19391); the two intervals also
+            # provide exactly the required sixty seconds of distinct speech.
             {
                 'text': 'second exchange',
                 'start': MIN_MEETING_DURATION_SECONDS - 25,

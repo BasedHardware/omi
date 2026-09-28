@@ -177,6 +177,7 @@ void main() {
             uploader: (
               files, {
               onUploadProgress,
+              captureEvidence,
               conversationId,
               recordingSessionId,
               audioStartSeconds,
@@ -229,6 +230,7 @@ void main() {
           uploader: (
             files, {
             onUploadProgress,
+            captureEvidence,
             conversationId,
             recordingSessionId,
             audioStartSeconds,
@@ -264,6 +266,7 @@ void main() {
         uploader: (
           files, {
           onUploadProgress,
+          captureEvidence,
           conversationId,
           recordingSessionId,
           audioStartSeconds,
@@ -335,6 +338,7 @@ void main() {
             uploader: (
               files, {
               onUploadProgress,
+              captureEvidence,
               conversationId,
               recordingSessionId,
               audioStartSeconds,
@@ -392,6 +396,7 @@ void main() {
             uploader: (
               files, {
               onUploadProgress,
+              captureEvidence,
               conversationId,
               recordingSessionId,
               audioStartSeconds,
@@ -450,6 +455,7 @@ void main() {
             uploader: (
               files, {
               onUploadProgress,
+              captureEvidence,
               conversationId,
               recordingSessionId,
               audioStartSeconds,

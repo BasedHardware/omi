@@ -107,6 +107,8 @@ from utils.subscription import (
     resolve_transcription_allowance,
 )
 from utils.sync import playback as sync_playback
+from config.capture_evidence import capture_evidence_dark_write_enabled
+from utils.capture_evidence import parse_sync_file_claims
 from utils.sync.files import (
     decode_files_to_wav,
     detect_source_from_filenames,
@@ -896,6 +898,7 @@ async def sync_local_files_v2(
     x_request_id: Optional[str] = Header(None, alias='X-Request-ID'),
     x_cloud_trace_context: Optional[str] = Header(None, alias='X-Cloud-Trace-Context'),
     x_omi_sync_capture_manifest: Optional[str] = Header(None, alias='X-Omi-Sync-Capture-Manifest'),
+    x_omi_capture_evidence: Optional[str] = Header(None, alias='X-Omi-Capture-Evidence', include_in_schema=False),
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
 ):
     """
@@ -933,6 +936,9 @@ async def sync_local_files_v2(
     geolocation = geolocation_from_private_header(x_omi_conversation_geolocation)
 
     filenames = [f.filename or '' for f in files]
+    capture_claims = (
+        parse_sync_file_claims(x_omi_capture_evidence, filenames) if capture_evidence_dark_write_enabled() else {}
+    )
     manifest_claims = verify_capture_manifest(
         x_omi_sync_capture_manifest,
         uid,
@@ -1241,6 +1247,7 @@ async def sync_local_files_v2(
                 'job_id': job_id,
                 'uid': uid,
                 'raw_blob_paths': owned_paths,
+                **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
                 'source': source.value,
                 'should_lock': should_lock,
                 'conversation_id': conversation_id,
@@ -1493,6 +1500,7 @@ async def sync_local_files_v2(
                             inline_run_lock_token=inline_run_lock_token,
                             content_run_bound=ledger_fence_active,
                             ledger_fence_active=ledger_fence_active,
+                            **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
                             recording_session_id=recording_session_id,
                             audio_start_seconds=audio_start_seconds,
                             audio_end_seconds=audio_end_seconds,
@@ -1922,6 +1930,9 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
         )
         client_device_id = payload.get('client_device_id')
         client_platform = payload.get('client_platform')
+        capture_claims = payload.get('capture_evidence_claims')
+        if not isinstance(capture_claims, dict) or len(capture_claims) > 20:
+            capture_claims = {}
         sync_lane = payload.get('lane') if payload.get('lane') in ('fresh', 'backfill') else SyncLane.FRESH.value
         content_id = payload.get('content_id') if isinstance(payload.get('content_id'), str) else None
         payload_uses_fence = payload.get('ledger_fence_mode') == SyncLedgerFenceMode.ACTIVE.value
@@ -2089,6 +2100,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
                 run_lock_token=lock_token if ledger_fence_active else None,
                 content_run_bound=ledger_fence_active,
                 ledger_fence_active=ledger_fence_active,
+                **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
                 recording_session_id=recording_session_id,
                 audio_start_seconds=audio_start_seconds,
                 audio_end_seconds=audio_end_seconds,

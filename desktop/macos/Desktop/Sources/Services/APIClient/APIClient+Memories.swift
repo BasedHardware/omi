@@ -737,6 +737,32 @@ extension APIClient {
     let end: Double
   }
 
+  struct CaptureEvidenceLineage: Encodable, Sendable {
+    struct Unit: Encodable, Sendable {
+      let id: String
+      let startMs: Int64
+      let endMs: Int64
+
+      enum CodingKeys: String, CodingKey {
+        case id
+        case startMs = "start_ms"
+        case endMs = "end_ms"
+      }
+    }
+    let version: Int
+    let capability: String
+    let captureRoot: String
+    let clockDomain: String
+    let lineage: String
+    let units: [Unit]
+
+    enum CodingKeys: String, CodingKey {
+      case version, capability, lineage, units
+      case captureRoot = "capture_root"
+      case clockDomain = "clock_domain"
+    }
+  }
+
   struct CreateConversationFromSegmentsRequest: Encodable, Sendable {
     // swift-format-ignore
     let transcript_segments: [UploadSegment]
@@ -755,33 +781,36 @@ extension APIClient {
     /// Exact stored S10 JSON bytes. Nil keeps today's segments-only upload.
     // swift-format-ignore
     let client_processing: Data?
+    let captureEvidence: CaptureEvidenceLineage?
 
     enum CodingKeys: String, CodingKey {
-      case transcript_segments
+      case transcriptSegments = "transcript_segments"
       case source
-      case started_at
-      case finished_at
+      case startedAt = "started_at"
+      case finishedAt = "finished_at"
       case language
-      case client_conversation_id
-      case conversation_role
-      case conversation_finalization_reason
-      case client_processing
+      case clientConversationId = "client_conversation_id"
+      case conversationRole = "conversation_role"
+      case conversationFinalizationReason = "conversation_finalization_reason"
+      case clientProcessing = "client_processing"
+      case captureEvidence = "capture_evidence"
     }
 
     func encode(to encoder: Encoder) throws {
       var container = encoder.container(keyedBy: CodingKeys.self)
-      try container.encode(transcript_segments, forKey: .transcript_segments)
+      try container.encode(transcript_segments, forKey: .transcriptSegments)
       try container.encode(source, forKey: .source)
-      try container.encodeIfPresent(started_at, forKey: .started_at)
-      try container.encodeIfPresent(finished_at, forKey: .finished_at)
+      try container.encodeIfPresent(started_at, forKey: .startedAt)
+      try container.encodeIfPresent(finished_at, forKey: .finishedAt)
       try container.encode(language, forKey: .language)
-      try container.encodeIfPresent(client_conversation_id, forKey: .client_conversation_id)
-      try container.encode(conversation_role, forKey: .conversation_role)
+      try container.encodeIfPresent(client_conversation_id, forKey: .clientConversationId)
+      try container.encode(conversation_role, forKey: .conversationRole)
       try container.encodeIfPresent(
-        conversation_finalization_reason, forKey: .conversation_finalization_reason)
-      if let client_processing {
-        let payload = try ClientProcessingContract.decode(client_processing)
-        try container.encode(payload, forKey: .client_processing)
+        conversation_finalization_reason, forKey: .conversationFinalizationReason)
+      try container.encodeIfPresent(captureEvidence, forKey: .captureEvidence)
+      if let clientProcessing = client_processing {
+        let payload = try ClientProcessingContract.decode(clientProcessing)
+        try container.encode(payload, forKey: .clientProcessing)
       }
     }
   }

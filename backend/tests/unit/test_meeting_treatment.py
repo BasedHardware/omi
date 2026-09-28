@@ -69,14 +69,27 @@ def test_overlapping_duplicate_stream_segments_are_counted_once():
     ]
 
     assert deduplicated_transcribed_speech_seconds(segments) == 60
-    assert is_meeting_treatment_eligible(_meeting(duration_seconds=10 * 60, segments=segments)) is True
+
+    # Duration is the transcript span (#19391), so the eligible-meeting fixture
+    # needs duplicate streams whose span also clears the five-minute bar.
+    meeting_segments = [
+        {'text': 'remote party through microphone', 'start': 240, 'end': 270},
+        {'text': 'remote party through system audio', 'start': 240, 'end': 270},
+        {'text': 'partially overlapping continuation', 'start': 255, 'end': 300},
+    ]
+    assert deduplicated_transcribed_speech_seconds(meeting_segments) == 60
+    assert is_meeting_treatment_eligible(_meeting(duration_seconds=10 * 60, segments=meeting_segments)) is True
 
 
 @pytest.mark.parametrize(
     ('updates', 'reason', 'eligible'),
     [
         ({}, 'eligible', True),
-        ({'transcript_segments': [{'text': 'short call', 'start': 0, 'end': 299}]}, 'too_short', False),
+        # Duration is the transcript span (#19391): a short span, not a short
+        # wall window, is what makes a meeting too short.
+        ({'transcript_segments': [{'text': 'measured discussion', 'start': 0, 'end': 299}]}, 'too_short', False),
+        # Span clears the five-minute bar while the deduplicated speech does not.
+        ({'transcript_segments': [{'text': 'brief', 'start': 271, 'end': 300}]}, 'insufficient_speech', False),
         (
             {
                 'transcript_segments': [
@@ -104,7 +117,7 @@ def test_overlapping_duplicate_stream_segments_are_counted_once():
 def test_verdict_records_reason_and_measured_inputs_for_every_policy_branch(updates, reason, eligible):
     conversation = _meeting(
         duration_seconds=1720,
-        segments=[{'text': 'measured discussion', 'start': 0, 'end': 1719.8}],
+        segments=[{'text': 'measured discussion', 'start': 0, 'end': 1720}],
     )
     conversation.update(updates)
 
@@ -112,10 +125,10 @@ def test_verdict_records_reason_and_measured_inputs_for_every_policy_branch(upda
 
     assert verdict.eligible is eligible
     assert verdict.reason == reason
-    assert verdict.duration_s == pytest.approx(299 if reason == 'too_short' else 1719.8)
-    assert verdict.dedup_speech_s == pytest.approx(
-        59 if reason == 'insufficient_speech' else 299 if reason == 'too_short' else 1719.8
-    )
+    expected_duration = max((segment['end'] for segment in conversation['transcript_segments']), default=1720)
+    expected_speech = deduplicated_transcribed_speech_seconds(conversation['transcript_segments'])
+    assert verdict.duration_s == pytest.approx(expected_duration)
+    assert verdict.dedup_speech_s == pytest.approx(expected_speech)
 
 
 def test_wall_duration_is_used_when_transcript_is_empty():

@@ -104,6 +104,32 @@ def test_sync_appended_to_live_target_does_not_reuse_live_speaker_id():
     assert [s['speaker_id'] for s in result['transcript_segments']] == [98, 100]
 
 
+def test_assignment_retains_each_source_track_receipt_when_chunks_coalesce():
+    store = StrictFirestore()
+    first = chunk('first', 1000)
+    second = chunk('second', 1060)
+    for item, root in ((first, 'root-a'), (second, 'root-b')):
+        item['capture_evidence'] = {
+            'version': 1,
+            'capability': 'source_position',
+            'coverage': 'mapped',
+            'receipts': [
+                {
+                    'segment_id': item['id'],
+                    'capture_root': root,
+                    'clock_epoch': 0,
+                    'source_start_frame': 0,
+                    'source_end_frame': 100,
+                }
+            ],
+        }
+    intake(store, first)
+    merged, _, _ = intake(store, second)
+    assert {r['capture_root'] for r in merged['capture_evidence']['receipts']} == {'root-a', 'root-b'}
+    retried, _, _ = intake(store, second)
+    assert len(retried['capture_evidence']['receipts']) == 2
+
+
 def test_two_jobs_with_stale_empty_lookup_converge():
     store = StrictFirestore()
     barrier = threading.Barrier(2)

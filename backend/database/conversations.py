@@ -2565,6 +2565,7 @@ def update_conversation_segments(
     *,
     started_at: datetime = None,
     audio_timeline: Optional[dict] = None,
+    capture_evidence: Optional[dict] = None,
     firestore_client: Any = None,
     invalidate_client_processing: bool = True,
     return_segments: bool = False,
@@ -2680,6 +2681,8 @@ def update_conversation_segments(
             # never reclaim it even if an older in-memory snapshot is empty.
             'has_content': bool(current.get('has_content')) or bool(accepted),
         }
+        if capture_evidence is not None:
+            update_payload['capture_evidence'] = capture_evidence
         if remap:
             update_payload['manual_speaker_assignments'] = receipt
         if finished_at:

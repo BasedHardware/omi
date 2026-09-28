@@ -946,6 +946,37 @@ export interface CanonicalKnowledgeGraphResponse {
   nodes: Array<Record<string, unknown>>;
 }
 
+export interface CaptureEvidenceLineage {
+  capability: "stable_artifact";
+  capture_root: string;
+  clock_domain: "desktop_session_ms";
+  lineage: "complete" | "incomplete";
+  units: Array<CaptureEvidenceLineageUnit>;
+  version?: 1;
+}
+
+export interface CaptureEvidenceLineageUnit {
+  end_ms: number;
+  id: string;
+  start_ms: number;
+}
+
+export interface CaptureEvidenceMetadata {
+  capability: "source_position" | "stable_artifact" | "unknown";
+  capture_root?: string | null;
+  channel?: string | null;
+  clock_epoch?: string | null;
+  conflicts?: number | null;
+  coverage?: "unknown" | "incomplete" | "mapped" | null;
+  origin?: string | null;
+  reason?: string | null;
+  receipts?: Array<Record<string, unknown>> | null;
+  runs?: Array<Record<string, unknown>> | null;
+  source_end?: number | null;
+  source_start?: number | null;
+  version?: 1;
+}
+
 export interface CaptureGroup {
   id: string;
   members?: Array<CaptureGroupMember>;
@@ -1478,6 +1509,7 @@ export interface CreateCheckoutRequest {
 }
 
 export interface CreateConversationFromTranscriptRequest {
+  capture_evidence?: CaptureEvidenceLineage | null;
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: unknown | null;
@@ -5260,6 +5292,9 @@ export interface OmiApiSchemas {
   "CandidateStatus": CandidateStatus;
   "CandidateSubjectKind": CandidateSubjectKind;
   "CanonicalKnowledgeGraphResponse": CanonicalKnowledgeGraphResponse;
+  "CaptureEvidenceLineage": CaptureEvidenceLineage;
+  "CaptureEvidenceLineageUnit": CaptureEvidenceLineageUnit;
+  "CaptureEvidenceMetadata": CaptureEvidenceMetadata;
   "CaptureGroup": CaptureGroup;
   "CaptureGroupMember": CaptureGroupMember;
   "CaptureLinkSpec": CaptureLinkSpec;
