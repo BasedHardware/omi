@@ -265,6 +265,28 @@ def test_parakeet_alerts_detect_fatal_cuda_and_ready_pod_black_holes():
         assert fatal_cuda["labels"]["impact"] == "infrastructure"
 
 
+def test_soniox_rate_limit_and_single_leg_alerts_use_live_capacity_signals():
+    rules = _rules(ALERT_SOURCES / "live-stt.json")
+    assert {"omi-soniox-rate-limited", "omi-stt-single-leg-risk"} <= rules.keys()
+
+    rate_limit = rules["omi-soniox-rate-limited"]
+    assert rate_limit["for"] == "10m"
+    assert "provider_rate_limited" in rate_limit["data"][0]["model"]["expr"]
+
+    single_leg = rules["omi-stt-single-leg-risk"]
+    expression = single_leg["data"][0]["model"]["expr"]
+    assert single_leg["for"] == "10m"
+    assert "omi_live_stt_open_streams" in expression
+    assert "omi_live_stt_accepted_total" in expression
+    assert "omi_live_stt_terminal_total" in expression
+    assert "omi_stt_provider_retired" in expression
+
+    dashboard = json.loads((MONITORING / "dashboards/gke/backend-listen.json").read_text(encoding="utf-8"))
+    panels = {panel["title"]: panel for panel in dashboard["panels"]}
+    assert "omi_live_stt_open_streams" in panels["Live STT open provider streams"]["targets"][0]["expr"]
+    assert "provider_rate_limited" in panels["Soniox rate-limited streams/sec"]["targets"][0]["expr"]
+
+
 def test_parakeet_dashboard_uses_application_request_status_labels():
     dashboard = json.loads(PARAKEET_CAPACITY_DASHBOARD.read_text(encoding="utf-8"))
 

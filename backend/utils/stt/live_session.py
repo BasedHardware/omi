@@ -10,7 +10,7 @@ from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_rollout import window_allocation, window_language_supported
-from utils.stt.socket import STTSocket
+from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
 from utils.transcribe_decisions import should_initialize_vad_gate, vad_gate_mode
 
@@ -301,6 +301,8 @@ class LiveLegSocket(STTSocket):
         self._seconds = 0.0
         self._pending_selection: PendingLiveFailover | None = None
         self._ingest_gain: SessionPcmGain | None = None
+        self._open_gauge_released = False
+        record_live_stt_socket_open(service.value)
         if window:
             from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC
 
@@ -313,6 +315,11 @@ class LiveLegSocket(STTSocket):
         if dead and self._pending_selection is not None:
             self._pending_selection.note_failure(self.typed_death_reason)
         return dead
+
+    def _release_open_gauge(self) -> None:
+        if not self._open_gauge_released:
+            self._open_gauge_released = True
+            record_live_stt_socket_closed(self.service.value)
 
     @property
     def death_reason(self) -> str | None:
@@ -361,7 +368,10 @@ class LiveLegSocket(STTSocket):
             except Exception:
                 if self.window:
                     self._dead = True
-                    self.raw.finish()
+                    try:
+                        self.raw.finish()
+                    finally:
+                        self._release_open_gauge()
                     record_fallback(
                         component='vad',
                         from_mode='gated',
@@ -418,9 +428,12 @@ class LiveLegSocket(STTSocket):
         self.raw.finalize()
 
     def finish(self) -> None:
-        if self.is_connection_dead and self._pending_selection is not None:
-            self._pending_selection.note_failure(self.typed_death_reason)
-        self.raw.finish()
+        try:
+            if self.is_connection_dead and self._pending_selection is not None:
+                self._pending_selection.note_failure(self.typed_death_reason)
+            self.raw.finish()
+        finally:
+            self._release_open_gauge()
 
     async def drain_and_close(self) -> None:
         try:
