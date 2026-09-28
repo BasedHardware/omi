@@ -50,6 +50,12 @@ const GLYPHS = {
   terminal: 0xeb8e,
   verified_user: 0xf013,
   view_timeline: 0xeb85,
+  // Mobile shell (tab bar, grouped settings rows, device pill).
+  forum: 0xe0bf,
+  chevron_right: 0xe5cc,
+  open_in_new: 0xe89e,
+  logout: 0xe9ba,
+  bluetooth: 0xe1a7,
 } as const;
 
 export type MaterialIconName = keyof typeof GLYPHS;
