@@ -139,6 +139,21 @@ DESKTOP_NOTIFICATION_REGRESSION_INPUTS = {
     "desktop/macos/Desktop/Sources/Providers/DeviceProvider.swift",
 }
 
+DESKTOP_RELEASE_PR_INPUTS = {
+    "desktop/macos/Desktop/Package.swift",
+    "desktop/macos/Desktop/Package.resolved",
+    "desktop/macos/ci/xcode-pin.json",
+    "desktop/macos/scripts/run-swift-ci.sh",
+    "codemagic.yaml",
+    ".github/workflows/desktop-swift-ci.yml",
+    ".github/workflows/desktop_auto_release.yml",
+    ".github/scripts/plan-desktop-release.py",
+    ".github/scripts/desktop-release-source-identity.py",
+    ".github/scripts/publish-desktop-candidate-tag.py",
+}
+
+DESKTOP_RELEASE_SCRIPT_MARKERS = ("release", "bundle", "artifact", "notar", "sign", "packag")
+
 DESKTOP_AGENT_RUNTIME_INPUTS = {
     "desktop/macos/run.sh",
     "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
@@ -386,6 +401,19 @@ def _is_desktop_notification_input(path: str) -> bool:
     )
 
 
+def _is_desktop_release_pr_input(path: str) -> bool:
+    if path in DESKTOP_RELEASE_PR_INPUTS or _is_desktop_notification_input(path):
+        return True
+    if not path.startswith("desktop/macos/"):
+        return False
+    if path.endswith((".entitlements", ".xcconfig", ".pbxproj")) or Path(path).name == "Info.plist":
+        return True
+    return path.startswith("desktop/macos/scripts/") and (
+        any(marker in Path(path).name for marker in DESKTOP_RELEASE_SCRIPT_MARKERS)
+        or Path(path).name == "embed-app-intents-metadata.sh"
+    )
+
+
 def _is_desktop_agent_runtime_input(path: str) -> bool:
     return path in DESKTOP_AGENT_RUNTIME_INPUTS or path.startswith(
         ("desktop/macos/agent/", "desktop/macos/pi-mono-extension/")
@@ -453,9 +481,11 @@ def resolve_impact(
                 selected.add("desktop-ci-only")
             if _is_desktop_swift_test_input(path):
                 selected.add("desktop-swift-tests")
-            # Every source/test input can expose a DEBUG-only seam to the
-            # release test target (#13123, #13467), regardless of its name.
-            if _is_desktop_release_test_input(path):
+            # The full main/health lane compiles the complete release test
+            # target. PRs reserve that build for release-specific inputs.
+            if _is_desktop_release_test_input(path) and (
+                event != "pull_request" or _is_desktop_release_pr_input(path)
+            ):
                 selected.add("desktop-swift-release-test-compile")
             if _is_desktop_notification_input(path):
                 selected.add("desktop-swift-notification-release-regression")
@@ -489,9 +519,10 @@ def resolve_impact(
                 "desktop-ci-only",
                 "desktop-flow-lint",
                 "desktop-swift-tests",
-                "desktop-swift-release-test-compile",
             }
         )
+        if event != "pull_request" or ".github/workflows/desktop-swift-ci.yml" in normalized_paths:
+            selected.add("desktop-swift-release-test-compile")
 
     if event in FULL_DESKTOP_HEALTH_EVENTS:
         # Manual dispatch is the exact-SHA recovery hatch and the scheduled run
@@ -507,17 +538,13 @@ def resolve_impact(
         )
 
     releasable_desktop = any(_is_releasable_desktop_path(path) for path in normalized_paths) or selector_changed
-    package_changed = any(
-        path in {"desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Package.resolved"}
-        for path in normalized_paths
-    )
+    release_pr_input = any(_is_desktop_release_pr_input(path) for path in normalized_paths)
     if releasable_desktop:
         selected.add("desktop-ci-only")
-    # Source/test PRs compile the complete release test target in the existing
-    # release job. It builds the app and tests once, then reuses those artifacts
-    # for the narrow notification regression (#13481). Non-target release inputs
-    # retain the cheaper app-only main-push check; pre-push stays debug-only.
-    if package_changed:
+    # Ordinary source/test PRs use the debug lane; release settings, packaging,
+    # package manifests, notification regression inputs, and this workflow
+    # retain the release compile on PRs. Main keeps full release evidence.
+    if event == "pull_request" and release_pr_input:
         selected.add("desktop-swift-release-compile")
     if event == "push" and releasable_desktop:
         selected.add("desktop-swift-release-compile")
