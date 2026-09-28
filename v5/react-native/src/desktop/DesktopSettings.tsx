@@ -35,11 +35,9 @@ import {
   type DesktopSettingsPane,
 } from './desktopChrome';
 import {ShippingStage} from './ShippingStage';
-import {
-  type DesktopTokens,
-  useDesktopTheme,
-  useDesktopStyleSheets,
-} from './DesktopTheme';
+import {OmiButton} from '../design/primitives';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import {omiMotion, type OmiTheme} from '../design/tokens';
 
 type Props = {
   capture?: ReturnType<typeof useRewindCapture>;
@@ -54,21 +52,25 @@ type Props = {
   /** Live interface-version switch (Settings → General → Interface). */
   onUiVersionChange?: (version: DesktopUiVersion) => void;
   softwarePlaneLocked: boolean;
+  /** Initial pane for previews and screenshots; users start at General. */
+  initialPane?: DesktopSettingsPane;
 };
 
 const PANE_ITEM_HEIGHT = 40;
 const PANE_ITEM_GAP = 4;
-const PANE_PILL_RADIUS = 10;
+const PANE_PILL_RADIUS = 12;
 
-const TOGGLE_WIDTH = 44;
-const TOGGLE_HEIGHT = 26;
-const TOGGLE_THUMB = 20;
-const TOGGLE_TRAVEL = TOGGLE_WIDTH - TOGGLE_THUMB - 6;
+const TOGGLE_WIDTH = 38;
+const TOGGLE_HEIGHT = 22;
+const TOGGLE_THUMB = 18;
+const TOGGLE_INSET = (TOGGLE_HEIGHT - TOGGLE_THUMB) / 2;
+const TOGGLE_TRAVEL = TOGGLE_WIDTH - TOGGLE_THUMB - 2 * TOGGLE_INSET;
 
 /**
- * The house toggle: a glass pill with a sliding thumb, matching the nav pill
- * and segmented controls instead of the system switch. Role stays "switch" so
- * accessibility behavior is unchanged.
+ * The house switch: a track with a knob, ink track when on (design
+ * language: toggles look like switches, selection is ink). Role stays
+ * "switch" so accessibility behavior is unchanged. Motion is the knob
+ * sliding only; no scale bounce, and none under Reduce Motion.
  */
 function GlassToggle({
   accessibilityLabel,
@@ -81,10 +83,9 @@ function GlassToggle({
   onValueChange: (value: boolean) => void;
   value: boolean;
 }) {
-  const styles = useDesktopStyleSheets(createStyles);
+  const styles = useOmiStyles(createStyles);
   const reduceMotion = useReduceMotion();
   const thumb = useRef(new Animated.Value(value ? 1 : 0)).current;
-  const [pressed, setPressed] = useState(false);
   useEffect(() => {
     if (reduceMotion) {
       thumb.setValue(value ? 1 : 0);
@@ -92,14 +93,14 @@ function GlassToggle({
     }
     const animation = Animated.timing(thumb, {
       toValue: value ? 1 : 0,
-      duration: pressed ? 220 : 160,
+      duration: omiMotion.quick + 40,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
       isInteraction: false,
     });
     animation.start();
     return () => animation.stop();
-  }, [value, pressed, reduceMotion, thumb]);
+  }, [value, reduceMotion, thumb]);
   return (
     <FocusPressable
       accessibilityLabel={accessibilityLabel}
@@ -111,8 +112,6 @@ function GlassToggle({
           onValueChange(!value);
         }
       }}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
       style={({pressed: active}) => [
         styles.toggle,
         value && styles.toggleOn,
@@ -129,12 +128,6 @@ function GlassToggle({
                 translateX: thumb.interpolate({
                   inputRange: [0, 1],
                   outputRange: [0, TOGGLE_TRAVEL],
-                }),
-              },
-              {
-                scale: thumb.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [1, 1.05],
                 }),
               },
             ],
@@ -193,17 +186,21 @@ const paneInfo: Record<
 function Row({
   action,
   actionLabel,
+  actionVariant = 'secondary',
+  actionBusy = false,
   copy,
   title,
   trailing,
 }: {
   action?: () => void;
   actionLabel?: string;
+  actionVariant?: 'primary' | 'secondary';
+  actionBusy?: boolean;
   copy: string;
   title: string;
   trailing?: React.ReactNode;
 }) {
-  const styles = useDesktopStyleSheets(createStyles);
+  const styles = useOmiStyles(createStyles);
   return (
     <View style={styles.row}>
       <View style={styles.rowCopy}>
@@ -212,13 +209,13 @@ function Row({
       </View>
       {trailing ? <View style={styles.rowControl}>{trailing}</View> : null}
       {action !== undefined && actionLabel !== undefined ? (
-        <FocusPressable
-          accessibilityLabel={actionLabel}
-          accessibilityRole="button"
+        <OmiButton
+          compact
+          disabled={actionBusy}
+          label={actionLabel}
           onPress={action}
-          style={({pressed}) => [styles.action, pressed && styles.pressed]}>
-          <Text style={styles.actionText}>{actionLabel}</Text>
-        </FocusPressable>
+          variant={actionVariant}
+        />
       ) : null}
     </View>
   );
@@ -226,20 +223,24 @@ function Row({
 
 function Segmented<Value extends string>({
   disabled = false,
+  format = option => option,
   onChange,
   options,
   value,
 }: {
   disabled?: boolean;
+  /** Display label for an option value (values stay the stored strings). */
+  format?: (option: Value) => string;
   onChange: (value: Value) => void;
   options: readonly Value[];
   value: Value;
 }) {
-  const styles = useDesktopStyleSheets(createStyles);
+  const styles = useOmiStyles(createStyles);
   return (
     <View style={styles.segments}>
       {options.map(option => (
         <FocusPressable
+          accessibilityLabel={format(option)}
           accessibilityRole="button"
           accessibilityState={{disabled, selected: value === option}}
           disabled={disabled}
@@ -249,17 +250,19 @@ function Segmented<Value extends string>({
               onChange(option);
             }
           }}
-          style={({pressed}) => [
+          style={state => [
             styles.segment,
-            value === option && styles.segmentActive,
-            pressed && styles.pressed,
+            value === option
+              ? styles.segmentActive
+              : (state as {hovered?: boolean}).hovered && styles.segmentHover,
+            state.pressed && styles.pressed,
           ]}>
           <Text
             style={[
               styles.segmentText,
               value === option && styles.segmentTextActive,
             ]}>
-            {option}
+            {format(option)}
           </Text>
         </FocusPressable>
       ))}
@@ -274,8 +277,8 @@ function SettingsNav({
   pane: DesktopSettingsPane;
   onChange: (pane: DesktopSettingsPane) => void;
 }) {
-  const {tokens: token} = useDesktopTheme();
-  const styles = useDesktopStyleSheets(createStyles);
+  const theme = useOmiTheme();
+  const styles = useOmiStyles(createStyles);
   const reduceMotion = useReduceMotion();
   const index = Math.max(0, desktopSettingsPanes.indexOf(pane));
   const translateY = useRef(
@@ -319,7 +322,9 @@ function SettingsNav({
               <MaterialIcon
                 name={icon}
                 size={16}
-                color={pane === label ? token.color.ink : token.color.inkMuted}
+                color={
+                  pane === label ? theme.color.ink : theme.color.inkSecondary
+                }
               />
               <Text
                 style={[
@@ -348,9 +353,10 @@ export function DesktopSettings({
   session,
   signingIn,
   softwarePlaneLocked,
+  initialPane = 'General',
 }: Props) {
-  const styles = useDesktopStyleSheets(createStyles);
-  const [pane, setPane] = useState<DesktopSettingsPane>('General');
+  const styles = useOmiStyles(createStyles);
+  const [pane, setPane] = useState<DesktopSettingsPane>(initialPane);
   const [prefs, setPrefs] = useState<DesktopPreferences>(
     defaultDesktopPreferences,
   );
@@ -624,6 +630,9 @@ export function DesktopSettings({
         title="Audio Recording"
         trailing={
           <Segmented<AudioRecordingMode>
+            format={mode =>
+              mode === 'off' ? 'Off' : mode === 'always' ? 'Always' : 'Meetings'
+            }
             onChange={value => {
               runAction(async () => {
                 if (
@@ -692,13 +701,15 @@ export function DesktopSettings({
               }
             : onSignIn
         }
+        actionBusy={session !== 'ready' && signingIn}
         actionLabel={
           session === 'ready'
-            ? 'Sign out'
+            ? 'Sign Out'
             : signingIn
-            ? 'Signing in…'
-            : 'Sign in'
+            ? 'Signing In…'
+            : 'Sign In'
         }
+        actionVariant={session === 'ready' ? 'secondary' : 'primary'}
       />
       {account?.profile?.name != null ? (
         <Row copy={account.profile.name} title="Name" />
@@ -762,6 +773,7 @@ export function DesktopSettings({
             onChange={value => {
               runAction(() => setPref('rewindRetentionDays', Number(value)));
             }}
+            format={days => (days === '0' ? 'Forever' : `${days} days`)}
             options={['7', '14', '30', '0'] as const}
             value={String(prefs.rewindRetentionDays) as '7' | '14' | '30' | '0'}
           />
@@ -885,7 +897,15 @@ export function DesktopSettings({
             </Text>
           ) : null}
           <ShippingStage stageKey={pane} variant="page" style={styles.stage}>
-            <View style={styles.group}>{body}</View>
+            {pane === 'Apps' ? (
+              // The gallery brings its own tabs and states; it is not a
+              // settings group.
+              body
+            ) : (
+              <View style={styles.group}>
+                <View style={styles.groupRows}>{body}</View>
+              </View>
+            )}
             {pane === 'General' ? deviceContent : null}
           </ShippingStage>
         </ScrollView>
@@ -894,38 +914,44 @@ export function DesktopSettings({
   );
 }
 
-const createStyles = (token: DesktopTokens) => ({
+const createStyles = (t: OmiTheme) => ({
   root: {
     flex: 1,
     flexDirection: 'row' as const,
-    paddingHorizontal: 24,
-    paddingTop: 8,
+    paddingHorizontal: t.layout.pageGutter.desktop,
+    paddingTop: t.space.sm,
   },
-  stage: {flexBasis: 'auto' as const, flexGrow: 0, flexShrink: 0, gap: 20},
+  stage: {
+    flexBasis: 'auto' as const,
+    flexGrow: 0,
+    flexShrink: 0,
+    gap: t.space.xl,
+  },
+  // One grouped card on the glass: a fill, no shadow, rows split by
+  // separators. The inner -1 margin hides the first row's top rule.
   group: {
-    backgroundColor: token.color.glassStrong,
-    borderRadius: 18,
+    backgroundColor: t.color.fill,
+    borderRadius: t.radius.card - 4,
     overflow: 'hidden' as const,
-    borderWidth: 1,
-    borderColor: token.color.line,
   },
+  groupRows: {marginTop: -1},
   sidebarTitle: {
-    fontSize: 12,
+    ...t.type.footnote,
     fontWeight: '600' as const,
-    color: token.color.inkMuted,
-    paddingHorizontal: 12,
-    paddingTop: 6,
-    paddingBottom: 22,
+    color: t.color.inkSecondary,
+    paddingHorizontal: t.space.md,
+    paddingTop: t.space.xs + 2,
+    paddingBottom: t.space.lg,
   },
   panes: {position: 'relative' as const},
   sidebar: {
-    marginRight: 24,
+    marginRight: t.space.xxl,
     position: 'relative' as const,
     width: 182,
     flexShrink: 0,
   },
   panePill: {
-    backgroundColor: token.color.glassSelected,
+    backgroundColor: t.color.fillSelected,
     borderRadius: PANE_PILL_RADIUS,
     height: PANE_ITEM_HEIGHT,
     left: 0,
@@ -936,109 +962,88 @@ const createStyles = (token: DesktopTokens) => ({
   paneItem: {
     alignItems: 'center' as const,
     flexDirection: 'row' as const,
-    gap: 10,
+    gap: t.space.sm + 2,
     height: PANE_ITEM_HEIGHT,
     justifyContent: 'flex-start' as const,
     marginBottom: PANE_ITEM_GAP,
-    paddingHorizontal: 12,
+    paddingHorizontal: t.space.md,
   },
   paneText: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.caption,
-    fontWeight: '500' as const,
+    ...t.type.subhead,
+    color: t.color.inkSecondary,
     textAlign: 'left' as const,
   },
-  paneTextActive: {color: token.color.ink},
+  paneTextActive: {color: t.color.ink, fontWeight: '500' as const},
   scroll: {flex: 1, minWidth: 0},
-  content: {paddingBottom: 32},
+  content: {
+    paddingBottom: t.space.section,
+    maxWidth: t.layout.listColumn,
+    width: '100%' as const,
+  },
   status: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.caption,
-    marginBottom: 10,
+    ...t.type.footnote,
+    color: t.color.inkSecondary,
+    marginBottom: t.space.sm + 2,
   },
   row: {
     alignItems: 'center' as const,
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 16,
-    borderBottomWidth: 1,
-    borderColor: token.color.line,
-    minHeight: 90,
-    padding: 20,
+    gap: t.space.lg,
+    borderTopWidth: 1,
+    borderColor: t.color.separator,
+    minHeight: 60,
+    paddingHorizontal: t.space.lg,
+    paddingVertical: t.space.md,
   },
-  rowCopy: {flexGrow: 1, flexShrink: 1, flexBasis: 220},
+  rowCopy: {flexGrow: 1, flexShrink: 1, flexBasis: 220, gap: t.space.xxs},
   rowControl: {marginLeft: 'auto' as const, maxWidth: '100%' as const},
-  rowTitle: {
-    color: token.color.ink,
-    fontFamily: token.font,
-    fontSize: 14,
-    fontWeight: '500' as const,
-  },
-  rowMeta: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.meta,
-    lineHeight: 19,
-    marginTop: 5,
-  },
-  action: {
-    backgroundColor: token.color.dark,
-    borderRadius: token.radius.control,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  actionText: {
-    color: token.color.white,
-    fontFamily: token.font,
-    fontSize: token.type.caption,
-    fontWeight: '600' as const,
-  },
-  pressed: {opacity: 0.78},
+  rowTitle: {...t.type.body, fontWeight: '500' as const, color: t.color.ink},
+  rowMeta: {...t.type.footnote, color: t.color.inkSecondary},
+  pressed: {opacity: t.motion.pressedOpacity},
   toggle: {
-    alignItems: 'center' as const,
-    borderColor: token.color.line,
-    borderRadius: TOGGLE_HEIGHT / 2,
-    borderWidth: 1,
+    backgroundColor: t.color.hairline,
+    borderRadius: t.radius.pill,
     height: TOGGLE_HEIGHT,
     justifyContent: 'center' as const,
-    paddingLeft: 3,
+    paddingHorizontal: TOGGLE_INSET,
     width: TOGGLE_WIDTH,
   },
-  toggleOn: {
-    backgroundColor: token.color.ink,
-    borderColor: token.color.ink,
-  },
+  toggleOn: {backgroundColor: t.color.ink},
   toggleThumb: {
-    backgroundColor: token.color.inkMuted,
-    borderRadius: TOGGLE_THUMB / 2,
+    // White knob on the off track in light; the light ink knob in dark.
+    backgroundColor: t.scheme === 'light' ? t.color.surface : t.color.ink,
+    borderRadius: t.radius.pill,
     height: TOGGLE_THUMB,
     width: TOGGLE_THUMB,
   },
-  toggleThumbOn: {backgroundColor: token.color.dark},
+  toggleThumbOn: {backgroundColor: t.color.onInk},
   toggleDisabled: {opacity: 0.4},
   segments: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 2,
-    backgroundColor: token.color.glassQuiet,
-    borderRadius: 10,
-    padding: 3,
+    gap: t.space.xxs,
+    backgroundColor: t.color.fill,
+    borderRadius: t.radius.pill,
+    padding: t.space.xxs,
   },
   segment: {
-    borderRadius: 10,
-    minHeight: 28,
+    borderRadius: t.radius.pill,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    minHeight: t.size.controlCompact - 2,
     justifyContent: 'center' as const,
-    paddingHorizontal: 10,
+    paddingHorizontal: t.space.md,
   },
-  segmentActive: {backgroundColor: token.color.glassStrong},
+  segmentHover: {backgroundColor: t.color.fill},
+  segmentActive: {
+    backgroundColor: t.color.fillSelected,
+    borderColor: t.color.separator,
+  },
   segmentText: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.caption,
-    fontWeight: '600' as const,
-    textTransform: 'capitalize' as const,
+    ...t.type.footnote,
+    fontWeight: '500' as const,
+    color: t.color.inkSecondary,
   },
-  segmentTextActive: {color: token.color.ink},
+  segmentTextActive: {color: t.color.ink},
 });

@@ -1,5 +1,5 @@
 import React, {useCallback, useLayoutEffect, useRef, useState} from 'react';
-import {Platform, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Platform, ScrollView, Text, View} from 'react-native';
 import {MaterialIcon} from '../ui/MaterialIcon';
 
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
@@ -8,11 +8,8 @@ import {FocusPressable} from '../ui/Pressable';
 import {OmiAvatar} from '../ui/OmiAvatar';
 import {ShippingPressable} from './ShippingPressable';
 import {useReduceMotion} from '../app/useReduceMotion';
-import {
-  type DesktopTokens,
-  useDesktopTheme,
-  useDesktopStyleSheets,
-} from './DesktopTheme';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import type {OmiTheme} from '../design/tokens';
 
 type Props = {
   submission: number;
@@ -36,8 +33,8 @@ export function DesktopChat({
   onLoadOlder,
   onSuggest,
 }: Props) {
-  const styles = useDesktopStyleSheets(createStyles);
-  const {tokens: token} = useDesktopTheme();
+  const styles = useOmiStyles(createStyles);
+  const theme = useOmiTheme();
   const list = useRef<ScrollView>(null);
   const follow = useRef(true);
   const userScrolling = useRef(false);
@@ -130,7 +127,7 @@ export function DesktopChat({
         <View style={styles.empty}>
           <OmiAvatar
             tone="ink"
-            inkColor={token.color.ink}
+            inkColor={theme.color.ink}
             size={72}
             motion="arrive"
             reduceMotion={reduceMotion}
@@ -158,7 +155,7 @@ export function DesktopChat({
                   <MaterialIcon
                     name="arrow_outward"
                     size={15}
-                    color={token.color.inkMuted}
+                    color={theme.color.inkSecondary}
                   />
                 </ShippingPressable>
               ))}
@@ -245,61 +242,63 @@ export function DesktopChat({
     </View>
   );
 }
-const createStyles = (token: DesktopTokens) =>
-  StyleSheet.create({
-    root: {flex: 1, width: '100%'},
-    history: {flex: 1},
-    messages: {padding: 20, gap: 20, flexGrow: 1},
-    empty: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      gap: 12,
-      padding: 24,
-    },
-    title: {
-      fontSize: 28,
-      letterSpacing: -0.6,
-      color: token.color.ink,
-      fontWeight: '500',
-      marginTop: 10,
-      textAlign: 'center',
-    },
-    emptyCopy: {textAlign: 'center', maxWidth: 400},
-    suggestions: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 10,
-      marginTop: 20,
-      alignSelf: 'stretch',
-    },
-    suggestion: {
-      flex: 1,
-      flexBasis: 180,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      padding: 16,
-      minHeight: 76,
-      borderRadius: 14,
-      borderColor: token.color.line,
-      borderWidth: 1,
-      overflow: 'hidden',
-    },
-    suggestionText: {
-      flex: 1,
-      fontSize: 12,
-      lineHeight: 19,
-      color: token.color.inkMuted,
-    },
-    muted: {fontSize: 13, lineHeight: 20, color: token.color.inkMuted},
-    earlier: {alignSelf: 'center', padding: 10},
-    error: {
-      color: token.color.ink,
-      padding: 18,
-      fontSize: 13,
-      lineHeight: 21,
-      borderTopWidth: 1,
-      borderColor: token.color.line,
-    },
-  });
+const createStyles = (t: OmiTheme) => ({
+  root: {flex: 1, width: '100%' as const},
+  history: {flex: 1},
+  messages: {
+    padding: t.space.xl,
+    gap: t.space.xl,
+    flexGrow: 1,
+    maxWidth: t.layout.chatColumn + 2 * t.space.xl,
+    width: '100%' as const,
+    alignSelf: 'center' as const,
+  },
+  empty: {
+    flex: 1,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    gap: t.space.md,
+    padding: t.space.xxl,
+  },
+  title: {
+    ...t.type.title,
+    color: t.color.ink,
+    marginTop: t.space.sm,
+    textAlign: 'center' as const,
+  },
+  emptyCopy: {textAlign: 'center' as const, maxWidth: 400},
+  suggestions: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    justifyContent: 'center' as const,
+    gap: t.space.sm,
+    marginTop: t.space.lg,
+    alignSelf: 'stretch' as const,
+  },
+  suggestion: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: t.space.sm,
+    minHeight: t.size.control,
+    paddingHorizontal: t.space.md + 2,
+    borderRadius: t.radius.pill,
+    borderColor: t.color.hairline,
+    borderWidth: 1,
+    overflow: 'hidden' as const,
+  },
+  suggestionText: {
+    ...t.type.subhead,
+    color: t.color.ink,
+  },
+  muted: {...t.type.subhead, color: t.color.inkSecondary},
+  earlier: {alignSelf: 'center' as const, padding: t.space.sm + 2},
+  error: {
+    ...t.type.subhead,
+    color: t.color.danger,
+    backgroundColor: t.color.dangerSurface,
+    margin: t.space.md,
+    paddingHorizontal: t.space.lg,
+    paddingVertical: t.space.md,
+    borderRadius: t.radius.row,
+  },
+});

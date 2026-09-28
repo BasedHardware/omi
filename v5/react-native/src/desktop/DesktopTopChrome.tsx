@@ -302,7 +302,7 @@ export function DesktopChrome({
                 top: 4,
                 bottom: 4,
                 left: 0,
-                borderRadius: 10,
+                borderRadius: 16,
                 backgroundColor: token.color.glassSelected,
                 transform: [{translateX: modePillX}],
                 width: modePillW,
@@ -470,7 +470,9 @@ export function DesktopChrome({
         }}
         style={styles.filterRow}>
         {desktopActivityFilters.map(id => {
-          const selected = id === filter;
+          // Filters belong to the Activity page: away from it (Settings,
+          // Recall search) no chip claims to be the current view.
+          const selected = id === filter && route === 'Home';
           return (
             <FocusPressable
               key={id}
@@ -629,7 +631,7 @@ const createStyles = (token: DesktopTokens) =>
       paddingHorizontal: 10,
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 12,
+      borderRadius: 16,
     },
     modeText: {fontSize: 12, color: token.color.inkMuted},
     modeTextActive: {color: token.color.ink},
@@ -677,7 +679,8 @@ const createStyles = (token: DesktopTokens) =>
       backgroundColor: token.color.glassStrong,
       borderWidth: 1,
       borderColor: token.color.line,
-      borderRadius: 14,
+      // The composer is a capsule (design language).
+      borderRadius: desktopOmnibarHeight / 2,
       flexDirection: 'row',
       gap: 8,
       height: desktopOmnibarHeight,
@@ -754,7 +757,9 @@ const createStyles = (token: DesktopTokens) =>
     },
     filterHit: {
       alignItems: 'center',
-      borderRadius: 14,
+      borderColor: 'transparent',
+      borderRadius: 15,
+      borderWidth: 1,
       flexDirection: 'row',
       gap: 7,
       height: 30,
@@ -763,6 +768,7 @@ const createStyles = (token: DesktopTokens) =>
     },
     filterHitSelected: {
       backgroundColor: token.color.glassSelected,
+      borderColor: token.color.line,
     },
     filterText: {
       color: token.color.inkMuted,
@@ -776,7 +782,7 @@ const createStyles = (token: DesktopTokens) =>
     groupBySlot: {flex: 1},
     groupBy: {
       alignItems: 'center',
-      borderRadius: 12,
+      borderRadius: 15,
       borderColor: token.color.line,
       borderWidth: 1,
       flexDirection: 'row',
@@ -785,7 +791,7 @@ const createStyles = (token: DesktopTokens) =>
     },
     groupHit: {
       alignItems: 'center',
-      borderRadius: 10,
+      borderRadius: 12,
       height: 24,
       justifyContent: 'center',
       paddingHorizontal: 10,

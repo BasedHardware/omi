@@ -5,6 +5,7 @@ import { AppRegistry, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { DesktopOnboarding } from "../../react-native/src/desktop/DesktopOnboarding";
 import { DesktopApp } from "../../react-native/src/desktop/DesktopApp";
+import { DesktopThemeProvider } from "../../react-native/src/desktop/DesktopTheme";
 import { Onboarding } from "../../react-native/src/ui/Onboarding";
 import { ConversationsPage } from "../../react-native/src/pages/Conversations";
 import { SettingsPage } from "../../react-native/src/pages/Settings";
@@ -60,6 +61,30 @@ const pick = <T extends string>(
 ): T | undefined =>
   allowed.find((item) => item.toLowerCase() === value?.toLowerCase());
 const desktopInitialRoute = pick(initialRouteParam, desktopRoutes);
+// Desktop-only review hooks: a Settings pane (`pane=account`), the v5 pages
+// interface (`ui=v5`) and its rail route (`v5route=conversations`).
+const desktopSettingsPanes = [
+  "General",
+  "Account & Plan",
+  "Transcription",
+  "Rewind",
+  "Alerts & Privacy",
+  "AI & Automation",
+  "Apps",
+  "About",
+] as const;
+const desktopInitialPane = desktopSettingsPanes.find((pane) =>
+  pane.toLowerCase().startsWith((params.get("pane") ?? "\u0000").toLowerCase())
+);
+const desktopUiVersion = params.get("ui") === "v5" ? "v5" : undefined;
+const desktopV5Route = pick(params.get("v5route"), [
+  "Home",
+  "Chat",
+  "Conversations",
+  "Rewind",
+  "Tasks",
+  "Settings",
+] as const);
 const desktopInitialFilter = pick(initialFilterParam, desktopFilters);
 const mobileInitialRoute = pick(initialRouteParam, mobileRoutes);
 const day = (offsetDays: number, hour: number, minute = 0) => {
@@ -326,6 +351,13 @@ function Preview() {
     onTaskEdit: (id: string, title: string) =>
       updateTask(id, (task) => ({ ...task, title, searchableText: title })),
   };
+  const onboardingProps = {
+    onSignIn: () => setSignedIn(true),
+    signingIn: false,
+    setupRequired: signedIn,
+    onCompleteSetup: () => setComplete(true),
+    onSignOut: () => setSignedIn(false),
+  };
   const desktop =
     surface === "desktop" || (complete && !surface.startsWith("mobile"));
   useEffect(() => {
@@ -375,6 +407,9 @@ function Preview() {
               initialRoute: desktopInitialRoute,
               initialActivityFilter: desktopInitialFilter,
               initialChatOpen: chatState !== null,
+              initialSettingsPane: desktopInitialPane,
+              initialUiVersion: desktopUiVersion,
+              initialV5Route: desktopV5Route,
               outcomes,
               readsPhase: outcomes ? "ready" : "unavailable",
               ...taskActions,
@@ -556,12 +591,14 @@ function Preview() {
               onViewTasks: () => setRoute("tasks"),
               onViewConversations: () => setRoute("chat"),
             })
-          : h(surface === "mobile-setup" ? Onboarding : DesktopOnboarding, {
-              onSignIn: () => setSignedIn(true),
-              signingIn: false,
-              setupRequired: signedIn,
-              onCompleteSetup: () => setComplete(true),
-              onSignOut: () => setSignedIn(false),
+          : surface === "mobile-setup"
+          ? h(Onboarding, onboardingProps)
+          : // The app mounts desktop onboarding inside DesktopThemeProvider
+            // (AppOrchestrator and DesktopApp's signed-out gate), so the
+            // preview does too: light glass gets dark ink.
+            h(DesktopThemeProvider, {
+              initialName: appearance,
+              children: h(DesktopOnboarding, onboardingProps),
             })
       )
     )

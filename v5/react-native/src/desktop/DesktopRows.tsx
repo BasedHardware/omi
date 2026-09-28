@@ -1,19 +1,16 @@
 import React, {memo} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {Text, View} from 'react-native';
 import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
 
 import {
   projectionTimestamp,
   type ConversationProjection,
   type DesktopReadProjection,
-  type MemoryProjection,
   type TaskProjection,
 } from '../desktopReadClient';
-import {
-  type DesktopTokens,
-  useDesktopTheme,
-  useDesktopStyleSheets,
-} from './DesktopTheme';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import type {OmiTheme} from '../design/tokens';
+import {OmiRow} from '../design/primitives';
 
 function timeLabel(item: DesktopReadProjection): string {
   const timestamp = projectionTimestamp(item);
@@ -26,22 +23,6 @@ function timeLabel(item: DesktopReadProjection): string {
   });
 }
 
-function RowGlyph({kind}: {kind: DesktopReadProjection['kind']}) {
-  const styles = useDesktopStyleSheets(createStyles);
-  const {tokens: token} = useDesktopTheme();
-  const name =
-    kind === 'conversation'
-      ? 'chat_bubble'
-      : kind === 'memory'
-      ? 'auto_awesome'
-      : 'check_circle';
-  return (
-    <View style={styles.glyph}>
-      <MaterialIcon color={token.color.ink} name={name} size={16} />
-    </View>
-  );
-}
-
 function conversationTitle(item: ConversationProjection): string {
   if (item.title !== '') {
     return item.title;
@@ -52,36 +33,32 @@ function conversationTitle(item: ConversationProjection): string {
 }
 
 export function SectionTitle({children}: {children: string}) {
-  const styles = useDesktopStyleSheets(createStyles);
-  return <Text style={styles.sectionTitle}>{children}</Text>;
-}
-
-export function EmptyCopy({children}: {children: string}) {
-  const styles = useDesktopStyleSheets(createStyles);
-  return <Text style={styles.emptyCopy}>{children}</Text>;
-}
-
-export function PageHeading({
-  title,
-  subtitle,
-  eyebrow,
-}: {
-  title: string;
-  subtitle: string;
-  eyebrow?: string;
-}) {
-  const styles = useDesktopStyleSheets(createStyles);
+  const styles = useOmiStyles(createCopyStyles);
   return (
-    <View style={styles.heading}>
-      {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-      <Text accessibilityRole="header" style={styles.pageTitle}>
-        {title}
-      </Text>
-      <Text style={styles.subtitle}>{subtitle}</Text>
-    </View>
+    <Text accessibilityRole="header" style={styles.sectionTitle}>
+      {children}
+    </Text>
   );
 }
 
+export function EmptyCopy({children}: {children: string}) {
+  const styles = useOmiStyles(createCopyStyles);
+  return <Text style={styles.emptyCopy}>{children}</Text>;
+}
+
+const createCopyStyles = (t: OmiTheme) => ({
+  sectionTitle: {
+    ...t.type.footnote,
+    fontWeight: '600' as const,
+    color: t.color.inkSecondary,
+  },
+  emptyCopy: {...t.type.subhead, color: t.color.inkSecondary},
+});
+
+/**
+ * Whole-surface empty or error state in the OmiPageState shape: a glyph, a
+ * title and one sentence on the page itself — never a filled, bordered slab.
+ */
 export function DesktopEmptyState({
   title,
   detail,
@@ -93,45 +70,74 @@ export function DesktopEmptyState({
   icon?: MaterialIconName;
   error?: boolean;
 }) {
-  const styles = useDesktopStyleSheets(createStyles);
-  const {tokens: token} = useDesktopTheme();
+  const styles = useOmiStyles(createEmptyStyles);
+  const theme = useOmiTheme();
   return (
     <View
       style={styles.emptyState}
       accessibilityRole={error ? 'alert' : undefined}>
-      <View style={styles.emptyGlyph}>
-        <MaterialIcon name={icon} size={24} color={token.color.inkMuted} />
-      </View>
+      <MaterialIcon
+        name={error ? 'info' : icon}
+        size={28}
+        color={theme.color.inkSecondary}
+      />
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyDetail}>{detail}</Text>
     </View>
   );
 }
 
+const createEmptyStyles = (t: OmiTheme) => ({
+  emptyState: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: t.space.sm,
+    minHeight: 240,
+    paddingVertical: t.space.section,
+    paddingHorizontal: t.space.xxl,
+  },
+  emptyTitle: {
+    ...t.type.headline,
+    color: t.color.ink,
+    textAlign: 'center' as const,
+  },
+  emptyDetail: {
+    ...t.type.subhead,
+    color: t.color.inkSecondary,
+    textAlign: 'center' as const,
+    maxWidth: 380,
+  },
+});
+
+const rowIcon = (
+  kind: DesktopReadProjection['kind'],
+): 'chat_bubble' | 'auto_awesome' | 'check_circle' =>
+  kind === 'conversation'
+    ? 'chat_bubble'
+    : kind === 'memory'
+    ? 'auto_awesome'
+    : 'check_circle';
+
+/**
+ * One row shape for every library entry (OmiRow: leading tile, title,
+ * subtitle, meta). The caller owns pressing; rows are clear at rest.
+ */
 export const ReadRow = memo(function ReadRow({
   item,
 }: {
   item: DesktopReadProjection;
 }) {
-  const styles = useDesktopStyleSheets(createStyles);
-  const meta =
-    item.kind === 'conversation'
-      ? [timeLabel(item), item.summary]
-      : item.kind === 'memory'
-      ? [timeLabel(item), 'Memory']
-      : [timeLabel(item)];
+  if (item.kind === 'conversation') {
+    return <ConversationRow item={item} />;
+  }
+  const time = timeLabel(item);
+  const kind = item.kind === 'memory' ? 'Memory' : 'Task';
   return (
-    <View style={styles.row}>
-      <RowGlyph kind={item.kind} />
-      <View style={styles.rowCopy}>
-        <Text numberOfLines={1} style={styles.rowTitle}>
-          {item.kind === 'conversation' ? conversationTitle(item) : item.title}
-        </Text>
-        <Text numberOfLines={2} style={styles.rowMeta}>
-          {meta.filter(part => part !== '').join(' · ')}
-        </Text>
-      </View>
-    </View>
+    <OmiRow
+      leadingIcon={rowIcon(item.kind)}
+      meta={time === '' ? kind : `${kind} · ${time}`}
+      title={item.title}
+    />
   );
 });
 
@@ -140,51 +146,28 @@ export const ConversationRow = memo(function ConversationRow({
 }: {
   item: ConversationProjection;
 }) {
-  const styles = useDesktopStyleSheets(createStyles);
+  const time = timeLabel(item);
   return (
-    <View style={styles.row}>
-      <RowGlyph kind="conversation" />
-      <View style={styles.rowCopy}>
-        <Text numberOfLines={1} style={styles.rowTitle}>
-          {conversationTitle(item)}
-        </Text>
-        <Text numberOfLines={2} style={styles.rowMeta}>
-          {[timeLabel(item), item.summary]
-            .filter(part => part !== '')
-            .join(' · ')}
-        </Text>
-      </View>
-    </View>
-  );
-});
-
-export const MemoryRow = memo(function MemoryRow({
-  item,
-}: {
-  item: MemoryProjection;
-}) {
-  const styles = useDesktopStyleSheets(createStyles);
-  return (
-    <View style={styles.memoryCard}>
-      <Text numberOfLines={3} style={styles.memoryText}>
-        {item.summary}
-      </Text>
-      <Text style={styles.rowMeta}>
-        {item.timestamp === null
-          ? 'Date unavailable'
-          : new Date(item.timestamp * 1000).toLocaleDateString()}
-      </Text>
-    </View>
+    <OmiRow
+      leadingIcon="chat_bubble"
+      meta={time === '' ? 'Conversation' : `Conversation · ${time}`}
+      subtitle={item.summary.trim() === '' ? undefined : item.summary}
+      title={conversationTitle(item)}
+    />
   );
 });
 
 export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
-  const styles = useDesktopStyleSheets(createStyles);
+  const styles = useOmiStyles(createTaskStyles);
+  const theme = useOmiTheme();
   return (
     <View style={styles.taskRow}>
       <View
-        style={[styles.taskCircle, item.completed && styles.taskCircleDone]}
-      />
+        style={[styles.taskCircle, item.completed && styles.taskCircleDone]}>
+        {item.completed ? (
+          <MaterialIcon name="check" size={12} color={theme.color.onInk} />
+        ) : null}
+      </View>
       <Text style={[styles.taskText, item.completed && styles.taskTextDone]}>
         {item.title}
       </Text>
@@ -192,135 +175,29 @@ export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
   );
 });
 
-const createStyles = (token: DesktopTokens) =>
-  StyleSheet.create({
-    heading: {gap: 10, paddingBottom: 24},
-    eyebrow: {
-      fontSize: 10,
-      letterSpacing: 1.4,
-      fontWeight: '600',
-      color: token.color.inkMuted,
-    },
-    pageTitle: {
-      fontSize: 29,
-      lineHeight: 36,
-      letterSpacing: -0.9,
-      fontWeight: '500',
-      color: token.color.ink,
-    },
-    subtitle: {fontSize: 14, lineHeight: 22, color: token.color.inkMuted},
-    emptyState: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 32,
-      minHeight: 240,
-      gap: 12,
-      backgroundColor: token.color.glassStrong,
-      borderWidth: 1,
-      borderColor: token.color.line,
-      borderRadius: 18,
-    },
-    emptyGlyph: {
-      width: 52,
-      height: 52,
-      borderRadius: 18,
-      backgroundColor: token.color.glassQuiet,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 6,
-    },
-    emptyTitle: {
-      fontSize: 19,
-      lineHeight: 26,
-      color: token.color.ink,
-      textAlign: 'center',
-      fontWeight: '500',
-    },
-    emptyDetail: {
-      fontSize: 13,
-      lineHeight: 21,
-      color: token.color.inkMuted,
-      textAlign: 'center',
-      maxWidth: 380,
-    },
-    row: {
-      alignItems: 'center',
-      flexDirection: 'row',
-      gap: 10,
-      minHeight: 64,
-      paddingVertical: 8,
-    },
-    glyph: {
-      alignItems: 'center',
-      backgroundColor: token.color.glassQuiet,
-      borderRadius: 12,
-      height: 30,
-      justifyContent: 'center',
-      width: 30,
-    },
-    rowCopy: {flex: 1},
-    rowTitle: {
-      color: token.color.ink,
-      fontFamily: token.font,
-      fontSize: 14,
-      fontWeight: '500',
-    },
-    rowMeta: {
-      color: token.color.inkMuted,
-      fontFamily: token.font,
-      fontSize: token.type.meta,
-      lineHeight: 19,
-      marginTop: 2,
-    },
-    sectionTitle: {
-      color: token.color.inkMuted,
-      fontFamily: token.font,
-      fontSize: token.type.caption,
-      fontWeight: '600',
-      marginTop: 0,
-    },
-    emptyCopy: {
-      color: token.color.inkMuted,
-      fontFamily: token.font,
-      fontSize: token.type.meta,
-      lineHeight: 18,
-      marginTop: 6,
-    },
-    memoryCard: {
-      backgroundColor: token.color.glassQuiet,
-      borderRadius: 16,
-      marginBottom: 10,
-      padding: 14,
-    },
-    memoryText: {
-      color: token.color.ink,
-      fontFamily: token.font,
-      fontSize: token.type.body,
-      lineHeight: 20,
-    },
-    taskRow: {
-      alignItems: 'center',
-      flexDirection: 'row',
-      gap: 12,
-      minHeight: 44,
-    },
-    taskCircle: {
-      borderColor: token.color.inkMuted,
-      borderRadius: 11,
-      borderWidth: 1.5,
-      height: 22,
-      width: 22,
-    },
-    taskCircleDone: {backgroundColor: token.color.ink},
-    taskText: {
-      flex: 1,
-      lineHeight: 22,
-      color: token.color.ink,
-      fontFamily: token.font,
-      fontSize: token.type.body,
-    },
-    taskTextDone: {
-      color: token.color.inkFaint,
-      textDecorationLine: 'line-through',
-    },
-  });
+const createTaskStyles = (t: OmiTheme) => ({
+  taskRow: {
+    alignItems: 'center' as const,
+    flexDirection: 'row' as const,
+    gap: t.space.md,
+    minHeight: 40,
+  },
+  taskCircle: {
+    alignItems: 'center' as const,
+    borderColor: t.color.hairline,
+    borderRadius: t.radius.pill,
+    borderWidth: 1.5,
+    height: 20,
+    justifyContent: 'center' as const,
+    width: 20,
+  },
+  taskCircleDone: {
+    backgroundColor: t.color.inkSecondary,
+    borderColor: 'transparent',
+  },
+  taskText: {flex: 1, ...t.type.body, color: t.color.ink},
+  taskTextDone: {
+    color: t.color.inkSecondary,
+    textDecorationLine: 'line-through' as const,
+  },
+});

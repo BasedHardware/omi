@@ -1,7 +1,10 @@
 import React from 'react';
-import {ScrollView, StyleSheet, Text, View} from 'react-native';
+import {ScrollView, Text, View} from 'react-native';
 import {MaterialIcon, type MaterialIconName} from '../../ui/MaterialIcon';
-import {Pressable} from '../../ui/Pressable';
+import {FocusPressable} from '../../ui/Pressable';
+import {OmiPageState, OmiRow} from '../../design/primitives';
+import {useOmiStyles, useOmiTheme} from '../../design/OmiTheme';
+import type {OmiTheme} from '../../design/tokens';
 
 import type {
   DesktopReadOutcomes,
@@ -9,13 +12,7 @@ import type {
   MemoryProjection,
   TaskProjection,
 } from '../../desktopReadClient';
-import {OmiLoadingMark} from '../../ui/OmiLoadingMark';
 import {type ActivityFilterId, type TimelineGrouping} from '../desktopChrome';
-import {
-  type DesktopTokens,
-  useDesktopTheme,
-  useDesktopStyleSheets,
-} from '../DesktopTheme';
 
 type EntryKind = 'conversation' | 'memory' | 'task' | 'capture';
 
@@ -398,10 +395,25 @@ const kindMeta: Record<EntryKind, {icon: MaterialIconName; label: string}> = {
   capture: {icon: 'monitor', label: 'Recall'},
 };
 
+function emptyTitle(filter: ActivityFilterId): string {
+  switch (filter) {
+    case 'conversations':
+      return 'No Conversations Yet';
+    case 'recall':
+      return 'No Screen History Yet';
+    case 'tasks':
+      return 'No Tasks Yet';
+    default:
+      return 'Nothing Here Yet';
+  }
+}
+
 /**
  * Unified activity timeline: one chronological feed of conversations,
  * memories, tasks, and recall capture groups — like the mobile app's day view.
- * The standalone Activity page owns the filters; this renders the merged feed.
+ * The standalone Activity page owns the filters; this renders the merged feed
+ * in a centered list column. Every entry uses the same row shape (OmiRow:
+ * leading tile, title, subtitle, meta) and group headers are quiet labels.
  */
 export function UnifiedTimeline({
   outcomes,
@@ -411,6 +423,7 @@ export function UnifiedTimeline({
   filter = 'all',
   groupBy = 'date',
   onOpenEntry,
+  onRetry,
   header,
 }: {
   outcomes: DesktopReadOutcomes | null;
@@ -421,11 +434,13 @@ export function UnifiedTimeline({
   /** How entries collapse into sections: by day, kind, or shared topic. */
   groupBy?: TimelineGrouping;
   onOpenEntry?: (entry: TimelineEntry) => void;
+  /** Retries a failed read; offered when nothing could be loaded at all. */
+  onRetry?: () => void;
   /** Optional content rendered above the feed inside the scroll view. */
   header?: React.ReactNode;
 }) {
-  const styles = useDesktopStyleSheets(createStyles);
-  const {tokens: token} = useDesktopTheme();
+  const styles = useOmiStyles(createStyles);
+  const theme = useOmiTheme();
   const {entries, failures} = mergeTimeline(outcomes, query, captures, filter);
   const sections = React.useMemo(
     () => groupTimelineSections(entries, groupBy),
@@ -444,65 +459,33 @@ export function UnifiedTimeline({
     });
   };
   const renderEntry = (entry: TimelineEntry): React.ReactNode => {
-    const meta = kindMeta[entry.kind].icon;
-    // Memories are single-voice like the mobile app's memory cards: the
-    // sentence is the row (title and summary carry the same text from both
-    // backends), so no boxed icon and no duplicated second text line.
-    const body =
-      entry.kind === 'memory' ? (
-        <View style={styles.memoryRow}>
-          <MaterialIcon
-            name={meta}
-            size={13}
-            color={token.color.inkMuted}
-            style={styles.memoryLeadingIcon}
-          />
-          <View style={styles.rowBody}>
-            <Text style={styles.memoryText} numberOfLines={3}>
-              {entry.title.trim() !== '' ? entry.title : 'Memory'}
-            </Text>
-            <Text style={styles.rowMeta}>
-              {kindMeta[entry.kind].label}
-              {entry.atMs === 0 ? '' : ` · ${timeLabel(entry.atMs)}`}
-            </Text>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.row}>
-          <View style={styles.rowIcon}>
-            <MaterialIcon name={meta} size={16} color={token.color.inkMuted} />
-          </View>
-          <View style={styles.rowBody}>
-            <Text style={styles.rowTitle} numberOfLines={1}>
-              {entry.title}
-            </Text>
-            {entry.detail.trim() !== '' ? (
-              <Text style={styles.rowDetail} numberOfLines={2}>
-                {entry.detail}
-              </Text>
-            ) : null}
-            <Text style={styles.rowMeta}>
-              {kindMeta[entry.kind].label}
-              {entry.atMs === 0 ? '' : ` · ${timeLabel(entry.atMs)}`}
-            </Text>
-          </View>
-        </View>
-      );
+    const kind = kindMeta[entry.kind];
+    const meta =
+      entry.atMs === 0
+        ? kind.label
+        : `${kind.label} · ${timeLabel(entry.atMs)}`;
+    // Memories are single-voice (title and summary carry the same sentence
+    // from both backends), so the sentence is the title and there is no
+    // subtitle — but the row keeps the same shape as every other entry.
+    const subtitle =
+      entry.kind === 'memory' || entry.detail.trim() === ''
+        ? undefined
+        : entry.detail;
     return (
-      <View key={entry.id}>
-        {onOpenEntry ? (
-          <Pressable
-            accessibilityLabel={`${kindMeta[entry.kind].label} ${entry.title}`}
-            style={styles.rowPress}
-            onPress={() => onOpenEntry(entry)}>
-            {body}
-          </Pressable>
-        ) : (
-          body
-        )}
-      </View>
+      <OmiRow
+        key={entry.id}
+        accessibilityLabel={`${kind.label} ${entry.title}`}
+        leadingIcon={kind.icon}
+        meta={meta}
+        onPress={onOpenEntry ? () => onOpenEntry(entry) : undefined}
+        subtitle={subtitle}
+        title={entry.title}
+      />
     );
   };
+  // Nothing could be read at all (no outcomes and not loading): say so and
+  // offer Try Again. Failed reads never claim an empty timeline.
+  const unavailable = outcomes === null && !loading;
   return (
     <View style={styles.root}>
       <ScrollView
@@ -511,44 +494,76 @@ export function UnifiedTimeline({
         contentContainerStyle={styles.content}>
         {header}
         {loading && entries.length === 0 ? (
-          <View style={styles.loading}>
-            <OmiLoadingMark inkColor={token.color.ink} size={56} />
-            <Text style={styles.empty}>Gathering your timeline…</Text>
-          </View>
+          <OmiPageState kind="loading" label="Gathering your timeline…" />
+        ) : unavailable ? (
+          <OmiPageState
+            kind="error"
+            title="Couldn’t Load Your Activity"
+            message="Some of your history isn't loaded yet."
+            onRetry={onRetry}
+          />
         ) : entries.length === 0 && failures.length === 0 ? (
-          <Text style={styles.empty}>
-            {query.trim() !== ''
-              ? 'Nothing in your timeline matches yet.'
-              : 'Your timeline fills in as Omi captures your day.'}
-          </Text>
+          query.trim() !== '' ? (
+            <OmiPageState
+              kind="empty"
+              icon="search"
+              title="No Matches"
+              message="Nothing in your timeline matches yet."
+            />
+          ) : (
+            <OmiPageState
+              kind="empty"
+              icon={filter === 'all' ? 'view_timeline' : filterIcon[filter]}
+              title={emptyTitle(filter)}
+              message="Your timeline fills in as Omi captures your day."
+            />
+          )
         ) : null}
-        {failures.map(failure => (
-          <Text key={failure} style={styles.failure}>
-            {failure}
-          </Text>
-        ))}
+        {failures.length > 0 ? (
+          <View accessibilityRole="alert" style={styles.failures}>
+            <MaterialIcon
+              name="info"
+              size={theme.size.iconSmall}
+              color={theme.color.danger}
+            />
+            <View style={styles.failureLines}>
+              {failures.map(failure => (
+                <Text key={failure} style={styles.failure}>
+                  {failure}
+                </Text>
+              ))}
+            </View>
+          </View>
+        ) : null}
         {sections.map(section => {
           const isCollapsed = collapsed.has(section.key);
           return (
             <View key={section.key}>
-              <Pressable
+              <FocusPressable
                 accessibilityLabel={`${isCollapsed ? 'Expand' : 'Collapse'} ${
                   section.label
                 } section`}
                 accessibilityRole="button"
-                style={styles.sectionHeader}
+                accessibilityState={{expanded: !isCollapsed}}
+                style={state => [
+                  styles.sectionHeader,
+                  (state as {hovered?: boolean}).hovered &&
+                    styles.sectionHeaderHovered,
+                ]}
                 onPress={() => toggleSection(section.key)}>
-                <MaterialIcon
-                  name="expand_more"
-                  size={16}
-                  color={token.color.inkMuted}
-                  style={isCollapsed ? styles.chevronClosed : undefined}
-                />
-                <Text style={styles.sectionLabel}>{section.label}</Text>
+                <Text accessibilityRole="header" style={styles.sectionLabel}>
+                  {section.label}
+                </Text>
                 <Text style={styles.sectionCount}>
                   {section.entries.length}
                 </Text>
-              </Pressable>
+                <MaterialIcon
+                  name="expand_more"
+                  size={theme.size.iconSmall}
+                  color={theme.color.inkSecondary}
+                  style={isCollapsed ? styles.chevronClosed : undefined}
+                />
+              </FocusPressable>
               {isCollapsed
                 ? null
                 : section.entries.map(entry => renderEntry(entry))}
@@ -560,124 +575,59 @@ export function UnifiedTimeline({
   );
 }
 
-const createStyles = (token: DesktopTokens) =>
-  StyleSheet.create({
-    root: {flex: 1},
-    content: {
-      paddingHorizontal: 8,
-      paddingBottom: 24,
-      maxWidth: 860,
-      width: '100%',
-      alignSelf: 'center',
-    },
-    sectionHeader: {
-      alignItems: 'center',
-      backgroundColor: token.color.glassQuiet,
-      borderColor: token.color.line,
-      borderRadius: 10,
-      borderWidth: 1,
-      flexDirection: 'row',
-      gap: 8,
-      marginTop: 18,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-    },
-    sectionLabel: {
-      color: token.color.ink,
-      flex: 1,
-      fontFamily: token.font,
-      fontSize: 12,
-      fontWeight: '600',
-      letterSpacing: 0.4,
-      textTransform: 'uppercase',
-    },
-    sectionCount: {
-      color: token.color.inkMuted,
-      fontFamily: token.font,
-      fontSize: 11,
-      fontVariant: ['tabular-nums'],
-    },
-    chevronClosed: {transform: [{rotate: '-90deg'}]},
-    day: {
-      color: token.color.inkMuted,
-      fontFamily: token.font,
-      fontSize: 12,
-      fontWeight: '600',
-      letterSpacing: 0.4,
-      marginTop: 22,
-      marginBottom: 8,
-      textTransform: 'uppercase',
-    },
-    row: {
-      flexDirection: 'row',
-      gap: 12,
-      paddingVertical: 10,
-      alignItems: 'flex-start',
-    },
-    rowPress: {
-      borderRadius: 12,
-      paddingHorizontal: 6,
-      marginHorizontal: -6,
-    },
-    rowIcon: {
-      width: 30,
-      height: 30,
-      borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: token.color.glassQuiet,
-    },
-    rowBody: {flex: 1, minWidth: 0},
-    memoryRow: {
-      alignItems: 'flex-start',
-      flexDirection: 'row',
-      gap: 8,
-      paddingVertical: 10,
-    },
-    memoryLeadingIcon: {marginTop: 3},
-    memoryText: {
-      color: token.color.ink,
-      fontFamily: token.font,
-      fontSize: 14,
-      fontWeight: '400',
-      lineHeight: 20,
-    },
-    rowTitle: {
-      color: token.color.ink,
-      fontFamily: token.font,
-      fontSize: token.type.body,
-      fontWeight: '600',
-    },
-    rowDetail: {
-      color: token.color.inkMuted,
-      fontFamily: token.font,
-      fontSize: 13,
-      lineHeight: 19,
-      marginTop: 2,
-    },
-    rowMeta: {
-      color: token.color.inkFaint,
-      fontFamily: token.font,
-      fontSize: 11,
-      marginTop: 4,
-    },
-    empty: {
-      color: token.color.inkMuted,
-      fontFamily: token.font,
-      fontSize: token.type.body,
-      lineHeight: 22,
-      paddingVertical: 32,
-      textAlign: 'center',
-    },
-    loading: {
-      alignItems: 'center',
-      paddingTop: 24,
-    },
-    failure: {
-      color: token.color.red,
-      fontFamily: token.font,
-      fontSize: 12,
-      paddingBottom: 8,
-      textAlign: 'center',
-    },
-  });
+const filterIcon: Record<ActivityFilterId, MaterialIconName> = {
+  all: 'view_timeline',
+  conversations: 'chat_bubble',
+  recall: 'history',
+  tasks: 'checklist',
+};
+
+const createStyles = (t: OmiTheme) => ({
+  root: {flex: 1},
+  // The feed reads as one centered list column; the chrome above keeps its
+  // own width.
+  content: {
+    paddingHorizontal: t.layout.pageGutter.desktop,
+    paddingBottom: t.space.xxl,
+    maxWidth: t.layout.listColumn + 2 * t.layout.pageGutter.desktop,
+    width: '100%' as const,
+    alignSelf: 'center' as const,
+  },
+  sectionHeader: {
+    alignItems: 'center' as const,
+    borderRadius: t.radius.badge,
+    flexDirection: 'row' as const,
+    gap: t.space.xs + 2,
+    marginTop: t.space.lg,
+    marginBottom: t.space.xs,
+    paddingLeft: t.space.sm,
+    paddingRight: t.space.xs,
+    paddingVertical: t.space.xs,
+  },
+  sectionHeaderHovered: {backgroundColor: t.color.fill},
+  sectionLabel: {
+    flex: 1,
+    ...t.type.footnote,
+    fontWeight: '600' as const,
+    color: t.color.inkSecondary,
+  },
+  sectionCount: {
+    ...t.type.caption,
+    color: t.color.inkSecondary,
+    fontVariant: ['tabular-nums' as const],
+    fontWeight: '400' as const,
+  },
+  chevronClosed: {transform: [{rotate: '-90deg'}]},
+  failures: {
+    alignItems: 'flex-start' as const,
+    backgroundColor: t.color.dangerSurface,
+    borderRadius: t.radius.row,
+    flexDirection: 'row' as const,
+    gap: t.space.sm,
+    marginTop: t.space.md,
+    paddingHorizontal: t.space.md,
+    paddingVertical: t.space.sm + 2,
+  },
+  failureLines: {flex: 1, gap: t.space.xxs},
+  failure: {...t.type.subhead, color: t.color.danger},
+});

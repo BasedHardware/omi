@@ -17,6 +17,7 @@ import {
   desktopWindowInset,
   type ActivityFilterId,
   type DesktopSession,
+  type DesktopSettingsPane,
   type TimelineGrouping,
 } from './desktopChrome';
 import {
@@ -29,6 +30,7 @@ import {DesktopThemeProvider, type DesktopThemeName} from './DesktopTheme';
 import {DesktopActivity} from './DesktopActivity';
 import type {CaptureGroupSummary} from './timeline/UnifiedTimeline';
 import {DesktopShellV5} from './DesktopShellV5';
+import type {DesktopRouteV5} from './DesktopChromeV5';
 import type {TaskMutationProps} from '../ui/TaskEditor';
 import {DesktopSettings} from './DesktopSettings';
 import type {
@@ -54,6 +56,9 @@ import {useDesktopTheme, useDesktopStyleSheets} from './DesktopTheme';
 import type {DesktopTokens} from './tokens';
 import {FocusPressable} from '../ui/Pressable';
 import {MaterialIcon} from '../ui/MaterialIcon';
+import {useOmiStyles} from '../design/OmiTheme';
+import {OmiButton} from '../design/primitives';
+import type {OmiTheme} from '../design/tokens';
 
 export type {DesktopSession};
 
@@ -130,6 +135,10 @@ type Props = TaskMutationProps & {
   initialRoute?: DesktopRoute;
   initialActivityFilter?: ActivityFilterId;
   initialChatOpen?: boolean;
+  initialSettingsPane?: DesktopSettingsPane;
+  /** Pins the interface revision over the saved preference (previews). */
+  initialUiVersion?: DesktopUiVersion;
+  initialV5Route?: DesktopRouteV5;
 };
 
 export function DesktopApp({
@@ -160,6 +169,9 @@ export function DesktopApp({
   initialRoute = 'Home',
   initialActivityFilter = 'all',
   initialChatOpen = false,
+  initialSettingsPane,
+  initialUiVersion,
+  initialV5Route,
   onAppearanceChange,
   captureAutoStart = false,
   outcomes,
@@ -183,7 +195,9 @@ export function DesktopApp({
   );
   const [groupBy, setGroupBy] = useState<TimelineGrouping>('date');
   // Interface revision: v5 keeps the pages IA selectable from Settings.
-  const [uiVersion, setUiVersion] = useState<DesktopUiVersion>('v5.1');
+  const [uiVersion, setUiVersion] = useState<DesktopUiVersion>(
+    initialUiVersion ?? 'v5.1',
+  );
   // Saved-v5 users would see one paint of v5.1 chrome before preferences
   // resolve; hold the loading mark until the first read settles.
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -211,7 +225,7 @@ export function DesktopApp({
       .then(prefs => {
         if (!cancelled) {
           setExploreDone(parseExploreProgress(prefs?.exploreProgress));
-          setUiVersion(prefs?.uiVersion ?? 'v5.1');
+          setUiVersion(initialUiVersion ?? prefs?.uiVersion ?? 'v5.1');
           setPrefsLoaded(true);
         }
       })
@@ -224,6 +238,8 @@ export function DesktopApp({
     return () => {
       cancelled = true;
     };
+    // Initial props seed state once; later preference reads own it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => clearGuideTimer, [clearGuideTimer]);
 
@@ -370,7 +386,6 @@ export function DesktopApp({
   // empty window (traffic-light spacer only) and a signed-out Mac sees the
   // same Welcome as every other surface — never nav pills, an omnibar, Home
   // cards, Settings, or empty-state lists.
-  const overlayStyles = useDesktopStyleSheets(createOverlayStyles);
   if (hostMode && session !== 'ready') {
     return null;
   }
@@ -452,6 +467,7 @@ export function DesktopApp({
             readsPhase={readsPhase}
             session={session}
             signingIn={signingIn}
+            initialRoute={initialV5Route}
             {...taskMutationsRest}
           />
         </DesktopRoot>
@@ -566,38 +582,29 @@ export function DesktopApp({
                   session={session}
                   signingIn={signingIn}
                   softwarePlaneLocked={chatBusy}
+                  initialPane={initialSettingsPane}
                 />
               </View>
             )}
           </ShippingStage>
           {chatOpen ? (
-            <View
-              accessibilityLabel="Chat overlay"
-              style={overlayStyles.chatOverlay}>
-              <FocusPressable
-                accessibilityLabel="Close chat"
-                accessibilityRole="button"
-                onPress={closeChat}
-                style={overlayStyles.chatScrim}
+            <ChatOverlay onClose={closeChat}>
+              <DesktopChat
+                submission={chatSubmission}
+                messages={messages}
+                busy={chatBusy || activeGenerationId !== null}
+                onSuggest={prompt => {
+                  setMode('Ask');
+                  onDraftChange(prompt);
+                  omnibarRef.current?.focus();
+                }}
+                error={chatNotice}
+                hasOlder={hasOlderChat}
+                loadingOlder={loadingOlderChat}
+                loadingHistory={loadingHistory}
+                onLoadOlder={onLoadOlderChat}
               />
-              <View style={overlayStyles.chatPanel}>
-                <DesktopChat
-                  submission={chatSubmission}
-                  messages={messages}
-                  busy={chatBusy || activeGenerationId !== null}
-                  onSuggest={prompt => {
-                    setMode('Ask');
-                    onDraftChange(prompt);
-                    omnibarRef.current?.focus();
-                  }}
-                  error={chatNotice}
-                  hasOlder={hasOlderChat}
-                  loadingOlder={loadingOlderChat}
-                  loadingHistory={loadingHistory}
-                  onLoadOlder={onLoadOlderChat}
-                />
-              </View>
-            </View>
+            </ChatOverlay>
           ) : null}
         </View>
         {postSetupHomeCue === 'proven' &&
@@ -675,13 +682,12 @@ function InlineAskCard({
           </Text>
         </View>
       )}
-      <FocusPressable
-        accessibilityLabel="Open chat"
-        accessibilityRole="button"
+      <OmiButton
+        compact
+        label="Open Chat"
         onPress={onOpenChat}
-        style={({pressed}) => [styles.openChat, pressed && styles.pressed]}>
-        <Text style={styles.openChatText}>Open chat</Text>
-      </FocusPressable>
+        style={styles.openChat}
+      />
     </View>
   );
 }
@@ -691,10 +697,10 @@ const createInlineStyles = (token: DesktopTokens) =>
     card: {
       backgroundColor: token.color.dark,
       borderColor: token.color.lineStrong,
-      borderRadius: 14,
+      borderRadius: 18,
       borderWidth: 1,
       gap: 8,
-      padding: 12,
+      padding: 14,
     },
     cardHead: {
       alignItems: 'center',
@@ -704,10 +710,8 @@ const createInlineStyles = (token: DesktopTokens) =>
     cardTitle: {
       color: token.color.inkMuted,
       fontFamily: token.font,
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '600',
-      letterSpacing: 0.4,
-      textTransform: 'uppercase',
     },
     close: {
       alignItems: 'center',
@@ -739,19 +743,7 @@ const createInlineStyles = (token: DesktopTokens) =>
       fontSize: 13,
       lineHeight: 18,
     },
-    openChat: {
-      alignSelf: 'flex-start',
-      backgroundColor: token.color.glassSelected,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-    },
-    openChatText: {
-      color: token.color.ink,
-      fontFamily: token.font,
-      fontSize: 12,
-      fontWeight: '600',
-    },
+    openChat: {alignSelf: 'flex-start'},
     pressed: {opacity: 0.7},
   });
 
@@ -783,30 +775,50 @@ const styles = StyleSheet.create({
   stage: {flex: 1},
 });
 
-const createOverlayStyles = (token: DesktopTokens) =>
-  StyleSheet.create({
-    chatOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      zIndex: 20,
-    },
-    chatScrim: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor:
-        token.color.ink === '#F2F4EF'
-          ? 'rgba(0, 0, 0, 0.35)'
-          : 'rgba(29, 31, 27, 0.24)',
-    },
-    chatPanel: {
-      alignSelf: 'center',
-      backgroundColor: token.color.dark,
-      borderColor: token.color.lineStrong,
-      borderRadius: 18,
-      borderWidth: 1,
-      flex: 1,
-      marginVertical: 4,
-      maxHeight: 720,
-      maxWidth: 780,
-      overflow: 'hidden',
-      width: '100%',
-    },
-  });
+// The chat overlay renders inside DesktopThemeProvider (DesktopApp itself
+// mounts the provider), so its surface and scrim follow the appearance: a
+// light surface with dark ink in light, the dark surface in dark.
+function ChatOverlay({
+  children,
+  onClose,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  const overlayStyles = useOmiStyles(createOverlayStyles);
+  return (
+    <View accessibilityLabel="Chat overlay" style={overlayStyles.chatOverlay}>
+      <FocusPressable
+        accessibilityLabel="Close chat"
+        accessibilityRole="button"
+        onPress={onClose}
+        style={overlayStyles.chatScrim}
+      />
+      <View style={overlayStyles.chatPanel}>{children}</View>
+    </View>
+  );
+}
+
+const createOverlayStyles = (t: OmiTheme) => ({
+  chatOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+  },
+  chatScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: t.color.scrim,
+  },
+  chatPanel: {
+    alignSelf: 'center' as const,
+    backgroundColor: t.color.surface,
+    borderColor: t.color.separator,
+    borderRadius: t.radius.card,
+    borderWidth: 1,
+    flex: 1,
+    marginVertical: t.space.xs,
+    maxHeight: 720,
+    maxWidth: t.layout.chatColumn + 2 * t.space.page,
+    overflow: 'hidden' as const,
+    width: '100%' as const,
+  },
+});

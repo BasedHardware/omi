@@ -34,6 +34,8 @@ import {
   useDesktopTheme,
   useDesktopStyleSheets,
 } from './DesktopTheme';
+import {OmiButton, OmiChip} from '../design/primitives';
+import {omiLayout} from '../design/tokens';
 
 export function LibraryPage({
   outcomes,
@@ -212,9 +214,10 @@ export function LibraryPage({
                   }`}
                   key={`${item.kind}:${item.id}`}
                   onPress={() => setSelectedId(`${item.kind}:${item.id}`)}
-                  style={({pressed}) => [
+                  style={state => [
                     styles.libraryRow,
-                    pressed && styles.selectedRow,
+                    (state as {hovered?: boolean}).hovered && styles.hoverRow,
+                    state.pressed && styles.selectedRow,
                   ]}>
                   {item.kind === 'conversation' ? (
                     <ConversationRow item={item} />
@@ -337,15 +340,14 @@ export function TasksPage({
                         <TaskRow item={item} />
                       </FocusPressable>
                       {writesAvailable && onTaskEdit && editable && (
-                        <FocusPressable
-                          accessibilityRole="button"
+                        <OmiButton
                           accessibilityLabel={`Edit task: ${item.title}`}
+                          compact
                           disabled={busyTaskId !== null}
-                          accessibilityState={{disabled: busyTaskId !== null}}
+                          label="Edit"
                           onPress={() => setEditingId(item.id)}
-                          style={styles.taskEdit}>
-                          <Text style={styles.rowMeta}>Edit</Text>
-                        </FocusPressable>
+                          variant="plain"
+                        />
                       )}
                     </View>
                     {editingId === item.id &&
@@ -485,18 +487,12 @@ export function AppsPage({session}: {session: DesktopSession}) {
       <View accessibilityRole="tablist" style={styles.galleryTabs}>
         {(['AI assistants', 'Connect data', 'Your apps'] as const).map(
           label => (
-            <FocusPressable
+            <OmiChip
               key={label}
-              accessibilityRole="tab"
-              accessibilityLabel={label}
-              accessibilityState={{selected: section === label}}
+              label={label}
               onPress={() => setSection(label)}
-              style={[
-                styles.galleryTab,
-                section === label && styles.galleryTabActive,
-              ]}>
-              <Text style={styles.rowTitle}>{label}</Text>
-            </FocusPressable>
+              selected={section === label}
+            />
           ),
         )}
       </View>
@@ -546,26 +542,19 @@ export function AppsPage({session}: {session: DesktopSession}) {
 const createStyles = (token: DesktopTokens) =>
   StyleSheet.create({
     page: {flex: 1, paddingHorizontal: 24, paddingTop: 8},
-    libraryRow: {
-      paddingHorizontal: 18,
-      paddingVertical: 6,
-      borderRadius: 14,
-      backgroundColor: token.color.glassStrong,
-      borderWidth: 1,
-      borderColor: token.color.line,
-      marginBottom: 8,
-    },
+    // Rows are clear at rest, fill on hover (design language: lists are
+    // rows, not slabs).
+    libraryRow: {borderRadius: 12},
+    hoverRow: {backgroundColor: token.color.glassQuiet},
     selectedRow: {backgroundColor: token.color.glassSelected},
     galleryStage: {flexBasis: 'auto', flexGrow: 0, flexShrink: 0},
     galleryTabs: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 8,
+      gap: 4,
       paddingHorizontal: 0,
       paddingVertical: 8,
     },
-    galleryTab: {paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12},
-    galleryTabActive: {backgroundColor: token.color.glassSelected},
     galleryContent: {
       paddingVertical: 24,
       maxWidth: 1040,
@@ -604,7 +593,13 @@ const createStyles = (token: DesktopTokens) =>
     },
     hubTextActive: {color: token.color.ink},
     list: {flex: 1},
-    listContent: {paddingBottom: 24, paddingTop: 4},
+    listContent: {
+      paddingBottom: 24,
+      paddingTop: 4,
+      maxWidth: omiLayout.listColumn,
+      width: '100%',
+      alignSelf: 'center',
+    },
     pageTitle: {
       color: token.color.ink,
       fontFamily: token.font,
@@ -665,17 +660,16 @@ const createStyles = (token: DesktopTokens) =>
       width: '50%',
       maxWidth: 360,
     },
+    // Cards on glass: a quiet fill, no border, no shadow.
     appCard: {
       minHeight: 200,
-      backgroundColor: token.color.glassStrong,
-      borderColor: token.color.line,
-      borderWidth: 1,
-      borderRadius: 18,
+      backgroundColor: token.color.glassQuiet,
+      borderRadius: 22,
       padding: 22,
     },
     appIcon: {
       alignItems: 'center',
-      backgroundColor: token.color.glassStrong,
+      backgroundColor: token.color.glassQuiet,
       borderRadius: 12,
       height: 40,
       justifyContent: 'center',
