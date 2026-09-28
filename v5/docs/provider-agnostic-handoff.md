@@ -4,7 +4,7 @@ Updated 2026-09-07. Production readiness remains open. The user authorizes paral
 
 ## Cursor Cloud continuation: Recall and legacy backend
 
-The user requested moving ongoing work to Cursor Cloud so their Mac can be closed. Start from BasedHardware/omi branch v5, not main. Preserve the v5 React Native and Objective-C++ architecture; consult main read-only for product parity and existing wire contracts. Commit logical verified changes and push to v5; never force-push, merge main, or deploy production. Use existing authenticated resources only; do not purchase access or copy local credentials into the cloud.
+Historical handoff from before the v5 subtree import: the user requested moving ongoing work to Cursor Cloud so their Mac could be closed. Its branch and push instructions are obsolete. Current development happens in `BasedHardware/omi` `main` through normal pull requests. Preserve the v5 React Native and Objective-C++ architecture; never force-push or deploy production. Use existing authenticated resources only; do not purchase access or copy local credentials into the cloud.
 
 The preceding commit 63d8a0e1c6 restored old backend conversations, memories, tasks and chat contracts and an explicit Old backend / New backend Settings toggle. Keep both operational; the user reported malformed responses everywhere. Missing new backend configuration must remain an explicit error, not silent fallback.
 

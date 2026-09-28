@@ -21,7 +21,7 @@ export interface GroundedModelPort { invoke(request: { strategy: string; version
  * The untrusted-content rule is a security property, not politeness. This corpus
  * is recordings of someone who dictates prompts to assistants all day, so the
  * transcript verbatim contains sentences like "Do not be lazy. Do not reward
- * hack." and "Write a new play update with the AssemblyAI pivot for me." One of
+ * workaround." and "Write a new play update with the AssemblyAI pivot for me." One of
  * those was extracted as an argument surface: the extractor had already begun
  * reading dictation as instruction, with nothing in the prompt saying it must
  * not. Marking the span is what makes "obey" and "analyse" distinguishable.

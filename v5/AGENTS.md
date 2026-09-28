@@ -16,7 +16,7 @@ live in `docs/` (indexed in `docs/README.md`).
 | Provider-independent backend (example-platform) | `backends/example-platform/AGENTS.md` |
 | Native C++ codec/policy boundary | `native-core/AGENTS.md` |
 | Omi BLE simulator | `tools/OmiSimulator/AGENTS.md` + `docs/simulator.md` |
-| Repo scripts, the `check` gate, the `v5` mirror push | `scripts/AGENTS.md` + `docs/verification.md` |
+| Repo scripts and the `check` gate | `scripts/AGENTS.md` + `docs/verification.md` |
 | CI workflows | `.github/AGENTS.md` |
 | Auth flows, sessions, native transport contract | `docs/auth-and-sessions.md` |
 | Encrypted capture journal | `docs/native-recording-journal.md` |
@@ -37,9 +37,8 @@ live in `docs/` (indexed in `docs/README.md`).
   Crepuscularity (GPUI) desktop app** with a local CoreBluetooth GATT
   peripheral. Crepuscularity (`https://crepuscularity.tsc.hk` /
   `tschk/crepuscularity`) is the UI framework only — not an Omi API base.
-- Run `bun run check` before every commit and push. Push the standalone `main`
-  branch only through `bun run push:v5`, which mirrors the identical commit to
-  `BasedHardware/omi:v5`.
+- Run `bun run check` by hand before committing. CI runs it for v5 changes.
+- Develop in `BasedHardware/omi` `main` through normal pull requests.
 - Do not add secrets, generated dependencies, build output, or local Xcode
   environment files.
 

@@ -39,10 +39,11 @@ let outputRoot: string | null = null;
 let archivePath: string | null = null;
 let created = false;
 try {
-  const projectRoot = run("git", ["rev-parse", "--show-toplevel"], process.cwd());
+  const projectRoot = resolve(import.meta.dir, "../../..");
+  const repositoryRoot = resolve(projectRoot, "..");
   const outputValue = outputArgument(process.argv.slice(2));
   const sourceCommit = run("git", ["rev-parse", "HEAD"], projectRoot);
-  const worktreeStatus = run("git", ["status", "--porcelain", "--untracked-files=all"], projectRoot);
+  const worktreeStatus = run("git", ["status", "--porcelain", "--untracked-files=all", "--", "v5"], repositoryRoot);
   const plan = productionDependencyArtifactPlan({
     project_root: projectRoot,
     output_root: outputValue,
@@ -57,8 +58,8 @@ try {
   mkdirSync(dirname(outputRoot), { recursive: true });
   mkdirSync(outputRoot);
   created = true;
-  run("git", ["archive", "--format=tar", "--output", archivePath, sourceCommit], projectRoot);
-  run("tar", ["-xf", archivePath, "-C", outputRoot], projectRoot);
+  run("git", ["archive", "--format=tar", "--output", archivePath, sourceCommit, "v5"], repositoryRoot);
+  run("tar", ["-xf", archivePath, "--strip-components=1", "-C", outputRoot], projectRoot);
   rmSync(archivePath);
   run("bun", ["install", "--production", "--omit", "optional", "--frozen-lockfile"], outputRoot);
   const allocatedKiBText = run("du", ["-sk", outputRoot], projectRoot).split(/\s+/, 1)[0];

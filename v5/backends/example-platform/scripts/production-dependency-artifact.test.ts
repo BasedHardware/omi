@@ -32,8 +32,8 @@ describe("production dependency artifact plan", () => {
     expect(PRODUCTION_ARTIFACT_COMMAND_MAX_BUFFER_BYTES).toBe(8 * 1_024 * 1_024);
     expect(PRODUCTION_ARTIFACT_MAX_ALLOCATED_KIB).toBe(512 * 1_024);
     expect(plan.commands).toEqual([
-      ["git", "archive", "--format=tar", commit],
-      ["tar", "-xf", "<archive>", "-C", output],
+      ["git", "archive", "--format=tar", commit, "v5"],
+      ["tar", "-xf", "<archive>", "--strip-components=1", "-C", output],
       ["bun", "install", "--production", "--omit", "optional", "--frozen-lockfile"],
       ["node", "scripts/verify-production-dependency-closure.mjs", "--root", output],
       ["bun", "scripts/verify-firebase-auth-runtime.mjs"],

@@ -1,4 +1,3 @@
 #!/bin/sh
 set -eu
-git config core.hooksPath .githooks
 bun install --frozen-lockfile

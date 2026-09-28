@@ -13,4 +13,3 @@ export const configureServiceStoreConnection = (db: Database): void => {
   db.query("PRAGMA journal_mode = WAL;").get();
   db.exec("PRAGMA foreign_keys = ON;");
 };
-

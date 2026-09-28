@@ -60,4 +60,3 @@ transfer authority.
   telemetry, errors, or user-visible reads;
 - no statistical grading, promotion, subject/bystander/privacy, identity,
   compose-voice, data-disposition, or cohort decision.
-

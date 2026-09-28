@@ -1,8 +1,7 @@
 # Verification
 
-The repo gate is `bun run check` (run before every commit and push; the
-pre-push hook runs it again unless `OMI_V5_CHECKED=1`, which only
-`scripts/push-v5` sets). It chains:
+The v5 gate is `bun run check`. Run it by hand before committing; the
+monorepo's `v5-checks.yml` workflow runs checks in CI. It chains:
 
 | Step | Script | What it proves |
 |---|---|---|
@@ -14,9 +13,7 @@ pre-push hook runs it again unless `OMI_V5_CHECKED=1`, which only
 | `native:test` | `scripts/test-native-core` | C++ boundary suites via CMake/CTest |
 | `platform:check` | `backends/example-platform check:deployed` | Portable backend contract + production-server purity |
 
-Publishing: `bun run push:v5` requires branch `main`, a clean worktree, a
-full `bun run check`, then mirrors the identical commit to
-`BasedHardware/omi:v5`.
+Development lands in `BasedHardware/omi` `main` through normal pull requests.
 
 ## Per-area test commands
 

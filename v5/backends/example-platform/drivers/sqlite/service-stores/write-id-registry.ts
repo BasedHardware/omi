@@ -106,4 +106,3 @@ export class SqliteWriteIdRegistry implements WriteIdRegistry {
     this.db.exec("DELETE FROM service_write_id_registry;");
   }
 }
-

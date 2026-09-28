@@ -1,18 +1,16 @@
 # Omi v5
 
-Rewrite-only Omi monorepo: the React Native product client (macOS, iOS,
+The v5 subtree in `BasedHardware/omi`: the React Native product client (macOS, iOS,
 Android, web/PWA), the native C++ codec and transport-policy boundary, typed
 platform contracts, and the two backends the rewrite targets — the
 Cloudflare-native staging Worker and the provider-independent
 `backends/example-platform` reference implementation.
 
-The standalone `main` branch is mirrored commit-for-commit to
-`BasedHardware/omi:v5`. Only publish through the mirror gate:
+Develop in `BasedHardware/omi` `main` through normal pull requests:
 
 ```sh
-bun run setup      # git hooks + frozen install (once per clone)
+bun run setup      # frozen install (once per worktree); root make setup owns hooks
 bun run check      # boundaries, format, lint, typecheck, tests, native, platform
-bun run push:v5    # verify + mirror main to BasedHardware/omi:v5
 ```
 
 Platform surfaces:

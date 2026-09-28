@@ -88,8 +88,8 @@ export const productionDependencyArtifactPlan = (input: Readonly<{
       max_allocated_kib: PRODUCTION_ARTIFACT_MAX_ALLOCATED_KIB,
     }),
     commands: Object.freeze([
-      Object.freeze(["git", "archive", "--format=tar", sourceCommit]),
-      Object.freeze(["tar", "-xf", "<archive>", "-C", outputRoot]),
+      Object.freeze(["git", "archive", "--format=tar", sourceCommit, "v5"]),
+      Object.freeze(["tar", "-xf", "<archive>", "--strip-components=1", "-C", outputRoot]),
       Object.freeze(["bun", "install", "--production", "--omit", "optional", "--frozen-lockfile"]),
       Object.freeze(["node", "scripts/verify-production-dependency-closure.mjs", "--root", outputRoot]),
       Object.freeze(["bun", "scripts/verify-firebase-auth-runtime.mjs"]),

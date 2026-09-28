@@ -85,4 +85,3 @@ export class SqliteStragglerTable implements StragglerTable {
     reset.immediate();
   }
 }
-

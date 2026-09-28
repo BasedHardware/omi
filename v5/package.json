@@ -28,7 +28,6 @@
     "setup": "scripts/setup",
     "test": "bun run --cwd react-native test -- --runInBand && bun run --cwd apps/backend-worker test && bun run --cwd packages/contracts/ratified verify && bun run --cwd pwa test",
     "typecheck": "bun run build && bun run --cwd react-native typecheck && bun run --cwd apps/backend-worker typecheck && bun run --cwd pwa typecheck",
-    "push:v5": "scripts/push-v5",
     "platform:check": "bun run --cwd backends/example-platform check:deployed"
   },
   "devDependencies": {

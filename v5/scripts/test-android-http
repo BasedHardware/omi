@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-repo_root=$(git rev-parse --show-toplevel)
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 build_dir=$(mktemp -d /tmp/omi-v5-android-http.XXXXXX)
 trap 'rm -rf "$build_dir"' EXIT
 javac --release 17 -d "$build_dir" \

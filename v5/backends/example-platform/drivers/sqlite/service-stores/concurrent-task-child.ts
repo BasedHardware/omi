@@ -28,4 +28,3 @@ try {
 } finally {
   db.close();
 }
-

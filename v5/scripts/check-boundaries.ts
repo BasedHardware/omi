@@ -1,5 +1,5 @@
-const tracked = Bun.spawnSync(["git", "ls-files"], {
-  cwd: import.meta.dir + "/..",
+const tracked = Bun.spawnSync(["git", "ls-files", "--", "v5"], {
+  cwd: import.meta.dir + "/../..",
   stdout: "pipe",
   stderr: "inherit",
 });
@@ -8,7 +8,12 @@ if (tracked.exitCode !== 0) {
   process.exit(tracked.exitCode);
 }
 
-const files = tracked.stdout.toString().trim().split("\n").filter(Boolean);
+const files = tracked.stdout
+  .toString()
+  .trim()
+  .split("\n")
+  .filter((file) => file.startsWith("v5/"))
+  .map((file) => file.slice("v5/".length));
 const forbidden = files.filter((file) => {
   if (file === "tools/OmiSimulator" || file.startsWith("tools/OmiSimulator/"))
     return false;

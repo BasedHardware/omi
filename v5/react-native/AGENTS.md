@@ -32,7 +32,7 @@ xcodebuild -workspace macos/RnRuntime.xcworkspace -scheme "RnRuntime-macOS" \
 
 - Screenshots: `swift /tmp/winid2.swift` (local scratch helper) for the
   window ID, then `screencapture -x -l<WID> out.png`.
-- `scripts/start-metro.ts` uses Metro's options-object
+- `../scripts/start-metro.ts` uses Metro's options-object
   `net.Server.listen` because Bun 1.3.14/1.4 never invoke the four-argument
   `(port, host, undefined, callback)` form. Don't revert it.
 - **Every rebuild resets the macOS Screen Recording TCC grant.** Re-grant in
@@ -83,14 +83,14 @@ index.js → App.tsx → src/app/AppOrchestrator.tsx
   Change both files together — `__tests__/macOSNativeBoundary.test.ts`
   asserts the hidden buttons, the command routing, the spacer pair, and the
   quit-after-last-window-close policy.
-- **Timeline**: `timeline/UnifiedTimeline.tsx` `mergeTimeline` merges
+- **Timeline**: `src/desktop/timeline/UnifiedTimeline.tsx` `mergeTimeline` merges
   conversation/memory/task projections with local capture groups into one
   filterable feed, with Date/Type/Topic grouping and collapsible sections.
   `rewindTimeline.ts` `groupRewindFrames` collapses same-window frames
   (12-minute gap bound); `createRewindTimeline` interleaves the local
   captured store with old Omi history. Native capture dedupe lives in
   `apple/OmiRewindCapture.mm` (600 s same-app+window repeat window).
-- **Theme**: `DesktopTheme.tsx` provides glass tokens (`desktop/tokens.ts`)
+- **Theme**: `DesktopTheme.tsx` provides glass tokens (`src/desktop/tokens.ts`)
   and remaps the shared kit palette for light. `src/ui/tokens.ts` stays
   static-dark by design — mobile renders without the provider.
 - **Preferences**: `src/desktopSettingsClient.ts` `desktopPreferenceKeys`

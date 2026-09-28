@@ -54,4 +54,3 @@ process.stdout.write("stop first process: complete\n");
 process.stdout.write("start second process: complete\n");
 process.stdout.write(`read through door: 200 found=${JSON.stringify(second.description)}\n`);
 process.stdout.write("replay after restart: 200 idempotent=true\n");
-

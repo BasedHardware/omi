@@ -393,4 +393,3 @@ describe("PostgreSQL durable work execution", () => {
     expect(connection.outboxRows).toBe(1);
   });
 });
-

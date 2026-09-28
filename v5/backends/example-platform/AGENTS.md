@@ -3,7 +3,7 @@
 The canonical repo for omi's backend rewrite (TypeScript memory system).
 Decisions are NOT made here — they live in the sibling
 `omi-as-a-platform-project-tracker` (specs' adjudication YAML, ADR-001..005,
-deprecations). Read `docs/implementation-charter.md` there before building.
+deprecations). Consult that tracker before making architectural decisions.
 
 ## Ground rules
 

@@ -33,7 +33,7 @@ tests/test_*.cpp                 # framework-free assertion suites, one per libr
   hostname classification come from here. The Android Java mirrors
   (`OmiBackendTransport.java`) must track changes to
   `omi_backend_policy.cpp`.
-- `scripts/test-apple-auth` compiles several Apple host tests against the
+- `v5/scripts/test-apple-auth` compiles several Apple host tests against the
   real `src/*.cpp`, so host tests and shims share semantics.
 
 ## Build and test
@@ -45,4 +45,4 @@ bun run native:test      # scripts/test-native-core: mktemp dir → cmake → bu
 Requires CMake ≥ 3.20 and a C++20 compiler. Suites cover invalid-argument
 handling, sync-byte/CRC errors, route stripping, the allowlist, the timeout
 table, hostname classification, and recording timestamp/retry/context rules.
-No JDK needed here (JDK 17 is `scripts/test-android-http`'s requirement).
+No JDK needed here (JDK 17 is `v5/scripts/test-android-http`'s requirement).
