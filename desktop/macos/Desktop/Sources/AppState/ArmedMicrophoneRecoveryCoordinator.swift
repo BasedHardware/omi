@@ -33,8 +33,7 @@ final class ArmedMicrophoneRecoveryCoordinator {
   private var episodeLaunchContext = "other"
   private var episodeUpdateAttemptID: String?
   private var lastInputIsBuiltIn: Bool?
-  private var lifecycleHourStart = Date()
-  private var lifecycleHourlyCount = 0
+  private var lifecycleEventPolicy = ArmedLifecycleEventPolicy()
   let outboundAudioGate = CaptureProbeAudioGate()
 
   var isWaitingOrProbing: Bool { policy.state != .idle }
@@ -90,11 +89,12 @@ final class ArmedMicrophoneRecoveryCoordinator {
       emitLifecycle(
         phase: "retry_skipped", trigger: signal.rawValue,
         duration: CaptureLaunchContext.timeBucket(policy.enteredAt.map { Date().timeIntervalSince($0) }),
-        presenceReason: reason.rawValue)
+        presenceReason: reason.rawValue, presenceReasonValue: reason)
       schedule(action)
       return
     }
     guard action == .probe else { return }
+    lifecycleEventPolicy.presenceReturned()
     trigger = signal.rawValue
     timer?.cancel()
     timer = nil
@@ -232,16 +232,15 @@ final class ArmedMicrophoneRecoveryCoordinator {
       mElement: kAudioObjectPropertyElementMain)
   }
 
-  private func emitLifecycle(phase: String, trigger: String, duration: String, presenceReason: String? = nil) {
+  private func emitLifecycle(
+    phase: String, trigger: String, duration: String, presenceReason: String? = nil,
+    presenceReasonValue: ArmedCaptureRecoveryPolicy.PresenceReason? = nil
+  ) {
     let now = Date()
-    if now.timeIntervalSince(lifecycleHourStart) >= 3_600 {
-      lifecycleHourStart = now
-      lifecycleHourlyCount = 0
-    }
-    if phase == "entered" || phase == "retry" || phase == "retry_skipped" {
-      guard lifecycleHourlyCount < 24 else { return }
-      lifecycleHourlyCount += 1
-    }
+    guard
+      lifecycleEventPolicy.shouldEmit(
+        phase: phase, presenceReason: presenceReasonValue, now: now)
+    else { return }
     let properties = SilentMicDiagnosticTelemetry.armedProperties(
       attemptID: episodeID, phase: phase, trigger: trigger,
       launchContext: episodeLaunchContext,

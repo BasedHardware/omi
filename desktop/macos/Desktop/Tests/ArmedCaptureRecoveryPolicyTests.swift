@@ -151,22 +151,22 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
     }
   }
 
-  func testSkippedBackoffsKeepIntervalUntilAnActualProbeFails() {
+  func testSkippedBackoffsEscalateWithoutConsumingRetryCount() {
     var policy = ArmedCaptureRecoveryPolicy()
     let locked = CapturePresence(
       screenLocked: true, displaysAsleep: true, consoleSessionActive: true,
       lidClosed: false, appActive: false)
     _ = policy.enter(now: start)
-    for second in [30.0, 60, 90] {
+    for (second, nextDelay) in [(30.0, 30.0), (60, 60), (120, 120)] {
       XCTAssertEqual(
         policy.signal(.backoff, now: start.addingTimeInterval(second), presence: locked, inputIsBuiltIn: nil),
-        .retrySkipped(reason: .screenLocked, until: start.addingTimeInterval(second + 30)))
+        .retrySkipped(reason: .screenLocked, until: start.addingTimeInterval(second + nextDelay)))
       XCTAssertEqual(policy.retryCount, 1)
     }
     XCTAssertEqual(
-      policy.signal(.unlock, now: start.addingTimeInterval(91), presence: present, inputIsBuiltIn: nil), .probe)
+      policy.signal(.unlock, now: start.addingTimeInterval(241), presence: present, inputIsBuiltIn: nil), .probe)
     XCTAssertEqual(
-      policy.enter(now: start.addingTimeInterval(100)), .releaseAndWait(until: start.addingTimeInterval(160)))
+      policy.enter(now: start.addingTimeInterval(250)), .releaseAndWait(until: start.addingTimeInterval(310)))
     XCTAssertEqual(policy.retryCount, 2)
     XCTAssertEqual(policy.enteredAt, start)
   }
@@ -189,11 +189,10 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
     var lidPolicy = ArmedCaptureRecoveryPolicy()
     _ = lidPolicy.enter(now: start)
     XCTAssertEqual(
-      lidPolicy.signal(.backoff, now: start.addingTimeInterval(30), presence: unknownLid, inputIsBuiltIn: nil),
-      .retrySkipped(reason: .unknown, until: start.addingTimeInterval(60)))
+      lidPolicy.signal(.backoff, now: start.addingTimeInterval(30), presence: unknownLid, inputIsBuiltIn: nil), .probe)
     XCTAssertEqual(
       lidPolicy.signal(.displayChanged, now: start.addingTimeInterval(31), presence: unknownLid, inputIsBuiltIn: nil),
-      .probe)
+      .none)
 
     let clamshell = CapturePresence(
       screenLocked: false, displaysAsleep: false, consoleSessionActive: true,
@@ -212,11 +211,90 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
       .probe)
   }
 
-  func testMissingScreenLockFactRemainsUnknown() {
+  func testScreenLockStateDistinguishesMissingDictionaryFromMissingKey() {
     XCTAssertNil(CapturePresence.screenLockState(from: nil))
-    XCTAssertNil(CapturePresence.screenLockState(from: [:]))
+    XCTAssertEqual(CapturePresence.screenLockState(from: [:]), false)
     XCTAssertEqual(CapturePresence.screenLockState(from: ["CGSSessionScreenIsLocked": true]), true)
     XCTAssertEqual(CapturePresence.screenLockState(from: ["CGSSessionScreenIsLocked": false]), false)
+    XCTAssertNil(CapturePresence.screenLockState(from: ["CGSSessionScreenIsLocked": "unknown"]))
+  }
+
+  func testDesktopMacWithNoLidCanProbeAfterBackoff() {
+    let desktopMac = CapturePresence(
+      screenLocked: false, displaysAsleep: false, consoleSessionActive: true,
+      lidClosed: nil, appActive: true)
+    var policy = ArmedCaptureRecoveryPolicy()
+    _ = policy.enter(now: start)
+    XCTAssertEqual(
+      policy.signal(.backoff, now: start.addingTimeInterval(30), presence: desktopMac, inputIsBuiltIn: nil),
+      .probe)
+  }
+
+  func testOvernightLockEscalatesChecksAndPreservesRetryTelemetryBudget() {
+    let locked = CapturePresence(
+      screenLocked: true, displaysAsleep: true, consoleSessionActive: true,
+      lidClosed: nil, appActive: false)
+    let eightHours: TimeInterval = 8 * 60 * 60
+    var policy = ArmedCaptureRecoveryPolicy()
+    var lifecycleEvents = ArmedLifecycleEventPolicy()
+    _ = policy.enter(now: start)
+    XCTAssertTrue(lifecycleEvents.shouldEmit(phase: "entered", now: start))
+    var skipChecks = 0
+    var skipEvents = 0
+    var now = start
+
+    while let deadline = policy.nextRetryAt, deadline.timeIntervalSince(start) <= eightHours {
+      now = deadline
+      guard
+        case .retrySkipped(let reason, _) = policy.signal(
+          .backoff, now: now, presence: locked, inputIsBuiltIn: nil)
+      else {
+        XCTFail("locked timer recheck must remain skipped")
+        return
+      }
+      skipChecks += 1
+      if lifecycleEvents.shouldEmit(phase: "retry_skipped", presenceReason: reason, now: now) {
+        skipEvents += 1
+      }
+    }
+    XCTAssertGreaterThan(skipChecks, 0)
+    XCTAssertLessThan(skipChecks, 60, "escalating waits should keep an overnight timer bounded")
+    XCTAssertEqual(skipEvents, 1, "an unchanged locked state emits only the first skip event")
+    XCTAssertEqual(policy.retryCount, 1, "skipped checks do not consume probe retries")
+
+    let unlockTime = start.addingTimeInterval(eightHours)
+    lifecycleEvents.presenceReturned()
+    XCTAssertTrue(lifecycleEvents.shouldEmit(phase: "retry", now: unlockTime))
+    XCTAssertEqual(
+      policy.signal(.unlock, now: unlockTime, presence: present, inputIsBuiltIn: nil), .probe)
+  }
+
+  func testRetrySkippedReasonChangesAreDeduplicatedAndSeparatelyCapped() {
+    var policy = ArmedLifecycleEventPolicy()
+    XCTAssertTrue(policy.shouldEmit(phase: "retry_skipped", presenceReason: .screenLocked, now: start))
+    XCTAssertFalse(
+      policy.shouldEmit(
+        phase: "retry_skipped", presenceReason: .screenLocked, now: start.addingTimeInterval(30)))
+    XCTAssertTrue(
+      policy.shouldEmit(
+        phase: "retry_skipped", presenceReason: .displaysAsleep, now: start.addingTimeInterval(60)))
+    XCTAssertTrue(policy.shouldEmit(phase: "retry", now: start.addingTimeInterval(90)))
+    XCTAssertTrue(
+      policy.shouldEmit(phase: "retry_skipped", presenceReason: .unknown, now: start.addingTimeInterval(120)))
+    XCTAssertTrue(
+      policy.shouldEmit(
+        phase: "retry_skipped", presenceReason: .consoleInactive, now: start.addingTimeInterval(150)))
+    XCTAssertFalse(
+      policy.shouldEmit(
+        phase: "retry_skipped", presenceReason: .lidClosedBuiltIn, now: start.addingTimeInterval(180)),
+      "skip events have their own four-per-hour cap")
+    XCTAssertFalse(
+      policy.shouldEmit(
+        phase: "retry_skipped", presenceReason: .lidClosedBuiltIn, now: start.addingTimeInterval(3_600)))
+    policy.presenceReturned()
+    XCTAssertTrue(
+      policy.shouldEmit(
+        phase: "retry_skipped", presenceReason: .lidClosedBuiltIn, now: start.addingTimeInterval(3_601)))
   }
 
   func testManualAndPermissionPoliciesRemainTerminal() {

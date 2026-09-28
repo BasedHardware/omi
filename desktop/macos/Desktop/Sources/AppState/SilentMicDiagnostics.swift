@@ -60,7 +60,11 @@ struct CapturePresence: Equatable {
   let appActive: Bool
 
   static func screenLockState(from session: [String: Any]?) -> Bool? {
-    session?["CGSSessionScreenIsLocked"] as? Bool
+    guard let session else { return nil }
+    // CGSession omits this key when the session is unlocked. A present
+    // dictionary with no lock flag is therefore an unlocked session.
+    guard let lockState = session["CGSSessionScreenIsLocked"] else { return false }
+    return lockState as? Bool
   }
 
   @MainActor static func current() -> Self {
