@@ -40,4 +40,101 @@ class SiriSnapshotDeltaTest < Minitest::Test
       refute_includes body, 'rebuildIndex()', entity
     end
   end
+
+  def test_late_spotlight_repair_keeps_the_owner_marker_until_delete_succeeds
+    swift = File.read(SOURCE)
+    helper = swift[/enum SiriLateRepairLedger \{.*?\n\}/m]
+    refute_nil helper
+    harness = <<~SWIFT
+      import Foundation
+      enum PlistValue { case string(String); case array([PlistValue]) }
+      enum SafeDefaults {
+          static func store(_ value: PlistValue, forKey key: String, in defaults: UserDefaults) throws {
+              guard case .array(let values) = value else { fatalError("array expected") }
+              defaults.set(values.map { value in
+                  guard case .string(let text) = value else { fatalError("string expected") }
+                  return text
+              }, forKey: key)
+          }
+      }
+      #{helper}
+      enum TestFailure: Error { case unavailable }
+      @main struct Harness {
+          static func main() async throws {
+              let suite = "siri-late-repair-\\(UUID().uuidString)"
+              let defaults = UserDefaults(suiteName: suite)!
+              defer { defaults.removePersistentDomain(forName: suite) }
+              let key = "pending-owner-index-delete"
+              try SiriLateRepairLedger.mark("old-owner", defaults: defaults, key: key)
+              try SiriLateRepairLedger.mark("old-owner", defaults: defaults, key: key)
+              precondition(defaults.stringArray(forKey: key) == ["old-owner"])
+              do {
+                  _ = try await SiriLateRepairLedger.drain(defaults: defaults, key: key) { _ in
+                      throw TestFailure.unavailable
+                  }
+                  fatalError("delete should fail")
+              } catch TestFailure.unavailable {}
+              precondition(defaults.stringArray(forKey: key) == ["old-owner"])
+              var deleted = [String]()
+              _ = try await SiriLateRepairLedger.drain(defaults: defaults, key: key) { deleted.append($0) }
+              precondition(deleted == ["old-owner"])
+              precondition(defaults.stringArray(forKey: key) == nil)
+          }
+      }
+    SWIFT
+    Dir.mktmpdir('siri-late-repair') do |dir|
+      path = File.join(dir, 'main.swift')
+      File.write(path, harness)
+      stdout, stderr, status = Open3.capture3('swiftc', '-parse-as-library', path, '-o', File.join(dir, 'repair'))
+      assert status.success?, "swiftc failed:\n#{stdout}\n#{stderr}"
+      stdout, stderr, status = Open3.capture3(File.join(dir, 'repair'))
+      assert status.success?, "repair failed:\n#{stdout}\n#{stderr}"
+    end
+  end
+
+  def test_late_spotlight_completion_starts_a_new_serialized_turn
+    swift = File.read(SOURCE)
+    context = swift[/private enum SiriSnapshotQueueContext \{.*?\n\}/m]
+    deadline = swift[/private actor SiriSpotlightDeadline \{.*?\n\}/m]
+    refute_nil context
+    refute_nil deadline
+    deadline = deadline.sub('12_000_000_000', '20_000_000')
+    harness = <<~SWIFT
+      import Foundation
+      enum SiriSession { enum Failure: Error { case server } }
+      #{context}
+      #{deadline}
+      actor Probe {
+          private var observed: Bool?
+          func record(_ value: Bool) { observed = value }
+          func read() -> Bool? { observed }
+      }
+      @main struct Harness {
+          static func main() async throws {
+              let probe = Probe()
+              await SiriSnapshotQueueContext.$active.withValue(true) {
+                  do {
+                      try await SiriSpotlightDeadline.run({
+                          try await Task.sleep(nanoseconds: 80_000_000)
+                      }, onLateCompletion: {
+                          await probe.record(SiriSnapshotQueueContext.active)
+                      })
+                      fatalError("operation should time out")
+                  } catch {}
+              }
+              try await Task.sleep(nanoseconds: 200_000_000)
+              let observed = await probe.read()
+              precondition(observed == false)
+          }
+      }
+    SWIFT
+    Dir.mktmpdir('siri-late-queue') do |dir|
+      path = File.join(dir, 'main.swift')
+      File.write(path, harness)
+      stdout, stderr, status = Open3.capture3('swiftc', '-parse-as-library', path, '-o', File.join(dir, 'queue'))
+      assert status.success?, "swiftc failed:\n#{stdout}\n#{stderr}"
+      stdout, stderr, status = Open3.capture3(File.join(dir, 'queue'))
+      assert status.success?, "queue failed:\n#{stdout}\n#{stderr}"
+    end
+  end
 end

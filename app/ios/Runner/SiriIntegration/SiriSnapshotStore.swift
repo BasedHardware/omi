@@ -10,6 +10,7 @@ struct SiriStorageNamespace {
     var snapshotFileName: String { "siri-index-snapshot-\(bundleID).json" }
     var ownerKey: String { "\(bundleID).siri.snapshot.owner" }
     var pendingWipeOwnersKey: String { "\(bundleID).siri.pending.wipe.owners" }
+    var pendingLateRepairOwnersKey: String { "\(bundleID).siri.pending.late.repair.owners" }
     var generationKey: String { "\(bundleID).siri.session.generation" }
     var enabledKey: String { "\(bundleID).siri.index.enabled" }
     var pendingRouteKey: String { "\(bundleID).siri.pending.route" }
@@ -40,6 +41,34 @@ enum SiriSnapshotDelta {
 
 /// Only the fields approved for Apple's on-device index are kept here.
 #if compiler(>=6.4)
+/// A late CoreSpotlight completion must leave a durable cleanup obligation
+/// until that owner's index has actually been removed. It must not invoke the
+/// account-transition wipe, which could destroy a newly bound owner's state.
+enum SiriLateRepairLedger {
+    enum Failure: Error { case flush }
+
+    static func mark(_ uid: String, defaults: UserDefaults, key: String) throws {
+        var pending = Set(defaults.stringArray(forKey: key) ?? [])
+        pending.insert(uid)
+        try SafeDefaults.store(.array(pending.sorted().map(PlistValue.string)), forKey: key, in: defaults)
+        guard defaults.synchronize() else { throw Failure.flush }
+    }
+
+    static func drain(defaults: UserDefaults, key: String,
+                      delete: (String) async throws -> Void) async throws -> Bool {
+        var pending = Set(defaults.stringArray(forKey: key) ?? [])
+        let hadPending = !pending.isEmpty
+        for uid in pending.sorted() {
+            try await delete(uid)
+            pending.remove(uid)
+            if pending.isEmpty { defaults.removeObject(forKey: key) }
+            else { try SafeDefaults.store(.array(pending.sorted().map(PlistValue.string)), forKey: key, in: defaults) }
+            guard defaults.synchronize() else { throw Failure.flush }
+        }
+        return hadPending
+    }
+}
+
 final class SiriSnapshotStore {
     static let shared = SiriSnapshotStore()
     private let lock = NSLock()
@@ -51,6 +80,7 @@ final class SiriSnapshotStore {
     private let namespace = SiriStorageNamespace.current
     private var ownerKey: String { namespace.ownerKey }
     private var pendingWipeOwnersKey: String { namespace.pendingWipeOwnersKey }
+    private var pendingLateRepairOwnersKey: String { namespace.pendingLateRepairOwnersKey }
     private var generationKey: String { namespace.generationKey }
     private var enabledKey: String { namespace.enabledKey }
     private var routeKey: String { namespace.pendingRouteKey }
@@ -75,6 +105,8 @@ final class SiriSnapshotStore {
     private var transitionGeneration: Int64?
     private var authResolutionPending = false
     private var expiryTask: _Concurrency.Task<Void, Never>?
+    private var lateRepairTask: _Concurrency.Task<Void, Never>?
+    private var lateRepairRetryOwners = Set<String>()
     #if OMI_SIRI_PROBE
     var simulateIndexDeleteFailure = false
     var simulateSnapshotPersistFailureOnce = false
@@ -93,13 +125,8 @@ final class SiriSnapshotStore {
     private func spotlight(for uid: String? = nil, _ operation: @escaping () async throws -> Void) async throws {
         let repairUid = uid ?? owner
         try await SiriSpotlightDeadline.run(operation, onLateCompletion: { [weak self] in
-            guard let self else { return }
-            // A timed-out write can finish after a delete or account wipe.
-            // Remove its owner index before rebuilding the current snapshot.
-            if let repairUid { try? await self.removeIndex(owners: [repairUid]) }
-            if let current = self.owner, self.generationForOwner(current) != nil {
-                try? await self.rebuildIndex()
-            }
+            guard let self, let repairUid else { return }
+            await self.repairAfterLateSpotlightCall(uid: repairUid)
         })
     }
     private init() {
@@ -123,6 +150,7 @@ final class SiriSnapshotStore {
         guard !uid.isEmpty, owner == uid, snapshot.ownerUid == uid,
               transitionGeneration == nil, !authResolutionPending,
               (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty,
+              !(defaults.stringArray(forKey: pendingLateRepairOwnersKey) ?? []).contains(uid),
               (sessionOwner == nil || sessionOwner == uid) else { return nil }
         return defaults.object(forKey: generationKey) as? Int64 ?? 0
     }
@@ -138,7 +166,8 @@ final class SiriSnapshotStore {
         return owner == uid && SiriSession.shared.currentConfig()?.uid == uid &&
             SiriSession.shared.hasMirroredToken() && SiriSession.shared.hasCurrentFirebaseOwner(uid) &&
             transitionGeneration == nil && !authResolutionPending &&
-            (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty
+            (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty &&
+            !(defaults.stringArray(forKey: pendingLateRepairOwnersKey) ?? []).contains(uid)
     }
     /// While Firebase waits for protected Keychain data, deny Siri reads and
     /// writes without deleting a possibly valid account's persisted index.
@@ -413,9 +442,70 @@ final class SiriSnapshotStore {
 
         }
     }
+    private func retryPendingLateRepairs() async throws -> Bool {
+        try await SiriLateRepairLedger.drain(defaults: defaults, key: pendingLateRepairOwnersKey) { uid in
+            try await self.removeIndex(owners: [uid])
+        }
+    }
+    private func repairAfterLateSpotlightCall(uid: String) async {
+        do {
+            try await serialized {
+                // Persist before attempting removal: a failed or timed-out
+                // delete is retried after launch, even with no bound owner.
+                try SiriLateRepairLedger.mark(uid, defaults: defaults, key: pendingLateRepairOwnersKey)
+                _ = try await retryPendingLateRepairs()
+                if enabled, let current = owner, generationForOwner(current) != nil {
+                    do { try await rebuildIndex() }
+                    catch { scheduleIndexRetry() }
+                }
+            }
+        } catch {
+            NSLog("[SiriIndex] Late Spotlight repair deferred: %@", String(describing: error))
+            scheduleLateRepairRetry(uid: uid)
+        }
+    }
+    private func scheduleLateRepairRetry(uid: String? = nil) {
+        lock.lock(); defer { lock.unlock() }
+        if let uid { lateRepairRetryOwners.insert(uid) }
+        guard lateRepairTask == nil else { return }
+        lateRepairTask = _Concurrency.Task.detached { [weak self] in
+            try? await _Concurrency.Task.sleep(nanoseconds: 30_000_000_000)
+            guard !_Concurrency.Task.isCancelled else { return }
+            await self?.retryLateRepairAfterTimer()
+        }
+    }
+    private func takeLateRepairRetryOwners() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        let owners = lateRepairRetryOwners.sorted()
+        lateRepairRetryOwners.removeAll()
+        lateRepairTask = nil
+        return owners
+    }
+    private func retryLateRepairAfterTimer() async {
+        let owners = takeLateRepairRetryOwners()
+        if !owners.isEmpty {
+            for uid in owners { await repairAfterLateSpotlightCall(uid: uid) }
+            return
+        }
+        do {
+            try await serialized {
+                let repaired = try await retryPendingLateRepairs()
+                if repaired, enabled, let current = owner, generationForOwner(current) != nil {
+                    do { try await rebuildIndex() }
+                    catch { scheduleIndexRetry() }
+                }
+            }
+        } catch {
+            NSLog("[SiriIndex] Late Spotlight repair retry deferred: %@", String(describing: error))
+            scheduleLateRepairRetry()
+        }
+    }
     func maintainOnLaunch() async throws -> Bool {
         return try await serialized {
             let retriedWipe = try await retryPendingWipe()
+            do { _ = try await retryPendingLateRepairs() }
+            catch { scheduleLateRepairRetry(); throw error }
             // setEnabled(false) persists the preference before Spotlight deletion.
             // A failed delete must be retried even though rebuilding is disabled.
             if !enabled {
@@ -879,7 +969,13 @@ private actor SiriSpotlightDeadline {
             self.continuation = nil
             continuation.resume(with: result)
         } else if expired {
-            Task { await onLateCompletion() }
+            Task {
+                // The timed-out operation inherited the original gate's
+                // task-local context. A late repair is a new queue turn.
+                await SiriSnapshotQueueContext.$active.withValue(false) {
+                    await onLateCompletion()
+                }
+            }
         }
     }
     private func expire() {

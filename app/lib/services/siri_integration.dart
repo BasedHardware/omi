@@ -698,7 +698,8 @@ class SiriIntegration extends SiriEventsApi {
 
   Future<bool> isEnabled() async {
     if (!_isIOS) return false;
-    return _nativeOperation(_host.isEnabled);
+    // This reads only a persisted preference. Do not queue it behind indexing.
+    return _host.isEnabled().timeout(_nativeTimeout);
   }
 
   Future<void> setEnabled(bool enabled) async {
