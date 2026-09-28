@@ -11470,4 +11470,17 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get searchPeople => 'Поиск людей';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Добавить «$query» как нового человека';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Показать всех людей ($count)';
+  }
 }
