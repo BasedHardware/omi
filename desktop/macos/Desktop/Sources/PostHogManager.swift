@@ -365,17 +365,26 @@ extension PostHogManager {
     _ attempt: CaptureAttemptOutcomeState,
     finalizationReason: TranscriptionFinalizationReason
   ) -> [String: Any] {
-    [
+    var properties: [String: Any] = [
       "platform": "macos",
       "attempt_id": attempt.attemptId,
       "mode": attempt.mode,
       "intent": attempt.intent.rawValue,
+      "launch_context": attempt.launchContext,
+      "seconds_since_launch": attempt.secondsSinceLaunch,
+      "update_attempt_id": attempt.updateAttemptID ?? "none",
       "capture_eligible": attempt.captureEligible,
       "first_audio_frame": attempt.firstAudioFrame,
       "speech_observed": attempt.speechObserved,
       "terminal_reason": attempt.terminalReason(for: finalizationReason).rawValue,
+      "finalization_reason": finalizationReason.rawValue,
       "conversation_accepted": attempt.conversationAccepted,
     ]
+    if let episodeID = attempt.armedEpisodeID {
+      properties["armed_retry"] = true
+      properties["armed_episode_id"] = episodeID
+    }
+    return properties
   }
 
   /// Minimal outcome payload for an attempt whose process died mid-flight:

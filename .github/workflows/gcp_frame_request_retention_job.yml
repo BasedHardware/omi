@@ -149,35 +149,12 @@ jobs:
           actual=$(gcloud run jobs describe "$SERVICE" --region="$REGION" \
             --project="${{ vars.GCP_PROJECT_ID }}" --format='value(template.template.containers[0].image)')
           test "$actual" = "$expected"
-      - name: Provision or update dedicated hourly Scheduler and validate
+      - name: Reconcile declared Scheduler trigger
         env:
-          SCHEDULER_SERVICE_ACCOUNT: ${{ vars.FRAME_REQUEST_RETENTION_SCHEDULER_SERVICE_ACCOUNT }}
+          SCHEDULER_ENVIRONMENT: ${{ vars.ENV == 'prod' && 'prod' || 'dev' }}
         run: |
           set -euo pipefail
-          test -n "$SCHEDULER_SERVICE_ACCOUNT"
-          target="https://run.googleapis.com/v2/projects/${{ vars.GCP_PROJECT_ID }}/locations/${REGION}/jobs/${SERVICE}:run"
-          common=(--location="$REGION" --project="${{ vars.GCP_PROJECT_ID }}" --schedule='0 * * * *' \
-            --time-zone='Etc/UTC' --uri="$target" --http-method=POST \
-            --oauth-service-account-email="$SCHEDULER_SERVICE_ACCOUNT")
-          if gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
-            gcloud scheduler jobs update http "$SCHEDULER_JOB" "${common[@]}"
-          else
-            gcloud scheduler jobs create http "$SCHEDULER_JOB" "${common[@]}"
-          fi
-          scheduler_state=$(gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" --format='value(state)')
-          if [[ "$scheduler_state" == "PAUSED" ]]; then
-            gcloud scheduler jobs resume "$SCHEDULER_JOB" --location="$REGION" \
-              --project="${{ vars.GCP_PROJECT_ID }}"
-          elif [[ "$scheduler_state" != "ENABLED" ]]; then
-            echo "ERROR: unexpected Scheduler state before validation: $scheduler_state" >&2
-            exit 1
-          fi
-          state_file=$(mktemp)
-          trap 'rm -f "$state_file"' EXIT
-          gcloud scheduler jobs describe "$SCHEDULER_JOB" --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" --format=json > "$state_file"
-          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
-            --state-file "$state_file" --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" --scheduler-job "$SCHEDULER_JOB" --cloud-run-job "$SERVICE"
+          python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+          python3 backend/scripts/scheduler_reconcile.py \
+            --environment "$SCHEDULER_ENVIRONMENT" \
+            --project "${{ vars.GCP_PROJECT_ID }}" --check

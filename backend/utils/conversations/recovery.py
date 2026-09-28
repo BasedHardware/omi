@@ -44,6 +44,21 @@ def structured_is_rich(structured: Any) -> bool:
     return False
 
 
+def verified_recovery_discard(discarded: Any, decision: Any) -> bool:
+    """An explicit recovery relevance discard is a valid terminal outcome.
+
+    The processor stores the decision before completing the job. Requiring its
+    trigger and verdict prevents an old discard flag or a title-only minimum
+    from passing the self-heal verifier without enrichment.
+    """
+    return (
+        discarded is True
+        and isinstance(decision, Mapping)
+        and decision.get('trigger') == 'server_recovery'
+        and decision.get('verdict') == 'discard'
+    )
+
+
 def structured_has_protected_content(structured: Any, user_title: Any = None) -> bool:
     """Whether regenerating the row could overwrite content worth keeping.
 
@@ -103,7 +118,7 @@ def recovery_audio_file_ids(conversation: Mapping[str, Any]) -> list[str] | None
 
 
 class RecoveryStructureUnavailableError(RuntimeError):
-    """SERVER_RECOVERY produced only the deterministic minimum.
+    """SERVER_RECOVERY kept a row but produced only the deterministic minimum.
 
     Raised before persistence so the row keeps its in-progress content and
     lifecycle status untouched; the durable finalization workflow owns the

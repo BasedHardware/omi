@@ -277,6 +277,20 @@ jobs:
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --format='value(notificationChannels)' | grep -q .
 
+      - name: Reconcile notifications Scheduler trigger
+        env:
+          SCHEDULER_ENVIRONMENT: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'dev' }}
+        run: |
+          python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+          if [[ "$SCHEDULER_ENVIRONMENT" == prod ]]; then
+            python3 backend/scripts/scheduler_reconcile.py \
+              --environment prod --project "${{ vars.GCP_PROJECT_ID }}" \
+              --apply --jobs notifications-job-scheduler-trigger
+          fi
+          python3 backend/scripts/scheduler_reconcile.py \
+            --environment "$SCHEDULER_ENVIRONMENT" \
+            --project "${{ vars.GCP_PROJECT_ID }}" --check
+
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'
         uses: ./.github/actions/deployment-summary

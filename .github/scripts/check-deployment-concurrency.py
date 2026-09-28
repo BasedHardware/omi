@@ -119,12 +119,7 @@ LOCK_CONTRACTS = {
 }
 
 
-# This workflow writes a run-ID-scoped Kubernetes Job and does not mutate the
-# persistent Parakeet release. The required marker makes the exemption fail
-# closed if that isolation is removed.
-RUN_SCOPED_EXEMPTIONS = {
-    "parakeet_gpu_tests.yml": "JOB_NAME: parakeet-gpu-test-${{ github.run_id }}",
-}
+RUN_SCOPED_EXEMPTIONS: dict[str, str] = {}
 
 READ_ONLY_WORKFLOW_EXEMPTIONS: dict[str, str] = {}
 

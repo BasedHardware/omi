@@ -73,7 +73,11 @@ from utils.conversations.deterministic_minimum import (
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
-from utils.conversations.recovery import RecoveryStructureUnavailableError, structured_is_rich
+from utils.conversations.recovery import (
+    RecoveryStructureUnavailableError,
+    structured_is_rich,
+    verified_recovery_discard,
+)
 from utils.conversations.relevance import (
     RELEVANCE_DECISION_FIELD,
     Neighbor,
@@ -2909,13 +2913,22 @@ def process_conversation(
         relevance_discarded=discarded,
     )
     _attach_client_projection(conversation, client_projection)
-    if trigger is ProcessingTrigger.SERVER_RECOVERY and not structured_is_rich(structured):
+    relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
+    explicit_recovery_discard = verified_recovery_discard(
+        conversation.discarded, relevance.as_record() if relevance is not None else None
+    )
+    if (
+        trigger is ProcessingTrigger.SERVER_RECOVERY
+        and not structured_is_rich(structured)
+        and not explicit_recovery_discard
+    ):
         sys.stdout.write(
             json.dumps(
                 {
                     'event': 'selfheal_guard',
                     'outcome': 'refused',
                     'reason': 'empty_structured',
+                    'relevance_verdict': relevance.verdict if relevance is not None else 'missing',
                     'uid': uid,
                     'conversation_id': conversation.id,
                 },
@@ -2925,7 +2938,15 @@ def process_conversation(
         )
         sys.stdout.flush()
         raise RecoveryStructureUnavailableError('server recovery produced no enriched structure')
-    relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
+    if (
+        trigger is ProcessingTrigger.SERVER_RECOVERY
+        and explicit_recovery_discard
+        and not structured_is_rich(structured)
+    ):
+        sys.stdout.write(
+            json.dumps({'event': 'selfheal_guard', 'outcome': 'accepted', 'reason': 'explicit_discard'}) + '\n'
+        )
+        sys.stdout.flush()
     if relevance is not None:
         record_decision(relevance)
 

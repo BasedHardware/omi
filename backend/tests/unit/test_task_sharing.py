@@ -294,7 +294,7 @@ class TestAcceptEndpoint:
                 "description": "Review PR",
                 "due_at": None,
             }
-            mock_db.create_action_item.return_value = "new_t1"
+            mock_db.create_action_items_batch.return_value = ["new_t1"]
 
             result = accept_shared_action_items(request, uid="uid_bob")
 
@@ -302,8 +302,8 @@ class TestAcceptEndpoint:
         assert result["created"] == ["new_t1"]
 
         # Verify shared_from was set
-        create_call = mock_db.create_action_item.call_args
-        new_item = create_call[0][1]
+        create_call = mock_db.create_action_items_batch.call_args
+        new_item = create_call[0][1][0]
         assert new_item["shared_from"]["sender_uid"] == "uid_alice"
         assert new_item["shared_from"]["sender_name"] == "Alice"
         assert new_item["shared_from"]["original_task_id"] == "t1"
@@ -359,7 +359,7 @@ class TestAcceptEndpoint:
             mock_redis.get_task_share.return_value = self._mock_share_data()
             mock_redis.try_accept_task_share.return_value = True
             mock_db.get_action_item.return_value = original
-            mock_db.create_action_item.return_value = "new_t1"
+            mock_db.create_action_items_batch.return_value = ["new_t1"]
             accept_shared_action_items(request, uid="uid_bob")
         return reminder
 
@@ -610,7 +610,7 @@ class TestAcceptSkipsLocked:
                 # Copy pass (only t1 is eligible)
                 {"id": "t1", "description": "OK", "due_at": None, "is_locked": False},
             ]
-            mock_db.create_action_item.return_value = "new_t1"
+            mock_db.create_action_items_batch.return_value = ["new_t1"]
 
             result = accept_shared_action_items(request, uid="uid_bob")
 

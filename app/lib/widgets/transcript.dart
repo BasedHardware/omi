@@ -24,6 +24,7 @@ typedef TranscriptSegmentBuilder = Widget Function(BuildContext context, Transcr
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
+  final bool unresolvedSpeakers;
   final bool horizontalMargin;
   final bool topMargin;
   final bool separator;
@@ -50,6 +51,7 @@ class TranscriptWidget extends StatefulWidget {
   const TranscriptWidget({
     super.key,
     required this.segments,
+    this.unresolvedSpeakers = false,
     this.horizontalMargin = true,
     this.topMargin = true,
     this.separator = true,
@@ -817,7 +819,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget build(BuildContext context) {
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
     // One resolver per build: every bubble is named with the conversation's dense numbering.
-    final names = SpeakerNames.forSegments(widget.segments, people: people, l10n: context.l10n);
+    final names = SpeakerNames.forSegments(
+      widget.segments,
+      people: people,
+      l10n: context.l10n,
+      unresolved: widget.unresolvedSpeakers,
+    );
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
     final transcriptList = NotificationListener<ScrollMetricsNotification>(
       onNotification: _onScrollMetrics,

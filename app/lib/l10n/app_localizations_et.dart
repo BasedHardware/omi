@@ -11401,4 +11401,30 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Tume';
+
+  @override
+  String get chatDiscardRecording => 'Loobu';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Ma ei saanud aru — proovige uuesti';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
 }

@@ -63,7 +63,7 @@ from utils.stt.provider_resilience import close_rejected_socket, fallback_socket
 from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
 from config.stt_provider_policy import MODULATE_PROVIDER, STTServingSurface, provider_for_service
-from utils.stt.outcomes import TranscriptionFailure, failure_from_exception
+from utils.stt.outcomes import TranscriptionFailure, bounded_provider, failure_from_exception
 from utils.observability.transcription import TranscriptionAttempt
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
@@ -610,7 +610,6 @@ def send_message(
     mobile_journey_attempt = ClientJourneyAttempt(
         'mobile_chat',
         resolve_client_kind_from_headers(request.headers),
-        app_build=extract_app_build(request),
     )
 
     async def generate_stream():
@@ -980,6 +979,14 @@ def create_voice_message_stream(
                 yield chunk
             if not attempt.finished:
                 attempt.finish(TranscriptionOutcome.EXPECTED_SILENCE)
+                no_speech = {
+                    'error': 'no_speech',
+                    'outcome': TranscriptionOutcome.EXPECTED_SILENCE.value,
+                    'provider': bounded_provider(stt_provider),
+                    'retryable': True,
+                    'message': 'No speech was detected.',
+                }
+                yield f"error: {json.dumps(no_speech, separators=(',', ':'))}\n\n"
         except Exception as error:
             if attempt.finished:
                 raise

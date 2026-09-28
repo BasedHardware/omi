@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+import AppKit
 import CryptoKit
 import Foundation
 import OmiSupport
@@ -96,10 +97,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   private var shouldInterruptNextResponse = false
   private var streamedText = ""
   private var bufferedText = ""
-  private var synthesisQueue: [String] = []
-  // Carries each chunk's source text alongside its synthesized audio so playback can fall
-  // back to the system voice (speaking the text) if AVAudioPlayer can't play the audio.
-  private var audioQueue: [(audio: Data, text: String)] = []
+  private var progressivePipeline: ProgressiveTTSPlaybackPipeline?
   private var isFillerSynthesizing = false
   private var isOneShotSynthesizing = false
   private var isSynthesizing = false
@@ -113,9 +111,11 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   // and its PTT lease; a callback for an older utterance must not drain a
   // replacement turn.
   private var activeSystemSpeechToken: SystemSpeechToken?
+  private var activeSystemSpeechCompletion: (() -> Void)?
   private var activePTTLease: VoiceOutputLease?
   private var activeRealtimeSlowToolAcknowledgement: RealtimeSlowToolAcknowledgementKind?
   private var activeRealtimeSlowToolAcknowledgementTransport: String?
+  private var lifecycleObservers: [NSObjectProtocol] = []
 
   /// QueryTracer for the in-flight query, handed in by the floating-bar window.
   /// Used to bracket the `tts_start` span (first real chunk → first audio out).
@@ -125,6 +125,22 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   private override init() {
     super.init()
     speechSynthesizer.delegate = self
+    lifecycleObservers = [
+      NotificationCenter.default.addObserver(
+        forName: NSApplication.willTerminateNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.stop() }
+      },
+      NSWorkspace.shared.notificationCenter.addObserver(
+        forName: NSWorkspace.willSleepNotification,
+        object: nil,
+        queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.stop() }
+      },
+    ]
   }
 
   var isSpeaking: Bool {
@@ -133,7 +149,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     if isFillerSynthesizing { return true }
     if isOneShotSynthesizing { return true }
     if isSynthesizing { return true }
-    return !audioQueue.isEmpty || !synthesisQueue.isEmpty
+    return progressivePipeline?.isActive == true
   }
 
   func playFillerIfEnabled() {
@@ -230,8 +246,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     if !text.hasPrefix(streamedText) {
       streamedText = ""
       bufferedText = ""
-      synthesisQueue.removeAll()
-      audioQueue.removeAll()
+      progressivePipeline?.cancel()
+      progressivePipeline = nil
     }
 
     // Cancel filler and stop filler audio when first real chunk is ready
@@ -286,84 +302,64 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     switch mode {
     case .systemVoice:
       enqueueSystemSpeech(text)
-    case .openAI:
-      synthesisQueue.append(text)
-      startSynthesisIfNeeded(mode: mode)
+    case .openAI(let voiceID, let instructions):
+      if progressivePipeline == nil {
+        progressivePipeline = makeProgressivePipeline(
+          voiceID: voiceID,
+          instructions: instructions)
+      }
+      progressivePipeline?.enqueue(text)
     }
   }
 
-  private func startSynthesisIfNeeded(mode: PlaybackMode) {
-    guard !isSynthesizing else { return }
-    guard !synthesisQueue.isEmpty else { return }
-
-    let text = synthesisQueue.removeFirst()
-    isSynthesizing = true
-    let token = currentSynthesisToken()
-    playbackTask?.cancel()
-    playbackTask = Task { [weak self] in
-      do {
-        let audioData: Data
-        switch mode {
-        case .openAI(let voiceID, let instructions):
-          audioData = try await Self.synthesizeOpenAISpeech(
-            text: text, voiceID: voiceID, instructions: instructions)
-        case .systemVoice:
-          return
-        }
-        try Task.checkCancellation()
-        await MainActor.run {
-          guard let self else { return }
-          guard self.ownsCurrentSynthesisToken(token) else { return }
-          self.isSynthesizing = false
-          self.playbackTask = nil
-          self.audioQueue.append((audio: audioData, text: text))
-          self.startPlaybackIfNeeded()
-          self.startSynthesisIfNeeded(mode: mode)
-          self.clearFloatingPillResponseGlowIfIdle()
-        }
-      } catch is CancellationError {
-        await MainActor.run {
-          guard let self else { return }
-          guard self.ownsCurrentSynthesisToken(token) else { return }
-          self.isSynthesizing = false
-          self.playbackTask = nil
-          self.startSynthesisIfNeeded(mode: mode)
-          self.clearFloatingPillResponseGlowIfIdle()
-        }
-      } catch {
-        if Self.isCancellation(error) {
-          await MainActor.run {
-            guard let self else { return }
-            guard self.ownsCurrentSynthesisToken(token) else { return }
-            self.isSynthesizing = false
-            self.playbackTask = nil
-            self.startSynthesisIfNeeded(mode: mode)
-            self.clearFloatingPillResponseGlowIfIdle()
-          }
-          return
-        }
-
-        await MainActor.run {
-          guard let self else { return }
-          guard self.ownsCurrentSynthesisToken(token) else { return }
-          self.isSynthesizing = false
-          self.playbackTask = nil
-          guard self.canUseCloudTTSFallback(after: error, token: token, operation: "chunk") else {
-            self.startSynthesisIfNeeded(mode: mode)
-            self.clearFloatingPillResponseGlowIfIdle()
-            return
-          }
-          log(
-            "FloatingBarVoicePlaybackService: cloud TTS chunk synthesis failed, falling back to system voice: \(error.localizedDescription)"
-          )
-          self.recordSelectedVoiceFallback(
-            to: "system_voice_fallback", reason: Self.ttsFallbackReason(for: error), outcome: .degraded)
-          self.enqueueSystemSpeech(text)
-          self.startSynthesisIfNeeded(mode: mode)
-          self.clearFloatingPillResponseGlowIfIdle()
-        }
-      }
+  private func makeProgressivePipeline(
+    voiceID: String,
+    instructions: String
+  ) -> ProgressiveTTSPlaybackPipeline {
+    let pipeline = ProgressiveTTSPlaybackPipeline(
+      streamFactory: { text in
+        try await Self.synthesizeOpenAISpeechStream(
+          text: text,
+          voiceID: voiceID,
+          instructions: instructions)
+      },
+      playerFactory: { [weak self] in
+        try ProgressiveMP3Player(playbackRate: self?.playbackRate ?? 1)
+      })
+    pipeline.onActivityChanged = { [weak self] active in
+      self?.isSynthesizing = active
+      if !active { self?.clearFloatingPillResponseGlowIfIdle() }
     }
+    pipeline.onPlaybackStarted = { [weak self] _ in
+      guard let self else { return }
+      if let lease = self.activePTTLease {
+        _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
+      }
+      self.tracer?.end("tts_start")
+    }
+    pipeline.onStreamFailure = { error in
+      guard !Self.isCancellation(error) else { return }
+      log(
+        "FloatingBarVoicePlaybackService: progressive cloud TTS failed: \(error.localizedDescription)"
+      )
+    }
+    pipeline.onFallback = { [weak self] text, error, completion in
+      guard let self else {
+        completion()
+        return
+      }
+      let token = self.currentSynthesisToken()
+      guard self.canUseCloudTTSFallback(after: error, token: token, operation: "progressive_chunk") else {
+        completion()
+        return
+      }
+      self.recordSelectedVoiceFallback(
+        to: "system_voice_fallback",
+        reason: Self.ttsFallbackReason(for: error),
+        outcome: .degraded)
+      self.enqueueSystemSpeech(text, completion: completion)
+    }
+    return pipeline
   }
 
   func stop() {
@@ -661,13 +657,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     return true
   }
 
-  private func startPlaybackIfNeeded() {
-    guard audioPlayer == nil else { return }
-    guard !audioQueue.isEmpty else { return }
-    let next = audioQueue.removeFirst()
-    startPlayback(next.audio, fallbackText: next.text)
-  }
-
   private func startPlayback(_ data: Data, fallbackText: String = "") {
     do {
       if UserDefaults.standard.bool(forKey: "forceTTSPlaybackFail") {
@@ -779,6 +768,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       // This exact utterance finished after its lease was superseded. Clear
       // only its physical marker; never let it drain the replacement lease.
       activeSystemSpeechToken = nil
+      activeSystemSpeechCompletion = nil
       return false
     }
     activeSystemSpeechToken = nil
@@ -799,8 +789,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       max(AVSpeechUtteranceMinimumSpeechRate, base * playbackSpeed))
   }
 
-  private func enqueueSystemSpeech(_ text: String) {
+  private func enqueueSystemSpeech(_ text: String, completion: (() -> Void)? = nil) {
     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      completion?()
       if let lease = activePTTLease {
         activePTTLease = nil
         VoiceTurnCoordinator.shared.publish(
@@ -822,6 +813,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       generation: playbackGeneration,
       leaseID: activePTTLease?.id,
       utterance: utterance)
+    activeSystemSpeechCompletion = completion
     speechSynthesizer.speak(utterance)
     tracer?.end("tts_start")
   }
@@ -847,7 +839,6 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         self.enqueueSystemSpeech(fallbackText)
         return
       }
-      self.startPlaybackIfNeeded()
       self.clearFloatingPillResponseGlowIfIdle()
     }
   }
@@ -876,6 +867,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     Task { @MainActor [weak self, utteranceBox] in
       guard let self else { return }
       guard self.completeSystemSpeechIfCurrent(utteranceBox.value) else { return }
+      let completion = self.activeSystemSpeechCompletion
+      self.activeSystemSpeechCompletion = nil
       if let acknowledgement = self.activeRealtimeSlowToolAcknowledgement {
         log(
           "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement finished kind=\(acknowledgement.rawValue) transport=\(self.activeRealtimeSlowToolAcknowledgementTransport ?? "system_voice") success=true"
@@ -883,7 +876,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         self.activeRealtimeSlowToolAcknowledgement = nil
         self.activeRealtimeSlowToolAcknowledgementTransport = nil
       }
-      self.startPlaybackIfNeeded()
+      completion?()
       self.clearFloatingPillResponseGlowIfIdle()
     }
   }
@@ -893,6 +886,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     Task { @MainActor [weak self, utteranceBox] in
       guard let self else { return }
       guard self.completeSystemSpeechIfCurrent(utteranceBox.value) else { return }
+      let completion = self.activeSystemSpeechCompletion
+      self.activeSystemSpeechCompletion = nil
       if let acknowledgement = self.activeRealtimeSlowToolAcknowledgement {
         log(
           "FloatingBarVoicePlaybackService: realtime slow-tool acknowledgement finished kind=\(acknowledgement.rawValue) transport=\(self.activeRealtimeSlowToolAcknowledgementTransport ?? "system_voice") success=false"
@@ -900,6 +895,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         self.activeRealtimeSlowToolAcknowledgement = nil
         self.activeRealtimeSlowToolAcknowledgementTransport = nil
       }
+      completion?()
       self.clearFloatingPillResponseGlowIfIdle()
     }
   }
@@ -922,8 +918,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
     streamedText = ""
     bufferedText = ""
-    synthesisQueue.removeAll()
-    audioQueue.removeAll()
+    progressivePipeline?.cancel()
+    progressivePipeline = nil
     isSynthesizing = false
     hasStartedRealPlayback = false
     hasEmittedFirstChunk = false
@@ -932,6 +928,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     activePlayerFallbackText = ""
     speechSynthesizer.stopSpeaking(at: .immediate)
     activeSystemSpeechToken = nil
+    activeSystemSpeechCompletion = nil
     activeRealtimeSlowToolAcknowledgement = nil
     activeRealtimeSlowToolAcknowledgementTransport = nil
     activePTTLease = nil
@@ -1083,6 +1080,12 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   }
 
   private nonisolated static func ttsFallbackReason(for error: Error) -> String {
+    if error as? ProgressiveTTSPlaybackError == .stalled {
+      return "timeout"
+    }
+    if let urlError = error as? URLError, urlError.code == .timedOut {
+      return "timeout"
+    }
     if let apiError = error as? APIError,
       case .httpError(let statusCode, _) = apiError,
       statusCode == 429

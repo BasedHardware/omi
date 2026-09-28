@@ -11503,4 +11503,30 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Sombre';
+
+  @override
+  String get chatDiscardRecording => 'Ignorer';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Je n’ai pas compris — réessayez';
+
+  @override
+  String get siriIndexSetting => 'Utiliser Omi avec Siri et Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Autorisez Siri à trouver vos conversations, souvenirs et tâches sur cet appareil. Désactiver cette option les supprime de la recherche Apple.';
+
+  @override
+  String get sendToSupport => 'Envoyer au support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Vérifiez les données de diagnostic JSON ci-dessous. Elles incluent l’identifiant de l’appareil, les connexions, la batterie, le micrologiciel et les événements Bluetooth. Aucun audio ni transcription.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Code du ticket de support';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Impossible d’envoyer les données de diagnostic. Réessayez.';
 }

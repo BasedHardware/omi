@@ -84,6 +84,11 @@ chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 desktop_updates_bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
 screen_frames_bucket = os.getenv('BUCKET_SCREEN_FRAMES')
 
+
+def get_private_cloud_sync_bucket() -> Any:
+    return _get_storage_client().bucket(private_cloud_sync_bucket)
+
+
 _did_warn_missing_speech_profiles_bucket = False
 
 
@@ -179,7 +184,9 @@ def delete_all_user_storage_objects(uid: str) -> int:
         (speech_profiles_bucket, (f'{uid}/',)),
         (
             private_cloud_sync_bucket,
-            tuple(f'{prefix}/{uid}/' for prefix in ('chunks', 'audio', 'merged', PLAYBACK_ARTIFACT_PREFIX)),
+            tuple(
+                f'{prefix}/{uid}/' for prefix in ('chunks', 'audio', 'merged', PLAYBACK_ARTIFACT_PREFIX, 'diagnostics')
+            ),
         ),
         (syncing_local_bucket, (f'syncing/{uid}/',)),
         (chat_files_bucket, (f'{uid}/',)),
@@ -195,6 +202,15 @@ def delete_all_user_storage_objects(uid: str) -> int:
             if key in seen_buckets:
                 continue
             seen_buckets.add(key)
+            if bucket_name == private_cloud_sync_bucket and prefix == f'diagnostics/{uid}/':
+                # Remove ticket lookups alongside their owner-scoped bundles.
+                for blob in list(bucket.list_blobs(prefix=prefix)):
+                    ticket = blob.name.rsplit('/', 1)[-1].removesuffix('.json')
+                    if len(ticket) == 12 and all(c in '0123456789ABCDEF' for c in ticket):
+                        lookup = bucket.blob(f'diagnostics/tickets/{ticket}.json')
+                        if lookup.exists():
+                            lookup.delete()
+                            deleted += 1
             deleted += _delete_owner_bucket_prefix(bucket, prefix)
     return deleted
 

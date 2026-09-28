@@ -142,6 +142,8 @@ async def fresh_live_match(monkeypatch, uid, vector):
     suggestions = []
 
     async def call(fn, *args, **kwargs):
+        if fn is speakers.conversations_db.get_manual_speaker_receipt:
+            return {}
         return fn(*args, **kwargs)
 
     host = SimpleNamespace(

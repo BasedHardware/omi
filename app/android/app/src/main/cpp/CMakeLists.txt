@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.22.1)
 
 project(phonemicopus C)
 
-add_library(phonemicopus SHARED phone_mic_opus_jni.c)
+add_library(phonemicopus SHARED phone_mic_opus_jni.c tts_mp3_decoder_jni.c)
 
 find_library(log-lib log)
 target_link_libraries(phonemicopus ${log-lib})

@@ -78,8 +78,14 @@ environment_shared:
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'false'
           category: rollout
+        STT_RESILIENT_RECONNECT:
+          value: 'false'
+          category: rollout
         STT_MULTI_LANGUAGE_HINTS:
           value: 'true'
+          category: rollout
+        STT_LEARNED_LANGUAGE_PROFILE:
+          value: 'false'
           category: rollout
         STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
           value: '0'
@@ -561,7 +567,7 @@ environment_shared:
             category: rollout
           SYNC_BACKFILL_UID_SEQUENCER:
             provisional: true
-            value: 'off'
+            value: 'on'
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
@@ -693,7 +699,7 @@ environment_shared:
             category: rollout
           SYNC_BACKFILL_UID_SEQUENCER:
             provisional: true
-            value: 'off'
+            value: 'on'
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
