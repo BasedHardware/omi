@@ -11245,4 +11245,59 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => '피드백 보내기';
+
+  @override
+  String get feedbackAllGood => '문제없음';
+
+  @override
+  String get feedbackChatWithUs => '자세한 이야기가 필요한가요? 채팅으로 알려주세요';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => '정확하지 않음';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => '불완전함';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => '관련 없음';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => '잘못된 맥락';
+
+  @override
+  String get feedbackReasonSummaryOther => '기타';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => '오디오 없음';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => '전사 품질 낮음';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => '잘못된 화자';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => '지연 또는 중단';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => '불완전하거나 중복됨';
+
+  @override
+  String get feedbackReasonRecordingOther => '기타';
+
+  @override
+  String get searchPeople => '사람 검색';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\"을(를) 새 사람으로 추가';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return '모두 $count명 표시';
+  }
 }

@@ -3605,5 +3605,22 @@
     "sendToSupport": "Send to support",
     "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
     "deviceDiagnosticsTicket": "Support ticket code",
-    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again."
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
+    "feedbackGiveFeedback": "提供反馈",
+    "feedbackAllGood": "一切正常",
+    "feedbackChatWithUs": "想补充细节？和我们聊聊",
+    "feedbackReasonSummaryInaccurate": "不准确",
+    "feedbackReasonSummaryIncomplete": "不完整",
+    "feedbackReasonSummaryIrrelevant": "不相关",
+    "feedbackReasonSummaryWrongContext": "语境不对",
+    "feedbackReasonSummaryOther": "其他问题",
+    "feedbackReasonRecordingMissingAudio": "缺少音频",
+    "feedbackReasonRecordingPoorTranscription": "转写质量差",
+    "feedbackReasonRecordingWrongSpeaker": "说话人错误",
+    "feedbackReasonRecordingDelayedOrStuck": "延迟或卡住",
+    "feedbackReasonRecordingFragmentedOrDuplicated": "断断续续或重复",
+    "feedbackReasonRecordingOther": "其他问题",
+    "searchPeople": "搜索人员",
+    "addQueryAsNewPerson": "将“{query}”添加为新人员",
+    "showAllPeople": "显示全部 {count} 人"
 }

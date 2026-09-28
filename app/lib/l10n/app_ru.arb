@@ -3640,5 +3640,22 @@
     "sendToSupport": "Send to support",
     "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
     "deviceDiagnosticsTicket": "Support ticket code",
-    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again."
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
+    "feedbackGiveFeedback": "Отправить отзыв",
+    "feedbackAllGood": "Всё хорошо",
+    "feedbackChatWithUs": "Подробнее? Напишите нам",
+    "feedbackReasonSummaryInaccurate": "Неточно",
+    "feedbackReasonSummaryIncomplete": "Неполно",
+    "feedbackReasonSummaryIrrelevant": "Не по теме",
+    "feedbackReasonSummaryWrongContext": "Не тот контекст",
+    "feedbackReasonSummaryOther": "Другое",
+    "feedbackReasonRecordingMissingAudio": "Нет звука",
+    "feedbackReasonRecordingPoorTranscription": "Плохая расшифровка",
+    "feedbackReasonRecordingWrongSpeaker": "Неверный спикер",
+    "feedbackReasonRecordingDelayedOrStuck": "Задержка или зависание",
+    "feedbackReasonRecordingFragmentedOrDuplicated": "Фрагментация или дублирование",
+    "feedbackReasonRecordingOther": "Другое",
+    "searchPeople": "Поиск людей",
+    "addQueryAsNewPerson": "Добавить «{query}» как нового человека",
+    "showAllPeople": "Показать всех людей ({count})"
 }

@@ -523,6 +523,23 @@ breakers, and `omi_stt_provider_retired{provider}` exporting the deployment's
 `STT_RETIRED_PROVIDERS` (default `deepgram`). See
 `backend/docs/operational/windowed-live-stt.md` for the alerts.
 
+For an allocated windowed-TDT session, listen retains a bounded 90-second
+capture-positioned PCM ring. Delivered window segments advance its finalized
+sample boundary. If the socket dies after accepting audio, the receiver starts
+the replacement provider epoch at the first unfinished sample and replays that
+audio before sending the current unsent chunk. A full ring triggers failover
+before an unfinished sample can be evicted. The replacement epoch stitches
+provider-local transcript times onto the original capture sample axis.
+Parakeet's `/batch/metrics` exports pending count and oldest queue wait;
+listen resolves every ready GPU pod through the chart's headless Service and
+polls them off the session-start path. It declines new window admissions at
+four pending requests summed across the pool or one second of oldest wait on
+any pod. A missing replica, invalid response, or stale reading stands down all
+listen processes. A partial replay retains its unaccepted tail and new audio
+for the next vendor leg while preserving capture sample offsets. Window POSTs mark their
+request so `parakeet_prerecorded_requests_total` excludes live canary errors
+while covering the batch path used by sync backfill.
+
 The same authoritative attempt emits fail-open PostHog product events:
 `Transcript Started` at first nontrivial audio and exactly one of `Transcript
 Completed`, `Transcript Failed`, or `Transcript Cancelled`. Those events carry
@@ -1531,8 +1548,17 @@ only committed IDs drive live updates and `SegmentsDeletedEvent`.
 Translation and inference flushes use `segment_update_fields`: they can update
 existing IDs but cannot restore retired IDs or replace speech text/timestamps.
 Both lifecycle processor writers reapply the current receipt before committing.
-This preserves attribution while leaving summary refresh explicit; processor
-content freshness for non-sync rows is a separate pre-existing limitation.
+The processor also reads and applies that receipt to its in-memory transcript
+before building the summary prompt, including when audio-based speaker resolution
+is unavailable. The mobile detail page regenerates an existing summary after
+four seconds without a newly acknowledged speaker edit, or when the detail page
+closes. Saves still in flight keep their conversation ID and regenerate once
+after the final successful acknowledgement, even if the detail page was disposed.
+The reprocess response carries `X-Omi-Speaker-Receipt-Summary: 1` only after
+the processor successfully reads and applies the manual receipt (including a
+confirmed empty receipt); a failed receipt read or application sends no header.
+Without it, the detail page keeps the explicit retry action. Processor content
+freshness for non-sync rows remains a separate limitation.
 Protection migration re-encodes the receipt and transcript in one per-document
 transaction; the stored level outranks a live caller's cached hint.
 

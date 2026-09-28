@@ -11220,4 +11220,59 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => '提供反馈';
+
+  @override
+  String get feedbackAllGood => '一切正常';
+
+  @override
+  String get feedbackChatWithUs => '想补充细节？和我们聊聊';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => '不准确';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => '不完整';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => '不相关';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => '语境不对';
+
+  @override
+  String get feedbackReasonSummaryOther => '其他问题';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => '缺少音频';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => '转写质量差';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => '说话人错误';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => '延迟或卡住';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => '断断续续或重复';
+
+  @override
+  String get feedbackReasonRecordingOther => '其他问题';
+
+  @override
+  String get searchPeople => '搜索人员';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '将“$query”添加为新人员';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return '显示全部 $count 人';
+  }
 }

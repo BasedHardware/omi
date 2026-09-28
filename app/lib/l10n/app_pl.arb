@@ -3640,5 +3640,22 @@
     "sendToSupport": "Send to support",
     "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
     "deviceDiagnosticsTicket": "Support ticket code",
-    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again."
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
+    "feedbackGiveFeedback": "Przekaż opinię",
+    "feedbackAllGood": "Wszystko OK",
+    "feedbackChatWithUs": "Więcej szczegółów? Napisz do nas",
+    "feedbackReasonSummaryInaccurate": "Nieprawidłowe",
+    "feedbackReasonSummaryIncomplete": "Niekompletne",
+    "feedbackReasonSummaryIrrelevant": "Nieistotne",
+    "feedbackReasonSummaryWrongContext": "Zły kontekst",
+    "feedbackReasonSummaryOther": "Coś innego",
+    "feedbackReasonRecordingMissingAudio": "Brak audio",
+    "feedbackReasonRecordingPoorTranscription": "Słaba transkrypcja",
+    "feedbackReasonRecordingWrongSpeaker": "Zła osoba mówiąca",
+    "feedbackReasonRecordingDelayedOrStuck": "Opóźnione lub zacięte",
+    "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmentaryczne lub zduplikowane",
+    "feedbackReasonRecordingOther": "Coś innego",
+    "searchPeople": "Szukaj osób",
+    "addQueryAsNewPerson": "Dodaj „{query}” jako nową osobę",
+    "showAllPeople": "Pokaż wszystkie osoby ({count})"
 }

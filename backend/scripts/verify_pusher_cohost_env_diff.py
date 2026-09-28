@@ -56,6 +56,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
+            "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             "PARAKEET_WINDOW_MAX_SESSIONS",
@@ -146,6 +148,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "prod": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
+            "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             "PARAKEET_WINDOW_MAX_SESSIONS",
@@ -267,7 +271,9 @@ SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
         }
     ),
-    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "DEEPGRAM_SELF_HOSTED_ENABLED"}),
+    # The 1% windowed-TDT canary is listen-only. Pusher retains its streaming
+    # and prerecorded policy while allocated listen sessions may lead with TDT.
+    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "DEEPGRAM_SELF_HOSTED_ENABLED", "STT_SERVICE_MODELS"}),
 }
 
 DEV_SHADOW_VALUES = {
