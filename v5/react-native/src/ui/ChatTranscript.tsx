@@ -1,5 +1,7 @@
 import React, {memo, useEffect, useRef} from 'react';
 import {Animated, Easing, StyleSheet, Text, View} from 'react-native';
+import {useOmiStyles} from '../design/OmiTheme';
+import type {OmiTheme} from '../design/tokens';
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {OmiAvatar} from './OmiAvatar';
 import {ChatMessageContent} from './ChatMessageContent';
@@ -38,6 +40,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
   const {tokens: token} = useDesktopTheme();
   const desktopStyles = useDesktopStyleSheets(createDesktopStyles);
   const transcriptStyles = useDesktopStyleSheets(createTranscriptStyles);
+  const mobileBubbles = useOmiStyles(createMobileBubbleStyles);
   const opacity = useRef(new Animated.Value(animate ? 0 : 1)).current;
   const translateY = useRef(
     new Animated.Value(animate && !reduceMotion ? 10 : 0),
@@ -110,8 +113,10 @@ const ChatMessageRow = memo(function ChatMessageRow({
             human
               ? desktop
                 ? desktopStyles.human
-                : transcriptStyles.human
-              : styles.chatBubbleAi,
+                : mobileBubbles.human
+              : desktop
+              ? styles.chatBubbleAi
+              : mobileBubbles.ai,
             desktop && !human && desktopStyles.ai,
             message.generationOutcome === 'cancelled' &&
               styles.cancelledMessage,
@@ -195,6 +200,7 @@ function ChatThinking({
   const {tokens: token} = useDesktopTheme();
   const desktopStyles = useDesktopStyleSheets(createDesktopStyles);
   const transcriptStyles = useDesktopStyleSheets(createTranscriptStyles);
+  const mobileBubbles = useOmiStyles(createMobileBubbleStyles);
   const opacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (reduceMotion) {
@@ -235,7 +241,7 @@ function ChatThinking({
         accessible={false}
         style={[
           styles.chatBubble,
-          styles.chatBubbleAi,
+          desktop ? styles.chatBubbleAi : mobileBubbles.ai,
           desktop && desktopStyles.ai,
           transcriptStyles.skeleton,
           {opacity},
@@ -274,15 +280,27 @@ const createDesktopStyles = (token: DesktopTokens) =>
     time: {color: token.color.inkFaint, fontSize: 11},
   });
 
+// Same convention as the shipped Omi apps on both platforms: your words sit
+// in a quiet bubble on the right; Omi answers as flat text with no bubble.
+const createMobileBubbleStyles = (t: OmiTheme) => ({
+  human: {
+    backgroundColor: t.color.surfaceRaised,
+    borderWidth: 0,
+    borderRadius: t.radius.sheet,
+    paddingHorizontal: t.space.lg - 2,
+    paddingVertical: t.space.sm + 2,
+  },
+  ai: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: t.space.xs,
+  },
+});
+
 const createTranscriptStyles = (token: DesktopTokens) =>
   StyleSheet.create({
     mobileColumn: {flexShrink: 1, maxWidth: '85%'},
-    human: {
-      backgroundColor: 'transparent',
-      borderWidth: 0,
-      paddingHorizontal: 0,
-      paddingVertical: 4,
-    },
     skeleton: {width: 260, maxWidth: '80%', gap: 10},
     line: {
       height: 10,

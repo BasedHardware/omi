@@ -12,6 +12,9 @@ app source. `src/main.ts` boots `../../react-native/App` via
 index.html               # Vite entry; viewport-fit=cover
 src/main.ts              # bootstrap + service-worker registration (best-effort)
 src/design-preview.ts    # labelled layout-review states over real surfaces
+                         #   (?surface ?data ?chat ?device ?conversations ?appearance ?route ?filter ?notice)
+src/preview-fonts.css    # loads the native icon font for the browser preview
+visual-audit/            # scenarios.ts + capture.ts: headless-Chrome screenshot audit (`bun run visual:audit`)
 src/root.css             # document pinned (no scroll/overscroll); screens own scrolling
 public/sw.js             # service worker: shell cache omi-v5-pwa-v1 (source, unit-tested)
 public/manifest.webmanifest, omi-mark.svg

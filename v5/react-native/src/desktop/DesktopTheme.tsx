@@ -3,6 +3,7 @@ import {color as kitDark} from '../ui/tokens';
 import type {DesktopThemeName, DesktopTokens} from './tokens';
 export type {DesktopThemeName, DesktopTokens};
 import {desktopThemeTokens} from './tokens';
+import {OmiThemeProvider} from '../design/OmiTheme';
 
 // The shared kit palette (ui/tokens `color`) stays dark for the mobile
 // surfaces that render without this provider. On the desktop shell the
@@ -79,7 +80,9 @@ export function DesktopThemeProvider({
   }, [name, onSetName]);
   return (
     <DesktopThemeContext.Provider value={value}>
-      {children}
+      <OmiThemeProvider scheme={name} density="desktop">
+        {children}
+      </OmiThemeProvider>
     </DesktopThemeContext.Provider>
   );
 }

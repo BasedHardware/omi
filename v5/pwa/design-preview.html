@@ -63,6 +63,11 @@
         width: min(380px, 100%);
         height: min(480px, calc(100dvh - 80px));
       }
+      body[data-appearance="dark"]:not([data-preview="mobile"])
+        #preview-window {
+        background: rgba(22, 23, 24, 0.72);
+        border-color: rgba(255, 255, 255, 0.12);
+      }
       @media (prefers-reduced-transparency: reduce) {
         body:not([data-preview="mobile"]) #preview-window {
           background: #f5f6f7;

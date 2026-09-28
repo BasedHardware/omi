@@ -1,4 +1,5 @@
 import React from 'react';
+import {omiPalettes} from '../design/tokens';
 import {ActivityIndicator, Animated, StyleSheet, Text} from 'react-native';
 import Renderer, {act} from 'react-test-renderer';
 import {ChatMessageRow, ChatThinking} from './ChatTranscript';
@@ -62,7 +63,7 @@ test('retires row animation and restores a row when animation is disabled', () =
 });
 
 test.each([false, true])(
-  'user messages are boxed and AI replies are unboxed on desktop (desktop=%s)',
+  'user messages are boxed and AI replies are unboxed (desktop=%s)',
   desktop => {
     let tree!: Renderer.ReactTestRenderer;
     const message = {
@@ -95,7 +96,8 @@ test.each([false, true])(
       expect(bubble().borderRadius).toBe(18);
       expect(bubble().borderWidth).toBe(0);
     } else {
-      expect(bubble().backgroundColor).toBe('transparent');
+      // Mobile follows the same convention: a quiet surface bubble for you.
+      expect(bubble().backgroundColor).toBe(omiPalettes.dark.surfaceRaised);
       expect(bubble().borderWidth).toBe(0);
     }
     act(() =>
@@ -109,12 +111,18 @@ test.each([false, true])(
         />,
       ),
     );
-    if (desktop) {
-      // Omi replies as flat text: the text node carries no bubble fill.
-      expect(bubble().backgroundColor).toBeUndefined();
-    } else {
-      expect(bubble().backgroundColor).not.toBe('transparent');
-    }
+    // Omi replies as flat text on both platforms: no bubble fill.
+    expect(bubble().backgroundColor).toBeUndefined();
+    expect(
+      StyleSheet.flatten(
+        tree.root.findAll(
+          node =>
+            typeof node.type === 'string' &&
+            StyleSheet.flatten(node.props.style)?.backgroundColor ===
+              omiPalettes.dark.surfaceRaised,
+        )[0]?.props.style,
+      ),
+    ).toBeUndefined();
     act(() => tree.unmount());
   },
 );
