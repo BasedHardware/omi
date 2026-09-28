@@ -77,6 +77,7 @@ class _RaceHost extends SiriIndexApi {
   String? owner;
   int generation = 0;
   final events = <String>[];
+  bool hangPreparation = false;
 
   @override
   Future<void> publishSessionConfig(SiriSessionConfig config) async {
@@ -89,6 +90,7 @@ class _RaceHost extends SiriIndexApi {
   @override
   Future<void> prepareForSignOut() async {
     events.add('pending-wipe');
+    if (hangPreparation) await Completer<void>().future;
     owner = null;
   }
 
@@ -325,6 +327,15 @@ void main() {
     host.releasePublish.complete();
     await Future.wait([signingIn, preparing]);
     expect(host.events, ['publish', 'pending-wipe']);
+    expect(host.owner, isNull);
+  });
+
+  test('a hung Pigeon preparation releases the native queue for callback wipe', () async {
+    final host = _RaceHost()..hangPreparation = true;
+    final siri = SiriIntegration.forTest(host, 'owner-race', prepareTimeout: const Duration(milliseconds: 20));
+    await expectLater(siri.prepareForSignOut(), throwsA(isA<TimeoutException>()));
+    await siri.accountChanged(null).timeout(const Duration(seconds: 1));
+    expect(host.events, ['pending-wipe']);
     expect(host.owner, isNull);
   });
 

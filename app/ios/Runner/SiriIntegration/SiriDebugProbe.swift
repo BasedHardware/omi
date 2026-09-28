@@ -632,6 +632,33 @@ enum SiriDebugProbe {
                         }
                     }
                     NSLog("[SiriProbe] stalePublishAfterWipe=%@", staleAccepted ? "FAIL" : "PASS")
+                    try await SiriSnapshotStore.shared.bind(uid: next.uid)
+                    let failedPrepOwner = SiriSessionConfig(uid: next.uid,
+                        generation: SiriSnapshotStore.shared.generationForOwner(next.uid) ?? -1,
+                        baseUrl: next.baseUrl, profile: next.profile,
+                        appVersion: next.appVersion, appBuild: next.appBuild,
+                        deviceIdHash: next.deviceIdHash, token: "fake-siri-probe-token",
+                        tokenExpiresAtMs: next.tokenExpiresAtMs)
+                    try SiriSession.shared.publish(failedPrepOwner)
+                    SiriSession.shared.simulateKeychainDeleteFailureOnce = true
+                    do { try await SiriSnapshotStore.shared.prepareForSignOut() }
+                    catch { NSLog("[SiriProbe] injectedSignOutPreparationFailure=observed") }
+                    let failedPrepPending = (defaults.stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? [])
+                        .contains(next.uid)
+                    NSLog("[SiriProbe] failedPreparationMarkerPersisted=%@", failedPrepPending ? "PASS" : "FAIL")
+                    _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
+                    let recoveredUID = "siri-probe-recovered"
+                    try await SiriSnapshotStore.shared.bind(uid: recoveredUID)
+                    let recovered = SiriSessionConfig(uid: recoveredUID,
+                        generation: SiriSnapshotStore.shared.generationForOwner(recoveredUID) ?? -1,
+                        baseUrl: next.baseUrl, profile: next.profile,
+                        appVersion: next.appVersion, appBuild: next.appBuild,
+                        deviceIdHash: next.deviceIdHash, token: "fake-siri-probe-token",
+                        tokenExpiresAtMs: next.tokenExpiresAtMs)
+                    try SiriSession.shared.publish(recovered)
+                    NSLog("[SiriProbe] signInAfterFailedPreparation=%@",
+                          SiriSnapshotStore.shared.generationForOwner(recoveredUID) != nil &&
+                          SiriSession.shared.currentConfig()?.uid == recoveredUID ? "PASS" : "FAIL")
                 }
             } catch {
                 NSLog("[SiriProbe] request=failed type=%@", String(describing: error))

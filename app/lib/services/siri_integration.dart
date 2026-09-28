@@ -98,6 +98,7 @@ class SiriIntegration extends SiriEventsApi {
         _testMemoryPageFetcher = null,
         _testTaskPageFetcher = null,
         _testConversationPageFetcher = null,
+        _prepareTimeout = const Duration(milliseconds: 1500),
         _delay = Future<void>.delayed;
 
   /// Inject a Pigeon host for hermetic projection and account fencing tests.
@@ -107,6 +108,7 @@ class SiriIntegration extends SiriEventsApi {
       SiriMemoryPageFetcher? memoryPageFetcher,
       SiriTaskPageFetcher? taskPageFetcher,
       SiriConversationPageFetcher? conversationPageFetcher,
+      Duration prepareTimeout = const Duration(milliseconds: 1500),
       Future<void> Function(Duration)? delay,
       bool coldStart = false})
       : _host = host,
@@ -116,6 +118,7 @@ class SiriIntegration extends SiriEventsApi {
         _testMemoryPageFetcher = memoryPageFetcher,
         _testTaskPageFetcher = taskPageFetcher,
         _testConversationPageFetcher = conversationPageFetcher,
+        _prepareTimeout = prepareTimeout,
         _delay = delay ?? Future<void>.delayed,
         _uid = coldStart ? null : uid,
         _nativeGeneration = coldStart ? null : 0;
@@ -130,6 +133,7 @@ class SiriIntegration extends SiriEventsApi {
   final SiriMemoryPageFetcher? _testMemoryPageFetcher;
   final SiriTaskPageFetcher? _testTaskPageFetcher;
   final SiriConversationPageFetcher? _testConversationPageFetcher;
+  final Duration _prepareTimeout;
   final Future<void> Function(Duration) _delay;
   void installEvents() {
     if (_isIOS) SiriEventsApi.setUp(this);
@@ -156,7 +160,7 @@ class SiriIntegration extends SiriEventsApi {
     ++_accountGeneration;
     _uid = null;
     _nativeGeneration = null;
-    await _nativeOperation(_host.prepareForSignOut);
+    await _nativeOperation(() => _host.prepareForSignOut().timeout(_prepareTimeout));
   }
 
   /// Synchronous provider callbacks keep their immediate UI update. Their

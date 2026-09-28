@@ -10,6 +10,7 @@ final class SiriSession {
     static let shared = SiriSession()
     #if OMI_SIRI_PROBE
     var beforeTokenLookup: (() -> Void)?
+    var simulateKeychainDeleteFailureOnce = false
     #endif
     private let defaults: UserDefaults?
     private let keychainService = SiriStorageNamespace.current.keychainService
@@ -75,6 +76,12 @@ final class SiriSession {
     /// A failed Keychain deletion leaves the pending-wipe marker in place and
     /// prevents Firebase sign-out from proceeding through the Dart bridge.
     func clearForSignOut() throws {
+        #if OMI_SIRI_PROBE
+        if simulateKeychainDeleteFailureOnce {
+            simulateKeychainDeleteFailureOnce = false
+            throw Failure.auth
+        }
+        #endif
         let status = SecItemDelete(keychainQuery() as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw Failure.auth }
         defaults?.removeObject(forKey: configKey)

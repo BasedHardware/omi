@@ -285,7 +285,7 @@ final class SiriSnapshotStore {
             let accepted = generation.map(generationMatchesLocked) ?? true
             let transitioning = transitionGeneration != nil
             lock.unlock()
-            guard accepted, !transitioning else { throw SiriSession.Failure.auth }
+            guard accepted, (!transitioning || pendingWipe) else { throw SiriSession.Failure.auth }
             if snapshotOwner != uid || owner != uid || pendingWipe { try await wipe(expectedGeneration: generation) }
             lock.lock(); defer { lock.unlock() }
             guard (generation.map(generationMatchesLocked) ?? true), transitionGeneration == nil,
@@ -323,17 +323,22 @@ final class SiriSnapshotStore {
         }
     }
     /// Prepare before Firebase sign-out, while the Flutter engine still exists.
-    /// UserDefaults is flushed before the token mirror is removed, so a killed
-    /// process sees the marker and refuses all engine-free reads and writes.
+    /// The pending marker is flushed before any other mutable state or Keychain
+    /// I/O. A later failure still leaves a durable engine-free privacy fence.
     func prepareForSignOut() async throws {
         try await serialized {
             lock.lock()
-            let next = (defaults.object(forKey: generationKey) as? Int64 ?? 0) + 1
             let owners = Set([owner, snapshot.ownerUid, SiriSession.shared.currentConfig()?.uid].compactMap { $0 })
                 .union(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? [])
-            transitionGeneration = next
-            defaults.set(next, forKey: generationKey)
             defaults.set(Array(owners), forKey: pendingWipeOwnersKey)
+            let markerPersisted = defaults.synchronize()
+            guard markerPersisted else {
+                lock.unlock()
+                throw SiriSession.Failure.auth
+            }
+            let next = (defaults.object(forKey: generationKey) as? Int64 ?? 0) + 1
+            defaults.set(next, forKey: generationKey)
+            transitionGeneration = next
             defaults.removeObject(forKey: routeKey)
             let persisted = defaults.synchronize()
             lock.unlock()
@@ -403,7 +408,7 @@ final class SiriSnapshotStore {
             let remaining = Set(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).subtracting(owners)
             if remaining.isEmpty { defaults.removeObject(forKey: pendingWipeOwnersKey) }
             else { defaults.set(Array(remaining), forKey: pendingWipeOwnersKey) }
-            if transitionGeneration == expectedGeneration { transitionGeneration = nil }
+            if expectedGeneration == nil || transitionGeneration == expectedGeneration { transitionGeneration = nil }
             lock.unlock()
 
         }

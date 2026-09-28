@@ -61,6 +61,42 @@ void main() {
     expect(order, ['siri-pending', 'firebase']);
   });
 
+  for (final preparation in ['throws', 'hangs']) {
+    for (final path in ['manual', 'switch', 'expiry', 'delete-account']) {
+      test('$path Firebase sign-out and cleanup finish when Siri preparation $preparation', () async {
+        SharedPreferences.setMockInitialValues({});
+        await SharedPreferencesUtil.init();
+        final order = <String>[];
+        final gateway = _DeletionGateway(Completer<RefreshedAuthToken?>(), onSignOut: () => order.add('firebase'));
+        final service = AuthService.forTesting(
+          tokenGateway: gateway,
+          siriPreparationTimeout: const Duration(milliseconds: 20),
+          prepareSiriSignOut: () async {
+            order.add('siri');
+            if (preparation == 'throws') throw StateError('native preparation failed');
+            await Completer<void>().future;
+          },
+        );
+        final Future<void> operation = switch (path) {
+          'manual' => service.signOut(),
+          'switch' => service.signOutForAccountSwitch(),
+          'expiry' =>
+            service.expireSession(const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken)),
+          _ => clearDeletedAccountSession(
+              authService: service,
+              clearUserState: () => order.add('providers'),
+              clearWal: () async => order.add('wal'),
+              clearPreferences: () async => order.add('preferences'),
+            ),
+        };
+        await operation.timeout(const Duration(seconds: 1));
+        expect(gateway.signOutCalls, 1);
+        expect(order, containsAllInOrder(['siri', 'firebase']));
+        if (path == 'delete-account') expect(order, containsAllInOrder(['firebase', 'wal', 'preferences']));
+      });
+    }
+  }
+
   test('account deletion invalidates late refresh and clears provider state before storage', () async {
     SharedPreferences.setMockInitialValues({'uid': 'user-1', 'authToken': 'old-token'});
     await SharedPreferencesUtil.init();
