@@ -53,6 +53,9 @@ def load_manifest(path: Path = MANIFEST) -> Mapping[str, Any]:
             names.add(job["name"])
             if job.get("state") not in {"ENABLED", "PAUSED"}:
                 raise ReconcileError(f"{env}/{job['name']}: state must be ENABLED or PAUSED")
+            lifecycle = job.get("lifecycle")
+            if lifecycle is not None and lifecycle != "planned":
+                raise ReconcileError(f"{env}/{job['name']}: lifecycle must be planned when specified")
             if not all(job.get(field) for field in ("region", "schedule", "time_zone", "attempt_deadline")):
                 raise ReconcileError(f"{env}/{job['name']}: missing schedule fields")
             target = _mapping(job.get("target"))
@@ -226,7 +229,13 @@ def reconcile(
     messages: list[str] = []
     for job in jobs:
         resource_name = _job_resource(project, job)
+        if apply and job.get("lifecycle") == "planned" and selected_jobs is None:
+            messages.append(f"PLANNED {resource_name}: skipped; select it explicitly with --jobs to deploy")
+            continue
         current = _get_job(session, resource_name)
+        if not apply and current is None and job.get("lifecycle") == "planned":
+            messages.append(f"PLANNED {resource_name}: not deployed")
+            continue
         desired = desired_resource(session, project, job)
         fields = diff_fields(current, desired)
         live_state = current.get("state") if current else None
