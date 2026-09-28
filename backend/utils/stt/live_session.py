@@ -180,12 +180,15 @@ class LiveChainSession:
                         translated = epoch.translate(seg_list)
                         if not translated:
                             return
-                        if gate is not None and not passthrough:
+                        if epoch.replay_origin_sample is not None:
+                            epoch.stitch_replayed_timestamps(translated)
+                        elif gate is not None and not passthrough:
                             gate.remap_segments(translated)
                         translated.sort(key=lambda item: item['start'])
                         for segment in translated:
-                            start = max(self.last_end, offset + max(0.0, float(segment['start'])))
-                            end = max(start, offset + max(0.0, float(segment['end'])))
+                            segment_offset = 0.0 if epoch.replay_origin_sample is not None else offset
+                            start = max(self.last_end, segment_offset + max(0.0, float(segment['start'])))
+                            end = max(start, segment_offset + max(0.0, float(segment['end'])))
                             segment['start'], segment['end'] = start, end
                             self.last_end = end
                         leg.note_selection_transcript(translated)

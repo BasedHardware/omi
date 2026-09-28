@@ -99,7 +99,21 @@ def test_replay_epoch_maps_new_socket_time_to_original_capture_position():
     assert [(s['start'], s['end']) for s in segments] == [(10.0, 11.0)]
 
 
-def test_reconnect_count_and_replay_limits():
+def test_clock_only_replay_timestamps_continue_on_capture_sample_axis():
+    timeline = CaptureTimeline(sample_rate=2)
+    timeline.accept(b'A\x00' * 2, arrival_wall=10.0, arrival_monotonic=1.0)
+    timeline.accept(b'B\x00' * 2, arrival_wall=11.0, arrival_monotonic=2.0)
+    replay_epoch = ProviderEpochTranslator(timeline, 2, project_times=False)
+    replay_epoch.provider_label = 'soniox'
+    replay_epoch.replay_origin_sample = 2
+    replay_epoch.note_accepted(2, 2)
+    segments = replay_epoch.translate([{'text': 'BB', 'start': 0.0, 'end': 1.0}])
+    replay_epoch.stitch_replayed_timestamps(segments)
+    assert [(s['_capture_start_sample'], s['_capture_end_sample']) for s in segments] == [(2, 4)]
+    assert [(s['start'], s['end']) for s in segments] == [(1.0, 2.0)]
+
+
+def test_reconnect_count_and_replay_limits(monkeypatch):
     ring = ResilientAudio(2)
     ring.append(b'X\x00' * 28, 0)
     assert ring.admit('soniox', 'soniox_rotation')
@@ -110,11 +124,25 @@ def test_reconnect_count_and_replay_limits():
     assert second.admit('soniox', 'soniox_rotation')
     assert not second.admit('soniox', 'soniox_rotation')  # rolling-minute cap
 
+    now = [0.0]
+    monkeypatch.setattr('utils.stt.resilient_stream.time.monotonic', lambda: now[0])
+    total_cap = ResilientAudio(2)
+    assert total_cap.admit('soniox', 'soniox_rotation')
+    now[0] = 61.0
+    assert total_cap.admit('soniox', 'soniox_rotation')
+    now[0] = 122.0
+    assert total_cap.admit('soniox', 'soniox_rotation')
+    now[0] = 183.0
+    assert not total_cap.admit('soniox', 'soniox_rotation')  # lifetime cap
+
 
 @pytest.mark.asyncio
 async def test_flag_off_uses_existing_failover_without_replay(monkeypatch):
     listener = receiver(monkeypatch, enabled=False)
     assert listener._resilient_audio is None
+    original = [{'text': 'unchanged', 'start': 1.25, 'end': 2.5, 'speaker': '0'}]
+    assert listener._filter_replayed_segments(original, 'soniox') is original
+    assert original == [{'text': 'unchanged', 'start': 1.25, 'end': 2.5, 'speaker': '0'}]
     listener.stt_socket = Socket(dead=True, reason='soniox_rotation')
     listener._rebuild_stt_socket_locked = AsyncMock(return_value=True)
     assert await listener._failover_stt_socket()

@@ -680,7 +680,9 @@ class ListenReceiver:
                 translated = epoch.translate(segments)
                 if not translated:
                     return
-                if self.vad_gate is not None and not passthrough:
+                if epoch.replay_origin_sample is not None:
+                    epoch.stitch_replayed_timestamps(translated)
+                elif self.vad_gate is not None and not passthrough:
                     self.vad_gate.remap_segments(translated)
                 self._enqueue_clock_positioned_segments(translated, provider=epoch.provider_label)
 
@@ -1261,6 +1263,8 @@ class ListenReceiver:
             return False
         replay = ring.snapshot()
         parakeet_callback, modulate_callback, epoch = self._stt_rebuild[0]()
+        if epoch is not None:
+            epoch.replay_origin_sample = replay[0][0] if replay else ring.finalized_sample
         try:
             raw = await self._create_stt_socket(
                 parakeet_callback,
