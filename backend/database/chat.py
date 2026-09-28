@@ -961,6 +961,7 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
     doc_refs = [messages_ref.document(msg_id) for msg_id in message_doc_ids]
     doc_snapshots = db.get_all(doc_refs)
 
+    batch_count = 0
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Message {doc_snapshot.id} not found, skipping.")
@@ -981,8 +982,14 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
 
         update_data: Dict[str, Any] = {'data_protection_level': target_level, 'text': migrated_text}
         batch.update(doc_snapshot.reference, update_data)
+        batch_count += 1
+        if batch_count >= BATCH_LIMIT:
+            batch.commit()
+            batch = db.batch()
+            batch_count = 0
 
-    batch.commit()
+    if batch_count > 0:
+        batch.commit()
 
 
 # ============================================================================
