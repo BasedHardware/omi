@@ -11428,6 +11428,48 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceDiagnosticsUploadFailed => 'Không thể gửi dữ liệu chẩn đoán. Vui lòng thử lại.';
 
   @override
+  String get feedbackGiveFeedback => 'Gửi phản hồi';
+
+  @override
+  String get feedbackAllGood => 'Mọi thứ đều ổn';
+
+  @override
+  String get feedbackChatWithUs => 'Thêm chi tiết? Nhắn tin với chúng tôi';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Không chính xác';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Chưa đầy đủ';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Không liên quan';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Sai ngữ cảnh';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Vấn đề khác';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Thiếu âm thanh';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Chuyển ngữ kém';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Sai người nói';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Bị chậm hoặc treo';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Đứt đoạn hoặc trùng lặp';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Vấn đề khác';
+
+  @override
   String get searchPeople => 'Tìm kiếm người';
 
   @override
