@@ -743,13 +743,15 @@ or raw exception text. `blocked_byok` is an explicit recovery state: durable
 offline BYOK is not supported without a separately reviewed credential broker;
 the worker must never silently use Omi keys.
 
-A stale `in_progress` row with content can also be finalized by the opt-in
-self-heal sweep as a `SERVER_RECOVERY` admission on the same conversation id —
+A stale `in_progress` row with content can also be finalized by the always-on
+backend reconciliation sweep as a `SERVER_RECOVERY` admission on the same conversation id —
 never a new conversation — through this same durable job ledger. The recovery
 run reuses normal persistence but is fenced by a pre-persist structured guard:
-output carrying only the deterministic minimum raises before the
-completed-status transaction, leaving the row's content and lifecycle state
-for the existing dead-letter review workflow.
+a kept output carrying only the deterministic minimum raises before the
+completed-status transaction, leaving the row's content for dead-letter review.
+An explicit relevance discard is a valid terminal outcome even without rich
+structure; the sweep verifies its persisted server-recovery verdict, a
+nonshrinking transcript byte count, and the original audio identifiers.
 
 Live listen sessions also hold a five-minute lease on their user-scoped
 `recording_sessions` document. Accepted decoded audio renews it at most once a
