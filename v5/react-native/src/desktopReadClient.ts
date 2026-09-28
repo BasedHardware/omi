@@ -52,6 +52,7 @@ export function conversationGroupLabel(
 export type MemoryProjection = {
   kind: 'memory';
   id: string;
+  visibility?: 'public' | 'private';
   title: string;
   summary: string;
   searchableText: string;

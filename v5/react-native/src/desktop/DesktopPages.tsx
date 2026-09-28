@@ -5,6 +5,7 @@ import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
 import {
   desktopProjectionUnavailableCopy,
+  loadMemories,
   projectionTimestamp,
   type DesktopReadOutcomes,
 } from '../desktopReadClient';
@@ -12,6 +13,7 @@ import {matchesSearchQuery} from '../searchText';
 import {omiBackend, subscribeOmiBackendSessionInvalidated} from '../omiNative';
 import {ReadStatus} from '../ui/ReadStatus';
 import {ConversationDetail} from '../ui/ConversationDetail';
+import {MemoryWriteActions} from '../pages/MemoryWriteActions';
 import {FocusPressable} from '../ui/Pressable';
 import {
   TaskEditor,
@@ -39,12 +41,14 @@ export function LibraryPage({
   onLoadMore,
   loadingMore = false,
   notice = null,
+  onRefresh,
 }: {
   outcomes: DesktopReadOutcomes | null;
   query?: string;
   onLoadMore?: () => void;
   loadingMore?: boolean;
   notice?: string | null;
+  onRefresh?: () => void | Promise<void>;
 }) {
   const styles = useDesktopStyleSheets(createStyles);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -65,6 +69,10 @@ export function LibraryPage({
     );
   const selected =
     items.find(item => `${item.kind}:${item.id}` === selectedId) ?? null;
+  const refreshMemoryWrites = async () => {
+    if (omiBackend != null) await loadMemories(omiBackend);
+    await onRefresh?.();
+  };
   const readError = [outcome, memoryOutcome]
     .filter(value => value?.status === 'error')
     .map(value => (value?.status === 'error' ? value.error : ''))
@@ -147,6 +155,15 @@ export function LibraryPage({
                   {selected.citations.length === 1 ? 'citation' : 'citations'} ·{' '}
                   {selected.provenance.label || 'Synthesized memory'}
                 </Text>
+                <MemoryWriteActions
+                  memory={selected}
+                  writesAvailable={
+                    memoryOutcome?.status === 'success' &&
+                    memoryOutcome.value.apiContract === 'omi'
+                  }
+                  onRefresh={refreshMemoryWrites}
+                  onDeleted={() => setSelectedId(null)}
+                />
               </View>
             )}
           </ScrollView>
