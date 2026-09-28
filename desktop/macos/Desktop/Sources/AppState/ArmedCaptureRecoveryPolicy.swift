@@ -149,9 +149,11 @@ struct ArmedLifecycleEventPolicy {
   private var hourStart: Date?
   private var lifecycleHourlyCount = 0
   private var skipHourlyCount = 0
+  private var suppressedHourlyCount = 0
   private var suppressedThisEpisode = false
   private let lifecycleHourlyLimit = 24
   private let skipHourlyLimit = 4
+  private let suppressedHourlyLimit = 4
 
   mutating func shouldEmit(
     phase: String, presenceReason: ArmedCaptureRecoveryPolicy.PresenceReason? = nil, now: Date
@@ -160,17 +162,21 @@ struct ArmedLifecycleEventPolicy {
       self.hourStart = now
       lifecycleHourlyCount = 0
       skipHourlyCount = 0
+      suppressedHourlyCount = 0
     } else if hourStart == nil {
       hourStart = now
     }
     switch phase {
-    case "entered", "retry", "suppressed_signal":
+    case "entered", "retry":
       guard lifecycleHourlyCount < lifecycleHourlyLimit else { return false }
-      if phase == "suppressed_signal" {
-        guard !suppressedThisEpisode else { return false }
-        suppressedThisEpisode = true
-      }
       lifecycleHourlyCount += 1
+      return true
+    case "suppressed_signal":
+      // Diagnostics have their own small hourly budget so echoes cannot use
+      // up the lifecycle budget needed for entered/retry outcomes.
+      guard !suppressedThisEpisode, suppressedHourlyCount < suppressedHourlyLimit else { return false }
+      suppressedThisEpisode = true
+      suppressedHourlyCount += 1
       return true
     case "retry_skipped":
       guard let presenceReason else { return false }

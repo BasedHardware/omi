@@ -34,8 +34,12 @@ extension AppState {
     {
       return
     }
-    if armedMicrophoneRecovery.isWaitingOrProbing && !armedRetry {
-      if userInitiated { armedMicrophoneRecovery.cancel() } else { return }
+    if userInitiated {
+      // A manual start ends any remembered automatic flap episode, including
+      // the recovered-but-still-continuable interval.
+      armedMicrophoneRecovery.cancel()
+    } else if armedMicrophoneRecovery.isWaitingOrProbing && !armedRetry {
+      return
     }
     guard AssistantSettings.shared.audioRecordingMode != .off else {
       log("Transcription: start ignored because Audio Recording is Off")
@@ -541,7 +545,9 @@ extension AppState {
               localService?.appendAudio(chunk)
             }
           } else {
-            mixer?.setMicAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              mixer?.setMicAudio(chunk)
+            }
           }
         },
         onAudioLevel: { level in
@@ -598,7 +604,9 @@ extension AppState {
               localSystem?.appendAudio(chunk)
             }
           } else {
-            mixer?.setSystemAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              mixer?.setSystemAudio(chunk)
+            }
           }
         },
         onAudioLevel: { level in

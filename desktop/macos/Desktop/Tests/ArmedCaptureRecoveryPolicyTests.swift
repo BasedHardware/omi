@@ -331,12 +331,22 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
     _ = policy.enter(now: fixture.now)
     XCTAssertEqual(gate.evaluate(.inputChanged), .settling)
     XCTAssertEqual(policy.state, .waiting, "the callback must not enter the policy during teardown")
-    fixture.now = start.addingTimeInterval(ArmedChangeSignalGate.settleInterval)
-    XCTAssertEqual(gate.evaluate(.inputChanged), .unchanged)
-    XCTAssertEqual(policy.state, .waiting)
+    // A genuine device change during the settle window is caught by the
+    // post-window recheck, even though its original listener callback settled.
     fixture.input = .init(deviceIDs: [1, 3], defaultInputID: 3)
+    fixture.now = start.addingTimeInterval(ArmedChangeSignalGate.settleInterval)
     XCTAssertEqual(gate.evaluate(.inputChanged), .changed)
     XCTAssertEqual(policy.signal(.inputChanged, now: fixture.now, presence: present, inputIsBuiltIn: nil), .probe)
+  }
+
+  func testOmiSystemAudioAggregateIsExcludedFromInputAndDefaultSnapshot() {
+    let snapshot = ArmedChangeSignalGate.InputSnapshot.currentInputs(
+      [
+        AudioCaptureService.InputDevice(id: 1, uid: "builtin-mic", name: "Built-in"),
+        AudioCaptureService.InputDevice(id: 9, uid: "omi.systemaudio.private", name: "Private"),
+      ], defaultInputID: 9)
+    XCTAssertEqual(snapshot.deviceIDs, [1])
+    XCTAssertNil(snapshot.defaultInputID)
   }
 
   @MainActor
@@ -395,18 +405,16 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
         XCTFail("exhaustion must wait")
         return
       }
-      XCTAssertEqual(
-        policy.signal(.inputChanged, now: now.addingTimeInterval(1), presence: present, inputIsBuiltIn: nil),
-        policy.flapCount >= ArmedCaptureRecoveryPolicy.guardedFlapCount ? .none : .probe)
-      if policy.state == .waiting {
-        XCTAssertEqual(policy.signal(.backoff, now: deadline, presence: present, inputIsBuiltIn: nil), .probe)
-        now = deadline
-      }
+      guard deadline < end else { break }
+      // The mic becomes live in under a second after the timer probe, then
+      // goes silent 15 seconds later. Echo callbacks never bypass backoff.
+      XCTAssertEqual(policy.signal(.backoff, now: deadline, presence: present, inputIsBuiltIn: nil), .probe)
+      now = deadline.addingTimeInterval(0.5)
       cycles += 1
-      now = now.addingTimeInterval(15)
       XCTAssertNotNil(policy.succeeded(now: now))
       now = now.addingTimeInterval(15)
     }
+    XCTAssertEqual(cycles, 49, "this policy completes 49 restart cycles in the eight-hour simulation")
     XCTAssertLessThanOrEqual(cycles, 60)
   }
 
@@ -415,7 +423,32 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
     events.beginEpisode()
     XCTAssertTrue(events.shouldEmit(phase: "suppressed_signal", now: start))
     XCTAssertFalse(events.shouldEmit(phase: "suppressed_signal", now: start.addingTimeInterval(1)))
+    for index in 1...3 {
+      events.beginEpisode()
+      XCTAssertTrue(
+        events.shouldEmit(phase: "suppressed_signal", now: start.addingTimeInterval(Double(index + 1))))
+    }
     events.beginEpisode()
-    XCTAssertTrue(events.shouldEmit(phase: "suppressed_signal", now: start.addingTimeInterval(2)))
+    XCTAssertFalse(events.shouldEmit(phase: "suppressed_signal", now: start.addingTimeInterval(10)))
+    for _ in 0..<12 {
+      XCTAssertTrue(events.shouldEmit(phase: "entered", now: start.addingTimeInterval(11)))
+      XCTAssertTrue(events.shouldEmit(phase: "retry", now: start.addingTimeInterval(11)))
+    }
+    XCTAssertFalse(events.shouldEmit(phase: "retry", now: start.addingTimeInterval(11)))
+  }
+
+  func testResetClearsRecoveredFlapHistoryForManualStartOrCancel() {
+    var policy = ArmedCaptureRecoveryPolicy()
+    _ = policy.enter(now: start)
+    XCTAssertEqual(
+      policy.signal(.backoff, now: start.addingTimeInterval(30), presence: present, inputIsBuiltIn: nil),
+      .probe)
+    XCTAssertNotNil(policy.succeeded(now: start.addingTimeInterval(31)))
+    XCTAssertGreaterThan(policy.retryCount, 0)
+    policy.reset()
+    XCTAssertEqual(policy.flapCount, 0)
+    XCTAssertEqual(policy.retryCount, 0)
+    XCTAssertFalse(policy.continuedEpisode)
+    XCTAssertFalse(policy.isFlapGuarded)
   }
 }

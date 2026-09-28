@@ -9,6 +9,16 @@ struct ArmedChangeSignalGate {
   struct InputSnapshot: Equatable {
     let deviceIDs: Set<AudioDeviceID>
     let defaultInputID: AudioDeviceID?
+
+    static func currentInputs(
+      _ devices: [AudioCaptureService.InputDevice], defaultInputID: AudioDeviceID?
+    ) -> Self {
+      let inputs = devices.filter { !$0.uid.hasPrefix("omi.systemaudio.") }
+      let inputIDs = Set(inputs.map(\.id))
+      return Self(
+        deviceIDs: inputIDs,
+        defaultInputID: defaultInputID.flatMap { inputIDs.contains($0) ? $0 : nil })
+    }
   }
   struct DisplaySnapshot: Equatable {
     let asleepByID: [CGDirectDisplayID: Bool]
@@ -58,11 +68,11 @@ struct ArmedChangeSignalGate {
 
   private static func currentInput() -> InputSnapshot? {
     // The private aggregate has an Omi-owned UID; exclude it even if the
-    // background HAL teardown has not finished when waiting starts.
-    let devices = AudioCaptureService.availableInputDevices()
-      .filter { !$0.uid.hasPrefix("omi.systemaudio.") }
-    return InputSnapshot(
-      deviceIDs: Set(devices.map(\.id)),
+    // background HAL teardown has not finished when waiting starts. Resolve
+    // the default through the same filtered list so its removal cannot look
+    // like a real user input change either.
+    InputSnapshot.currentInputs(
+      AudioCaptureService.availableInputDevices(),
       defaultInputID: AudioCaptureService.currentDefaultInputDeviceID())
   }
 
@@ -142,6 +152,7 @@ final class ArmedMicrophoneRecoveryCoordinator {
     let wasIdle = policy.state == .idle
     let action = policy.enter(now: Date())
     if wasIdle && !policy.continuedEpisode {
+      cancelMilestones()
       episodeID = UUID().uuidString.lowercased()
       trigger = "initial"
       episodeLaunchContext = launchContext ?? CaptureLaunchContext.kindForStart().rawValue
@@ -150,8 +161,8 @@ final class ArmedMicrophoneRecoveryCoordinator {
         ?? (episodeLaunchContext == CaptureLaunchContext.Kind.updateRelaunch.rawValue
           ? CaptureLaunchContext.updateAttemptID : nil)
       lifecycleEventPolicy.beginEpisode()
+      scheduleMilestones()
     }
-    if wasIdle { scheduleMilestones() }
     appState.isWaitingForMicrophone = true
     outboundAudioGate.setOpen(false)
     changeGate.begin()
@@ -177,6 +188,8 @@ final class ArmedMicrophoneRecoveryCoordinator {
       return
     }
     guard action == .probe else { return }
+    settleRecheck?.cancel()
+    settleRecheck = nil
     lifecycleEventPolicy.presenceReturned()
     trigger = signal.rawValue
     timer?.cancel()
@@ -209,7 +222,6 @@ final class ArmedMicrophoneRecoveryCoordinator {
     removeObservers()
     timer?.cancel()
     timer = nil
-    cancelMilestones()
   }
 
   func cancel() {
