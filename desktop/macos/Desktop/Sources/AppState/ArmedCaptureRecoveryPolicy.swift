@@ -25,8 +25,17 @@ struct ArmedCaptureRecoveryPolicy {
   private(set) var enteredAt: Date?
   private(set) var retryCount = 0
   private(set) var nextRetryAt: Date?
+  private(set) var flapCount = 0
+  private(set) var continuedEpisode = false
+  private(set) var isFlapGuarded = false
+  private var recoveredAt: Date?
+  private var recentFlaps: [Date] = []
   private var skippedBackoffIndex = 0
   private static let delays: [TimeInterval] = [30, 60, 120, 300, 600]
+  // Keep an unstable route on its existing backoff, then require a fresh episode.
+  static let continuationWindow: TimeInterval = 15 * 60
+  static let flapWindow: TimeInterval = 30 * 60
+  static let guardedFlapCount = 3
 
   static func canEnterWaiting(captureActive: Bool, sttActive: Bool) -> Bool {
     !captureActive && !sttActive
@@ -58,7 +67,18 @@ struct ArmedCaptureRecoveryPolicy {
   }
 
   mutating func enter(now: Date) -> Action {
-    if enteredAt == nil { enteredAt = now }
+    if state == .idle {
+      continuedEpisode = recoveredAt.map { now.timeIntervalSince($0) <= Self.continuationWindow } == true
+      if continuedEpisode {
+        flapCount += 1
+        recentFlaps.removeAll { now.timeIntervalSince($0) > Self.flapWindow }
+        recentFlaps.append(now)
+        if recentFlaps.count >= Self.guardedFlapCount { isFlapGuarded = true }
+      } else {
+        reset()
+        enteredAt = now
+      }
+    }
     state = .waiting
     let delay = Self.delays[min(retryCount, Self.delays.count - 1)]
     retryCount += 1
@@ -70,6 +90,12 @@ struct ArmedCaptureRecoveryPolicy {
   mutating func signal(_ signal: Signal, now: Date, presence: CapturePresence, inputIsBuiltIn: Bool?) -> Action {
     guard state == .waiting else { return .none }
     if signal == .backoff, let nextRetryAt, now < nextRetryAt { return .none }
+    if isFlapGuarded,
+      signal == .inputChanged || signal == .displayChanged || signal == .appActive,
+      let nextRetryAt, now < nextRetryAt
+    {
+      return .none
+    }
     if let reason = Self.unavailablePresenceReason(presence, inputIsBuiltIn: inputIsBuiltIn) {
       if signal == .backoff {
         // An absent or unknown user must not open the mic on a timer. Rechecks
@@ -95,7 +121,10 @@ struct ArmedCaptureRecoveryPolicy {
   mutating func succeeded(now: Date) -> TimeInterval? {
     guard state == .probing else { return nil }
     let duration = enteredAt.map { max(0, now.timeIntervalSince($0)) }
-    reset()
+    state = .idle
+    recoveredAt = now
+    nextRetryAt = nil
+    skippedBackoffIndex = 0
     return duration
   }
 
@@ -105,6 +134,11 @@ struct ArmedCaptureRecoveryPolicy {
     retryCount = 0
     nextRetryAt = nil
     skippedBackoffIndex = 0
+    flapCount = 0
+    continuedEpisode = false
+    isFlapGuarded = false
+    recoveredAt = nil
+    recentFlaps.removeAll()
   }
 }
 
@@ -115,6 +149,7 @@ struct ArmedLifecycleEventPolicy {
   private var hourStart: Date?
   private var lifecycleHourlyCount = 0
   private var skipHourlyCount = 0
+  private var suppressedThisEpisode = false
   private let lifecycleHourlyLimit = 24
   private let skipHourlyLimit = 4
 
@@ -129,8 +164,12 @@ struct ArmedLifecycleEventPolicy {
       hourStart = now
     }
     switch phase {
-    case "entered", "retry":
+    case "entered", "retry", "suppressed_signal":
       guard lifecycleHourlyCount < lifecycleHourlyLimit else { return false }
+      if phase == "suppressed_signal" {
+        guard !suppressedThisEpisode else { return false }
+        suppressedThisEpisode = true
+      }
       lifecycleHourlyCount += 1
       return true
     case "retry_skipped":
@@ -146,6 +185,11 @@ struct ArmedLifecycleEventPolicy {
   }
 
   mutating func presenceReturned() {
+    lastReason = nil
+  }
+
+  mutating func beginEpisode() {
+    suppressedThisEpisode = false
     lastReason = nil
   }
 }

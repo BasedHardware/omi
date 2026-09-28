@@ -1,9 +1,23 @@
+import CoreAudio
 import Foundation
 import XCTest
 
 @testable import Omi_Computer
 
 final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
+  @MainActor
+  private final class ChangeFixture {
+    var now: Date
+    var input: ArmedChangeSignalGate.InputSnapshot
+    var display: ArmedChangeSignalGate.DisplaySnapshot
+
+    init(now: Date) {
+      self.now = now
+      input = .init(deviceIDs: [1, 2], defaultInputID: 1)
+      display = .init(asleepByID: [10: false])
+    }
+  }
+
   private let start = Date(timeIntervalSince1970: 1_000)
   private let present = CapturePresence(
     screenLocked: false, displaysAsleep: false,
@@ -303,5 +317,105 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
       MicrophoneCaptureAuthorizationPolicy.action(for: .denied, userInitiated: false),
       .abandonAutomaticStart)
     XCTAssertEqual(MicrophoneCaptureAuthorizationPolicy.terminalAlert(for: .denied), .permission)
+  }
+
+  @MainActor
+  func testTeardownEchoDoesNotProbeButRealInputChangeDoes() {
+    let fixture = ChangeFixture(now: start)
+    var gate = ArmedChangeSignalGate(
+      inputSnapshot: { fixture.input },
+      displaySnapshot: { fixture.display },
+      now: { fixture.now })
+    gate.begin()
+    var policy = ArmedCaptureRecoveryPolicy()
+    _ = policy.enter(now: fixture.now)
+    XCTAssertEqual(gate.evaluate(.inputChanged), .settling)
+    XCTAssertEqual(policy.state, .waiting, "the callback must not enter the policy during teardown")
+    fixture.now = start.addingTimeInterval(ArmedChangeSignalGate.settleInterval)
+    XCTAssertEqual(gate.evaluate(.inputChanged), .unchanged)
+    XCTAssertEqual(policy.state, .waiting)
+    fixture.input = .init(deviceIDs: [1, 3], defaultInputID: 3)
+    XCTAssertEqual(gate.evaluate(.inputChanged), .changed)
+    XCTAssertEqual(policy.signal(.inputChanged, now: fixture.now, presence: present, inputIsBuiltIn: nil), .probe)
+  }
+
+  @MainActor
+  func testDisplayEchoNeedsChangedMetadata() {
+    let fixture = ChangeFixture(now: start)
+    var gate = ArmedChangeSignalGate(
+      inputSnapshot: { fixture.input },
+      displaySnapshot: { fixture.display }, now: { fixture.now })
+    gate.begin()
+    fixture.now = start.addingTimeInterval(2)
+    XCTAssertEqual(gate.evaluate(.displayChanged), .unchanged)
+    fixture.display = .init(asleepByID: [10: true])
+    XCTAssertEqual(gate.evaluate(.displayChanged), .changed)
+  }
+
+  func testRecoveredFlapsContinueBackoffAndGuardWeakSignals() {
+    var policy = ArmedCaptureRecoveryPolicy()
+    var now = start
+    for flap in 0...ArmedCaptureRecoveryPolicy.guardedFlapCount {
+      let expectedDelay = [30.0, 60, 120, 300][flap]
+      XCTAssertEqual(policy.enter(now: now), .releaseAndWait(until: now.addingTimeInterval(expectedDelay)))
+      XCTAssertEqual(policy.flapCount, flap)
+      XCTAssertEqual(policy.continuedEpisode, flap > 0)
+      if flap == ArmedCaptureRecoveryPolicy.guardedFlapCount {
+        XCTAssertEqual(
+          policy.signal(.inputChanged, now: now.addingTimeInterval(1), presence: present, inputIsBuiltIn: nil),
+          .none)
+        XCTAssertEqual(
+          policy.signal(.appActive, now: now.addingTimeInterval(1), presence: present, inputIsBuiltIn: nil),
+          .none)
+        XCTAssertEqual(
+          policy.signal(.unlock, now: now.addingTimeInterval(1), presence: present, inputIsBuiltIn: nil),
+          .probe)
+      } else {
+        XCTAssertEqual(
+          policy.signal(.backoff, now: now.addingTimeInterval(expectedDelay), presence: present, inputIsBuiltIn: nil),
+          .probe)
+      }
+      now = now.addingTimeInterval(expectedDelay + 2)
+      XCTAssertNotNil(policy.succeeded(now: now))
+      now = now.addingTimeInterval(1)
+    }
+    now = now.addingTimeInterval(ArmedCaptureRecoveryPolicy.continuationWindow + 1)
+    XCTAssertEqual(policy.enter(now: now), .releaseAndWait(until: now.addingTimeInterval(30)))
+    XCTAssertEqual(policy.flapCount, 0)
+    XCTAssertFalse(policy.continuedEpisode)
+  }
+
+  func testEightHoursOfIntermittentMicHasBoundedCycles() {
+    var policy = ArmedCaptureRecoveryPolicy()
+    var now = start
+    var cycles = 0
+    let end = start.addingTimeInterval(8 * 60 * 60)
+    while now < end {
+      guard case .releaseAndWait(let deadline) = policy.enter(now: now) else {
+        XCTFail("exhaustion must wait")
+        return
+      }
+      XCTAssertEqual(
+        policy.signal(.inputChanged, now: now.addingTimeInterval(1), presence: present, inputIsBuiltIn: nil),
+        policy.flapCount >= ArmedCaptureRecoveryPolicy.guardedFlapCount ? .none : .probe)
+      if policy.state == .waiting {
+        XCTAssertEqual(policy.signal(.backoff, now: deadline, presence: present, inputIsBuiltIn: nil), .probe)
+        now = deadline
+      }
+      cycles += 1
+      now = now.addingTimeInterval(15)
+      XCTAssertNotNil(policy.succeeded(now: now))
+      now = now.addingTimeInterval(15)
+    }
+    XCTAssertLessThanOrEqual(cycles, 60)
+  }
+
+  func testSuppressedEchoEmitsOncePerEpisodeWithinLifecycleCap() {
+    var events = ArmedLifecycleEventPolicy()
+    events.beginEpisode()
+    XCTAssertTrue(events.shouldEmit(phase: "suppressed_signal", now: start))
+    XCTAssertFalse(events.shouldEmit(phase: "suppressed_signal", now: start.addingTimeInterval(1)))
+    events.beginEpisode()
+    XCTAssertTrue(events.shouldEmit(phase: "suppressed_signal", now: start.addingTimeInterval(2)))
   }
 }
