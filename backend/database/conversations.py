@@ -41,6 +41,7 @@ from .firestore_index_registry import (
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
+from .read_boundary import parse_snapshots
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
 from utils.other.storage import list_audio_chunks
 from .first_open_obligations import (
@@ -2992,18 +2993,14 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
     whisperx_ref = conversation_ref.collection('fal_whisperx')
     prerecorded_ref = conversation_ref.collection('prerecorded')
 
-    # Sort each provider's segments by start time, tolerating a legacy/partial doc missing 'start'
-    # (a bare x['start'] would KeyError and 500 the whole transcripts response).
+    # Parse each provider's segments at the read boundary so a legacy/partial doc (e.g. missing 'start' or
+    # 'is_user') is skipped instead of 500ing the whole transcripts response, then sort by start time.
     return {
-        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x.get('start', 0))),
-        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x.get('start', 0))),
-        'speechmatics': list(
-            sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x.get('start', 0))
-        ),
-        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x.get('start', 0))),
-        'prerecorded': list(
-            sorted([doc.to_dict() for doc in prerecorded_ref.stream()], key=lambda x: x.get('start', 0))
-        ),
+        'deepgram': sorted(parse_snapshots(TranscriptSegment, deepgram_ref.stream()), key=lambda s: s.start),
+        'soniox': sorted(parse_snapshots(TranscriptSegment, soniox_ref.stream()), key=lambda s: s.start),
+        'speechmatics': sorted(parse_snapshots(TranscriptSegment, speechmatics_ref.stream()), key=lambda s: s.start),
+        'whisperx': sorted(parse_snapshots(TranscriptSegment, whisperx_ref.stream()), key=lambda s: s.start),
+        'prerecorded': sorted(parse_snapshots(TranscriptSegment, prerecorded_ref.stream()), key=lambda s: s.start),
     }
 
 
