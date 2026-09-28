@@ -13,6 +13,7 @@ import os
 
 import firebase_admin
 
+from utils.env_loader import firebase_admin_options
 from utils.x_connector import is_oauth_configured, raise_if_x_sync_job_failed, run_x_sync_job
 
 logging.basicConfig(level=logging.INFO)
@@ -25,9 +26,9 @@ def _init_firebase() -> None:
     if service_account_json:
         service_account_info = json.loads(service_account_json)
         credentials = firebase_admin.credentials.Certificate(service_account_info)
-        firebase_admin.initialize_app(credentials)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
+        firebase_admin.initialize_app(credentials, options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
     else:
-        firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
+        firebase_admin.initialize_app(options=firebase_admin_options())  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
 
 def main() -> None:

@@ -51,6 +51,17 @@ PROJECT=based-hardware-dev   # or based-hardware for prod
 REGION=us-central1
 SCHEDULER_SA=x-connector-sync-scheduler@${PROJECT}.iam.gserviceaccount.com
 
+# One-time: the account the trigger calls as, allowed to run only this job.
+gcloud iam service-accounts create x-connector-sync-scheduler \
+  --project="$PROJECT" \
+  --display-name="X connector sync Scheduler trigger"
+
+gcloud run jobs add-iam-policy-binding x-connector-sync-job \
+  --region="$REGION" \
+  --project="$PROJECT" \
+  --member="serviceAccount:${SCHEDULER_SA}" \
+  --role="roles/run.invoker"
+
 gcloud scheduler jobs create http x-connector-sync-6h \
   --location="$REGION" \
   --project="$PROJECT" \
