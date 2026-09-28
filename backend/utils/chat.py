@@ -71,9 +71,23 @@ def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id
 
     # Load previous messages — session-scoped when session_id is provided, app-scoped otherwise
     if chat_session_id:
-        prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, chat_session_id=chat_session_id)))
+        raw_prev_messages = chat_db.get_messages(uid, limit=5, chat_session_id=chat_session_id)
     else:
-        prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
+        raw_prev_messages = chat_db.get_messages(uid, limit=5, app_id=app_id)
+
+    prev_messages = list(
+        reversed(
+            Message.deserialize_many_safe(
+                raw_prev_messages,
+                on_error=lambda record, exc: logger.warning(
+                    'Skipping malformed chat message %s for uid=%s: %s',
+                    record.get('id') if isinstance(record, dict) else None,
+                    uid,
+                    type(exc).__name__,
+                ),
+            )
+        )
+    )
     logger.info(f'initial_message_util returned {len(prev_messages)} prev messages for {app_id}')
 
     # Skip malformed/legacy stored messages rather than 500 the whole initial-message call —
@@ -85,12 +99,12 @@ def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id
 
     text: str
     if app and app.is_a_persona():
-        text = initial_persona_chat_message(uid, app, prev_messages_safe)
+        text = initial_persona_chat_message(uid, app, prev_messages)
     else:
         prev_messages_str = ''
-        if prev_messages_safe:
+        if prev_messages:
             prev_messages_str = 'Previous conversation history:\n'
-            prev_messages_str += Message.get_messages_as_string(prev_messages_safe)
+            prev_messages_str += Message.get_messages_as_string(prev_messages)
         logger.info(f'initial_message_util {len(prev_messages_str)} {app_id}')
         text = initial_chat_message(uid, app, prev_messages_str)
 
@@ -324,7 +338,17 @@ def process_voice_message_segment(
     app_id = None
 
     messages = list(
-        reversed(Message.deserialize_many_safe(chat_db.get_messages(uid, limit=10), on_error=_log_skipped_message))
+        reversed(
+            Message.deserialize_many_safe(
+                chat_db.get_messages(uid, limit=10),
+                on_error=lambda record, exc: logger.warning(
+                    'Skipping malformed chat message %s for uid=%s: %s',
+                    record.get('id') if isinstance(record, dict) else None,
+                    uid,
+                    type(exc).__name__,
+                ),
+            )
+        )
     )
     with track_usage(uid, Features.CHAT):
         response, ask_for_nps, memories = execute_graph_chat(uid, messages, app)  # app
@@ -549,11 +573,17 @@ async def process_voice_message_segment_stream(
 
         return ai_message, ask_for_nps
 
+    raw_messages = await run_blocking(db_executor, chat_db.get_messages, uid, limit=10)
     messages = list(
         reversed(
             Message.deserialize_many_safe(
-                await run_blocking(db_executor, chat_db.get_messages, uid, limit=10),
-                on_error=_log_skipped_message,
+                raw_messages,
+                on_error=lambda record, exc: logger.warning(
+                    'Skipping malformed chat message %s for uid=%s: %s',
+                    record.get('id') if isinstance(record, dict) else None,
+                    uid,
+                    type(exc).__name__,
+                ),
             )
         )
     )

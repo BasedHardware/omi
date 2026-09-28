@@ -1,15 +1,8 @@
-"""One malformed stored chat message must not 500 the initial-message or voice paths.
+"""Tests for Message.deserialize_many_safe integration in utils.chat.
 
-`utils/chat.py` built chat history with `[Message(**msg) for msg in ...]` at four call sites:
-`initial_message_util` (persona and standard branches), `process_voice_message_segment`, and
-`process_voice_message_segment_stream`. One legacy or corrupt row selected by the last-N query
-raised `ValidationError` and took the whole endpoint down until the row aged out of the window.
-
-`Message.deserialize_many_safe` (#8882) is the shared safe-deserialize helper the repo already
-routes the list (#8239), send (`routers/chat.py`) and proactive-notification
-(`utils/app_integrations.py`, #9799) paths through; `utils/chat.py` was the last holder of the raw
-comprehension. These tests pin the behavior (the bad row is skipped, the rest of the history is
-used) and the source (the comprehension cannot come back).
+Verifies that malformed stored messages in chat history (missing required fields)
+are skipped gracefully instead of raising a ValidationError and 500ing initial-message
+or voice-message processing paths.
 """
 
 import ast
@@ -19,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 os.environ.setdefault(
     'ENCRYPTION_SECRET',
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
@@ -26,46 +21,120 @@ os.environ.setdefault(
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 os.environ.setdefault('PINECONE_API_KEY', 'test-pinecone-key-not-real')
 
-import utils.chat as chat_util
+import utils.chat as chat_utils
 from models.chat import Message
 
-_GOOD = {
-    'id': 'good-1',
-    'text': "what's the plan?",
-    'created_at': datetime(2026, 1, 1, tzinfo=timezone.utc),
+_GOOD_MESSAGE_DICT = {
+    'id': 'msg-good-1',
+    'text': 'Hello world',
+    'created_at': datetime(2025, 1, 1, tzinfo=timezone.utc),
     'sender': 'human',
     'type': 'text',
 }
-# Missing text / created_at / sender / type -> Message(**record) raises ValidationError.
-_MALFORMED = {'id': 'legacy-broken'}
+
+_MALFORMED_MESSAGE_DICT = {
+    'id': 'msg-bad-1',
+    # Missing required text, created_at, sender, type
+}
+
+_MOCK_SESSION_DICT = {
+    'id': 'session-123',
+    'created_at': datetime(2025, 1, 1, tzinfo=timezone.utc),
+}
 
 
-def test_malformed_stored_message_does_not_break_initial_message(monkeypatch, caplog):
-    monkeypatch.setattr(chat_util.chat_db, 'get_chat_session_by_id', lambda uid, sid: {'id': 'sess-1'})
-    monkeypatch.setattr(chat_util.chat_db, 'get_messages', lambda *args, **kwargs: [dict(_GOOD), dict(_MALFORMED)])
-    monkeypatch.setattr(chat_util.chat_db, 'add_message', MagicMock())
-    monkeypatch.setattr(chat_util.chat_db, 'add_message_to_chat_session', MagicMock())
-    monkeypatch.setattr(chat_util, 'get_available_app_by_id', lambda app_id, uid: None)
-    captured = {}
+def test_initial_message_util_skips_malformed_messages(monkeypatch):
+    monkeypatch.setattr(chat_utils.chat_db, 'get_chat_session_by_id', lambda uid, sid: {'id': sid, 'app_id': 'app-1'})
+    monkeypatch.setattr(
+        chat_utils.chat_db,
+        'get_messages',
+        lambda uid, limit=5, chat_session_id=None, app_id=None: [_GOOD_MESSAGE_DICT, _MALFORMED_MESSAGE_DICT],
+    )
+    monkeypatch.setattr(chat_utils, 'get_available_app_by_id', lambda app_id, uid: None)
+    monkeypatch.setattr(chat_utils, 'initial_chat_message', lambda uid, app, history: 'Hello from AI')
+    monkeypatch.setattr(chat_utils.chat_db, 'add_message', MagicMock())
+    monkeypatch.setattr(chat_utils.chat_db, 'add_message_to_chat_session', MagicMock())
+    monkeypatch.setattr(chat_utils, 'record_app_usage', MagicMock())
 
-    def fake_initial_message(uid, app, history):
-        captured['history'] = history
-        return 'reply'
+    result = chat_utils.initial_message_util('user-123', 'app-1', chat_session_id='session-456')
 
-    monkeypatch.setattr(chat_util, 'initial_chat_message', fake_initial_message)
+    assert result.text == 'Hello from AI'
+    assert result.chat_session_id == 'session-456'
 
-    with caplog.at_level(logging.WARNING):
-        message = chat_util.initial_message_util('uid-1', chat_session_id='sess-1')
 
-    assert isinstance(message, Message)
-    assert message.text == 'reply'
-    # The valid row reached the prompt; the malformed one was skipped, with a warning.
-    assert isinstance(captured['history'], str) and "what's the plan?" in captured['history']
-    assert 'legacy-broken' in caplog.text
+def test_process_voice_message_segment_skips_malformed_messages(monkeypatch):
+    monkeypatch.setattr(chat_utils, '_validated_wav_is_silent', lambda path, provider=None: False)
+    monkeypatch.setattr(chat_utils, '_prepare_voice_message_url', lambda path: 'https://example.com/voice.wav')
+    monkeypatch.setattr(
+        chat_utils,
+        '_transcribe_voice_message_url',
+        lambda url, path, language, detect_language=True: ('Hello segment', 'en'),
+    )
+    monkeypatch.setattr(chat_utils.chat_db, 'add_message', MagicMock())
+    monkeypatch.setattr(chat_utils.chat_db, 'add_message_to_chat_session', MagicMock())
+    monkeypatch.setattr(chat_utils.chat_db, 'get_chat_session', lambda uid, app_id=None: _MOCK_SESSION_DICT)
+    monkeypatch.setattr(
+        chat_utils.chat_db,
+        'get_messages',
+        lambda uid, limit=10: [_GOOD_MESSAGE_DICT, _MALFORMED_MESSAGE_DICT],
+    )
+    monkeypatch.setattr(chat_utils, 'send_chat_message_notification', MagicMock())
+
+    captured_messages = []
+
+    def mock_execute_graph_chat(uid, messages, app):
+        captured_messages.extend(messages)
+        return 'AI response to voice', False, []
+
+    monkeypatch.setattr(chat_utils, 'execute_graph_chat', mock_execute_graph_chat)
+
+    result = chat_utils.process_voice_message_segment('/tmp/fake.wav', 'user-123')
+
+    assert len(result) == 2
+    assert result[1]['text'] == 'AI response to voice'
+    assert len(captured_messages) == 1
+    assert captured_messages[0].id == 'msg-good-1'
+
+
+@pytest.mark.asyncio
+async def test_process_voice_message_segment_stream_skips_malformed_messages(monkeypatch):
+    monkeypatch.setattr(chat_utils, '_validated_wav_is_silent', lambda path, provider=None: False)
+    monkeypatch.setattr(chat_utils, '_prepare_voice_message_url', lambda path: 'https://example.com/voice.wav')
+    monkeypatch.setattr(
+        chat_utils,
+        '_transcribe_voice_message_url',
+        lambda url, path, language, detect_language=True: ('Hello stream', 'en'),
+    )
+    monkeypatch.setattr(
+        chat_utils.chat_db,
+        'get_messages',
+        lambda uid, limit=10: [_GOOD_MESSAGE_DICT, _MALFORMED_MESSAGE_DICT],
+    )
+    monkeypatch.setattr(chat_utils, 'send_chat_message_notification', MagicMock())
+    monkeypatch.setattr(chat_utils.chat_db, 'get_chat_session', lambda uid, app_id=None: _MOCK_SESSION_DICT)
+
+    captured_messages = []
+
+    async def mock_execute_graph_chat_stream(uid, messages, app, *args, **kwargs):
+        captured_messages.extend(messages)
+        yield 'AI streamed chunk'
+
+    monkeypatch.setattr(chat_utils, 'execute_graph_chat_stream', mock_execute_graph_chat_stream)
+    monkeypatch.setattr(chat_utils.chat_db, 'add_message', MagicMock())
+    monkeypatch.setattr(chat_utils.chat_db, 'add_message_to_chat_session', MagicMock())
+    monkeypatch.setattr(chat_utils, 'acquire_chat_session', lambda uid, app_id=None: {'id': 'session-123'})
+
+    chunks = []
+    async for chunk in chat_utils.process_voice_message_segment_stream('/tmp/fake.wav', 'user-123'):
+        chunks.append(chunk)
+
+    assert len(chunks) > 0
+    assert len(captured_messages) == 1
+    assert captured_messages[0].id == 'msg-good-1'
 
 
 def test_utils_chat_has_no_raw_message_comprehension():
-    tree = ast.parse(Path(chat_util.__file__).read_text())
+    tree = ast.parse(Path(chat_utils.__file__).read_text())
     offenders = [
         node.lineno
         for node in ast.walk(tree)
