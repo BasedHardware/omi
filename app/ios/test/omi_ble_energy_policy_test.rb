@@ -58,16 +58,18 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                     level: 19,
                     nowMs: minute
                 ))
-                let unknownCharging = OmiBleEnergyPolicy.batteryHistoryEntry(
-                    timestampMs: 123, level: 80, charging: nil
-                )
-                precondition(unknownCharging["charging"] == nil)
-                precondition(PropertyListSerialization.propertyList(unknownCharging, isValidFor: .binary))
-                let charging = OmiBleEnergyPolicy.batteryHistoryEntry(
-                    timestampMs: 124, level: 81, charging: true
-                )
-                precondition(charging["charging"] as? Bool == true)
-                precondition(PropertyListSerialization.propertyList(charging, isValidFor: .binary))
+                let suiteName = "omi-ble-plist-\(UUID().uuidString)"
+                let defaults = UserDefaults(suiteName: suiteName)!
+                defer { defaults.removePersistentDomain(forName: suiteName) }
+                for charging in [true, false, nil] as [Bool?] {
+                    let entry = OmiBleEnergyPolicy.batteryHistoryEntry(timestampMs: 123, level: 80, charging: charging)
+                    precondition(entry["charging"] as? Bool == charging)
+                    precondition(entry.keys.contains("charging") == (charging != nil))
+                    let history = [entry]
+                    precondition((try? PropertyListSerialization.data(fromPropertyList: history, format: .binary, options: 0)) != nil)
+                    defaults.set(history, forKey: "battery_history_test")
+                    precondition((defaults.array(forKey: "battery_history_test") as? [[String: Any]])?.count == 1)
+                }
                 precondition(OmiBleFirmwareDiagnostics.parse(Data(repeating: 0, count: 24), timestampMs: 1) == nil)
                 precondition(OmiBleFirmwareDiagnostics.parse(Data(repeating: 0, count: 25), timestampMs: 1) == nil)
                 var diagnostic = Data(repeating: 0, count: 30)
@@ -83,19 +85,16 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                 precondition(parsed["uptime_s"] as? UInt32 == 42)
                 precondition(parsed["battery_mv"] as? NSNumber == 0x1234)
                 precondition(parsed["charging"] as? NSNumber == true)
-                precondition(PropertyListSerialization.propertyList(parsed, isValidFor: .binary))
-                diagnostic[1] = 0xff
-                diagnostic[2] = 0xff
-                diagnostic[3] = 0xff
-                diagnostic[4] = 0xff
-                diagnostic[9] = 0xff
-                diagnostic[10] = 0xff
-                diagnostic[11] = 0xff
-                let unknown = OmiBleFirmwareDiagnostics.parse(diagnostic, timestampMs: 124)!
-                precondition(unknown["reset_cause_raw"] == nil)
-                precondition(unknown["battery_mv"] == nil)
-                precondition(unknown["charging"] == nil)
-                precondition(PropertyListSerialization.propertyList(unknown, isValidFor: .binary))
+                precondition((try? PropertyListSerialization.data(fromPropertyList: [parsed], format: .binary, options: 0)) != nil)
+                var unknown = Data(repeating: 0xff, count: 25)
+                unknown[0] = 1
+                let unknownParsed = OmiBleFirmwareDiagnostics.parse(unknown, timestampMs: 456)!
+                for key in ["reset_cause_raw", "battery_mv", "charging", "mic_overrun_count", "ble_tx_drop_count", "storage_error_count"] {
+                    precondition(unknownParsed[key] == nil)
+                }
+                precondition((try? PropertyListSerialization.data(fromPropertyList: [unknownParsed], format: .binary, options: 0)) != nil)
+                defaults.set([unknownParsed], forKey: "ble_diagnostics_firmware_test")
+                precondition((defaults.array(forKey: "ble_diagnostics_firmware_test") as? [[String: Any]])?.count == 1)
                 precondition(OmiBleRssiDiagnostics.trend(samples: [], nowMs: 100_000) == "gap")
                 precondition(OmiBleRssiDiagnostics.trend(samples: [(99_000, -55)], nowMs: 100_000) == "unknown")
                 let samples: [(ts: Int64, rssi: Int64)] = [(90_000, -55), (99_000, -72)]

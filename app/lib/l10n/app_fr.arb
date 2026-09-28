@@ -3635,6 +3635,8 @@
     "appearanceDark": "Sombre",
     "chatDiscardRecording": "Ignorer",
     "voiceQuestionNoSpeech": "Je n’ai pas compris — réessayez",
+    "siriIndexSetting": "Utiliser Omi avec Siri et Apple Intelligence",
+    "siriIndexSettingDescription": "Autorisez Siri à trouver vos conversations, souvenirs et tâches sur cet appareil. Désactiver cette option les supprime de la recherche Apple.",
     "sendToSupport": "Envoyer au support",
     "deviceDiagnosticsUploadDescription": "Vérifiez les données de diagnostic JSON ci-dessous. Elles incluent l’identifiant de l’appareil, les connexions, la batterie, le micrologiciel et les événements Bluetooth. Aucun audio ni transcription.",
     "deviceDiagnosticsTicket": "Code du ticket de support",

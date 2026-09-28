@@ -59,10 +59,18 @@ struct CapturePresence: Equatable {
   let lidClosed: Bool?
   let appActive: Bool
 
+  static func screenLockState(from session: [String: Any]?) -> Bool? {
+    guard let session else { return nil }
+    // CGSession omits this key when the session is unlocked. A present
+    // dictionary with no lock flag is therefore an unlocked session.
+    guard let lockState = session["CGSSessionScreenIsLocked"] else { return false }
+    return lockState as? Bool
+  }
+
   @MainActor static func current() -> Self {
     let session = CGSessionCopyCurrentDictionary() as? [String: Any]
     let console = session?["kCGSSessionOnConsoleKey"] as? Bool
-    let locked: Bool? = session.map { $0["CGSSessionScreenIsLocked"] as? Bool ?? false }
+    let locked = screenLockState(from: session)
     var displays = [CGDirectDisplayID](repeating: 0, count: 16)
     var count: UInt32 = 0
     let status = CGGetOnlineDisplayList(UInt32(displays.count), &displays, &count)
@@ -83,6 +91,33 @@ struct CapturePresence: Equatable {
     return Self(
       screenLocked: locked, displaysAsleep: asleep,
       consoleSessionActive: console, lidClosed: lidClosed, appActive: NSApp?.isActive ?? false)
+  }
+}
+
+/// Reads only HAL metadata; it does not start or configure an audio device.
+/// A preferred input is resolved during capture on a serialized worker, so its
+/// route is unknown here until a probe has actually selected it.
+enum CaptureInputPresence {
+  static func builtInForNextProbe() -> Bool? {
+    let preferred = UserDefaults.standard.string(forKey: AudioCaptureService.preferredInputUIDDefaultsKey) ?? ""
+    guard preferred.isEmpty, let deviceID = AudioCaptureService.currentDefaultInputDeviceID() else { return nil }
+    return builtIn(deviceID: deviceID)
+  }
+
+  static func builtIn(deviceID: AudioDeviceID) -> Bool? {
+    var transport: UInt32 = 0
+    var size = UInt32(MemoryLayout<UInt32>.size)
+    var address = AudioObjectPropertyAddress(
+      mSelector: kAudioDevicePropertyTransportType,
+      mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &transport) == noErr else { return nil }
+    switch transport {
+    case kAudioDeviceTransportTypeBuiltIn: return true
+    case kAudioDeviceTransportTypeBluetooth, kAudioDeviceTransportTypeBluetoothLE,
+      kAudioDeviceTransportTypeUSB, kAudioDeviceTransportTypeVirtual, kAudioDeviceTransportTypeAggregate:
+      return false
+    default: return nil
+    }
   }
 }
 
@@ -148,13 +183,15 @@ enum SilentMicDiagnosticTelemetry {
 
   static func armedProperties(
     attemptID: String, phase: String, trigger: String, launchContext: String,
-    updateAttemptID: String?, duration: String
+    updateAttemptID: String?, duration: String, presenceReason: String? = nil
   ) -> [String: Any] {
-    [
+    var properties: [String: Any] = [
       "platform": "macos", "attempt_id": attemptID, "phase": phase,
       "trigger": trigger, "launch_context": launchContext,
       "update_attempt_id": updateAttemptID ?? "none", "armed_duration": duration,
     ]
+    if let presenceReason { properties["presence_reason"] = presenceReason }
+    return properties
   }
 
   private static func optional(_ value: Bool?) -> String {

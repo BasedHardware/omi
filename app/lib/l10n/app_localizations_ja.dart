@@ -11224,6 +11224,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get voiceQuestionNoSpeech => '聞き取れませんでした — もう一度お試しください';
 
   @override
+  String get siriIndexSetting => 'SiriとApple IntelligenceでOmiを使用';
+
+  @override
+  String get siriIndexSettingDescription => 'Siriがこのデバイス上の会話、メモリー、タスクを検索できるようにします。オフにするとAppleの検索から削除されます。';
+
+  @override
   String get sendToSupport => 'Send to support';
 
   @override

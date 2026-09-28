@@ -999,7 +999,8 @@ extension OmiBleManager: CBCentralManagerDelegate {
         readyNotified.remove(uuid)
         discoveryStartedAt.removeValue(forKey: uuid)
         pairingRecoveryInFlight.remove(uuid)
-        connectionStartTimes[uuid] = Int64(Date().timeIntervalSince1970 * 1000)
+        let connectionStartedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        connectionStartTimes[uuid] = connectionStartedAt
         lastRssi.removeValue(forKey: uuid)
         rssiHistory.removeValue(forKey: uuid)
         chargingState.removeValue(forKey: uuid)
@@ -1007,7 +1008,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         audioReceived[uuid] = 0
         audioExpected[uuid] = 0
         if UserDefaults.standard.object(forKey: "ble_diagnostics_counters_since_\(uuid)") == nil {
-            UserDefaults.standard.set(connectionStartTimes[uuid], forKey: "ble_diagnostics_counters_since_\(uuid)")
+            UserDefaults.standard.set(connectionStartedAt, forKey: "ble_diagnostics_counters_since_\(uuid)")
         }
         startRssiDiagnosticsPolling(for: peripheral)
         logBle(uuid: uuid, event: "connected", detail: "")

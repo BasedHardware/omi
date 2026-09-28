@@ -49,16 +49,12 @@ enum OmiBleFirmwareDiagnostics {
             "reset_cause_names": names,
             "uptime_s": u32(5),
         ]
-        if reset != UInt32.max { result["reset_cause_raw"] = reset }
-        if battery != 0xffff { result["battery_mv"] = battery }
-        if data[11] != 0xff { result["charging"] = data[11] == 1 }
-        for (name, offset) in [
-            ("mic_overrun_count", 13),
-            ("ble_tx_drop_count", 17),
-            ("storage_error_count", 21),
-        ] {
-            let count = u32(offset)
-            if count != UInt32.max { result[name] = count }
+        if reset != UInt32.max { result["reset_cause_raw"] = NSNumber(value: reset) }
+        if battery != 0xffff { result["battery_mv"] = NSNumber(value: battery) }
+        if data[11] != 0xff { result["charging"] = NSNumber(value: data[11] == 1) }
+        for (key, offset) in [("mic_overrun_count", 13), ("ble_tx_drop_count", 17), ("storage_error_count", 21)] {
+            let value = u32(offset)
+            if value != UInt32.max { result[key] = NSNumber(value: value) }
         }
         return result
     }
