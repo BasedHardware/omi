@@ -575,7 +575,7 @@ def _persist_l1_archive_route_outcomes(
             run_id=run_id or f"l1-archive:{source_id}",
             patch_id=item.archive_id,
             audit_metadata={
-                "source": "utils.llm.working_memory.extract_l1_memory_archive_items_from_text",
+                "source": "utils.llm.working_observations.extract_l1_memory_archive_items_from_text",
                 "source_type": source_type,
                 "archive_id": item.archive_id,
                 "archive_class": item.archive_class.value,

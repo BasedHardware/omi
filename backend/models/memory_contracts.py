@@ -19,10 +19,6 @@ from models.product_memory import (
     MemoryTier,
 )
 
-# Neutral fact-source string for new durable-memory patch ledger writes (schema literal unchanged).
-DURABLE_MEMORY_PATCH_FACT_SOURCE = "durable_memory_patch"
-
-
 class MemoryExtractionError(RuntimeError):
     """A strict memory extraction failed before producing a valid batch.
 
@@ -339,46 +335,6 @@ class WorkingMemoryObservation(BaseModel):
         return self
 
 
-class SourceBackedMemoryCandidate(BaseModel):
-    schema_version: str = "source_backed_memory_candidate.v1"
-    candidate_id: str
-    user_id: str
-    source_id: str
-    source_type: str
-    source_version: str
-    text: str
-    evidence_ids: List[str] = Field(default_factory=list)
-    source_refs: List[Dict[str, Any]] = Field(default_factory=list[Dict[str, Any]])
-    captured_at: AwareDatetime
-    expires_at: AwareDatetime
-    initial_tier: MemoryTier = MemoryTier.short_term
-    archive_id: Optional[str] = None
-    default_access_candidate: bool = True
-    risk_flags: List[str] = Field(default_factory=list)
-    extractor_version: str = "source_backed_candidate_v1"
-
-    @field_validator("candidate_id", "user_id", "source_id", "source_type", "source_version", "text")
-    @classmethod
-    def validate_required_text(cls, value: str) -> str:
-        stripped = (value or "").strip()
-        if not stripped:
-            raise ValueError("required source-backed candidate fields must be non-empty")
-        return stripped
-
-    @model_validator(mode="after")
-    def validate_candidate_tier(self):
-        normalized_risks = {flag.lower().strip() for flag in self.risk_flags if flag and flag.strip()}
-        if self.initial_tier == MemoryTier.archive:
-            self.default_access_candidate = False
-        else:
-            self.initial_tier = MemoryTier.short_term
-            self.archive_id = None
-            self.default_access_candidate = not bool(normalized_risks.intersection(_SECRET_RISK_FLAGS))
-        if self.expires_at <= self.captured_at:
-            raise ValueError("expires_at must be after captured_at")
-        return self
-
-
 class L2SearchRequest(BaseModel):
     query: str
     reason: str
@@ -427,49 +383,6 @@ class L2SearchResult(BaseModel):
     score: Optional[float] = None
     content: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
-
-
-class L2MemoryRoute(BaseModel):
-    schema_version: str = "l2_memory_route.v1"
-    route: Literal["durable", "review", "discard", "hidden"]
-    memory_text: Optional[str] = None
-    evidence_quotes: List[str] = Field(default_factory=list)
-    confidence: str = "medium"
-    reason: str
-    drop_reason: Optional[
-        Literal[
-            "ephemeral_chatter",
-            "third_party_or_unknown_speaker",
-            "ui_or_ocr_context",
-            "unsupported_or_too_noisy",
-            "secret_or_security_sensitive",
-            "duplicate",
-            "not_future_useful",
-            "missing_user_tie",
-        ]
-    ] = None
-
-    @field_validator("confidence")
-    @classmethod
-    def validate_route_confidence(cls, value: str) -> str:
-        if value not in {"high", "medium", "low"}:
-            raise ValueError("confidence must be high, medium, or low")
-        return value
-
-    @model_validator(mode="after")
-    def validate_route_contract(self):
-        if self.route in {"durable", "review"}:
-            if not self.memory_text:
-                raise ValueError("durable/review routes require memory_text")
-            if not self.evidence_quotes:
-                raise ValueError("durable/review routes require exact evidence_quotes")
-            if self.drop_reason is not None:
-                raise ValueError("durable/review routes must not set drop_reason")
-        if self.route in {"discard", "hidden"} and not self.drop_reason:
-            raise ValueError("discard/hidden routes require drop_reason")
-        if self.route == "hidden" and self.drop_reason != "secret_or_security_sensitive":
-            raise ValueError("hidden route requires secret_or_security_sensitive drop_reason")
-        return self
 
 
 class DurableMemoryPatch(BaseModel):
@@ -597,19 +510,15 @@ WorkingObservation = WorkingMemoryObservation
 WorkingObservationArchiveItem = L1MemoryArchiveItem
 
 __all__ = [
-    "DURABLE_MEMORY_PATCH_FACT_SOURCE",
     "DurableMemoryPatch",
     "DurablePatchDecision",
     "EvidenceRef",
     "L1MemoryArchiveClass",
     "L1MemoryArchiveItem",
-    "L2MemoryRoute",
     "L2SearchPlan",
     "L2SearchRequest",
     "L2SearchResult",
     "LifecycleState",
-    "SourceBackedMemoryCandidate",
-    "DURABLE_MEMORY_PATCH_FACT_SOURCE",
     "WorkingMemoryObservation",
     "WorkingObservation",
     "WorkingObservationArchiveItem",
