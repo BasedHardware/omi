@@ -496,7 +496,7 @@ void main() {
       await tester.pumpWidget(buildTestApp(const FairUseErrorHarness()));
       await tester.pumpAndSettle();
 
-      expect(find.widgetWithText(TextButton, 'Retry'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Try Again'), findsOneWidget);
     });
 
     testWidgets('retry button triggers callback', (tester) async {
@@ -504,7 +504,7 @@ void main() {
       await tester.pumpWidget(buildTestApp(FairUseErrorHarness(onRetry: () => retried = true)));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.widgetWithText(TextButton, 'Retry'));
+      await tester.tap(find.widgetWithText(TextButton, 'Try Again'));
       expect(retried, isTrue);
     });
   });

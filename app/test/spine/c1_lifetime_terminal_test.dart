@@ -8,7 +8,6 @@ CaptureLifetime lifetime() => CaptureLifetime(ManualScheduler(clock: VirtualCloc
 
 void main() {
   contractTest('C1 asFuture error completion releases its registration', () async {
-    pendingContract('C1');
     final bag = lifetime();
     final stream = StreamController<int>();
     final sub = bag.listen(stream.stream, (_) {});
@@ -22,7 +21,6 @@ void main() {
     expect(retained, 0);
   });
   contractTest('C1 original and replacement done callbacks respect closing', () async {
-    pendingContract('C1');
     for (final replace in [false, true]) {
       final bag = lifetime();
       final completed = StreamController<int>();

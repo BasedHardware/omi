@@ -13,7 +13,6 @@ import 'c1_location_completion_test.dart' show PhoneSpy, WalSpy;
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('stop invalidates location before waiting for WAL finalization', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('t10-stop-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {

@@ -15,7 +15,7 @@ from typing import Optional, Dict, Any, List
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import Depends, FastAPI, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -41,6 +41,7 @@ from models import (
     GetOrdersRequest,
     GetFulfillmentCentersRequest,
 )
+from shipbob_tools_auth import require_shipbob_tools_auth
 
 
 def log(msg: str):
@@ -275,6 +276,32 @@ def get_products(uid: str, page: int = 1, limit: int = 50) -> List[Dict]:
     return []
 
 
+def _fetch_all_pages(fetch, uid: str, page_size: int = 100, max_pages: int = 25) -> List[Dict]:
+    """Follow ShipBob Page/Limit pagination until a short page or the safety cap.
+
+    ShipBob list endpoints return one page per request; a full page means more
+    items may exist. Anything matching by name needs the complete set or items
+    past page 1 are invisible to it.
+    """
+    items: List[Dict] = []
+    for page in range(1, max_pages + 1):
+        batch = fetch(uid, page=page, limit=page_size)
+        items.extend(batch)
+        if len(batch) < page_size:
+            break
+    return items
+
+
+def get_all_inventory(uid: str) -> List[Dict]:
+    """Get every inventory item across all pages."""
+    return _fetch_all_pages(get_inventory, uid)
+
+
+def get_all_products(uid: str) -> List[Dict]:
+    """Get every product across all pages."""
+    return _fetch_all_pages(get_products, uid)
+
+
 def match_name_candidates(items, name, key="name"):
     """Return (exact_hits, partial_hits) for a name query.
 
@@ -312,14 +339,14 @@ def format_name_candidates(candidates, what="product"):
 
 def find_product_candidates(uid: str, name: str):
     """All product hits for a name: exact hits, else partial hits."""
-    products = get_products(uid, limit=100)
+    products = get_all_products(uid)
     exact, partial = match_name_candidates(products, name)
     return exact or partial
 
 
 def find_inventory_candidates(uid: str, name: str):
     """All inventory hits for a name: exact hits, else partial hits."""
-    inventory = get_inventory(uid, limit=100)
+    inventory = get_all_inventory(uid)
     exact, partial = match_name_candidates(inventory, name)
     return exact or partial
 
@@ -548,7 +575,7 @@ async def handle_shipbob_callback(
             log(f"Channel selection error (non-fatal): {ch_err}")
 
         # Redirect to home with uid
-        return RedirectResponse(url=f"/?uid={uid}")
+        return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
     except Exception as e:
         log(f"OAuth error: {e}")
@@ -569,10 +596,10 @@ async def check_setup(uid: str):
 async def disconnect_shipbob(uid: str):
     """Disconnect ShipBob account."""
     delete_shipbob_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
-@app.post("/select-channel")
+@app.post("/select-channel", dependencies=[Depends(require_shipbob_tools_auth)])
 async def select_channel(request: Request):
     """Select a channel for the user."""
     body = await _safe_body(request)
@@ -596,7 +623,7 @@ async def select_channel(request: Request):
 # ============================================
 
 
-@app.post("/tools/get_inventory", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_inventory", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_get_inventory(request: Request):
     """
     Get inventory levels for all items or a specific product.
@@ -656,7 +683,7 @@ async def tool_get_inventory(request: Request):
         return ChatToolResponse(error=f"Failed to get inventory: {str(e)}")
 
 
-@app.post("/tools/get_products", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_products", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_get_products(request: Request):
     """
     Get list of products.
@@ -674,7 +701,7 @@ async def tool_get_products(request: Request):
         if not headers:
             return ChatToolResponse(error="Please connect your ShipBob account first in the app settings.")
 
-        products = get_products(uid, limit=100 if search else limit)
+        products = get_all_products(uid) if search else get_products(uid, limit=limit)
 
         if search:
             search_lower = search.lower()
@@ -700,7 +727,7 @@ async def tool_get_products(request: Request):
         return ChatToolResponse(error=f"Failed to get products: {str(e)}")
 
 
-@app.post("/tools/create_wro", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/create_wro", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_create_wro(request: Request):
     """
     Create a Warehouse Receiving Order (WRO).
@@ -765,7 +792,7 @@ async def tool_create_wro(request: Request):
 
         if not inventory_id:
             # Try to get from inventory list
-            inventory = get_inventory(uid, limit=100)
+            inventory = get_all_inventory(uid)
             product_name_lower = str(product.get("name", "")).lower()
             for inv in inventory:
                 if isinstance(inv, dict) and str(inv.get("name", "")).lower() == product_name_lower:
@@ -856,7 +883,7 @@ async def tool_create_wro(request: Request):
         return ChatToolResponse(error=f"Failed to create WRO: {str(e)}")
 
 
-@app.post("/tools/get_wros", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_wros", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_get_wros(request: Request):
     """
     Get Warehouse Receiving Orders.
@@ -913,7 +940,7 @@ async def tool_get_wros(request: Request):
         return ChatToolResponse(error=f"Failed to get WROs: {str(e)}")
 
 
-@app.post("/tools/cancel_wro", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/cancel_wro", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_cancel_wro(request: Request):
     """
     Cancel a Warehouse Receiving Order.
@@ -953,7 +980,7 @@ async def tool_cancel_wro(request: Request):
         return ChatToolResponse(error=f"Failed to cancel WRO: {str(e)}")
 
 
-@app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_get_orders(request: Request):
     """
     Get recent orders.
@@ -1015,7 +1042,7 @@ async def tool_get_orders(request: Request):
         return ChatToolResponse(error=f"Failed to get orders: {str(e)}")
 
 
-@app.post("/tools/get_fulfillment_centers", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post("/tools/get_fulfillment_centers", tags=["chat_tools"], response_model=ChatToolResponse, dependencies=[Depends(require_shipbob_tools_auth)])
 async def tool_get_fulfillment_centers(request: Request):
     """
     Get available fulfillment centers.

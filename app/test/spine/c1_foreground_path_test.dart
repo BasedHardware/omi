@@ -11,7 +11,6 @@ import 'c1_composition_test.dart' show dependencies;
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 real capture start-stop race routes foreground intent through injected owner', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-foreground-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     final startGate = Completer<void>();

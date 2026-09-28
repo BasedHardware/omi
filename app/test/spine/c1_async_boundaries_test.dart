@@ -41,7 +41,6 @@ class HeldLocation extends ConversationLocationCapture {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   contractTest('C1 location fix from obsolete session must not start compatibility upload', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-location-');
     final w = await CaptureReplayWorld.boot(tempDir: dir);
     try {
@@ -65,7 +64,6 @@ void main() {
   });
 
   contractTest('C1 pending auth refresh cannot reconnect after capture generation changes', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-auth-');
     final w = await CaptureReplayWorld.boot(tempDir: dir);
     try {

@@ -111,6 +111,84 @@
         "title": "BatchMemoriesResponse",
         "type": "object"
       },
+      "CaptureEvidenceLineage": {
+        "properties": {
+          "capability": {
+            "const": "stable_artifact",
+            "title": "Capability",
+            "type": "string"
+          },
+          "capture_root": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Capture Root",
+            "type": "string"
+          },
+          "clock_domain": {
+            "const": "desktop_session_ms",
+            "title": "Clock Domain",
+            "type": "string"
+          },
+          "lineage": {
+            "enum": [
+              "complete",
+              "incomplete"
+            ],
+            "title": "Lineage",
+            "type": "string"
+          },
+          "units": {
+            "items": {
+              "$ref": "#/components/schemas/CaptureEvidenceLineageUnit"
+            },
+            "maxItems": 64,
+            "title": "Units",
+            "type": "array"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "capability",
+          "capture_root",
+          "clock_domain",
+          "lineage",
+          "units"
+        ],
+        "title": "CaptureEvidenceLineage",
+        "type": "object"
+      },
+      "CaptureEvidenceLineageUnit": {
+        "properties": {
+          "end_ms": {
+            "exclusiveMinimum": 0.0,
+            "title": "End Ms",
+            "type": "integer"
+          },
+          "id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "start_ms": {
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "start_ms",
+          "end_ms"
+        ],
+        "title": "CaptureEvidenceLineageUnit",
+        "type": "object"
+      },
       "CategoryEnum": {
         "enum": [
           "personal",
@@ -241,6 +319,16 @@
       },
       "CreateConversationFromTranscriptRequest": {
         "properties": {
+          "capture_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaptureEvidenceLineage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "client_device_id": {
             "anyOf": [
               {
@@ -292,15 +380,6 @@
           "conversation_finalization_reason": {
             "anyOf": [
               {
-                "enum": [
-                  "user_stop",
-                  "finish_and_continue",
-                  "meeting_started",
-                  "meeting_ended",
-                  "max_duration_rotation",
-                  "crash_recovery",
-                  "retry"
-                ],
                 "type": "string"
               },
               {
@@ -4743,7 +4822,7 @@
         ]
       },
       "post": {
-        "description": "Create a new memory for the authenticated user.\n\n- **content**: The content of the memory (1-500 characters)\n- **category**: Memory category (auto-categorized if not provided)\n- **visibility**: Visibility: public or private (default: private)\n- **tags**: List of tags associated with the memory",
+        "description": "Create a new memory for the authenticated user.\n\n- **content**: The content of the memory (1-500 characters)\n- **category**: Memory category (auto-categorized if not provided)\n- **visibility**: Visibility: public or private (default: private)\n- **tags**: List of tags associated with the memory\n\nA memory is identified by its text. Sending text the user already has (ignoring surrounding\nwhitespace; case-sensitive) returns that memory unchanged, so retries are safe without extra\nheaders. Use PATCH to change an existing memory's fields. After a delete, the same text creates\na new memory.",
         "operationId": "createMemory",
         "requestBody": {
           "content": {
@@ -4796,7 +4875,7 @@
     },
     "/v1/dev/user/memories/batch": {
       "post": {
-        "description": "Create multiple memories in a batch.\n\n- **memories**: List of memories to create (max 25)",
+        "description": "Create multiple memories in a batch.\n\n- **memories**: List of memories to create (max 25)\n\nItems follow the single-create rule: text the user already has returns the existing memory at\nthat position, so a retried batch creates nothing twice. `created_count` is the number of\nmemories returned.",
         "operationId": "createMemoriesBatch",
         "requestBody": {
           "content": {

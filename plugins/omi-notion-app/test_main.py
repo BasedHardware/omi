@@ -43,6 +43,8 @@ notion = importlib.util.module_from_spec(spec)
 with patch.dict(sys.modules, stubs):
     spec.loader.exec_module(notion)
 
+_ABSENT = object()
+
 class PageReadTests(unittest.TestCase):
     def read(self, content_response, archived=False):
         metadata = Mock(status_code=200)
@@ -483,6 +485,55 @@ class ListedPageIdTests(unittest.TestCase):
         with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.multiple(notion.requests, **doubles):
             result = asyncio.run(notion.tool_get_page(request))
         self.assertIsNotNone(result.error)
+
+class OptionalIntParamTests(unittest.TestCase):
+    handlers = (
+        ("tool_search", {}, 10),
+        ("tool_list_pages", {}, 10),
+        ("tool_list_databases", {}, 10),
+        ("tool_query_database", {"database_id": "db-1"}, 10),
+    )
+
+    def call(self, handler, extra, max_results):
+        body = {"uid": "test-user", **extra}
+        if max_results is not _ABSENT:
+            body["max_results"] = max_results
+        request = Mock(json=AsyncMock(return_value=body))
+        api = Mock(return_value={"results": []})
+        with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.object(notion, "notion_api_request", api):
+            result = asyncio.run(getattr(notion, handler)(request))
+        return result, api
+
+    def test_a_null_max_results_uses_the_documented_default(self):
+        for handler, extra, default in self.handlers:
+            with self.subTest(handler=handler):
+                result, api = self.call(handler, extra, None)
+                self.assertIsNone(result.error)
+                self.assertEqual(api.call_args.kwargs["json_data"]["page_size"], default)
+
+    def test_an_omitted_max_results_still_uses_the_default(self):
+        for handler, extra, default in self.handlers:
+            with self.subTest(handler=handler):
+                result, api = self.call(handler, extra, _ABSENT)
+                self.assertIsNone(result.error)
+                self.assertEqual(api.call_args.kwargs["json_data"]["page_size"], default)
+
+    def test_values_outside_the_documented_range_are_clamped(self):
+        for handler, extra, _ in self.handlers:
+            cap = 50 if handler == "tool_query_database" else 20
+            with self.subTest(handler=handler):
+                _, api = self.call(handler, extra, 999)
+                self.assertEqual(api.call_args.kwargs["json_data"]["page_size"], cap)
+                _, api = self.call(handler, extra, 0)
+                self.assertEqual(api.call_args.kwargs["json_data"]["page_size"], 1)
+
+    def test_a_numeric_string_is_accepted_and_junk_falls_back(self):
+        _, api = self.call("tool_search", {}, "5")
+        self.assertEqual(api.call_args.kwargs["json_data"]["page_size"], 5)
+        _, api = self.call("tool_search", {}, "many")
+        self.assertEqual(api.call_args.kwargs["json_data"]["page_size"], 10)
+        _, api = self.call("tool_search", {}, True)
+        self.assertEqual(api.call_args.kwargs["json_data"]["page_size"], 10)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

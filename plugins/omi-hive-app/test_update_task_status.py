@@ -14,15 +14,22 @@ _dotenv = types.ModuleType("dotenv")
 _dotenv.load_dotenv = lambda *args, **kwargs: None
 
 _fastapi = types.ModuleType("fastapi")
+
+
 class _FastAPI:
     def __init__(self, *args, **kwargs):
         pass
+
     def get(self, *args, **kwargs):
         return lambda fn: fn
+
     def post(self, *args, **kwargs):
         return lambda fn: fn
+
     def mount(self, *args, **kwargs):
         pass
+
+
 _fastapi.FastAPI = _FastAPI
 _fastapi.HTTPException = Exception
 _fastapi.Request = MagicMock
@@ -41,12 +48,17 @@ _fastapi_templating = types.ModuleType("fastapi.templating")
 _fastapi_templating.Jinja2Templates = MagicMock
 
 _pydantic = types.ModuleType("pydantic")
+
+
 class _BaseModel:
     def __init__(self, **data):
         for k, v in data.items():
             setattr(self, k, v)
+
     def dict(self, *args, **kwargs):
         return self.__dict__
+
+
 _pydantic.BaseModel = _BaseModel
 _pydantic.Field = lambda *args, **kwargs: None
 
@@ -105,6 +117,12 @@ class FakeRequest:
         return self._json_data
 
 
+# search_tasks now looks up the workspace's projects before it can scope an
+# actions request to each one (see main.search_tasks) — every scenario below
+# that goes through search needs this as its first hive_rest_request call.
+SINGLE_PROJECT_RESPONSE = [{"id": "proj_1", "name": "Main"}]
+
+
 class TestHiveUpdateTaskStatus(unittest.TestCase):
 
     def setUp(self):
@@ -116,14 +134,16 @@ class TestHiveUpdateTaskStatus(unittest.TestCase):
     def test_update_exact_match_chosen_over_partials(self, mock_creds, mock_rest, mock_conn):
         """When an exact title match exists alongside partial matches, the exact match is updated."""
         mock_rest.side_effect = [
-            # 1st call: search_tasks GET workspaces/ws_1/actions
+            # 1st call: search_tasks GET workspaces/ws_1/projects
+            SINGLE_PROJECT_RESPONSE,
+            # 2nd call: search_tasks GET workspaces/ws_1/actions?projectId=proj_1
             [
                 {"_id": "act_1", "title": "Don't deploy on Friday", "status": "todo"},
                 {"_id": "act_2", "title": "Deploy", "status": "todo"},
                 {"_id": "act_3", "title": "Deploy staging", "status": "todo"},
             ],
-            # 2nd call: PUT actions/act_2
-            {"_id": "act_2", "status": "completed"}
+            # 3rd call: PUT actions/act_2
+            {"_id": "act_2", "status": "completed"},
         ]
 
         req = FakeRequest({"uid": self.uid, "task_name": "Deploy", "status": "done"})
@@ -138,9 +158,12 @@ class TestHiveUpdateTaskStatus(unittest.TestCase):
     @patch.object(main, "get_hive_credentials", return_value={"workspace_id": "ws_1"})
     def test_update_ambiguous_partial_matches_rejected(self, mock_creds, mock_rest, mock_conn):
         """When multiple partial matches exist and no exact match, disambiguation is returned and no task is mutated."""
-        mock_rest.return_value = [
-            {"_id": "act_1", "title": "Don't deploy on Friday", "status": "todo"},
-            {"_id": "act_3", "title": "Deploy staging", "status": "todo"},
+        mock_rest.side_effect = [
+            SINGLE_PROJECT_RESPONSE,
+            [
+                {"_id": "act_1", "title": "Don't deploy on Friday", "status": "todo"},
+                {"_id": "act_3", "title": "Deploy staging", "status": "todo"},
+            ],
         ]
 
         req = FakeRequest({"uid": self.uid, "task_name": "deploy", "status": "done"})
@@ -152,16 +175,21 @@ class TestHiveUpdateTaskStatus(unittest.TestCase):
         self.assertIn("act_1", res.error)
         self.assertIn("Deploy staging", res.error)
         self.assertIn("act_3", res.error)
-        self.assertEqual(mock_rest.call_count, 1)
+        # No PUT/mutation call happened — just the projects lookup and the
+        # one project's actions search.
+        self.assertEqual(mock_rest.call_count, 2)
 
     @patch.object(main, "is_connected", return_value=True)
     @patch.object(main, "hive_rest_request")
     @patch.object(main, "get_hive_credentials", return_value={"workspace_id": "ws_1"})
     def test_update_ambiguous_duplicate_exact_matches_rejected(self, mock_creds, mock_rest, mock_conn):
         """When multiple tasks share the exact same title, disambiguation is returned with IDs."""
-        mock_rest.return_value = [
-            {"_id": "act_10", "title": "Release v1.0", "status": "todo"},
-            {"_id": "act_11", "title": "Release v1.0", "status": "todo"},
+        mock_rest.side_effect = [
+            SINGLE_PROJECT_RESPONSE,
+            [
+                {"_id": "act_10", "title": "Release v1.0", "status": "todo"},
+                {"_id": "act_11", "title": "Release v1.0", "status": "todo"},
+            ],
         ]
 
         req = FakeRequest({"uid": self.uid, "task_name": "Release v1.0", "status": "completed"})
@@ -171,7 +199,7 @@ class TestHiveUpdateTaskStatus(unittest.TestCase):
         self.assertIn("Multiple tasks found with exact name 'Release v1.0'", res.error)
         self.assertIn("act_10", res.error)
         self.assertIn("act_11", res.error)
-        self.assertEqual(mock_rest.call_count, 1)
+        self.assertEqual(mock_rest.call_count, 2)
 
     @patch.object(main, "is_connected", return_value=True)
     @patch.object(main, "hive_rest_request")
@@ -179,8 +207,9 @@ class TestHiveUpdateTaskStatus(unittest.TestCase):
     def test_update_single_partial_match_resolves(self, mock_creds, mock_rest, mock_conn):
         """When exactly one partial match exists, it resolves and updates."""
         mock_rest.side_effect = [
+            SINGLE_PROJECT_RESPONSE,
             [{"_id": "act_42", "title": "Fix memory leak on login", "status": "todo"}],
-            {"_id": "act_42", "status": "completed"}
+            {"_id": "act_42", "status": "completed"},
         ]
 
         req = FakeRequest({"uid": self.uid, "task_name": "memory leak", "status": "done"})
@@ -210,22 +239,87 @@ class TestHiveUpdateTaskStatus(unittest.TestCase):
     def test_search_and_get_tasks_print_ids(self, mock_creds, mock_rest, mock_conn):
         """hive_search and hive_get_tasks include task IDs in their output."""
         # 1. Search
-        mock_rest.return_value = [
-            {"_id": "act_55", "title": "Audit auth logs", "status": "todo"}
+        mock_rest.side_effect = [
+            SINGLE_PROJECT_RESPONSE,
+            [{"_id": "act_55", "title": "Audit auth logs", "status": "todo"}],
         ]
         search_req = FakeRequest({"uid": self.uid, "query": "Audit"})
         search_res = asyncio.run(main.tool_hive_search(search_req))
         self.assertIsNone(search_res.error)
         self.assertIn("ID: `act_55`", search_res.result)
 
-        # 2. Get tasks
-        mock_rest.return_value = [
-            {"_id": "act_77", "title": "Configure CI", "status": "in progress"}
-        ]
+        # 2. Get tasks — project_id is given directly, so this is a single
+        # get_project_tasks call with no projects lookup; reset the exhausted
+        # side_effect from the search above before configuring this call.
+        mock_rest.side_effect = None
+        mock_rest.return_value = [{"_id": "act_77", "title": "Configure CI", "status": "in progress"}]
         get_req = FakeRequest({"uid": self.uid, "project_id": "proj_1"})
         get_res = asyncio.run(main.tool_hive_get_tasks(get_req))
         self.assertIsNone(get_res.error)
         self.assertIn("ID: `act_77`", get_res.result)
+
+    @patch.object(main, "is_connected", return_value=True)
+    @patch.object(main, "hive_rest_request")
+    @patch.object(main, "get_hive_credentials", return_value={"workspace_id": "ws_1"})
+    def test_an_unhandled_exception_does_not_leak_into_the_user_facing_error(self, mock_creds, mock_rest, mock_conn):
+        """A raw exception message (which can carry internal detail) must never reach the chat response."""
+        mock_rest.side_effect = RuntimeError("connection reset by peer at 10.0.4.12:5432")
+
+        req = FakeRequest({"uid": self.uid, "task_name": "Deploy", "status": "done"})
+        res = asyncio.run(main.tool_hive_update_task_status(req))
+
+        self.assertEqual(res.error, "Failed to update task. Please try again.")
+        self.assertNotIn("10.0.4.12", res.error)
+        self.assertNotIn("connection reset", res.error)
+
+
+class ErrorPayloadShapeTests(unittest.TestCase):
+    """A 2xx body can carry any shape under "errors"; only a real error may fail the call."""
+
+    def setUp(self):
+        self.uid = "test_user_123"
+
+    def _update(self, put_result):
+        with patch.object(main, "is_connected", return_value=True), patch.object(
+            main, "get_hive_credentials", return_value={"workspace_id": "ws_1"}
+        ), patch.object(main, "hive_rest_request") as mock_rest:
+            mock_rest.side_effect = [
+                SINGLE_PROJECT_RESPONSE,
+                [{"_id": "act_2", "title": "Deploy", "status": "todo"}],
+                put_result,
+            ]
+            req = FakeRequest({"uid": self.uid, "task_name": "Deploy", "status": "done"})
+            return asyncio.run(main.tool_hive_update_task_status(req))
+
+    def test_an_empty_errors_list_is_not_a_failure(self):
+        res = self._update({"_id": "act_2", "status": "completed", "errors": []})
+
+        self.assertIsNone(res.error)
+        self.assertIn("Updated task", res.result)
+
+    def test_a_null_errors_field_is_not_a_failure(self):
+        res = self._update({"_id": "act_2", "status": "completed", "errors": None})
+
+        self.assertIsNone(res.error)
+        self.assertIn("Updated task", res.result)
+
+    def test_a_real_error_list_still_reports_its_message(self):
+        res = self._update({"errors": [{"message": "Action is archived"}]})
+
+        self.assertIsNotNone(res.error)
+        self.assertIn("Action is archived", res.error)
+
+    def test_a_string_error_is_reported_instead_of_crashing(self):
+        res = self._update({"errors": "action_locked"})
+
+        self.assertIsNotNone(res.error)
+        self.assertIn("action_locked", res.error)
+
+    def test_a_dict_error_is_reported_instead_of_crashing(self):
+        res = self._update({"errors": {"message": "rate limited"}})
+
+        self.assertIsNotNone(res.error)
+        self.assertIn("rate limited", res.error)
 
 
 if __name__ == "__main__":

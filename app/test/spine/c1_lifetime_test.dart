@@ -7,7 +7,6 @@ import '../support/spine/contract.dart';
 
 void main() {
   contractTest('C1 lifetime cancels every timer, stream, and listener including late acquisition', () async {
-    pendingContract('C1');
     final scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026)));
     final bag = CaptureLifetime(scheduler);
     final stream = StreamController<int>.broadcast(sync: true);
@@ -44,7 +43,6 @@ void main() {
   });
 
   contractTest('C1 one failed cancellation cannot strand other resources', () async {
-    pendingContract('C1');
     final bag = CaptureLifetime(ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
     var cancelled = false;
     bag.own(() => throw StateError('cancel failure'));

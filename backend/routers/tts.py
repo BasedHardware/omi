@@ -1,8 +1,8 @@
-"""TTS proxy route — proxies ElevenLabs text-to-speech server-side.
+"""Mobile read-aloud TTS route with Gemini and legacy ElevenLabs providers.
 
 Provides the mobile TTS contract so mobile clients can play
 Omi's spoken responses in background / lock-screen scenarios without shipping
-an ElevenLabs API key to the client.
+provider credentials to the client.
 
 Rate limits per user (Redis-backed sliding-window + daily counter):
   - 50 requests per rolling 60 seconds → 429
@@ -10,6 +10,7 @@ Rate limits per user (Redis-backed sliding-window + daily counter):
   - 5,000 characters per single request (hard cap, 400)
 """
 
+import asyncio
 import logging
 import os
 from typing import Any, Callable, Dict, cast
@@ -19,11 +20,20 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from database import redis_db
-from models.tts import TtsSynthesizeRequest
+from models.tts import DEFAULT_MODEL_ID, TtsSynthesizeRequest
 from utils.http_client import get_tts_client, get_tts_semaphore
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.executors import run_blocking, critical_executor
+from utils.tts import (
+    TtsConfigurationError,
+    TtsRequestLog,
+    TtsResponseError,
+    TtsUnavailableError,
+    TtsUpstreamError,
+    get_tts_provider,
+    open_gemini_mp3_stream,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +76,7 @@ async def tts_synthesize(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "tts:synthesize"))
     ),
 ):
-    """Proxy a TTS request to ElevenLabs. Per-user rate limited."""
-    api_key = os.getenv('ELEVENLABS_API_KEY')
-    if not api_key:
-        logger.error("tts_synthesize: ELEVENLABS_API_KEY not configured")
-        raise HTTPException(status_code=503, detail="TTS service not configured")
-
+    """Synthesize MP3 speech through Gemini, with a legacy rollback path."""
     if not _is_valid_voice_id(req.voice_id):
         raise HTTPException(status_code=400, detail="invalid voice_id")
 
@@ -111,6 +116,36 @@ async def tts_synthesize(
         )
     # status == -1 (Redis error): fail-open intentionally — TTS is best-effort.
 
+    try:
+        provider = get_tts_provider()
+    except TtsConfigurationError as exc:
+        raise HTTPException(status_code=503, detail="TTS service not configured") from exc
+
+    if provider == 'gemini':
+        try:
+            audio_stream = await open_gemini_mp3_stream(
+                text=text,
+                voice_id=req.voice_id,
+                client='mobile',
+            )
+        except TtsConfigurationError as exc:
+            raise HTTPException(status_code=503, detail="TTS service not configured") from exc
+        except TtsUpstreamError as exc:
+            raise HTTPException(status_code=exc.status_code, detail="TTS upstream error") from exc
+        except (TtsUnavailableError, TtsResponseError) as exc:
+            raise HTTPException(status_code=502, detail="TTS upstream unavailable") from exc
+        return StreamingResponse(audio_stream, media_type="audio/mpeg")
+
+    api_key = os.getenv('ELEVENLABS_API_KEY')
+    # model_id is client-controlled for released-client compatibility. Keep it
+    # out of logs unless it is the known shipped default.
+    model_label = DEFAULT_MODEL_ID if req.model_id == DEFAULT_MODEL_ID else 'client-selected'
+    metrics = TtsRequestLog(provider='elevenlabs', model=model_label, chars=char_count)
+    if not api_key:
+        metrics.finish('not_configured')
+        logger.error("tts_synthesize: ELEVENLABS_API_KEY not configured")
+        raise HTTPException(status_code=503, detail="TTS service not configured")
+
     body: Dict[str, Any] = {
         "text": text,
         "model_id": req.model_id,
@@ -139,6 +174,7 @@ async def tts_synthesize(
             resp = await upstream_cm.__aenter__()
         except httpx.HTTPError as e:
             semaphore.release()
+            metrics.finish('transport_error')
             logger.error(f"tts_synthesize: upstream request failed uid={uid}: {sanitize(str(e))}")
             raise HTTPException(status_code=502, detail="TTS upstream unavailable")
 
@@ -147,6 +183,7 @@ async def tts_synthesize(
             err_text = err_body.decode('utf-8', errors='replace')[:200]
             await upstream_cm.__aexit__(None, None, None)
             semaphore.release()
+            metrics.finish(f'upstream_{resp.status_code}')
             logger.warning(
                 f"tts_synthesize: ElevenLabs returned {resp.status_code} uid={uid}: " f"{sanitize(err_text)}"
             )
@@ -159,13 +196,22 @@ async def tts_synthesize(
             semaphore.release()
         except Exception:
             pass
+        metrics.finish('pre_stream_error')
         logger.error(f"tts_synthesize: pre-stream failure uid={uid}: {sanitize(str(e))}")
         raise HTTPException(status_code=502, detail="TTS upstream unavailable")
 
-    async def audio_stream():
+    async def legacy_audio_stream():
+        outcome = 'success'
         try:
             async for chunk in resp.aiter_bytes():
+                metrics.mark_first_byte()
                 yield chunk
+        except (asyncio.CancelledError, GeneratorExit):
+            outcome = 'cancelled'
+            raise
+        except Exception:
+            outcome = 'stream_error'
+            raise
         finally:
             try:
                 await upstream_cm.__aexit__(None, None, None)
@@ -175,5 +221,6 @@ async def tts_synthesize(
                 semaphore.release()
             except Exception:
                 pass
+            metrics.finish(outcome)
 
-    return StreamingResponse(audio_stream(), media_type="audio/mpeg")
+    return StreamingResponse(legacy_audio_stream(), media_type="audio/mpeg")

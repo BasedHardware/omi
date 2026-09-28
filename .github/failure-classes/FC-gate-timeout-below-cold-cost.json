@@ -9,8 +9,8 @@
   ],
   "evidence_prs": [10374],
   "scope_hints": [
-    "desktop/macos/scripts/qualify-desktop-beta.sh",
-    "desktop/macos/tests/test-qualify-desktop-beta-contract.sh"
+    "desktop/macos/scripts/desktop-core-harness.sh",
+    "desktop/macos/tests/test-fault-suite-launch-env.sh"
   ],
   "status": "open"
 }

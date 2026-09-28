@@ -126,6 +126,7 @@ extension View {
     message: String,
     confirmTitle: String,
     isDestructive: Bool = true,
+    onCancel: (() -> Void)? = nil,
     onConfirm: @escaping () -> Void
   ) -> some View {
     // The dialog is modal: while it is up, what is under it must not be reachable by VoiceOver or
@@ -142,7 +143,10 @@ extension View {
               isPresented.wrappedValue = false
               onConfirm()
             },
-            onCancel: { isPresented.wrappedValue = false }
+            onCancel: {
+              isPresented.wrappedValue = false
+              onCancel?()
+            }
           )
         }
       }

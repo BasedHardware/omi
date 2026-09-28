@@ -4,12 +4,14 @@ Google Calendar Integration App for Omi
 This app provides Google Calendar integration through OAuth2 authentication
 and chat tools for managing calendar events.
 """
+import html
 import os
+import re
 import sys
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List
-from urllib.parse import urlencode
+from typing import Optional, List, Any
+from urllib.parse import quote, urlencode
 
 import requests
 from dotenv import load_dotenv
@@ -92,6 +94,22 @@ def _coerce_int(value, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(parsed, maximum))
 
 
+def _normalize_attendees(attendees_raw: Any) -> List[str]:
+    """Normalize attendees from string, list, or comma/semicolon-separated emails."""
+    if isinstance(attendees_raw, str):
+        attendees_raw = [attendees_raw]
+    if not isinstance(attendees_raw, list):
+        return []
+    attendees = []
+    for item in attendees_raw:
+        if isinstance(item, str):
+            for part in re.split(r"[,;]+", item):
+                part = part.strip()
+                if part and part not in attendees:
+                    attendees.append(part)
+    return attendees
+
+
 def get_valid_access_token(uid: str) -> Optional[str]:
     """
     Get a valid access token, refreshing if necessary.
@@ -115,7 +133,7 @@ def get_valid_access_token(uid: str) -> Optional[str]:
                 new_token = refresh_access_token(refresh_token)
                 if new_token:
                     access_token = new_token["access_token"]
-                    new_expires_at = (datetime.utcnow() + timedelta(seconds=new_token.get("expires_in", 3600))).isoformat() + "Z"
+                    new_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=new_token.get("expires_in", 3600))).strftime("%Y-%m-%dT%H:%M:%SZ")
                     update_google_tokens(uid, access_token, new_expires_at)
                 else:
                     return None
@@ -294,12 +312,18 @@ def get_default_calendar(uid: str) -> str:
 
 def format_event_time(event: dict) -> str:
     """Format event start/end time for display."""
+    if not isinstance(event, dict):
+        return ""
     start = event.get("start", {})
     end = event.get("end", {})
+    if not isinstance(start, dict):
+        start = {}
+    if not isinstance(end, dict):
+        end = {}
 
     if "date" in start:
         # All-day event
-        start_date = start["date"]
+        start_date = start.get("date", "")
         end_date = end.get("date", start_date)
         if start_date == end_date:
             return f"All day on {start_date}"
@@ -509,6 +533,8 @@ async def tool_list_events(request: Request):
     """List upcoming calendar events."""
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         log(f"=== LIST_EVENTS ===")
 
         uid = body.get("uid")
@@ -526,9 +552,9 @@ async def tool_list_events(request: Request):
         calendar_id = body.get("calendar_id") or get_default_calendar(uid)
 
         # Calculate time range
-        now = datetime.utcnow()
-        time_min = now.isoformat() + "Z"
-        time_max = (now + timedelta(days=days)).isoformat() + "Z"
+        now = datetime.now(timezone.utc)
+        time_min = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        time_max = (now + timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         result = calendar_api_request(uid, "GET", f"/calendars/{calendar_id}/events", params={
             "timeMin": time_min,
@@ -542,6 +568,8 @@ async def tool_list_events(request: Request):
             return ChatToolResponse(error=f"Failed to get events: {result.get('error', 'Unknown error')}")
 
         events = result.get("items", [])
+        if not isinstance(events, list):
+            events = []
 
         if not events:
             return ChatToolResponse(result=f"No events in the next {days} days.")
@@ -549,6 +577,8 @@ async def tool_list_events(request: Request):
         result_parts = [f"**Upcoming Events ({len(events)})**", ""]
 
         for event in events:
+            if not isinstance(event, dict):
+                continue
             summary = event.get("summary", "No title")
             time_str = format_event_time(event)
             location = event.get("location", "")
@@ -574,6 +604,8 @@ async def tool_create_event(request: Request):
     """Create a new calendar event."""
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         log(f"=== CREATE_EVENT ===")
         log(f"Request: {body}")
 
@@ -583,13 +615,7 @@ async def tool_create_event(request: Request):
         end_str = body.get("end")
         description = body.get("description", "")
         location = body.get("location", "")
-        attendees = body.get("attendees")
-        if isinstance(attendees, str):
-            attendees = [attendees]
-        if not isinstance(attendees, list):
-            attendees = []
-        attendees = [email.strip() for email in attendees
-                     if isinstance(email, str) and email.strip()]
+        attendees = _normalize_attendees(body.get("attendees"))
         all_day = body.get("all_day") is True
 
         if not uid:
@@ -622,6 +648,8 @@ async def tool_create_event(request: Request):
                 end_dt, _ = parse_datetime(end_str)
             except ValueError as e:
                 return ChatToolResponse(error=f"Invalid end time: {e}")
+            if end_dt <= start_dt:
+                return ChatToolResponse(error="End time must be after start time")
         else:
             if is_all_day:
                 end_dt = start_dt + timedelta(days=1)
@@ -688,6 +716,8 @@ async def tool_get_event(request: Request):
     """Get details of a specific event."""
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         uid = body.get("uid")
         event_id = body.get("event_id")
 
@@ -717,7 +747,13 @@ async def tool_get_event(request: Request):
         time_str = format_event_time(result)
 
         attendees = result.get("attendees", [])
-        attendee_list = [a.get("email", "") for a in attendees]
+        if not isinstance(attendees, list):
+            attendees = []
+        attendee_list = [
+            a.get("email", "").strip()
+            for a in attendees
+            if isinstance(a, dict) and a.get("email") and a.get("email").strip()
+        ]
 
         result_parts = [
             f"**{summary}**",
@@ -755,6 +791,8 @@ async def tool_update_event(request: Request):
     """Update an existing calendar event."""
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         log(f"=== UPDATE_EVENT ===")
 
         uid = body.get("uid")
@@ -764,6 +802,7 @@ async def tool_update_event(request: Request):
         end_str = body.get("end")
         description = body.get("description")
         location = body.get("location")
+        attendees_raw = body.get("attendees")
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -791,6 +830,9 @@ async def tool_update_event(request: Request):
             update_data["summary"] = title
             updates.append(f"Title: {title}")
 
+        start_dt = None
+        end_dt = None
+
         if start_str:
             try:
                 start_dt, is_all_day = parse_datetime(start_str)
@@ -813,6 +855,9 @@ async def tool_update_event(request: Request):
             except ValueError as e:
                 return ChatToolResponse(error=f"Invalid end time: {e}")
 
+        if start_dt and end_dt and end_dt <= start_dt:
+            return ChatToolResponse(error="End time must be after start time")
+
         if description is not None:
             update_data["description"] = description
             updates.append("Description updated")
@@ -821,8 +866,13 @@ async def tool_update_event(request: Request):
             update_data["location"] = location
             updates.append(f"Location: {location}")
 
+        if attendees_raw is not None:
+            attendees = _normalize_attendees(attendees_raw)
+            update_data["attendees"] = [{"email": email} for email in attendees]
+            updates.append(f"Attendees: {', '.join(attendees)}")
+
         if not update_data:
-            return ChatToolResponse(error="No updates provided. Specify title, start, end, description, or location.")
+            return ChatToolResponse(error="No updates provided. Specify title, start, end, description, location, or attendees.")
 
         result = calendar_api_request(uid, "PATCH", f"/calendars/{calendar_id}/events/{event_id}", json_data=update_data)
 
@@ -843,6 +893,8 @@ async def tool_delete_event(request: Request):
     """Delete a calendar event."""
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         uid = body.get("uid")
         event_id = body.get("event_id")
 
@@ -880,6 +932,8 @@ async def tool_list_calendars(request: Request):
     """List all calendars available to the user."""
     try:
         body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
         uid = body.get("uid")
 
         if not uid:
@@ -895,6 +949,8 @@ async def tool_list_calendars(request: Request):
             return ChatToolResponse(error=f"Failed to list calendars: {result.get('error', 'Unknown error')}")
 
         calendars = result.get("items", [])
+        if not isinstance(calendars, list):
+            calendars = []
 
         if not calendars:
             return ChatToolResponse(result="No calendars found.")
@@ -902,6 +958,8 @@ async def tool_list_calendars(request: Request):
         result_parts = [f"**Your Calendars ({len(calendars)})**", ""]
 
         for cal in calendars:
+            if not isinstance(cal, dict):
+                continue
             name = cal.get("summary", "Unnamed")
             cal_id = cal.get("id", "")
             primary = " (Primary)" if cal.get("primary") else ""
@@ -941,7 +999,9 @@ async def root(uid: str = Query(None)):
     tokens = get_google_tokens(uid)
 
     if not tokens:
-        auth_url = f"/auth/google?uid={uid}"
+        # uid is client-controlled and lands in href/action attributes below;
+        # percent-encode once so a quote cannot break out of the attribute.
+        auth_url = f"/auth/google?uid={quote(uid, safe='')}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1018,7 +1078,7 @@ async def root(uid: str = Query(None)):
                     <h3>Default Calendar</h3>
                     <p style="text-align: left; margin-bottom: 12px;">Choose which calendar to use when creating events:</p>
                     <form action="/update-calendar" method="POST" id="calendarForm">
-                        <input type="hidden" name="uid" value="{uid}">
+                        <input type="hidden" name="uid" value="{html.escape(uid)}">
                         <select name="calendar_id" class="select-input" onchange="this.form.submit()">
                             {calendar_options}
                         </select>
@@ -1032,7 +1092,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"What do I have scheduled for Friday?"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={quote(uid, safe='')}" class="btn btn-secondary btn-block">
                     Disconnect Google Calendar
                 </a>
 
@@ -1081,7 +1141,7 @@ async def google_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{html.escape(error)}</p>
                     </div>
                 </div>
             </body>
@@ -1160,7 +1220,7 @@ async def google_callback(
                         <p>Your Google Calendar is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={uid}" class="btn btn-primary btn-block">
+                    <a href="/?uid={quote(uid, safe='')}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
@@ -1194,7 +1254,7 @@ async def check_setup(uid: str = Query(...)):
 async def disconnect(uid: str = Query(...)):
     """Disconnect Google Calendar."""
     delete_google_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
 
 @app.post("/update-calendar")
@@ -1211,7 +1271,7 @@ async def update_calendar(request: Request):
         store_user_setting(uid, "default_calendar", calendar_id)
         log(f"Updated default calendar for {uid} to {calendar_id}")
 
-    return RedirectResponse(url=f"/?uid={uid}", status_code=303)
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
 
 
 @app.get("/health")

@@ -525,7 +525,7 @@ async def test_a_saturated_reservation_leaves_one_row_per_dispatch(monkeypatch, 
     monkeypatch.setattr(desktop_proxy, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_proxy, '_meter_server_request', meter)
     monkeypatch.setattr(desktop_proxy, '_upstream', route)
-    monkeypatch.setattr(desktop_proxy, '_recovery_plan', lambda *_: [('gemini-2.5-flash', 'shared')])
+    monkeypatch.setattr(desktop_proxy, '_recovery_plan', lambda *_args, **_kwargs: [('gemini-2.5-flash', 'shared')])
     monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_client', lambda: Client())
     monkeypatch.setattr(desktop_proxy, 'get_desktop_gemini_semaphore', lambda: asyncio.Semaphore(1))
     monkeypatch.setattr(desktop_proxy.desktop_gemini_gateway, 'should_route_features_through_gateway', lambda: False)

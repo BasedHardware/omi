@@ -132,11 +132,12 @@ def test_runtime_manifest_keeps_the_drain_bounded_and_authorized():
         assert job["flags"]["--task-timeout"] == "1200s"
         assert job["flags"]["--max-retries"] == "1"
         assert job["env"]["MEMORY_ENABLED"]["value"] == "on"
-        assert set(job["secrets"]) == {
-            "ENCRYPTION_SECRET",
-            "POSTHOG_PROJECT_API_KEY",
-            "SERVICE_ACCOUNT_JSON",
-        }
+        # Prod still mounts the legacy key; dev runs keyless on its runtime identity.
+        keyed = {"SERVICE_ACCOUNT_JSON"} if environment == "prod" else set()
+        assert set(job["secrets"]) == {"ENCRYPTION_SECRET", "POSTHOG_PROJECT_API_KEY"} | keyed
+        if environment == "dev":
+            assert job["env"]["OMI_CUSTOMER_DATA_PROJECT"]["value"] == "based-hardware"
+            assert job["flags"]["--service-account"].startswith("dev-backend-runtime@")
 
     dev_env = manifest["environments"]["dev"]["cloud_run"]["jobs"]["knowledge-ledger-drain-job"]["env"]
     assert dev_env["KNOWLEDGE_LEDGER_DRAIN_ENABLED"]["value"] == "false"

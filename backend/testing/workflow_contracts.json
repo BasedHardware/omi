@@ -244,6 +244,7 @@
       "tests": [
         "tests/unit/test_sync_v2.py",
         "tests/unit/test_sync_cloud_tasks.py",
+        "tests/unit/test_sync_status_read_ownership.py",
         "tests/unit/test_audio_merge_tasks.py",
         "tests/unit/test_sync_fair_use_gate.py",
         "tests/unit/test_sync_cloud_tasks_stack_ci_wiring.py"
@@ -252,6 +253,7 @@
       "invariants": [
         "task retries do not double-count usage or completed segments",
         "segment failures cannot be reported as completed work",
+        "status reads cannot bypass run ownership or overwrite a concurrent terminal result; abandoned Cloud Tasks still recover through the lease-owning finalizer",
         "enqueued jobs retain staged blobs until handler completion",
         "fresh v2 Sync admission runs a credential-free local Firestore, Redis, storage, and separate Cloud Tasks-worker stack gauntlet in blocking PR CI"
       ]

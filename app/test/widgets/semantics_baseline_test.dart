@@ -84,9 +84,7 @@ void main() {
     try {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: SearchBar(hintText: 'Search memories...'),
-          ),
+          home: Scaffold(body: SearchBar(hintText: 'Search memories...')),
         ),
       );
 
@@ -345,9 +343,6 @@ Future<SurfaceSemanticsReport> _measureConversations(WidgetTester tester) async 
               onFolderSelected: (_) {},
               showStarredOnly: false,
               onStarredToggle: () {},
-              showDailySummaries: false,
-              onDailySummariesToggle: () {},
-              hasDailySummaries: false,
             ),
             ConversationListItem(conversation: item, date: item.createdAt, conversationIdx: 0),
             const EmptyConversationsWidget(),

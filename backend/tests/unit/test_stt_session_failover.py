@@ -22,13 +22,15 @@ from routers.listen.receiver import MAX_STT_FAILOVERS, ListenReceiver
 from utils.metrics import OMI_LIVE_STT_ACCEPTED_TOTAL
 from utils.observability.transcription import _deployment_environment
 from utils.stt.streaming import STTService, get_stt_service_for_language
+from utils.stt.language_policy import LiveLanguageProfile
 
 
 class FakeSocket:
-    def __init__(self, dead: bool = False):
+    def __init__(self, dead: bool = False, typed_death_reason: Optional[str] = None):
         self._dead = dead
         self.finished = False
         self.sent: list[bytes] = []
+        self.typed_death_reason = typed_death_reason
 
     @property
     def is_connection_dead(self) -> bool:
@@ -81,8 +83,11 @@ def test_excluding_the_dead_provider_skips_soniox_without_a_key():
         assert second == STTService.deepgram
 
 
-def test_excluding_every_provider_selects_nothing():
+def test_excluding_every_provider_selects_nothing(monkeypatch):
     """Exhausting the chain must report no provider, not loop back to the first."""
+    # Credentials/stubs from another collected test must not enable a default leg.
+    monkeypatch.setattr('utils.stt.streaming._deepgram_is_available', lambda: False)
+    monkeypatch.delenv('HOSTED_PARAKEET_API_URL', raising=False)
     with patch('utils.stt.streaming.stt_service_models', ['modulate-velma-2', 'soniox']), patch.dict(
         'os.environ', {'SONIOX_API_KEY': 'k'}
     ):
@@ -103,7 +108,9 @@ def _receiver_with_dead_socket(monkeypatch: Any, *, replacement: Any):
     receiver = ListenReceiver(host, [], {})
     receiver.stt_socket = FakeSocket(dead=True)
     receiver.vad_gate = None
-    receiver._stt_rebuild = (lambda _s: None, lambda _s: None, 16000)
+    # Audio-timeline: _stt_rebuild holds a callback FACTORY plus the sample
+    # rate (a fresh epoch translator per rebuild), not the callbacks.
+    receiver._stt_rebuild = (lambda: (lambda _s: None, lambda _s: None, None), 16000)
     receiver._create_stt_socket = AsyncMock(return_value=replacement)
     return receiver
 
@@ -125,6 +132,42 @@ async def test_a_dead_primary_moves_the_session_to_the_next_provider(monkeypatch
     # The dead socket is released rather than leaked for the session's lifetime.
     assert dead.finished is True
     assert MODULATE_PROVIDER in receiver._stt_failed_providers
+
+
+@pytest.mark.asyncio
+async def test_failover_reuses_the_initial_language_profile(monkeypatch):
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
+    profile = LiveLanguageProfile.create('pt', multi=True, uid='stable-user')
+    receiver.host.language = 'pt'
+    receiver.host.language_profile = profile
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language',
+        return_value=(STTService.soniox, 'multi', 'soniox'),
+    ) as select:
+        assert await receiver._failover_stt_socket() is True
+    assert select.call_args.kwargs['language_profile'] is profile
+
+
+@pytest.mark.asyncio
+async def test_soniox_replacement_socket_receives_profile_for_hints(monkeypatch):
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
+    receiver._create_stt_socket = ListenReceiver._create_stt_socket.__get__(receiver)
+    profile = LiveLanguageProfile.create('pt', multi=True, uid='stable-user')
+    receiver.host.language_profile = profile
+    receiver.host.stt_service = STTService.soniox
+    receiver.host.stt_language = 'multi'
+    receiver.host.vocabulary = []
+    monkeypatch.setattr('routers.listen.receiver.managed_chain_enabled', lambda _host: False)
+
+    async def connect(**kwargs):
+        socket = await kwargs['connect_primary']()
+        return socket, STTService.soniox
+
+    with patch('routers.listen.receiver.connect_stt_socket_with_fallback', side_effect=connect), patch(
+        'routers.listen.receiver.process_audio_soniox', new_callable=AsyncMock, return_value=FakeSocket()
+    ) as soniox:
+        await receiver._create_stt_socket(lambda _segments: None, 16000)
+    assert soniox.await_args.kwargs['profile'] is profile
 
 
 @pytest.mark.asyncio
@@ -255,3 +298,112 @@ async def test_the_audio_send_path_still_terminates_once_the_chain_is_exhausted(
 
     assert receiver.host.state.stt_terminal_failure is True
     receiver.host.request.websocket.close.assert_awaited_once()
+
+
+def _failover_events(monkeypatch: Any) -> list[dict[str, str]]:
+    events: list[dict[str, str]] = []
+
+    def _record(**kwargs: Any) -> None:
+        events.append(kwargs)
+
+    monkeypatch.setattr('utils.stt.live_failure.record_fallback', _record)
+    return events
+
+
+@pytest.mark.asyncio
+async def test_connect_then_vendor_close_is_not_recovered(monkeypatch):
+    """The 2026-09-19 Soniox budget incident: the vendor accepted the socket
+    then closed it. Recording recovered at connect made a dead leg look healthy.
+    """
+    from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
+
+    events = _failover_events(monkeypatch)
+    dead = FakeSocket(dead=True, typed_death_reason=PROVIDER_BUDGET_EXHAUSTED)
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=dead)
+
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language',
+        return_value=(STTService.soniox, 'en', 'soniox'),
+    ):
+        assert await receiver._failover_stt_socket() is False
+
+    live = [event for event in events if event.get('component') == 'stt_live_session']
+    assert all(event['outcome'] != 'recovered' for event in live)
+    assert live == [
+        {
+            'component': 'stt_live_session',
+            'from_mode': MODULATE_PROVIDER,
+            'to_mode': 'soniox',
+            'reason': 'quota',
+            'outcome': 'exhausted',
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_connect_then_delayed_vendor_close_is_exhausted_not_recovered(monkeypatch):
+    from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
+
+    events = _failover_events(monkeypatch)
+    replacement = FakeSocket(dead=False)
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=replacement)
+
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language',
+        return_value=(STTService.soniox, 'en', 'soniox'),
+    ):
+        assert await receiver._failover_stt_socket() is True
+        assert not any(event['outcome'] == 'recovered' for event in events)
+        replacement._dead = True
+        replacement.typed_death_reason = PROVIDER_BUDGET_EXHAUSTED
+        await receiver._failover_stt_socket()
+
+    live = [event for event in events if event.get('component') == 'stt_live_session']
+    assert live, events
+    assert live[0]['outcome'] == 'exhausted'
+    assert live[0]['reason'] == 'quota'
+    assert live[0]['to_mode'] == 'soniox'
+    assert all(event['outcome'] != 'recovered' for event in events)
+
+
+@pytest.mark.asyncio
+async def test_connect_then_transcript_recovers_exactly_once(monkeypatch):
+    events = _failover_events(monkeypatch)
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=FakeSocket(dead=False))
+    receiver.host.transcripts.enqueue = MagicMock()
+
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language',
+        return_value=(STTService.soniox, 'en', 'soniox'),
+    ):
+        assert await receiver._failover_stt_socket() is True
+
+    assert not any(event['outcome'] == 'recovered' for event in events)
+    receiver._enqueue_stt_segments([])
+    assert not any(event['outcome'] == 'recovered' for event in events)
+    receiver._enqueue_stt_segments([{'text': 'hello', 'speaker': 'SPEAKER_00'}])
+    receiver._enqueue_stt_segments([{'text': 'again', 'speaker': 'SPEAKER_00'}])
+    recovered = [event for event in events if event.get('outcome') == 'recovered']
+    assert recovered == [
+        {
+            'component': 'stt_live_session',
+            'from_mode': MODULATE_PROVIDER,
+            'to_mode': 'soniox',
+            'reason': 'connection_lost',
+            'outcome': 'recovered',
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_failed_ramped_rebuild_keeps_the_dead_provider_attribution(monkeypatch):
+    monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
+    receiver = _receiver_with_dead_socket(monkeypatch, replacement=None)
+    receiver.host.stt_language, receiver.host.stt_model = 'multi', 'velma-2'
+    receiver._create_stt_socket = AsyncMock(side_effect=RuntimeError('chain exhausted'))
+    with patch(
+        'routers.listen.receiver.get_stt_service_for_language', return_value=(STTService.soniox, 'multi', 'soniox')
+    ):
+        assert await receiver._failover_stt_socket() is False
+    assert receiver.host.stt_service == STTService.modulate
+    assert receiver.host.stt_model == 'velma-2'

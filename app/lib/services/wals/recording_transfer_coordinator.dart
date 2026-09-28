@@ -2,11 +2,20 @@ import 'dart:async';
 
 import 'package:omi/utils/logger.dart';
 
-/// The event that made another foreground recording-transfer pass worthwhile.
+/// The event that made another recording-transfer pass worthwhile.
 ///
 /// All recording recovery paths use this closed set so a wake can be audited
 /// without introducing a second recovery owner.
-enum WakeTrigger { startup, foregrounded, connectivityRestored, deviceConnected, cooldownElapsed, userRetry }
+enum WakeTrigger {
+  startup,
+  foregrounded,
+  connectivityRestored,
+  deviceConnected,
+  socketReconnected,
+  dataStalled,
+  cooldownElapsed,
+  userRetry,
+}
 
 /// Result reported by the production drain seam.
 ///
@@ -44,30 +53,40 @@ class RecordingTransferDrainResult {
 typedef RecordingTransferPass = Future<void> Function();
 typedef RecordingTransferDrain = Future<RecordingTransferDrainResult> Function();
 typedef RecordingTransferCooldownScheduler = void Function(Duration delay, void Function() callback);
+typedef RecordingTransferKeepAlive = Future<void> Function();
 
-/// The single foreground owner for recording recovery.
+/// The single owner for recording recovery.
 ///
-/// It deliberately knows no provider or transport details. Production wires
-/// the seams once, while tests use the same coordinator with fake connectivity,
-/// time, reconciliation, and drain functions.
+/// New discovery/drain passes stay foreground-only. An already-running pass
+/// keeps its Android transfer keep-alive (FGS + partial wake lock) until that
+/// pass completes or the user cancels, so screen-off cannot kill BLE/cloud
+/// file sync (#5221). It deliberately knows no provider or transport details.
 class RecordingTransferCoordinator {
   RecordingTransferCoordinator({
     required RecordingTransferPass reconcile,
     required RecordingTransferPass discover,
     required RecordingTransferPass refreshPending,
     required RecordingTransferDrain drain,
+    RecordingTransferDrain? drainLiveCapture,
     required bool Function() autoUploadEnabled,
     Stream<bool>? connectivityChanges,
     bool initiallyConnected = true,
     DateTime Function()? clock,
     RecordingTransferCooldownScheduler? scheduleCooldown,
+    RecordingTransferKeepAlive? onTransferStarted,
+    RecordingTransferKeepAlive? onTransferFinished,
+    RecordingTransferPass? onConnectivityRestored,
   })  : _reconcile = reconcile,
         _discover = discover,
         _refreshPending = refreshPending,
         _drain = drain,
+        _drainLiveCapture = drainLiveCapture,
         _autoUploadEnabled = autoUploadEnabled,
         _clock = clock ?? DateTime.now,
-        _scheduleCooldown = scheduleCooldown {
+        _scheduleCooldown = scheduleCooldown,
+        _onTransferStarted = onTransferStarted,
+        _onTransferFinished = onTransferFinished,
+        _onConnectivityRestored = onConnectivityRestored {
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected);
   }
@@ -77,6 +96,7 @@ class RecordingTransferCoordinator {
         _discover = _noop,
         _refreshPending = _noop,
         _drain = _skippedDrain,
+        _drainLiveCapture = _skippedDrain,
         _autoUploadEnabled = _disabled,
         _clock = DateTime.now;
 
@@ -97,9 +117,13 @@ class RecordingTransferCoordinator {
   RecordingTransferPass _discover;
   RecordingTransferPass _refreshPending;
   RecordingTransferDrain _drain;
+  RecordingTransferDrain? _drainLiveCapture;
   bool Function() _autoUploadEnabled;
   final DateTime Function() _clock;
   RecordingTransferCooldownScheduler? _scheduleCooldown;
+  RecordingTransferKeepAlive? _onTransferStarted;
+  RecordingTransferKeepAlive? _onTransferFinished;
+  RecordingTransferPass? _onConnectivityRestored;
 
   StreamSubscription<bool>? _connectivitySubscription;
   Timer? _cooldownTimer;
@@ -145,15 +169,23 @@ class RecordingTransferCoordinator {
     required RecordingTransferPass discover,
     required RecordingTransferPass refreshPending,
     required RecordingTransferDrain drain,
+    RecordingTransferDrain? drainLiveCapture,
     required bool Function() autoUploadEnabled,
     required Stream<bool> connectivityChanges,
     required bool initiallyConnected,
+    RecordingTransferKeepAlive? onTransferStarted,
+    RecordingTransferKeepAlive? onTransferFinished,
+    RecordingTransferPass? onConnectivityRestored,
   }) {
     _reconcile = reconcile;
     _discover = discover;
     _refreshPending = refreshPending;
     _drain = drain;
+    _drainLiveCapture = drainLiveCapture;
     _autoUploadEnabled = autoUploadEnabled;
+    _onTransferStarted = onTransferStarted ?? _onTransferStarted;
+    _onTransferFinished = onTransferFinished ?? _onTransferFinished;
+    _onConnectivityRestored = onConnectivityRestored ?? _onConnectivityRestored;
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected);
 
@@ -176,25 +208,38 @@ class RecordingTransferCoordinator {
     });
   }
 
-  /// Stops foreground-only retry timers while the app is backgrounded. The
-  /// persisted WAL state is picked up by the next foreground or startup wake.
+  /// Stops foreground-only retry timers while the app is backgrounded. A
+  /// bounded set of data-plane wakes may still run one live-capture-only pass.
   void setForeground(bool isForeground) {
     _foreground = isForeground;
     if (!isForeground) {
-      _cooldownGeneration++;
-      _cooldownTimer?.cancel();
-      _cooldownTimer = null;
-      nextCooldownAt = null;
+      // An already-running pass must finish, but a coalesced extra pass is a
+      // new discovery/drain and stays foreground-only (#5221).
+      _pendingWake = null;
+      if (_inFlight == null) {
+        _cancelForegroundTimers();
+      }
     }
   }
 
+  void _cancelForegroundTimers() {
+    _cooldownGeneration++;
+    _cooldownTimer?.cancel();
+    _cooldownTimer = null;
+    nextCooldownAt = null;
+  }
+
   /// Coalesces concurrent events into a single extra serial pass. Five wakes
-  /// during one pass therefore run at most two passes and never parallel drains.
+  /// during one pass therefore run at most two passes and never parallel drains,
+  /// including while backgrounded.
   Future<void> wake(WakeTrigger trigger) {
-    // Recovery is foreground-only. Persisted WAL state is recovered by the
-    // foreground wake, so background connectivity/device callbacks must not
-    // start discovery or a whole-WAL drain.
-    if (!_foreground) return Future.value();
+    // Background recovery is limited to recent conversation-bound phone WALs.
+    // It never enumerates device storage or starts a whole-history drain.
+    if (!_foreground && !_isBackgroundEligible(trigger)) {
+      final active = _inFlight;
+      if (active != null) return active;
+      return Future.value();
+    }
 
     if (!_configured) {
       _wakeBeforeConfigured = _preferWake(_wakeBeforeConfigured, trigger);
@@ -212,6 +257,11 @@ class RecordingTransferCoordinator {
     pass.whenComplete(() {
       if (!identical(_inFlight, pass)) return;
       _inFlight = null;
+      if (!_foreground) {
+        _pendingWake = null;
+        _cancelForegroundTimers();
+        return;
+      }
       final lateWake = _pendingWake;
       _pendingWake = null;
       if (lateWake != null) {
@@ -221,30 +271,61 @@ class RecordingTransferCoordinator {
     return pass;
   }
 
+  bool _isBackgroundEligible(WakeTrigger trigger) =>
+      trigger == WakeTrigger.connectivityRestored ||
+      trigger == WakeTrigger.socketReconnected ||
+      trigger == WakeTrigger.dataStalled;
+
   WakeTrigger _preferWake(WakeTrigger? existing, WakeTrigger incoming) {
-    if (existing == WakeTrigger.userRetry || incoming != WakeTrigger.userRetry) {
-      return existing ?? incoming;
-    }
-    return incoming;
+    if (existing == null) return incoming;
+    return _wakePriority(incoming) > _wakePriority(existing) ? incoming : existing;
   }
 
+  int _wakePriority(WakeTrigger trigger) => switch (trigger) {
+        WakeTrigger.userRetry => 3,
+        WakeTrigger.connectivityRestored => 2,
+        WakeTrigger.socketReconnected || WakeTrigger.dataStalled => 1,
+        _ => 0,
+      };
+
   Future<void> _run(WakeTrigger firstWake) async {
-    WakeTrigger wake = firstWake;
-    do {
-      _pendingWake = null;
-      await _runPass(wake);
-      wake = _pendingWake ?? wake;
-    } while (_pendingWake != null);
+    final started = _onTransferStarted;
+    if (started != null) await started();
+    try {
+      WakeTrigger wake = firstWake;
+      var passes = 0;
+      do {
+        _pendingWake = null;
+        await _runPass(wake);
+        passes++;
+        if (!_foreground) {
+          final pending = _pendingWake;
+          if (pending == null || passes >= 2 || !_isBackgroundEligible(pending)) {
+            _pendingWake = null;
+            break;
+          }
+        }
+        wake = _pendingWake ?? wake;
+      } while (_pendingWake != null);
+    } finally {
+      final finished = _onTransferFinished;
+      if (finished != null) await finished();
+    }
   }
 
   Future<void> _runPass(WakeTrigger trigger) async {
     try {
+      if (trigger == WakeTrigger.connectivityRestored) {
+        await _onConnectivityRestored?.call();
+      }
       // Uploaded jobs are resolved before a whole-WAL drain can offer any
       // retryable bytes. `syncAll` only uploads `miss`, preserving job ids.
       // Reconciling only resolves work already on the server, so a failure here
       // must not stop new recordings from uploading — it is retried instead.
       var reconcileFailed = !await _tryReconcile();
-      await _discover();
+      if (_foreground) {
+        await _discover();
+      }
       await _refreshPending();
 
       final mayUpload = trigger == WakeTrigger.userRetry || _autoUploadEnabled();
@@ -253,7 +334,9 @@ class RecordingTransferCoordinator {
         return;
       }
 
-      final result = await _drain();
+      final drain = _foreground ? _drain : _drainLiveCapture;
+      if (drain == null) return;
+      final result = await drain();
       await _refreshPending();
 
       // Partial upload success still leaves `uploaded` WALs that need the

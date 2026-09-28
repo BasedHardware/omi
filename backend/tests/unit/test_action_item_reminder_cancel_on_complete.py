@@ -162,12 +162,14 @@ def test_helper_cancels_on_completed_or_no_due():
 def test_router_wires_helper_and_no_longer_blindly_rearms():
     ai = _src("routers/action_items.py")
     assert _is_imported("routers/action_items.py")
-    # toggle-completion AND update both reconcile through the helper (real calls, not comments)
-    assert len(_live_call_lines("routers/action_items.py")) >= 2
+    # toggle-completion, update AND the reminders sync batch all reconcile through the helper
+    # (real calls, not comments)
+    assert len(_live_call_lines("routers/action_items.py")) >= 3
     # the old unconditional "re-arm whenever due_at present" block is gone
     assert "if 'due_at' in update_data and update_data['due_at']:" not in ai
-    # creating an already-completed item must not arm a reminder
-    assert "not request.completed" in ai
+    # A create replay uses the saved state, which may now be completed.
+    # Behavioral coverage is in test_action_item_idempotency.py.
+    assert "not response.completed" in ai
 
 
 def test_agentic_and_developer_paths_wired():

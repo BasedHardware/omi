@@ -62,7 +62,7 @@ no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.pro
 
 Note: Stackdriver exporter is scraped by Prometheus (job `prometheus-stackdriver-metrics`), then prometheus-adapter queries Prometheus for those metrics. The exporter does not feed the adapter directly.
 
-Cloud Run application metrics take a push-then-pull bridge because a public URL scrape reaches only one random autoscaled instance. Each `backend` and `desktop-backend` instance exposes its registry on loopback port 9090 to Google's Managed Service for Prometheus sidecar. The sidecar writes `prometheus.googleapis.com/omi_*` to Cloud Monitoring. A separate, rate-limited Stackdriver exporter imports only those two Cloud Run services, and Prometheus scrapes it as `cloud-run-application-metrics`. See [`../../docs/runbooks/cloud-run-metrics-ingestion.md`](../../docs/runbooks/cloud-run-metrics-ingestion.md).
+Cloud Run application metrics take a push-then-pull bridge because a public URL scrape reaches only one random autoscaled instance. Each `backend` and `desktop-backend` instance exposes its registry on loopback port 9090 to Google's Managed Service for Prometheus sidecar. The sidecar writes `prometheus.googleapis.com/omi_*` to Cloud Monitoring. A separate, rate-limited Stackdriver exporter imports only those two Cloud Run services, and Prometheus scrapes it as `cloud-run-application-metrics`. **`backend-sync` is not in that allowlist**, so `omi_sync_intake_total`, `omi_sync_lane_jobs_total`, and `omi_conversation_*` with `source="sync"` are empty in Prometheus until a follow-up adds it (see below). Sync intake and sync conversation shape are readable today through Cloud Logging of `omi_sync_intake` and `omi_conversation_shape`. See [`../../docs/runbooks/cloud-run-metrics-ingestion.md`](../../docs/runbooks/cloud-run-metrics-ingestion.md).
 
 ## Components
 
@@ -188,6 +188,17 @@ Bridges GCP Cloud Monitoring into Prometheus. Two releases share the existing Wo
 
 The application exporter is separate to prevent Cloud Monitoring API read cost from multiplying every per-instance application series by the legacy 1-second scrape rate. Stackdriver exporter exposes normalized names such as `stackdriver_prometheus_target_prometheus_googleapis_com_<metric>_<type>`; retain the `service_name` and `instance` labels and aggregate counters across instances in PromQL.
 
+### Follow-up: scrape Cloud Run `backend-sync`
+
+Not implemented here (needs `.github/` workflow and Helm values). Until it lands, `omi_sync_intake_total`, `omi_sync_lane_jobs_total`, and `omi_conversation_{duration_seconds,speech_seconds,segments}{source="sync"}` are empty in Prometheus. Alerts and the Core Features sync panel use Cloud Logging of `omi_sync_intake` / `omi_conversation_shape` instead.
+
+Concrete change, cost, verify:
+
+1. **Exporter filter** — `backend/charts/monitoring/prometheus-stackdriver-exporter/{dev,prod}_omi_cloud_run_metrics_exporter.yaml` currently restricts Cloud Monitoring reads to `resource.labels.namespace=one_of("backend","desktop-backend")`. Add `"backend-sync"` to that `one_of`. Keep the `prometheus.googleapis.com/omi_*` prefix. Do **not** fold this into the 1-second load-balancer exporter.
+2. **Sidecar on the service** — `.github/workflows` that deploy `backend-sync` must attach the same GMP sidecar + `PROMETHEUS_SIDECAR_PORT=9090` loopback listener used by `backend` / `desktop-backend` (`backend/docs/runbooks/cloud-run-metrics-ingestion.md`). Without the sidecar there is nothing for Cloud Monitoring to ingest.
+3. **Cost** — GMP samples scale with `series × instances × 30s`. Shape histograms are 342 children per process (6 sources × 3 families); sync only populates `source="sync"` plus the existing `omi_sync_*` families. Sidecar adds 1 vCPU + 512 MiB per active `backend-sync` instance (same as backend). Isolated exporter API reads grow by one namespace, still at 30s.
+4. **Verify** — after deploy, `count({job="cloud-run-application-metrics", __name__=~"omi_.*", service_name="backend-sync"})` must be > 0, and `omi-cloud-run-metric-names-unnormalized` stays at 0. Then `sum(rate(omi_conversation_duration_seconds_count{source="sync"}[5m]))` and `sum(rate(omi_sync_intake_total[5m]))` should match Cloud Logging counts of `omi_conversation_shape source=sync` and `omi_sync_intake` within the 30s exporter offset. Do not enable a Prometheus alert on those series before this proof.
+
 ## Values Files
 
 Each component has dev and prod values:
@@ -241,7 +252,7 @@ Most are bundled with kube-prometheus-stack and auto-provisioned. Custom dashboa
 | Kubernetes / Scheduler | `2e6b6a3b4bddf1427b3a55aa1311c656` | `kubernetes-mixin` | Bundled |
 | Node Exporter / AIX | `7e0a61e486f727d763fb1d86fdd629c2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / MacOS | `629701ea43bf69291922ea45f4a87d37` | `node-exporter-mixin` | Bundled |
-| Omi Core Features | `omi-core-features` | — | **Custom** — user-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey). The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
+| Omi Core Features | `omi-core-features` | — | **Custom** — user-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source). Conversation-shape histograms for `source="sync"` and `omi_sync_intake_total` are empty in Prometheus until backend-sync is scraped; the collapsed row's third panel reads Cloud Logging of `omi_sync_intake` instead. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
 | Node Exporter / Nodes | `7d57716318ee0dddbac5a7f451fb7753` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Cluster | `3e97d1d02672cdd0861f4c97c64f89b2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Node | `fac67cfbe174d3ef53eb473d73d9212f` | `node-exporter-mixin` | Bundled |
@@ -588,7 +599,8 @@ before publishing or promoting an image. The protected `MONITOR_GRAFANA_TOKEN`
 secret (repo-scoped for dest `monitor.omiapi.com`, `prod` environment-scoped
 for `monitor.omi.me`) must be able to read provisioned alert rules, datasource
 health and queries, and contact points. Do not reuse `GRAFANA_TOKEN` here; that
-secret belongs to the TV Cloud Run Grafana. The gate fails closed unless the committed memory-admission
+secret belongs to the TV Cloud Run Grafana. The default invocation is the
+Pusher release gate: it fails closed unless the committed memory-admission
 and capture-outcome pager set is live and unpaused, Prometheus reports healthy,
 both Pusher and backend-listen scrape targets are currently healthy, and the
 exact Telegram receiver exists with resolve notifications enabled. After each
@@ -597,6 +609,17 @@ both jobs; zero-valued labeled failure children are initialized at process
 startup so absence is unambiguously a source failure. Production repeats this
 check after rollout so an hours-long release cannot finish on stale evidence.
 It never prints contact-point settings or token material.
+
+The same script can classify every committed rule in `alerts/*.json` against
+live Grafana provisioning (`--mode fleet`). That run prints committed-but-absent,
+live-but-uncommitted, present-but-paused, and present-but-divergent UIDs. Default
+`--fail-on none` reports drift without failing; `--fail-on gated` fails only on
+UIDs listed in `live-alert-gate.json`, which starts as the proven Pusher set and
+widens only after a token-backed proof. Do not wire `--fail-on all` into a
+backend or Pusher deploy until that proof exists: a large unimported set would
+block every release. Nothing in CI or deploy currently POSTs these JSON files to
+Grafana; they remain a manual import until that write path is an explicit
+decision. Split-vs-combined equality in unit tests is not evidence a rule is live.
 
 Every rule carries these notification fields:
 

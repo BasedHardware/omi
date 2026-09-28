@@ -22,6 +22,7 @@ from utils.http_client import get_auth_client
 from utils.log_sanitizer import sanitize
 from utils.metrics import AUTH_FLOW_DURATION_SECONDS, AUTH_FLOW_EVENTS
 from utils.observability.fallback import record_fallback
+from utils.product_metrics import extract_app_build
 from utils.integration_telemetry import emit_posthog_event
 from utils.referrals import REFERRAL_COOKIE_NAME, REFERRAL_PROGRAM, ReferralCodeError, referrer_uid_from_code
 import logging
@@ -288,14 +289,17 @@ def _log_auth_event(
     status_code: Optional[int] = None,
     redirect_scheme: Optional[str] = None,
     duration_seconds: Optional[float] = None,
+    request: Optional[Request] = None,
 ) -> None:
     safe_provider = provider if provider in {"apple", "google"} else "unknown"
     safe_failure_class = _failure_class(failure_class)
+    app_build = extract_app_build(request) if request is not None else 'unknown'
     AUTH_FLOW_EVENTS.labels(
         provider=safe_provider,
         stage=stage,
         outcome=outcome,
         failure_class=safe_failure_class,
+        app_build=app_build,
     ).inc()
     if duration_seconds is not None:
         AUTH_FLOW_DURATION_SECONDS.labels(provider=safe_provider, terminal_state=outcome).observe(duration_seconds)
@@ -334,6 +338,7 @@ async def auth_authorize(
         outcome="started",
         auth_flow_id=auth_flow_id,
         redirect_scheme=redirect_scheme,
+        request=request,
     )
     if provider not in ['google', 'apple']:
         _log_auth_event(
@@ -343,6 +348,7 @@ async def auth_authorize(
             auth_flow_id=auth_flow_id,
             failure_class="unsupported_provider",
             redirect_scheme=redirect_scheme,
+            request=request,
         )
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
@@ -359,6 +365,7 @@ async def auth_authorize(
             failure_class=_failure_class(exc),
             status_code=exc.status_code,
             redirect_scheme=redirect_scheme,
+            request=request,
         )
         raise
 
@@ -384,6 +391,7 @@ async def auth_authorize(
         outcome="succeeded",
         auth_flow_id=auth_flow_id,
         redirect_scheme=redirect_scheme,
+        request=request,
     )
 
     # Redirect to provider OAuth
@@ -398,6 +406,7 @@ async def auth_authorize(
         outcome="succeeded",
         auth_flow_id=auth_flow_id,
         redirect_scheme=redirect_scheme,
+        request=request,
     )
     return response
 

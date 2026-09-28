@@ -120,7 +120,7 @@ void main() {
       // extension could have been registered.
       expect(semanticControlsEligible, isFalse, reason: 'test compilation omits the opt-in define');
       expect(SemanticControls.instance.installed, isFalse);
-      SemanticControls.instance.installIfEligible();
+      SemanticControls.instance.installIfEligible(register: (_, __) => fail('ineligible registrar invoked'));
       expect(SemanticControls.instance.installed, isFalse,
           reason: 'install must be a no-op when the build is not eligible');
     });

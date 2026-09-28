@@ -1,44 +1,36 @@
-export default function LoadingMemory() {
+import ShareThemeBoot from '@/src/components/memories/share/share-theme-boot';
+import './share-note.css';
+
+/** Placeholder in the note's own layout while the shared conversation loads. */
+export default function Loading() {
   return (
-    <div className="relative top-16 mx-3 my-10 max-w-screen-md rounded-2xl border border-solid border-zinc-800 py-6 text-center text-white md:mx-auto md:my-28 md:py-12">
-      <div className="px-4 md:px-12">
-        <div className="line-clamp-2 h-[32px] w-[15rem] animate-pulse rounded-lg bg-zinc-700 font-bold md:h-[36px] md:w-[30rem]"></div>
-        <p className="my-2 h-[18px] w-[30%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base"></p>
-        <div className="h-[24px] w-[100px] rounded-full bg-gray-700 px-3 py-1.5 text-xs md:text-sm"></div>
-      </div>
-      <div className="mt-8 flex h-[52px] border-y border-solid border-zinc-800 text-base md:mt-10 md:text-lg"></div>
-      <div className="mt-10 px-4 md:px-12">
-        <div className="h-[28px] w-[10rem] animate-pulse rounded-lg bg-zinc-700 font-bold md:h-[30px]"></div>
-        <div className="h-[10px]" />
-        <div>
-          <div className="my-2 h-[10px] w-[30%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
-          <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
-          <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
-          <div className="my-2 h-[10px] w-[90%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
-          <div className="my-2 h-[10px] w-[70%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
-        </div>
-        <div className="mt-9">
-          <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
-          <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
-          <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
-          <div className="my-2 h-[10px] w-[90%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
-          <div className="my-2 h-[10px] w-[70%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
-        </div>
-      </div>
-      <div className="mt-10 px-4 md:px-12">
-        <div className="h-[28px] w-[10rem] animate-pulse rounded-lg bg-zinc-700 font-bold md:h-[30px]"></div>
-        <div className="h-[10px]" />
-        <div className="mt-3 flex flex-col gap-4">
-          {[...Array(3)].map((_, index) => (
-            <div className="flex w-full items-center gap-3" key={index}>
-              <div className="min-h-[20px] min-w-[20px] rounded-full bg-gray-500" />
-              <div className="w-full">
-                <div className="my-2 h-[10px] w-[100%] animate-pulse rounded-lg bg-gray-500 text-sm text-gray-500 md:text-base" />
-              </div>
-            </div>
+    <>
+      <ShareThemeBoot />
+      <div className="share-note" aria-busy="true" aria-label="Loading shared note">
+        <div className="sn-topbar" />
+        <section className="sn-page">
+          <div className="sn-skeleton" style={{ height: 14, width: 140 }} />
+          <div
+            className="sn-skeleton"
+            style={{ height: 40, width: '80%', marginTop: 20 }}
+          />
+          <div
+            className="sn-skeleton"
+            style={{ height: 14, width: 220, marginTop: 18 }}
+          />
+          <div
+            className="sn-skeleton"
+            style={{ height: 44, width: 300, marginTop: 36, borderRadius: 999 }}
+          />
+          {[100, 94, 88, 60].map((width, index) => (
+            <div
+              key={index}
+              className="sn-skeleton"
+              style={{ height: 14, width: `${width}%`, marginTop: index === 0 ? 44 : 14 }}
+            />
           ))}
-        </div>
+        </section>
       </div>
-    </div>
+    </>
   );
 }

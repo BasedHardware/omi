@@ -33,6 +33,7 @@ PHASE_ORDER = (
     "app-analysis-tests",
     "app-journeys-hermetic",
     "app-compile-smoke",
+    "app-ios-compile",
     "desktop-agent-runtime",
     "desktop-swift-tests",
     "desktop-swift-release-compile",
@@ -267,6 +268,32 @@ def _is_app_compile_smoke_input(path: str) -> bool:
     }
 
 
+IOS_PIGEON_DEFINITIONS = {
+    "app/lib/pigeon_interfaces.dart",
+    "app/lib/phone_mic_interface.dart",
+}
+
+
+def _is_app_ios_compile_input(path: str) -> bool:
+    """Wake the iOS simulator compile on native iOS, Pigeon, pubspec, or this job.
+
+    Generated Pigeon Swift lives under ``app/ios/``, so it is covered by that
+    prefix. Ordinary Dart under ``app/lib/`` stays on Android compile smoke.
+    Editing this workflow (or detect-changes) must wake the job so a change
+    to the compile check actually runs the compile check.
+    """
+    return (
+        path.startswith("app/ios/")
+        or path.startswith(".github/actions/detect-changes/")
+        or path in IOS_PIGEON_DEFINITIONS
+        or path in {
+            "app/pubspec.yaml",
+            "app/pubspec.lock",
+            ".github/workflows/mobile-app-checks.yml",
+        }
+    )
+
+
 def _is_app_journey_input(path: str) -> bool:
     """Wake the hermetic seeded-journey lane (SCA-490).
 
@@ -384,6 +411,8 @@ def resolve_impact(
             selected.update({"app-ci-only", "app-analysis-tests"})
             if _is_app_compile_smoke_input(path):
                 selected.add("app-compile-smoke")
+            if _is_app_ios_compile_input(path):
+                selected.add("app-ios-compile")
             if path.endswith(".dart") and not _is_generated_dart(path):
                 selected.add("app-dart-format")
             if _is_app_l10n_input(path):
@@ -426,6 +455,7 @@ def resolve_impact(
                 "app-analysis-tests",
                 "app-journeys-hermetic",
                 "app-compile-smoke",
+                "app-ios-compile",
                 "desktop-ci-only",
                 "desktop-flow-lint",
                 "desktop-swift-tests",
@@ -482,6 +512,7 @@ def github_outputs(plan: ImpactPlan) -> dict[str, str]:
         "has_app_l10n": str(plan.includes("flutter-l10n")).lower(),
         "has_flutter_generated": str(plan.includes("flutter-codegen") or plan.includes("flutter-l10n")).lower(),
         "has_app_compile_smoke": str(plan.includes("app-compile-smoke")).lower(),
+        "has_app_ios_compile": str(plan.includes("app-ios-compile")).lower(),
         "has_app_dart": str(plan.includes("app-analysis-tests")).lower(),
         "has_app_journeys": str(plan.includes("app-journeys-hermetic")).lower(),
         "has_desktop_agent_runtime": str(plan.includes("desktop-agent-runtime")).lower(),

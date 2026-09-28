@@ -227,7 +227,9 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -261,12 +263,14 @@ jobs:
 
           path = Path(os.environ["GOOGLE_APPLICATION_CREDENTIALS"])
           payload = json.loads(path.read_text(encoding="utf-8"))
-          if payload.get("type") != "service_account":
-              raise SystemExit("development auth action must provide a service-account credential")
-          if payload.get("project_id") != os.environ["QA_PROJECT"]:
-              raise SystemExit("development auth action credential is not scoped to the QA project")
-          client_email = payload.get("client_email")
-          if not isinstance(client_email, str) or not client_email.endswith("@based-hardware-dev.iam.gserviceaccount.com"):
+          # GitHub WIF: an external-account config that impersonates the dev
+          # deployer. No service-account key reaches the runner.
+          if payload.get("type") != "external_account":
+              raise SystemExit("development auth action must provide a GitHub WIF external-account credential")
+          impersonation_url = payload.get("service_account_impersonation_url")
+          if not isinstance(impersonation_url, str) or not impersonation_url.endswith(
+              "@based-hardware-dev.iam.gserviceaccount.com:generateAccessToken"
+          ):
               raise SystemExit("development auth action credential has an unexpected service-account identity")
           credentials, project = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
           if credentials is None:
@@ -493,7 +497,7 @@ jobs:
           MEMORY_DAILY_MEMORY_SWEEP_ENABLED: "true"
           MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH: "false"
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED: "true"
-          MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME: gpt-5.6-luna
+          MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME: gpt-6-luna
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES: "3"
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD: "0.05"
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED: "true"
@@ -544,7 +548,7 @@ jobs:
             --project "$QA_PROJECT" \
             --region "$QA_REGION" \
             --async \
-            --update-env-vars "GCLOUD_PROJECT=$QA_PROJECT,OMI_JIT_QA_SWEEP_RUN_ID=$server_run_id,OMI_JIT_QA_SWEEP_ADMISSION=true,MEMORY_DAILY_MEMORY_SWEEP_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=gpt-5.6-luna,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=3,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0.05,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=jit-qa-sweep-v1,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED=false" \
+            --update-env-vars "GCLOUD_PROJECT=$QA_PROJECT,OMI_JIT_QA_SWEEP_RUN_ID=$server_run_id,OMI_JIT_QA_SWEEP_ADMISSION=true,MEMORY_DAILY_MEMORY_SWEEP_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH=false,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME=gpt-6-luna,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES=3,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD=0.05,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED=true,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG=jit-qa-sweep-v1,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED=false" \
             --format=json > "$operator_dir/sweep.launch.json"
           execution="$("$QA_PYTHON" - "$operator_dir/sweep.launch.json" <<'PY'
           import json

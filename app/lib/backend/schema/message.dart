@@ -249,6 +249,9 @@ class ServerMessage {
   Map<String, dynamic>? rawChartData;
   List<Map<String, dynamic>> contentBlocks;
 
+  /// Receipt for a successful memory write in this streamed reply.
+  String? memoryAction;
+
   /// Optional supplemental references. Text remains authoritative when this
   /// envelope is absent, malformed, unavailable, or from a future version.
   ChatEvidenceReferenceEnvelope? evidenceEnvelope;
@@ -379,7 +382,7 @@ class ServerMessage {
       'created_at': createdAt.toUtc().toIso8601String(),
       'text': text,
       'sender': sender.toString().split('.').last,
-      'type': type.toString().split('.').last,
+      'type': type.value,
       'plugin_id': appId,
       'from_integration': fromIntegration,
       'memories': memories.map((m) => m.toJson()).toList(),
@@ -621,6 +624,7 @@ class ServerMessage {
 
 enum MessageChunkType {
   think('think'),
+  memory('memory'),
   data('data'),
   done('done'),
   error('error'),
@@ -636,8 +640,9 @@ class ServerMessageChunk {
   MessageChunkType type;
   String text;
   ServerMessage? message;
+  String? errorCode;
 
-  ServerMessageChunk(this.messageId, this.text, this.type, {this.message});
+  ServerMessageChunk(this.messageId, this.text, this.type, {this.message, this.errorCode});
 
   static ServerMessageChunk failedMessage() {
     return ServerMessageChunk(

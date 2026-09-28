@@ -136,3 +136,55 @@ def test_set_user_time_zone_if_missing_does_not_write_when_zone_exists(monkeypat
 
     assert notifications_module.set_user_time_zone_if_missing('uid1', 'America/New_York') is False
     user_ref.set.assert_not_called()
+
+
+def test_set_user_time_zone_writes_defaults_alongside_time_zone():
+    fake_db, user_ref = _user_doc_db({'email': 'web-only@example.com'})
+
+    notifications_module.set_user_time_zone('uid1', 'America/New_York', firestore_client=fake_db)
+
+    user_ref.set.assert_called_once_with(
+        {
+            'time_zone': 'America/New_York',
+            'daily_summary_enabled': True,
+            'daily_summary_hour_local': 22,
+        },
+        merge=True,
+    )
+
+
+def test_set_user_time_zone_preserves_present_schedule_fields():
+    fake_db, user_ref = _user_doc_db(
+        {'daily_summary_enabled': False, 'daily_summary_hour_local': 0, 'time_zone': 'UTC'}
+    )
+
+    notifications_module.set_user_time_zone('uid1', 'America/New_York', firestore_client=fake_db)
+
+    user_ref.set.assert_called_once_with({'time_zone': 'America/New_York'}, merge=True)
+
+
+def test_set_user_time_zone_fills_only_the_absent_schedule_field():
+    fake_db, user_ref = _user_doc_db({'daily_summary_enabled': False})
+
+    notifications_module.set_user_time_zone('uid1', 'America/New_York', firestore_client=fake_db)
+
+    user_ref.set.assert_called_once_with(
+        {
+            'time_zone': 'America/New_York',
+            'daily_summary_hour_local': 22,
+        },
+        merge=True,
+    )
+
+
+def test_set_user_time_zone_on_missing_document_seeds_full_schedule():
+    """A brand-new document must satisfy the module invariant after one write."""
+    fake_db, user_ref = _user_doc_db(None)
+
+    notifications_module.set_user_time_zone('uid1', 'America/New_York', firestore_client=fake_db)
+
+    written = user_ref.set.call_args.args[0]
+    assert user_ref.set.call_args.kwargs == {'merge': True}
+    assert written['time_zone'] == 'America/New_York'
+    assert written['daily_summary_enabled'] is True
+    assert written['daily_summary_hour_local'] == 22

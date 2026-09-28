@@ -12,7 +12,7 @@ server verifies that token and chooses one of two fixed Omi gateway lanes:
 - signed-out or anonymous Firebase session: `omi:auto:persona-chat`
   (`gpt-5.4-nano`);
 - verified, non-anonymous Firebase session: `omi:auto:persona-chat-premium`
-  (`gpt-5.6-luna`).
+  (`gpt-x-luna`).
 
 Both lanes are resolved inside the authenticated Omi LLM gateway. A caller
 supplied model value is ignored, and a gateway failure returns an unavailable
@@ -46,7 +46,7 @@ RAPIDAPI_KEY=your_rapidapi_key
 RAPIDAPI_HOST=your_rapidapi_host
 LINKEDIN_RAPIDAPI_HOST=linkedin-api8.p.rapidapi.com
 LINKEDIN_API_KEY=your_rapidapi_linkedin_key
-NEXT_PUBLIC_MIXPANEL_TOKEN=your_mixpanel_token
+NEXT_PUBLIC_POSTHOG_KEY=your_posthog_key
 REDIS_DB_HOST=your_redis_host
 REDIS_DB_PORT=your_redis_port
 REDIS_DB_PASSWORD=your_redis_password

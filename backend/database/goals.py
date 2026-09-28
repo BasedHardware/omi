@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from google.cloud import firestore
 
@@ -34,6 +35,38 @@ logger = logging.getLogger(__name__)
 goals_collection = 'goals'
 goal_history_collection = 'goal_history'
 goal_events_collection = 'events'
+
+
+def _history_date_str(uid: str, now: datetime, *, firestore_client: Any = None) -> str:
+    """The goal-history document id: the user's own calendar day, not UTC's.
+
+    ``goal_history`` is keyed one document per day (``write_transaction.set``/
+    ``.set(merge=True)`` on ``document(<date>)``), so bucketing by UTC date splits
+    or merges a user's day at the wrong boundary for anyone not on UTC — the same
+    class of bug already fixed for the proactive-notification cap, which resolves
+    the zone via ``database.notifications.resolve_user_timezone``.
+
+    Reads ``time_zone`` directly through ``_get_db(firestore_client)`` (the same
+    seam every other read in this module goes through) rather than calling into
+    ``database.notifications``: that function has no ``firestore_client`` seam of
+    its own, so it always hit the real client — invisible in this module's own
+    tests, which inject a fake client, but it broke a *different* module's tests
+    that exercise ``goals.py`` through ``firestore_client=fake_db`` and don't know
+    to fake out `database.notifications` too. Any failure (missing field, bad
+    zone, a transient read error) falls back to UTC rather than raising, matching
+    the fail-soft posture the rest of this codebase uses for non-critical reads.
+    """
+    try:
+        snapshot = _get_db(firestore_client).collection(users_collection).document(uid).get()
+        payload = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+        tz = payload.get('time_zone') if isinstance(payload, dict) else None
+        if not tz:
+            return now.strftime('%Y-%m-%d')
+        return now.astimezone(ZoneInfo(str(tz))).strftime('%Y-%m-%d')
+    except Exception:
+        return now.strftime('%Y-%m-%d')
+
+
 users_collection = 'users'
 DEFAULT_FOCUS_CAP = 5
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
@@ -799,6 +832,10 @@ def _append_goal_progress_event(
     goal_ref = _goal_ref(uid, goal_id, firestore_client=client)
     transaction = client.transaction()
     now = datetime.now(timezone.utc)
+    # Resolved once, outside the transaction: `apply` below can retry on contention,
+    # and _history_date_str is a Firestore read of its own — repeating it on every
+    # retry would multiply reads for no benefit, since `now` doesn't change.
+    history_date = _history_date_str(uid, now, firestore_client=client)
     event_id = (
         f'gpe_{hashlib.sha256(f"{uid}:{account_generation}:{goal_id}:{idempotency_key}".encode()).hexdigest()[:32]}'
         if idempotency_key is not None and account_generation is not None
@@ -853,10 +890,10 @@ def _append_goal_progress_event(
             goal_patch.update(_metric_aliases(event.metric))
         write_transaction.update(goal_ref, goal_patch)
         if authority_account_generation is not None and record.metric is not None:
-            history_ref = goal_ref.collection(goal_history_collection).document(now.strftime('%Y-%m-%d'))
+            history_ref = goal_ref.collection(goal_history_collection).document(history_date)
             write_transaction.set(
                 history_ref,
-                {'date': now.strftime('%Y-%m-%d'), 'value': record.metric.current, 'recorded_at': now},
+                {'date': history_date, 'value': record.metric.current, 'recorded_at': now},
             )
         return record
 
@@ -955,10 +992,9 @@ def save_goal_progress_history(
     firestore_client: Any = None,
 ) -> None:
     now = datetime.now(timezone.utc)
+    history_date = _history_date_str(uid, now, firestore_client=firestore_client)
     history_ref = _goal_ref(uid, goal_id, firestore_client=firestore_client).collection(goal_history_collection)
-    history_ref.document(now.strftime('%Y-%m-%d')).set(
-        {'date': now.strftime('%Y-%m-%d'), 'value': value, 'recorded_at': now}, merge=True
-    )
+    history_ref.document(history_date).set({'date': history_date, 'value': value, 'recorded_at': now}, merge=True)
 
 
 def get_goal_history(

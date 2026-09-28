@@ -117,7 +117,6 @@ def rig(tmp_path):
         child.close()
 
 
-@pending("V1")
 def test_reload_really_sends_machine_rpc_and_binds_loaded_inputs(rig):
     engine = rig.engine()
     assert engine.start()['outcome'] == 'ok'
@@ -150,7 +149,6 @@ def test_reload_really_sends_machine_rpc_and_binds_loaded_inputs(rig):
     assert se.read_evidence(rig.directory / 'operations' / op / 'evidence.json') == receipt
 
 
-@pending("V1")
 @pytest.mark.parametrize('mode,outcome', [('reject', 'rejected'), ('missing-code', 'blocked'),
                                           ('die', 'blocked'), ('wedge', 'blocked')])
 def test_failed_reload_never_advances_loaded_identity(rig, mode, outcome):
@@ -169,7 +167,6 @@ def test_failed_reload_never_advances_loaded_identity(rig, mode, outcome):
     assert len([c for c in rig.calls() if c['method'] == 'app.restart']) == 1
 
 
-@pending("V1")
 def test_hot_restart_is_explicit_and_revalidates_controls(rig):
     engine = rig.engine()
     engine.start()
@@ -182,7 +179,6 @@ def test_hot_restart_is_explicit_and_revalidates_controls(rig):
                c['params']['methodName'] == 'ext.omi.controls.state' for c in calls)
 
 
-@pending("V1")
 def test_native_input_change_requires_cold_start_without_sending_reload(rig):
     engine = rig.engine()
     engine.start()
@@ -191,7 +187,6 @@ def test_native_input_change_requires_cold_start_without_sending_reload(rig):
     assert not any(c['method'] == 'app.restart' for c in rig.calls())
 
 
-@pending("V1")
 def test_second_mutation_rejected_while_status_remains_available(rig):
     engine = rig.engine()
     engine.start()
@@ -210,7 +205,6 @@ def test_second_mutation_rejected_while_status_remains_available(rig):
     assert len([c for c in rig.calls() if c['method'] == 'app.restart']) == 1
 
 
-@pending("V1")
 def test_source_edit_during_reload_is_not_attributed_to_either_version(rig):
     engine = rig.engine()
     before = engine.start()['evidence']['live']['loaded_source']
@@ -228,7 +222,6 @@ def test_source_edit_during_reload_is_not_attributed_to_either_version(rig):
     assert engine.request('status', generation=1)['result']['state'] == 'blocked'
 
 
-@pending("V1")
 @pytest.mark.parametrize('field,value', [('profile', 'mobile_beta'), ('profile', 'local_prod'),
     ('profile', ''), ('flavor', 'prod'), ('flavor', ''), ('app_id', 'com.friend.ios')])
 def test_wrong_launch_identity_refused_before_spawn(rig, field, value):
@@ -240,7 +233,6 @@ def test_wrong_launch_identity_refused_before_spawn(rig, field, value):
     assert rig.specs == []
 
 
-@pending("V1")
 @pytest.mark.parametrize('mode', ['wrong-runtime', 'unready'])
 def test_app_started_without_correct_runtime_readiness_is_blocked(rig, mode):
     rig.mode = mode
@@ -254,7 +246,6 @@ def test_app_started_without_correct_runtime_readiness_is_blocked(rig, mode):
         assert 'ext.omi.controls.wait_ready' in names
 
 
-@pending("V1")
 def test_generation_checked_against_current_lease_before_mutation(rig):
     engine = rig.engine()
     engine.start()
@@ -265,7 +256,6 @@ def test_generation_checked_against_current_lease_before_mutation(rig):
     assert not any(c['method'] == 'app.restart' for c in rig.calls())
 
 
-@pending("V1")
 def test_screenshot_uses_owned_device_and_has_hash_and_identity(rig):
     engine = rig.engine()
     engine.start()
@@ -279,7 +269,6 @@ def test_screenshot_uses_owned_device_and_has_hash_and_identity(rig):
     assert reply['evidence']['live']['loaded_source']['inputs_sha256'] == rig.stamp.inputs_sha256
 
 
-@pending("V1")
 def test_controls_pass_actual_extension_and_params_and_refuse_arbitrary_rpc(rig):
     engine = rig.engine()
     engine.start()
@@ -299,7 +288,6 @@ def test_controls_pass_actual_extension_and_params_and_refuse_arbitrary_rpc(rig)
         'methodName': 'ext.omi.controls.fault', 'params': {'fault': 'unknown'}}
 
 
-@pending("V1")
 def test_stop_is_idempotent_and_stops_only_owned_child(rig):
     engine = rig.engine()
     engine.start()
@@ -309,7 +297,6 @@ def test_stop_is_idempotent_and_stops_only_owned_child(rig):
     assert len([c for c in rig.calls() if c['method'] == 'app.stop']) == 1
 
 
-@pending("V1")
 @pytest.mark.parametrize('field,value', [('host', 'other-host'), ('user', 'other-user')])
 def test_foreign_owner_refused_before_spawn(rig, field, value):
     rig.lease['owner'][field] = value
@@ -319,7 +306,6 @@ def test_foreign_owner_refused_before_spawn(rig, field, value):
     assert rig.specs == []
 
 
-@pending("V1")
 def test_nonloopback_env_is_refused_before_spawn(rig):
     (rig.directory.parent / 'app' / '.dev.env').write_text('API_BASE_URL=https://example.invalid/\n')
     engine = rig.engine()
@@ -329,7 +315,6 @@ def test_nonloopback_env_is_refused_before_spawn(rig):
     assert rig.specs == []
 
 
-@pending("V1")
 def test_logs_are_owned_bounded_and_do_not_expose_vm_auth(rig):
     engine = rig.engine()
     engine.start()
@@ -342,7 +327,6 @@ def test_logs_are_owned_bounded_and_do_not_expose_vm_auth(rig):
     assert 'private-vm-auth' not in json.dumps(reply)
 
 
-@pending("V1")
 def test_unloaded_source_cannot_be_captured_as_current(rig):
     engine = rig.engine()
     engine.start()
@@ -352,7 +336,6 @@ def test_unloaded_source_cannot_be_captured_as_current(rig):
     assert rig.shots == []
 
 
-@pending("V1")
 @pytest.mark.parametrize('operation', ['stop', 'reset', 'recover', 'release'])
 def test_session_lifecycle_tears_down_live_before_other_resources(tmp_path, monkeypatch, operation):
     from dev_harness import mobile_session as ms
@@ -381,7 +364,6 @@ def test_session_lifecycle_tears_down_live_before_other_resources(tmp_path, monk
         assert order == ['live', 'reset']
 
 
-@pending("V1")
 @pytest.mark.parametrize('operation', ['stop', 'reset', 'recover', 'release'])
 def test_unproven_live_ownership_blocks_destructive_lifecycle(tmp_path, monkeypatch, operation):
     from dev_harness import mobile_session as ms
@@ -403,7 +385,6 @@ def test_unproven_live_ownership_blocks_destructive_lifecycle(tmp_path, monkeypa
     assert path.read_bytes() == original
 
 
-@pending("V1")
 def test_live_receipt_validates_structure_and_cross_field_claims(rig):
     import copy
     document = copy.deepcopy(rig.evidence)
@@ -431,7 +412,6 @@ def test_live_receipt_validates_structure_and_cross_field_claims(rig):
         assert se.validate_evidence(candidate), candidate
 
 
-@pending("V1")
 def test_two_sessions_have_independent_process_device_and_build_roots(rig):
     import copy
     first = rig.engine()
@@ -469,7 +449,6 @@ def test_two_sessions_have_independent_process_device_and_build_roots(rig):
     assert second.request('reload', generation=1)['outcome'] == 'ok'
 
 
-@pending("V1")
 def test_live_verify_admission_requires_matching_loaded_build_and_real_selection(rig):
     import copy
     engine = rig.engine()
@@ -500,7 +479,6 @@ def test_live_verify_admission_requires_matching_loaded_build_and_real_selection
         assert error.value.code == code
 
 
-@pending("V1")
 def test_live_verify_preserves_selection_drift_without_contacting_broker(monkeypatch):
     from dev_harness import mobile_verify as verify
     calls = []
@@ -509,7 +487,6 @@ def test_live_verify_preserves_selection_drift_without_contacting_broker(monkeyp
     assert calls == []
 
 
-@pending("V1")
 def test_process_teardown_requires_full_identity_not_pid_or_heartbeat():
     record = live.BrokerIdentity('host', 'user', 'boot-1', 1234, 'start-1', 'random-marker',
                                 1, '/fixture/worktree', 'oms-fixture')
@@ -529,7 +506,6 @@ def test_process_teardown_requires_full_identity_not_pid_or_heartbeat():
     assert signaled == [1234]
 
 
-@pending("V1")
 def test_broker_wire_rejects_unbound_requests_and_unknown_fields():
     request = {'version': 'live-session/v1', 'id': 'request-1', 'session_id': 'oms-fixture',
                'generation': 1, 'operation': 'reload', 'params': {}, 'timeout_ms': 30000}

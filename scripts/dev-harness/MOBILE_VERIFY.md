@@ -52,9 +52,14 @@ uploads the APK as `app-dev-debug-<head-sha>` (5-day retention, in-repo debug
 keystore, no secrets). Extra ABIs OOM'd `ubuntu-latest` during
 `stripDebugSymbols` (`c8f35061fc`); this job does not compile the JNI opus shim
 for armeabi-v7a or x86_64. `:app:testDevDebugUnitTest` runs in a parallel
-`android-unit-tests` job, not after the APK. Gradle cache writes only on `main`
-(`cache-read-only: ${{ github.ref != 'refs/heads/main' }}`). These jobs do not
-change `journeys-hermetic` behavior.
+`android-unit-tests` job, not after the APK. Gradle cache writes only from
+`android-unit-tests` on `main` (`cache-read-only: ${{ github.ref != 'refs/heads/main' }}`);
+the compile-smoke job is restore-only on every ref so its POST save is not on
+the workflow wall. A parallel `Dart Tests (Pacific/Kiritimati)` job runs the
+harness Z1 contract `TZ=Pacific/Kiritimati bash app/test.sh` and
+`TZ=Pacific/Pago_Pago bash app/test.sh`; it is not on the critical path and is
+expected red until that Z1 PR merges. These jobs do not change
+`journeys-hermetic` behavior.
 
 ## Receipts
 

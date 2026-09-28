@@ -15,7 +15,6 @@ CaptureSessionOwner owner() => CaptureSessionOwner(
     stopForeground: () async {});
 void main() {
   contractTest('roll while replacing a published socket cannot return obsolete new socket', () async {
-    pendingContract('C1');
     final o = owner();
     o.replaceSession('a');
     final closingOld = Completer<void>();
@@ -44,7 +43,6 @@ void main() {
     expect(beforeCleanup, ['old', 'new']);
   });
   contractTest('close waits for late open to be reaped', () async {
-    pendingContract('C1');
     final o = owner();
     o.replaceSession('a');
     final gate = Completer<String>();

@@ -7,7 +7,6 @@ import 'package:omi/services/capture/capture_lifetime.dart';
 CaptureLifetime lifetime() => CaptureLifetime(ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
 void main() {
   contractTest('close joins a release already in flight', () async {
-    pendingContract('C1');
     final bag = lifetime();
     final gate = Completer<void>();
     var cancellations = 0;
@@ -26,7 +25,6 @@ void main() {
     expect(premature, isFalse);
   });
   contractTest('close joins explicit subscription cancellation already in flight', () async {
-    pendingContract('C1');
     final gate = Completer<void>();
     final stream = StreamController<int>(onCancel: () => gate.future);
     final bag = lifetime();

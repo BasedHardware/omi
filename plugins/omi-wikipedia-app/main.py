@@ -36,8 +36,32 @@ class ChatToolResponse(BaseModel):
     error: Optional[str] = None
 
 
+# Wikipedia language subdomains are ASCII-only BCP-47-style codes such as "en",
+# "simple", "zh-min-nan" and "be-tarask".  The pattern is deliberately strict:
+# the value is interpolated into the request hostname, so anything outside this
+# alphabet must fall back to the default rather than steer the request.
+_LANGUAGE_RE = re.compile(r"^[a-z]{2,10}(?:-[a-z0-9]{2,8})*$")
+MAX_LANGUAGE_LENGTH = 12
+MAX_TITLE_LENGTH = 255
+
+
+def _coerce_text(value: Any) -> str:
+    """Return stripped text for string input and "" for every other type.
+
+    The Omi backend forwards tool arguments as a flat JSON object, so a caller
+    can send a number, list or object where a string is expected.  Returning ""
+    lets the endpoint answer with its own validation error instead of raising
+    AttributeError and surfacing HTTP 500.
+    """
+    if isinstance(value, str):
+        return value.strip()
+    return ""
+
+
 def _safe_limit(limit: Any) -> int:
     if limit is None or limit == "":
+        return 5
+    if isinstance(limit, bool):
         return 5
     try:
         limit = int(limit)
@@ -46,11 +70,38 @@ def _safe_limit(limit: Any) -> int:
     return max(1, min(limit, MAX_LIMIT))
 
 
-def _safe_language(language: Optional[str]) -> str:
-    lang = (language or DEFAULT_LANGUAGE).strip().lower()
-    if not lang.replace("-", "").isalpha() or len(lang) > 12:
+def _safe_language(language: Any) -> str:
+    """Validate a Wikipedia language code before it becomes a hostname label.
+
+    ``str.isalpha()`` accepts any Unicode letter, so the previous check let
+    values through that IDNA-encode into a different host: "ss" for "ß",
+    or the punycode label "xn--l1ae" for Cyrillic look-alikes.  Only lowercase
+    ASCII codes matching a real Wikipedia subdomain are accepted now.
+
+    The ASCII test precedes casefolding on purpose: ``str.lower()`` folds a
+    few non-ASCII letters into ASCII, so U+212A KELVIN SIGN would otherwise
+    reach the pattern as "k" and let a non-ASCII value name a language code.
+    """
+    raw = _coerce_text(language)
+    if not raw.isascii():
+        return DEFAULT_LANGUAGE
+    lang = raw.lower()
+    if not lang:
+        return DEFAULT_LANGUAGE
+    if len(lang) > MAX_LANGUAGE_LENGTH or not _LANGUAGE_RE.fullmatch(lang):
         return DEFAULT_LANGUAGE
     return lang
+
+
+def _encode_title(title: str) -> str:
+    """Percent-encode an article title as exactly one URL path segment.
+
+    ``quote`` defaults to ``safe="/"``, which left separators intact and allowed
+    a title such as "../../../../w/api.php" to walk out of the summary path and
+    address a different Wikipedia endpoint.  Encoding with ``safe=""`` keeps the
+    title inside its own segment.
+    """
+    return quote(title.replace(" ", "_"), safe="")
 
 
 async def _request_json(url: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
@@ -62,7 +113,7 @@ async def _request_json(url: str, params: Optional[dict[str, Any]] = None) -> di
 
 
 def _article_url(language: str, title: str) -> str:
-    return f"https://{language}.wikipedia.org/wiki/{quote(title.replace(' ', '_'))}"
+    return f"https://{language}.wikipedia.org/wiki/{_encode_title(title)}"
 
 
 def _clean_snippet(value: Optional[str]) -> str:
@@ -185,7 +236,7 @@ async def get_omi_tools_manifest():
 
 @app.post("/tools/search_articles", tags=["chat_tools"], response_model=ChatToolResponse)
 async def search_articles(payload: dict[str, Any]):
-    query = (payload.get("query") or "").strip()
+    query = _coerce_text(payload.get("query"))
     if not query:
         return ChatToolResponse(error="Missing required field: query")
 
@@ -221,18 +272,20 @@ async def search_articles(payload: dict[str, Any]):
         return ChatToolResponse(result="\n".join(lines))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Wikipedia search failed with status {exc.response.status_code}.")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Wikipedia search failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Wikipedia search failed.")
 
 
 @app.post("/tools/get_article_summary", tags=["chat_tools"], response_model=ChatToolResponse)
 async def get_article_summary(payload: dict[str, Any]):
-    title = (payload.get("title") or "").strip()
+    title = _coerce_text(payload.get("title"))
     if not title:
         return ChatToolResponse(error="Missing required field: title")
+    if len(title) > MAX_TITLE_LENGTH:
+        return ChatToolResponse(error="Article title is too long.")
 
     language = _safe_language(payload.get("language"))
-    url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}"
+    url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{_encode_title(title)}"
 
     try:
         data = await _request_json(url)
@@ -246,8 +299,8 @@ async def get_article_summary(payload: dict[str, Any]):
         if exc.response.status_code == 404:
             return ChatToolResponse(error=f"No Wikipedia article found for '{title}'. Try search_articles first.")
         return ChatToolResponse(error=f"Wikipedia article request failed with status {exc.response.status_code}.")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Wikipedia article request failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Wikipedia article request failed.")
 
 
 @app.post("/tools/get_random_article", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -275,10 +328,10 @@ async def get_random_article(payload: dict[str, Any]):
         if not title:
             return ChatToolResponse(result="Wikipedia returned a random article without a title.")
 
-        summary_url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'))}"
+        summary_url = f"https://{language}.wikipedia.org/api/rest_v1/page/summary/{_encode_title(title)}"
         summary = await _request_json(summary_url)
         return ChatToolResponse(result="Random Wikipedia article:\n\n" + _format_summary(summary, language))
     except httpx.HTTPStatusError as exc:
         return ChatToolResponse(error=f"Wikipedia random article request failed with status {exc.response.status_code}.")
-    except httpx.HTTPError as exc:
-        return ChatToolResponse(error=f"Wikipedia random article request failed: {exc}")
+    except Exception:
+        return ChatToolResponse(error="Wikipedia random article request failed.")

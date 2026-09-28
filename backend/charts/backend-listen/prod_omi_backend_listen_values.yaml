@@ -29,8 +29,12 @@ serviceAccount:
   create: true
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
-  # Annotations to add to the service account
-  annotations: {}
+  # Annotations to add to the service account.
+  # Keyless runtime identity (Workload Identity) that replaces the nik-164
+  # SERVICE_ACCOUNT_JSON key once the key env is removed; while the key env is
+  # present the JSON still wins. Shared by the listen canary deployments.
+  annotations:
+    iam.gke.io/gcp-service-account: backend-listen-runtime@based-hardware.iam.gserviceaccount.com
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
@@ -87,8 +91,20 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  # Keep these aligned with the production GitHub environment variables used
+  # by the Cloud Run backend; api.omi.me is served by backend-listen.
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+    value: "https://api.omi.me"
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+    value: "208440318997-compute@developer.gserviceaccount.com"
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://omi.me"
+  - name: FREE_TIER_LOCAL_PROCESSING
+    value: "false"
+  - name: FREE_TIER_EMERGENCY_STOP
+    value: "false"
+  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
+    value: ""
   - name: ACCOUNT_DELETION_DISPATCH_MODE
     value: "cloud_tasks"
   - name: ACCOUNT_DELETION_TASKS_QUEUE
@@ -103,6 +119,8 @@ env:
     value: "0.01"
   - name: USE_VERTEX_AI
     value: "true"
+  - name: TTS_PROVIDER
+    value: "gemini"
   # Direct-provider surfaces (desktop_proxy, omni_relay) write their attempts
   # to the gateway ledger under this switch; the manifest declares it, this is
   # where it actually reaches the pod.
@@ -113,6 +131,11 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GEMINI_API_KEY
+  - name: ELEVENLABS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: ELEVENLABS_API_KEY
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles"
   - name: GITHUB_TOKEN
@@ -148,8 +171,18 @@ env:
     value: "false"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
     value: "false"
+  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
+    value: "false"
+  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
+    value: "false"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
+  - name: CAPTURE_JEV_SHADOW_ENABLED
+    value: "true"
+  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: CAPTURE_JEV_SHADOW_PERCENT
+    value: "0"
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -248,6 +281,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: SERVICE_ACCOUNT_JSON
+  - name: OMI_CUSTOMER_DATA_PROJECT
+    value: "based-hardware"
   - name: HOSTED_PUSHER_API_URL
     value: "http://pusher.omi.me"
   - name: BUCKET_PLUGINS_LOGOS
@@ -333,13 +368,36 @@ env:
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
+  - name: STT_CONNECT_ORDER_FROM_CONFIG
+    value: "true"
+  - name: STT_MULTI_LANGUAGE_HINTS
+    value: "true"
+  - name: STT_LEARNED_LANGUAGE_PROFILE
+    value: "false"
+  - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
+    value: "25"
+  - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
+    value: "0"
+  - name: PARAKEET_WINDOW_MAX_SESSIONS
+    value: "1"
+  - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
+    value: "8"
+  - name: PARAKEET_WINDOW_DIARIZATION
+    value: "false"
+  - name: PARAKEET_WINDOW_PACE_SECONDS
+    value: "6"
+  - name: PARAKEET_WINDOW_MAX_CONTEXT_SECONDS
+    value: "24"
+  - name: STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS
+    value: "1800"
+  - name: STT_CIRCUIT_HALF_OPEN_PROBES
+    value: "1"
+  - name: SONIOX_CIRCUIT_FAILURE_THRESHOLD
+    value: "3"
+  - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
+    value: "30"
   - name: STT_SERVICE_MODELS
     value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
   - name: HOSTED_TRANSLATION_API_URL
@@ -379,6 +437,11 @@ env:
         key: TWILIO_API_KEY_SECRET
   - name: VAD_GATE_MODE
     value: "active"
+  # Audio-timeline v2: one capture coordinate for segments and stored audio.
+  # Admits new eligible recordings only (single-channel, server STT);
+  # existing v1 sessions and resumed v1 conversations are unaffected.
+  - name: AUDIO_TIMELINE_V2
+    value: "false"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"
@@ -399,7 +462,7 @@ env:
   - name: FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
     value: "43200"
   - name: FAIR_USE_CLASSIFIER_MODEL
-    value: "gpt-5.6-luna"
+    value: "gpt-6-luna"
   - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
     value: "7"
   - name: FAIR_USE_CHECK_INTERVAL_SECONDS

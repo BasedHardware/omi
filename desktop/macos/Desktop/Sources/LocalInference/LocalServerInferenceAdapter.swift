@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 protocol LocalInferenceHTTPClient: Sendable {
   func send(_ request: URLRequest) async throws -> (Data, URLResponse)
@@ -92,11 +93,28 @@ enum LocalInferenceLoopback {
   }
 }
 
+/// Qwen3.5 defaults to thinking on; temperature zero also looped inside strings
+/// in 3/19 measured calls. The model-card non-thinking settings had 0/51 loops
+/// (2026-09-20). Send them explicitly so server launch flags do not pick behavior.
+struct LocalServerInferenceSampling: Sendable, Equatable {
+  var temperature: Double = 0.7
+  var topP: Double = 0.8
+  var topK: Int = 20
+  var minP: Double = 0
+  var presencePenalty: Double = 1.5
+  var disableThinking: Bool = true
+}
+
 struct LocalServerInferenceConfiguration: Sendable, Equatable {
   var baseURL: URL
   var model: String
   var contextWindowTokens: Int
   var timeout: TimeInterval
+  /// Sent as `max_tokens`. A full draft at the schema's caps measured 1,500–1,800
+  /// tokens on a 40-minute meeting; this leaves headroom and still ends a
+  /// runaway in about a minute instead of at the end of the window.
+  var maxCompletionTokens: Int = 4096
+  var sampling: LocalServerInferenceSampling = .init()
 
   static func fromKillSwitchSources(
     environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -105,8 +123,10 @@ struct LocalServerInferenceConfiguration: Sendable, Equatable {
     LocalServerInferenceConfiguration(
       baseURL: LocalInferenceKillSwitches.localServerURL(environment: environment, defaults: defaults),
       model: LocalInferenceKillSwitches.localServerModel(environment: environment, defaults: defaults),
-      contextWindowTokens: 8192,
-      timeout: 60
+      contextWindowTokens: LocalInferenceKillSwitches.localServerContextTokens(
+        environment: environment, defaults: defaults),
+      timeout: LocalInferenceKillSwitches.localServerTimeoutSeconds(
+        environment: environment, defaults: defaults)
     )
   }
 }
@@ -143,11 +163,41 @@ struct LocalServerInferenceAdapter: LocalInferenceService {
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = try encodeChatRequest(prompt: prompt, schema: schema)
 
-    let (data, response) = try await httpClient.send(request)
+    // Elapsed time is logged on every exit, including the throwing ones. A
+    // request that died at exactly `timeout` seconds is a transport fault; one
+    // that returned quickly with nothing useful is a model result. Both reach
+    // the caller as the deterministic minimum, so the log is the only place the
+    // two can be told apart.
+    let started = ContinuousClock.now
+    let promptBytes = request.httpBody?.count ?? 0
+    func elapsedMs() -> Int { max(0, Int(started.duration(to: .now) / .milliseconds(1))) }
+
+    let data: Data
+    let response: URLResponse
+    do {
+      (data, response) = try await httpClient.send(request)
+    } catch {
+      let nsError = error as NSError
+      Self.emit(
+        "LOCAL_SERVER_CALL outcome=transport_error elapsed_ms=\(elapsedMs()) timeout_s=\(Int(configuration.timeout)) request_bytes=\(promptBytes) domain=\(nsError.domain) code=\(nsError.code)"
+      )
+      throw error
+    }
     let status = (response as? HTTPURLResponse)?.statusCode ?? -1
     guard (200...299).contains(status) else {
+      // The body of a llama-server 4xx/5xx is the actual error. Without it a
+      // context overflow, a grammar compile failure and an OOM are all "400".
+      let detail = String(decoding: data.prefix(600), as: UTF8.self)
+        .replacingOccurrences(of: "\n", with: " ")
+      Self.emit(
+        "LOCAL_SERVER_CALL outcome=http_\(status) elapsed_ms=\(elapsedMs()) request_bytes=\(promptBytes) detail=\(detail)"
+      )
       throw LocalInferenceError.httpStatus(status)
     }
+    let usage = try? JSONDecoder().decode(OpenAIUsageEnvelope.self, from: data)
+    Self.emit(
+      "LOCAL_SERVER_CALL outcome=ok elapsed_ms=\(elapsedMs()) request_bytes=\(promptBytes) prompt_tokens=\(usage?.usage?.promptTokens ?? -1) completion_tokens=\(usage?.usage?.completionTokens ?? -1) finish=\(usage?.choices?.first?.finishReason ?? "unknown")"
+    )
     let completion: OpenAIChatCompletionResponse
     do {
       completion = try JSONDecoder().decode(OpenAIChatCompletionResponse.self, from: data)
@@ -160,6 +210,17 @@ struct LocalServerInferenceAdapter: LocalInferenceService {
       return try JSONDecoder().decode(T.self, from: payload)
     } catch {
       throw LocalInferenceError.invalidResponse("undecodable_content")
+    }
+  }
+
+  private static let callLog = Logger(subsystem: "com.omi.desktop", category: "local-inference")
+
+  /// `Logger` for the app, and stdout when an evaluation asks for it, because
+  /// `swift test` does not surface the unified log.
+  private static func emit(_ line: String) {
+    callLog.info("\(line, privacy: .public)")
+    if ProcessInfo.processInfo.environment["OMI_LOCAL_INFERENCE_TRACE"] == "1" {
+      print(line)
     }
   }
 
@@ -178,10 +239,37 @@ struct LocalServerInferenceAdapter: LocalInferenceService {
     return URL(string: path + "/chat/completions") ?? baseURL.appendingPathComponent("chat/completions")
   }
 
+  /// Builds the request with the schema spliced in **verbatim**.
+  ///
+  /// The schema used to be parsed with `JSONSerialization` and re-serialized as
+  /// part of the body. That round-trip goes through an unordered dictionary, so
+  /// `title, overview, …, sections, …, action_items` reached the server as
+  /// `category, events, emoji, sections, title, action_items, overview`.
+  /// llama.cpp compiles `json_schema` to a grammar that emits properties in the
+  /// order the schema lists them, so property order *is* generation order: the
+  /// model was made to write `sections` before it had written a title or an
+  /// overview. Measured 2026-09-20 on Qwen3.5-4B at 32K: with nothing planned, it
+  /// poured a whole 40-minute meeting into one section body, fell into a
+  /// repetition loop inside that string, and generated 23,626 tokens to the end
+  /// of the window — 407 s, then the deterministic minimum. The authored order
+  /// completes the same prompt in 25 s.
+  ///
+  /// `maxItems` cannot stop that loop, because it is inside a string. Only a
+  /// token cap can, so one is sent: `max_tokens` bounds the cost of a runaway; it
+  /// does not rescue the result, which still fails closed.
   private func encodeChatRequest(prompt: String, schema: LocalInferenceJSONSchema) throws -> Data {
-    let schemaObject = try JSONSerialization.jsonObject(with: schema.json)
-    let body: [String: Any] = [
+    // Still parsed, but only to reject a schema that is not JSON before it is
+    // spliced into a body by text.
+    _ = try JSONSerialization.jsonObject(with: schema.json)
+    let placeholder = "omi-schema-\(UUID().uuidString)"
+    var body: [String: Any] = [
       "model": configuration.model,
+      "max_tokens": configuration.maxCompletionTokens,
+      "temperature": configuration.sampling.temperature,
+      "top_p": configuration.sampling.topP,
+      "top_k": configuration.sampling.topK,
+      "min_p": configuration.sampling.minP,
+      "presence_penalty": configuration.sampling.presencePenalty,
       "messages": [
         ["role": "user", "content": prompt]
       ],
@@ -190,11 +278,24 @@ struct LocalServerInferenceAdapter: LocalInferenceService {
         "json_schema": [
           "name": schema.name,
           "strict": true,
-          "schema": schemaObject,
+          "schema": placeholder,
         ],
       ],
     ]
-    return try JSONSerialization.data(withJSONObject: body)
+    if configuration.sampling.disableThinking {
+      body["chat_template_kwargs"] = ["enable_thinking": false]
+    }
+    let encoded = try JSONSerialization.data(withJSONObject: body)
+    guard
+      let text = String(data: encoded, encoding: .utf8),
+      let schemaText = String(data: schema.json, encoding: .utf8),
+      let range = text.range(of: "\"\(placeholder)\"")
+    else {
+      throw LocalInferenceError.invalidResponse("unencodable_request")
+    }
+    // A fresh UUID cannot occur in the prompt, and a quoted occurrence inside a
+    // JSON string would be escaped (`\"`), so this matches the value only.
+    return Data(text.replacingCharacters(in: range, with: schemaText).utf8)
   }
 
   private func unwrapContent(_ completion: OpenAIChatCompletionResponse) throws -> String {
@@ -217,6 +318,24 @@ struct LocalServerInferenceAdapter: LocalInferenceService {
     }
     return data
   }
+}
+
+/// Token accounting, decoded leniently and only for the log line.
+private struct OpenAIUsageEnvelope: Decodable {
+  struct Usage: Decodable {
+    var promptTokens: Int?
+    var completionTokens: Int?
+    enum CodingKeys: String, CodingKey {
+      case promptTokens = "prompt_tokens"
+      case completionTokens = "completion_tokens"
+    }
+  }
+  struct Choice: Decodable {
+    var finishReason: String?
+    enum CodingKeys: String, CodingKey { case finishReason = "finish_reason" }
+  }
+  var usage: Usage?
+  var choices: [Choice]?
 }
 
 private struct OpenAIChatCompletionResponse: Decodable {

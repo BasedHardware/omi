@@ -49,7 +49,15 @@ DURATION_RE = re.compile(r"^(\d+)([dh])$")
 
 @dataclass(frozen=True)
 class Definition:
-    """A parsed failure-class definition and its repository-relative path."""
+    """A schema-valid failure-class definition and its repository-relative path.
+
+    INVARIANT: every required field named in `validate_definition` is present and
+    well-formed. `load_definitions` enforces it by constructing a Definition only
+    for files that validated cleanly, so consumers may index `data["status"]` and
+    friends directly. Without that invariant `report` and `prepare` indexed fields
+    that validation had *already proven absent* and died with a KeyError, which is
+    a traceback rather than the structured payload every caller parses.
+    """
 
     data: dict[str, Any]
     path: Path
@@ -329,7 +337,8 @@ def load_definitions(root: Path) -> tuple[list[Definition], list[dict[str, Any]]
         except (OSError, json.JSONDecodeError) as exc:
             errors.append(error("invalid_definition_json", str(exc), path=str(path)))
             continue
-        errors.extend(validate_definition(data, path, root))
+        definition_errors = validate_definition(data, path, root)
+        errors.extend(definition_errors)
         if isinstance(data, dict) and isinstance(data.get("id"), str):
             if data["id"] in ids:
                 errors.append(
@@ -339,8 +348,13 @@ def load_definitions(root: Path) -> tuple[list[Definition], list[dict[str, Any]]
                     )
                 )
             else:
+                # Claim the id even when the file is invalid, so a second file
+                # carrying the same id is still reported as a duplicate.
                 ids[data["id"]] = path
-                definitions.append(Definition(data=data, path=path))
+                # A malformed file is described by the errors above, never handed
+                # on as a Definition: see the invariant on the dataclass.
+                if not definition_errors:
+                    definitions.append(Definition(data=data, path=path))
     return sorted(definitions, key=lambda item: item.id), errors
 
 
@@ -438,7 +452,10 @@ def dead_scope_hint_errors(root: Path, common: str, head: str) -> list[dict[str,
 
     A hint that matches nothing is silently skipped during candidate narrowing,
     which is fail-open: the class disappears from the list and the author
-    invents a new one. That is worse than no gate.
+    invents a new one. Checking every current hint on a changed definition,
+    not only newly added strings, is required because an already-dead hint
+    never appears in current-minus-previous and would stay fail-open even
+    when its own JSON is edited.
     """
     try:
         tracked = tracked_paths(root)
@@ -455,10 +472,10 @@ def dead_scope_hint_errors(root: Path, common: str, head: str) -> list[dict[str,
                 continue
         if not isinstance(data, dict):
             continue
-        base_data = definition_json_at_ref(root, common, relative) or {}
-        previous = set(base_data.get("scope_hints") or []) if isinstance(base_data, dict) else set()
-        current = set(data.get("scope_hints") or [])
-        for hint in sorted(current - previous):
+        current = data.get("scope_hints") or []
+        if not isinstance(current, list):
+            continue
+        for hint in current:
             if not isinstance(hint, str) or not hint.strip():
                 continue
             pattern = scope_hint_pattern(hint)

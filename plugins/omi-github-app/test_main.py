@@ -88,6 +88,8 @@ class _StubResponse:
         self.args = args
         self.kwargs = kwargs
         self.status_code = kwargs.get("status_code", 200)
+        self.content = kwargs.get("content", args[0] if args else "")
+        self.body = self.content.encode("utf-8") if isinstance(self.content, str) else self.content
 
 
 _responses.HTMLResponse = _StubResponse
@@ -188,10 +190,12 @@ with patch.dict(sys.modules, STUBS):
     models = _load("models")
     github_client = _load("github_client")
     agent_providers = _load("agent_providers")
+    github_tools_auth = _load("github_tools_auth")
     _real = {
         "models": models,
         "github_client": github_client,
         "agent_providers": agent_providers,
+        "github_tools_auth": github_tools_auth,
     }
     with patch.dict(sys.modules, _real):
         main = _load("main")
@@ -939,6 +943,167 @@ class UrlAndSshParsingTests(unittest.TestCase):
         self.assertIn("Only GitHub URLs are supported", err)
 
 
+
+class ChatToolExceptionHandlingTests(unittest.TestCase):
+    def test_tool_create_issue_exception_returns_stable_error(self):
+        with authed(), patch.object(
+            main.github_client, "create_issue", side_effect=RuntimeError("internal DB failure: /etc/secrets")
+        ):
+            resp = call_tool("/tools/create_issue", {"uid": "u1", "title": "Test Bug"})
+            self.assertEqual(resp.error, "Failed to create issue due to an internal error.")
+            self.assertNotIn("/etc/secrets", resp.error)
+
+    def test_tool_list_repos_exception_returns_stable_error(self):
+        with authed(), patch.object(
+            main.github_client, "list_user_repos", side_effect=RuntimeError("socket error: leaked-host")
+        ):
+            resp = call_tool("/tools/list_repos", {"uid": "u1"})
+            self.assertEqual(resp.error, "Failed to list repositories due to an internal error.")
+            self.assertNotIn("leaked-host", resp.error)
+
+    def test_tool_list_issues_exception_returns_stable_error(self):
+        with authed(), patch.object(
+            main.github_client, "list_issues", side_effect=RuntimeError("query error: leaked-query")
+        ):
+            resp = call_tool("/tools/list_issues", {"uid": "u1"})
+            self.assertEqual(resp.error, "Failed to list issues due to an internal error.")
+            self.assertNotIn("leaked-query", resp.error)
+
+    def test_tool_get_issue_exception_returns_stable_error(self):
+        with authed(), patch.object(
+            main.github_client, "get_issue", side_effect=RuntimeError("timeout error: leaked-timeout")
+        ):
+            resp = call_tool("/tools/get_issue", {"uid": "u1", "issue_number": 42})
+            self.assertEqual(resp.error, "Failed to get issue due to an internal error.")
+            self.assertNotIn("leaked-timeout", resp.error)
+
+    def test_tool_list_labels_exception_returns_stable_error(self):
+        with authed(), patch.object(
+            main.github_client, "get_repo_labels_with_details", side_effect=RuntimeError("label error: leaked-label")
+        ):
+            resp = call_tool("/tools/list_labels", {"uid": "u1"})
+            self.assertEqual(resp.error, "Failed to list labels due to an internal error.")
+            self.assertNotIn("leaked-label", resp.error)
+
+    def test_tool_add_comment_exception_returns_stable_error(self):
+        with authed(), patch.object(
+            main.github_client, "add_issue_comment", side_effect=RuntimeError("comment error: leaked-comment")
+        ):
+            resp = call_tool("/tools/add_comment", {"uid": "u1", "issue_number": 42, "body": "test comment"})
+            self.assertEqual(resp.error, "Failed to add comment due to an internal error.")
+            self.assertNotIn("leaked-comment", resp.error)
+
+    def test_tool_code_feature_exception_returns_stable_error(self):
+        with authed(), patch.object(
+            main.SimpleUserStorage, "get_agent_provider", side_effect=RuntimeError("agent execution crash: leaked-secret")
+        ):
+            resp = call_tool("/tools/code_feature", {"uid": "u1", "feature": "build feature"})
+            self.assertEqual(resp.error, "Failed to implement feature due to an internal error.")
+            self.assertNotIn("leaked-secret", resp.error)
+
+
+class OAuthAndHtmlSinkSanitizationTests(unittest.TestCase):
+    def test_auth_start_exception_raises_stable_http_exception(self):
+        with patch.object(
+            main.github_client, "get_authorization_url", side_effect=RuntimeError("secret connection string: postgres://...")
+        ):
+            with self.assertRaises(main.HTTPException) as ctx:
+                asyncio.run(main.auth_start(uid="u1"))
+            self.assertEqual(ctx.exception.status_code, 500)
+            self.assertEqual(ctx.exception.detail, "OAuth initialization failed")
+            self.assertNotIn("secret connection string", ctx.exception.detail)
+
+    def test_auth_callback_error_page_never_reflects_exception_string(self):
+        main.oauth_states["valid_state"] = "user_123"
+        with patch.object(
+            main.github_client, "exchange_code_for_token", side_effect=RuntimeError("<script>alert(1)</script> token service down")
+        ):
+            resp = asyncio.run(main.auth_callback(_Request(), code="auth_code", state="valid_state"))
+            self.assertEqual(resp.status_code, 500)
+            self.assertIn("Failed to complete authentication. Please try again.", resp.content)
+            self.assertNotIn("<script>alert(1)</script>", resp.content)
+            self.assertNotIn("token service down", resp.content)
+
+    def test_auth_callback_error_page_escapes_uid_in_retry_link(self):
+        main.oauth_states["xss_state"] = 'test"><script>alert("uid")</script>'
+        with patch.object(
+            main.github_client, "exchange_code_for_token", side_effect=RuntimeError("boom")
+        ):
+            resp = asyncio.run(main.auth_callback(_Request(), code="auth_code", state="xss_state"))
+            self.assertEqual(resp.status_code, 500)
+            self.assertNotIn('"><script>alert("uid")</script>', resp.content)
+
+    def test_auth_callback_success_page_escapes_username_and_uid(self):
+        main.oauth_states["ok_state"] = 'test"uid'
+        with patch.object(
+            main.github_client, "exchange_code_for_token", return_value={"access_token": "tok"}
+        ), patch.object(
+            main.github_client, "get_user_info", return_value={"login": '<b onmouseover="alert(1)">user</b>'}
+        ), patch.object(
+            main.github_client, "list_user_repos", return_value=[]
+        ), patch.object(
+            main.SimpleUserStorage, "save_user"
+        ):
+            resp = asyncio.run(main.auth_callback(_Request(), code="auth_code", state="ok_state"))
+            self.assertEqual(resp.status_code, 200)
+            self.assertNotIn('<b onmouseover="alert(1)">', resp.content)
+            self.assertIn('&lt;b onmouseover=&quot;alert(1)&quot;&gt;user&lt;/b&gt;', resp.content)
+            self.assertNotIn('?uid=test"uid', resp.content)
+
+    def test_root_page_escapes_unauthenticated_uid(self):
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=None):
+            resp = asyncio.run(main.root(uid='"><script>alert("xss")</script>'))
+            self.assertNotIn('"><script>alert("xss")</script>', resp.content)
+
+    def test_root_page_escapes_authenticated_uid_and_username(self):
+        malicious_user = {
+            "access_token": "tok",
+            "github_username": '<script>alert("user")</script>',
+            "available_repos": [],
+            "selected_repo": "",
+        }
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=malicious_user):
+            resp = asyncio.run(main.root(uid='"><script>alert("auth_uid")</script>'))
+            self.assertNotIn('<script>alert("user")</script>', resp.content)
+            self.assertNotIn('"><script>alert("auth_uid")</script>', resp.content)
+
+
+class JsonEndpointErrorHandlingTests(unittest.TestCase):
+    def test_update_repo_exception_returns_stable_error(self):
+        with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
+            resp = asyncio.run(main.update_repo(uid="u1", repo="owner/repo"))
+            self.assertEqual(resp, {"success": False, "error": "Failed to update repository"})
+
+    def test_refresh_repos_exception_returns_stable_error(self):
+        with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
+            resp = asyncio.run(main.refresh_repos(uid="u1"))
+            self.assertEqual(resp, {"success": False, "error": "Failed to refresh repositories"})
+
+    def test_check_repo_access_exception_returns_stable_error(self):
+        with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
+            resp = asyncio.run(main.check_repo_access(uid="u1", repo="owner/repo"))
+            self.assertEqual(resp, {"success": False, "error": "Failed to check repository access"})
+
+    def test_save_agent_provider_exception_returns_stable_error(self):
+        with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
+            resp = asyncio.run(main.save_agent_provider(uid="u1", provider="cursor"))
+            self.assertEqual(resp, {"success": False, "error": "Failed to save agent provider"})
+
+    def test_save_agent_key_exception_returns_stable_error(self):
+        with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
+            resp = asyncio.run(main.save_agent_key(uid="u1", provider="cursor", key="secret-key"))
+            self.assertEqual(resp, {"success": False, "error": "Failed to save agent key"})
+
+    def test_delete_agent_key_exception_returns_stable_error(self):
+        with patch.object(main.SimpleUserStorage, "delete_agent_api_key", side_effect=RuntimeError("db crash: /secret/path")):
+            resp = asyncio.run(main.delete_agent_key(uid="u1", provider="cursor"))
+            self.assertEqual(resp, {"success": False, "error": "Failed to delete agent key"})
+
+    def test_test_agent_exception_returns_stable_error(self):
+        with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
+            resp = asyncio.run(main.test_agent(_Request({"uid": "u1", "prompt": "hello"})))
+            self.assertEqual(resp, {"success": False, "error": "Failed to execute agent test"})
+
+
 if __name__ == "__main__":
     unittest.main()
-

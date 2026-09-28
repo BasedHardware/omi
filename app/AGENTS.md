@@ -1,6 +1,7 @@
 # App (Flutter) — Operational Playbook
 
 Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
+UI rules: [docs/ux-contract.md](docs/ux-contract.md).
 
 ## Build Bootstrap
 
@@ -15,7 +16,7 @@ Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
 ### Generated Files (never edit)
 envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.
 
-Never edit generated `.g.dart`/`.gen.dart` files. Regenerate using the commands above after source changes; resolve build_runner conflicts with `--delete-conflicting-outputs`.
+Regenerate after source changes; resolve build_runner conflicts with `--delete-conflicting-outputs`.
 
 ### Setup Sequence
 ```bash
@@ -74,9 +75,9 @@ On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-devi
 | Calendar | READ/WRITE_CALENDAR | NSCalendarsUsageDescription | Calendar integration |
 | Camera | — | NSCameraUsageDescription | QR/photo features |
 | Notifications | POST_NOTIFICATIONS | (automatic) | Push notifications |
-| Background | FOREGROUND_SERVICE_* (4 types) | UIBackgroundModes (7 modes) | Continuous capture |
+| Background | FOREGROUND_SERVICE_* (5 types) | UIBackgroundModes (7 modes) | Continuous capture |
 
-Android: 26 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
+Android: 27 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
 
 ## Test Strategy
 
@@ -97,12 +98,14 @@ make mobile-verify ARGS="fast --all"                   # full hermetic journey s
 
 `test.sh` bootstraps missing inputs with empty `API_BASE_URL`. Journey selection/receipts/CI: `scripts/dev-harness/MOBILE_VERIFY.md`.
 
-Native batch contracts: `ruby ios/test/batch_audio_energy_test.rb` (macOS manifest, local + CI).
+Native: `ruby ios/test/batch_audio_energy_test.rb`; [phone/BLE replay](../scripts/dev-harness/IPHONE_HARNESS.md).
 
 CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
 
 ### Test Patterns
+- Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
+- HTTP result/consumer migration: [C3 contract](lib/backend/http/API_RESULTS.md).
 - Test state machine logic via minimal abstractions mirroring production flow
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: pumping only `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.

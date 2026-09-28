@@ -14,7 +14,7 @@
   "scope_hints": [
     "app/test.sh",
     "app/scripts/**",
-    "app/.dev.env",
+    "app/.env.template",
     "scripts/dev-harness/dev_harness/mobile_doctor.py"
   ],
   "status": "open"

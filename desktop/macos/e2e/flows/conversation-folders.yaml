@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/FolderManagementViews.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationListView.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+DataLoading.swift
 preconditions:
   - automation_bridge_ready

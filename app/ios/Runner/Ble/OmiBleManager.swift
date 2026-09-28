@@ -1,4 +1,5 @@
 import CoreBluetooth
+import AVFoundation
 import Flutter
 import UIKit
 
@@ -35,9 +36,8 @@ final class OmiBleManager: NSObject {
     /// until Dart explicitly calls manageDevice again after the user forgets the device.
     private var pairingLostBlocked: Set<String> = []
 
-    /// RSSI timer used only while the diagnostics screen is visible.
-    private var rssiTimer: Timer?
-    private var rssiTimerPeripheralUuid: String?
+    /// Low-frequency RSSI sampling continues for the life of each link.
+    private var rssiTimers: [String: Timer] = [:]
 
     /// Peripheral whose live RSSI graph is currently subscribed by Flutter.
     private var diagnosticsRssiPeripheralUuid: String?
@@ -51,6 +51,14 @@ final class OmiBleManager: NSObject {
     /// Tracks peripherals that have connected at least once (for reconnection counting).
     private var everConnected: Set<String> = []
 
+    /// Characteristic discovery callbacks arrive once per service and may overlap.
+    /// Emit device-ready exactly once for each physical connection.
+    private var readyNotified: Set<String> = []
+
+    /// Suppresses duplicate recovery callbacks while CoreBluetooth tears down a
+    /// link whose protected characteristic rejected the current bond.
+    private var pairingRecoveryInFlight: Set<String> = []
+
     /// Most recent RSSI sample per peripheral, captured in didReadRSSI. Used to
     /// annotate disconnect events so we can tell range/interference-driven drops
     /// apart from disconnects with healthy signal.
@@ -60,6 +68,14 @@ final class OmiBleManager: NSObject {
     /// to classify the trajectory before a disconnect (fading vs. sudden vs. gap).
     /// Capped at rssiHistoryLimit — beyond that we drop the oldest.
     private var rssiHistory: [String: [(ts: Int64, rssi: Int64)]] = [:]
+    private var lastPacketIndex: [String: Int] = [:]
+    private var audioReceived: [String: Int64] = [:]
+    private var audioExpected: [String: Int64] = [:]
+    private var pendingAudioRecovery: [String: Int64] = [:]
+    private var chargingState: [String: Bool] = [:]
+    private static let diagnosticsServiceUuid = CBUUID(string: "19B10040-E8F2-537E-4F6C-D104768A1214")
+    private static let diagnosticsCharUuid = CBUUID(string: "19B10041-E8F2-537E-4F6C-D104768A1214")
+    private static let audioCharUuid = CBUUID(string: "19B10001-E8F2-537E-4F6C-D104768A1214")
 
     /// Timestamp of the most recently persisted unexpected disconnect per peripheral.
     /// On the next successful didConnect we backfill `timeToReconnectMs` on that event.
@@ -75,6 +91,7 @@ final class OmiBleManager: NSObject {
     /// the complete UserDefaults history for every notification.
     private var lastPersistedBatteryLevel: [String: Int] = [:]
     private var lastPersistedBatteryTimestampMs: [String: Int64] = [:]
+    private var lastPersistedBatteryCharging: [String: Bool] = [:]
     /// UUIDs whose persisted battery history has already been consulted in
     /// this process. This keeps relaunch rehydration to one read per device
     /// without putting UserDefaults on the hot notification path.
@@ -90,6 +107,16 @@ final class OmiBleManager: NSObject {
 
     private override init() {
         super.init()
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: "ble_diagnostics_run_open") {
+            appendLifecycleEvent("previous_run_unclean")
+        }
+        defaults.set(true, forKey: "ble_diagnostics_run_open")
+        appendLifecycleEvent("app_launch")
+        NotificationCenter.default.addObserver(self, selector: #selector(markCleanExit), name: UIApplication.willTerminateNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(powerModeChanged), name: .NSProcessInfoPowerStateDidChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(permissionStateChanged), name: UIApplication.didBecomeActiveNotification, object: nil)
+        permissionStateChanged()
         NSLog("[OmiBle] Initializing OmiBleManager with restore ID: \(OmiBleManager.restoreIdentifier)")
         centralManager = CBCentralManager(
             delegate: self,
@@ -301,47 +328,39 @@ final class OmiBleManager: NSObject {
         isRssiStreamingEnabled = enabled
         if enabled {
             diagnosticsRssiPeripheralUuid = uuid
-            guard let peripheral = peripherals[uuid],
-                  OmiBleEnergyPolicy.shouldPollRssi(
-                    diagnosticsEnabled: true,
-                    peripheralConnected: peripheral.state == .connected
-                  ) else {
-                stopRssiDiagnosticsPolling()
-                return
+            if let peripheral = peripherals[uuid], peripheral.state == .connected {
+                startRssiDiagnosticsPolling(for: peripheral)
             }
-            peripheral.readRSSI()
-            startRssiDiagnosticsPolling(for: peripheral)
             return
         }
 
         if diagnosticsRssiPeripheralUuid == uuid {
             diagnosticsRssiPeripheralUuid = nil
             isRssiStreamingEnabled = false
-            stopRssiDiagnosticsPolling()
+            if let peripheral = peripherals[uuid], peripheral.state == .connected {
+                startRssiDiagnosticsPolling(for: peripheral)
+            }
         }
     }
 
     private func startRssiDiagnosticsPolling(for peripheral: CBPeripheral) {
-        stopRssiDiagnosticsPolling()
-        rssiTimerPeripheralUuid = peripheralUuidString(peripheral)
-        rssiTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self, weak peripheral] _ in
+        let uuid = peripheralUuidString(peripheral)
+        stopRssiDiagnosticsPolling(uuid: uuid)
+        peripheral.readRSSI()
+        let interval = 10.0
+        rssiTimers[uuid] = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self, weak peripheral] _ in
             guard let self, let peripheral else { return }
             let uuid = self.peripheralUuidString(peripheral)
-            guard OmiBleEnergyPolicy.shouldPollRssi(
-                diagnosticsEnabled: self.diagnosticsRssiPeripheralUuid == uuid,
-                peripheralConnected: peripheral.state == .connected
-            ) else {
-                self.stopRssiDiagnosticsPolling()
+            guard peripheral.state == .connected else {
+                self.stopRssiDiagnosticsPolling(uuid: uuid)
                 return
             }
             peripheral.readRSSI()
         }
     }
 
-    private func stopRssiDiagnosticsPolling() {
-        rssiTimer?.invalidate()
-        rssiTimer = nil
-        rssiTimerPeripheralUuid = nil
+    private func stopRssiDiagnosticsPolling(uuid: String) {
+        rssiTimers.removeValue(forKey: uuid)?.invalidate()
     }
 
     // MARK: - Private Helpers
@@ -386,32 +405,103 @@ final class OmiBleManager: NSObject {
     private static let diagnosticsKeyPrefix = "ble_diagnostics_disconnect_history_"
     private static let reconnectCountKeyPrefix = "ble_diagnostics_reconnect_count_"
     private static let failToConnectCountKeyPrefix = "ble_diagnostics_fail_to_connect_count_"
-    private static let maxDisconnectHistory = 20
-    private static let rssiHistoryLimit = 10
-    private static let rssiTrendWindowMs: Int64 = 15_000
-    private static let rssiTrendFadingDropDb: Int64 = 10
-
-    /// Classify the RSSI trajectory in the window before `nowMs`. See `rssiTrend`
-    /// on BleDisconnectEvent for the semantics of each label.
-    private static func classifyRssiTrend(samples: [(ts: Int64, rssi: Int64)], nowMs: Int64) -> String {
-        let windowStart = nowMs - rssiTrendWindowMs
-        let recent = samples.filter { $0.ts >= windowStart }
-        // No recent samples — keep-alive wasn't running, so we can't say.
-        if recent.isEmpty { return "gap" }
-        if recent.count < 3 { return "unknown" }
-        // Compare the average of the oldest third to the newest third. A drop of
-        // ≥rssiTrendFadingDropDb dB indicates a fading signal (walk-away).
-        let third = max(1, recent.count / 3)
-        let oldestAvg = recent.prefix(third).map { $0.rssi }.reduce(0, +) / Int64(third)
-        let newestAvg = recent.suffix(third).map { $0.rssi }.reduce(0, +) / Int64(third)
-        let dropDb = oldestAvg - newestAvg // RSSI is negative; larger drop = more negative newer value
-        if dropDb >= rssiTrendFadingDropDb { return "fading" }
-        return "sudden"
-    }
+    private static let maxDisconnectHistory = 500
+    private static let disconnectRetentionMs: Int64 = 7 * 24 * 3600 * 1000
+    private static let rssiHistoryLimit = 120
 
     private static func historyKey(_ uuid: String) -> String { "\(diagnosticsKeyPrefix)\(uuid)" }
     private static func reconnectKey(_ uuid: String) -> String { "\(reconnectCountKeyPrefix)\(uuid)" }
     private static func failToConnectKey(_ uuid: String) -> String { "\(failToConnectCountKeyPrefix)\(uuid)" }
+
+    @objc private func markCleanExit() {
+        UserDefaults.standard.set(false, forKey: "ble_diagnostics_run_open")
+    }
+
+    @objc private func powerModeChanged() {
+        appendLifecycleEvent(ProcessInfo.processInfo.isLowPowerModeEnabled ? "low_power_on" : "low_power_off")
+    }
+
+    @objc private func permissionStateChanged() {
+        let defaults = UserDefaults.standard
+        let mic = String(AVAudioSession.sharedInstance().recordPermission.rawValue)
+        let bluetooth = String(CBManager.authorization.rawValue)
+        for (name, value) in [("mic", mic), ("bluetooth", bluetooth)] {
+            let key = "ble_diagnostics_permission_\(name)"
+            if defaults.string(forKey: key) != value {
+                defaults.set(value, forKey: key)
+                appendLifecycleEvent("\(name)_permission_\(value)")
+            }
+        }
+    }
+
+    private func appendLifecycleEvent(_ name: String) {
+        let defaults = UserDefaults.standard
+        var events = defaults.array(forKey: "ble_diagnostics_lifecycle") as? [[String: Any]] ?? []
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        events.append(["ts": now, "event": name])
+        events.removeAll { ($0["ts"] as? Int64 ?? 0) < now - Self.disconnectRetentionMs }
+        defaults.set(Array(events.suffix(500)), forKey: "ble_diagnostics_lifecycle")
+    }
+
+    private func logBle(uuid: String, event: String, detail: String) {
+        let defaults = UserDefaults.standard
+        let key = "ble_diagnostics_log_\(uuid)"
+        var entries = defaults.array(forKey: key) as? [[String: Any]] ?? []
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        entries.append(["ts": now, "event": event, "detail": detail])
+        entries.removeAll { ($0["ts"] as? Int64 ?? 0) < now - 24 * 3600 * 1000 }
+        defaults.set(Array(entries.suffix(500)), forKey: key)
+    }
+
+    private func recordAudioPacket(uuid: String, value: Data) {
+        guard value.count >= 3 else { return }
+        let index = Int(value[0]) | (Int(value[1]) << 8)
+        let previous = lastPacketIndex[uuid]
+        let delta = previous.map { (index - $0 + 65_536) % 65_536 } ?? 1
+        if delta == 0 { return } // Duplicate packet.
+        audioReceived[uuid, default: 0] += 1
+        audioExpected[uuid, default: 0] += Int64(delta > 4096 ? 1 : delta) // Stream restart becomes a new baseline.
+        lastPacketIndex[uuid] = index
+        if let marker = pendingAudioRecovery.removeValue(forKey: uuid) {
+            let key = Self.historyKey(uuid)
+            let defaults = UserDefaults.standard
+            var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
+            if let i = history.lastIndex(where: { ($0["timestamp"] as? Int64) == marker }) {
+                history[i]["lostAudioSeconds"] = Double(max(0, Int64(Date().timeIntervalSince1970 * 1000) - marker)) / 1000
+                defaults.set(history, forKey: key)
+            }
+        }
+    }
+
+    private func recordFirmwareDiagnostics(uuid: String, data: Data) {
+        guard let value = OmiBleFirmwareDiagnostics.parse(data, timestampMs: Int64(Date().timeIntervalSince1970 * 1000)) else { return }
+        let defaults = UserDefaults.standard
+        chargingState[uuid] = value["charging"] as? Bool
+        let key = "ble_diagnostics_firmware_\(uuid)"
+        var reads = defaults.array(forKey: key) as? [[String: Any]] ?? []
+        reads.append(value)
+        defaults.set(Array(reads.suffix(20)), forKey: key)
+        logBle(uuid: uuid, event: "firmware_diagnostics_read", detail: "v\(data[0])")
+    }
+
+    func getExtendedDeviceDiagnostics(uuid: String) -> String {
+        let defaults = UserDefaults.standard
+        let data: [String: Any] = [
+            "disconnect_history_v2": defaults.array(forKey: Self.historyKey(uuid)) ?? [],
+            "battery_history_v2": defaults.array(forKey: Self.batteryHistoryKey(uuid)) ?? [],
+            "rssi_samples": (rssiHistory[uuid] ?? []).map { ["ts": $0.ts, "rssi": $0.rssi] },
+            "audio_packets_received": audioReceived[uuid] ?? 0,
+            "audio_packets_expected": audioExpected[uuid] ?? 0,
+            "connected_at": connectionStartTimes[uuid] ?? 0,
+            "firmware_diagnostics": defaults.array(forKey: "ble_diagnostics_firmware_\(uuid)") ?? [],
+            "lifecycle_events": defaults.array(forKey: "ble_diagnostics_lifecycle") ?? [],
+            "ble_log": defaults.array(forKey: "ble_diagnostics_log_\(uuid)") ?? [],
+            "counters_since": defaults.object(forKey: "ble_diagnostics_counters_since_\(uuid)") ?? NSNull(),
+        ]
+        guard let encoded = try? JSONSerialization.data(withJSONObject: data),
+              let result = String(data: encoded, encoding: .utf8) else { return "{}" }
+        return result
+    }
 
     /// Sample the UIApplication state from whatever thread we're on. The BLE
     /// callbacks run on the main queue already (centralManager was created with
@@ -472,7 +562,7 @@ final class OmiBleManager: NSObject {
         let startedAt = connectionStartTimes[uuid] ?? 0
         let durationMs: Int64 = (eventType == "disconnect" && startedAt > 0) ? (now - startedAt) : 0
 
-        let trend = OmiBleManager.classifyRssiTrend(samples: rssiHistory[uuid] ?? [], nowMs: now)
+        let trend = OmiBleRssiDiagnostics.trend(samples: rssiHistory[uuid] ?? [], nowMs: now)
         let event: [String: Any] = [
             "timestamp": now,
             "reason": isManual ? "manual" : (reason ?? "unknown"),
@@ -480,23 +570,29 @@ final class OmiBleManager: NSObject {
             "isManual": isManual,
             "eventType": eventType,
             "lastRssi": lastRssi[uuid] ?? 0,
+            "lastRssiAgeMs": OmiBleRssiDiagnostics.ageMs(samples: rssiHistory[uuid] ?? [], nowMs: now),
+            "audioPacketsReceived": audioReceived[uuid] ?? 0,
+            "audioPacketsExpected": audioExpected[uuid] ?? 0,
             "connectionDurationMs": durationMs,
             "appState": currentAppState(),
             "timeToReconnectMs": 0,
             "rssiTrend": trend,
         ]
         history.append(event)
+        history.removeAll { ($0["timestamp"] as? Int64 ?? 0) < now - Self.disconnectRetentionMs }
 
         if history.count > OmiBleManager.maxDisconnectHistory {
             history = Array(history.suffix(OmiBleManager.maxDisconnectHistory))
         }
 
         defaults.set(history, forKey: key)
+        logBle(uuid: uuid, event: eventType, detail: event["reason"] as? String ?? "unknown")
 
         // Remember this event's timestamp so the next successful didConnect can
         // backfill timeToReconnectMs. Only track unexpected (non-manual) events.
         if !isManual {
             pendingReconnectForEvent[uuid] = now
+            if eventType == "disconnect" { pendingAudioRecovery[uuid] = now }
         }
     }
 
@@ -585,12 +681,14 @@ final class OmiBleManager: NSObject {
         else { return }
         lastPersistedBatteryLevel[uuid] = level
         lastPersistedBatteryTimestampMs[uuid] = ts
+        lastPersistedBatteryCharging[uuid] = last["charging"] as? Bool
     }
 
     private func persistBatteryReading(uuid: String, level: Int) {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         rehydrateBatteryBaselineIfNeeded(uuid: uuid)
-        guard OmiBleEnergyPolicy.shouldPersistBatteryReading(
+        let charging = chargingState[uuid]
+        guard lastPersistedBatteryCharging[uuid] != charging || OmiBleEnergyPolicy.shouldPersistBatteryReading(
             previousLevel: lastPersistedBatteryLevel[uuid],
             previousTimestampMs: lastPersistedBatteryTimestampMs[uuid],
             level: level,
@@ -604,7 +702,7 @@ final class OmiBleManager: NSObject {
         let cutoff = now - OmiBleManager.batteryHistoryRetentionMs
         history.removeAll { ($0["ts"] as? Int64 ?? 0) < cutoff }
 
-        history.append(["ts": now, "level": level])
+        history.append(["ts": now, "level": level, "charging": charging as Any? ?? NSNull()])
 
         if history.count > OmiBleManager.maxBatteryHistoryEntries {
             history = Array(history.suffix(OmiBleManager.maxBatteryHistoryEntries))
@@ -613,6 +711,7 @@ final class OmiBleManager: NSObject {
         defaults.set(history, forKey: key)
         lastPersistedBatteryLevel[uuid] = level
         lastPersistedBatteryTimestampMs[uuid] = now
+        lastPersistedBatteryCharging[uuid] = charging
     }
 
     func getBatteryHistory(uuid: String) -> [BleBatteryPoint] {
@@ -632,14 +731,13 @@ final class OmiBleManager: NSObject {
     // MARK: - Audio Batch Helpers
 
     private func cleanupPeripheral(_ peripheralUuid: String) {
-        if rssiTimerPeripheralUuid == peripheralUuid {
-            stopRssiDiagnosticsPolling()
-        }
+        stopRssiDiagnosticsPolling(uuid: peripheralUuid)
         if diagnosticsRssiPeripheralUuid == peripheralUuid {
             diagnosticsRssiPeripheralUuid = nil
             isRssiStreamingEnabled = false
         }
         discoveredServices.removeValue(forKey: peripheralUuid)
+        readyNotified.remove(peripheralUuid)
 
         // Clean up pending completions
         let completionKeys = readCompletions.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
@@ -661,6 +759,8 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         let state = getBluetoothState()
+        if state == "on" || state == "off" { appendLifecycleEvent("bluetooth_\(state)") }
+        if state == "unauthorized" { appendLifecycleEvent("bluetooth_permission_denied") }
         NSLog("[OmiBle] centralManagerDidUpdateState: \(state), flutterApi=\(flutterApi != nil)")
         flutterApi?.onBluetoothStateChanged(state: state) { _ in }
 
@@ -672,6 +772,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        appendLifecycleEvent("corebluetooth_restored")
         // CoreBluetooth can relaunch the process directly into the background;
         // applicationDidEnterBackground is not delivered for that lifecycle.
         // Start the native accounting window here so restored notifications are
@@ -712,7 +813,11 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         let blePeripheral = BlePeripheral(
             uuid: uuid,
-            name: peripheral.name ?? "",
+            name: OmiBleDiscoveryNaming.discoveredName(
+                advertisedLocalName: advertisementData[CBAdvertisementDataLocalNameKey] as? String,
+                cachedName: peripheral.name,
+                advertisementData: advertisementData
+            ),
             rssi: Int64(RSSI.intValue),
             serviceUuids: serviceUuids
         )
@@ -731,7 +836,20 @@ extension OmiBleManager: CBCentralManagerDelegate {
             backfillTimeToReconnect(uuid: uuid)
         }
         everConnected.insert(uuid)
+        readyNotified.remove(uuid)
+        pairingRecoveryInFlight.remove(uuid)
         connectionStartTimes[uuid] = Int64(Date().timeIntervalSince1970 * 1000)
+        lastRssi.removeValue(forKey: uuid)
+        rssiHistory.removeValue(forKey: uuid)
+        chargingState.removeValue(forKey: uuid)
+        lastPacketIndex.removeValue(forKey: uuid)
+        audioReceived[uuid] = 0
+        audioExpected[uuid] = 0
+        if UserDefaults.standard.object(forKey: "ble_diagnostics_counters_since_\(uuid)") == nil {
+            UserDefaults.standard.set(connectionStartTimes[uuid], forKey: "ble_diagnostics_counters_since_\(uuid)")
+        }
+        startRssiDiagnosticsPolling(for: peripheral)
+        logBle(uuid: uuid, event: "connected", detail: "")
 
         peripheral.delegate = self
         peripheral.discoverServices(nil)
@@ -741,6 +859,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let uuid = peripheralUuidString(peripheral)
         let isManual = manuallyDisconnected.contains(uuid)
         let pairingLost = OmiBlePairingPolicy.isPairingLost(error)
+            || pairingRecoveryInFlight.remove(uuid) != nil
         NSLog("[OmiBle] didFailToConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
 
@@ -777,6 +896,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let uuid = peripheralUuidString(peripheral)
         let isManual = manuallyDisconnected.contains(uuid)
         let pairingLost = OmiBlePairingPolicy.isPairingLost(error)
+            || pairingRecoveryInFlight.remove(uuid) != nil
         NSLog("[OmiBle] didDisconnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
 
@@ -840,7 +960,7 @@ extension OmiBleManager: CBPeripheralDelegate {
         guard let services = peripheral.services else { return }
         let allDiscovered = services.allSatisfy { $0.characteristics != nil }
 
-        if allDiscovered {
+        if allDiscovered, readyNotified.insert(uuid).inserted {
             let bleServices = services.map { svc in
                 BleService(
                     uuid: self.fullUuidString(svc.uuid),
@@ -850,11 +970,9 @@ extension OmiBleManager: CBPeripheralDelegate {
             
             flutterApi?.onDeviceReady(peripheralUuid: uuid, services: bleServices) { _ in }
             LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
-            // Retain one connection-time sample for disconnect diagnostics, but
-            // do not keep the radio polling unless the diagnostics UI asks.
-            peripheral.readRSSI()
-            if diagnosticsRssiPeripheralUuid == uuid {
-                startRssiDiagnosticsPolling(for: peripheral)
+            if let diagnostic = services.first(where: { $0.uuid == Self.diagnosticsServiceUuid })?
+                .characteristics?.first(where: { $0.uuid == Self.diagnosticsCharUuid }) {
+                peripheral.readValue(for: diagnostic)
             }
         }
     }
@@ -886,6 +1004,10 @@ extension OmiBleManager: CBPeripheralDelegate {
         let uuid = peripheralUuidString(peripheral)
         guard let service = characteristic.service else { return }
 
+        if OmiBleConnectionPolicy.requiresPairingRecovery(error) {
+            beginPairingRecovery(for: peripheral, uuid: uuid)
+        }
+
         let serviceUuid = fullUuidString(service.uuid)
         let charUuid = fullUuidString(characteristic.uuid)
         let key = "\(uuid):\(serviceUuid):\(charUuid)".lowercased()
@@ -902,8 +1024,15 @@ extension OmiBleManager: CBPeripheralDelegate {
             return
         }
 
+        if characteristic.uuid == Self.diagnosticsCharUuid {
+            if error == nil, let value = characteristic.value { recordFirmwareDiagnostics(uuid: uuid, data: value) }
+            return
+        }
+
         // Handle notification
         guard let data = characteristic.value, !data.isEmpty else { return }
+
+        if characteristic.uuid == Self.audioCharUuid { recordAudioPacket(uuid: uuid, value: data) }
 
         if characteristic.uuid == OmiBleManager.batteryLevelCharUuid, let firstByte = data.first {
             persistBatteryReading(uuid: uuid, level: Int(firstByte))
@@ -957,6 +1086,10 @@ extension OmiBleManager: CBPeripheralDelegate {
                 completion(.success(()))
             }
         }
+
+        if OmiBleConnectionPolicy.requiresPairingRecovery(error) {
+            beginPairingRecovery(for: peripheral, uuid: uuid)
+        }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
@@ -964,8 +1097,19 @@ extension OmiBleManager: CBPeripheralDelegate {
         let charUuid = fullUuidString(characteristic.uuid)
         if let error = error {
             NSLog("[OmiBle] Failed to update notification state for \(charUuid): \(error.localizedDescription)")
+            if OmiBleConnectionPolicy.requiresPairingRecovery(error) {
+                beginPairingRecovery(for: peripheral, uuid: uuid)
+            }
         } else {
             NSLog("[OmiBle] Notification state updated for \(charUuid): isNotifying=\(characteristic.isNotifying)")
         }
+    }
+
+    private func beginPairingRecovery(for peripheral: CBPeripheral, uuid: String) {
+        guard pairingRecoveryInFlight.insert(uuid).inserted else { return }
+        NSLog("[OmiBle] GATT authentication failed for \(uuid); pairing recovery required")
+        manuallyDisconnected.insert(uuid)
+        flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: "pairing_lost") { _ in }
+        centralManager.cancelPeripheralConnection(peripheral)
     }
 }

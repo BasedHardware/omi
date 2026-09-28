@@ -10,6 +10,7 @@ class GeneratedPerson {
   final List<String> speechSamples;
   final int speechSamplesVersion;
   final DateTime? updatedAt;
+  final String voiceReadiness;
 
   const GeneratedPerson({
     this.createdAt,
@@ -19,6 +20,7 @@ class GeneratedPerson {
     this.speechSamples = const [],
     this.speechSamplesVersion = 3,
     this.updatedAt,
+    this.voiceReadiness = "unknown",
   });
 
   factory GeneratedPerson.fromJson(Map<String, dynamic> json) {
@@ -30,6 +32,7 @@ class GeneratedPerson {
       speechSamples: _required(_readFieldValue<List<String>>(_readField(json, const ["speech_samples"]), "speech_samples", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "speech_samples"),
       speechSamplesVersion: _required(_readFieldValue<int>(_readField(json, const ["speech_samples_version"]), "speech_samples_version", _readInt, requiredField: false, nullable: false, defaultValue: 3), "speech_samples_version"),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
+      voiceReadiness: _required(_readFieldValue<String>(_readField(json, const ["voice_readiness"]), "voice_readiness", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "voice_readiness"),
     );
   }
 
@@ -42,6 +45,7 @@ class GeneratedPerson {
       'speech_samples': speechSamples,
       'speech_samples_version': speechSamplesVersion,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
+      'voice_readiness': voiceReadiness,
     };
   }
 }

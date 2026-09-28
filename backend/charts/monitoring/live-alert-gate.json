@@ -1,0 +1,12 @@
+{
+  "description": "UIDs that fail-closed live Grafana coverage. Widen only after a token-backed run proves the rule is live, unpaused, and definition-equal to the committed file. The pusher release gate still checks this same set plus pusher-specific scrape and metric health; do not add UIDs here to make pusher deploys fail-closed on the rest of the fleet.",
+  "uids": [
+    "omi-capture-finalization-memory-fence",
+    "omi-journey-capture-success-critical",
+    "omi-journey-capture-settle-gap",
+    "omi-capture-oldest-nonterminal",
+    "omi-capture-dead-letter-surge",
+    "omi-journey-scrape-missing",
+    "omi-journey-capture-fail"
+  ]
+}

@@ -238,6 +238,7 @@ class PrePushCiPredictionTests(unittest.TestCase):
             "desktop-swift-tests",
             "app-analysis-tests",
             "app-compile-smoke",
+            "app-ios-compile",
         ):
             with self.subTest(phase=phase):
                 self.assertTrue(plan.includes(phase))
@@ -424,6 +425,38 @@ class PrePushCiPredictionTests(unittest.TestCase):
                 self.assertFalse(plan.includes("desktop-ci-only"))
                 self.assertFalse(plan.includes("desktop-swift-tests"))
                 self.assertFalse(plan.includes("desktop-swift-release-compile"))
+                self.assertFalse(plan.includes("app-ios-compile"))
+
+    def test_ios_compile_wakes_on_native_pigeon_and_pubspec_only(self) -> None:
+        """Ordinary Dart stays off the hosted Mac; iOS/Pigeon/pubspec wake it."""
+        self.assertNotIn("app-ios-compile", LOCAL_CHECK_ORDER)
+        dart = self.plan(["app/lib/pages/chat/page.dart"], {"app/lib/pages/chat/page.dart": "class ChatPage {}"})
+        self.assertFalse(dart.includes("app-ios-compile"))
+        self.assertEqual(github_outputs(dart)["has_app_ios_compile"], "false")
+        self.assertTrue(dart.includes("app-compile-smoke"))
+
+        android = self.plan(["app/android/app/src/main/AndroidManifest.xml"])
+        self.assertFalse(android.includes("app-ios-compile"))
+
+        for path in (
+            "app/ios/Runner/AppDelegate.swift",
+            "app/ios/Runner/PigeonCommunicator.g.swift",
+            "app/ios/Runner/PhoneMic/PhoneMicPigeon.g.swift",
+            "app/lib/pigeon_interfaces.dart",
+            "app/lib/phone_mic_interface.dart",
+            "app/pubspec.yaml",
+            "app/pubspec.lock",
+            ".github/workflows/mobile-app-checks.yml",
+            ".github/actions/detect-changes/action.yml",
+        ):
+            with self.subTest(path=path):
+                plan = self.plan([path])
+                self.assertTrue(plan.includes("app-ios-compile"), path)
+                self.assertEqual(github_outputs(plan)["has_app_ios_compile"], "true")
+
+        selector = self.plan([".github/workflows/mobile-app-checks.yml"])
+        self.assertTrue(selector.includes("app-ios-compile"))
+        self.assertEqual(github_outputs(selector)["has_app_ios_compile"], "true")
 
     def test_authoritative_main_health_events_ignore_changed_paths(self) -> None:
         """#12275: recovery/health runs must compile the current main SHA itself."""

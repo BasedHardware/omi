@@ -14,12 +14,7 @@ class ConversationSummarySelection {
   final String? appId;
   final int? resultIndex;
 
-  const ConversationSummarySelection({
-    required this.content,
-    required this.kind,
-    this.appId,
-    this.resultIndex,
-  });
+  const ConversationSummarySelection({required this.content, required this.kind, this.appId, this.resultIndex});
 
   bool get isApp => kind == ConversationSummaryKind.app;
 
@@ -71,27 +66,15 @@ class ConversationSummarySelection {
     final overview = conversation.structured.overview.trim();
     final projectedSections = renderSections(conversation.structured.sections);
     if (projectedSections.isNotEmpty && overview == projectedSections) {
-      return ConversationSummarySelection(
-        content: projectedSections,
-        kind: ConversationSummaryKind.sections,
-      );
+      return ConversationSummarySelection(content: projectedSections, kind: ConversationSummaryKind.sections);
     }
     if (overview.isNotEmpty) {
-      return ConversationSummarySelection(
-        content: overview,
-        kind: ConversationSummaryKind.overview,
-      );
+      return ConversationSummarySelection(content: overview, kind: ConversationSummaryKind.overview);
     }
     if (projectedSections.isNotEmpty) {
-      return ConversationSummarySelection(
-        content: projectedSections,
-        kind: ConversationSummaryKind.sections,
-      );
+      return ConversationSummarySelection(content: projectedSections, kind: ConversationSummaryKind.sections);
     }
-    return const ConversationSummarySelection(
-      content: '',
-      kind: ConversationSummaryKind.empty,
-    );
+    return const ConversationSummarySelection(content: '', kind: ConversationSummaryKind.empty);
   }
 
   /// The canonical Markdown projection of structured sections.

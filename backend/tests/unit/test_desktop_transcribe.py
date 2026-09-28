@@ -324,6 +324,7 @@ def _desktop_transcribe_isolation():
         _speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
         _speaker_embedding.extract_embedding_from_bytes = MagicMock()
         _speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+        _speaker_embedding.speaker_embedding_configured = lambda: True
         sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
         _attach_existing_module('utils.stt.speaker_embedding')
 

@@ -11,14 +11,8 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 
 ServerConversation _conversationWithSections() {
   final structured = Structured('Sprint sync', 'Short compatibility paragraph.', emoji: '🧠');
-  structured.sections = [
-    const wire.GeneratedSection(heading: 'Decisions', bodyMarkdown: 'Ship the beta on Friday'),
-  ];
-  return ServerConversation(
-    id: 'conv-1',
-    createdAt: DateTime(2026, 7, 1, 9).toUtc(),
-    structured: structured,
-  );
+  structured.sections = [const wire.GeneratedSection(heading: 'Decisions', bodyMarkdown: 'Ship the beta on Friday')];
+  return ServerConversation(id: 'conv-1', createdAt: DateTime(2026, 7, 1, 9).toUtc(), structured: structured);
 }
 
 Future<void> _pumpSummary(
@@ -54,11 +48,7 @@ Future<void> _pumpSummary(
                   ),
                 ],
               )
-            : AppResultDetailWidget(
-                summarySelection: selection,
-                app: app,
-                conversation: conversation,
-              ),
+            : AppResultDetailWidget(summarySelection: selection, app: app, conversation: conversation),
       ),
     ),
   );
@@ -117,7 +107,11 @@ void main() {
     });
 
     testWidgets('a resolved app result shows the app name', (tester) async {
-      await _pumpSummary(tester, app: _templateApp(), response: AppResponse('App summary', appId: 'app-1'));
+      await _pumpSummary(
+        tester,
+        app: _templateApp(),
+        response: AppResponse('App summary', appId: 'app-1'),
+      );
 
       expect(find.text('My Template'), findsOneWidget);
       expect(find.text('Unknown App'), findsNothing);

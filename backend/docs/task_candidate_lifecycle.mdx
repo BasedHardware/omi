@@ -8,6 +8,14 @@ The backend owns canonical tasks in `users/{uid}/action_items/{task_id}` and rev
 and the other compatibility fields while the same response also carries typed status, owner, source,
 provenance, goal/workstream links, due confidence, priority, and recurrence fields.
 
+Direct `POST /v1/action-items` retries use the caller's optional `Idempotency-Key`, not task text.
+A matching non-deleted task in the current account generation retains its identity after completion;
+the response and derived search/reminder/integration payloads use its saved state, not the old create
+request. Completed tasks do not schedule reminders or enqueue an open-task export. Unkeyed creates
+remain distinct, and the existing policy permits recreation after deletion or an account-generation reset.
+This is not a permanent create receipt or an exactly-once external-delivery guarantee. Local real-database
+replay evidence lives in `backend/tests/integration/test_action_item_replay_emulator.py`.
+
 Candidate payloads are discriminated by `subject_kind`. A task Candidate has either a typed create payload or
 a typed mutation payload. A workstream Candidate has only a workstream proposal with an anchor-task payload.
 Goal links, evidence, source surface, and confidence remain on the Candidate envelope and are never duplicated
@@ -139,6 +147,15 @@ without a task, and score-based promotion skips forward rather than starving beh
 Released action-item request shapes are accepted through an explicit compatibility adapter. The canonical task
 and Candidate models remain strict; legacy-only fields are ignored at the old route boundary, and
 `clear_due_at` is projected to an explicit `due_at: null` update.
+
+Shared-link acceptance (`POST /v1/action-items/accept`) resolves eligible source tasks before creating the
+recipient's copies in one `create_action_items_batch` transaction (a share contains at most 20 tasks).
+Indexing, reminders, and Chat-first wakes happen only after the entire batch is saved. A source-read or
+rejected-write failure therefore cannot leave a copied prefix behind an already-used share. The existing
+Redis acceptance marker still rejects duplicate requests; this is not a cross-store crash-recovery protocol.
+Process death after that claim, ambiguous commit outcomes, and historical partial accepts remain separate
+recovery limitations. The Firestore emulator proof is
+`backend/tests/integration/test_shared_task_acceptance_atomic_emulator.py`.
 
 What Matters Now projections, interventions, feedback, outcomes, attention overrides, and device snapshots are
 all account-generation scoped. Their Firestore mutations re-read workflow control in the commit transaction, so

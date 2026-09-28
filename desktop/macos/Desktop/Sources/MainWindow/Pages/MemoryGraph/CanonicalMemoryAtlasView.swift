@@ -77,88 +77,6 @@ private struct CanonicalMemoryAtlasLoadGate<Content: View>: View {
   }
 }
 
-struct CanonicalMemoryAtlasPage: View {
-  @ObservedObject var viewModel: MemoryGraphViewModel
-  let onBack: () -> Void
-  let evidenceProvider: ([String]) async -> [MemoryAtlasEvidence]
-  /// Opens a cited memory on the Memories surface this page came from.
-  let onOpenMemory: (String) -> Void
-
-  /// Reads the memoized snapshot drawn below, so the counts cannot drift.
-  private var headerCountLabel: String {
-    if let projection = viewModel.canonicalAtlasProjection {
-      return MemoryAtlasLayoutEngine.countLabel(
-        entities: projection.snapshot.nodes.filter { !$0.isCatalog }.count,
-        memories: projection.snapshot.nodes.filter(\.isCatalog).count,
-        connections: projection.snapshot.edges.count)
-    }
-    return MemoryAtlasLayoutEngine.countLabel(
-      entities: viewModel.graphResponse.atlasNodes.count,
-      memories: viewModel.graphResponse.catalogNodes?.count,
-      connections: viewModel.graphResponse.edges.count)
-  }
-
-  var body: some View {
-    VStack(spacing: 0) {
-      HStack(spacing: 12) {
-        Button(action: onBack) {
-          Label("Memories", systemImage: "chevron.left")
-            .scaledFont(size: 12, weight: .semibold)
-            .foregroundColor(Ink.secondary)
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .glassChip()
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("memory_atlas_back_to_memories")
-
-        // "Brain Map" everywhere the user can see it: the atlas replaces the
-        // legacy graph on the destination that already had that name, so
-        // introducing a second name for the same place only splits the domain
-        // vocabulary. "Atlas" survives in type and symbol names only.
-        Text("Brain Map")
-          .scaledFont(size: 17, weight: .semibold)
-          .foregroundColor(Ink.primary)
-
-        Spacer()
-
-        // Show the semantic map and the complete canonical-memory catalog as
-        // distinct counts; catalog records are visible but never fake edges.
-        Text(headerCountLabel)
-          .scaledFont(size: 12)
-          .foregroundColor(Ink.secondary)
-          .accessibilityIdentifier("memory_atlas_header_counts")
-      }
-      .padding(.horizontal, 18)
-      .frame(height: 44)
-      .background(Ink.rowFill)
-
-      Divider().overlay(Ink.separator.opacity(0.25))
-
-      CanonicalMemoryAtlasLoadGate(viewModel: viewModel) {
-        CanonicalMemoryAtlasSurface(
-          graph: viewModel.canonicalAtlasProjection?.graph ?? viewModel.graphResponse,
-          projection: viewModel.canonicalAtlasProjection,
-          compact: false,
-          evidenceProvider: evidenceProvider,
-          onOpenMemory: onOpenMemory,
-          onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
-          isRebuilding: viewModel.isRebuilding,
-          onLeave: onBack
-        )
-      }
-    }
-    .background(Color.clear)
-    .accessibilityIdentifier("canonical_memory_atlas_page")
-    .task { await viewModel.prepareCanonicalAtlas() }
-    .onAppear {
-      memoryAtlasLogger.info(
-        "Atlas page opened nodes=\(viewModel.graphResponse.atlasNodes.count, privacy: .public) edges=\(viewModel.graphResponse.edges.count, privacy: .public)"
-      )
-    }
-  }
-}
-
 /// Memory hub presentation of the atlas.
 ///
 /// The hub already owns navigation chrome (the Memory menu selects the
@@ -761,16 +679,7 @@ private struct CanonicalMemoryAtlasSurface: View {
             .accessibilityIdentifier("memory_atlas_search")
 
           if !searchText.isEmpty {
-            Button {
-              searchBinding.wrappedValue = ""
-            } label: {
-              Image(systemName: "xmark.circle.fill")
-                .scaledFont(size: 11)
-                .foregroundColor(Ink.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Clear search (Esc)")
-            .accessibilityLabel("Clear search")
+            ClearFieldButton { searchBinding.wrappedValue = "" }
           }
         }
         .padding(.horizontal, 12)
@@ -798,22 +707,14 @@ private struct CanonicalMemoryAtlasSurface: View {
       // The legacy Brain Map carried a rebuild control; without it a thin or
       // stale server graph has no recovery path from inside the atlas.
       if let onRebuild {
-        Menu {
+        PageMoreMenu(help: "More Brain Map actions", accessibilityIdentifier: "memory_atlas_more_actions") {
           Button(action: onRebuild) {
             Label(
               isRebuilding ? "Rebuilding Brain Map…" : "Rebuild Brain Map…",
               systemImage: "arrow.clockwise")
           }
           .disabled(isRebuilding)
-        } label: {
-          PageQueryActionLabel(icon: "ellipsis", title: "More")
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("More Brain Map actions")
-        .accessibilityLabel("More Brain Map actions")
-        .accessibilityIdentifier("memory_atlas_more_actions")
       }
     }
     .padding(.horizontal, compact ? 12 : 18)
@@ -1671,18 +1572,9 @@ private struct CanonicalMemoryAtlasSurface: View {
       .scaledFont(size: 10)
       .foregroundColor(Ink.secondary)
 
-      Button {
-        clearSelection(resetCamera: true)
-      } label: {
-        Image(systemName: "xmark")
-          .scaledFont(size: 10, weight: .semibold)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 24, height: 24)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .help("Clear selection (Esc)")
-      .accessibilityLabel("Clear selection")
+      DismissButton(
+        action: { clearSelection(resetCamera: true) }, accessibilityLabel: "Clear Selection", size: .compact
+      )
       .accessibilityIdentifier("memory_atlas_clear_selection")
     }
     .padding(.horizontal, compact ? 12 : 18)
@@ -2293,12 +2185,10 @@ private struct CanonicalMemoryAtlasSurface: View {
     case .neighbourhood:
       leaveNeighbourhood()
     case .passThrough:
-      // The last layer is the map itself. Handing the key back to the window
-      // instead was the tidy-looking version and it did nothing: the atlas is
-      // a canvas, so there is no focused control for a cancel to travel up
-      // from, and Escape on a page with nothing selected was simply swallowed.
-      guard let onLeave else { return false }
-      onLeave()
+      // The last layer is the map itself, so the key goes back to the shell, which handles it the
+      // way it does on every other Memories page. It used to switch to the Memories chip instead —
+      // Esc changing peer tabs, which it does nowhere else (docs/ux-contract.md §1).
+      return false
     }
     return true
   }

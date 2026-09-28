@@ -17,6 +17,22 @@ class _NullMeansDefault(BaseModel):
         return data
 
 
+def _coerce_int(value: Any, field_name: str) -> int:
+    """Coerce a JSON value to an int, failing with ValueError, never TypeError.
+
+    pydantic turns a ValueError raised inside a validator into a request
+    validation error, which this app answers with a readable tool error; any
+    other exception escapes the validator and becomes an unhandled 500.
+    ``int()`` raises TypeError for a list or object and OverflowError for
+    infinity, so ``{"limit": []}`` crashed the tool instead of reporting an
+    invalid request.
+    """
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError(f"{field_name} must be a whole number (e.g. 5).") from None
+
+
 class ChatToolResponse(BaseModel):
     """Standard response model for Omi chat tool endpoints."""
 
@@ -85,7 +101,7 @@ class SearchCryptoCoinsRequest(_NullMeansDefault):
     def coerce_max_results(cls, v: Optional[int]) -> int:
         if v is None:
             return 5
-        return int(v)
+        return _coerce_int(v, "max_results")
 
     @field_validator("query")
     @classmethod
@@ -106,7 +122,7 @@ class GetTrendingCryptoRequest(_NullMeansDefault):
     def coerce_limit(cls, v: Optional[int]) -> int:
         if v is None:
             return 5
-        return int(v)
+        return _coerce_int(v, "limit")
 
 
 class GetCryptoMarketOverviewRequest(_NullMeansDefault):
@@ -124,7 +140,7 @@ class GetCryptoMarketOverviewRequest(_NullMeansDefault):
     def coerce_limit(cls, v: Optional[int]) -> int:
         if v is None:
             return 10
-        return int(v)
+        return _coerce_int(v, "limit")
 
     @field_validator("vs_currency", mode="before")
     @classmethod

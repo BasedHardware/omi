@@ -439,3 +439,15 @@ Vectors are created ONCE during initial processing. Reprocessed conversations do
     Environment setup and configuration
   </Card>
 </CardGroup>
+
+### Manual speaker attribution during concurrent writes
+
+Manual speaker decisions live in a protected sparse receipt alongside the transcript.
+Live STT merging and both processing-result writers read that receipt in their
+commit transaction. Live merging preserves every manually covered speech span,
+including speaker-wide defaults, explicit clears, and training opt-outs. The
+committed transcript and deleted-ID delta are returned together for client delivery.
+Translation and inference-only writers patch current IDs without owning the segment
+set. Privacy-level migration re-encodes the transcript and receipt together.
+Changing attribution does not automatically regenerate a summary; refresh remains
+an explicit user action. Enrollment remains best-effort.

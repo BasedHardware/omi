@@ -28,10 +28,18 @@ class JourneyFixtureBackend {
 
   final HttpServer _server;
   final Set<JourneyFault> _faults = {};
+  final Map<String, List<({int status, String body})>> _httpFaults = {};
+
+  /// One-shot HTTP faults shared by typed-result contracts and journeys.
+  /// This loopback-only fixture is never compiled into the application.
+  void failNext(String method, String path, {required int status, String body = '{}'}) {
+    (_httpFaults['$method $path'] ??= []).add((status: status, body: body));
+  }
 
   /// Seeded, owned records served by the fixture.
   final List<Map<String, dynamic>> conversations = [];
   final List<Map<String, dynamic>> memories = [];
+  final List<Map<String, dynamic>> actionItems = [];
 
   /// Request journal: method + path -> count. Journeys assert on it (e.g.
   /// "the send request actually reached the server") — the structural
@@ -59,7 +67,10 @@ class JourneyFixtureBackend {
 
   void clear(JourneyFault fault) => _faults.remove(fault);
 
-  void clearFaults() => _faults.clear();
+  void clearFaults() {
+    _faults.clear();
+    _httpFaults.clear();
+  }
 
   int countOf(String method, String path) => requestCounts['$method $path'] ?? 0;
 
@@ -101,6 +112,15 @@ class JourneyFixtureBackend {
         'error': 'ownership',
         'detail': 'bearer does not own the requested records',
       }));
+      await req.response.close();
+      return;
+    }
+    final queuedFaults = _httpFaults['$method $path'];
+    if (queuedFaults != null && queuedFaults.isNotEmpty) {
+      final fault = queuedFaults.removeAt(0);
+      req.response.statusCode = fault.status;
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(fault.body);
       await req.response.close();
       return;
     }
@@ -150,6 +170,29 @@ class JourneyFixtureBackend {
         req.response.statusCode = 200;
         req.response.headers.contentType = ContentType.json;
         req.response.write(jsonEncode(conversations));
+        await req.response.close();
+        return;
+
+      case 'POST /v1/action-items':
+        final body = jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>;
+        final now = DateTime.now().toUtc().toIso8601String();
+        final item = <String, dynamic>{
+          ...body,
+          'id': 'srv-task-${actionItems.length + 1}',
+          'created_at': now,
+          'updated_at': now,
+        };
+        actionItems.add(item);
+        req.response.statusCode = 200;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(item));
+        await req.response.close();
+        return;
+
+      case 'GET /v1/action-items':
+        req.response.statusCode = 200;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({'action_items': actionItems, 'has_more': false}));
         await req.response.close();
         return;
 

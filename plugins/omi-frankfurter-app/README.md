@@ -50,5 +50,7 @@ curl -X POST http://localhost:8080/tools/get_latest_rates \
 ## Notes
 
 - Frankfurter provides reference exchange rates, not trading quotes.
+- Requests use Frankfurter's canonical versioned API at
+  `https://api.frankfurter.dev/v1` (the legacy `.app` host redirects there).
 - Unsupported currencies return a clear error from the API.
 - Results include the source date returned by Frankfurter.

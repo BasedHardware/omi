@@ -107,6 +107,7 @@ MONITORING_CONTRACT_SOURCES = (
     'backend/charts/monitoring/kube-prometheus-stack/',
     'backend/charts/monitoring/alerts/',
     'backend/charts/monitoring/alert-rules.json',
+    'backend/charts/monitoring/live-alert-gate.json',
     'backend/charts/monitoring/prometheus-stackdriver-exporter/',
     'backend/charts/parakeet/templates/servicemonitor.yaml',
 )
@@ -201,11 +202,17 @@ AREA_TESTS = (
         ('tests/unit/test_parakeet_*.py',),
     ),
     (
+        ('backend/scripts/verify_pusher_live_alert_route.py',),
+        (),
+        ('tests/unit/test_verify_pusher_live_alert_route.py',),
+    ),
+    (
         MONITORING_CONTRACT_SOURCES,
         (),
         (
             'tests/unit/test_monitoring_*.py',
             'tests/unit/test_journey_observability.py',
+            'tests/unit/test_verify_pusher_live_alert_route.py',
         ),
     ),
     (

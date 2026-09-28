@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Sparkles, Mic, Zap, X, Rocket } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -40,6 +41,16 @@ export function WhatsNewModal({ onDismiss }: WhatsNewModalProps) {
     onDismiss();
   };
 
+  // Escape is the third way out, alongside the button and the backdrop. Every
+  // path runs the same `onDismiss`, which is what writes the seen flag.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onDismiss();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onDismiss]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -49,31 +60,38 @@ export function WhatsNewModal({ onDismiss }: WhatsNewModalProps) {
       className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4"
       onClick={handleClose}
     >
-      {/* Modal */}
+      {/* Modal. The enter/exit offsets are `y` and `scale` numbers, not a
+          `transform` string: `transform: 'none'` is interpolated as an
+          all-zero matrix, which collapsed this dialog to 0×0 behind a
+          screen-filling backdrop. The height cap keeps the action reachable on
+          a phone. */}
       <motion.div
         initial={{
           opacity: 0,
-          transform: reduceMotion ? 'none' : 'translateY(20px) scale(0.95)',
+          y: reduceMotion ? 0 : 20,
+          scale: reduceMotion ? 1 : 0.95,
         }}
-        animate={{ opacity: 1, transform: 'none' }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{
           opacity: 0,
-          transform: reduceMotion ? 'none' : 'translateY(12px) scale(0.97)',
+          y: reduceMotion ? 0 : 12,
+          scale: reduceMotion ? 1 : 0.97,
         }}
         transition={{ duration: reduceMotion ? 0.16 : 0.22, ease: [0.23, 1, 0.32, 1] }}
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          'w-full max-w-md bg-bg-secondary rounded-2xl',
+          'relative w-full max-w-md bg-bg-secondary rounded-2xl',
           'shadow-xl border border-bg-tertiary',
-          'overflow-hidden relative',
+          'max-h-[calc(100dvh-2rem)] overflow-y-auto',
         )}
       >
         {/* Close button */}
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 p-2 rounded-lg hover:bg-bg-tertiary transition-colors z-10"
+          aria-label="Close"
+          className="absolute top-3 right-3 z-10 rounded-lg p-2 text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
         >
-          <X className="w-5 h-5 text-text-tertiary" />
+          <X className="w-5 h-5" />
         </button>
 
         {/* Header with gradient */}
@@ -99,9 +117,9 @@ export function WhatsNewModal({ onDismiss }: WhatsNewModalProps) {
                 key={index}
                 initial={{
                   opacity: 0,
-                  transform: reduceMotion ? 'none' : 'translateX(-10px)',
+                  x: reduceMotion ? 0 : -10,
                 }}
-                animate={{ opacity: 1, transform: 'none' }}
+                animate={{ opacity: 1, x: 0 }}
                 transition={{
                   duration: reduceMotion ? 0.16 : 0.2,
                   delay: reduceMotion ? 0 : 0.06 + index * 0.05,

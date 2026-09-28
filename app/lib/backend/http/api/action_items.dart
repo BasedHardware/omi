@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as wire;
 import 'package:omi/backend/schema/schema.dart';
@@ -71,6 +73,123 @@ Future<ActionItemsResponse?> tryGetActionItems({
   } else {
     Logger.debug('getActionItems error ${response.statusCode}');
     return null;
+  }
+}
+
+String _actionItemsCollectionUrl(
+  String baseUrl, {
+  required int limit,
+  required int offset,
+  bool? completed,
+  String? conversationId,
+  DateTime? startDate,
+  DateTime? endDate,
+  DateTime? dueStartDate,
+  DateTime? dueEndDate,
+}) {
+  final root = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+  var url = '${root}v1/action-items?limit=$limit&offset=$offset';
+  if (completed != null) url += '&completed=$completed';
+  if (conversationId != null) url += '&conversation_id=$conversationId';
+  if (startDate != null) url += '&start_date=${startDate.toUtc().toIso8601String()}';
+  if (endDate != null) url += '&end_date=${endDate.toUtc().toIso8601String()}';
+  if (dueStartDate != null) url += '&due_start_date=${dueStartDate.toUtc().toIso8601String()}';
+  if (dueEndDate != null) url += '&due_end_date=${dueEndDate.toUtc().toIso8601String()}';
+  return url;
+}
+
+/// Decode the action-items envelope once and rows independently. A valid empty
+/// list is success; a wholly invalid nonempty list is decode failure.
+ApiResult<ActionItemsResponse> decodeActionItemsEnvelope(String body, {void Function(ApiFallbackEvent)? fallback}) {
+  late final Object? decoded;
+  try {
+    decoded = jsonDecode(body);
+  } on FormatException {
+    return const ApiFailure(ApiProblem(ApiProblemKind.decode));
+  }
+  if (decoded is! Map) {
+    return const ApiFailure(ApiProblem(ApiProblemKind.decode));
+  }
+  final rows = decoded['action_items'];
+  if (rows is! List) {
+    return const ApiFailure(ApiProblem(ApiProblemKind.decode));
+  }
+  if (rows.isEmpty) {
+    return ApiSuccess(ActionItemsResponse(actionItems: const [], hasMore: decoded['has_more'] == true));
+  }
+  final kept = <ActionItemWithMetadata>[];
+  var rejected = 0;
+  for (final item in rows) {
+    if (item is! Map) {
+      rejected++;
+      continue;
+    }
+    try {
+      kept.add(wire.GeneratedActionItemResponse.fromJson(Map<String, dynamic>.from(item)));
+    } catch (_) {
+      rejected++;
+    }
+  }
+  if (kept.isEmpty) {
+    return const ApiFailure(ApiProblem(ApiProblemKind.decode));
+  }
+  if (rejected > 0) {
+    fallback?.call(
+      const ApiFallbackEvent(reason: ApiFallbackReason.partialDecode, outcome: ApiFallbackOutcome.degraded),
+    );
+  }
+  return ApiSuccess(
+    ActionItemsResponse(
+      actionItems: kept,
+      hasMore: decoded['has_more'] == true,
+      truncated: decoded['truncated'] == true,
+    ),
+    rejectedRows: rejected,
+  );
+}
+
+/// Typed action-items list. Legacy [getActionItems]/[tryGetActionItems] stay for
+/// unmigrated callers; a 503 is distinct here instead of an empty task list.
+class ActionItemsApi {
+  ActionItemsApi({required String baseUrl, ApiSend? send})
+      : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
+        _send = send;
+
+  final String _baseUrl;
+  final ApiSend? _send;
+
+  Future<ApiResult<ActionItemsResponse>> list({
+    int limit = 50,
+    int offset = 0,
+    bool? completed,
+    String? conversationId,
+    DateTime? startDate,
+    DateTime? endDate,
+    DateTime? dueStartDate,
+    DateTime? dueEndDate,
+  }) async {
+    final sent = await executeApi<String>(
+      request: ApiRequest(
+        url: _actionItemsCollectionUrl(
+          _baseUrl,
+          limit: limit,
+          offset: offset,
+          completed: completed,
+          conversationId: conversationId,
+          startDate: startDate,
+          endDate: endDate,
+          dueStartDate: dueStartDate,
+          dueEndDate: dueEndDate,
+        ),
+        method: 'GET',
+      ),
+      send: _send,
+      decode: (body) => body,
+    );
+    return switch (sent) {
+      ApiFailure(:final problem) => ApiFailure(problem),
+      ApiSuccess(:final data) => decodeActionItemsEnvelope(data, fallback: recordFallback),
+    };
   }
 }
 

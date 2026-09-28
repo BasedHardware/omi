@@ -61,12 +61,10 @@ function IdentifyPlugin({ pluginId }: IdentifyPluginProps) {
         height={32}
       />
       <div className="flex-1">
-        <h3 className="text-base font-semibold text-white">{pluginCommunity?.name}</h3>
-        <p className="line-clamp-1 text-xs text-zinc-400">
-          {pluginCommunity.description}
-        </p>
+        <h3 className="sn-ink text-base font-semibold">{pluginCommunity?.name}</h3>
+        <p className="sn-muted line-clamp-1 text-xs">{pluginCommunity.description}</p>
       </div>
-      {isPublic && <NavArrowRight className="h-4 w-4 text-zinc-500" />}
+      {isPublic && <NavArrowRight className="sn-muted h-4 w-4" />}
     </>
   );
 
