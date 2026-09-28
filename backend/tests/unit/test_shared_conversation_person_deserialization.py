@@ -141,6 +141,7 @@ def test_jit_first_open_worker_skips_malformed_person_records(monkeypatch):
     )
 
     import sys
+
     monkeypatch.setitem(sys.modules, "utils.conversations.process_conversation", mock_proc)
 
     effects = {"folder_assignment": {"state": "complete"}}
