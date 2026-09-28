@@ -871,7 +871,6 @@ def request_finalization(
         record_client_journey_accepted(
             'conversation_finalization',
             bounded_client_kind(client_kind),
-            app_build if isinstance(app_build, str) else 'unknown',
         )
         record_product_event(
             'conversation_finalized',

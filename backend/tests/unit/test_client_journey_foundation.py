@@ -60,33 +60,18 @@ def test_label_coercion_collapses_unbounded_values_to_unknown():
     assert bounded_app_build('240') == '240'
 
 
-def test_client_journey_attempt_records_sanitized_app_build_not_raw_header(monkeypatch):
+def test_client_journey_attempt_does_not_export_app_build(monkeypatch):
     accepted, terminal, _issues, _duration = _install_client_journey_metrics(monkeypatch)
-    with journeys.ClientJourneyAttempt('desktop_chat', 'desktop_macos', app_build='240') as attempt:
+    with journeys.ClientJourneyAttempt('desktop_chat', 'desktop_macos') as attempt:
         attempt.succeed()
     accepted.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_macos',
-        app_build='240',
     )
     terminal.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_macos',
-        app_build='240',
         outcome='success',
-    )
-
-    accepted.reset_mock()
-    with journeys.ClientJourneyAttempt(
-        'desktop_chat',
-        'desktop_macos',
-        app_build='1.0.522+240',
-    ) as attempt:
-        attempt.succeed()
-    accepted.labels.assert_called_once_with(
-        journey='desktop_chat',
-        client_kind='desktop_macos',
-        app_build='unknown',
     )
 
 
@@ -139,7 +124,7 @@ def test_client_kind_non_string_header_collapses_to_unknown():
     assert resolve_client_kind(x_app_platform=object(), user_agent='OpenAI/JS 6.26.0') == 'unknown'
 
 
-def test_client_journey_metrics_zero_initialize_the_complete_bounded_contract():
+def test_client_journey_metrics_do_not_seed_cross_products_or_created_series():
     accepted = _sample_label_sets(metrics.OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL, 'omi_client_journey_accepted_total')
     terminal = _sample_label_sets(metrics.OMI_CLIENT_JOURNEY_TERMINAL_TOTAL, 'omi_client_journey_terminal_total')
     issues = _sample_label_sets(metrics.OMI_CLIENT_JOURNEY_ISSUES_TOTAL, 'omi_client_journey_issues_total')
@@ -147,21 +132,33 @@ def test_client_journey_metrics_zero_initialize_the_complete_bounded_contract():
         metrics.OMI_CLIENT_JOURNEY_DURATION_SECONDS, 'omi_client_journey_duration_seconds_count'
     )
 
-    assert len(accepted) == len(CLIENT_JOURNEYS) * len(CLIENT_KINDS)
-    assert len(terminal) == len(CLIENT_JOURNEYS) * len(CLIENT_KINDS) * len(CLIENT_JOURNEY_OUTCOMES)
-    assert len(issues) == len(CLIENT_JOURNEYS) * len(CLIENT_KINDS) * len(CLIENT_JOURNEY_ISSUE_CLASSES)
-    assert len(duration) == len(CLIENT_JOURNEYS) * len(CLIENT_JOURNEY_OUTCOMES)
-    assert (
-        ('app_build', 'unknown'),
-        ('client_kind', 'pi_mono_unknown_os'),
-        ('journey', 'desktop_chat'),
-    ) in accepted
-    assert (
-        ('app_build', 'unknown'),
-        ('client_kind', 'desktop_macos'),
-        ('journey', 'desktop_chat'),
-        ('outcome', 'degraded'),
-    ) in terminal
+    assert len(accepted) < len(CLIENT_JOURNEYS) * len(CLIENT_KINDS)
+    assert len(terminal) < len(CLIENT_JOURNEYS) * len(CLIENT_KINDS) * len(CLIENT_JOURNEY_OUTCOMES)
+    assert len(issues) < len(CLIENT_JOURNEYS) * len(CLIENT_KINDS) * len(CLIENT_JOURNEY_ISSUE_CLASSES)
+    assert len(duration) < len(CLIENT_JOURNEYS) * len(CLIENT_JOURNEY_OUTCOMES)
+    assert all('app_build' not in dict(labels) for labels in accepted | terminal | issues)
+    assert all(
+        not sample.name.endswith('_created')
+        for family in metrics.OMI_CLIENT_JOURNEY_ISSUES_TOTAL.collect()
+        for sample in family.samples
+    )
+
+
+def test_audio_timeline_rejects_are_lazy_and_bounded():
+    samples = [sample for family in metrics.OMI_AUDIO_TIMELINE_REJECTS_TOTAL.collect() for sample in family.samples]
+    rejects = [sample for sample in samples if sample.name == 'omi_audio_timeline_rejects_total']
+    assert len(rejects) < 2 * len(metrics.AUDIO_TIMELINE_PROVIDERS) * len(metrics.AUDIO_TIMELINE_SEND_PATHS) * len(
+        metrics.AUDIO_TIMELINE_REJECT_REASONS
+    )
+    assert all(not sample.name.endswith('_created') for sample in samples)
+    metrics.OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(
+        mode='legacy', reason='other', provider='unknown', send_path='unknown'
+    ).inc()
+    assert any(
+        sample.labels == {'mode': 'legacy', 'reason': 'other', 'provider': 'unknown', 'send_path': 'unknown'}
+        for family in metrics.OMI_AUDIO_TIMELINE_REJECTS_TOTAL.collect()
+        for sample in family.samples
+    )
 
 
 def test_streaming_attempt_records_failure_when_stream_breaks_after_success_candidate(monkeypatch):
@@ -193,13 +190,11 @@ def test_streaming_attempt_records_failure_when_stream_breaks_after_success_cand
     terminal.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_macos',
-        app_build='unknown',
         outcome='failure',
     )
     issues.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_macos',
-        app_build='unknown',
         issue_class='provider_error',
     )
     duration.labels.assert_called_once_with(journey='desktop_chat', outcome='failure')
@@ -231,7 +226,6 @@ def test_streaming_attempt_records_success_only_after_clean_exhaustion(monkeypat
     terminal.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_windows',
-        app_build='unknown',
         outcome='success',
     )
     issues.labels.assert_not_called()
@@ -274,13 +268,11 @@ def test_streaming_attempt_error_frame_wins_over_later_done(monkeypatch):
     terminal.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='pi_mono_unknown_os',
-        app_build='unknown',
         outcome='failure',
     )
     issues.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='pi_mono_unknown_os',
-        app_build='unknown',
         issue_class='upstream_rejected',
     )
 
