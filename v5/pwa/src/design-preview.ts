@@ -33,6 +33,7 @@ import {
   type MobileRoute,
 } from "../../react-native/src/mobile/MobileAppSurface";
 import "./root.css";
+import "./preview-fonts.css";
 
 const h = React.createElement;
 const noop = () => undefined;
@@ -43,6 +44,28 @@ const deviceState = new URLSearchParams(location.search).get("device");
 const conversationState = new URLSearchParams(location.search).get(
   "conversations"
 );
+// Screenshot controls (see pwa/visual-audit/). All optional; defaults match
+// the interactive preview.
+const params = new URLSearchParams(location.search);
+const appearance = params.get("appearance") === "light" ? "light" : "dark";
+const initialRouteParam = params.get("route");
+const initialFilterParam = params.get("filter");
+const showNotice = params.get("notice") !== "off";
+const desktopRoutes = ["Home", "Rewind", "Settings", "Chat"] as const;
+const desktopFilters = ["all", "conversations", "recall", "tasks"] as const;
+const mobileRoutes = ["home", "chat", "tasks", "apps", "settings"] as const;
+const pick = <T extends string>(
+  value: string | null,
+  allowed: readonly T[]
+): T | undefined =>
+  allowed.find((item) => item.toLowerCase() === value?.toLowerCase());
+const desktopInitialRoute = pick(initialRouteParam, desktopRoutes);
+const desktopInitialFilter = pick(initialFilterParam, desktopFilters);
+const mobileInitialRoute = pick(initialRouteParam, mobileRoutes);
+const day = (offsetDays: number, hour: number, minute = 0) => {
+  const at = new Date(Date.UTC(2026, 8, 17 - offsetDays, hour, minute));
+  return at.toISOString();
+};
 const previewDevice: PlatformNativeSnapshot = {
   bluetooth: "poweredOn",
   phase:
@@ -84,6 +107,46 @@ const page: ReadPageState = {
   reasons: [],
 };
 // Explicitly labelled, local-only fixtures for populated/empty layout review.
+const previewConversations: [string, string, number, number][] = [
+  [
+    "A thoughtful start to the week",
+    "A few ideas, a clear next step, and time to think.",
+    0,
+    10,
+  ],
+  [
+    "Planning a quieter workspace",
+    "Less visual noise. More room for the work that matters.",
+    0,
+    15,
+  ],
+  [
+    "Design review: onboarding",
+    "Priya walked through the new permission guide; two copy changes and one layout fix agreed.",
+    1,
+    11,
+  ],
+  [
+    "Coffee with Sam",
+    "Talked about the trip in October and a book recommendation worth following up on.",
+    1,
+    16,
+  ],
+  [
+    "Weekly planning",
+    "Priorities for the release, owners for each task, and a date for the next check-in.",
+    2,
+    9,
+  ],
+  ["", "A short recording with no title yet.", 3, 14],
+];
+const previewMemories = [
+  "Prefers morning meetings before 11am",
+  "Is planning a trip to Lisbon in October",
+  "Leads the onboarding redesign with Priya",
+  "Reads before bed; currently on a history of the printing press",
+  "Allergic to peanuts",
+];
 const exampleOutcomes: DesktopReadOutcomes = {
   conversations: {
     status: "success",
@@ -91,34 +154,55 @@ const exampleOutcomes: DesktopReadOutcomes = {
       items:
         example === "empty"
           ? []
-          : [
-              "A thoughtful start to the week",
-              "Planning a quieter workspace",
-            ].map((title, index) => ({
-              kind: "conversation",
-              id: `preview-conversation-${index}`,
-              title,
-              summary:
-                index === 0
-                  ? "A few ideas, a clear next step, and time to think."
-                  : "Less visual noise. More room for the work that matters.",
-              searchableText: title,
-              createdAt: "2026-09-17T10:00:00Z",
-              updatedAt: "2026-09-17T10:30:00Z",
-              startedAt: "2026-09-17T10:00:00Z",
-              finishedAt: "2026-09-17T10:30:00Z",
-              starred: index === 1,
-              status: "completed",
-              source: "desktop",
-              visibility: "private",
-              folderId: null,
-              locked: false,
-              discarded: false,
+          : previewConversations.map(
+              ([title, summary, offset, hour], index) => ({
+                kind: "conversation",
+                id: `preview-conversation-${index}`,
+                title,
+                summary,
+                searchableText: `${title} ${summary}`,
+                createdAt: day(offset, hour),
+                updatedAt: day(offset, hour, 30),
+                startedAt: day(offset, hour),
+                finishedAt: day(offset, hour, 30),
+                starred: index === 1,
+                status: "completed",
+                source: "desktop",
+                visibility: "private",
+                folderId: null,
+                locked: false,
+                discarded: false,
+              })
+            ),
+      page,
+    },
+  },
+  memories: {
+    status: "success",
+    value: {
+      apiContract: "omi",
+      items:
+        example === "empty"
+          ? []
+          : previewMemories.map((text, index) => ({
+              kind: "memory",
+              id: `preview-memory-${index}`,
+              visibility: index === 2 ? "public" : "private",
+              title: text,
+              summary: text,
+              searchableText: text,
+              citations: index === 0 ? ["preview-conversation-0"] : [],
+              timestamp: Date.parse(day(index, 9)),
+              provenance: {
+                label: index === 0 ? "From a conversation" : null,
+                synthesisVersion: null,
+                inputDigest: null,
+                outputDigest: null,
+              },
             })),
       page,
     },
   },
-  memories: { status: "success", value: { items: [], page } },
   tasks: {
     status: "success",
     value: {
@@ -131,6 +215,8 @@ const exampleOutcomes: DesktopReadOutcomes = {
               "Send the notes from today’s conversation",
               "Make time for a long walk",
               "Review the ideas for the next release",
+              "Book the design review with Priya",
+              "Reply to the onboarding feedback thread",
             ].map((title, index) => ({
               kind: "task",
               id: `preview-task-${index}`,
@@ -207,7 +293,7 @@ function Preview() {
     setChatError("Preview only — messages are not sent.");
   };
   const [route, setRoute] = useState<MobileRoute>(
-    conversationState ? "chat" : "home"
+    mobileInitialRoute ?? (conversationState ? "chat" : "home")
   );
   const beforeChat = useRef<MobileRoute>("home");
   const [outcomes, setOutcomes] = useState<DesktopReadOutcomes | null>(
@@ -243,6 +329,7 @@ function Preview() {
   const desktop =
     surface === "desktop" || (complete && !surface.startsWith("mobile"));
   useEffect(() => {
+    document.body.dataset.appearance = appearance;
     document.body.dataset.preview = surface.startsWith("mobile")
       ? "mobile"
       : desktop
@@ -260,6 +347,7 @@ function Preview() {
         {
           nativeID: "preview-notice",
           style: {
+            display: showNotice ? "flex" : "none",
             color: "#666a62",
             backgroundColor: "#eeeee8",
             textAlign: "center",
@@ -283,6 +371,10 @@ function Preview() {
         desktop
           ? h(DesktopApp, {
               session: "ready",
+              initialAppearance: appearance,
+              initialRoute: desktopInitialRoute,
+              initialActivityFilter: desktopInitialFilter,
+              initialChatOpen: chatState !== null,
               outcomes,
               readsPhase: outcomes ? "ready" : "unavailable",
               ...taskActions,
@@ -290,11 +382,12 @@ function Preview() {
               authError: null,
               signingIn: false,
               draft,
-              messages: [],
+              messages: chatMessages,
               hasOlderChat: false,
               loadingOlderChat: false,
-              chatBusy: false,
-              chatError: null,
+              loadingHistory: chatState === "loading",
+              chatBusy,
+              chatError,
               onRefresh: noop,
               onSignIn: noop,
               onSignOut: () => setComplete(false),

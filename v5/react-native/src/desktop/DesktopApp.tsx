@@ -126,6 +126,10 @@ type Props = TaskMutationProps & {
   initialAppearance?: DesktopThemeName;
   onAppearanceChange?: (name: DesktopThemeName) => void;
   captureAutoStart?: boolean;
+  /** Initial view state for previews and screenshots; users start at Home. */
+  initialRoute?: DesktopRoute;
+  initialActivityFilter?: ActivityFilterId;
+  initialChatOpen?: boolean;
 };
 
 export function DesktopApp({
@@ -153,6 +157,9 @@ export function DesktopApp({
   onWorkspaceReload,
   onPreferencesChange,
   initialAppearance = 'dark',
+  initialRoute = 'Home',
+  initialActivityFilter = 'all',
+  initialChatOpen = false,
   onAppearanceChange,
   captureAutoStart = false,
   outcomes,
@@ -170,8 +177,10 @@ export function DesktopApp({
     () => setCaptureRevision(value => value + 1),
     captureAutoStart,
   );
-  const [route, setRoute] = useState<DesktopRoute>('Home');
-  const [activityFilter, setActivityFilter] = useState<ActivityFilterId>('all');
+  const [route, setRoute] = useState<DesktopRoute>(initialRoute);
+  const [activityFilter, setActivityFilter] = useState<ActivityFilterId>(
+    initialActivityFilter,
+  );
   const [groupBy, setGroupBy] = useState<TimelineGrouping>('date');
   // Interface revision: v5 keeps the pages IA selectable from Settings.
   const [uiVersion, setUiVersion] = useState<DesktopUiVersion>('v5.1');
@@ -181,7 +190,7 @@ export function DesktopApp({
   const [focusCaptureId, setFocusCaptureId] = useState<string | null>(null);
   // Chat is an overlay, not a page: small asks answer inline under the
   // omnibar and the full transcript opens here on demand.
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(initialChatOpen);
   const [inlineAnswerOpen, setInlineAnswerOpen] = useState(false);
   const [exploreDone, setExploreDone] = useState<Set<ExploreCheck> | null>(
     null,

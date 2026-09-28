@@ -48,6 +48,19 @@ Development lands in `BasedHardware/omi` `main` through normal pull requests.
 Toolchain: Bun for everything JS/TS, Xcode for Apple, JDK 17 for the
 Android JVM tests, CMake + C++20 for the native boundary.
 
+## Visual audit (UI changes)
+
+`bun run visual:audit` renders every scenario in
+`pwa/visual-audit/scenarios.ts` through the design preview (react-native-web,
+example data, every backend request stubbed) with headless Chrome, in light
+and dark where the surface supports both. It writes PNGs, `frames.json` and
+`gallery.html` to a temp directory outside the repo. Options: `--out DIR`,
+`--only id,id`, `--base DIR` (pairs each shot with an earlier run as
+before/after), `--url` (reuse a running `pwa:dev` server). Needs Google
+Chrome (`CHROME_PATH` overrides). Run it before and after a UI change and
+read every pair; the rules it checks against are in
+[design-language.md](design-language.md). Screenshots are never committed.
+
 ## What checks cannot prove
 
 - These checks do not replace authenticated app or physical-device
