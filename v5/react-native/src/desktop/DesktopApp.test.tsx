@@ -1879,7 +1879,7 @@ test('Settings does not persist audio capture when microphone access is denied',
     await Promise.resolve();
   });
   await act(async () => {
-    pressText(renderer, 'always');
+    pressText(renderer, 'Always');
     await Promise.resolve();
     await Promise.resolve();
   });

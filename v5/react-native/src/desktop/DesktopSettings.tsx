@@ -240,6 +240,7 @@ function Segmented<Value extends string>({
     <View style={styles.segments}>
       {options.map(option => (
         <FocusPressable
+          accessibilityLabel={format(option)}
           accessibilityRole="button"
           accessibilityState={{disabled, selected: value === option}}
           disabled={disabled}
