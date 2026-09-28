@@ -8,6 +8,11 @@ import {
   openDeviceSession,
   transcribeDeviceSession,
 } from '../deviceSessionClient';
+import {
+  isTransientLegacyOmiSyncError,
+  LegacyOmiSyncError,
+  syncLegacyOmiRecording,
+} from '../legacyOmiSync';
 import {omiBackend} from '../omiNative';
 
 export type AmbientAudioStatus = {
@@ -109,6 +114,32 @@ async function uploadAmbientSegment(
   const backend = omiBackend;
   if (backend === null || backend === undefined) {
     throw new Error('Native backend transport is unavailable');
+  }
+  if (backend.getApiContract !== undefined) {
+    if ((await backend.getApiContract()) === 'omi') {
+      // Legacy plane: the device-session endpoints do not exist there. Drain
+      // the same framed packets through the wearable offline-sync pipeline so
+      // conversations and memories build up on the account.
+      const packets: Uint8Array[] = [];
+      let offset = 0;
+      while (offset < segment.packets) {
+        const batch = await native.ambientAudioSegmentPackets(
+          segment.id,
+          offset,
+          UPLOAD_BATCH_PACKETS,
+        );
+        if (batch.packets.length === 0) {
+          throw new Error('Ambient audio segment ended early');
+        }
+        packets.push(...batch.packets.map(decodeBase64));
+        offset += batch.packets.length;
+      }
+      await syncLegacyOmiRecording(backend, {
+        capturedAtMs: segment.capturedAtMs,
+        packets,
+      });
+      return;
+    }
   }
   const captureId = await ambientCaptureId();
   const session = await openDeviceSession(backend, {
@@ -267,7 +298,23 @@ export function useAmbientAudio(
             await native.ambientAudioAcknowledgeSegment(segment.id);
             setUploadError(null);
           } catch (failure) {
-            if (isTransientDeviceSessionError(failure)) {
+            if (
+              failure instanceof LegacyOmiSyncError &&
+              failure.unrecoverable
+            ) {
+              // Outside the server's recovery window: this audio can never be
+              // admitted again, so drop it locally instead of jamming the
+              // queue behind newer segments forever.
+              await native.ambientAudioAcknowledgeSegment(segment.id);
+              setUploadError(
+                'Some recordings were older than the recovery window and could not sync.',
+              );
+              continue;
+            }
+            if (
+              isTransientDeviceSessionError(failure) ||
+              isTransientLegacyOmiSyncError(failure)
+            ) {
               wait = UPLOAD_RETRY_MS;
             } else {
               wait = UPLOAD_BACKOFF_MS;

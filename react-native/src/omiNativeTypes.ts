@@ -7,6 +7,14 @@ export type CaptureMode = 'stream' | 'batch';
 export type ConnectionPhase = 'disconnected' | 'connecting' | 'connected';
 export type NativeHttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
+export type NativeHttpMultipartPart = {
+  name: string;
+  filename?: string;
+  contentType?: string;
+  /** Decoded by the native transport; JS never touches raw credentials. */
+  bytesBase64: string;
+};
+
 export type NativeHttpRequest = {
   id: string;
   expectedApiContract?: 'omi' | 'canonical';
@@ -14,6 +22,8 @@ export type NativeHttpRequest = {
   path: `/${string}`;
   headers?: Record<string, string>;
   body?: string;
+  /** Binary multipart/form-data upload (offline-sync WAL audio). */
+  multipart?: NativeHttpMultipartPart[];
 };
 
 export type NativeHttpResponse = {

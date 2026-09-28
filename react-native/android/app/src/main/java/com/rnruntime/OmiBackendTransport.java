@@ -270,7 +270,8 @@ public final class OmiBackendTransport {
       return 60;
     }
     return "POST".equals(method) && route != null &&
-      route.matches("/v1/device-sessions/[^/]+/transcribe") ? 150 : 60;
+      (route.matches("/v1/device-sessions/[^/]+/transcribe") ||
+       route.equals("/v2/sync-local-files")) ? 150 : 60;
   }
 
   /** Java mirror of native-core omi_backend_is_capture_path. */
@@ -290,6 +291,9 @@ public final class OmiBackendTransport {
       route.startsWith("/v1/chat-attachments/") ||
       route.equals("/v1/device-sessions") ||
       route.startsWith("/v1/device-sessions/") ||
+      // Legacy omi offline-sync upload + job polling (mirrors C++).
+      route.equals("/v2/sync-local-files") ||
+      route.startsWith("/v2/sync-local-files/") ||
       route.equals("/v1/conversations") ||
       route.equals("/v1/memories") ||
       route.equals("/v1/tasks") || route.equals("/v1/tasks/ops");

@@ -1151,6 +1151,58 @@ RCT_REMAP_METHOD(request,
     if (![expectedContract isEqual:actual]) { reject(@"OMI_HTTP_BACKEND_CHANGED", @"The selected backend changed", nil); return; }
   }
   NSString *body = [value[@"body"] isKindOfClass:NSString.class] ? value[@"body"] : nil;
+  NSArray<NSDictionary *> *multipart =
+      [value[@"multipart"] isKindOfClass:NSArray.class] ? value[@"multipart"] : nil;
+  NSData *multipartBody = nil;
+  NSString *multipartContentType = nil;
+  if (multipart != nil) {
+    // Offline-sync WAL uploads: binary parts are assembled here so JS never
+    // handles raw bytes or credentials. Names/filenames must stay
+    // header-safe (no quotes, CR, or LF).
+    BOOL multipartInvalid = body != nil || multipart.count == 0 || multipart.count > 20;
+    NSString *boundary = [NSString stringWithFormat:@"omi-%@", NSUUID.UUID.UUIDString.lowercaseString];
+    NSMutableData *assembled = [NSMutableData data];
+    for (id rawPart in multipart) {
+      if (![rawPart isKindOfClass:NSDictionary.class]) { multipartInvalid = YES; break; }
+      NSDictionary *part = (NSDictionary *)rawPart;
+      NSString *name = [part[@"name"] isKindOfClass:NSString.class] ? part[@"name"] : nil;
+      NSString *filename = [part[@"filename"] isKindOfClass:NSString.class] ? part[@"filename"] : nil;
+      NSString *partContentType = [part[@"contentType"] isKindOfClass:NSString.class]
+          ? part[@"contentType"] : @"application/octet-stream";
+      NSString *base64 = [part[@"bytesBase64"] isKindOfClass:NSString.class] ? part[@"bytesBase64"] : nil;
+      NSData *bytes = base64 != nil
+          ? [[NSData alloc] initWithBase64EncodedString:base64 options:NSDataBase64DecodingIgnoreUnknownCharacters]
+          : nil;
+      NSCharacterSet *unsafeHeaderCharacters =
+          [NSCharacterSet characterSetWithCharactersInString:@"\"\r\n"];
+      BOOL nameSafe = name.length > 0 && name.length <= 255 &&
+          [name rangeOfCharacterFromSet:unsafeHeaderCharacters].location == NSNotFound;
+      BOOL filenameSafe = filename == nil ||
+          (filename.length > 0 && filename.length <= 255 &&
+           [filename rangeOfCharacterFromSet:unsafeHeaderCharacters].location == NSNotFound);
+      if (!nameSafe || !filenameSafe || bytes == nil) {
+        multipartInvalid = YES;
+        break;
+      }
+      NSMutableString *head = [NSMutableString stringWithFormat:
+          @"--%@\r\nContent-Disposition: form-data; name=\"%@\"", boundary, name];
+      if (filename != nil) {
+        [head appendFormat:@"; filename=\"%@\"", filename];
+      }
+      [head appendFormat:@"\r\nContent-Type: %@\r\n\r\n", partContentType];
+      [assembled appendData:[head dataUsingEncoding:NSUTF8StringEncoding]];
+      [assembled appendData:bytes];
+      [assembled appendData:[@"\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
+    }
+    if (multipartInvalid) {
+      reject(@"OMI_HTTP_INVALID_REQUEST", @"Native HTTP multipart request is invalid", nil);
+      return;
+    }
+    [assembled appendData:[[NSString stringWithFormat:@"--%@--\r\n", boundary]
+        dataUsingEncoding:NSUTF8StringEncoding]];
+    multipartBody = assembled;
+    multipartContentType = [NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary];
+  }
   NSSet<NSString *> *schemes = [NSSet setWithArray:@[ @"http", @"https" ]];
   omi_backend_http_plan plan = {};
   if (requestId.length == 0 || method.length == 0 || path.length == 0 ||
@@ -1203,7 +1255,10 @@ RCT_REMAP_METHOD(request,
     }
     [request setValue:rawValue forHTTPHeaderField:rawName];
   }
-  if (body != nil) {
+  if (multipartBody != nil) {
+    request.HTTPBody = multipartBody;
+    [request setValue:multipartContentType forHTTPHeaderField:@"content-type"];
+  } else if (body != nil) {
     request.HTTPBody = [body dataUsingEncoding:NSUTF8StringEncoding];
     [request setValue:@"application/json" forHTTPHeaderField:@"content-type"];
   }
