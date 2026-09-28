@@ -1,13 +1,32 @@
 import OmiKit
 import SwiftUI
 
-// Port of `DesktopRewind.tsx`: the capture-detail page. The store exposes the
-// grouped capture feed (`AppStore.rewindGroups`, already collapsed by OmiKit's
-// `groupRewindFrames` with the 12-minute gap bound), so this renders the
-// moment list with day separators and the preview pane. Frame bitmaps are
-// owned by the native host bridge (`OmiRewind.readFrame` in the TS app); the
-// store carries no frame-image surface yet, so the preview pane renders the
-// selected moment's summary — see report.
+// Port of `DesktopRewind.tsx`: the capture-detail page. The store owns the
+// rewind timeline reader (`App/RewindTimelineStore.swift`) and exposes the
+// grouped capture feed (`AppStore.rewindGroups`, collapsed by OmiKit's
+// `groupRewindFrames` with the 12-minute gap bound); this renders the moment
+// list with day separators, the Load-more pagination, and the preview pane
+// showing the selected moment's captured frame (host bitmap bridge).
+
+#if os(macOS)
+import AppKit
+
+/// Decodes frame JPEG/PNG data for the preview pane (macOS host path; the
+/// Skip/Android build never renders the desktop Recall surface).
+private func platformFrameImage(_ data: Data) -> Image? {
+    guard let nsImage = NSImage(data: data) else { return nil }
+    var rect = CGRect(origin: .zero, size: nsImage.size)
+    guard let cgImage = nsImage.cgImage(forProposedRect: &rect, context: nil, hints: nil) else {
+        return nil
+    }
+    return Image(decorative: cgImage, scale: 1.0)
+}
+#else
+/// Skip/Android: hosts carry no frame bitmaps; the glyph fallback renders.
+private func platformFrameImage(_ data: Data) -> Image? {
+    nil
+}
+#endif
 
 struct DesktopRewindPage: View {
     @EnvironmentObject var store: AppStore
@@ -19,6 +38,23 @@ struct DesktopRewindPage: View {
     @State private var selectedGroupId: String?
 
     var body: some View {
+        gatedView
+            .task(id: query) {
+                // DesktopRewind.tsx: every query change rebuilds the reader.
+                await store.refreshRewindTimeline(query: query)
+            }
+            .task {
+                // The upstream 15 s refresh keeps Recall live while visible.
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 15_000_000_000)
+                    guard !Task.isCancelled else { break }
+                    await store.refreshRewindTimeline(query: query)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var gatedView: some View {
         if groups.isEmpty {
             emptyState
         } else {
@@ -56,6 +92,17 @@ struct DesktopRewindPage: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(8)
+        .overlay(alignment: .top) {
+            if let notice = store.rewindTimelineWarning {
+                Text(notice)
+                    .font(.system(size: 12))
+                    .foregroundStyle(tokens.inkMuted)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(tokens.glassQuiet))
+                    .padding(.top, 2)
+            }
+        }
         .accessibilityLabel("Recall screen history")
         .onAppear {
             if selectedGroupId == nil, let focusGroupId {
@@ -79,6 +126,30 @@ struct DesktopRewindPage: View {
                     ForEach(section.groups, id: \.id) { group in
                         momentRow(group)
                     }
+                }
+                if store.rewindTimelineHasMore {
+                    Button {
+                        Task { await store.loadOlderRewindTimeline() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if store.rewindTimelineBusy {
+                                ProgressView()
+                            }
+                            Text("Load more")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundStyle(tokens.ink)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule().fill(tokens.glassQuiet)
+                                .overlay(Capsule().strokeBorder(tokens.line, lineWidth: 1))
+                        )
+                    }
+                    .buttonStyle(GlassPressableStyle())
+                    .disabled(store.rewindTimelineBusy)
+                    .accessibilityLabel("Load more history")
+                    .padding(.top, 14)
                 }
             }
             .padding(.horizontal, 4)
@@ -149,9 +220,13 @@ struct DesktopRewindPage: View {
                 )
             if let selected {
                 VStack(spacing: 10) {
-                    DesktopIcon.monitor
-                        .frame(width: 32, height: 32)
-                        .foregroundStyle(tokens.inkFaint)
+                    framePreview(selected)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .strokeBorder(tokens.line, lineWidth: 1)
+                        )
                     Text(momentTitle(selected))
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(tokens.ink)
@@ -161,7 +236,7 @@ struct DesktopRewindPage: View {
                         .foregroundStyle(tokens.inkMuted)
                         .multilineTextAlignment(.center)
                 }
-                .padding(24)
+                .padding(16)
             } else {
                 VStack(spacing: 8) {
                     DesktopIcon.monitor
@@ -174,6 +249,27 @@ struct DesktopRewindPage: View {
             }
         }
         .aspectRatio(16.0 / 10.0, contentMode: .fit)
+    }
+
+    /// The captured frame bitmap (`OmiRewind.readFrame` upstream). Hosts
+    /// without bitmaps fall back to the capture glyph — the summary stays
+    /// honest either way.
+    @ViewBuilder
+    private func framePreview(_ group: RewindCaptureGroup) -> some View {
+        if let data = store.services.rewindFrameImage?(group.frame.id),
+            let image = platformFrameImage(data)
+        {
+            image
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12).fill(tokens.glassQuiet)
+                DesktopIcon.monitor
+                    .frame(width: 32, height: 32)
+                    .foregroundStyle(tokens.inkFaint)
+            }
+        }
     }
 
     private func momentTitle(_ group: RewindCaptureGroup) -> String {

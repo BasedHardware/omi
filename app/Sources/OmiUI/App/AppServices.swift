@@ -22,6 +22,12 @@ public struct AppServices: Sendable {
     public var settings: (any SettingsStoring)?
     public var devices: (any DeviceTransport)?
     public var rewindCapture: RewindCaptureControlling?
+    /// Rewind history reader (`OmiRewind.listFrames` in the TS app). Absent →
+    /// the Recall surface honestly shows an empty history.
+    public var rewindTimeline: RewindTimelineBridge?
+    /// Frame bitmaps for the Recall preview pane (`OmiRewind.readFrame`).
+    /// Frame id → JPEG/PNG data, nil when the host keeps no bitmaps.
+    public var rewindFrameImage: (@Sendable (String) -> Data?)?
     public var transport: (any BackendTransport)?
 
     public init(
@@ -33,6 +39,8 @@ public struct AppServices: Sendable {
         settings: (any SettingsStoring)? = nil,
         devices: (any DeviceTransport)? = nil,
         rewindCapture: RewindCaptureControlling? = nil,
+        rewindTimeline: RewindTimelineBridge? = nil,
+        rewindFrameImage: (@Sendable (String) -> Data?)? = nil,
         transport: (any BackendTransport)? = nil
     ) {
         self.auth = auth
@@ -43,6 +51,8 @@ public struct AppServices: Sendable {
         self.settings = settings
         self.devices = devices
         self.rewindCapture = rewindCapture
+        self.rewindTimeline = rewindTimeline
+        self.rewindFrameImage = rewindFrameImage
         self.transport = transport
     }
 }
@@ -81,6 +91,12 @@ final class AppRuntime {
 
     // Connectors
     var pendingConnectorId: String?
+
+    // Rewind timeline reader (DesktopRewind.tsx owns the reader upstream;
+    // the store holds the reader handle so pagination survives re-renders).
+    var rewindReader: RewindTimeline?
+    var rewindReaderQuery: String?
+    var rewindLoadMorePending = false
 
     // Task mutations (useTaskMutations.ts)
     var pendingTaskPatch: PreparedTaskPatch?

@@ -189,6 +189,10 @@ struct OmiHostApp: App {
                 .environmentObject(store)
                 .background(OmiGlassBackground())
                 .background(OmiWindowAccessor())
+                .onAppear { applyAppearance(store.preferences.appearance) }
+                .onChange(of: store.preferences.appearance) { appearance in
+                    applyAppearance(appearance)
+                }
         }
         .windowStyle(.automatic)
         .defaultSize(width: 1_020, height: 720)
@@ -204,5 +208,13 @@ struct OmiHostApp: App {
                 .keyboardShortcut("k", modifiers: .command)
             }
         }
+    }
+
+    /// The v5 window contract: dark preference drives the dark HUD glass.
+    /// Without this the window follows the system appearance and the glass
+    /// renders with the light material under the app's dark ink.
+    private func applyAppearance(_ appearance: DesktopAppearance) {
+        NSApp.appearance = appearance == .dark
+            ? NSAppearance(named: .darkAqua) : nil
     }
 }

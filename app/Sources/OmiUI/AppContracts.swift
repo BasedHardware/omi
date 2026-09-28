@@ -101,6 +101,12 @@ public final class AppStore: ObservableObject {
 
     public init() {}
 
+    /// Host bootstrap: construct with the injected service bundle before
+    /// `start()` runs (see App/AppServices.swift).
+    public init(services: AppServices) {
+        self.services = services
+    }
+
     // MARK: Reads (conversations / memories / tasks)
 
     @Published public internal(set) var outcomes: DesktopReadOutcomes?
@@ -131,6 +137,10 @@ public final class AppStore: ObservableObject {
     // MARK: Rewind (desktop activity)
 
     @Published public internal(set) var rewindGroups: [RewindCaptureGroup] = []
+    @Published public internal(set) var rewindTimelineBusy: Bool = false
+    @Published public internal(set) var rewindTimelineHasMore: Bool = false
+    /// `rewindHistoryWarning` when a source could not be read.
+    @Published public internal(set) var rewindTimelineWarning: String?
 
     // MARK: Preferences + cloud
 

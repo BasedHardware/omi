@@ -36,11 +36,16 @@ extension AppStore {
     public func start() {
         guard !runtime.started else { return }
         runtime.started = true
-        runtime.streamTasks.append(Task { await loadPreferencesTask() })
-        runtime.streamTasks.append(Task { await probeOnboarding() })
-        if let rewind = services.rewindCapture {
-            runtime.streamTasks.append(Task { await probeRewindAvailability(rewind) })
-        }
+        // Order mirrors the TS orchestrator: hydrate persisted settings
+        // first, then probe the session against the loaded onboarding
+        // marker, then probe capture availability.
+        runtime.streamTasks.append(Task {
+            await loadPreferencesTask()
+            await probeOnboarding()
+            if let rewind = services.rewindCapture {
+                await probeRewindAvailability(rewind)
+            }
+        })
         startDeviceStreamLoops()
         startAuthStreamLoops()
     }
@@ -57,22 +62,21 @@ extension AppStore {
 
     // MARK: - Onboarding / session (useOnboarding.ts)
 
-    /// The persisted onboarding-completed flag. The `SettingsStoring` facade
-    /// round-trips only whitelisted preference keys; `exploreProgress`
-    /// (`omi.onboarding.exploreProgress`) carries the marker.
-    static let onboardingCompletedMarker = "completed"
-
+    /// The persisted onboarding-completed flag: `omi.onboarding.setupRevision`
+    /// == "1" (upstream `OmiAuthModule` / `omiNative.web` storage — a native
+    /// key outside the 17-entry JS whitelist; `exploreProgress` stays a pure
+    /// CSV of explore-check ids).
     func onboardingCompletedFromPreferences() -> Bool {
-        preferences.exploreProgress == AppStore.onboardingCompletedMarker
+        preferences.onboardingSetupCompleted
     }
 
     func saveOnboardingCompleted() async {
         if let settings = services.settings {
             _ = await settings.setPreference(
-                desktopPreferenceKeys.exploreProgress,
-                PreferenceValue.string(AppStore.onboardingCompletedMarker))
+                desktopPreferenceKeys.onboardingSetupRevision,
+                PreferenceValue.string("1"))
         }
-        preferences.exploreProgress = AppStore.onboardingCompletedMarker
+        preferences.onboardingSetupCompleted = true
     }
 
     /// The session probe. nil → Bool transition of `onboardingRequired`;
@@ -85,12 +89,14 @@ extension AppStore {
         }
         let completed = onboardingCompletedFromPreferences()
         runtime.completedOnboarding = completed
-        // The `Authenticating` protocol carries no session probe; the shipped
-        // `OmiAuthSession` does. Hosts binding a custom authenticator get the
-        // optimistic default (sign-in itself still gates everything).
+        // The `Authenticating` protocol carries no session probe; the
+        // `SessionProbeCapable` capability does (OmiAuthSession implements
+        // the real cloud check). Hosts binding a custom authenticator
+        // without it get the optimistic default (sign-in itself still
+        // gates everything).
         let hasSession: Bool
-        if let omiAuth = auth as? OmiAuthSession {
-            hasSession = await omiAuth.hasCloudSession()
+        if let probe = auth as? SessionProbeCapable {
+            hasSession = await probe.hasCloudSession()
         } else {
             hasSession = true
         }
@@ -111,6 +117,7 @@ extension AppStore {
         authErrorCopy = nil
         signInErrorCopy = nil
         signingIn = true
+        syncAuthState()
         // The previous handoff's code is dead the moment a new sign-in
         // starts; a fresh one arrives through the desktopHandoffs stream.
         desktopHandoff = nil
@@ -118,6 +125,7 @@ extension AppStore {
             if operation == runtime.authOperation {
                 signingIn = false
                 desktopHandoff = nil
+                syncAuthState()
             }
         }
         do {
@@ -147,6 +155,7 @@ extension AppStore {
     public func cancelSignIn() async {
         runtime.authOperation += 1
         signingIn = false
+        syncAuthState()
         authErrorCopy = nil
         signInErrorCopy = nil
         desktopHandoff = nil
@@ -166,8 +175,8 @@ extension AppStore {
                 completingSetup = false
             }
         }
-        if let omiAuth = services.auth as? OmiAuthSession {
-            if !(await omiAuth.hasCloudSession()) {
+        if let probe = services.auth as? SessionProbeCapable {
+            if !(await probe.hasCloudSession()) {
                 setupRequired = false
                 setOnboardingRequired(true)
                 return
@@ -230,6 +239,7 @@ extension AppStore {
     /// Gate transition: bumps the chat session epoch, drops or (re)loads the
     /// transcript. Mirrors the chat-history effect in AppOrchestrator.tsx.
     func applySessionGate() {
+        syncAuthState()
         bumpChatEpoch()
         if !sessionReady {
             resetChatSession()
@@ -237,6 +247,30 @@ extension AppStore {
             runtime.streamTasks.append(Task { [weak self] in
                 await self?.refreshChatHistory()
             })
+            // The TS reads effect re-runs when the session gate opens — the
+            // surfaces may already be mounted (the gate opened after their
+            // onAppear), so the store owns this refresh too.
+            runtime.streamTasks.append(Task { [weak self] in
+                await self?.refreshReads(initial: false)
+            })
+        }
+    }
+
+    /// Derives the presentation gate from the probe + in-flight sign-in
+    /// (the session phases of DesktopApp.tsx / MobileAppSurface.tsx). While
+    /// the probe is unresolved the shell keeps the signed-out gate up — it
+    /// never claims a ready session it has not proven.
+    func syncAuthState() {
+        if signingIn {
+            authState = .signingIn
+        } else if returningUser {
+            authState = .signedOut
+        } else if onboardingRequired == true {
+            authState = .onboarding
+        } else if onboardingRequired == false {
+            authState = .signedIn
+        } else {
+            authState = .signedOut
         }
     }
 

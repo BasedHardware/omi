@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import OmiKit
+import OmiUI
 import ScreenCaptureKit
 
 // The macOS Rewind capture engine — the native `OmiRewind` module contract
@@ -31,13 +32,13 @@ final class OmiRewindEngine: @unchecked Sendable {
         frameDirectory = base.appendingPathComponent("Omi v5/Rewind", isDirectory: true)
         try? FileManager.default.createDirectory(
             at: frameDirectory, withIntermediateDirectories: true)
-        pruneExpiredFrames()
         bridge = RewindCaptureControlling(
             permissionStatus: { await OmiRewindEngine.shared.permissionStatus() },
             requestPermission: { await OmiRewindEngine.shared.requestPermission() },
             start: { try await OmiRewindEngine.shared.startCapture() },
             stop: { try await OmiRewindEngine.shared.stopCapture() },
             captureFrame: { await OmiRewindEngine.shared.captureFrame() })
+        pruneExpiredFrames()
     }
 
     // MARK: Permission (native `requestCapturePermission` outcomes)
@@ -142,10 +143,84 @@ final class OmiRewindEngine: @unchecked Sendable {
         let url = frameDirectory.appendingPathComponent("\(stamp).jpg")
         do {
             try jpeg.write(to: url)
+            writeFrameMeta(stamp: stamp)
             return true
         } catch {
             return false
         }
+    }
+
+    /// One JSON sidecar per frame with the frontmost app + window title —
+    /// the metadata the RN native module stored alongside each capture
+    /// (`RewindFrame.appName` / `.windowTitle`).
+    private func writeFrameMeta(stamp: Int64) {
+        var app = ""
+        var title = ""
+        if let front = NSWorkspace.shared.frontmostApplication {
+            app = front.localizedName ?? ""
+            title = WindowTitleReader.frontmostTitle(bundleIdentifier: front.bundleIdentifier) ?? ""
+        }
+        let meta = FrameMeta(appName: app, windowTitle: title)
+        guard let data = try? JSONEncoder().encode(meta) else { return }
+        try? data.write(to: frameDirectory.appendingPathComponent("\(stamp).json"))
+    }
+
+    // MARK: History reader (native `OmiRewind.listFrames` / `readFrame`)
+
+    /// Newest-first frame page over the local capture store. `query`
+    /// filters by app name + window title (case-insensitive); `cursor` is
+    /// the previous page's last stamp.
+    func frames(
+        source: RewindSourceKind, query: String, cursor: String?, limit: Int
+    ) throws -> RewindFramePage {
+        // The shipping-history source needs the old Omi account store, which
+        // the native capture engine does not carry — honestly unavailable.
+        guard source == .captured else {
+            throw RewindTimelineFailure.unavailable
+        }
+        let entries = readFrameEntries()
+            .filter { entry in
+                let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+                guard !needle.isEmpty else { return true }
+                return "\(entry.appName)\n\(entry.windowTitle)".lowercased()
+                    .contains(needle)
+            }
+        // Cursor: skip until past the previous page's last (oldest) frame.
+        var startIndex = 0
+        if let cursor, let cursorStamp = Int(cursor) {
+            startIndex =
+                entries.firstIndex(where: { $0.stamp < cursorStamp }) ?? entries.count
+        }
+        let pageEntries = entries.dropFirst(startIndex).prefix(limit)
+        let frames = pageEntries.map { entry in
+            RewindFrame(
+                id: "\(entry.stamp)", capturedAtMs: entry.stamp,
+                appName: entry.appName, windowTitle: entry.windowTitle)
+        }
+        let nextCursor: String? =
+            frames.count == limit ? pageEntries.last.map { "\($0.stamp)" } : nil
+        return RewindFramePage(frames: frames, nextCursor: nextCursor)
+    }
+
+    /// `OmiRewind.readFrame` — the JPEG bytes for one frame id.
+    func frameJPEG(id: String) -> Data? {
+        try? Data(contentsOf: frameDirectory.appendingPathComponent("\(id).jpg"))
+    }
+
+    private func readFrameEntries() -> [(stamp: Int64, appName: String, windowTitle: String)] {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: frameDirectory, includingPropertiesForKeys: nil)) ?? []
+        var entries = [(stamp: Int64, appName: String, windowTitle: String)]()
+        for file in files where file.pathExtension == "jpg" {
+            guard let stamp = Int(file.deletingPathExtension().lastPathComponent) else {
+                continue
+            }
+            let meta = (try? Data(contentsOf: frameDirectory.appendingPathComponent("\(stamp).json")))
+                .flatMap { try? JSONDecoder().decode(FrameMeta.self, from: $0) }
+            entries.append((Int64(stamp), meta?.appName ?? "", meta?.windowTitle ?? ""))
+        }
+        // Newest first (rewindTimeline.ts contract).
+        return entries.sorted { $0.stamp > $1.stamp }
     }
 
     /// Applies the `rewindRetentionDays` preference on launch.
@@ -155,13 +230,46 @@ final class OmiRewindEngine: @unchecked Sendable {
         let cutoff = Date().addingTimeInterval(-Double(retentionDays) * 86_400)
         let files = (try? FileManager.default.contentsOfDirectory(
             at: frameDirectory, includingPropertiesForKeys: nil)) ?? []
-        for file in files where file.pathExtension == "jpg" {
-            if let stamp = Int(file.deletingPathExtension().lastPathComponent),
+        for file in files {
+            guard let stamp = Int(file.deletingPathExtension().lastPathComponent),
                 Date(timeIntervalSince1970: Double(stamp) / 1000) < cutoff
+            else { continue }
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
+}
+
+/// Per-frame metadata sidecar (`<stamp>.json`).
+private struct FrameMeta: Codable {
+    var appName: String
+    var windowTitle: String
+}
+
+/// Reads the frontmost window's title via the accessibility API (the same
+/// source the RN `OmiRewind` module used for window labels).
+enum WindowTitleReader {
+    static func frontmostTitle(bundleIdentifier: String?) -> String? {
+        guard let list = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+            as? [[String: Any]]
+        else { return nil }
+        for window in list {
+            guard let layer = window["kCGWindowLayer"] as? Int, layer == 0,
+                let bounds = window["kCGWindowBounds"] as? [String: Any],
+                (bounds["Width"] as? Int ?? 0) > 60,
+                (bounds["Height"] as? Int ?? 0) > 60
+            else { continue }
+            // Prefer a window of the frontmost application; the window list
+            // is front-to-back, so the first owned layer-0 window is it.
+            if let owner = window["kCGWindowOwnerName"] as? String,
+                let front = NSWorkspace.shared.frontmostApplication,
+                owner == front.localizedName
             {
-                try? FileManager.default.removeItem(at: file)
+                let title = window["kCGWindowName"] as? String
+                return title ?? ""
             }
         }
+        return nil
     }
 }
 

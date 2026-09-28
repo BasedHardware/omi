@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import OmiKit
 import OmiUI
@@ -466,8 +467,6 @@ private final class DemoCloudService: CloudServicing {
 /// In-memory `SettingsStoring` seeded so the demo opens on the completed-
 /// onboarding path, parsed through the same tolerant parsers as production.
 private final class DemoSettingsStore: SettingsStoring {
-    static let onboardingMarker = "completed"
-
     private let lock = NSLock()
     private var values: [String: PreferenceValue] = [
         SOFTWARE_PLANE_DEFAULTS_KEY: .string("old"),
@@ -476,7 +475,10 @@ private final class DemoSettingsStore: SettingsStoring {
         desktopPreferenceKeys.fontScale: .integer(100),
         desktopPreferenceKeys.rewindRetentionDays: .integer(14),
         desktopPreferenceKeys.liveVoiceProvider: .string("gpt_live"),
-        desktopPreferenceKeys.exploreProgress: .string(DemoSettingsStore.onboardingMarker),
+        // Completed onboarding at its own native key; the explore checklist
+        // is mid-flight (3 of 5 surfaces visited).
+        desktopPreferenceKeys.onboardingSetupRevision: .string("1"),
+        desktopPreferenceKeys.exploreProgress: .string("recall,chat,conversations"),
     ]
 
     func loadPreferences() async -> DesktopPreferences {
@@ -504,45 +506,72 @@ private final class DemoSettingsStore: SettingsStoring {
 
     private func snapshot() -> DesktopPreferences {
         lock.lock(); defer { lock.unlock() }
+        func stringValue(_ key: String) -> String? {
+            if case .string(let text)? = values[key] { return text }
+            return nil
+        }
+        func boolValue(_ key: String) -> Bool? {
+            if case .bool(let bool)? = values[key] { return bool }
+            return nil
+        }
+        func intValue(_ key: String) -> Int? {
+            if case .integer(let int)? = values[key] { return int }
+            return nil
+        }
         var preferences = DesktopPreferences()
-        for (key, value) in values {
-            switch (key, value) {
-            case (SOFTWARE_PLANE_DEFAULTS_KEY, .string(let text)):
-                preferences.softwarePlane = parseSoftwarePlane(.string(text))
-            case (desktopPreferenceKeys.screenCapture, .bool(let bool)):
-                preferences.screenCapture = bool
-            case (desktopPreferenceKeys.audioMode, .string(let text)):
-                preferences.audioMode = parseAudioRecordingMode(.string(text))
-            case (desktopPreferenceKeys.interfaceSounds, .bool(let bool)):
-                preferences.interfaceSounds = bool
-            case (desktopPreferenceKeys.fontScale, .integer(let int)):
-                preferences.fontScale = int
-            case (desktopPreferenceKeys.notificationsEnabled, .bool(let bool)):
-                preferences.notificationsEnabled = bool
-            case (desktopPreferenceKeys.rewindRetentionDays, .integer(let int)):
-                preferences.rewindRetentionDays = int
-            case (desktopPreferenceKeys.meetingNoteScreenshots, .bool(let bool)):
-                preferences.meetingNoteScreenshots = bool
-            case (desktopPreferenceKeys.floatingBar, .bool(let bool)):
-                preferences.floatingBar = bool
-            case (desktopPreferenceKeys.transcriptionAutoDetect, .bool(let bool)):
-                preferences.transcriptionAutoDetect = bool
-            case (desktopPreferenceKeys.vadGate, .bool(let bool)):
-                preferences.vadGate = bool
-            case (desktopPreferenceKeys.openOmiShortcut, .bool(let bool)):
-                preferences.openOmiShortcut = bool
-            case (desktopPreferenceKeys.pushToTalk, .bool(let bool)):
-                preferences.pushToTalk = bool
-            case (desktopPreferenceKeys.liveVoiceProvider, .string(let text)):
-                preferences.liveVoiceProvider = parseLiveVoiceProvider(.string(text))
-            case (desktopPreferenceKeys.appearance, .string(let text)):
-                preferences.appearance = parseDesktopAppearance(.string(text))
-            case (desktopPreferenceKeys.uiVersion, .string(let text)):
-                preferences.uiVersion = parseDesktopUiVersion(.string(text))
-            case (desktopPreferenceKeys.exploreProgress, .string(let text)):
-                preferences.exploreProgress = text
-            default: break
-            }
+        if let text = stringValue(SOFTWARE_PLANE_DEFAULTS_KEY) {
+            preferences.softwarePlane = parseSoftwarePlane(.string(text))
+        }
+        if let bool = boolValue(desktopPreferenceKeys.screenCapture) {
+            preferences.screenCapture = bool
+        }
+        if let text = stringValue(desktopPreferenceKeys.audioMode) {
+            preferences.audioMode = parseAudioRecordingMode(.string(text))
+        }
+        if let bool = boolValue(desktopPreferenceKeys.interfaceSounds) {
+            preferences.interfaceSounds = bool
+        }
+        if let int = intValue(desktopPreferenceKeys.fontScale) {
+            preferences.fontScale = int
+        }
+        if let bool = boolValue(desktopPreferenceKeys.notificationsEnabled) {
+            preferences.notificationsEnabled = bool
+        }
+        if let int = intValue(desktopPreferenceKeys.rewindRetentionDays) {
+            preferences.rewindRetentionDays = int
+        }
+        if let bool = boolValue(desktopPreferenceKeys.meetingNoteScreenshots) {
+            preferences.meetingNoteScreenshots = bool
+        }
+        if let bool = boolValue(desktopPreferenceKeys.floatingBar) {
+            preferences.floatingBar = bool
+        }
+        if let bool = boolValue(desktopPreferenceKeys.transcriptionAutoDetect) {
+            preferences.transcriptionAutoDetect = bool
+        }
+        if let bool = boolValue(desktopPreferenceKeys.vadGate) {
+            preferences.vadGate = bool
+        }
+        if let bool = boolValue(desktopPreferenceKeys.openOmiShortcut) {
+            preferences.openOmiShortcut = bool
+        }
+        if let bool = boolValue(desktopPreferenceKeys.pushToTalk) {
+            preferences.pushToTalk = bool
+        }
+        if let text = stringValue(desktopPreferenceKeys.liveVoiceProvider) {
+            preferences.liveVoiceProvider = parseLiveVoiceProvider(.string(text))
+        }
+        if let text = stringValue(desktopPreferenceKeys.appearance) {
+            preferences.appearance = parseDesktopAppearance(.string(text))
+        }
+        if let text = stringValue(desktopPreferenceKeys.uiVersion) {
+            preferences.uiVersion = parseDesktopUiVersion(.string(text))
+        }
+        if let text = stringValue(desktopPreferenceKeys.exploreProgress) {
+            preferences.exploreProgress = text
+        }
+        if stringValue(desktopPreferenceKeys.onboardingSetupRevision) == "1" {
+            preferences.onboardingSetupCompleted = true
         }
         return preferences
     }
@@ -562,7 +591,7 @@ final class DemoBackendTransport: BackendTransport, OmiChatStreaming, @unchecked
     }
 
     func request(_ request: BackendRequest) async throws -> BackendResponse {
-        guard request.method == .post, request.path == writeOpsPath("tasks"),
+        guard request.method == .POST, request.path == writeOpsPath("tasks"),
             let body = request.body,
             let envelope = JSON.parseOrNull(body)
         else {
@@ -642,20 +671,105 @@ final class DemoAuthSession: Authenticating, @unchecked Sendable {
 
     func signOut() async throws -> Bool {
         invalidations.continuation.yield(())
-        true
+        return true
+    }
+}
+
+// MARK: - Rewind history (demo `OmiRewind.listFrames` / `readFrame`)
+
+/// In-memory rewind history serving realistic frames through the same
+/// `RewindTimelineBridge` contract as the production engine. Frame previews
+/// are generated demo captures (gradient + app label), clearly not real
+/// screen content.
+private final class DemoRewindHistory: @unchecked Sendable {
+    struct Entry {
+        let id: String
+        let stamp: Int64
+        let app: String
+        let title: String
+    }
+
+    let entries: [Entry]
+
+    init(now: Int64) {
+        let minute: Int64 = 60_000
+        entries = [
+            Entry(id: "demo-cap-1", stamp: now - 18 * minute, app: "Xcode",
+                title: "OmiHostApp.swift — omi-v5"),
+            Entry(id: "demo-cap-2", stamp: now - 47 * minute, app: "Figma",
+                title: "Omi v5.1 desktop — Activity IA"),
+            Entry(id: "demo-cap-3", stamp: now - 82 * minute, app: "Safari",
+                title: "Reading group schedule — shared doc"),
+            Entry(id: "demo-cap-4", stamp: now - 126 * minute, app: "Messages",
+                title: "Priya"),
+            Entry(id: "demo-cap-5", stamp: now - 3 * 60 * minute, app: "Linear",
+                title: "Tasting booking follow-ups"),
+            Entry(id: "demo-cap-6", stamp: now - 26 * 60 * minute, app: "Xcode",
+                title: "PolicyTests.swift — native-core"),
+            Entry(id: "demo-cap-7", stamp: now - 27 * 60 * minute, app: "Mail",
+                title: "Re: coast trip logistics"),
+        ]
+    }
+
+    func framePage(query: String, cursor: String?, limit: Int) -> RewindFramePage {
+        let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+        var matched = entries.filter {
+            needle.isEmpty || "\($0.app)\n\($0.title)".lowercased().contains(needle)
+        }
+        if let cursor {
+            matched = matched.filter { $0.stamp < (Int64(cursor) ?? .max) }
+        }
+        let page = matched.prefix(limit)
+        let frames = page.map { entry in
+            RewindFrame(
+                id: entry.id, capturedAtMs: entry.stamp, appName: entry.app,
+                windowTitle: entry.title)
+        }
+        return RewindFramePage(
+            frames: frames,
+            nextCursor: frames.count == limit ? page.last.map { "\($0.stamp)" } : nil)
+    }
+
+    /// A generated demo capture bitmap: deep gradient + app label, so the
+    /// preview pane shows real image rendering without real screen content.
+    func frameJPEG(id: String) -> Data? {
+        guard let entry = entries.first(where: { $0.id == id }) else { return nil }
+        let width = 640, height = 400
+        let image = NSImage(size: NSSize(width: width, height: height))
+        image.lockFocus()
+        let gradient = NSGradient(
+            starting: NSColor(calibratedRed: 0.13, green: 0.14, blue: 0.24, alpha: 1),
+            ending: NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.09, alpha: 1))
+        gradient?.draw(
+            in: NSRect(x: 0, y: 0, width: width, height: height), angle: -60)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 22, weight: .semibold),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.82),
+            .paragraphStyle: paragraph,
+        ]
+        let label = "\(entry.app)\n\(entry.title) — demo capture"
+        NSAttributedString(string: label, attributes: attrs).draw(
+            in: NSRect(x: 40, y: height / 2 - 40, width: width - 80, height: 120))
+        image.unlockFocus()
+        let rep = NSBitmapImageRep(data: image.tiffRepresentation ?? Data())
+        return rep?.representation(using: .jpeg, properties: [.compressionFactor: 0.8])
     }
 }
 
 // MARK: - Bundle assembly
 
 enum DemoServices {
-    /// The labeled demo bundle. The explore-progress marker seeds the
-    /// completed-onboarding path; the capture toggle drives the real host
-    /// engine because the demo settings report Screen Recording granted.
+    /// The labeled demo bundle: signed-in demo user, demo backend, and the
+    /// demo rewind history (the real capture engine stays available for the
+    /// Screen Recording toggle, exactly like a real session).
     static func makeServices() -> AppServices {
         let state = DemoState()
         let cancelled = CancelledRequestIds()
         let transport = DemoBackendTransport(state: state, cancelledRequestIds: cancelled)
+        let history = DemoRewindHistory(
+            now: Int64(Date().timeIntervalSince1970 * 1000))
         return AppServices(
             auth: DemoAuthSession(),
             chat: DemoChatService(state: state, cancelledRequestIds: cancelled),
@@ -665,6 +779,13 @@ enum DemoServices {
             settings: DemoSettingsStore(),
             devices: nil,
             rewindCapture: OmiRewindEngine.shared.bridge,
+            rewindTimeline: RewindTimelineBridge { source, query, cursor, limit in
+                guard source == .captured else {
+                    throw RewindTimelineFailure.unavailable
+                }
+                return history.framePage(query: query, cursor: cursor, limit: limit)
+            },
+            rewindFrameImage: { history.frameJPEG(id: $0) },
             transport: transport)
     }
 }

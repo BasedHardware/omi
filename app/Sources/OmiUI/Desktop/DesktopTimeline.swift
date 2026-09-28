@@ -13,6 +13,10 @@ struct DesktopActivityPage: View {
     @EnvironmentObject var store: AppStore
     let filter: TimelineFilter
     let groupBy: TimelineGrouping
+    /// Effective recall query — empty in Ask mode (upstream
+    /// `query={mode === 'Search' ? draft : ''}`), so the ask draft never
+    /// filters the Activity timeline.
+    let query: String
     let exploreDone: Set<ExploreCheck>
     let onExploreItem: (ExploreCheck) -> Void
     let onOpenCapture: (CaptureGroupSummary) -> Void
@@ -23,6 +27,7 @@ struct DesktopActivityPage: View {
             DesktopUnifiedTimeline(
                 filter: filter,
                 groupBy: groupBy,
+                query: query,
                 header: {
                     VStack(alignment: .leading, spacing: 0) {
                         GlanceCard()
@@ -184,6 +189,7 @@ struct DesktopUnifiedTimeline<Header: View>: View {
     @EnvironmentObject var store: AppStore
     let filter: TimelineFilter
     let groupBy: TimelineGrouping
+    let query: String
     @ViewBuilder let header: () -> Header
     var onOpenEntry: ((TimelineEntry) -> Void)?
 
@@ -206,7 +212,7 @@ struct DesktopUnifiedTimeline<Header: View>: View {
                     .padding(.top, 24)
                 } else if timeline.entries.isEmpty && timeline.failures.isEmpty {
                     Text(
-                        !store.searchQuery.trimmingCharacters(in: .whitespaces).isEmpty
+                        !query.trimmingCharacters(in: .whitespaces).isEmpty
                             ? "Nothing in your timeline matches yet."
                             : "Your timeline fills in as Omi captures your day."
                     )
@@ -250,7 +256,7 @@ struct DesktopUnifiedTimeline<Header: View>: View {
             )
         }
         return mergeTimeline(
-            store.outcomes, query: store.searchQuery,
+            store.outcomes, query: query,
             captures: captures, filter: filter
         )
     }

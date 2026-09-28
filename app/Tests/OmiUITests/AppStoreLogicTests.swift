@@ -5,6 +5,7 @@ import XCTest
 
 // Tests for the pure logic added with the App/AppStore wave: the chat
 // transcript settle and the rewind capture-group → timeline-summary mapping.
+@MainActor
 final class AppStoreLogicTests: XCTestCase {
     private func message(
         _ id: String, _ text: String, _ sender: ChatSender,
@@ -81,4 +82,130 @@ final class AppStoreLogicTests: XCTestCase {
         XCTAssertNil(services.rewindCapture)
         XCTAssertNil(services.transport)
     }
+
+    /// The completed-onboarding marker + a session the user can use right
+    /// now must open the ready shell (the gate regression: `authState` used
+    /// to stay `.signedOut` forever).
+    func testSessionGateOpensReadyShellForCompletedOnboarding() async {
+        let settings = GateTestSettingsStore(onboardingSetupCompleted: true)
+        let store = AppStore(
+            services: AppServices(
+                auth: GateTestAuthSession(), settings: settings))
+        await store.loadPreferencesTask()
+        await store.probeOnboarding()
+        XCTAssertEqual(store.authState, .signedIn)
+        XCTAssertFalse(store.returningUser)
+        XCTAssertFalse(store.onboardingRequired ?? true)
+        // The marker lives on its own key; explore progress stays pure CSV.
+        XCTAssertTrue(store.preferences.exploreProgress.isEmpty)
+    }
+
+    /// A completed onboarding with no usable session is a returning user:
+    /// the Welcome-back gate, never a faked ready shell.
+    func testSessionGateShowsReturningUserWithoutSession() async {
+        let settings = GateTestSettingsStore(onboardingSetupCompleted: true)
+        let store = AppStore(
+            services: AppServices(
+                auth: GateTestAuthSession(hasSession: false), settings: settings))
+        await store.loadPreferencesTask()
+        await store.probeOnboarding()
+        XCTAssertEqual(store.authState, .signedOut)
+        XCTAssertTrue(store.returningUser)
+    }
+
+    /// The Rewind reader loads frames through the bridge and collapses them
+    /// with the 12-minute grouping (`DesktopRewind.tsx` reader effect).
+    func testRefreshRewindTimelineGroupsFrames() async {
+        let bridge = RewindTimelineBridge { source, _, cursor, _ in
+            // Cursor-respecting page like the real bridges: stamps < cursor.
+            // The captured store owns this fixture; shipping history is empty
+            // (the reader interleaves both sources).
+            guard source == .captured else {
+                return RewindFramePage(frames: [], nextCursor: nil)
+            }
+            let all = [
+                RewindFrame(id: "3", capturedAtMs: 3_000, appName: "Xcode", windowTitle: "a"),
+                RewindFrame(id: "2", capturedAtMs: 2_000, appName: "Xcode", windowTitle: "a"),
+                RewindFrame(id: "1", capturedAtMs: 1_000, appName: "Safari", windowTitle: "b"),
+            ]
+            let remaining = cursor.flatMap { stamp in
+                all.filter { $0.capturedAtMs < (Int64(stamp) ?? .max) }
+            } ?? all
+            return RewindFramePage(frames: remaining, nextCursor: nil)
+        }
+        let store = AppStore(services: AppServices(rewindTimeline: bridge))
+        await store.refreshRewindTimeline(query: "")
+        XCTAssertEqual(store.rewindGroups.map { $0.id }, ["3", "1"])
+        XCTAssertEqual(store.rewindGroups.first?.count, 2)
+        XCTAssertFalse(store.rewindTimelineHasMore)
+        XCTAssertNil(store.rewindTimelineWarning)
+        XCTAssertFalse(store.rewindTimelineBusy)
+    }
+
+    /// A missing history source is normal: the list clears with no warning
+    /// (upstream `OMI_REWIND_UNAVAILABLE`).
+    func testRewindTimelineUnavailableClearsQuietly() async {
+        let bridge = RewindTimelineBridge { _, _, _, _ in
+            throw RewindTimelineFailure.unavailable
+        }
+        let store = AppStore(services: AppServices(rewindTimeline: bridge))
+        await store.refreshRewindTimeline(query: "")
+        XCTAssertTrue(store.rewindGroups.isEmpty)
+        XCTAssertFalse(store.rewindTimelineHasMore)
+        XCTAssertNil(store.rewindTimelineWarning)
+    }
+
+    /// No bridge → honestly empty, never a fabricated history.
+    func testRewindTimelineWithoutBridgeStaysEmpty() async {
+        let store = AppStore(services: AppServices())
+        await store.refreshRewindTimeline(query: "")
+        XCTAssertTrue(store.rewindGroups.isEmpty)
+        XCTAssertFalse(store.rewindTimelineHasMore)
+    }
+}
+
+/// Optimistic authenticator with an explicit session-probe result.
+private final class GateTestAuthSession: SessionProbeCapable, @unchecked Sendable {
+    private let handoffs = AsyncStream<DesktopHandoff>.makeStream()
+    private let invalidations = AsyncStream<Void>.makeStream()
+    private let hasSession: Bool
+
+    init(hasSession: Bool = true) {
+        self.hasSession = hasSession
+    }
+
+    var desktopHandoffs: AsyncStream<DesktopHandoff> { handoffs.stream }
+    var sessionInvalidated: AsyncStream<Void> { invalidations.stream }
+
+    func signIn() async throws -> Bool { hasSession }
+    func cancelSignIn() async {}
+    func signOut() async throws -> Bool { true }
+    func hasCloudSession() async -> Bool { hasSession }
+}
+
+/// In-memory `SettingsStoring` carrying one explore-progress value.
+private final class GateTestSettingsStore: SettingsStoring {
+    private let onboardingSetupCompleted: Bool
+    private let exploreProgress: String
+
+    init(onboardingSetupCompleted: Bool, exploreProgress: String = "") {
+        self.onboardingSetupCompleted = onboardingSetupCompleted
+        self.exploreProgress = exploreProgress
+    }
+
+    func loadPreferences() async -> DesktopPreferences {
+        var preferences = DesktopPreferences()
+        preferences.onboardingSetupCompleted = onboardingSetupCompleted
+        preferences.exploreProgress = exploreProgress
+        return preferences
+    }
+
+    func setPreference(
+        _ key: String, _ value: PreferenceValue
+    ) async -> DesktopPreferences {
+        await loadPreferences()
+    }
+
+    func permissionStatus() async -> [PermissionKind: PermissionState] { [:] }
+    func requestPermission(_ kind: PermissionKind) async -> PermissionState { .unknown }
 }

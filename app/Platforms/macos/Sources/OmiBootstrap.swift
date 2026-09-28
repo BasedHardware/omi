@@ -205,6 +205,7 @@ enum OmiBootstrap {
     }
 
     /// The wired store for this launch.
+    @MainActor
     static func makeStore() -> AppStore {
         if demoMode {
             AppStore(services: DemoServices.makeServices())
@@ -242,6 +243,11 @@ enum OmiBootstrap {
             settings: SettingsStore(storage: UserDefaultsKeyValueStore()),
             devices: CoreBluetoothDeviceTransport(),
             rewindCapture: OmiRewindEngine.shared.bridge,
+            rewindTimeline: RewindTimelineBridge { source, query, cursor, limit in
+                try OmiRewindEngine.shared.frames(
+                    source: source, query: query, cursor: cursor, limit: limit)
+            },
+            rewindFrameImage: { OmiRewindEngine.shared.frameJPEG(id: $0) },
             transport: transport)
     }
 }
