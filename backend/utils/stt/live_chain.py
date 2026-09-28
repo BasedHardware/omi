@@ -16,7 +16,7 @@ from config.stt_provider_policy import DEEPGRAM_PROVIDERS, provider_for_model_to
 from utils.observability.fallback import record_fallback
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_failure import PendingLiveFailover, fallback_reason_for_typed_death
-from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS
+from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY
 from utils.stt.live_health import health, mode as routing_mode, ordered_providers
 from utils.stt.provider_resilience import EXPECTED_REJECTIONS, close_rejected_socket, fallback_socket_is_serving
 from utils.stt.socket import STTSocket
@@ -69,11 +69,12 @@ async def connect_configured_chain(
             ordered.append(service)
     callbacks = {**callbacks, primary_service: connect_primary}
     candidates = [primary_service, *ordered]
+    decision_started = time.perf_counter()
     mode = routing_mode()
     fleet_states = {}
     if mode != 'off' and routing_uid:
         configured = [service.value for service in candidates if callbacks.get(service) is not None]
-        fleet_states = await health.snapshot(configured, routing_language)
+        fleet_states = health.cached_snapshot(configured, routing_language)
         try:
             probe_percent = float(os.getenv('STT_ROUTING_PROBE_PERCENT', '2'))
         except ValueError:
@@ -89,6 +90,7 @@ async def connect_configured_chain(
             digest = hashlib.sha256(routing_uid.encode()).digest()[0]
             if digest < 3:
                 logger.info('live_stt_routing_shadow configured=%s proposed=%s', configured, proposed)
+    ROUTING_DECISION_LATENCY.observe(time.perf_counter() - decision_started)
     origin = primary_service.value
     prior_reason = 'circuit_open'
     attempted = False
@@ -184,7 +186,7 @@ async def connect_configured_chain(
             continue
         state = fleet_states.get(service.value)
         if mode == 'on' and state is not None and state.bench and state.bench_until <= time.time():
-            if not await health.admit_recovery_probe(service.value):
+            if not health.try_admit_recovery_probe(service.value):
                 continue
         circuit = _circuit_for_primary(service)
         if not circuit.allow_request(max_probes=probes):

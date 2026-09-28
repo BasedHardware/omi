@@ -77,8 +77,9 @@ provider/language transcript outcomes but still connects in configured order.
 windowed Parakeet allocation and the language arm keep their selected primary;
 account benches exclude a provider regardless of score. A 2% deterministic
 probe floor lets lower-score eligible providers demonstrate recovery. The
-Redis read has a 75 ms default deadline and falls back to process-local
-health; writes happen outside the audio path. `off` returns to configured
+background Redis refresh has a 75 ms default deadline; stale cache falls back
+to process-local health. Neither Redis reads nor writes run on the connection
+path. `off` returns to configured
 order without a code change. Each leg emits `text` only when it produces its
 first nonempty text within `STT_NO_TEXT_SECONDS` of VAD-confirmed speech;
 eligible legs that miss the deadline emit `no_text`. The existing terminal

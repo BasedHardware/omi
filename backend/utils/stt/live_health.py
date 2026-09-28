@@ -24,6 +24,10 @@ LANGUAGES = MODULATE_SUPPORTED_LANGUAGES | frozenset().union(*PARAKEET_SUPPORTED
 SCORE_BUCKET_SECONDS = 300
 SCORE_BUCKETS = 3
 REDIS_DEADLINE_SECONDS = 0.075
+CACHE_REFRESH_SECONDS = 5.0
+CACHE_STALE_SECONDS = 15.0
+INTEREST_STALE_SECONDS = 900.0
+LOCAL_PROBE_INTERVAL_SECONDS = 10.0
 LOCAL_EVENTS_CAP = 256
 LOCAL_KEYS_CAP = 256
 KEY_PREFIX = 'omi:live-stt:v1'
@@ -59,7 +63,13 @@ class ProviderState:
 
 
 class FleetHealth:
-    def __init__(self, *, clock: Callable[[], float] = time.time, redis_client: Any = None) -> None:
+    def __init__(
+        self,
+        *,
+        clock: Callable[[], float] = time.time,
+        redis_client: Any = None,
+        probe_jitter: Callable[[str], float] | None = None,
+    ) -> None:
         self._clock = clock
         self._client = redis_client
         self._lock = threading.RLock()
@@ -67,6 +77,17 @@ class FleetHealth:
         self._benches: dict[str, tuple[str, float]] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
         self._redis_retry_at = 0.0
+        self._interests: dict[tuple[str, str], float] = {}
+        self._cached_scores: dict[tuple[str, str], ProviderState] = {}
+        self._cached_benches: dict[str, tuple[str, float]] = {}
+        self._cache_at: float | None = None
+        self._probe_ready: dict[str, float] = {}
+        self._probe_pending: set[str] = set()
+        self._local_probe_next: dict[str, float] = {}
+        seed = f'{os.getpid()}:{time.monotonic_ns()}'.encode()
+        self._probe_jitter = probe_jitter or (
+            lambda provider: int.from_bytes(hashlib.sha256(seed + provider.encode()).digest()[:4], 'big') / 2**32 * 5.0
+        )
 
     def _redis(self) -> Any:
         if self._client is None:
@@ -179,59 +200,133 @@ class FleetHealth:
             self._redis_retry_at = self._clock() + 10.0
             logger.debug('STT fleet bench write fell back to local state', exc_info=True)
 
-    async def snapshot(self, providers: list[str], language: str | None) -> dict[str, ProviderState]:
+    def cached_snapshot(self, providers: list[str], language: str | None) -> dict[str, ProviderState]:
+        """Read only pod memory on the connection path; stale fleet data is ignored."""
         providers = [provider for provider in providers if provider in PROVIDERS]
         lang = bounded_language(language)
         local = {provider: self._local_score(provider, lang) for provider in providers}
-        if mode() == 'off' or not providers or self._clock() < self._redis_retry_at:
+        if mode() == 'off' or not providers:
             return local
+        now = self._clock()
+        with self._lock:
+            for provider in providers:
+                key = provider, lang
+                if key not in self._interests and len(self._interests) >= LOCAL_KEYS_CAP:
+                    self._interests.pop(min(self._interests, key=lambda item: self._interests[item]))
+                self._interests[key] = now
+            fresh = (
+                self._cache_at is not None
+                and now - self._cache_at <= CACHE_STALE_SECONDS
+                and now >= self._redis_retry_at
+            )
+            if not fresh:
+                return local
+            result: dict[str, ProviderState] = {}
+            for provider in providers:
+                cached = self._cached_scores.get((provider, lang), local[provider])
+                kind, until = self._cached_benches.get(provider, ('', 0.0))
+                fallback = local[provider]
+                if fallback.excluded and fallback.bench_until > until:
+                    kind, until = fallback.bench or '', fallback.bench_until
+                result[provider] = ProviderState(cached.score, cached.samples, kind or None, until)
+            return result
+
+    async def refresh_once(self) -> None:
+        """One bounded Redis batch off the connection path, including probe leases."""
+        if mode() == 'off' or self._clock() < self._redis_retry_at:
+            return
         self._loop = asyncio.get_running_loop()
-        bucket = int(self._clock() // SCORE_BUCKET_SECONDS)
+        now = self._clock()
+        with self._lock:
+            self._interests = {
+                key: seen for key, seen in self._interests.items() if now - seen <= INTEREST_STALE_SECONDS
+            }
+            interests = sorted(self._interests)
+        bucket = int(now // SCORE_BUCKET_SECONDS)
         keys: list[str] = []
-        for provider in providers:
+        for provider, lang in interests:
             for index in range(SCORE_BUCKETS):
                 keys.extend(self._score_keys(provider, lang, bucket - index))
+        for provider in sorted(PROVIDERS):
             keys.append(f'{KEY_PREFIX}:state:{provider}')
         try:
             values = await self._bounded(self._redis().mget(keys))
             if not isinstance(values, list) or len(values) != len(keys):
                 raise ValueError('invalid fleet health read')
-            result: dict[str, ProviderState] = {}
+            scores: dict[tuple[str, str], ProviderState] = {}
             cursor = 0
-            for provider in providers:
+            for provider, lang in interests:
                 counts = [int(raw or 0) for raw in values[cursor : cursor + SCORE_BUCKETS * 2]]
                 cursor += SCORE_BUCKETS * 2
-                raw_state = values[cursor]
-                cursor += 1
                 successes = sum(counts[::2])
                 failures = sum(counts[1::2])
-                state = str(raw_state or '').split(':', 1)
-                kind = state[0] if len(state) == 2 and state[0] in {'account', 'selection'} else None
-                until = float(state[1]) if kind else 0.0
-                fallback = local[provider]
-                # A local rejection must take effect immediately while its
-                # fire-and-forget Redis write is still pending.
-                if fallback.excluded and fallback.bench_until > until:
-                    kind, until = fallback.bench, fallback.bench_until
                 if successes + failures:
-                    result[provider] = ProviderState(
-                        (successes + 1) / (successes + failures + 2), successes + failures, kind, until
+                    scores[(provider, lang)] = ProviderState(
+                        (successes + 1) / (successes + failures + 2), successes + failures
                     )
-                else:
-                    result[provider] = ProviderState(fallback.score, fallback.samples, kind, until)
-            return result
+            benches: dict[str, tuple[str, float]] = {}
+            for provider in sorted(PROVIDERS):
+                raw_state = values[cursor]
+                cursor += 1
+                state = str(raw_state or '').split(':', 1)
+                if len(state) == 2 and state[0] in {'account', 'selection'}:
+                    benches[provider] = state[0], float(state[1])
+            with self._lock:
+                self._cached_scores = scores
+                self._cached_benches = benches
+                self._cache_at = self._clock()
+                expired = {provider for provider, (_, until) in benches.items() if until <= self._clock()}
+                self._probe_ready = {
+                    provider: lease_until
+                    for provider, lease_until in self._probe_ready.items()
+                    if provider in expired and lease_until > self._clock()
+                }
+                need_lease = expired - self._probe_ready.keys()
+                self._probe_pending.update(need_lease)
+            try:
+                for provider in sorted(need_lease):
+                    granted = await self._bounded(
+                        self._redis().set(f'{KEY_PREFIX}:probe:{provider}', '1', ex=10, nx=True)
+                    )
+                    if granted:
+                        with self._lock:
+                            self._probe_ready[provider] = self._clock() + 9.0
+            finally:
+                with self._lock:
+                    self._probe_pending.difference_update(need_lease)
         except Exception:
             self._redis_retry_at = self._clock() + 10.0
+            with self._lock:
+                self._cache_at = None
+                self._probe_ready.clear()
+                self._probe_pending.clear()
             logger.debug('STT fleet health read fell back to local state', exc_info=True)
-            return local
 
-    async def admit_recovery_probe(self, provider: str) -> bool:
-        """One fleet probe after a shared bench expires; local admission survives Redis loss."""
-        try:
-            result = await self._bounded(self._redis().set(f'{KEY_PREFIX}:probe:{provider}', '1', ex=10, nx=True))
-            return bool(result)
-        except Exception:
-            self._redis_retry_at = self._clock() + 10.0
+    async def refresh_forever(self) -> None:
+        while True:
+            await self.refresh_once()
+            await asyncio.sleep(CACHE_REFRESH_SECONDS)
+
+    def try_admit_recovery_probe(self, provider: str) -> bool:
+        """Consume a background fleet permit, or a jittered pod-local fallback."""
+        now = self._clock()
+        with self._lock:
+            fresh = self._cache_at is not None and now - self._cache_at <= CACHE_STALE_SECONDS
+            shared = fresh and now >= self._redis_retry_at and provider in self._cached_benches
+            if shared:
+                if self._probe_ready.get(provider, 0.0) > now:
+                    self._probe_ready.pop(provider)
+                    return True
+                if provider not in self._probe_pending:
+                    return False
+            next_at = self._local_probe_next.get(provider)
+            jitter = self._probe_jitter(provider)
+            if next_at is None:
+                next_at = now + jitter
+            if now < next_at:
+                self._local_probe_next[provider] = next_at
+                return False
+            self._local_probe_next[provider] = now + LOCAL_PROBE_INTERVAL_SECONDS + jitter
             return True
 
 

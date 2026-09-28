@@ -52,3 +52,8 @@ LEG_TRANSCRIPT_OUTCOME = Counter(
     ['provider', 'language', 'outcome'],
 )
 ROUTING_DECISION = Counter('omi_stt_routing_decisions_total', 'Health-weighted routing decisions', ['outcome'])
+ROUTING_DECISION_LATENCY = Histogram(
+    'omi_stt_routing_decision_seconds',
+    'Time spent choosing the eligible live STT order without network operations',
+    buckets=(0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.05),
+)

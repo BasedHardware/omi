@@ -18,9 +18,14 @@ when it has the highest historical score. The deterministic probe floor
 (`STT_ROUTING_PROBE_PERCENT`, 2 by default, maximum 10) tests eligible
 lower-score providers. The score is three five-minute buckets of `text` and
 `no_text` with a neutral prior; the event and metric labels have closed
-provider/language/outcome vocabularies. Redis reads and writes have a 75 ms
-default deadline (`STT_ROUTING_REDIS_TIMEOUT_SECONDS`, maximum 100 ms). A
-Redis fault uses process-local scores and benches and never fails a session.
+provider/language/outcome vocabularies. A background task refreshes the fleet
+snapshot every five seconds. The connection path reads pod memory only. Redis
+reads and writes have a 75 ms default deadline
+(`STT_ROUTING_REDIS_TIMEOUT_SECONDS`, maximum 100 ms) on background tasks;
+after 15 seconds without a healthy refresh, routing uses process-local scores
+and benches. A Redis fault never delays or fails a session. Expired shared
+benches use background-acquired recovery permits. When Redis is unavailable,
+each pod admits at most one probe per provider per jittered interval.
 
 `STT_NO_TEXT_SECONDS=30` is the deadline from first VAD-confirmed speech to
 first nonempty provider text. A leg with at least one second of confirmed
@@ -39,6 +44,7 @@ Use the backend-listen Grafana dashboard and these PromQL queries:
 sum by (provider, language, outcome) (rate(omi_stt_leg_transcript_outcome_total{job="backend-listen-metrics"}[15m]))
 sum by (provider, outcome) (rate(omi_stt_provider_connect_total{job="backend-listen-metrics"}[15m]))
 max by (provider, kind) (omi_stt_provider_circuit_open{job="backend-listen-metrics"})
+histogram_quantile(0.95, sum by (le) (rate(omi_stt_routing_decision_seconds_bucket{job="backend-listen-metrics"}[10m])))
 sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[5m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[5m])), 1)
 ```
 
