@@ -55,7 +55,8 @@ final class OmiBleManager: NSObject {
     /// Deduplicate native setup for each physical connection; an explicit Dart
     /// manageDevice call may still replay readiness to the current Flutter engine.
     private var readyNotified: Set<String> = []
-    /// Monotonic start time for the current GATT discovery, cleared at ready or failure.
+    /// Monotonic start time of the latest GATT discovery. Retain it on errors so
+    /// a late callback cannot clear the retry bound for a newer attempt.
     private var discoveryStartedAt: [String: TimeInterval] = [:]
 
     /// Suppresses duplicate recovery callbacks while CoreBluetooth tears down a
@@ -1003,7 +1004,6 @@ extension OmiBleManager: CBPeripheralDelegate {
         let uuid = peripheralUuidString(peripheral)
 
         guard error == nil, let services = peripheral.services, !services.isEmpty else {
-            discoveryStartedAt.removeValue(forKey: uuid)
             logBle(uuid: uuid, event: "service_discovery_failed", detail: error?.localizedDescription ?? "no_services")
             return
         }
@@ -1019,7 +1019,6 @@ extension OmiBleManager: CBPeripheralDelegate {
         let uuid = peripheralUuidString(peripheral)
 
         if let error {
-            discoveryStartedAt.removeValue(forKey: uuid)
             logBle(uuid: uuid, event: "characteristic_discovery_failed", detail: error.localizedDescription)
             return
         }
