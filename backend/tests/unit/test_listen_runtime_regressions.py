@@ -405,7 +405,7 @@ async def test_reconnect_budget_returns_terminal_backoff_before_entitlement_work
     runtime = object.__new__(ListenSessionRuntime)
     runtime.request = request
     runtime.state = SimpleNamespace(active=True, stt_terminal_failure=False, close_code=1001)
-    monkeypatch.setattr(runtime_module.listen_reconnect_budget, 'admit', lambda _uid: (False, 17))
+    monkeypatch.setattr(runtime_module.listen_reconnect_budget, 'admit', lambda *_args: (False, 17))
     paywall = AsyncMock()
     monkeypatch.setattr(runtime_module, 'run_blocking', paywall)
     before = OMI_LISTEN_STT_UNAVAILABLE_TOTAL.labels(reason='reconnect_budget')._value.get()

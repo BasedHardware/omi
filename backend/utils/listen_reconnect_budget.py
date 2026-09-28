@@ -34,31 +34,34 @@ class ListenReconnectBudget:
         self.max_entries = max(1, max_entries)
         self.ttl_seconds = max(1.0, ttl_seconds)
         self._clock = clock
-        self._buckets: OrderedDict[str, _Bucket] = OrderedDict()
+        self._buckets: OrderedDict[tuple[str, str | None], _Bucket] = OrderedDict()
         self._lock = threading.Lock()
 
-    def admit(self, uid: str) -> tuple[bool, int]:
+    def admit(self, uid: str, device_id: str | None = None) -> tuple[bool, int]:
         """Consume one token and return (admitted, retry_after_seconds)."""
 
-        now = self._clock()
         rate = self.per_minute / 60.0
         if self.per_minute <= 0:
             return True, 0
         with self._lock:
+            # Sample time inside the lock so waiting concurrent calls cannot
+            # move updated_at backwards and accidentally refill extra tokens.
+            now = self._clock()
             while self._buckets:
                 _, oldest = next(iter(self._buckets.items()))
                 if now - oldest.updated_at < self.ttl_seconds:
                     break
                 self._buckets.popitem(last=False)
 
-            bucket = self._buckets.get(uid)
+            key = (uid, device_id)
+            bucket = self._buckets.get(key)
             if bucket is None:
                 bucket = _Bucket(tokens=self.burst, updated_at=now)
-                self._buckets[uid] = bucket
+                self._buckets[key] = bucket
             else:
                 bucket.tokens = min(self.burst, bucket.tokens + max(0.0, now - bucket.updated_at) * rate)
                 bucket.updated_at = now
-                self._buckets.move_to_end(uid)
+                self._buckets.move_to_end(key)
 
             if bucket.tokens >= 1:
                 bucket.tokens -= 1

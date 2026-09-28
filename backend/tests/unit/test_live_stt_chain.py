@@ -172,6 +172,38 @@ async def test_expired_breaker_still_admits_its_half_open_probe(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_idle_half_open_recovery_probe_is_not_shed(monkeypatch):
+    monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'modulate-velma-2', 'parakeet'])
+    now = [0.0]
+    probe_circuit = resilience.ProviderCircuitBreaker(
+        failure_threshold=1, cooldown_seconds=30, serve_error_cooldown_seconds=30, clock=lambda: now[0]
+    )
+    probe_circuit.record_serve_failure()
+    now[0] = 31
+    assert probe_circuit.allow_request()
+    probe_circuit.record_success()  # Grace success leaves a serve-error bench half-open.
+    assert probe_circuit.state == 'half_open'
+    monkeypatch.setattr(st, '_soniox_circuit', probe_circuit)
+    st._modulate_circuit.record_account_failure(600)
+    st._parakeet_circuit.record_account_failure(600)
+
+    recovering = AsyncMock(return_value=socket())
+    callbacks = {service: AsyncMock(return_value=socket()) for service in st.STTService}
+    _, selected = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.soniox,
+        connect_primary=recovering,
+        callbacks=callbacks,
+        failed=set(),
+        models=['soniox', 'modulate-velma-2', 'parakeet'],
+    )
+
+    assert selected == st.STTService.soniox
+    recovering.assert_awaited_once()
+    callbacks[st.STTService.modulate].assert_not_awaited()
+    callbacks[st.STTService.parakeet].assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_open_primary_skips_to_healthy_tail_then_serve_error_last_resort(monkeypatch):
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
     st._modulate_circuit.record_serve_failure()

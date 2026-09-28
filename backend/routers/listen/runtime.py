@@ -406,7 +406,8 @@ class ListenSessionRuntime:
         if not self.request.uid:
             await self.request.websocket.close(code=1008, reason='Bad uid')
             return False
-        allowed, retry_after = listen_reconnect_budget.admit(self.request.uid)
+        device_id = getattr(getattr(self, 'client_device_context', None), 'client_device_id', None)
+        allowed, retry_after = listen_reconnect_budget.admit(self.request.uid, device_id)
         if not allowed:
             await terminate_live_stt_backoff(
                 self.request.websocket,

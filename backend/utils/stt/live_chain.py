@@ -103,10 +103,9 @@ async def connect_configured_chain(
     eligible = [service for service in candidates if callbacks.get(service) is not None]
     if eligible:
         circuits = [_circuit_for_primary(service) for service in eligible]
-        all_benched = all(
-            circuit.state == 'half_open' or (circuit.state == 'open' and not circuit.cooldown_elapsed())
-            for circuit in circuits
-        )
+        # Half-open is an admission state: allow_request() may grant its
+        # recovery probe. Only open circuits still inside cooldown are benched.
+        all_benched = all(circuit.state == 'open' and not circuit.cooldown_elapsed() for circuit in circuits)
         if all_benched:
             waits = [circuit.account_cooldown_seconds_remaining for circuit in circuits if circuit.state == 'open']
             retry_after = max(5, int(max(waits, default=0) + 0.999))
