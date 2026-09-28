@@ -286,7 +286,7 @@ def get_action_items_tool(
         import traceback
 
         traceback.print_exc()
-        return f"Error retrieving action items: {str(e)}"
+        return "Error retrieving action items"
 
     action_items_count = len(action_items) if action_items else 0
     logger.info(f"📊 get_action_items_tool - found {action_items_count} action items")
@@ -508,7 +508,7 @@ def create_action_item_tool(
 
     except Exception as e:
         logger.error(f"❌ Error creating action item: {e}")
-        return f"Error creating action item: {str(e)}"
+        return "Error creating action item"
 
 
 @tool
@@ -671,4 +671,4 @@ def update_action_item_tool(
 
     except Exception as e:
         logger.error(f"❌ Error updating action item: {e}")
-        return f"Error updating action item: {str(e)}"
+        return "Error updating action item"
