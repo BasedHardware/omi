@@ -11445,6 +11445,48 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
 
   @override
+  String get feedbackGiveFeedback => 'Geri bildirim ver';
+
+  @override
+  String get feedbackAllGood => 'Her şey yolunda';
+
+  @override
+  String get feedbackChatWithUs => 'Detay paylaşmak ister misin? Bizimle yazış';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Hatalı';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Eksik';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Alakasız';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Yanlış bağlam';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Başka bir şey';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Ses eksik';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Kötü transkripsiyon';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Yanlış konuşmacı';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Gecikmeli veya takılı';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Parçalı veya tekrarlı';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Başka bir şey';
+
+  @override
   String get searchPeople => 'Kişi ara';
 
   @override
