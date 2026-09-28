@@ -59,6 +59,26 @@ def test_secret_headers_are_resolved_in_memory_and_never_in_diff_output():
     assert "never-print-me" not in str(fields)
 
 
+def test_http_failures_show_method_status_and_redacted_path_without_query_or_body():
+    class FailingSession:
+        def get(self, _url, **_kwargs):
+            return Response({"error": {"message": "response-body-secret"}}, status_code=403)
+
+    url = (
+        "https://secretmanager.googleapis.com/v1/projects/based-hardware/secrets/"
+        "private-secret-name/versions/private-version:access?alt=json&access_token=query-secret"
+    )
+    with pytest.raises(reconcile.ReconcileError) as error:
+        reconcile._request(FailingSession(), "get", url)
+
+    message = str(error.value)
+    assert message == (
+        "HTTP GET /v1/projects/based-hardware/secrets/[REDACTED]/versions/[REDACTED]:access returned status 403"
+    )
+    for sensitive_value in ("private-secret-name", "private-version", "response-body-secret", "query-secret", "?"):
+        assert sensitive_value not in message
+
+
 def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retired_agent_vm():
     manifest = reconcile.load_manifest()
     assert manifest["environments"]["dev"]["project"] == "based-hardware-dev"
@@ -232,3 +252,32 @@ def test_check_reports_unlisted_job_without_deleting():
     assert messages == [
         "UNLISTED projects/based-hardware-dev/locations/us-central1/jobs/unlisted: retained; no delete performed"
     ]
+
+
+def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_manifest():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    owner_checks = {
+        ".github/actions/sync-backfill-lifecycle/action.yml": "--check --jobs sync-backfill-uid-sequencer",
+        ".github/workflows/gcp_admin.yml": "--check --jobs omi-admin-stats-precompute",
+        ".github/workflows/gcp_daily_memory_sweep_job.yml": "--jobs \"$SCHEDULER_JOB\" \"$LEDGER_DRAIN_SCHEDULER_JOB\"",
+        ".github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml": "--jobs \"$SCHEDULER_JOB\" \"$LEDGER_DRAIN_SCHEDULER_JOB\"",
+        ".github/workflows/gcp_day3_reengagement_email_job.yml": "--check --jobs \"$SCHEDULER_JOB\"",
+        ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml": "--check --jobs \"$SCHEDULER_JOB\"",
+        ".github/workflows/gcp_frame_request_retention_job.yml": "--check --jobs \"$SCHEDULER_JOB\"",
+        ".github/workflows/gcp_memory_maintenance_job.yml": "--check --jobs \"$SCHEDULER_JOB\"",
+        ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml": "--check --jobs \"$SCHEDULER_JOB\"",
+        ".github/workflows/gcp_notifications_job.yml": "--check --jobs notifications-job-scheduler-trigger",
+    }
+    for relative_path, scoped_args in owner_checks.items():
+        text = (root / relative_path).read_text(encoding="utf-8")
+        assert scoped_args in text, relative_path
+        scheduler_calls = [segment[:400] for segment in text.split("scheduler_reconcile.py")[1:]]
+        check_commands = [command for command in scheduler_calls if "--check" in command]
+        assert check_commands, relative_path
+        assert all("--jobs" in command for command in check_commands), relative_path
+
+    central = (root / ".github/workflows/gcp_scheduler_reconcile.yml").read_text(encoding="utf-8")
+    assert '--project "$PROJECT_ID" --check' in central
+    assert '--project "$PROJECT_ID" --check --jobs' not in central
