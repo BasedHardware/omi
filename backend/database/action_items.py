@@ -721,14 +721,7 @@ def _probe_legacy_completion_rows(
     )
 
 
-def _harvest_legacy_docs(
-    base_query_fn,
-    budget,
-    need,
-    seen,
-    active,
-    can_probe_legacy
-):
+def _harvest_legacy_docs(base_query_fn, budget, need, seen, active, can_probe_legacy):
     should_scan_legacy = True
     total_docs = 0
 
@@ -786,6 +779,7 @@ def _harvest_legacy_docs(
     active.sort(key=_action_item_list_sort_key)
     active = active[:need]
     return active, total_docs
+
 
 def get_action_items(
     uid: str,
@@ -871,9 +865,7 @@ def get_action_items(
                 and due_start_date is None
                 and due_end_date is None
             )
-            active, docs_billed = _harvest_legacy_docs(
-                _base_query, budget, need, seen, active, can_probe_legacy
-            )
+            active, docs_billed = _harvest_legacy_docs(_base_query, budget, need, seen, active, can_probe_legacy)
             total_docs += docs_billed
 
         if len(active) >= need or _out_of_budget():
