@@ -30,6 +30,13 @@ KIND_BOOKMARK = 'bookmark'
 KIND_LIKE = 'like'
 
 
+# Validation & Persistence Design:
+# - Loud writes: Mutator functions (e.g. save_x_posts) validate inputs strictly and raise ValueError
+#   on invalid uid or malformed payloads to prevent corrupt records from reaching the data layer.
+# - Quiet reads: Reader and counter functions (e.g. get_x_posts, get_x_post_counts) gracefully
+#   degrade on invalid uid returning safe defaults ([], 0, None) so read paths never trigger unhandled 500s.
+
+
 def _posts_ref(uid: str) -> Any:
     clean_uid = uid.strip() if isinstance(uid, str) else ''
     return db.collection(users_collection).document(clean_uid).collection(x_posts_collection)
@@ -41,6 +48,11 @@ def save_x_posts(uid: str, posts: List[Dict[str, Any]]) -> int:
     Each post dict must contain at least: id (tweet id, str), text, created_at,
     kind. We dedupe on the document id (the tweet id), so calling this repeatedly
     with overlapping pages only ever inserts each post once.
+
+    Batch Atomicity Trade-off:
+    Commits in chunks of 500 operations to satisfy Firestore batch write limits.
+    A failure mid-sequence leaves earlier committed chunks written (no cross-chunk
+    rollback), which is strictly preferred over an all-or-nothing failure for >500 items.
     """
     if not uid or not isinstance(uid, str) or not uid.strip():
         raise ValueError('uid must be a non-empty string')
@@ -117,7 +129,12 @@ def get_pending_memory_extraction_posts(uid: str, limit: int = 200) -> List[Dict
 
 
 def mark_memory_extraction_completed(uid: str, post_ids: List[str]) -> None:
-    """Acknowledge extraction only after its canonical/legacy memory writes succeed."""
+    """Acknowledge extraction only after its canonical/legacy memory writes succeed.
+
+    Batch Atomicity Trade-off:
+    Commits in chunks of 500 operations to satisfy Firestore batch write limits.
+    Chunks commit independently without cross-chunk rollback if an intermediate chunk fails.
+    """
     if not uid or not isinstance(uid, str) or not uid.strip():
         return
     if not post_ids or not isinstance(post_ids, list):
