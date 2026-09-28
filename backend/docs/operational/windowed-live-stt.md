@@ -66,6 +66,17 @@ per-process `PARAKEET_WINDOW_MAX_SESSIONS=1` is the admission safety limit;
 overflow proceeds to the next eligible leg. Keep it at 1 until the mixed live
 and sync-batch capacity curve gives a reason to change it.
 
+Listen refreshes `/batch/metrics` in a background task at most every five
+seconds with a one-second HTTP deadline. Admission reads only the cached value:
+four pending batch requests or a one-second oldest pending wait sends an
+allocated window session to the next vendor leg. The poll never holds session
+start. If the endpoint is missing, invalid, or the reading is over 15 seconds
+old, the process still admits at most its existing one window session. This
+keeps the canary available through telemetry outages while bounding its GPU
+load. An active TDT window that fails on timeout, 5xx, or capacity pressure
+replays its untranscribed capture audio on the replacement leg; already emitted
+audio is trimmed at the capture sample boundary.
+
 During the 1% bake, compare `omi_stt_window_canary_transcript_outcome_total`
 `arm=window` with `arm=control`: the rate of `transcribed / (transcribed +
 no_transcript)` must not drop for the allocated arm. The 95% fleet SLO is shown
@@ -83,6 +94,14 @@ serve sync backfill, so require visible headroom and no sync-batch queue or
 latency regression before ramping. Use the Parakeet GPU dashboard for the
 batch queue and memory panels. Read each metric by time and load, not a single
 snapshot.
+
+The Telegram batch pages fire at four pending requests for two minutes, batch
+queue p95 at one second with five observations for two minutes, and prerecorded
+Parakeet error rate at 2% with ten requests for two minutes. Prerecorded traffic
+includes sync backfill and excludes live-window POSTs by their request header,
+so read these alongside the sync job queue before ramping.
+The page action is **Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0**
+in the prod chart and runtime overlay, then recompose the runtime environment.
 
 If the 1% bake meets those criteria, change only
 `PARAKEET_WINDOW_ALLOCATION_PERCENT` from `1` to `2` in the prod listen chart

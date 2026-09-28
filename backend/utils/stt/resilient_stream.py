@@ -19,8 +19,9 @@ def enabled() -> bool:
 
 
 class ResilientAudio:
-    def __init__(self, sample_rate: int) -> None:
+    def __init__(self, sample_rate: int, *, ring_seconds: int = RING_SECONDS) -> None:
         self.sample_rate = sample_rate
+        self.ring_seconds = ring_seconds
         self._chunks: deque[tuple[int, bytes]] = deque()
         self._end_sample = 0
         self.finalized_sample = 0
@@ -31,6 +32,12 @@ class ResilientAudio:
     @property
     def buffered_bytes(self) -> int:
         return sum(len(data) for _, data in self._chunks)
+
+    def would_overflow(self, data: bytes, start_sample: int | None) -> bool:
+        if start_sample is None or not data:
+            return False
+        first = self._chunks[0][0] if self._chunks else start_sample
+        return start_sample + len(data) // 2 - first > self.ring_seconds * self.sample_rate
 
     def append(self, data: bytes, start_sample: int | None) -> None:
         if start_sample is None or not data:
@@ -44,7 +51,7 @@ class ResilientAudio:
         self._trim()
 
     def _trim(self) -> None:
-        first = max(self.finalized_sample, self._end_sample - RING_SECONDS * self.sample_rate)
+        first = max(self.finalized_sample, self._end_sample - self.ring_seconds * self.sample_rate)
         while self._chunks and self._chunks[0][0] + len(self._chunks[0][1]) // 2 <= first:
             self._chunks.popleft()
         if self._chunks and self._chunks[0][0] < first:

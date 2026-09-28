@@ -221,6 +221,49 @@ class WindowAdmission:
 admission = WindowAdmission()
 
 
+class BatchPressure:
+    """Poll the shared GPU batch queue off the session-start path."""
+
+    REFRESH_SECONDS = 5.0
+    STALE_SECONDS = 15.0
+    MAX_PENDING = 4
+    MAX_OLDEST_SECONDS = 1.0
+
+    def __init__(self) -> None:
+        self._task: asyncio.Task[None] | None = None
+        self._next_refresh = 0.0
+        self._observed_at = 0.0
+        self._busy = False
+
+    def allows(self, base_url: str) -> bool:
+        now = time.monotonic()
+        if now >= self._next_refresh and (self._task is None or self._task.done()):
+            self._next_refresh = now + self.REFRESH_SECONDS
+            self._task = asyncio.get_running_loop().create_task(self._refresh(base_url))
+        # Missing or stale telemetry keeps the existing per-process cap as the
+        # upper bound. A fresh pressure sample stands live window admission down.
+        return not (now - self._observed_at <= self.STALE_SECONDS and self._busy)
+
+    async def _refresh(self, base_url: str) -> None:
+        try:
+            async with httpx.AsyncClient(timeout=1.0) as client:
+                response = await client.get(base_url.rstrip('/') + '/batch/metrics')
+            response.raise_for_status()
+            metrics = response.json()
+            pending = metrics['pending_requests']
+            oldest = metrics['oldest_pending_seconds']
+            if not isinstance(pending, (int, float)) or not isinstance(oldest, (int, float)):
+                return
+            self._busy = pending >= self.MAX_PENDING or oldest >= self.MAX_OLDEST_SECONDS
+            self._observed_at = time.monotonic()
+        except Exception:
+            # No exception may escape into socket admission.
+            return
+
+
+batch_pressure = BatchPressure()
+
+
 class WindowedParakeetSocket(ParakeetStreamingSocket):
     """One in-flight POST, sentence-anchored growing windows, no retries.
 
@@ -698,6 +741,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     return await get_stt_client().post(
                         self._url,
                         files={'file': ('audio.wav', wav, 'audio/wav')},
+                        headers={'X-Omi-STT-Surface': 'live-window'},
                     )
         except (TimeoutError, httpx.TimeoutException):
             if not acquired:
@@ -821,6 +865,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
 
 def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate: int) -> WindowedParakeetSocket:
+    if not batch_pressure.allows(os.environ['HOSTED_PARAKEET_API_URL']):
+        WINDOW_ADMISSION.labels(outcome='batch_pressure').inc()
+        raise ParakeetConnectionError('capacity_full')
     release = admission.acquire()
     try:
         socket = WindowedParakeetSocket(callback, os.environ['HOSTED_PARAKEET_API_URL'], sample_rate, release)

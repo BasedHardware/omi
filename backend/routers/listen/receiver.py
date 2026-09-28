@@ -205,6 +205,7 @@ class ListenReceiver:
         self._stt_failover_lock = asyncio.Lock()
         self._pending_live_failover: Optional[PendingLiveFailover] = None
         self._resilient_audio: ResilientAudio | None = None
+        self._window_replay_audio: ResilientAudio | None = None
         self.stt_sockets_multi: List[Any] = [None] * len(channel_configs)
         self.multi_opus_decoders: List[Any] = [None] * len(channel_configs)
         self.channel_mix_buffers: List[bytearray] = [bytearray() for _ in channel_configs]
@@ -237,6 +238,9 @@ class ListenReceiver:
             and int(getattr(host.request, 'sample_rate', 0) or 0) > 0
         ):
             self.capture_timeline = CaptureTimeline(sample_rate=int(host.request.sample_rate))
+            # Window admission is capped to one session per process. Its bounded
+            # 90s buffer matches the socket's maximum 2*context+2*pace (30/15).
+            self._window_replay_audio = ResilientAudio(int(host.request.sample_rate), ring_seconds=90)
             if resilient_reconnect_enabled():
                 self._resilient_audio = ResilientAudio(int(host.request.sample_rate))
             # Pin the persistence mode for the recording's life; the flag is
@@ -451,6 +455,16 @@ class ListenReceiver:
         self, segments: List[Dict[str, Any]], provider: Optional[str]
     ) -> List[Dict[str, Any]]:
         ring = getattr(self, '_resilient_audio', None)
+        window_ring = getattr(self, '_window_replay_audio', None)
+        if (
+            provider == 'parakeet'
+            and window_ring is not None
+            and getattr(self.host, 'stt_model', None) == 'parakeet-window'
+        ):
+            for segment in segments:
+                end = segment.get('_capture_end_sample')
+                if isinstance(end, int):
+                    window_ring.finalize_through(end)
         if ring is None or provider != 'soniox':
             return segments
         cutoff = getattr(self, '_replay_cutoff_sample', 0)
@@ -1081,6 +1095,8 @@ class ListenReceiver:
         self._resilient_closing = True
         if self._resilient_audio is not None:
             self._resilient_audio.close()
+        if self._window_replay_audio is not None:
+            self._window_replay_audio.close()
         sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
         for socket in sockets:
             target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
@@ -1373,6 +1389,10 @@ class ListenReceiver:
         sample_rate = rebuild[1]
         previous = self.stt_socket
         previous_selection = (self.host.stt_service, self.host.stt_language, self.host.stt_model)
+        window_ring = self._window_replay_audio if self.host.stt_model == 'parakeet-window' else None
+        replay = window_ring.snapshot() if window_ring is not None else ()
+        if replay and epoch is not None:
+            epoch.replay_origin_sample = replay[0][0]
         self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
         hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
         try:
@@ -1405,7 +1425,24 @@ class ListenReceiver:
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             return False
 
+        # Re-send only capture audio after the last emitted window segment.
+        # The replacement epoch maps its provider-local clock back to these
+        # original sample positions, including in the clock-only path.
+        for start, data in replay:
+            replay_send = getattr(raw, 'replay_send', None)
+            accepted = replay_send(data, start) if callable(replay_send) else raw.send(data, start_sample=start)
+            if not accepted:
+                close_rejected_socket(raw)
+                hop.note_failure('connection_lost')
+                return False
+            if self._resilient_audio is not None and self.host.stt_service == STTService.soniox:
+                self._resilient_audio.append(data, start)
+            if window_ring is not None:
+                window_ring.record_replay(dead_provider or 'parakeet', len(data) // 2)
+
         self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
+        if window_ring is not None:
+            window_ring.close()
         self._record_selected_epoch(epoch, self.stt_socket)
         record_live_connection(self.host, self._serving_provider())
         self._pending_live_failover = hop
@@ -1523,6 +1560,14 @@ class ListenReceiver:
                 return
             outbound_audio = bytes(buffer)
             outbound_start_sample = self._stt_buffer_start_sample
+            window_ring = self._window_replay_audio if self.host.stt_model == 'parakeet-window' else None
+            if window_ring is not None and window_ring.would_overflow(outbound_audio, outbound_start_sample):
+                raw = getattr(self.stt_socket, 'raw', None)
+                if raw is not None:
+                    raw.fail('capacity_full')
+                if await self._failover_stt_socket():
+                    continue
+                return
             sent = await flush_live_stt_buffer(
                 request.websocket,
                 self.host.state,
@@ -1536,6 +1581,8 @@ class ListenReceiver:
             if sent:
                 if self._resilient_audio is not None and self.host.stt_service == STTService.soniox:
                     self._resilient_audio.append(outbound_audio, outbound_start_sample)
+                if self._window_replay_audio is not None and self.host.stt_model == 'parakeet-window':
+                    self._window_replay_audio.append(outbound_audio, outbound_start_sample)
                 self._capture('capture_outbound_stt', outbound_audio)
                 self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
                 self._stt_buffer_start_sample = None
@@ -1898,6 +1945,8 @@ class ListenReceiver:
         self._resilient_closing = True
         if self._resilient_audio is not None:
             self._resilient_audio.close()
+        if self._window_replay_audio is not None:
+            self._window_replay_audio.close()
         for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
             if socket:
                 try:

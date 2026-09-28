@@ -37,6 +37,7 @@ def runtime(monkeypatch):
     monkeypatch.setenv('MODULATE_API_KEY', 'test')
     monkeypatch.setenv('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://embedding.invalid')
     monkeypatch.setattr(window, 'admission', window.WindowAdmission())
+    monkeypatch.setattr(window, 'batch_pressure', window.BatchPressure())
     monkeypatch.setattr(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0)
     for provider in ('parakeet', 'modulate', 'deepgram', 'soniox'):
         monkeypatch.setattr(
@@ -78,6 +79,64 @@ class Client:
         if self.error:
             raise self.error
         return httpx.Response(self.status, json=self.data, request=httpx.Request('POST', url))
+
+
+@pytest.mark.asyncio
+async def test_batch_pressure_cache_never_waits_at_admission_and_stands_down(monkeypatch):
+    pressure = window.BatchPressure()
+    began = asyncio.Event()
+    release = asyncio.Event()
+
+    async def refresh(_url):
+        began.set()
+        await release.wait()
+        pressure._busy = True
+        pressure._observed_at = window.time.monotonic()
+
+    monkeypatch.setattr(pressure, '_refresh', refresh)
+    assert pressure.allows('http://tdt.invalid')  # schedules a poll without waiting
+    await began.wait()
+    assert pressure.allows('http://tdt.invalid')  # pending poll retains the local cap
+    release.set()
+    await pressure._task
+    assert not pressure.allows('http://tdt.invalid')
+    pressure._observed_at -= pressure.STALE_SECONDS + 1
+    assert pressure.allows('http://tdt.invalid')  # unavailable signal: local cap remains
+
+
+@pytest.mark.asyncio
+async def test_batch_pressure_endpoint_thresholds_and_unavailable_signal(monkeypatch):
+    pressure = window.BatchPressure()
+
+    class Response:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    class ClientContext:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, _url):
+            return Response({'pending_requests': 4, 'oldest_pending_seconds': 0})
+
+    monkeypatch.setattr(window.httpx, 'AsyncClient', ClientContext)
+    await pressure._refresh('http://tdt.invalid')
+    assert not pressure.allows('http://tdt.invalid')
+    pressure._observed_at -= pressure.STALE_SECONDS + 1
+    assert pressure.allows('http://tdt.invalid')
+    await pressure._task
 
 
 class SeqClient:
@@ -151,7 +210,8 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert len(client.requests) == 1
     url, kwargs = client.requests[0]
     assert url.endswith('/v1/transcribe')
-    assert list(kwargs) == ['files']  # the batch endpoint takes no language parameter
+    assert list(kwargs) == ['files', 'headers']  # no language parameter; exclude live from prerecorded metrics
+    assert kwargs['headers'] == {'X-Omi-STT-Surface': 'live-window'}
     assert kwargs['files']['file'][1].startswith(b'RIFF')
     assert recv.emitted[0]['text'] == 'hello'
     assert recv.emitted[0]['start'] >= 1.0

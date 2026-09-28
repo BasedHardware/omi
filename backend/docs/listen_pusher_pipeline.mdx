@@ -504,6 +504,20 @@ breakers, and `omi_stt_provider_retired{provider}` exporting the deployment's
 `STT_RETIRED_PROVIDERS` (default `deepgram`). See
 `backend/docs/operational/windowed-live-stt.md` for the alerts.
 
+For an allocated windowed-TDT session, listen retains a bounded 90-second
+capture-positioned PCM ring. Delivered window segments advance its finalized
+sample boundary. If the socket dies after accepting audio, the receiver starts
+the replacement provider epoch at the first unfinished sample and replays that
+audio before sending the current unsent chunk. A full ring triggers failover
+before an unfinished sample can be evicted. The replacement epoch stitches
+provider-local transcript times onto the original capture sample axis.
+Parakeet's `/batch/metrics` exports pending count and oldest queue wait;
+listen polls it off the session-start path and declines new window admissions
+at four pending requests or one second of oldest wait. An unavailable reading
+retains the one-session-per-process admission cap. Window POSTs mark their
+request so `parakeet_prerecorded_requests_total` excludes live canary errors
+while covering the batch path used by sync backfill.
+
 The same authoritative attempt emits fail-open PostHog product events:
 `Transcript Started` at first nontrivial audio and exactly one of `Transcript
 Completed`, `Transcript Failed`, or `Transcript Cancelled`. Those events carry
