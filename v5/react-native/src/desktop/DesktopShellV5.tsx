@@ -62,6 +62,8 @@ type ShellProps = TaskMutationProps & {
   readsPhase: ReadsPhase;
   session: DesktopSession;
   signingIn: boolean;
+  /** Initial rail route for previews and screenshots; users start at Home. */
+  initialRoute?: DesktopRouteV5;
 };
 
 // v5 checklist destinations are rail routes, not filters.
@@ -106,9 +108,10 @@ export function DesktopShellV5({
   readsPhase,
   session,
   signingIn,
+  initialRoute = 'Home',
   ...taskMutations
 }: ShellProps) {
-  const [route, setRoute] = useState<DesktopRouteV5>('Home');
+  const [route, setRoute] = useState<DesktopRouteV5>(initialRoute);
   const [guideTarget, setGuideTarget] = useState<DesktopRouteV5 | null>(null);
   const guideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearGuideTimer = useCallback(() => {

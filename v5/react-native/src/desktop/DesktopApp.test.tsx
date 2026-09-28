@@ -1911,7 +1911,7 @@ test('Settings surfaces sign-out failures without leaving the ready shell', asyn
   });
   await act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Sign out')
+      .find(node => node.props.accessibilityLabel === 'Sign Out')
       .props.onPress();
     await Promise.resolve();
     await Promise.resolve();

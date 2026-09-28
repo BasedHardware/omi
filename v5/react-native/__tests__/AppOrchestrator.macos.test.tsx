@@ -308,7 +308,7 @@ test('signed-out Mac sees only the Welcome until a real session lands', async ()
   });
   await act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Sign out')
+      .find(node => node.props.accessibilityLabel === 'Sign Out')
       .props.onPress();
   });
   expect(mockAuth.signOut).toHaveBeenCalledTimes(1);
@@ -578,7 +578,7 @@ test('the previous session transcript never survives a sign-out', async () => {
   });
   await act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Sign out')
+      .find(node => node.props.accessibilityLabel === 'Sign Out')
       .props.onPress();
   });
   expect(labelsOf(renderer)).toContain('First-run onboarding');
@@ -1262,7 +1262,7 @@ test.each(['stop', 'unmount', 'signout'])(
       });
       await act(async () => {
         renderer.root
-          .find(node => node.props.accessibilityLabel === 'Sign out')
+          .find(node => node.props.accessibilityLabel === 'Sign Out')
           .props.onPress();
       });
     } else await act(async () => renderer.unmount());

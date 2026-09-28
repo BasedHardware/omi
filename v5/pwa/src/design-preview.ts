@@ -61,6 +61,30 @@ const pick = <T extends string>(
 ): T | undefined =>
   allowed.find((item) => item.toLowerCase() === value?.toLowerCase());
 const desktopInitialRoute = pick(initialRouteParam, desktopRoutes);
+// Desktop-only review hooks: a Settings pane (`pane=account`), the v5 pages
+// interface (`ui=v5`) and its rail route (`v5route=conversations`).
+const desktopSettingsPanes = [
+  "General",
+  "Account & Plan",
+  "Transcription",
+  "Rewind",
+  "Alerts & Privacy",
+  "AI & Automation",
+  "Apps",
+  "About",
+] as const;
+const desktopInitialPane = desktopSettingsPanes.find((pane) =>
+  pane.toLowerCase().startsWith((params.get("pane") ?? "\u0000").toLowerCase())
+);
+const desktopUiVersion = params.get("ui") === "v5" ? "v5" : undefined;
+const desktopV5Route = pick(params.get("v5route"), [
+  "Home",
+  "Chat",
+  "Conversations",
+  "Rewind",
+  "Tasks",
+  "Settings",
+] as const);
 const desktopInitialFilter = pick(initialFilterParam, desktopFilters);
 const mobileInitialRoute = pick(initialRouteParam, mobileRoutes);
 const day = (offsetDays: number, hour: number, minute = 0) => {
@@ -383,6 +407,9 @@ function Preview() {
               initialRoute: desktopInitialRoute,
               initialActivityFilter: desktopInitialFilter,
               initialChatOpen: chatState !== null,
+              initialSettingsPane: desktopInitialPane,
+              initialUiVersion: desktopUiVersion,
+              initialV5Route: desktopV5Route,
               outcomes,
               readsPhase: outcomes ? "ready" : "unavailable",
               ...taskActions,

@@ -14,6 +14,8 @@ import {
   useDesktopTheme,
   useDesktopStyleSheets,
 } from './DesktopTheme';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import type {OmiTheme} from '../design/tokens';
 
 function timeLabel(item: DesktopReadProjection): string {
   const timestamp = projectionTimestamp(item);
@@ -82,6 +84,10 @@ export function PageHeading({
   );
 }
 
+/**
+ * Whole-surface empty or error state in the OmiPageState shape: a glyph, a
+ * title and one sentence on the page itself — never a filled, bordered slab.
+ */
 export function DesktopEmptyState({
   title,
   detail,
@@ -93,20 +99,44 @@ export function DesktopEmptyState({
   icon?: MaterialIconName;
   error?: boolean;
 }) {
-  const styles = useDesktopStyleSheets(createStyles);
-  const {tokens: token} = useDesktopTheme();
+  const styles = useOmiStyles(createEmptyStyles);
+  const theme = useOmiTheme();
   return (
     <View
       style={styles.emptyState}
       accessibilityRole={error ? 'alert' : undefined}>
-      <View style={styles.emptyGlyph}>
-        <MaterialIcon name={icon} size={24} color={token.color.inkMuted} />
-      </View>
+      <MaterialIcon
+        name={error ? 'info' : icon}
+        size={28}
+        color={theme.color.inkSecondary}
+      />
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyDetail}>{detail}</Text>
     </View>
   );
 }
+
+const createEmptyStyles = (t: OmiTheme) => ({
+  emptyState: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: t.space.sm,
+    minHeight: 240,
+    paddingVertical: t.space.section,
+    paddingHorizontal: t.space.xxl,
+  },
+  emptyTitle: {
+    ...t.type.headline,
+    color: t.color.ink,
+    textAlign: 'center' as const,
+  },
+  emptyDetail: {
+    ...t.type.subhead,
+    color: t.color.inkSecondary,
+    textAlign: 'center' as const,
+    maxWidth: 380,
+  },
+});
 
 export const ReadRow = memo(function ReadRow({
   item,
@@ -209,40 +239,6 @@ const createStyles = (token: DesktopTokens) =>
       color: token.color.ink,
     },
     subtitle: {fontSize: 14, lineHeight: 22, color: token.color.inkMuted},
-    emptyState: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 32,
-      minHeight: 240,
-      gap: 12,
-      backgroundColor: token.color.glassStrong,
-      borderWidth: 1,
-      borderColor: token.color.line,
-      borderRadius: 18,
-    },
-    emptyGlyph: {
-      width: 52,
-      height: 52,
-      borderRadius: 18,
-      backgroundColor: token.color.glassQuiet,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 6,
-    },
-    emptyTitle: {
-      fontSize: 19,
-      lineHeight: 26,
-      color: token.color.ink,
-      textAlign: 'center',
-      fontWeight: '500',
-    },
-    emptyDetail: {
-      fontSize: 13,
-      lineHeight: 21,
-      color: token.color.inkMuted,
-      textAlign: 'center',
-      maxWidth: 380,
-    },
     row: {
       alignItems: 'center',
       flexDirection: 'row',

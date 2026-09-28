@@ -17,6 +17,7 @@ import {
   desktopWindowInset,
   type ActivityFilterId,
   type DesktopSession,
+  type DesktopSettingsPane,
   type TimelineGrouping,
 } from './desktopChrome';
 import {
@@ -29,6 +30,7 @@ import {DesktopThemeProvider, type DesktopThemeName} from './DesktopTheme';
 import {DesktopActivity} from './DesktopActivity';
 import type {CaptureGroupSummary} from './timeline/UnifiedTimeline';
 import {DesktopShellV5} from './DesktopShellV5';
+import type {DesktopRouteV5} from './DesktopChromeV5';
 import type {TaskMutationProps} from '../ui/TaskEditor';
 import {DesktopSettings} from './DesktopSettings';
 import type {
@@ -132,6 +134,10 @@ type Props = TaskMutationProps & {
   initialRoute?: DesktopRoute;
   initialActivityFilter?: ActivityFilterId;
   initialChatOpen?: boolean;
+  initialSettingsPane?: DesktopSettingsPane;
+  /** Pins the interface revision over the saved preference (previews). */
+  initialUiVersion?: DesktopUiVersion;
+  initialV5Route?: DesktopRouteV5;
 };
 
 export function DesktopApp({
@@ -162,6 +168,9 @@ export function DesktopApp({
   initialRoute = 'Home',
   initialActivityFilter = 'all',
   initialChatOpen = false,
+  initialSettingsPane,
+  initialUiVersion,
+  initialV5Route,
   onAppearanceChange,
   captureAutoStart = false,
   outcomes,
@@ -185,7 +194,8 @@ export function DesktopApp({
   );
   const [groupBy, setGroupBy] = useState<TimelineGrouping>('date');
   // Interface revision: v5 keeps the pages IA selectable from Settings.
-  const [uiVersion, setUiVersion] = useState<DesktopUiVersion>('v5.1');
+  const [uiVersion, setUiVersion] =
+    useState<DesktopUiVersion>(initialUiVersion ?? 'v5.1');
   // Saved-v5 users would see one paint of v5.1 chrome before preferences
   // resolve; hold the loading mark until the first read settles.
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -213,7 +223,7 @@ export function DesktopApp({
       .then(prefs => {
         if (!cancelled) {
           setExploreDone(parseExploreProgress(prefs?.exploreProgress));
-          setUiVersion(prefs?.uiVersion ?? 'v5.1');
+          setUiVersion(initialUiVersion ?? prefs?.uiVersion ?? 'v5.1');
           setPrefsLoaded(true);
         }
       })
@@ -226,6 +236,8 @@ export function DesktopApp({
     return () => {
       cancelled = true;
     };
+    // Initial props seed state once; later preference reads own it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => clearGuideTimer, [clearGuideTimer]);
 
@@ -453,6 +465,7 @@ export function DesktopApp({
             readsPhase={readsPhase}
             session={session}
             signingIn={signingIn}
+            initialRoute={initialV5Route}
             {...taskMutationsRest}
           />
         </DesktopRoot>
@@ -567,6 +580,7 @@ export function DesktopApp({
                   session={session}
                   signingIn={signingIn}
                   softwarePlaneLocked={chatBusy}
+                  initialPane={initialSettingsPane}
                 />
               </View>
             )}
