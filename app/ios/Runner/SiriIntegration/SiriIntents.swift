@@ -8,6 +8,11 @@ private func cleanedMemory(_ text: String) -> String {
     return result.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
+private func requireSignedInSiriSession() throws {
+    guard let config = SiriSession.shared.currentConfig() else { throw SiriSession.Failure.auth }
+    try SiriSession.shared.validateOwner(config)
+}
+
 private func persistConfirmedWrite(owner: SiriSession.Config,
                                    _ operation: () async throws -> Void) async {
     do { try await operation() }
@@ -196,6 +201,7 @@ struct OpenOmiFolderIntent: OpenIntent {
     @Parameter(title: "Folder") var target: OmiFolderEntity
     func perform() async throws -> some IntentResult {
         let started = Date()
+        try requireSignedInSiriSession()
         guard target.id == "memories" || target.id == "conversations" else {
             throw SiriUnsupportedInput(kind: .open)
         }
@@ -213,6 +219,7 @@ struct OpenOmiListIntent: OpenIntent {
     @Parameter(title: "List") var target: OmiListEntity
     func perform() async throws -> some IntentResult {
         let started = Date()
+        try requireSignedInSiriSession()
         guard target.id == "omi" else { throw SiriUnsupportedInput(kind: .open) }
         SiriBridge.shared.navigate("omi://action-items")
         SiriTelemetry.intent("open", outcome: "ok", started: started)
@@ -229,6 +236,7 @@ struct SearchOmiIntent: ShowInAppSearchResultsIntent {
     @Parameter(title: "Search") var criteria: StringSearchCriteria
     func perform() async throws -> some IntentResult {
         let started = Date()
+        try requireSignedInSiriSession()
         SiriBridge.shared.navigate("omi://search?q=\(criteria.term.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")
         SiriTelemetry.intent("search", outcome: "ok", started: started)
         return .result()
@@ -355,6 +363,7 @@ struct StartOmiListeningIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let started = Date()
         do {
+            try requireSignedInSiriSession()
             try await SiriBridge.shared.setListening(true)
             SiriTelemetry.intent("startListening", outcome: "ok", started: started)
             return .result(dialog: "Omi is listening.")
@@ -364,6 +373,9 @@ struct StartOmiListeningIntent: AppIntent {
         } catch let failure as SiriListeningFailure {
             SiriTelemetry.intent("startListening", outcome: SiriTelemetry.outcome(failure), started: started)
             return .result(dialog: IntentDialog("\(failure.spokenDialog(starting: true))"))
+        } catch SiriSession.Failure.auth {
+            SiriTelemetry.intent("startListening", outcome: "auth", started: started)
+            return .result(dialog: "Open Omi and sign in first.")
         } catch {
             SiriTelemetry.intent("startListening", outcome: SiriTelemetry.outcome(error), started: started)
             return .result(dialog: "Open Omi to start listening.")
@@ -378,12 +390,16 @@ struct StopOmiListeningIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let started = Date()
         do {
+            try requireSignedInSiriSession()
             try await SiriBridge.shared.setListening(false)
             SiriTelemetry.intent("stopListening", outcome: "ok", started: started)
             return .result(dialog: "Omi stopped listening.")
         } catch let failure as SiriListeningFailure {
             SiriTelemetry.intent("stopListening", outcome: SiriTelemetry.outcome(failure), started: started)
             return .result(dialog: IntentDialog("\(failure.spokenDialog(starting: false))"))
+        } catch SiriSession.Failure.auth {
+            SiriTelemetry.intent("stopListening", outcome: "auth", started: started)
+            return .result(dialog: "Open Omi and sign in first.")
         } catch {
             SiriTelemetry.intent("stopListening", outcome: SiriTelemetry.outcome(error), started: started)
             return .result(dialog: "Open Omi to stop listening.")

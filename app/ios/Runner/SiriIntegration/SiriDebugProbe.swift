@@ -33,6 +33,10 @@ enum SiriDebugProbe {
             Task { await runAuthFenceProbe(seed: false) }
             return
         }
+        if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe-auth-gate") {
+            Task { await runAuthGateProbe() }
+            return
+        }
         guard ProcessInfo.processInfo.arguments.contains("-omi-siri-probe") else { return }
         Task {
             let support = FileManager.default.temporaryDirectory.appendingPathComponent("siri-storage-probe")
@@ -128,7 +132,7 @@ enum SiriDebugProbe {
                       SiriSnapshotStore.shared.probeStoredEntity(type: "memory", id: "stub-memory-1") ? "PASS" : "FAIL")
                 // Model a process kill after the native sign-out preparation,
                 // before Flutter's auth-state callback can finish the wipe.
-                try SiriSnapshotStore.shared.prepareForSignOut()
+                SiriSnapshotStore.shared.prepareForSignOut()
                 let markerPersisted = (defaults.stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? [])
                     .contains(config.uid)
                 NSLog("[SiriProbe] pendingSignOutMarkerPersisted=%@", markerPersisted ? "PASS" : "FAIL")
@@ -395,6 +399,9 @@ enum SiriDebugProbe {
                         createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
                     try await SiriSnapshotStore.shared.upsert([disabledRow], uid: config.uid)
                     try await SiriSnapshotStore.shared.setEnabled(false)
+                    let explicitFolder = try await OmiFolderQuery().entities(for: ["memories"])
+                    NSLog("[SiriProbe] disabledExplicitFolder=%@",
+                          explicitFolder.count == 1 ? "PASS" : "FAIL")
                     do {
                         try await SiriSnapshotStore.shared.delete(type: "memory", ids: [disabledRow.id], uid: config.uid)
                         try await SiriSnapshotStore.shared.setEnabled(true)
@@ -657,7 +664,7 @@ enum SiriDebugProbe {
                             indexDescription: CSSearchableIndexDescription())
                     }
                     await SiriReindexProbeGate.shared.waitUntilPaused()
-                    let fastFence = Task { try? SiriSnapshotStore.shared.prepareForSignOut() }
+                    let fastFence = Task { SiriSnapshotStore.shared.prepareForSignOut() }
                     try await Task.sleep(nanoseconds: 150_000_000)
                     let fenceBypassedQueue = (defaults.stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? [])
                         .contains(next.uid)
@@ -675,8 +682,7 @@ enum SiriDebugProbe {
                         tokenExpiresAtMs: next.tokenExpiresAtMs)
                     try SiriSession.shared.publish(resumedAfterFence)
                     SiriSession.shared.simulateKeychainDeleteFailureOnce = true
-                    do { try SiriSnapshotStore.shared.prepareForSignOut() }
-                    catch { NSLog("[SiriProbe] injectedSignOutPreparationFailure=observed") }
+                    SiriSnapshotStore.shared.prepareForSignOut()
                     let failedPrepPending = (defaults.stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? [])
                         .contains(next.uid)
                     NSLog("[SiriProbe] failedPreparationMarkerPersisted=%@", failedPrepPending ? "PASS" : "FAIL")
@@ -694,8 +700,7 @@ enum SiriDebugProbe {
                           SiriSnapshotStore.shared.generationForOwner(recoveredUID) != nil &&
                           SiriSession.shared.currentConfig()?.uid == recoveredUID ? "PASS" : "FAIL")
                     SiriSnapshotStore.shared.simulateMarkerFlushFailureOnce = true
-                    do { try SiriSnapshotStore.shared.prepareForSignOut() }
-                    catch { NSLog("[SiriProbe] injectedMarkerFlushFailure=observed") }
+                    SiriSnapshotStore.shared.prepareForSignOut()
                     let tokenRemoved = !SiriSession.shared.hasMirroredToken()
                     SiriSnapshotStore.shared.probeSimulateColdLaunchWithoutMarker()
                     let noMarkerQueriesEmpty = SiriSnapshotStore.shared.memories(ids: nil).isEmpty &&
@@ -772,6 +777,86 @@ enum SiriDebugProbe {
                   SiriSnapshotStore.shared.generationForOwner(next.uid) != nil &&
                   SiriSession.shared.hasMirroredToken() ? "PASS" : "FAIL")
         } catch { NSLog("[SiriProbe] firebaseAuthFenceProbe=FAIL error=%@", String(describing: error)) }
+    }
+
+    /// Exercise the request gate with the asynchronous Auth listener disabled.
+    /// A process can die between Firebase sign-out and that listener callback.
+    @available(iOS 26.0, *)
+    private static func runAuthGateProbe() async {
+        guard ProcessInfo.processInfo.environment["OMI_SIRI_AUTH_EMULATOR"] == "127.0.0.1:9099" else { return }
+        if FirebaseApp.app() == nil { FirebaseApp.configure() }
+        let auth = Auth.auth()
+        auth.useEmulator(withHost: "127.0.0.1", port: 9099)
+        guard let config = SiriSession.shared.currentConfig(),
+              auth.currentUser?.uid == config.uid else {
+            NSLog("[SiriProbe] authGateColdSignedIn=FAIL missing seed")
+            return
+        }
+        let coldAllowed = (try? await SiriSession.shared.token(for: config)) != nil
+        NSLog("[SiriProbe] authGateColdSignedIn=%@", coldAllowed ? "PASS" : "FAIL")
+        SiriSession.shared.simulateFirebaseTokenFailure = true
+        let mirror = try? await SiriSession.shared.token(for: config)
+        SiriSession.shared.simulateFirebaseTokenFailure = false
+        NSLog("[SiriProbe] authGateMatchingUserMirrorFallback=%@",
+              mirror == "fake-siri-probe-token" ? "PASS" : "FAIL")
+        do {
+            try await SiriSnapshotStore.shared.upsert([
+                SiriMemory(id: "auth-gate-private", content: "private", createdAtMs:
+                    Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+            ], uid: config.uid)
+            try auth.signOut()
+            let refused: Bool
+            do { _ = try await SiriSession.shared.token(for: config); refused = false }
+            catch SiriSession.Failure.auth { refused = true }
+            catch { refused = false }
+            let queriesEmpty: Bool
+            if #available(iOS 27.0, *) {
+                queriesEmpty = SiriSnapshotStore.shared.memories(ids: nil).isEmpty &&
+                    SiriSnapshotStore.shared.tasks(ids: nil).isEmpty
+            } else { queriesEmpty = true }
+            let pending = !(UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")?
+                .stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? []).isEmpty
+            NSLog("[SiriProbe] authGateNilRefused=%@ queriesEmpty=%@ fenced=%@",
+                  refused ? "PASS" : "FAIL", queriesEmpty ? "PASS" : "FAIL", pending ? "PASS" : "FAIL")
+            _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
+            let original = try await auth.signInAnonymously().user
+            try await SiriSnapshotStore.shared.bind(uid: original.uid)
+            let rebound = SiriSessionConfig(uid: original.uid,
+                generation: SiriSnapshotStore.shared.generationForOwner(original.uid) ?? -1,
+                baseUrl: "http://127.0.0.1:8976", profile: "local_dev", appVersion: "probe",
+                appBuild: "0", deviceIdHash: "probe-device", token: "fake-siri-probe-token",
+                tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
+            try SiriSession.shared.publish(rebound)
+            let oldConfig = SiriSession.shared.currentConfig()!
+            try auth.signOut()
+            _ = try await auth.signInAnonymously().user
+            let differentRefused: Bool
+            do { _ = try await SiriSession.shared.token(for: oldConfig); differentRefused = false }
+            catch SiriSession.Failure.auth { differentRefused = true }
+            catch { differentRefused = false }
+            NSLog("[SiriProbe] authGateDifferentUidRefused=%@", differentRefused ? "PASS" : "FAIL")
+            _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
+            let currentUid = auth.currentUser!.uid
+            try await SiriSnapshotStore.shared.bind(uid: currentUid)
+            let current = SiriSessionConfig(uid: currentUid,
+                generation: SiriSnapshotStore.shared.generationForOwner(currentUid) ?? -1,
+                baseUrl: "http://127.0.0.1:8976", profile: "local_dev", appVersion: "probe",
+                appBuild: "0", deviceIdHash: "probe-device", token: "fake-siri-probe-token",
+                tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
+            try SiriSession.shared.publish(current)
+            SiriSession.shared.simulateKeychainDeleteFailuresRemaining = 2
+            SiriSnapshotStore.shared.simulateMarkerFlushFailureOnce = true
+            SiriSnapshotStore.shared.prepareForSignOut()
+            let missingMarker = (UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")?
+                .stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? []).isEmpty
+            let queryDenied: Bool
+            if #available(iOS 27.0, *) { queryDenied = SiriSnapshotStore.shared.memories(ids: nil).isEmpty }
+            else { queryDenied = true }
+            let inMemoryDenied = SiriSession.shared.hasMirroredToken() && missingMarker &&
+                SiriSnapshotStore.shared.generationForOwner(currentUid) == nil && queryDenied
+            NSLog("[SiriProbe] authGateAllPersistenceFailedInMemoryFence=%@",
+                  inMemoryDenied ? "PASS" : "FAIL")
+        } catch { NSLog("[SiriProbe] authGateNilRefused=FAIL error=%@", String(describing: error)) }
     }
 }
 

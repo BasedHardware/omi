@@ -3,6 +3,7 @@ import Foundation
 import Security
 import FirebaseAuth
 import FirebaseCore
+import UIKit
 
 /// A short-lived mirror lets an intent run before the Flutter engine exists.
 /// Tokens are never stored in UserDefaults or in the Spotlight snapshot.
@@ -11,6 +12,8 @@ final class SiriSession {
     #if OMI_SIRI_PROBE
     var beforeTokenLookup: (() -> Void)?
     var simulateKeychainDeleteFailureOnce = false
+    var simulateKeychainDeleteFailuresRemaining = 0
+    var simulateFirebaseTokenFailure = false
     #endif
     private let defaults: UserDefaults?
     private let keychainService = SiriStorageNamespace.current.keychainService
@@ -79,6 +82,10 @@ final class SiriSession {
     @discardableResult
     func revokeMirroredTokenForSignOut() -> Bool {
         #if OMI_SIRI_PROBE
+        if simulateKeychainDeleteFailuresRemaining > 0 {
+            simulateKeychainDeleteFailuresRemaining -= 1
+            return false
+        }
         if simulateKeychainDeleteFailureOnce {
             simulateKeychainDeleteFailureOnce = false
             return false
@@ -95,7 +102,44 @@ final class SiriSession {
         return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
     }
 
+    /// Pinned FirebaseAuth 11.10.0, Auth.swift:1671-1705, enqueues saved-user
+    /// Keychain hydration on kAuthGlobalWorkQueue. Auth.swift:174-178 makes
+    /// currentUser synchronize on that same queue, so this read waits
+    /// for the initial hydration attempt. A locked Keychain is the exception:
+    /// Firebase retries after protected data becomes available, and Siri must
+    /// deny temporarily without destroying the signed-in account's index.
+    func requireFirebaseOwner(_ uid: String) throws -> User? {
+        #if OMI_SIRI_PROBE
+        // The legacy loopback probe deliberately uses synthetic UIDs. The
+        // separate Auth-emulator probe exercises this real authorization gate.
+        if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe") { return nil }
+        #endif
+        if FirebaseApp.app() == nil { FirebaseApp.configure() }
+        let user = Auth.auth().currentUser
+        guard let user, user.uid == uid else {
+            if user == nil && !UIApplication.shared.isProtectedDataAvailable {
+                SiriSnapshotStore.shared.setAuthResolutionPending(true)
+            } else {
+                SiriSnapshotStore.shared.prepareForSignOut()
+            }
+            throw Failure.auth
+        }
+        SiriSnapshotStore.shared.setAuthResolutionPending(false)
+        return user
+    }
+
+    /// A pure check for callers already holding the snapshot lock. The public
+    /// request/read entry points run requireFirebaseOwner first to fence a
+    /// definitive mismatch outside that lock.
+    func hasCurrentFirebaseOwner(_ uid: String) -> Bool {
+        #if OMI_SIRI_PROBE
+        if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe") { return true }
+        #endif
+        return FirebaseApp.app() != nil && Auth.auth().currentUser?.uid == uid
+    }
+
     func validateOwner(_ config: Config) throws {
+        _ = try requireFirebaseOwner(config.uid)
         guard hasMirroredToken(), let current = currentConfig(), current.uid == config.uid,
               (current.generation ?? 0) == (config.generation ?? 0),
               SiriSnapshotStore.shared.generationForOwner(config.uid) == (config.generation ?? 0)
@@ -107,14 +151,18 @@ final class SiriSession {
         beforeTokenLookup?()
         #endif
         try validateOwner(config)
-        // Try Firebase first. On a clean background Runner launch, the SDK can
-        // lack a hydrated user; the bounded mirror below is the fallback.
-        if FirebaseApp.app() == nil { FirebaseApp.configure() }
-        if let user = Auth.auth().currentUser, user.uid == config.uid {
-            if let fresh = try? await user.getIDToken(), !fresh.isEmpty {
-                try validateOwner(config)
-                return fresh
-            }
+        let user = try requireFirebaseOwner(config.uid)
+        // The mirror is only a token fallback for this same native Firebase
+        // user, never an alternative source of account authorization.
+        #if OMI_SIRI_PROBE
+        let skipFirebaseToken = simulateFirebaseTokenFailure
+        #else
+        let skipFirebaseToken = false
+        #endif
+        if !skipFirebaseToken, let user,
+           let fresh = try? await user.getIDToken(), !fresh.isEmpty {
+            try validateOwner(config)
+            return fresh
         }
         guard let expiry = config.expiresAtMs,
               expiry > Int64(Date().timeIntervalSince1970 * 1000) + 60_000 else {

@@ -9,7 +9,7 @@ final class OmiSceneDelegate: FlutterSceneDelegate {
     override func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
                         options connectionOptions: UIScene.ConnectionOptions) {
         #if OMI_SIRI_PROBE && compiler(>=6.4)
-        if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe"),
+        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("-omi-siri-probe") }),
            let windowScene = scene as? UIWindowScene, #available(iOS 26.0, *) {
             window = UIWindow(windowScene: windowScene)
             SiriDebugProbe.runIfRequested() // No Flutter scene or engine has been created.

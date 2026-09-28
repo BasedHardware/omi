@@ -116,7 +116,7 @@ final class SiriSnapshotStore {
     private func accountOwnerLocked() -> Bool {
         guard let uid = snapshot.ownerUid, !uid.isEmpty else { return false }
         return owner == uid && SiriSession.shared.currentConfig()?.uid == uid &&
-            SiriSession.shared.hasMirroredToken() &&
+            SiriSession.shared.hasMirroredToken() && SiriSession.shared.hasCurrentFirebaseOwner(uid) &&
             transitionGeneration == nil && !authResolutionPending &&
             (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty
     }
@@ -148,6 +148,8 @@ final class SiriSnapshotStore {
         (defaults.object(forKey: generationKey) as? Int64 ?? 0) == generation
     }
     private func requireValidOwner(_ expectedUid: String? = nil) throws {
+        guard let uid = expectedUid ?? owner else { throw SiriSession.Failure.auth }
+        _ = try SiriSession.shared.requireFirebaseOwner(uid)
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked(), expectedUid == nil || snapshot.ownerUid == expectedUid else {
             throw SiriSession.Failure.auth
@@ -340,8 +342,9 @@ final class SiriSnapshotStore {
     }
     /// This fast privacy fence bypasses the Spotlight serialization gate.
     /// Each operation runs even if another fails; the queued wipe follows via
-    /// the auth callback. Token absence alone denies a cold engine-free launch.
-    func prepareForSignOut() throws {
+    /// the auth callback. Token absence and the hydrated Firebase owner check
+    /// each deny a cold engine-free launch independently of the marker.
+    func prepareForSignOut() {
         let tokenRemoved = SiriSession.shared.revokeMirroredTokenForSignOut()
         if !tokenRemoved { NSLog("[SiriIndex] Sign-out token revocation failed; attempting durable marker") }
         lock.lock()
@@ -371,7 +374,11 @@ final class SiriSnapshotStore {
         if !SiriSession.shared.revokeMirroredTokenForSignOut() {
             NSLog("[SiriIndex] Sign-out post-fence token revocation failed")
         }
-        guard tokenRemoved && markerPersisted else { throw SiriSession.Failure.auth }
+        if !tokenRemoved || !markerPersisted {
+            // The process fence is still active. On a future launch, every
+            // Siri read also checks Firebase's persisted currentUser.
+            NSLog("[SiriIndex] Sign-out persistence incomplete; Firebase owner check remains required")
+        }
     }
     func retryPendingWipe() async throws -> Bool {
         return try await serialized {
@@ -579,6 +586,8 @@ final class SiriSnapshotStore {
         if defaults.string(forKey: routeKey) == route { defaults.removeObject(forKey: routeKey) }
     }
     func allowsDonation(uid: String) -> Bool {
+        do { _ = try SiriSession.shared.requireFirebaseOwner(uid) }
+        catch { return false }
         lock.lock(); defer { lock.unlock() }
         return validOwnerLocked() && snapshot.ownerUid == uid
     }
@@ -586,6 +595,9 @@ final class SiriSnapshotStore {
     /// Open intents remain usable with indexing OFF, but a stale entity must
     /// never navigate under a different owner or after leaving index scope.
     func containsCurrentEntity(type: String, id: String) -> Bool {
+        guard let uid = owner else { return false }
+        do { _ = try SiriSession.shared.requireFirebaseOwner(uid) }
+        catch { return false }
         lock.lock(); defer { lock.unlock() }
         guard !id.isEmpty, accountOwnerLocked(), transitionGeneration == nil,
               (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty else { return false }
@@ -603,6 +615,9 @@ final class SiriSnapshotStore {
 
     @available(iOS 27.0, *)
     func conversations(ids: [String]?) -> [ConversationEntity] {
+        guard let uid = owner else { return [] }
+        do { _ = try SiriSession.shared.requireFirebaseOwner(uid) }
+        catch { return [] }
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
@@ -615,6 +630,9 @@ final class SiriSnapshotStore {
     }
     @available(iOS 27.0, *)
     func memoryNotes(ids: [String]?) -> [ConversationEntity] {
+        guard let uid = owner else { return [] }
+        do { _ = try SiriSession.shared.requireFirebaseOwner(uid) }
+        catch { return [] }
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
@@ -625,6 +643,9 @@ final class SiriSnapshotStore {
     }
     @available(iOS 27.0, *)
     func memories(ids: [String]?) -> [MemoryEntity] {
+        guard let uid = owner else { return [] }
+        do { _ = try SiriSession.shared.requireFirebaseOwner(uid) }
+        catch { return [] }
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
@@ -634,6 +655,9 @@ final class SiriSnapshotStore {
     }
     @available(iOS 27.0, *)
     func tasks(ids: [String]?) -> [TaskEntity] {
+        guard let uid = owner else { return [] }
+        do { _ = try SiriSession.shared.requireFirebaseOwner(uid) }
+        catch { return [] }
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
         let now = Int64(Date().timeIntervalSince1970 * 1000)

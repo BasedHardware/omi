@@ -210,7 +210,9 @@ struct TaskEntity: IndexedEntity {
 @available(iOS 27.0, *)
 struct OmiFolderQuery: EntityQuery {
     func entities(for identifiers: [String]) async throws -> [OmiFolderEntity] {
-        [OmiFolderEntity.conversations, .memories].filter { identifiers.contains($0.id) }
+        guard let config = SiriSession.shared.currentConfig(),
+              (try? SiriSession.shared.validateOwner(config)) != nil else { return [] }
+        return [OmiFolderEntity.conversations, .memories].filter { identifiers.contains($0.id) }
     }
 }
 @available(iOS 27.0, *)
@@ -219,7 +221,11 @@ struct OmiAccountQuery: EntityQuery {
 }
 @available(iOS 27.0, *)
 struct OmiListQuery: EntityQuery {
-    func entities(for identifiers: [String]) async throws -> [OmiListEntity] { identifiers.contains("omi") ? [.omi] : [] }
+    func entities(for identifiers: [String]) async throws -> [OmiListEntity] {
+        guard let config = SiriSession.shared.currentConfig(),
+              (try? SiriSession.shared.validateOwner(config)) != nil else { return [] }
+        return identifiers.contains("omi") ? [.omi] : []
+    }
 }
 @available(iOS 27.0, *)
 struct OmiLocationTriggerQuery: EntityQuery {

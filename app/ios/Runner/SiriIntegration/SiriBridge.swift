@@ -66,6 +66,7 @@ final class SiriBridge: SiriIndexApi {
         if arguments.contains("-omi-siri-probe") &&
             !arguments.contains("-omi-siri-probe-auth-seed") &&
             !arguments.contains("-omi-siri-probe-auth-verify") { return }
+        if arguments.contains("-omi-siri-probe-auth-gate") { return }
         #endif
         SiriNativeAuthFence.shared.install()
     }
@@ -113,10 +114,8 @@ final class SiriBridge: SiriIndexApi {
         }
     }
     func prepareForSignOut(completion: @escaping (Result<Void, Error>) -> Void) {
-        do {
-            try SiriSnapshotStore.shared.prepareForSignOut()
-            completion(.success(()))
-        } catch { completion(.failure(error)) }
+        SiriSnapshotStore.shared.prepareForSignOut()
+        completion(.success(()))
     }
     func generationForOwner(uid: String, completion: @escaping (Result<Int64?, Error>) -> Void) {
         completion(.success(SiriSnapshotStore.shared.generationForOwner(uid)))
@@ -231,8 +230,7 @@ private final class SiriNativeAuthFence {
             SiriSnapshotStore.shared.setAuthResolutionPending(true)
             return
         }
-        do { try SiriSnapshotStore.shared.prepareForSignOut() }
-        catch { NSLog("[SiriIndex] Native auth transition fence failed: %@", String(describing: error)) }
+        SiriSnapshotStore.shared.prepareForSignOut()
     }
 }
 
