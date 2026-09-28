@@ -19,6 +19,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:uuid/uuid.dart';
 
 import 'feedback_prompt_policy.dart';
+import 'feedback_sheet.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
@@ -151,7 +152,11 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
 class SummaryFeedbackPrompt extends StatefulWidget {
   final String? conversationId;
 
-  const SummaryFeedbackPrompt({super.key, required this.conversationId});
+  /// Test seam for the [submitMobileFeedback] request path; production leaves
+  /// this null and submits through the real ledger API.
+  final MobileFeedbackSubmit? submitFeedback;
+
+  const SummaryFeedbackPrompt({super.key, required this.conversationId, this.submitFeedback});
 
   @override
   State<SummaryFeedbackPrompt> createState() => _SummaryFeedbackPromptState();
@@ -163,7 +168,11 @@ class SummaryFeedbackPrompt extends StatefulWidget {
 class RecordingQualityFeedbackPrompt extends StatefulWidget {
   final String? recordingId;
 
-  const RecordingQualityFeedbackPrompt({super.key, required this.recordingId});
+  /// Test seam for the [submitMobileFeedback] request path; production leaves
+  /// this null and submits through the real ledger API.
+  final MobileFeedbackSubmit? submitFeedback;
+
+  const RecordingQualityFeedbackPrompt({super.key, required this.recordingId, this.submitFeedback});
 
   @override
   State<RecordingQualityFeedbackPrompt> createState() => _RecordingQualityFeedbackPromptState();
@@ -180,6 +189,7 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
   Future<void>? _claimFuture;
   String? _feedbackId;
   int? _pendingValue;
+  MobileFeedbackReason? _pendingReason;
 
   @override
   void initState() {
@@ -238,7 +248,7 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
     );
   }
 
-  Future<void> _submit(int value) async {
+  Future<void> _submit(int value, {MobileFeedbackReason? reason}) async {
     if (_saving || _responded) return;
     final id = widget.recordingId;
     if (id == null || id.isEmpty) return;
@@ -247,20 +257,22 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
     if (!mounted || id != widget.recordingId || identityEpoch != AnalyticsManager.identityEpoch) return;
     _ensureExposed();
     if (_attempt == null) return;
-    if (_pendingValue != value) {
+    if (_pendingValue != value || _pendingReason != reason) {
       _feedbackId = const Uuid().v4();
       _pendingValue = value;
+      _pendingReason = reason;
     }
     final feedbackId = _feedbackId;
     final attempt = _attempt;
     setState(() => _saving = true);
     MobileFeedbackReceipt? receipt;
     try {
-      receipt = await submitMobileFeedback(
+      receipt = await (widget.submitFeedback ?? submitMobileFeedback)(
         kind: MobileFeedbackKind.recordingQuality,
         targetKind: MobileFeedbackTargetKind.conversation,
         targetId: id,
         value: value,
+        reason: reason,
         feedbackId: feedbackId,
         correlationId: _attempt?.correlationId,
       );
@@ -303,6 +315,18 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
     setState(() => _dismissed = true);
   }
 
+  /// Opens the quick feedback sheet. Picking an option there submits through
+  /// [_submit]; closing the sheet without a choice leaves the prompt as-is.
+  Future<void> _openFeedbackSheet() async {
+    if (_saving || !_policyClaimed) return;
+    await showFeedbackReasonSheet(
+      context,
+      title: context.l10n.feedbackTitleAudioQuality,
+      population: FeedbackReasonPopulation.recording,
+      onSubmit: (value, reason) => _submit(value, reason: reason),
+    );
+  }
+
   @override
   void dispose() {
     if (!_responded && !_dismissed && _attempt != null) {
@@ -329,7 +353,7 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             child: Row(
               children: [
                 Expanded(
@@ -348,23 +372,19 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: context.l10n.wasThisHelpful,
-                  onPressed: _saving || !_policyClaimed ? null : () => _submit(1),
-                  icon: const Icon(Icons.thumb_up_alt_outlined, size: 19),
-                  color: Colors.white70,
-                ),
-                IconButton(
-                  tooltip: context.l10n.notHelpful,
-                  onPressed: _saving || !_policyClaimed ? null : () => _submit(-1),
-                  icon: const Icon(Icons.thumb_down_alt_outlined, size: 19),
-                  color: Colors.white70,
+                OmiButton.secondary(
+                  key: const ValueKey('recording_feedback_give_feedback'),
+                  label: context.l10n.feedbackGiveFeedback,
+                  size: OmiButtonSize.compact,
+                  // The sheet is a chooser, not work: don't hand its future to
+                  // OmiButton or the button would spin for as long as it's open.
+                  onPressed: _saving || !_policyClaimed ? null : () => unawaited(_openFeedbackSheet()),
                 ),
                 IconButton(
                   tooltip: context.l10n.close,
                   onPressed: _saving || !_policyClaimed ? null : _dismiss,
                   icon: const Icon(Icons.close, size: 18),
-                  color: Colors.white54,
+                  color: OmiColors.textPrimary.withValues(alpha: 0.54),
                 ),
               ],
             ),
@@ -386,6 +406,7 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
   Future<void>? _claimFuture;
   String? _feedbackId;
   int? _pendingValue;
+  MobileFeedbackReason? _pendingReason;
 
   @override
   void initState() {
@@ -408,6 +429,7 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
       _claimFuture = null;
       _feedbackId = null;
       _pendingValue = null;
+      _pendingReason = null;
       _loadEligibility();
     }
   }
@@ -463,7 +485,7 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
     );
   }
 
-  Future<void> _submit(int value) async {
+  Future<void> _submit(int value, {MobileFeedbackReason? reason}) async {
     if (_saving || _responded) return;
     final id = widget.conversationId;
     if (id == null || id.isEmpty) return;
@@ -472,20 +494,22 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
     if (!mounted || id != widget.conversationId || identityEpoch != AnalyticsManager.identityEpoch) return;
     _ensureExposed();
     if (_attempt == null) return;
-    if (_pendingValue != value) {
+    if (_pendingValue != value || _pendingReason != reason) {
       _feedbackId = const Uuid().v4();
       _pendingValue = value;
+      _pendingReason = reason;
     }
     final feedbackId = _feedbackId;
     final attempt = _attempt;
     setState(() => _saving = true);
     MobileFeedbackReceipt? receipt;
     try {
-      receipt = await submitMobileFeedback(
+      receipt = await (widget.submitFeedback ?? submitMobileFeedback)(
         kind: MobileFeedbackKind.summaryHelpfulness,
         targetKind: MobileFeedbackTargetKind.conversation,
         targetId: id,
         value: value,
+        reason: reason,
         feedbackId: feedbackId,
         correlationId: _attempt?.correlationId,
       );
@@ -535,6 +559,18 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
     setState(() => _dismissed = true);
   }
 
+  /// Opens the quick feedback sheet. Picking an option there submits through
+  /// [_submit]; closing the sheet without a choice leaves the prompt as-is.
+  Future<void> _openFeedbackSheet() async {
+    if (_saving || !_policyClaimed) return;
+    await showFeedbackReasonSheet(
+      context,
+      title: context.l10n.wasThisHelpful,
+      population: FeedbackReasonPopulation.summary,
+      onSubmit: (value, reason) => _submit(value, reason: reason),
+    );
+  }
+
   @override
   void dispose() {
     if (!_responded && !_dismissed && _attempt != null) {
@@ -571,36 +607,32 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 context.l10n.wasThisHelpful,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: OmiColors.textPrimary,
                   fontSize: 14, // omi-ux-allow: font-size-literal -- pre-existing label style; no 14pt OmiType token
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ),
-            IconButton(
-              tooltip: context.l10n.wasThisHelpful,
-              onPressed: _saving || !_policyClaimed ? null : () => _submit(1),
-              icon: const Icon(Icons.thumb_up_alt_outlined, size: 19),
-              color: Colors.white70,
-            ),
-            IconButton(
-              tooltip: context.l10n.notHelpful,
-              onPressed: _saving || !_policyClaimed ? null : () => _submit(-1),
-              icon: const Icon(Icons.thumb_down_alt_outlined, size: 19),
-              color: Colors.white70,
+            OmiButton.secondary(
+              key: const ValueKey('summary_feedback_give_feedback'),
+              label: context.l10n.feedbackGiveFeedback,
+              size: OmiButtonSize.compact,
+              // The sheet is a chooser, not work: don't hand its future to
+              // OmiButton or the button would spin for as long as it's open.
+              onPressed: _saving || !_policyClaimed ? null : () => unawaited(_openFeedbackSheet()),
             ),
             IconButton(
               tooltip: context.l10n.close,
               onPressed: _saving || !_policyClaimed ? null : _dismiss,
               icon: const Icon(Icons.close, size: 18),
-              color: Colors.white54,
+              color: OmiColors.textPrimary.withValues(alpha: 0.54),
             ),
           ],
         ),

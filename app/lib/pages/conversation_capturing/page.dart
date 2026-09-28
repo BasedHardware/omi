@@ -291,14 +291,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // Camera icon avatar
-          const Column(
+          Column(
             children: [
               CircleAvatar(
                 radius: 16,
                 backgroundColor: OmiColors.surface2,
                 child: Icon(Icons.camera_alt, size: 16, color: OmiColors.textSecondary),
               ),
-              SizedBox(height: 2),
+              const SizedBox(height: 2),
             ],
           ),
           const SizedBox(width: 8),
@@ -338,7 +338,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.camera_alt, size: 12, color: OmiColors.textTertiary),
+                        Icon(Icons.camera_alt, size: 12, color: OmiColors.textTertiary),
                         const SizedBox(width: 4),
                         Text(
                           group.length > 1
@@ -464,14 +464,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           onTap: () => _editSegmentSpeaker(segment, provider),
           child: GestureDetector(
             onTap: () => _editSegmentSpeaker(segment, provider),
-            child: const Column(
+            child: Column(
               children: [
                 CircleAvatar(
                   radius: 16,
                   backgroundColor: OmiColors.surface2,
                   child: Icon(Icons.person, size: 16, color: OmiColors.textSecondary),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
               ],
             ),
           ),
@@ -618,7 +618,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
               ),
               if (!failed && !retrying && uploading) ...[
                 const SizedBox(width: 8),
-                const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
+                OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
               ],
             ],
           ),

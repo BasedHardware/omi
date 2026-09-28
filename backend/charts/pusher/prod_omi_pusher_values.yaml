@@ -184,6 +184,23 @@ env:
     value: "false"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
+  # Phase-1 final-pass shadow runs only for the owner UID on this pusher.
+  - name: TRANSCRIPTION_SHADOW_ENABLED
+    value: "true"
+  - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
+    value: "false"
+  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: TRANSCRIPTION_SHADOW_PERCENT
+    value: "0"
+  - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
+    value: "1"
+  - name: CAPTURE_JEV_SHADOW_ENABLED
+    value: "true"
+  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: CAPTURE_JEV_SHADOW_PERCENT
+    value: "0"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:

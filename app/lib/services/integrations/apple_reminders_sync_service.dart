@@ -1,8 +1,29 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/schema/action_item.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/integrations/apple_reminders_service.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/services/siri_integration.dart';
+
+/// Apply a backend batch and emit only the index changes the backend confirmed.
+Future<void> applyAppleReminderTaskMutations({
+  required List<Map<String, dynamic>> updates,
+  required List<String> deleteIds,
+  required Future<bool> Function(List<Map<String, dynamic>>) syncBatch,
+  required Future<bool> Function(String) deleteTask,
+  required Future<void> Function() refreshTaskIndex,
+  required Future<void> Function(List<String>) removeFromIndex,
+}) async {
+  if (updates.isNotEmpty && await syncBatch(updates)) await refreshTaskIndex();
+  final confirmedDeletes = <String>[];
+  for (final id in deleteIds) {
+    if (await deleteTask(id)) confirmedDeletes.add(id);
+  }
+  if (confirmedDeletes.isNotEmpty) await removeFromIndex(confirmedDeletes);
+}
 
 /// Orchestrates bidirectional Apple Reminders sync on foreground resume.
 class AppleRemindersSyncService {
@@ -76,6 +97,7 @@ class AppleRemindersSyncService {
   }
 
   Future<Map<String, int>> _performBidirectionalSync(List<ActionItemWithMetadata> syncedItems) async {
+    final ownerUid = SharedPreferencesUtil().uid;
     final stats = {
       'checked': 0,
       'completionsPulled': 0,
@@ -169,12 +191,14 @@ class AppleRemindersSyncService {
       }
     }
 
-    if (backendUpdates.isNotEmpty) {
-      await syncBatchUpdate(backendUpdates);
-    }
-    for (final id in deleteIds) {
-      await deleteActionItem(id);
-    }
+    await applyAppleReminderTaskMutations(
+      updates: backendUpdates,
+      deleteIds: deleteIds,
+      syncBatch: syncBatchUpdate,
+      deleteTask: deleteActionItem,
+      refreshTaskIndex: () => SiriIntegration.current.refreshAuthoritativeTasks(expectedUid: ownerUid),
+      removeFromIndex: (ids) => SiriIntegration.current.deleteMany('task', ids, expectedUid: ownerUid),
+    );
     return stats;
   }
 

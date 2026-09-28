@@ -397,14 +397,14 @@ def test_fenced_cas_loss_leaves_unconfirmed_pending_orphan(monkeypatch):
     assert calls == ['pending', 'eval', 'eval', 'eval']
 
 
-def test_stale_backfill_self_heal_writes_pending_first(monkeypatch):
+def test_stale_backfill_read_does_not_publish_dead_letter(monkeypatch):
     job = _backfill_job(status='processing', updated_at=time.time() - 700, created_at=time.time() - 800)
     fake_redis, recorder, calls = _hook_harness(monkeypatch, job)
 
     result = sync_jobs.get_sync_job('job-1')
 
-    assert result['status'] == 'failed'
-    assert calls == ['pending', 'set']
+    assert result == job
+    assert calls == []
 
 
 def _poll(job, dead_letter_doc, monkeypatch):
@@ -519,20 +519,26 @@ def test_poll_terminal_backfill_with_confirmed_ledger_serves_status(monkeypatch)
     assert _client_terminal_policy(resp['status'], is_terminal=True) == 'retry'
 
 
-def test_poll_stale_self_healed_backfill_releases_inflight_slot(monkeypatch):
-    stale_job = _backfill_job(status='processing', updated_at=time.time() - 700, created_at=time.time() - 800)
+def test_poll_stale_owned_backfill_preserves_inflight_slot(monkeypatch):
+    stale_job = _backfill_job(
+        status='processing',
+        dispatch_mode='cloud_tasks',
+        updated_at=time.time() - 700,
+        created_at=time.time() - 800,
+    )
     fake_redis, _, _ = _hook_harness(monkeypatch, stale_job)
     released = []
     monkeypatch.setattr(sync_router, 'get_sync_job', sync_jobs.get_sync_job)
     monkeypatch.setattr(sync_router, 'get_sync_ledger_fence_mode', lambda: sync_router.SyncLedgerFenceMode.LEGACY)
+    monkeypatch.setattr(sync_router, 'try_acquire_job_run_lock', lambda _job_id: None)
     monkeypatch.setattr(sync_router.sync_dead_letters, 'get_dead_letter', MagicMock(return_value=_ledger_doc()))
     monkeypatch.setattr(sync_router, 'release_backfill_slot', lambda uid, jid: released.append((uid, jid)))
 
     resp = sync_router.get_sync_job_status('job-1', uid='u1')
 
-    assert resp['status'] == 'failed'
-    assert json.loads(fake_redis.raw)['status'] == 'failed'
-    assert released == [('u1', 'job-1')]
+    assert resp['status'] == 'processing'
+    assert json.loads(fake_redis.raw)['status'] == 'processing'
+    assert released == []
 
 
 @pytest.mark.parametrize('status', ['pending', 'dead_letter'])
@@ -613,6 +619,8 @@ class _FakeRequest:
 
 def _run_job_harness(monkeypatch, job, *, ensure_error=None):
     calls: list[str] = []
+    monkeypatch.setattr(sync_router, 'get_raw_sync_job', MagicMock(return_value=deepcopy(job)))
+    monkeypatch.setattr(sync_router.sync_backfill_sequencer, 'get_owner', MagicMock(return_value={}))
     monkeypatch.setattr(
         sync_router,
         'get_sync_ledger_fence_mode',

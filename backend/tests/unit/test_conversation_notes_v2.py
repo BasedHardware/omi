@@ -395,6 +395,162 @@ def test_source_segment_refs_drop_non_string_ids():
     assert result.action_items[0].source_segment_ids == ['s1']
 
 
+def test_presentation_contract_recovers_inline_citations_and_neutralizes_unsafe_links():
+    from utils.llm.meeting_notes_validation import enforce_structured_presentation_contract
+
+    source_id = '443191dc-8b75-4451-9d72-27c449b9ea45'
+    unknown_id = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+    structured = Structured.model_validate(
+        {
+            'title': 'Dinner',
+            'sections': [
+                {
+                    'heading': 'Plans',
+                    'body_markdown': (
+                        f'- Shared hot pot. ([{source_id}]({source_id}); s2)\n'
+                        '- Standalone source [s3](s3)\n'
+                        f'- Preserved reference {unknown_id}.\n'
+                        '  - Nested detail stays nested.\n'
+                        'Hard break stays here.  \nNext line.\n'
+                        '- Open [local file](file:///tmp/private).'
+                    ),
+                    'source_segment_ids': ['invented'],
+                }
+            ],
+        }
+    )
+
+    report = enforce_structured_presentation_contract(structured, [source_id, 's2', 's3'])
+
+    assert structured.sections[0].body_markdown == (
+        f'- Shared hot pot.\n- Standalone source\n- Preserved reference {unknown_id}.\n'
+        '  - Nested detail stays nested.\nHard break stays here.  \nNext line.\n- Open local file.'
+    )
+    assert structured.sections[0].source_segment_ids == [source_id, 's2', 's3']
+    assert report.repairs == {'inline_source_citation', 'invalid_source_reference', 'unsafe_markdown_link'}
+    assert not report.needs_revision
+
+    overview_only = Structured(overview=f'Compatibility text exposed {source_id}.')
+    first_report = enforce_structured_presentation_contract(overview_only, [source_id])
+    assert first_report.needs_revision
+    fallback_report = enforce_structured_presentation_contract(overview_only, [source_id], safe_fallback=True)
+    assert source_id not in overview_only.overview
+    assert fallback_report.repairs == {'source_id_in_prose'}
+
+
+@pytest.mark.parametrize('second_pass_is_clean', [True, False])
+def test_presentation_contract_allows_one_revision_then_falls_back(monkeypatch, second_pass_is_clean):
+    from utils.llm import conversation_processing, meeting_notes_presentation
+    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+
+    source_id = 'seg-private-1'
+    prefix = ConversationPromptPrefix(
+        conversation_id='conv-contract',
+        context=f'FULL TRANSCRIPT\n[{source_id} 0] First point',
+        transcript_segment_ids=frozenset({source_id}),
+    )
+    calls = []
+    fallbacks = []
+
+    class Model:
+        def invoke(self, messages):
+            calls.append(messages)
+            leaking = len(calls) == 1 or not second_pass_is_clean
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        'title': 'Evidence',
+                        'overview': 'compatibility',
+                        'emoji': '🧠',
+                        'category': 'work',
+                        'sections': [
+                            {
+                                'heading': 'Point',
+                                'body_markdown': (
+                                    f'- The identifier {source_id} supports this.' if leaking else '- First point.'
+                                ),
+                                'source_segment_ids': [source_id],
+                            }
+                        ],
+                        'action_items': [],
+                        'events': [],
+                    }
+                )
+            )
+
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_args, **_kwargs: Model())
+    monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
+    monkeypatch.setattr(meeting_notes_presentation, '_record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+    result = conversation_processing.get_conversation_notes(
+        prefix,
+        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+        language_code='en',
+        output_language_code='en',
+        tz='UTC',
+        task_intelligence_capture=True,
+    )
+
+    assert len(calls) == 2
+    assert 'Regenerate the complete JSON once' in _joined_message_text(calls[1])
+    assert source_id not in result.sections[0].body_markdown
+    assert result.sections[0].source_segment_ids == [source_id]
+    assert ('First point.' in result.sections[0].body_markdown) is second_pass_is_clean
+    assert fallbacks == ([] if second_pass_is_clean else [{'reason': 'policy'}])
+
+
+def test_presentation_contract_revision_error_keeps_sanitized_first_response(monkeypatch, caplog):
+    from utils.llm import conversation_processing, meeting_notes_presentation
+    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+
+    source_id = 'seg-private-1'
+    prefix = ConversationPromptPrefix(
+        conversation_id='conv-contract-error',
+        context=f'FULL TRANSCRIPT\n[{source_id} 0] First point',
+        transcript_segment_ids=frozenset({source_id}),
+    )
+    calls = 0
+    fallbacks = []
+
+    class Model:
+        def invoke(self, _messages):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                return SimpleNamespace(content='{"private":"PRIVATE-NOTE-CANARY"')
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        'title': 'Evidence',
+                        'sections': [
+                            {
+                                'heading': 'Point',
+                                'body_markdown': f'- Keep the useful first response without {source_id}.',
+                                'source_segment_ids': [source_id],
+                            }
+                        ],
+                    }
+                )
+            )
+
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_args, **_kwargs: Model())
+    monkeypatch.setattr(conversation_processing, 'shared_conversation_cache_supported', lambda: False)
+    monkeypatch.setattr(meeting_notes_presentation, '_record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+    result = conversation_processing.get_conversation_notes(
+        prefix,
+        started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
+        language_code='en',
+        output_language_code='en',
+        tz='UTC',
+        task_intelligence_capture=True,
+    )
+
+    assert calls == 2
+    assert result.sections[0].body_markdown == '- Keep the useful first response without.'
+    assert result.sections[0].source_segment_ids == [source_id]
+    assert fallbacks == [{'reason': 'other'}]
+    assert 'PRIVATE-NOTE-CANARY' not in caplog.text
+
+
 def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder():
     from utils.conversations.meeting_context import context_from_screen_activity
     from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix

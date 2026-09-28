@@ -11226,7 +11226,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get openCall => 'Åpne anrop';
 
   @override
-  String get captureRecoveryBanner => 'Lyden fra anhenget når ikke frem til appen — trykk for å reparere';
+  String get captureRecoveryBanner => 'Omi sender ikke lyd — trykk for å koble til igjen';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11363,4 +11363,142 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Hodetelefoner';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutter';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Oppgaver';
+
+  @override
+  String get usageMonth => 'Denne måneden';
+
+  @override
+  String get usageYear => 'Dette året';
+
+  @override
+  String get usageAll => 'All tid';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Utseende';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Lys';
+
+  @override
+  String get appearanceDark => 'Mørk';
+
+  @override
+  String get chatDiscardRecording => 'Forkast';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Jeg fikk ikke med meg det — prøv igjen';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Søk etter personer';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Legg til \"$query\" som en ny person';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Vis alle $count personer';
+  }
 }

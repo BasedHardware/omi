@@ -68,8 +68,8 @@ vi.mock('firebase/messaging', () => ({
   isSupported: async () => false,
 }));
 
-vi.mock('@/lib/analytics/mixpanel', () => ({
-  MixpanelManager: {
+vi.mock('@/lib/analytics/posthog', () => ({
+  PostHogManager: {
     init: vi.fn(),
     identify: vi.fn(),
     track: vi.fn(),
@@ -87,7 +87,9 @@ async function renderProvider() {
   function Probe() {
     const { user, loading, redirectSignInError } = useAuth();
     const code =
-      typeof redirectSignInError === 'object' && redirectSignInError !== null && 'code' in redirectSignInError
+      typeof redirectSignInError === 'object' &&
+      redirectSignInError !== null &&
+      'code' in redirectSignInError
         ? String((redirectSignInError as { code: unknown }).code)
         : 'none';
     return createElement(
@@ -151,12 +153,12 @@ describe('AuthProvider', () => {
   it('counts a sign-in that completed by redirect', async () => {
     stubEnvironment(CONFIGURED_ENV);
     firebaseAuth.getRedirectResult.mockResolvedValueOnce({ user: { uid: 'user-2' } });
-    const { MixpanelManager } = await import('@/lib/analytics/mixpanel');
+    const { PostHogManager } = await import('@/lib/analytics/posthog');
 
     await renderProvider();
 
     await waitFor(() =>
-      expect(MixpanelManager.track).toHaveBeenCalledWith('Sign In Completed', {
+      expect(PostHogManager.track).toHaveBeenCalledWith('Sign In Completed', {
         method: 'redirect',
       }),
     );
