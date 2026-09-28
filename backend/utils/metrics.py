@@ -921,6 +921,12 @@ OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
     ['transcription_source', 'outcome', 'client_platform'],
 )
 
+OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL = Counter(
+    'omi_listen_audio_decode_failures_total',
+    'Undecodable /v4/listen audio frames by bounded declared codec and client platform',
+    ['codec', 'client_platform'],
+)
+
 OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
     'omi_listen_unknown_channel_prefix_total',
     'Multi-channel frames dropped for an unknown channel prefix, by bounded source and client platform',

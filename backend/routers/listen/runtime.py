@@ -123,6 +123,7 @@ class ListenSessionRuntime:
 
     def __init__(self, request: ListenRequest):
         self.request = request
+        self.declared_codec = request.codec
         self.limits = ListenLimits()
         self.persistence = ListenPersistence()
         self.state = ListenSessionState()
