@@ -572,8 +572,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     />
   );
 
-  const send = async () => {
-    const text = draft.trim();
+  const send = async (explicitText?: string) => {
+    const text = (explicitText ?? draft).trim();
+    const explicit = explicitText !== undefined;
     const backend = omiBackend;
     if (
       backend === undefined ||
@@ -600,7 +601,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     const pending = createPendingAssistantMessage(localMessage);
     const pendingId = pending.id;
     setMessages(current => [...current, localMessage, pending]);
-    setDraft('');
+    if (!explicit) {
+      setDraft('');
+    }
     try {
       const result = await sendChatMessage(
         backend,
@@ -721,6 +724,19 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         omiRequestRef.current = null;
         setActiveOmiRequestId(null);
         setChatBusy(false);
+      }
+    }
+  };
+
+  // Re-send the human message paired with a failed assistant response.
+  const retryChatMessage = (failed: ChatMessage) => {
+    const index = messages.findIndex(message => message.id === failed.id);
+    if (index < 0) return;
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const candidate = messages[i];
+      if (candidate.sender === 'human') {
+        send(candidate.text).catch(() => undefined);
+        return;
       }
     }
   };
@@ -869,13 +885,16 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     setChatEpoch(current => current + 1);
   }, [refreshReads, resetChatSession, resetReads]);
 
-  const shouldAnimateChatMessage = (id: string) => {
-    if (stableChatMessageIds.has(id) || animatedChatMessageIds.has(id)) {
-      return false;
+  const shouldAnimateChatMessage = (id: string) =>
+    !stableChatMessageIds.has(id) && !animatedChatMessageIds.has(id);
+
+  // Mark rendered message ids as animated after commit; keeps
+  // shouldAnimateChatMessage pure (no ref writes during render).
+  useEffect(() => {
+    for (const message of messages) {
+      animatedChatMessageIds.add(message.id);
     }
-    animatedChatMessageIds.add(id);
-    return true;
-  };
+  }, [animatedChatMessageIds, messages]);
 
   const composer = (
     <Composer
@@ -1168,6 +1187,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         setRoute(beforeMobileChat.current.route);
         setMobileMode(beforeMobileChat.current.mode);
       }}
+      onRetry={retryChatMessage}
       onUsePrompt={prompt => {
         setMobileMode('Ask');
         setDraft(prompt);
@@ -1241,6 +1261,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               if (!homeChatOpen)
                 beforeMobileChat.current = {route, mode: mobileMode};
               setRoute('Home');
+              shouldFollowChat.current = true;
               setHomeChatOpen(true);
               send().catch(() => undefined);
             }}

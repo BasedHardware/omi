@@ -3,6 +3,7 @@ import {Animated, Easing, StyleSheet, Text, View} from 'react-native';
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {OmiAvatar} from './OmiAvatar';
 import {ChatMessageContent} from './ChatMessageContent';
+import {FocusPressable} from './Pressable';
 import {styles} from './styles';
 import {
   type DesktopTokens,
@@ -24,12 +25,14 @@ const ChatMessageRow = memo(function ChatMessageRow({
   compact,
   desktop = false,
   message,
+  onRetry,
   reduceMotion,
 }: {
   animate: boolean;
   compact: boolean;
   desktop?: boolean;
   message: ChatMessage;
+  onRetry?: () => void;
   reduceMotion: boolean;
 }) {
   const {tokens: token} = useDesktopTheme();
@@ -152,6 +155,23 @@ const ChatMessageRow = memo(function ChatMessageRow({
         {message.generationOutcome === 'cancelled' && (
           <Text style={styles.cancelledLabel}>Response stopped</Text>
         )}
+        {message.generationOutcome === 'failed' &&
+          message.generationRetryable === true &&
+          onRetry !== undefined && (
+            <FocusPressable
+              accessibilityRole="button"
+              accessibilityLabel="Try again"
+              onPress={onRetry}
+              style={[styles.retryButton, desktop && styles.macRetryButton]}>
+              <Text
+                style={[
+                  styles.retryButtonText,
+                  desktop && styles.macRetryButtonText,
+                ]}>
+                Try again
+              </Text>
+            </FocusPressable>
+          )}
         <Text
           style={[
             styles.chatTimestamp,

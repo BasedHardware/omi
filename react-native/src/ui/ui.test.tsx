@@ -62,7 +62,10 @@ jest.mock('react-native', () => {
     TextInput: component('TextInput'),
     View: component('View'),
     ScrollView: component('ScrollView'),
-    Linking: {openURL: jest.fn(async () => undefined)},
+    Linking: {
+      openSettings: jest.fn(async () => undefined),
+      openURL: jest.fn(async () => undefined),
+    },
   };
 });
 
@@ -326,19 +329,12 @@ describe('Onboarding chrome', () => {
       });
     };
     await press('Agree & Continue');
-    await act(async () => {
-      renderer.root
-        .find(node => node.props.accessibilityLabel === 'Enter your name')
-        .props.onChangeText('Sam');
-    });
-    await press('Continue');
     await press('Continue');
     await press('TikTok');
     await press('Continue');
     await checkPermissions?.();
     await press("I'll do these later");
     await press('Skip for now');
-    await press('Continue');
   }
 
   test('browser setup continues without offering unavailable wearable capture', async () => {
@@ -369,7 +365,7 @@ describe('Onboarding chrome', () => {
     });
     expect(
       renderer.root.findAll(
-        node => node.props.accessibilityLabel === 'Agree and connect Omi',
+        node => node.props.accessibilityLabel === 'Connect your Omi',
       ),
     ).toHaveLength(0);
     const action = renderer.root.findAll(
