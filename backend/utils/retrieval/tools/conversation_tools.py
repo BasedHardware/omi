@@ -418,12 +418,9 @@ def get_conversations_tool(
         return result
 
     except Exception as e:
-        error_msg = f"Error formatting conversations: {str(e)}"
-        logger.info(f"❌ get_conversations_tool - {error_msg}")
-        import traceback
+        logger.error(f"❌ Unexpected error in get_conversations_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while retrieving conversations. Please try again later."
 
-        traceback.print_exc()
-        return f"Found {len(conversations_data)} conversations but encountered an error formatting them: {str(e)}"
 
 
 @tool

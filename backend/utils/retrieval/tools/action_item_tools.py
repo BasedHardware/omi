@@ -179,11 +179,8 @@ def get_action_items_tool(
 
         logger.info(f"✅ get_action_items_tool - uid: {uid}, limit: {limit}")
     except Exception as config_error:
-        logger.error(f"❌ get_action_items_tool - error accessing config: {config_error}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Error: Configuration error - {str(config_error)}"
+        logger.error(f"❌ get_action_items_tool - error accessing config: {config_error}", exc_info=True)
+        return "Error: Unable to access user configuration"
 
     # Hard-scope: force conversation_id and intersect creation dates with chat_scope (#4515).
     scope = chat_scope_from_config(configurable)
@@ -282,11 +279,8 @@ def get_action_items_tool(
 
         logger.info(f"🔍 Database call completed - received {len(action_items) if action_items else 0} items")
     except Exception as e:
-        logger.error(f"❌ Error getting action items: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Error retrieving action items: {str(e)}"
+        logger.error(f"❌ Unexpected error getting action items: {e}", exc_info=True)
+        return "An unexpected error occurred while retrieving action items. Please try again later."
 
     action_items_count = len(action_items) if action_items else 0
     logger.info(f"📊 get_action_items_tool - found {action_items_count} action items")
@@ -507,8 +501,8 @@ def create_action_item_tool(
         return result
 
     except Exception as e:
-        logger.error(f"❌ Error creating action item: {e}")
-        return f"Error creating action item: {str(e)}"
+        logger.error(f"❌ Unexpected error creating action item: {e}", exc_info=True)
+        return "An unexpected error occurred while creating the action item. Please try again later."
 
 
 @tool
@@ -582,56 +576,56 @@ def update_action_item_tool(
         logger.info(f"❌ update_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
 
-    # Check if action item exists
-    existing_item = action_items_db.get_action_item(uid, action_item_id)
-    if not existing_item:
-        return f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID."
-
-    # Prepare update data
-    update_data: Dict[str, Any] = {}
-    changes: List[str] = []
-
-    if completed is not None:
-        update_data['completed'] = completed
-        if completed:
-            update_data['completed_at'] = datetime.now(datetime.now().astimezone().tzinfo)
-            changes.append("marked as completed")
-        else:
-            update_data['completed_at'] = None
-            changes.append("marked as pending")
-
-    if description is not None:
-        update_data['description'] = description
-        changes.append(f"description updated to '{description}'")
-
-    if due_at is not None:
-        try:
-            # Parse due date (must be ISO format with timezone)
-            due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
-            if due_dt.tzinfo is None:
-                return f"Error: due_at must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:30:00-08:00'): {due_at}"
-            # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences)
-            now_utc = datetime.now(timezone.utc)
-            if due_dt < now_utc - timedelta(days=1):
-                logger.warning(
-                    f"⚠️ update_action_item_tool - rejected past due_at: {due_at} (now: {now_utc.isoformat()})"
-                )
-                return (
-                    f"Error: due_at '{due_at}' is in the past. "
-                    f"The current time is {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}. "
-                    "Please use a future date for the due date."
-                )
-
-            update_data['due_at'] = due_dt
-            changes.append(f"due date set to {due_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        except ValueError as e:
-            return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at} - {str(e)}"
-
-    if not update_data:
-        return "No changes specified. Please provide at least one field to update (completed, description, or due_at)."
-
     # Update the action item
     try:
+        # Check if action item exists
+        existing_item = action_items_db.get_action_item(uid, action_item_id)
+        if not existing_item:
+            return f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID."
+
+        # Prepare update data
+        update_data: Dict[str, Any] = {}
+        changes: List[str] = []
+
+        if completed is not None:
+            update_data['completed'] = completed
+            if completed:
+                update_data['completed_at'] = datetime.now(datetime.now().astimezone().tzinfo)
+                changes.append("marked as completed")
+            else:
+                update_data['completed_at'] = None
+                changes.append("marked as pending")
+
+        if description is not None:
+            update_data['description'] = description
+            changes.append(f"description updated to '{description}'")
+
+        if due_at is not None:
+            try:
+                # Parse due date (must be ISO format with timezone)
+                due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
+                if due_dt.tzinfo is None:
+                    return f"Error: due_at must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:30:00-08:00'): {due_at}"
+                # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences)
+                now_utc = datetime.now(timezone.utc)
+                if due_dt < now_utc - timedelta(days=1):
+                    logger.warning(
+                        f"⚠️ update_action_item_tool - rejected past due_at: {due_at} (now: {now_utc.isoformat()})"
+                    )
+                    return (
+                        f"Error: due_at '{due_at}' is in the past. "
+                        f"The current time is {now_utc.strftime('%Y-%m-%dT%H:%M:%SZ')}. "
+                        "Please use a future date for the due date."
+                    )
+
+                update_data['due_at'] = due_dt
+                changes.append(f"due date set to {due_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            except ValueError as e:
+                return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at} - {str(e)}"
+
+        if not update_data:
+            return "No changes specified. Please provide at least one field to update (completed, description, or due_at)."
+
         success = action_items_db.update_action_item(uid, action_item_id, update_data)
         if not success:
             return f"Error: Failed to update action item with ID '{action_item_id}'."
@@ -670,5 +664,5 @@ def update_action_item_tool(
         return result
 
     except Exception as e:
-        logger.error(f"❌ Error updating action item: {e}")
-        return f"Error updating action item: {str(e)}"
+        logger.error(f"❌ Unexpected error updating action item: {e}", exc_info=True)
+        return "An unexpected error occurred while updating the action item. Please try again later."

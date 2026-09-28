@@ -1,6 +1,6 @@
+import logging
 import os
 import re
-import traceback
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -27,6 +27,7 @@ from utils.twilio_service import (
 )
 
 E164_PATTERN = re.compile(r'^\+[1-9]\d{1,14}$')
+logger = logging.getLogger(__name__)
 
 
 def _redact_phone(number: str) -> str:
@@ -144,11 +145,11 @@ def verify_phone_number(
                     status_code=409,
                     detail="A verification call is already in progress for this number. Please answer the call and enter the code.",
                 )
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
+        logger.error(f"Failed to start phone verification: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to start verification. Please try again later.")
     except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
+        logger.error(f"Unexpected error starting phone verification: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to start verification. Please try again later.")
 
 
 @router.post("/v1/phone/numbers/verify/check", response_model=CheckVerificationResponse, tags=['phone-calls'])

@@ -522,9 +522,5 @@ def search_memories_tool(
         return result.strip()
 
     except Exception as e:
-        error_msg = f"Error performing memory search: {str(e)}"
-        logger.info(f"❌ search_memories_tool - {error_msg}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Error searching memories: {str(e)}"
+        logger.error(f"❌ Unexpected error in search_memories_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while searching memories. Please try again later."
