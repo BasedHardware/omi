@@ -58,6 +58,25 @@ void main() {
     expect(await File('${directory.path}/boot_stages.json').readAsString(), contains('quarantine:btDevice'));
   });
 
+  test('mixed-type list is archived as JSON before the original is removed', () async {
+    const key = 'flash_page_pending_uploads';
+    SharedPreferences.setMockInitialValues({
+      key: <dynamic>['upload-1', 42]
+    });
+    await SharedPreferencesUtil.init();
+    final stored = await SharedPreferences.getInstance();
+    expect(stored.containsKey(key), isFalse);
+    final archive = stored.getKeys().singleWhere((candidate) => candidate.startsWith('$key.corrupt-'));
+    expect(jsonDecode(stored.getString(archive)!), ['upload-1', 42]);
+    expect(SharedPreferencesUtil().getStringList(key), isEmpty);
+    final journal = jsonDecode(await File('${directory.path}/boot_stages.json').readAsString()) as List<dynamic>;
+    expect(
+        journal,
+        contains(predicate<Map<String, dynamic>>(
+          (entry) => entry['stage'] == 'quarantine:$key' && entry['state'] == 'invalid_schema',
+        )));
+  });
+
   test('pre-fencing WAL index admits valid old entries and archives a corrupt sibling', () async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();

@@ -145,6 +145,7 @@ class SharedPreferencesUtil {
       if (value is int) saved = await prefs.setInt(archive, value);
       if (value is double) saved = await prefs.setDouble(archive, value);
       if (value is List<String>) saved = await prefs.setStringList(archive, value);
+      if (value is List && value is! List<String>) saved = await prefs.setString(archive, jsonEncode(value));
       if (saved) await prefs.remove(key);
       await BootJournal.instance.record('quarantine:$key', saved ? reason : 'copy_failed');
     } catch (_) {
