@@ -21,15 +21,15 @@ Person _person(String id, String name) =>
     Person(id: id, name: name, createdAt: DateTime(2026), updatedAt: DateTime(2026));
 
 TranscriptSegment _seg(String id, {String? personId}) => TranscriptSegment(
-  id: id,
-  text: 'speech',
-  speaker: 'SPEAKER_00',
-  isUser: false,
-  personId: personId,
-  translations: [],
-  start: 0,
-  end: 1,
-);
+      id: id,
+      text: 'speech',
+      speaker: 'SPEAKER_00',
+      isUser: false,
+      personId: personId,
+      translations: [],
+      start: 0,
+      end: 1,
+    );
 
 Future<void> _pumpSheet(
   WidgetTester tester, {
@@ -42,8 +42,7 @@ Future<void> _pumpSheet(
     String personName,
     List<String> segmentIds,
     bool applyToSpeaker,
-  )?
-  onSpeakerAssigned,
+  )? onSpeakerAssigned,
 }) async {
   final provider = PeopleProvider()..people = people;
   await tester.pumpWidget(

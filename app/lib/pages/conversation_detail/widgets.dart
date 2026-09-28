@@ -288,17 +288,17 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
             child: content.isEmpty
                 ? _buildNoSummaryForApp(context)
                 : _isEditing
-                ? _buildEditor(context)
-                : GestureDetector(
-                    onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
-                        ? null
-                        : () => _startEditing(content),
-                    child: ConversationMarkdownWidget(
-                      content: content,
-                      searchQuery: widget.searchQuery,
-                      currentResultIndex: widget.currentResultIndex,
-                    ),
-                  ),
+                    ? _buildEditor(context)
+                    : GestureDetector(
+                        onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
+                            ? null
+                            : () => _startEditing(content),
+                        child: ConversationMarkdownWidget(
+                          content: content,
+                          searchQuery: widget.searchQuery,
+                          currentResultIndex: widget.currentResultIndex,
+                        ),
+                      ),
           ),
           if (content.isNotEmpty && !_isEditing) _buildAppAttribution(context, selection),
         ],

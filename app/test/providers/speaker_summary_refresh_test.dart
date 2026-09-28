@@ -16,24 +16,25 @@ ServerConversation conversation({
   String id = 'c',
   ConversationStatus status = ConversationStatus.completed,
   String overview = 'Summary',
-}) => ServerConversation(
-  id: id,
-  createdAt: DateTime(2026),
-  structured: Structured('Title', overview),
-  status: status,
-  transcriptSegments: [
-    TranscriptSegment(
-      id: 's',
-      text: 'Synthetic speech',
-      speaker: 'SPEAKER_00',
-      isUser: false,
-      personId: null,
-      translations: [],
-      start: 0,
-      end: 3,
-    ),
-  ],
-);
+}) =>
+    ServerConversation(
+      id: id,
+      createdAt: DateTime(2026),
+      structured: Structured('Title', overview),
+      status: status,
+      transcriptSegments: [
+        TranscriptSegment(
+          id: 's',
+          text: 'Synthetic speech',
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          translations: [],
+          start: 0,
+          end: 3,
+        ),
+      ],
+    );
 
 void select(ConversationDetailProvider provider, ServerConversation value) {
   provider.selectedDate = value.createdAt;

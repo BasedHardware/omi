@@ -139,8 +139,7 @@ Future<void> showNameSpeakerSheet(
     String personName,
     List<String> segmentIds,
     bool applyToSpeaker,
-  )
-  onSpeakerAssigned,
+  ) onSpeakerAssigned,
   SpeakerLabelSuggestionEvent? suggestion,
   bool defaultApplyToSpeaker = false,
 }) {
@@ -167,8 +166,7 @@ class NameSpeakerBottomSheet extends StatefulWidget {
     String personName,
     List<String> segmentIds,
     bool applyToSpeaker,
-  )
-  onSpeakerAssigned;
+  ) onSpeakerAssigned;
   final List<TranscriptSegment> segments;
   final SpeakerLabelSuggestionEvent? suggestion;
   final bool defaultApplyToSpeaker;
@@ -529,9 +527,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     if (isSearching) {
       final normalizedQuery = _normalizeForSearch(query);
       // "You" and the "+ Add Person" chip stay visible regardless of the filter.
-      visiblePeople = people
-          .where((p) => p.id == 'user' || _normalizeForSearch(p.name).contains(normalizedQuery))
-          .toList();
+      visiblePeople =
+          people.where((p) => p.id == 'user' || _normalizeForSearch(p.name).contains(normalizedQuery)).toList();
       noPersonMatches = visiblePeople.length == 1;
     } else if (!_showAllPeople && ppl.length > _kPersonGridCap) {
       // "You" stays pinned; only the first ~24 people (post-sort) render until
@@ -607,9 +604,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   }
 
   Widget _buildUntaggedSegments() {
-    final untaggedSegments = widget.segments
-        .where((s) => s.speakerId == widget.speakerId && s.id != widget.segmentId)
-        .toList();
+    final untaggedSegments =
+        widget.segments.where((s) => s.speakerId == widget.speakerId && s.id != widget.segmentId).toList();
     final selectedUntaggedSegmentsCount = untaggedSegments.where((s) => _selectedSegmentIds.contains(s.id)).length;
 
     return Column(

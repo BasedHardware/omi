@@ -10,8 +10,7 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart'
     hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
-import 'package:omi/backend/http/api/conversations.dart'
-    as conv_api
+import 'package:omi/backend/http/api/conversations.dart' as conv_api
     show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -26,10 +25,10 @@ import 'package:omi/pages/conversation_detail/conversation_summary_selection.dar
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-typedef SpeakerAssignmentCall =
-    Future<bool> Function(String, List<String>, {bool? isUser, String? personId, int? speakerId});
-typedef ConversationReprocessCall =
-    Future<ServerConversation?> Function(String, {String? appId, bool requireSpeakerReceipt});
+typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
+    {bool? isUser, String? personId, int? speakerId});
+typedef ConversationReprocessCall = Future<ServerConversation?> Function(String,
+    {String? appId, bool requireSpeakerReceipt});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
@@ -39,9 +38,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     SpeakerAssignmentCall? assignSpeaker,
     ConversationReprocessCall? reprocess,
     ConversationDetailFetchCall? fetchConversation,
-  }) : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
-       _reprocess = reprocess ?? reProcessConversationServer,
-       _fetchConversation = fetchConversation ?? getConversationById;
+  })  : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
+        _reprocess = reprocess ?? reProcessConversationServer,
+        _fetchConversation = fetchConversation ?? getConversationById;
   final SpeakerAssignmentCall _assignSpeaker;
   final ConversationReprocessCall _reprocess;
   final ConversationDetailFetchCall _fetchConversation;
@@ -59,11 +58,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   @visibleForTesting
   Set<String> get trackedSpeakerConversationIds => {
-    ..._speakerEditGenerationByConversation.keys,
-    ..._pendingSpeakerSavesByConversation.keys,
-    ..._automaticSpeakerSummaryRefreshIds,
-    ..._endedSpeakerLabelingSessionIds,
-  };
+        ..._speakerEditGenerationByConversation.keys,
+        ..._pendingSpeakerSavesByConversation.keys,
+        ..._automaticSpeakerSummaryRefreshIds,
+        ..._endedSpeakerLabelingSessionIds,
+      };
 
   bool _speakerConversationDeleted(String conversationId) =>
       conversationProvider?.memoriesToDelete.containsKey(conversationId) == true ||
@@ -832,9 +831,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       if (_isDisposed) return;
 
       // Preserve locally added apps that aren't in the API response yet
-      final locallyAddedApps = _cachedEnabledConversationApps
-          .where((app) => _locallyAddedAppIds.contains(app.id))
-          .toList();
+      final locallyAddedApps =
+          _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
 
       _cachedEnabledConversationApps.clear();
       _cachedEnabledConversationApps.addAll(apps);
