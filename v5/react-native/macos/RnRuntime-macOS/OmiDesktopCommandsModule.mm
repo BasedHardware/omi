@@ -11,6 +11,13 @@ NSString *const OmiDesktopAppearanceDidChangeNotification = @"OmiDesktopAppearan
 
 NSAppearanceName OmiPreferredDesktopAppearance(void) {
   NSString *preference = [NSUserDefaults.standardUserDefaults stringForKey:@"omi.appearance"];
+  if ([preference isEqual:@"system"]) {
+    // NSApp.appearance stays nil, so its effective appearance tracks macOS
+    // even though the window pins a resolved one.
+    NSAppearanceName system = [NSApp.effectiveAppearance
+        bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
+    return [system isEqual:NSAppearanceNameAqua] ? NSAppearanceNameAqua : NSAppearanceNameDarkAqua;
+  }
   return [preference isEqual:@"light"] ? NSAppearanceNameAqua : NSAppearanceNameDarkAqua;
 }
 
@@ -60,7 +67,7 @@ static NSDictionary *OmiDesktopPreferenceSnapshot(void) {
   NSString *softwarePlane = [defaults stringForKey:@"omi.backend.softwarePlane"];
   NSString *liveVoiceProvider = [defaults stringForKey:@"omi.live.voiceProvider"] ?: @"gpt_live";
   NSString *appearance = [defaults stringForKey:@"omi.appearance"];
-  if (![appearance isKindOfClass:NSString.class] || ![@[@"dark", @"light"] containsObject:appearance]) appearance = @"dark";
+  if (![appearance isKindOfClass:NSString.class] || ![@[@"dark", @"light", @"system"] containsObject:appearance]) appearance = @"dark";
   NSString *uiVersion = [defaults stringForKey:@"omi.uiVersion"];
   if (![uiVersion isKindOfClass:NSString.class] || ![@[@"v5", @"v5.1"] containsObject:uiVersion]) uiVersion = @"v5.1";
   // Same source of truth as the backend module: launch environment first,

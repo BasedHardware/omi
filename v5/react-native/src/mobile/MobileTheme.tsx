@@ -2,7 +2,7 @@
 // The shell resolves the preference against the OS scheme and provides the
 // Omi design language (mobile density) to every mobile surface below it.
 import React, {createContext, useCallback, useContext, useState} from 'react';
-import {StatusBar, useColorScheme} from 'react-native';
+import {NativeModules, StatusBar, useColorScheme} from 'react-native';
 import {OmiThemeProvider} from '../design/OmiTheme';
 import type {OmiScheme} from '../design/tokens';
 
@@ -34,10 +34,34 @@ export function resolveMobileScheme(
   return system === 'light' ? 'light' : 'dark';
 }
 
-// Persistence: the web build keeps the choice in localStorage. The phone
-// shells have no JS-reachable preference store yet (adding one is native
-// work), so there the choice lasts for the app process.
-let processAppearance: MobileAppearance = 'system';
+// Persistence: the phone apps store the choice natively (OmiNative:
+// NSUserDefaults on iOS, SharedPreferences on Android) and export it as a
+// startup constant so the first frame already uses it; the web build keeps it
+// in localStorage. Without either, the choice lasts for the app process.
+type AppearanceNative = {
+  appearance?: unknown;
+  getConstants?: () => {appearance?: unknown};
+  setAppearance?: (appearance: MobileAppearance) => Promise<unknown>;
+};
+
+function appearanceNative(): AppearanceNative | null {
+  return (NativeModules.OmiNative as AppearanceNative | undefined) ?? null;
+}
+
+function nativeStoredAppearance(): MobileAppearance | null {
+  const native = appearanceNative();
+  if (native === null) {
+    return null;
+  }
+  try {
+    const value = native.getConstants?.().appearance ?? native.appearance;
+    return value === undefined ? null : parseMobileAppearance(value);
+  } catch {
+    return null;
+  }
+}
+
+let processAppearance: MobileAppearance | null = null;
 
 function webStorage(): Storage | null {
   try {
@@ -48,13 +72,16 @@ function webStorage(): Storage | null {
 }
 
 export function loadMobileAppearance(): MobileAppearance {
+  if (processAppearance !== null) {
+    return processAppearance;
+  }
   try {
     const stored = webStorage()?.getItem(storageKey);
     if (stored != null) {
       return parseMobileAppearance(stored);
     }
   } catch {}
-  return processAppearance;
+  return nativeStoredAppearance() ?? 'system';
 }
 
 export function saveMobileAppearance(appearance: MobileAppearance): void {
@@ -62,6 +89,16 @@ export function saveMobileAppearance(appearance: MobileAppearance): void {
   try {
     webStorage()?.setItem(storageKey, appearance);
   } catch {}
+  // Best effort: a failed native write only loses persistence, never the
+  // in-process choice.
+  appearanceNative()
+    ?.setAppearance?.(appearance)
+    ?.catch(() => undefined);
+}
+
+/** Test seam: forget the in-process choice. */
+export function resetMobileAppearanceForTests(): void {
+  processAppearance = null;
 }
 
 /** Stored appearance preference plus a setter that persists it. */

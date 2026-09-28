@@ -6,6 +6,7 @@ import type {DesktopReadOutcomes} from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 
 import {DesktopReadBanner} from './DesktopHome';
+import {GlanceCard} from './DesktopGlance';
 import {EXPLORE_CHECKLIST, type ExploreCheck} from './exploreChecklist';
 import {groupRewindFrames} from './rewindTimeline';
 import type {ActivityFilterId, TimelineGrouping} from './desktopChrome';
@@ -109,7 +110,9 @@ export function DesktopActivity({
   const theme = useOmiTheme();
   const captures = useActivityCaptures(captureRevision);
   // No page title and no filler hero: the filter chips already say where you
-  // are (design language: content before chrome). A read that failed outright
+  // are (design language: content before chrome). The one exception is the
+  // v5-backend "At a glance" line on All; it renders nothing on the legacy
+  // backend. A read that failed outright
   // becomes the timeline's own page state, so the inline notice only speaks
   // for partial or in-flight reads.
   const showNotice = !(outcomes === null && readsPhase === 'unavailable');
@@ -127,6 +130,7 @@ export function DesktopActivity({
                 readsPhase={readsPhase}
               />
             ) : null}
+            {filter === 'all' ? <GlanceCard outcomes={outcomes} /> : null}
             {exploreDone !== null &&
             exploreDone.size < EXPLORE_CHECKLIST.length ? (
               <View accessibilityLabel="Home explore" style={styles.section}>

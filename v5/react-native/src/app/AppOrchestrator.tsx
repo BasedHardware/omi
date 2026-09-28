@@ -12,6 +12,7 @@ import {
   TextInput,
   useWindowDimensions,
   View,
+  useColorScheme,
 } from 'react-native';
 import omiPendant from '../../assets/omi-pendant.webp';
 import {MaterialIcon} from '../ui/MaterialIcon';
@@ -77,6 +78,7 @@ import {LiveVoiceButton} from '../ui/LiveVoiceButton';
 import {
   loadDesktopPreferences,
   type AudioRecordingMode,
+  resolveDesktopAppearance,
   type DesktopAppearance,
   type LiveVoiceProvider,
 } from '../desktopSettingsClient';
@@ -267,6 +269,9 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
     useState<LiveVoiceProvider>('gpt_live');
   const [audioMode, setAudioMode] = useState<AudioRecordingMode>('off');
   const [appearance, setAppearance] = useState<DesktopAppearance>('dark');
+  // 'system' follows macOS; the window reports the resolved scheme.
+  const systemScheme = useColorScheme();
+  const desktopScheme = resolveDesktopAppearance(appearance, systemScheme);
   const [screenCaptureEnabled, setScreenCaptureEnabled] = useState(false);
 
   useEffect(() => {
@@ -1088,7 +1093,7 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
       // they must read the same theme or light mode shows dark ink on glass.
       return (
         <DesktopThemeProvider
-          initialName={appearance}
+          initialName={desktopScheme}
           onSetName={setAppearance}>
           <PageShell macDesktop workspaceMaterial>
             {onboardingRequired === true ? (
@@ -1157,7 +1162,7 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
             setAppearance(prefs.appearance);
             setScreenCaptureEnabled(prefs.screenCapture);
           }}
-          initialAppearance={appearance}
+          initialAppearance={desktopScheme}
           onAppearanceChange={setAppearance}
           captureAutoStart={!hostMode && screenCaptureEnabled}
           onWorkspaceReload={retireWorkspace}

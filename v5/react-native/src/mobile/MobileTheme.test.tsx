@@ -1,13 +1,16 @@
+import {NativeModules} from 'react-native';
 import {
   loadMobileAppearance,
   parseMobileAppearance,
+  resetMobileAppearanceForTests,
   resolveMobileScheme,
   saveMobileAppearance,
 } from './MobileTheme';
 
 afterEach(() => {
   delete (globalThis as {localStorage?: unknown}).localStorage;
-  saveMobileAppearance('system');
+  delete (NativeModules as {OmiNative?: unknown}).OmiNative;
+  resetMobileAppearanceForTests();
 });
 
 test('System follows the OS scheme; an unknown OS scheme stays dark', () => {
@@ -34,7 +37,7 @@ test('the choice persists in web storage and survives without it', () => {
   expect(store.get('omi.mobile.appearance')).toBe('light');
   expect(loadMobileAppearance()).toBe('light');
   delete (globalThis as {localStorage?: unknown}).localStorage;
-  // Native shells have no JS store: the choice lasts for the process.
+  // Without web storage the in-process choice still holds.
   saveMobileAppearance('dark');
   expect(loadMobileAppearance()).toBe('dark');
 });
@@ -49,5 +52,28 @@ test('a throwing storage never breaks the appearance', () => {
     },
   };
   expect(() => saveMobileAppearance('light')).not.toThrow();
+  expect(loadMobileAppearance()).toBe('light');
+});
+
+test('the phone apps restore the stored choice from the native constant', () => {
+  const setAppearance = jest.fn(() => Promise.resolve('dark'));
+  (NativeModules as {OmiNative?: unknown}).OmiNative = {
+    getConstants: () => ({appearance: 'light'}),
+    setAppearance,
+  };
+  expect(loadMobileAppearance()).toBe('light');
+  saveMobileAppearance('dark');
+  expect(setAppearance).toHaveBeenCalledWith('dark');
+  expect(loadMobileAppearance()).toBe('dark');
+});
+
+test('a failed native write keeps the in-process choice', async () => {
+  (NativeModules as {OmiNative?: unknown}).OmiNative = {
+    appearance: 'sepia',
+    setAppearance: jest.fn(() => Promise.reject(new Error('disk'))),
+  };
+  expect(loadMobileAppearance()).toBe('system');
+  expect(() => saveMobileAppearance('light')).not.toThrow();
+  await Promise.resolve();
   expect(loadMobileAppearance()).toBe('light');
 });

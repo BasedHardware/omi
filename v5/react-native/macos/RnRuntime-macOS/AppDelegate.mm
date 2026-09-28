@@ -273,6 +273,16 @@ static void OmiSwizzleTitlebarHitTest(Class cls)
           object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note) {
     [weakSelf dressOmiWindow];
   }];
+  // Appearance "system": follow macOS light/dark switches. The effective
+  // appearance settles after the distributed notification, so re-resolve on
+  // the next main-queue turn and reuse the preference-change path.
+  self.omiSystemAppearanceObserver = [NSDistributedNotificationCenter.defaultCenter addObserverForName:@"AppleInterfaceThemeChangedNotification"
+      object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note) {
+    if (![[NSUserDefaults.standardUserDefaults stringForKey:@"omi.appearance"] isEqual:@"system"]) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [NSNotificationCenter.defaultCenter postNotificationName:OmiDesktopAppearanceDidChangeNotification object:nil];
+    });
+  }];
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender
@@ -304,6 +314,10 @@ static void OmiSwizzleTitlebarHitTest(Class cls)
   if (self.omiAppearanceObserver != nil) {
     [NSNotificationCenter.defaultCenter removeObserver:self.omiAppearanceObserver];
     self.omiAppearanceObserver = nil;
+  }
+  if (self.omiSystemAppearanceObserver != nil) {
+    [NSDistributedNotificationCenter.defaultCenter removeObserver:self.omiSystemAppearanceObserver];
+    self.omiSystemAppearanceObserver = nil;
   }
   [super applicationWillTerminate:notification];
 }

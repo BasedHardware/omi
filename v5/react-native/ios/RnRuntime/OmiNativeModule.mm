@@ -82,6 +82,32 @@ RCT_EXPORT_MODULE(OmiNative)
   return YES;
 }
 
+// Appearance (System / Light / Dark) is a device-local UI preference. It is
+// exported as a constant so the first frame already uses the stored scheme.
+static NSString *const OmiAppearanceDefaultsKey = @"omi.mobile.appearance";
+
+static NSString *OmiStoredAppearance(void) {
+  NSString *value = [NSUserDefaults.standardUserDefaults stringForKey:OmiAppearanceDefaultsKey];
+  return [@[ @"system", @"light", @"dark" ] containsObject:value] ? value : @"system";
+}
+
+- (NSDictionary *)constantsToExport {
+  return @{@"appearance" : OmiStoredAppearance()};
+}
+
+RCT_REMAP_METHOD(setAppearance,
+                 setAppearance:(NSString *)appearance
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (![appearance isKindOfClass:NSString.class] ||
+      ![@[ @"system", @"light", @"dark" ] containsObject:appearance]) {
+    reject(@"OMI_APPEARANCE_INVALID", @"Unknown appearance", nil);
+    return;
+  }
+  [NSUserDefaults.standardUserDefaults setObject:appearance forKey:OmiAppearanceDefaultsKey];
+  resolve(appearance);
+}
+
 - (dispatch_queue_t)methodQueue { return dispatch_get_main_queue(); }
 
 - (void)setBridge:(RCTBridge *)bridge {

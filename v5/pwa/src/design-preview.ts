@@ -37,6 +37,7 @@ import {
   MobileThemeRoot,
   type MobileAppearance,
 } from "../../react-native/src/mobile/MobileTheme";
+import { setDesktopPreference } from "../../react-native/src/desktopSettingsClient";
 import "./root.css";
 import "./preview-fonts.css";
 
@@ -640,6 +641,9 @@ function Preview() {
 }
 
 if (import.meta.env.DEV) {
+  // The web build keeps preferences in memory; seed the appearance so the
+  // Settings control matches the appearance the screenshot renders.
+  void setDesktopPreference("appearance", appearance);
   // Even when a developer configures the authenticated proxy, this review
   // entry must neither read an account nor persist preview onboarding choices.
   omiBackend.request = async (request) => ({

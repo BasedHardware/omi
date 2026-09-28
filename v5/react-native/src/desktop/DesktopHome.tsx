@@ -18,6 +18,7 @@ import {ReadStatus} from '../ui/ReadStatus';
 import {ShippingListInsert} from './ShippingStage';
 import {MaterialIcon} from '../ui/MaterialIcon';
 
+import {GlanceCard} from './DesktopGlance';
 import {EXPLORE_CHECKLIST, type ExploreCheck} from './exploreChecklist';
 import {EmptyCopy, ReadRow, SectionTitle, TaskRow} from './DesktopRows';
 import {
@@ -176,6 +177,7 @@ export function DesktopHome({
           scrollEventThrottle={16}
           contentContainerStyle={styles.listContent}
           style={styles.list}>
+          <GlanceCard outcomes={outcomes} />
           {exploreDone !== null &&
           exploreDone.size < EXPLORE_CHECKLIST.length ? (
             <View accessibilityLabel="Home explore" style={styles.section}>
