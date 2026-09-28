@@ -76,6 +76,35 @@ def test_hint_vocabulary_filters_each_code_and_preserves_identification(monkeypa
     assert soniox_hints('multi', profile) == []
 
 
+def test_soniox_hints_expand_equivalents_with_deduplication_and_cap():
+    hindi = LiveLanguageProfile.create('hi', multi=True, uid='u')
+    assert soniox_hints('multi', hindi) == ['hi', 'ur', 'en']
+
+    duplicate = LiveLanguageProfile('hi', ('hi', 'ur', 'en'), 'non_en', 'control', True)
+    assert soniox_hints('multi', duplicate) == ['hi', 'ur', 'en']
+
+    serbian = LiveLanguageProfile.create('sr', multi=True, uid='u')
+    hints = soniox_hints('multi', serbian)
+    assert hints == ['sr', 'hr', 'bs']
+    assert len(hints) <= 3
+
+    learned = LiveLanguageProfile('pt', ('pt', 'hi', 'en'), 'non_en', 'control', True, source='learned')
+    assert soniox_hints('multi', learned) == ['pt', 'hi', 'ur']
+
+
+def test_single_language_and_out_of_scope_hints_keep_the_declared_code():
+    single = LiveLanguageProfile.create('ur', multi=False, uid='u')
+    out_of_scope = LiveLanguageProfile.create('ur', multi=True, uid='u', in_scope=False)
+    assert soniox_hints('ur', single) == ['ur']
+    assert soniox_hints('ur', out_of_scope) == ['ur']
+
+
+def test_soniox_equivalent_hints_filter_the_provider_vocabulary(monkeypatch):
+    monkeypatch.setattr('utils.stt.language_policy.soniox_accepts_language_hint', lambda code: code in {'hi', 'en'})
+    profile = LiveLanguageProfile.create('hi', multi=True, uid='u')
+    assert soniox_hints('multi', profile) == ['hi', 'en']
+
+
 def test_learned_thresholds_cap_and_hint_vocabulary(monkeypatch):
     assert learned_expected('en', [{'pt': 8, 'en': 2}, {'pt': 8, 'en': 2}]) == ()
     assert learned_expected('en', [{'pt': 10}, {'en': 10}, {'en': 10}]) == ('en',)
@@ -85,6 +114,11 @@ def test_learned_thresholds_cap_and_hint_vocabulary(monkeypatch):
     assert learned_expected('en', [{'pt': 7, 'en': 3}] * 3) == ('pt', 'en')
     assert learned_expected('en', [{'pt': 9, 'en': 1}] * 3) == ('pt', 'en')
     assert learned_expected('en', [{'pt': 9, 'en': 0}] * 3) == ('pt',)
+
+
+def test_learned_language_equivalents_share_one_profile_slot():
+    sessions = [{'hi': 4, 'ur': 4, 'en': 2}] * 3
+    assert learned_expected('en', sessions) == ('hi', 'en')
 
 
 def test_english_primary_uses_learned_non_en_arm_and_flag_off(monkeypatch):
@@ -193,6 +227,10 @@ def test_classification_prefers_provider_language_and_keeps_short_segments_unkno
     assert classify_output('a', profile, 'pt') == ('in_profile', 'pt')
     assert classify_output('a', profile, 'it') == ('out_of_profile', 'it')
     assert classify_output('a', profile, 'pt-BR') == ('in_profile', 'pt')
+    hindi = LiveLanguageProfile.create('hi', multi=True, uid='u')
+    urdu = LiveLanguageProfile.create('ur', multi=True, uid='u')
+    assert classify_output('a', hindi, 'ur') == ('in_profile', 'hi')
+    assert classify_output('a', urdu, 'hi') == ('in_profile', 'hi')
     zh = LiveLanguageProfile.create('zh-CN', multi=True, uid='u')
     assert classify_output('a', zh, 'zh-cn') == ('in_profile', 'zh')
     assert classify_output('a', profile) == ('undetermined', None)
@@ -243,6 +281,23 @@ async def test_metric_labels_and_ephemeral_language_metadata(monkeypatch):
     assert out._value.get() == before_out + 2
     assert observations.counts['out_of_profile'] == 2
     assert observations.language_counts == {'it': 2}
+
+
+@pytest.mark.asyncio
+async def test_out_code_summary_and_learning_counts_use_canonical_codes(monkeypatch):
+    from utils.stt import language_policy
+
+    observations = LiveLanguageObservations(LiveLanguageProfile.create('hi', multi=True, uid='u'))
+    observations._record('soniox', ('out_of_profile', 'ur'))
+    observations._record('soniox', ('in_profile', 'hi'))
+    assert observations.out_codes == {'hi': 1}
+    assert observations.language_counts == {'hi': 2}
+
+    summaries = []
+    monkeypatch.setattr(language_policy.logger, 'info', lambda message, *args: summaries.append(message % args))
+    await observations.summarize()
+    assert len(summaries) == 1
+    assert 'top_out_code=hi' in summaries[0]
 
 
 @pytest.mark.asyncio
