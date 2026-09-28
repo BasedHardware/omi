@@ -11439,4 +11439,17 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get searchPeople => 'लोक शोधा';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" ला नवीन व्यक्ती म्हणून जोडा';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'सर्व $count लोक दाखवा';
+  }
 }

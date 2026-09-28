@@ -11525,4 +11525,17 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Diagnosedaten konnten nicht gesendet werden. Bitte erneut versuchen.';
+
+  @override
+  String get searchPeople => 'Personen suchen';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '„$query“ als neue Person hinzufügen';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Alle $count Personen anzeigen';
+  }
 }

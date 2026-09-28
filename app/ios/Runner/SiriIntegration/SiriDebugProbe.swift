@@ -59,7 +59,10 @@ enum SiriDebugProbe {
             let developmentKeys = [development.ownerKey, development.pendingWipeOwnersKey,
                 development.generationKey, development.enabledKey, development.pendingRouteKey,
                 development.sessionConfigKey, development.telemetryKey]
-            let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
+            guard let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12") else {
+                NSLog("[SiriProbe] flavorNamespace=FAIL (app-group defaults unavailable)")
+                return
+            }
             let probeA = SiriStorageNamespace(bundleID: "com.omi.probe.a")
             let probeB = SiriStorageNamespace(bundleID: "com.omi.probe.b")
             defaults.set("probe-a", forKey: probeA.ownerKey)
@@ -82,15 +85,22 @@ enum SiriDebugProbe {
                   backgroundModes.contains("audio") && backgroundModes.contains("bluetooth-central") ? "PASS" : "FAIL")
             let quickActionsClass = NSClassFromString("quick_actions_ios.QuickActionsPlugin")
             let sceneProtocol = NSProtocolFromString("FlutterSceneLifeCycleDelegate")
-            NSLog("[SiriProbe] quickActionScenePlugin=%@",
-                  quickActionsClass != nil && sceneProtocol != nil &&
-                  class_conformsToProtocol(quickActionsClass!, sceneProtocol!) ? "PASS" : "FAIL")
+            let quickActionAvailable: Bool
+            if let quickActionsClass, let sceneProtocol {
+                quickActionAvailable = class_conformsToProtocol(quickActionsClass, sceneProtocol)
+            } else {
+                quickActionAvailable = false
+            }
+            NSLog("[SiriProbe] quickActionScenePlugin=%@", quickActionAvailable ? "PASS" : "FAIL")
             for (label, rawURL) in [
                 ("scheme", "omi-dev://conversation/scene-probe"),
                 ("universal", "https://h.omi.me/conversation/scene-probe"),
                 ("oauth", "com.googleusercontent.apps.probe:/oauth-callback"),
             ] {
-                let url = URL(string: rawURL)!
+                guard let url = URL(string: rawURL) else {
+                    NSLog("[SiriProbe] sceneLink_%@=FAIL (invalid URL)", label)
+                    continue
+                }
                 if label == "universal" {
                     let activity = NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb)
                     activity.webpageURL = url
@@ -118,7 +128,7 @@ enum SiriDebugProbe {
                 baseUrl: raw, profile: "local_dev",
                 appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
                 token: "fake-siri-probe-token",
-                tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
+                tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
                 try SiriSession.shared.publish(config)
                 let resumedGeneration = SiriSnapshotStore.shared.generationForOwner(config.uid)
                 NSLog("[SiriProbe] sameOwnerGeneration=%@ changedOwnerGeneration=%@",
@@ -157,7 +167,7 @@ enum SiriDebugProbe {
                     baseUrl: config.baseUrl, profile: config.profile,
                     appVersion: config.appVersion, appBuild: config.appBuild,
                     deviceIdHash: config.deviceIdHash, token: "fake-siri-probe-token",
-                    tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
+                    tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
                 try SiriSession.shared.publish(config)
                 if #available(iOS 27.0, *) {
                     let writeConfig = URLSessionConfiguration.ephemeral
@@ -213,14 +223,14 @@ enum SiriDebugProbe {
                     let rebuildsBeforeSingleUpsert = SiriSnapshotStore.shared.probeFullRebuildCount
                     try await SiriSnapshotStore.shared.upsert([
                         SiriConversation(id: "probe-single-upsert", title: "Single", summary: "summary",
-                                         startedAtMs: Int64(Date().timeIntervalSince1970 * 1000),
-                                         updatedAtMs: Int64(Date().timeIntervalSince1970 * 1000))
+                                         startedAtMs: CheckedIntegerConversion.epochMs(),
+                                         updatedAtMs: CheckedIntegerConversion.epochMs())
                     ], uid: config.uid)
                     NSLog("[SiriProbe] singleUpsertFullRebuilds=%@",
                           SiriSnapshotStore.shared.probeFullRebuildCount == rebuildsBeforeSingleUpsert ? "PASS" : "FAIL")
                     try await SiriSnapshotStore.shared.upsert([
                         SiriMemory(id: "stub-memory-1", content: "probe memory",
-                                   createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
+                                   createdAtMs: CheckedIntegerConversion.epochMs(),
                                    expiresAtMs: nil)
                     ], uid: config.uid)
                     var open = OpenOmiIntent()
@@ -287,7 +297,7 @@ enum SiriDebugProbe {
                           SiriSnapshotStore.shared.pendingRoute() == "/task/cold-fallback" ? "PASS" : "FAIL")
                     SiriBridge.shared.routeDeliveryProbe = nil
                     let row = SiriMemory(id: "probe-memory", content: "probe-memory-native-index-2026", createdAtMs:
-                        Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                        CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
                     try await SiriSnapshotStore.shared.upsert([row], uid: config.uid)
                     let fetched: Int = await withCheckedContinuation { continuation in
                         let query = CSSearchQuery(
@@ -310,7 +320,7 @@ enum SiriDebugProbe {
                         }
                         NSLog("[SiriProbe] staticItem=%@ count=%d", title, count)
                     }
-                    let cutoffNow = Int64(Date().timeIntervalSince1970 * 1000)
+                    let cutoffNow = CheckedIntegerConversion.epochMs()
                     let expiringConversation = SiriConversation(
                         id: "probe-aged-conversation", title: "probe-aged-conversation-2026",
                         summary: "Cutoff test", startedAtMs: cutoffNow - 180 * 86_400_000 + 1_500,
@@ -326,8 +336,8 @@ enum SiriDebugProbe {
                           SiriSnapshotStore.shared.probeStoredEntity(type: "conversation", id: expiringConversation.id) ? "FAIL" : "PASS",
                           SiriSnapshotStore.shared.probeStoredEntity(type: "task", id: expiringTask.id) ? "FAIL" : "PASS")
                     let expiring = SiriMemory(id: "probe-expiring", content: "probe-expiring-native-index-2026",
-                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
-                        expiresAtMs: Int64(Date().addingTimeInterval(1.5).timeIntervalSince1970 * 1000))
+                        createdAtMs: CheckedIntegerConversion.epochMs(),
+                        expiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(1.5)))
                     try await SiriSnapshotStore.shared.upsert([expiring], uid: config.uid)
                     try await Task.sleep(nanoseconds: 2_000_000_000)
                     NSLog("[SiriProbe] expiredMemoryQuery=%d expiredNoteQuery=%d",
@@ -344,8 +354,8 @@ enum SiriDebugProbe {
                     }
                     NSLog("[SiriProbe] expiredSpotlightCount=%d", expiredIndexCount)
                     let coldExpired = SiriMemory(id: "probe-cold-expired", content: "probe-cold-expired-private-2026",
-                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
-                        expiresAtMs: Int64(Date().addingTimeInterval(1.5).timeIntervalSince1970 * 1000))
+                        createdAtMs: CheckedIntegerConversion.epochMs(),
+                        expiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(1.5)))
                     try await SiriSnapshotStore.shared.upsert([coldExpired], uid: config.uid)
                     SiriSnapshotStore.shared.simulateTerminatedExpiryTimer()
                     try await Task.sleep(nanoseconds: 2_000_000_000)
@@ -382,7 +392,7 @@ enum SiriDebugProbe {
                           SiriSnapshotStore.shared.memories(ids: [row.id]).count, deletedIndexCount)
                     let noteRow = SiriMemory(id: "probe-memory-note-delete",
                         content: "probe-memory-note-delete-private-2026",
-                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                        createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
                     try await SiriSnapshotStore.shared.upsert([noteRow], uid: config.uid)
                     try await ConversationQuery().reindexEntities(for: [noteRow.id],
                         indexDescription: CSSearchableIndexDescription())
@@ -396,7 +406,7 @@ enum SiriDebugProbe {
                     NSLog("[SiriProbe] deletedMemoryNoteAbsent=%@ count=%d",
                           deletedNoteCount == 0 ? "PASS" : "FAIL", deletedNoteCount)
                     let disabledRow = SiriMemory(id: "probe-disabled", content: "probe-disabled-index-2026",
-                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                        createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
                     try await SiriSnapshotStore.shared.upsert([disabledRow], uid: config.uid)
                     try await SiriSnapshotStore.shared.setEnabled(false)
                     let explicitFolder = try await OmiFolderQuery().entities(for: ["memories"])
@@ -413,7 +423,7 @@ enum SiriDebugProbe {
                     }
                     let disableFailure = SiriMemory(id: "probe-disable-failure",
                         content: "probe-disable-failure-private-2026",
-                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                        createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
                     try await SiriSnapshotStore.shared.upsert([disableFailure], uid: config.uid)
                     SiriSnapshotStore.shared.simulateIndexDeleteFailure = true
                     do { try await SiriSnapshotStore.shared.setEnabled(false) }
@@ -432,12 +442,12 @@ enum SiriDebugProbe {
                     try await SiriSnapshotStore.shared.setEnabled(true)
                     let removedByServer = SiriMemory(id: "probe-remote-deleted",
                         content: "probe-remote-deleted-private-2026",
-                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                        createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
                     try await SiriSnapshotStore.shared.upsert([removedByServer], uid: config.uid)
                     try await SiriSnapshotStore.shared.reconcile([SiriMemory](), uid: config.uid)
                     NSLog("[SiriProbe] authoritativeMemoryRemoval=%@",
                           SiriSnapshotStore.shared.memories(ids: [removedByServer.id]).isEmpty ? "PASS" : "FAIL")
-                    let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+                    let nowMs = CheckedIntegerConversion.epochMs()
                     let staleNew = SiriConversation(id: "probe-remote-deleted-conversation", title: "private",
                         summary: "private summary", startedAtMs: nowMs, updatedAtMs: nowMs)
                     let outsidePage = SiriConversation(id: "probe-outside-page", title: "older",
@@ -489,7 +499,7 @@ enum SiriDebugProbe {
                         baseUrl: raw, profile: "local_dev",
                         appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
                         token: "fake-siri-probe-token",
-                        tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
+                        tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
                     try SiriSession.shared.publish(next)
                     do {
                         try await SiriSnapshotStore.shared.upsert([row], uid: config.uid)
@@ -515,7 +525,7 @@ enum SiriDebugProbe {
                     let switched = SiriSessionConfig(uid: "siri-probe-switched", generation: 0,
                         baseUrl: raw, profile: "local_dev", appVersion: "probe", appBuild: "0",
                         deviceIdHash: "probe-device", token: "switched-account-token",
-                        tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
+                        tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
                     let requestsBeforeSwitch = SiriProbeURLProtocol.requestCount
                     SiriSession.shared.beforeTokenLookup = { try? SiriSession.shared.publish(switched) }
                     do {
@@ -604,7 +614,7 @@ enum SiriDebugProbe {
                     }
                     OmiNativeAPI.testSession = nil
                     let racingMemory = SiriMemory(id: "probe-reindex-wipe", content: "probe-reindex-wipe-private-2026",
-                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                        createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
                     try await SiriSnapshotStore.shared.upsert([racingMemory], uid: next.uid)
                     await SiriReindexProbeGate.shared.arm()
                     let reindex = Task {
@@ -656,7 +666,7 @@ enum SiriDebugProbe {
                         tokenExpiresAtMs: next.tokenExpiresAtMs)
                     try SiriSession.shared.publish(failedPrepOwner)
                     let blockedMemory = SiriMemory(id: "probe-blocked-fence", content: "blocked-fence-private",
-                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                        createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
                     try await SiriSnapshotStore.shared.upsert([blockedMemory], uid: next.uid)
                     await SiriReindexProbeGate.shared.arm()
                     let blockedReindex = Task {
@@ -742,7 +752,7 @@ enum SiriDebugProbe {
                     baseUrl: "http://127.0.0.1:8976", profile: "local_dev",
                     appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
                     token: "fake-siri-probe-token",
-                    tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
+                    tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
                 try SiriSession.shared.publish(config)
                 NSLog("[SiriProbe] firebaseAuthSeed=%@", SiriSession.shared.hasMirroredToken() ? "PASS" : "FAIL")
                 return
@@ -771,7 +781,7 @@ enum SiriDebugProbe {
                 baseUrl: "http://127.0.0.1:8976", profile: "local_dev",
                 appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
                 token: "fake-siri-probe-token",
-                tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
+                tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
             try SiriSession.shared.publish(config)
             NSLog("[SiriProbe] firebaseReSignInRestoresSiri=%@",
                   SiriSnapshotStore.shared.generationForOwner(next.uid) != nil &&
@@ -802,7 +812,7 @@ enum SiriDebugProbe {
         do {
             try await SiriSnapshotStore.shared.upsert([
                 SiriMemory(id: "auth-gate-private", content: "private", createdAtMs:
-                    Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                    CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
             ], uid: config.uid)
             try auth.signOut()
             let refused: Bool
@@ -825,9 +835,12 @@ enum SiriDebugProbe {
                 generation: SiriSnapshotStore.shared.generationForOwner(original.uid) ?? -1,
                 baseUrl: "http://127.0.0.1:8976", profile: "local_dev", appVersion: "probe",
                 appBuild: "0", deviceIdHash: "probe-device", token: "fake-siri-probe-token",
-                tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
+                tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
             try SiriSession.shared.publish(rebound)
-            let oldConfig = SiriSession.shared.currentConfig()!
+            guard let oldConfig = SiriSession.shared.currentConfig() else {
+                NSLog("[SiriProbe] authGateDifferentUidRefused=FAIL (missing session config)")
+                return
+            }
             try auth.signOut()
             _ = try await auth.signInAnonymously().user
             let differentRefused: Bool
@@ -836,13 +849,16 @@ enum SiriDebugProbe {
             catch { differentRefused = false }
             NSLog("[SiriProbe] authGateDifferentUidRefused=%@", differentRefused ? "PASS" : "FAIL")
             _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
-            let currentUid = auth.currentUser!.uid
+            guard let currentUid = auth.currentUser?.uid else {
+                NSLog("[SiriProbe] authGateDifferentUidRefused=FAIL (missing Firebase user)")
+                return
+            }
             try await SiriSnapshotStore.shared.bind(uid: currentUid)
             let current = SiriSessionConfig(uid: currentUid,
                 generation: SiriSnapshotStore.shared.generationForOwner(currentUid) ?? -1,
                 baseUrl: "http://127.0.0.1:8976", profile: "local_dev", appVersion: "probe",
                 appBuild: "0", deviceIdHash: "probe-device", token: "fake-siri-probe-token",
-                tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
+                tokenExpiresAtMs: CheckedIntegerConversion.epochMs(Date().addingTimeInterval(300)))
             try SiriSession.shared.publish(current)
             SiriSession.shared.simulateKeychainDeleteFailuresRemaining = 2
             SiriSnapshotStore.shared.simulateMarkerFlushFailureOnce = true
@@ -901,8 +917,12 @@ private final class SiriProbeURLProtocol: URLProtocol {
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return
         }
-        let response = HTTPURLResponse(url: request.url!, statusCode: Self.status,
-                                       httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
+        guard let url = request.url,
+              let response = HTTPURLResponse(url: url, statusCode: Self.status,
+                                             httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"]) else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Self.status == 200 ? Data(Self.payload.utf8) : Data("{}".utf8))
         client?.urlProtocolDidFinishLoading(self)

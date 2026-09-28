@@ -11427,4 +11427,17 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get searchPeople => 'Otsi inimesi';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Lisa \"$query\" uue inimesena';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Kuva kõik inimesed ($count)';
+  }
 }
