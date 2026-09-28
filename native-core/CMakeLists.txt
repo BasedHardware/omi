@@ -18,6 +18,10 @@ target_link_libraries(omi_backend_http PUBLIC omi_backend_policy)
 add_library(omi_backend_recording STATIC src/omi_backend_recording.cpp)
 target_include_directories(omi_backend_recording PUBLIC include)
 
+add_library(omi_device STATIC src/omi_device.cpp)
+target_include_directories(omi_device PUBLIC include)
+target_link_libraries(omi_device PUBLIC omi_native_boundary)
+
 enable_testing()
 add_executable(test_omi_native_boundary tests/test_omi_native_boundary.cpp)
 target_link_libraries(test_omi_native_boundary PRIVATE omi_native_boundary)
@@ -34,3 +38,7 @@ add_test(NAME BackendHttpHostTest COMMAND test_omi_backend_http)
 add_executable(test_omi_backend_recording tests/test_omi_backend_recording.cpp)
 target_link_libraries(test_omi_backend_recording PRIVATE omi_backend_recording)
 add_test(NAME BackendRecordingHostTest COMMAND test_omi_backend_recording)
+
+add_executable(test_omi_device tests/test_omi_device.cpp)
+target_link_libraries(test_omi_device PRIVATE omi_device)
+add_test(NAME DeviceHostTest COMMAND test_omi_device)
