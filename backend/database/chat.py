@@ -805,6 +805,12 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
     invisible here, stranding a user's existing history behind a brand new
     session. A session with no timestamp sorts oldest, and its id breaks ties so
     the answer is stable across calls.
+
+    Callers build `ChatSession(**session)` from the result, so the chosen session
+    is normalized like `get_chat_session_by_id`: a legacy document missing
+    `created_at` or an `id` field would otherwise be found and then fail
+    validation on every message (FC-1). Defaults are filled after the pick so an
+    untimestamped session still loses to a real one.
     """
     collection = db.collection('users').document(uid).collection('chat_sessions')
     ordered_sessions = (
@@ -818,9 +824,9 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         .limit(1)
         .stream()
     )
-    ordered_docs = [_typed_doc(session) for session in ordered_sessions]
+    ordered_docs = [_chat_session_doc(session) for session in ordered_sessions]
     if ordered_docs:
-        return max(
+        newest_ordered = max(
             ordered_docs,
             key=lambda data: (
                 data.get('created_at') is not None,
@@ -828,6 +834,7 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
                 str(data.get('id') or ''),
             ),
         )
+        return _normalize_chat_session(newest_ordered)
 
     legacy_session = (
         CURRENT_CHAT_SESSION_QUERY.build(
@@ -840,7 +847,7 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         .stream()
     )
 
-    legacy_docs = [_typed_doc(session) for session in legacy_session]
+    legacy_docs = [_chat_session_doc(session) for session in legacy_session]
     if len(legacy_docs) > 1:
         legacy_docs = legacy_docs[:1]
 
@@ -854,7 +861,15 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         if newest_key is None or key > newest_key:
             newest, newest_key = data, key
 
-    return newest
+    return _normalize_chat_session(newest)
+
+
+def _chat_session_doc(snapshot: Any) -> Dict[str, Any]:
+    """A chat-session snapshot as a dict whose `id` is the document id when unset."""
+    data = _typed_doc(snapshot)
+    if not data.get('id'):
+        data['id'] = snapshot.id
+    return data
 
 
 def get_chat_session_by_id(uid: str, chat_session_id: str) -> Optional[Dict[str, Any]]:
