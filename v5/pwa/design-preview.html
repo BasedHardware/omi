@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Omi · component preview</title>
+    <style>
+      body[data-preview="mobile"] #preview-desktop {
+        width: 100%;
+        max-width: 430px;
+        align-self: center;
+        margin-inline: auto;
+      }
+      body:not([data-preview="mobile"]) {
+        background: linear-gradient(
+          145deg,
+          #c6d9df 0%,
+          #91aba9 30%,
+          #3e625d 68%,
+          #203e39 100%
+        );
+        color-scheme: light;
+        --omi-web-accent: #242622;
+        --omi-web-canvas: transparent;
+      }
+      body:not([data-preview="mobile"])::before {
+        content: "";
+        position: fixed;
+        inset: 20% -10% -50%;
+        border-radius: 50% 80% 0 0;
+        background: linear-gradient(145deg, #92b3ad, #1c3f3a);
+        transform: rotate(-18deg);
+        box-shadow: 0 -35px 100px #d8e7df50;
+      }
+      body:not([data-preview="mobile"]) #preview-desktop {
+        justify-content: center;
+        align-items: center;
+        padding: 54px 20px 20px;
+      }
+      body:not([data-preview="mobile"]) #preview-notice {
+        position: absolute;
+        top: 14px;
+        background: transparent !important;
+        color: #243b36 !important;
+      }
+      body:not([data-preview="mobile"]) #preview-window {
+        flex: none !important;
+        width: min(720px, 100%);
+        height: min(700px, calc(100dvh - 80px));
+        background: rgba(249, 251, 250, 0.74);
+        backdrop-filter: blur(32px) saturate(0.7);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        border-radius: 22px;
+        box-shadow: 0 24px 80px #0c272a45, 0 2px 6px #17333320;
+        overflow: hidden;
+      }
+      body[data-preview="app"] #preview-window {
+        width: min(1060px, 100%);
+        height: min(780px, calc(100dvh - 80px));
+      }
+      body:not([data-preview="mobile"])
+        #preview-window:has(#omi-window-permission-guide) {
+        width: min(380px, 100%);
+        height: min(480px, calc(100dvh - 80px));
+      }
+      @media (prefers-reduced-transparency: reduce) {
+        body:not([data-preview="mobile"]) #preview-window {
+          background: #f5f6f7;
+          backdrop-filter: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/design-preview.ts"></script>
+  </body>
+</html>

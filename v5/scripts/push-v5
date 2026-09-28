@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+if [ "$(git branch --show-current)" != "main" ]; then
+  echo "push:v5 requires the standalone main branch" >&2
+  exit 1
+fi
+if [ -n "$(git status --porcelain)" ]; then
+  echo "push:v5 requires a clean worktree" >&2
+  exit 1
+fi
+bun run check
+OMI_V5_CHECKED=1 git push omi HEAD:refs/heads/v5

@@ -1,0 +1,10 @@
+﻿<react:ReactApplication
+    x:Class="RnRuntime.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:RnRuntime"
+    xmlns:react="using:Microsoft.ReactNative">
+    <Application.Resources>
+        <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+    </Application.Resources>
+</react:ReactApplication>

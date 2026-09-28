@@ -1,0 +1,324 @@
+import { createExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { runInDurableObject } from "cloudflare:test";
+import { beforeEach, describe, expect, test } from "vitest";
+
+import handler from "../src/index";
+import { terminalEvent } from "../src/chat";
+
+const chatSchema = [
+  "CREATE TABLE IF NOT EXISTS chat_messages (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, text TEXT NOT NULL, sender TEXT NOT NULL, created_at INTEGER NOT NULL, generation_outcome TEXT, position INTEGER NOT NULL, payload TEXT)",
+  "CREATE INDEX IF NOT EXISTS chat_messages_account_position ON chat_messages (account_id, position)",
+  "CREATE TABLE IF NOT EXISTS chat_admissions (message_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, op_id TEXT NOT NULL, payload TEXT NOT NULL, generation_id TEXT NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS chat_admissions_account ON chat_admissions (account_id)",
+  "CREATE INDEX IF NOT EXISTS chat_admissions_generation ON chat_admissions (generation_id)",
+  "CREATE TABLE IF NOT EXISTS chat_generation_events (generation_id TEXT NOT NULL, account_id TEXT NOT NULL, event_id TEXT NOT NULL, ordinal INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY (generation_id, event_id))",
+  "CREATE INDEX IF NOT EXISTS chat_generation_events_account ON chat_generation_events (account_id)",
+];
+
+const taskSchema =
+  "CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, description TEXT NOT NULL, completed INTEGER NOT NULL, completed_at INTEGER, due_at INTEGER, owner TEXT, source TEXT NOT NULL, provenance TEXT NOT NULL, sort_order REAL NOT NULL, indent_level INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, revision TEXT)";
+
+const attachmentSchema = [
+  "CREATE TABLE IF NOT EXISTS chat_attachments (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, op_id TEXT NOT NULL, display_name TEXT NOT NULL, media_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, state TEXT NOT NULL CHECK (state IN ('staged', 'uploaded', 'ingesting', 'ingested', 'invalid', 'bound', 'expired')), r2_key TEXT NOT NULL, expires_at INTEGER NOT NULL, bound_message_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS chat_attachments_account ON chat_attachments (account_id)",
+];
+
+const authenticatedHeaders = {
+  authorization: "Bearer test-token",
+  "x-omi-client-id": "test-account",
+};
+
+const create = (id: string) => ({
+  op: "create" as const,
+  opId: `op-${id}`,
+  id,
+  at: 1,
+  text: "hello",
+  sender: "human" as const,
+  journalRevision: 0,
+  appId: null,
+  chatSessionId: null,
+  attachmentIds: [],
+});
+
+const fetchWorker = (path: string, init?: RequestInit) =>
+  handler.fetch(
+    new Request(`https://worker.test${path}`, init),
+    {
+      ...env,
+      API_TOKEN: "test-token",
+      AI: { run: async () => ({ response: "test response" }) },
+    } as never,
+    createExecutionContext()
+  );
+
+beforeEach(async () => {
+  for (const statement of chatSchema) {
+    await env.DB.exec(statement);
+  }
+  await env.DB.exec(taskSchema);
+  for (const statement of attachmentSchema) {
+    await env.DB.exec(statement);
+  }
+  await env.DB.prepare("DELETE FROM chat_messages").run();
+  await env.DB.prepare("DELETE FROM chat_admissions").run();
+  await env.DB.prepare("DELETE FROM chat_generation_events").run();
+  await env.DB.prepare("DELETE FROM chat_attachments").run();
+  await runInDurableObject(
+    env.ACCOUNTS.getByName("test-account"),
+    (instance) => {
+      Object.defineProperty(instance, "env", {
+        configurable: true,
+        value: {
+          ...(instance as unknown as { env: Record<string, unknown> }).env,
+          AI: { run: async () => ({ response: "test response" }) },
+        },
+      });
+    }
+  );
+});
+
+describe("AccountBackend D1-backed coordination", () => {
+  test("concurrent retries admit one message and replay the same generation", async () => {
+    const responses = await Promise.all(
+      [1, 2].map(() =>
+        fetchWorker("/v1/chat-messages", {
+          method: "POST",
+          headers: authenticatedHeaders,
+          body: JSON.stringify(create("concurrent-retry")),
+        })
+      )
+    );
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      200, 201,
+    ]);
+    const bodies = (await Promise.all(
+      responses.map((response) => response.json())
+    )) as Array<{ generation: { id: string } }>;
+    expect(bodies[0]?.generation.id).toBe(bodies[1]?.generation.id);
+  });
+
+  test("concurrent admissions cannot exceed the account chat limit", async () => {
+    const stub = env.ACCOUNTS.getByName("test-account");
+    const results = await Promise.all([
+      stub.admit("test-account", create("limit-first"), 1),
+      stub.admit("test-account", create("limit-second"), 1),
+    ]);
+    expect(results.filter((result) => typeof result !== "string")).toHaveLength(
+      1
+    );
+    expect(results.filter((result) => result === "entitlement")).toHaveLength(
+      1
+    );
+  });
+
+  test("Workers AI receives the previous turn before the current user message", async () => {
+    const stub = env.ACCOUNTS.getByName("test-account");
+    await runInDurableObject(stub, async (instance) => {
+      Object.defineProperty(instance, "env", {
+        configurable: true,
+        value: {
+          ...(instance as unknown as { env: Record<string, unknown> }).env,
+          AI: { run: async () => ({ response: "Hello Ana" }) },
+        },
+      });
+    });
+    const first = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        ...create("context-first"),
+        text: "My name is Ana",
+      }),
+    });
+    expect(first.status).toBe(201);
+    await runInDurableObject(stub, async (instance) => {
+      await instance.alarm();
+    });
+    const firstReply = await env.DB.prepare(
+      "SELECT text FROM chat_messages WHERE account_id = ? AND sender = 'ai'"
+    )
+      .bind("test-account")
+      .all();
+    expect(firstReply.results).toEqual([{ text: "Hello Ana" }]);
+    let captured: unknown = null;
+    await runInDurableObject(stub, async (instance) => {
+      Object.defineProperty(instance, "env", {
+        configurable: true,
+        value: {
+          ...(instance as unknown as { env: Record<string, unknown> }).env,
+          AI: {
+            run: async (_model: unknown, input: { messages: unknown }) => {
+              captured = input.messages;
+              return { response: "Ana" };
+            },
+          },
+        },
+      });
+    });
+    const second = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        ...create("context-second"),
+        text: "What is my name?",
+      }),
+    });
+    expect(second.status).toBe(201);
+    await runInDurableObject(stub, async (instance) => {
+      await instance.alarm();
+    });
+    expect(captured).toEqual([
+      {
+        role: "system",
+        content: "You are Omi, a concise and helpful personal assistant.",
+      },
+      { role: "user", content: "My name is Ana" },
+      { role: "assistant", content: "Hello Ana" },
+      { role: "user", content: "What is my name?" },
+    ]);
+  });
+
+  test("settings reflects env config and D1 admission count without resetting usage", async () => {
+    const before = await fetchWorker("/v1/settings", {
+      headers: authenticatedHeaders,
+    });
+    expect((await before.json()) as unknown).toMatchObject({
+      identity: {
+        displayName: "Test Account",
+        email: "test@example.invalid",
+      },
+      entitlement: { used: 0, limit: 10, limitReached: false },
+    });
+
+    const admitted = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(create("first")),
+    });
+    expect(admitted.status).toBe(201);
+
+    const after = await fetchWorker("/v1/settings", {
+      headers: authenticatedHeaders,
+    });
+    expect((await after.json()) as unknown).toMatchObject({
+      identity: {
+        displayName: "Test Account",
+        email: "test@example.invalid",
+      },
+      entitlement: { used: 1, limit: 10, limitReached: false },
+    });
+  });
+
+  test("admission persists canonical state to D1 and schedules recoverable generation work", async () => {
+    const admission = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(create("message")),
+    });
+    expect(admission.status).toBe(201);
+    const admissionBody = (await admission.json()) as {
+      message: { id: string };
+      generation: { id: string };
+    };
+    expect(admissionBody.message.id).toBe("message");
+
+    const history = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    const historyBody = (await history.json()) as {
+      messages: Array<{ id: string; sender: string }>;
+    };
+    expect(
+      historyBody.messages
+        .filter((message) => message.sender === "human")
+        .map((message) => message.id)
+    ).toEqual(["message"]);
+
+    const stub = env.ACCOUNTS.getByName("test-account");
+    const alarm = await runInDurableObject(stub, (_instance, state) =>
+      state.storage.getAlarm()
+    );
+    const terminal = await terminalEvent(
+      env.DB,
+      "test-account",
+      admissionBody.generation.id
+    );
+    expect(alarm !== null || terminal !== null).toBe(true);
+
+    const replay = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(create("message")),
+    });
+    expect(replay.status).toBe(200);
+
+    const settings = await fetchWorker("/v1/settings", {
+      headers: authenticatedHeaders,
+    });
+    expect((await settings.json()) as unknown).toMatchObject({
+      entitlement: { used: 1 },
+    });
+  });
+
+  test("provider failure terminates its generation and advances queued work", async () => {
+    const stub = env.ACCOUNTS.getByName("test-account");
+    await runInDurableObject(stub, (instance) => {
+      Object.defineProperty(instance, "env", {
+        configurable: true,
+        value: {
+          ...(instance as unknown as { env: Record<string, unknown> }).env,
+          AI: {
+            run: async (
+              _model: unknown,
+              input: { messages: Array<{ content: string }> }
+            ) => {
+              if (input.messages.at(-1)?.content === "first input")
+                throw new Error("provider unavailable");
+              return { response: "second completed" };
+            },
+          },
+        },
+      });
+    });
+    const first = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ ...create("first"), text: "first input" }),
+    });
+    const second = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ ...create("second"), text: "second input" }),
+    });
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+
+    const firstBody = (await first.json()) as { generation: { id: string } };
+    const secondBody = (await second.json()) as { generation: { id: string } };
+
+    await runInDurableObject(stub, (instance) => instance.alarm());
+    const failed = await stub.fetch(
+      `https://account.internal/events?generationId=${firstBody.generation.id}`
+    );
+    expect(await failed.text()).toContain("event: failed");
+    await runInDurableObject(stub, (instance) => instance.alarm());
+    const completed = await stub.fetch(
+      `https://account.internal/events?generationId=${secondBody.generation.id}`
+    );
+    expect(await completed.text()).toContain("event: done");
+
+    const history = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    const historyBody = (await history.json()) as {
+      messages: Array<{ text: string }>;
+    };
+    expect(historyBody.messages.map((message) => message.text)).toEqual([
+      "first input",
+      "second input",
+      "second completed",
+    ]);
+  });
+});

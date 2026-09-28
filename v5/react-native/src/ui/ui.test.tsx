@@ -1,0 +1,684 @@
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import React from 'react';
+import ReactTestRenderer, {act} from 'react-test-renderer';
+
+const mockReact = React;
+let mockPlatformOS = 'macos';
+let mockReduceMotion = false;
+
+jest.mock('react-native', () => {
+  const ReactRuntime = require('react');
+  const component =
+    (name: string) =>
+    ({children, ...props}: {children?: React.ReactNode}) =>
+      ReactRuntime.createElement(name, props, children);
+  const animation = () => ({
+    start: jest.fn(),
+    stop: jest.fn(),
+  });
+
+  return {
+    Platform: {
+      get OS() {
+        return mockPlatformOS;
+      },
+    },
+    AccessibilityInfo: {
+      addEventListener: jest.fn(() => ({remove: jest.fn()})),
+      isReduceMotionEnabled: jest.fn(() => Promise.resolve(false)),
+    },
+    Animated: {
+      View: component('Animated.View'),
+      Value: class {
+        constructor(value: number) {
+          this.value = value;
+        }
+        interpolate() {
+          return 0;
+        }
+        setValue(value: number) {
+          this.value = value;
+        }
+        value = 0;
+      },
+      loop: jest.fn(animation),
+      parallel: jest.fn(animation),
+      sequence: jest.fn(animation),
+      spring: jest.fn(animation),
+      timing: jest.fn(animation),
+    },
+    Easing: {
+      bezier: () => undefined,
+      cubic: {},
+      inOut: (value: unknown) => value,
+      linear: (value: unknown) => value,
+      out: (value: unknown) => value,
+    },
+    Image: component('Image'),
+    Pressable: component('Pressable'),
+    StyleSheet: {create: <T,>(styles: T) => styles},
+    Text: component('Text'),
+    TextInput: component('TextInput'),
+    View: component('View'),
+    ScrollView: component('ScrollView'),
+    Linking: {
+      openSettings: jest.fn(async () => undefined),
+      openURL: jest.fn(async () => undefined),
+    },
+  };
+});
+
+jest.mock('../native-component', () => ({
+  requireNativeComponent: (name: string) => (props: Record<string, unknown>) =>
+    mockReact.createElement(name, props),
+}));
+
+jest.mock('../app/useReduceMotion', () => ({
+  useReduceMotion: () => mockReduceMotion,
+}));
+
+jest.mock('../omiNative', () => ({
+  omiAuth: null,
+  omiBackend: null,
+  omiNative: {
+    requestPermissions: jest.fn(async () => ({
+      microphone: 'denied',
+      notifications: 'denied',
+    })),
+  },
+  requestBluetoothScanPermission: jest.fn(async () => false),
+}));
+
+import {Animated} from 'react-native';
+import {Button} from './Button';
+import {ReadStatus} from './ReadStatus';
+import {Field} from './Field';
+import {FocusPressable} from './Pressable';
+import {tokens} from './tokens';
+import {Onboarding} from './Onboarding';
+import {PermissionRow} from './PermissionRow';
+import {omiNative} from '../omiNative';
+import {
+  OmiAvatar,
+  OMI_MARK_INK,
+  omiDotColor,
+  omiMarkBrightness,
+  omiMarkDotCenter,
+  omiMarkGeometry,
+  omiMarkMotionPose,
+} from './OmiAvatar';
+
+function render(element: React.ReactElement) {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(element);
+  });
+  return renderer;
+}
+
+function findHost(renderer: ReactTestRenderer.ReactTestRenderer, type: string) {
+  return renderer.root.find(node => String(node.type) === type);
+}
+
+function findOmiDots(renderer: ReactTestRenderer.ReactTestRenderer) {
+  return renderer.root.find(
+    node =>
+      node.props.identity === 'omi' &&
+      node.props.size === 104 &&
+      node.props.animate !== undefined,
+  );
+}
+
+function flattenStyle(style: unknown): Array<Record<string, unknown>> {
+  return ([] as Array<unknown>)
+    .concat(style)
+    .filter(
+      (entry): entry is Record<string, unknown> =>
+        entry != null && typeof entry === 'object',
+    );
+}
+
+function isWhiteInk(color: unknown): boolean {
+  const value = String(color).trim().toLowerCase().replace(/\s+/g, '');
+  return (
+    value === '#fff' ||
+    value === '#ffffff' ||
+    value === 'white' ||
+    value === 'rgb(255,255,255)' ||
+    value === 'rgba(255,255,255,1)'
+  );
+}
+
+function omiInkDotHosts(renderer: ReactTestRenderer.ReactTestRenderer) {
+  return renderer.root.findAll(node => {
+    if (String(node.type) !== 'Animated.View') {
+      return false;
+    }
+    return flattenStyle(node.props.style).some(entry =>
+      isWhiteInk(entry.backgroundColor),
+    );
+  });
+}
+
+describe('UI primitives', () => {
+  beforeEach(() => {
+    mockPlatformOS = 'macos';
+    mockReduceMotion = false;
+  });
+
+  test('FocusPressable composes its focus state with caller behavior', () => {
+    const onFocus = jest.fn();
+    const renderer = render(
+      <FocusPressable
+        accessibilityLabel="Focus target"
+        onFocus={onFocus}
+        style={{opacity: 0.8}}
+      />,
+    );
+    const pressable = findHost(renderer, 'Pressable');
+
+    act(() => pressable.props.onFocus({}));
+
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(pressable.props.style({pressed: false})).toEqual(
+      expect.arrayContaining([
+        {opacity: 0.8},
+        {
+          borderColor: tokens.color.focus,
+          borderWidth: tokens.border.width,
+        },
+      ]),
+    );
+  });
+
+  test('Button and Field expose accessible native control contracts', () => {
+    const renderer = render(
+      <>
+        <Button accessibilityLabel="Continue">Continue</Button>
+        <Field
+          accessibilityLabel="Email"
+          error="Enter a valid email"
+          label="Email"
+        />
+      </>,
+    );
+    const button = findHost(renderer, 'Pressable');
+    const input = findHost(renderer, 'TextInput');
+
+    expect(button.props.accessibilityRole).toBe('button');
+    expect(input.props.accessibilityLabel).toBe('Email');
+    expect(input.props['aria-invalid']).toBe(true);
+    expect(JSON.stringify(renderer.toJSON())).toContain('Continue');
+    expect(JSON.stringify(renderer.toJSON())).toContain('Email');
+    expect(JSON.stringify(renderer.toJSON())).toContain('Enter a valid email');
+  });
+});
+
+describe('Onboarding chrome', () => {
+  beforeEach(() => {
+    mockReduceMotion = false;
+    (Animated.loop as jest.Mock).mockClear();
+    (Animated.parallel as jest.Mock).mockClear();
+    (Animated.sequence as jest.Mock).mockClear();
+    (Animated.spring as jest.Mock).mockClear();
+    (Animated.timing as jest.Mock).mockClear();
+  });
+
+  test('first-run onboarding is Welcome and Sign in only', () => {
+    const renderer = render(
+      <Onboarding onSignIn={() => undefined} signingIn={false} />,
+    );
+    const output = JSON.stringify(renderer.toJSON());
+
+    expect(output).toContain('Welcome to Omi');
+    expect(output).toContain('Sign in');
+    expect(output).toContain(
+      'Sign in to access your conversations and memories.',
+    );
+    expect(output).not.toContain('calm workspace');
+    expect(output).not.toContain('Search Omi');
+    expect(output).not.toContain('Home search dock');
+    expect(output).not.toContain('Home navigation');
+    expect(output).not.toContain('Desktop application chrome');
+  });
+
+  test('Onboarding renders the Omi dots above Welcome to Omi', () => {
+    mockPlatformOS = 'ios';
+    const renderer = render(
+      <Onboarding onSignIn={() => undefined} signingIn={false} />,
+    );
+    const output = JSON.stringify(renderer.toJSON());
+    const title = renderer.root.find(
+      node => node.props.accessibilityRole === 'header',
+    );
+    const dots = findOmiDots(renderer);
+
+    expect(dots.props).toMatchObject({
+      animate: true,
+      identity: 'omi',
+      reduceMotion: false,
+      size: 104,
+      tone: 'ink',
+    });
+    expect(omiInkDotHosts(renderer)).toHaveLength(8);
+    const rainbow = Array.from({length: 8}, (_, index) =>
+      omiDotColor('omi', index),
+    );
+    for (const color of rainbow) {
+      expect(output).not.toContain(color);
+    }
+    expect(output.toLowerCase()).toContain('#ffffff');
+    expect(
+      renderer.root.findAll(node => String(node.type) === 'Image'),
+    ).toHaveLength(0);
+    expect(title.props.children).toBe('Welcome to Omi');
+    const siblings = title.parent?.children ?? [];
+    const dotsSlot = dots.parent;
+    expect(dotsSlot).toBeTruthy();
+    expect(
+      siblings.indexOf(dotsSlot as (typeof siblings)[number]),
+    ).toBeLessThan(siblings.indexOf(title));
+    expect(output).toContain('Sign in');
+    expect(output).not.toContain('Search Omi');
+    expect(Animated.timing).toHaveBeenCalled();
+    expect(Animated.loop).toHaveBeenCalled();
+  });
+
+  test('reduce-motion skips onboarding dots animation', () => {
+    mockPlatformOS = 'ios';
+    mockReduceMotion = true;
+    const renderer = render(
+      <Onboarding onSignIn={() => undefined} signingIn={false} />,
+    );
+    const dots = findOmiDots(renderer);
+
+    expect(dots.props).toMatchObject({
+      animate: false,
+      identity: 'omi',
+      reduceMotion: true,
+      size: 104,
+      tone: 'ink',
+    });
+    expect(Animated.timing).not.toHaveBeenCalled();
+    expect(Animated.loop).not.toHaveBeenCalled();
+    expect(Animated.parallel).not.toHaveBeenCalled();
+    expect(Animated.sequence).not.toHaveBeenCalled();
+    expect(Animated.spring).not.toHaveBeenCalled();
+    const hosts = omiInkDotHosts(renderer);
+    expect(hosts).toHaveLength(8);
+    for (const host of hosts) {
+      const style = Object.assign({}, ...flattenStyle(host.props.style));
+      expect(isWhiteInk(style.backgroundColor)).toBe(true);
+      expect(style.opacity).toBe(1);
+    }
+    expect(
+      renderer.root.findAll(node => String(node.type) === 'Image'),
+    ).toHaveLength(0);
+  });
+
+  async function finishMobileSetup(
+    renderer: ReactTestRenderer.ReactTestRenderer,
+    checkPermissions?: () => Promise<void>,
+  ) {
+    const press = async (label: string) => {
+      await act(async () => {
+        renderer.root
+          .find(node => node.props.accessibilityLabel === label)
+          .props.onPress();
+      });
+    };
+    await press('Agree & Continue');
+    await press('Continue');
+    await press('TikTok');
+    await press('Continue');
+    await checkPermissions?.();
+    await press("I'll do these later");
+    await press('Skip for now');
+  }
+
+  test('browser setup continues without offering unavailable wearable capture', async () => {
+    mockPlatformOS = 'web';
+    const complete = jest.fn();
+    const renderer = render(
+      <Onboarding
+        onSignIn={() => undefined}
+        signingIn={false}
+        setupRequired
+        onCompleteSetup={complete}
+      />,
+    );
+    await finishMobileSetup(renderer, async () => {
+      (omiNative!.requestPermissions as jest.Mock).mockResolvedValueOnce({
+        microphone: 'granted',
+        notifications: 'unsupported',
+      });
+      await act(async () =>
+        renderer.root.findAllByType(PermissionRow)[0].props.onPress(),
+      );
+      const rows = renderer.root.findAllByType(PermissionRow);
+      expect(rows.map(row => row.props.status)).toEqual([
+        'Unavailable',
+        'Granted',
+      ]);
+      expect(rows.every(row => row.props.disabled)).toBe(true);
+    });
+    expect(
+      renderer.root.findAll(
+        node => node.props.accessibilityLabel === 'Connect your Omi',
+      ),
+    ).toHaveLength(0);
+    const action = renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Start Using Omi',
+    )[0];
+    act(() => action.props.onPress());
+    expect(complete).toHaveBeenCalledWith(false);
+  });
+
+  test('setup disclosure names what Omi saves and where it is read back', () => {
+    mockPlatformOS = 'ios';
+    const renderer = render(
+      <Onboarding
+        onSignIn={() => undefined}
+        signingIn={false}
+        setupRequired
+        onCompleteSetup={() => undefined}
+      />,
+    );
+    const output = JSON.stringify(renderer.toJSON());
+
+    expect(output).toContain('Data & Privacy');
+    expect(output).toContain(
+      'your conversations, recordings, and personal information will be securely stored',
+    );
+    expect(output).toContain(
+      'Deepgram for transcription and OpenAI for analysis',
+    );
+    expect(output).toContain('Privacy Policy');
+    expect(output).toContain('Terms of Service');
+    expect(output).toContain('Agree & Continue');
+    expect(output).not.toContain('Claude');
+  });
+
+  test('unreachable session error is distinct from clean signed-out Welcome', () => {
+    mockPlatformOS = 'macos';
+    const unreachable =
+      "Couldn't reach Omi to check your session. Try Sign in again when you are online.";
+    const clean = render(
+      <Onboarding onSignIn={() => undefined} signingIn={false} />,
+    );
+    expect(JSON.stringify(clean.toJSON())).toContain('Welcome to Omi');
+    expect(
+      clean.root.findAll(
+        node => node.props.accessibilityLabel === 'Session unreachable',
+      ),
+    ).toHaveLength(0);
+    expect(
+      clean.root.findAll(
+        node => node.props.accessibilityLabel === 'Sign-in error',
+      ),
+    ).toHaveLength(0);
+
+    const offline = render(
+      <Onboarding
+        error={unreachable}
+        onSignIn={() => undefined}
+        signingIn={false}
+      />,
+    );
+    const error = offline.root.find(
+      node => node.props.accessibilityLabel === 'Session unreachable',
+    );
+    expect(String(error.props.children)).toBe(unreachable);
+    expect(Object.assign({}, ...flattenStyle(error.props.style)).color).toBe(
+      '#ff453a',
+    );
+    expect(JSON.stringify(offline.toJSON())).toContain('Welcome to Omi');
+    expect(JSON.stringify(offline.toJSON())).toContain('Sign in');
+  });
+
+  test('macOS onboarding renders light ink on the dark native glass', () => {
+    mockPlatformOS = 'macos';
+    const renderer = render(
+      <Onboarding
+        onSignIn={() => undefined}
+        signingIn={false}
+        error="Try again"
+      />,
+    );
+    const title = renderer.root.find(
+      node => node.props.accessibilityRole === 'header',
+    );
+    expect(Object.assign({}, ...flattenStyle(title.props.style)).color).toBe(
+      '#F2F4EF',
+    );
+    const dots = findOmiDots(renderer);
+    expect(dots.props.inkColor).toBe('#F2F4EF');
+    const hosts = dots.findAll(node => String(node.type) === 'Animated.View');
+    expect(hosts).toHaveLength(8);
+    for (const host of hosts) {
+      expect(
+        Object.assign({}, ...flattenStyle(host.props.style)).backgroundColor,
+      ).toBe('#F2F4EF');
+    }
+    const error = renderer.root.find(
+      node => node.props.accessibilityLabel === 'Sign-in error',
+    );
+    expect(Object.assign({}, ...flattenStyle(error.props.style)).color).toBe(
+      'rgba(242, 244, 239, 0.62)',
+    );
+  });
+
+  test('first-run onboarding sits on the shared glass, not a nested card', () => {
+    const renderer = render(
+      <Onboarding onSignIn={() => undefined} signingIn={false} />,
+    );
+    const surface = renderer.root.find(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    );
+    const surfaceStyle = Object.assign(
+      {},
+      ...flattenStyle(
+        surface.props.contentContainerStyle ?? surface.props.style,
+      ),
+    );
+    const content = renderer.root.find(node =>
+      flattenStyle(node.props.style).some(
+        style => style.gap === tokens.space.sm && style.width === '100%',
+      ),
+    );
+    const contentStyle = Object.assign(
+      {},
+      ...flattenStyle(content.props.style),
+    );
+    const dotsStyle = Object.assign(
+      {},
+      ...flattenStyle(findOmiDots(renderer).parent?.props.style),
+    );
+
+    expect(surfaceStyle).toMatchObject({
+      alignSelf: 'stretch',
+      flexGrow: 1,
+      paddingHorizontal: tokens.space.xxl,
+      paddingVertical: tokens.space.xl,
+    });
+    expect(surfaceStyle.padding).toBeUndefined();
+    expect(Number(surfaceStyle.paddingVertical)).toBeLessThan(
+      tokens.space.xxxl,
+    );
+    expect(
+      renderer.root.findAll(
+        node =>
+          node.props.accessibilityLabel === 'First-run onboarding material',
+      ),
+    ).toHaveLength(0);
+    expect(contentStyle.gap).toBe(tokens.space.sm);
+    expect(Number(contentStyle.gap)).toBeLessThan(tokens.space.lg);
+    expect(dotsStyle.marginBottom ?? tokens.space.none).toBe(tokens.space.none);
+  });
+
+  test("welcome mark geometry is main's white ring, not a rainbow smile", () => {
+    expect(OMI_MARK_INK).toBe('#ffffff');
+    expect(omiMarkGeometry).toMatchObject({
+      canvas: 260,
+      axisRadius: 86.71,
+      diagonalRadius: 91.92,
+      idleBrightness: 0.5,
+      pulseWidth: 0.18,
+      lapMs: 900,
+    });
+    expect(omiMarkDotCenter(0)).toEqual({
+      x: omiMarkGeometry.centre,
+      y: omiMarkGeometry.centre - omiMarkGeometry.axisRadius,
+    });
+    expect(omiMarkBrightness(0, null)).toBe(1);
+    expect(omiMarkBrightness(0, 0)).toBe(1);
+    expect(omiMarkBrightness(4, 0.5)).toBe(1);
+    expect(omiMarkBrightness(0, 0.5)).toBe(omiMarkGeometry.idleBrightness);
+  });
+});
+
+describe('extracted modules', () => {
+  test('omiDotColor stays in the avatar module', () => {
+    expect(omiDotColor('omi', 0)).toBe(omiDotColor('omi', 0));
+    expect(omiDotColor('omi', 0)).not.toBe(omiDotColor('other', 0));
+  });
+});
+
+describe('event-driven Omi mark motion', () => {
+  test('arrival is staggered; gather contracts then releases; success scatters outwards', () => {
+    expect(omiMarkMotionPose('arrive', 0, 0.25).opacity).toBeGreaterThan(
+      omiMarkMotionPose('arrive', 7, 0.25).opacity,
+    );
+    expect(omiMarkMotionPose('gather', 0, 0.25).y).toBeGreaterThan(0);
+    expect(omiMarkMotionPose('gather', 0, 0.75).y).toBeLessThan(0);
+    expect(omiMarkMotionPose('success', 0, 0.5).y).toBeCloseTo(-34);
+    expect(omiMarkMotionPose('success', 2, 0.5).x).toBeCloseTo(34);
+    for (const motion of ['arrive', 'gather', 'success'] as const) {
+      for (let index = 0; index < 8; index++) {
+        const pose = omiMarkMotionPose(motion, index, 1);
+        expect(pose.x).toBeCloseTo(0);
+        expect(pose.y).toBeCloseTo(0);
+        expect(pose.scale).toBeCloseTo(1);
+        expect(pose.opacity).toBe(1);
+      }
+    }
+    for (let index = 0; index < 8; index++) {
+      const start = omiMarkMotionPose('breathe', index, 0);
+      const end = omiMarkMotionPose('breathe', index, 1);
+      expect(end.x).toBeCloseTo(start.x);
+      expect(end.y).toBeCloseTo(start.y);
+      expect(end.opacity).toBeCloseTo(start.opacity);
+    }
+  });
+
+  test('gestures stop on replacement, stable grant renders do not replay, and Reduce Motion stays static', () => {
+    jest.mocked(Animated.timing).mockClear();
+    jest.mocked(Animated.loop).mockClear();
+    const renderer = render(
+      <OmiAvatar tone="ink" motion="breathe" motionKey="screen" />,
+    );
+    const waiting = jest.mocked(Animated.loop).mock.results[0].value;
+    expect(waiting.start).toHaveBeenCalledTimes(1);
+    act(() =>
+      renderer.update(
+        <OmiAvatar tone="ink" motion="success" motionKey="screen" />,
+      ),
+    );
+    expect(waiting.stop).toHaveBeenCalledTimes(1);
+    expect(Animated.timing).toHaveBeenCalledTimes(2);
+    const success = jest.mocked(Animated.timing).mock.results[1].value;
+    act(() =>
+      renderer.update(
+        <OmiAvatar tone="ink" motion="success" motionKey="screen" />,
+      ),
+    );
+    expect(Animated.timing).toHaveBeenCalledTimes(2);
+    act(() =>
+      renderer.update(
+        <OmiAvatar
+          tone="ink"
+          motion="success"
+          motionKey="screen"
+          reduceMotion
+        />,
+      ),
+    );
+    expect(success.stop).toHaveBeenCalledTimes(1);
+    expect(Animated.timing).toHaveBeenCalledTimes(2);
+    for (const dot of omiInkDotHosts(renderer)) {
+      expect(dot.props.style.opacity).toBe(1);
+      expect(dot.props.style.transform).toBeUndefined();
+    }
+    act(() => renderer.unmount());
+  });
+});
+
+describe('signed-out Settings and first-run', () => {
+  test('Account exposes Sign out and first-run stays the session-empty surface', () => {
+    const settings = readFileSync(
+      resolve(__dirname, '../pages/Settings.tsx'),
+      'utf8',
+    );
+    const onboarding = readFileSync(
+      resolve(__dirname, './Onboarding.tsx'),
+      'utf8',
+    );
+    const gate = readFileSync(
+      resolve(__dirname, '../app/useOnboarding.ts'),
+      'utf8',
+    );
+
+    expect(settings).toContain('actionLabel="Sign out"');
+    expect(settings).toContain('onSignOut');
+    expect(settings).toContain('auth.signOut()');
+    expect(settings).toContain('if (!result.signedOut)');
+    expect(settings).not.toContain('Sign out is not exposed');
+    expect(onboarding).toContain('First-run onboarding');
+    expect(onboarding).toContain('Welcome to Omi');
+    expect(gate).toContain('signOutAndRefresh');
+    expect(gate).toMatch(
+      /const result = await auth\.signOut\(\);[^]*setOnboardingRequired\(!completed\);[^]*setReturningUser\(completed\)/,
+    );
+    // A failed confirmation probe must not strand a signed-out session in
+    // the product shell: the gate falls back to Welcome either way.
+    expect(gate).toMatch(
+      /try \{[^]*hasSession = await auth\.hasCloudSession\(\);[^]*\} catch \{[^]*hasSession = false;/,
+    );
+  });
+});
+
+test('legacy unknown completeness is not presented as a known incomplete read', () => {
+  const page = {
+    windowStatus: 'unknown' as const,
+    complete: false,
+    hasMore: false,
+    nextCursor: null,
+    completenessStatus: 'unknown' as const,
+    reasons: [],
+  };
+  const renderer = render(<ReadStatus label="Conversations" page={page} />);
+  expect(renderer.toJSON()).toBeNull();
+  act(() =>
+    renderer.update(
+      <ReadStatus
+        label="Conversations"
+        page={{...page, completenessStatus: 'incomplete'}}
+      />,
+    ),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'Conversations are incomplete.',
+  );
+  act(() =>
+    renderer.update(
+      <ReadStatus
+        label="Memories"
+        page={{...page, completenessStatus: 'partial'}}
+      />,
+    ),
+  );
+  expect(JSON.stringify(renderer.toJSON())).toContain(
+    'Memories are a partial view.',
+  );
+});

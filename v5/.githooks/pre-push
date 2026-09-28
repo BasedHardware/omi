@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+if [ "${OMI_V5_CHECKED:-0}" = "1" ]; then
+  exit 0
+fi
+exec bun run check

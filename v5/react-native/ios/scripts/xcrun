@@ -1,0 +1,24 @@
+#!/bin/bash
+set -e
+REAL_XCRUN=/usr/bin/xcrun
+SAFE_ROOT=/tmp/omi-xcode-space-safe.app
+XCODE_ROOT="$($REAL_XCRUN --find clang)"
+XCODE_ROOT="${XCODE_ROOT%/Contents/Developer/Toolchains/*}"
+if [[ "$XCODE_ROOT" == *" "* ]]; then
+  ln -sfn "$XCODE_ROOT" "$SAFE_ROOT"
+fi
+if [[ "$1" == "-find" ]]; then
+  tool="$($REAL_XCRUN "$@")"
+  echo "${tool/$XCODE_ROOT/$SAFE_ROOT}"
+  exit 0
+fi
+if [[ "$*" == *"--show-sdk-path"* ]]; then
+  sdk="$($REAL_XCRUN "$@")"
+  case "$sdk" in
+    *iPhoneOS*.sdk) ln -sfn "$sdk" /tmp/omi-iPhoneOS.sdk; echo /tmp/omi-iPhoneOS.sdk ;;
+    *iPhoneSimulator*.sdk) ln -sfn "$sdk" /tmp/omi-iPhoneSimulator.sdk; echo /tmp/omi-iPhoneSimulator.sdk ;;
+    *) echo "$sdk" ;;
+  esac
+  exit 0
+fi
+exec "$REAL_XCRUN" "$@"

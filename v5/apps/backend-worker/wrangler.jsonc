@@ -1,0 +1,88 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "omi-v5-backend-staging",
+  "account_id": "fc62a6e6528bec6d3d81c3bf8967ceeb",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ENVIRONMENT": "staging",
+    "FIREBASE_API_KEY": "AIzaSyA88gHcmiAxjN_aE23tHRWXOgFfapyO6dk",
+    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "STAGING_ACCOUNT_ID": "staging-primary",
+    "STAGING_DISPLAY_NAME": "Omi Staging",
+    "STAGING_EMAIL": "staging@omi.invalid",
+    "STAGING_PLAN_LABEL": "Staging",
+    "STAGING_CHAT_LIMIT": 1000,
+    "OBSERVABILITY_SINK_MODE": "cloudflare_only",
+    "OPENROUTER_GATEWAY_ENABLED": "false",
+    "OPENROUTER_MODEL": "openai/gpt-5.6-luna",
+    "R2_ACCOUNT_ID": "fc62a6e6528bec6d3d81c3bf8967ceeb",
+    "R2_BUCKET_NAME": "omi-v5-backend-staging-attachments",
+    "R2_SIGNED_URL_TTL_SECONDS": "900"
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "limits": { "subrequests": 70000 },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ACCOUNTS",
+        "class_name": "AccountBackend"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["AccountBackend"]
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "omi-v5-backend-staging-tasks",
+      "database_id": "028f665e-87df-4329-b794-b0811a6e24a4",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05
+    }
+  },
+  "r2_buckets": [
+    {
+      "binding": "ATTACHMENTS",
+      "bucket_name": "omi-v5-backend-staging-attachments"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "ATTACHMENT_INGEST",
+        "queue": "omi-v5-attachment-ingest"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "omi-v5-attachment-ingest",
+        "max_batch_size": 10,
+        "max_retries": 5
+      }
+    ]
+  }
+  // VECTORIZE is intentionally unbound. `wrangler vectorize list` found
+  // omi-memory-claims (768-d) and omi-v5-retrieval-benchmark-staging
+  // (synthetic benchmark only). Neither is an omi-v5 staging memories
+  // index. Vectorize cannot serve canonical content; until a canonical
+  // memory store is connected, /v1/memories fail-closed with retryable
+  // projection_unavailable.
+}

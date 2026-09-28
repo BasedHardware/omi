@@ -1,0 +1,68 @@
+{
+  "name": "@omi-core/ratified-contracts",
+  "version": "0.8.0",
+  "private": true,
+  "description": "Reviewed Omi client/backend contract seam",
+  "packageManager": "bun@1.3.14",
+  "type": "module",
+  "exports": {
+    "./pagination/cursor": {
+      "types": "./dist/pagination/cursor.d.ts",
+      "import": "./dist/pagination/cursor.js"
+    },
+    "./projections/synthesized": {
+      "types": "./dist/projections/synthesized.d.ts",
+      "import": "./dist/projections/synthesized.js"
+    },
+    "./projections/tasks": {
+      "types": "./dist/projections/tasks.d.ts",
+      "import": "./dist/projections/tasks.js"
+    },
+    "./recall/trace": {
+      "types": "./dist/recall/trace.d.ts",
+      "import": "./dist/recall/trace.js"
+    },
+    "./write/ops": {
+      "types": "./dist/write/ops.d.ts",
+      "import": "./dist/write/ops.js"
+    }
+  },
+  "files": [
+    "dist/pagination/cursor.js",
+    "dist/pagination/cursor.d.ts",
+    "dist/projections/synthesized.js",
+    "dist/projections/synthesized.d.ts",
+    "dist/projections/tasks.js",
+    "dist/projections/tasks.d.ts",
+    "dist/recall/trace.js",
+    "dist/recall/trace.d.ts",
+    "dist/wire/json.js",
+    "dist/wire/json.d.ts",
+    "dist/write/ops.js",
+    "dist/write/ops.d.ts",
+    "fixtures/manifest.json",
+    "fixtures/read-page-windows.json",
+    "fixtures/recall-completeness.json",
+    "fixtures/recall-trace.json",
+    "fixtures/page-conformance.json",
+    "fixtures/status-matrix.json",
+    "fixtures/write-ops-outcomes.json",
+    "fixtures/write-ops-conformance.json",
+    "fixtures/tasks-read-shape.json",
+    "fixtures/tasks-read-conformance.json",
+    "PROVENANCE.json"
+  ],
+  "scripts": {
+    "build": "bun scripts/clean.mjs && tsc -p tsconfig.json",
+    "test": "bun test test/*.test.mjs",
+    "check:types": "tsc -p fixtures/clean-consumer/tsconfig.json --noEmit",
+    "check:markers": "bun scripts/check-domain-markers.mjs",
+    "check:provenance": "bun scripts/provenance.mjs --check",
+    "check:package": "bun scripts/package-boundary.mjs --check",
+    "verify": "bun run build && bun run test && bun run check:types && bun run check:markers && bun run check:provenance && bun run check:package",
+    "verify:ci": "bun scripts/verify-ci.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

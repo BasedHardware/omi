@@ -1,0 +1,17 @@
+{
+  "name": "@omi-core/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Single source of truth: types, grammars, and interface contracts. Pure declarations \u2014 no runtime logic (enforced: no function bodies beyond type guards derived from grammar constants).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "echo contracts:types-only-no-tests",
+    "lint": "echo contracts:no-lint-yet"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

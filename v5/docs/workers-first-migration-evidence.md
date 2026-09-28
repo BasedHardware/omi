@@ -1,0 +1,81 @@
+# Workers-first migration evidence
+
+This note records locally reproducible evidence for the current Omi v5 Workers slices. It is intentionally limited to isolated recovery worktrees and does not claim a deployment or a production migration.
+
+## Authority and boundaries
+
+- **Workers** are the runtime boundary.
+- **D1** is authoritative for the migrated tasks read projection (`DB` binding and `0001_tasks.sql`). The focused Cloudflare Vitest integration test proves account-filtered reads from seeded D1 rows.
+- **Durable Objects** coordinate per-account state/admission and generation/event sequencing; they are not the authoritative migrated tasks read store.
+- **AI traffic**: the gateway slice adds fail-closed configuration, HTTPS-only URL validation, bounded request/response handling, bearer forwarding to the configured Cloudflare AI Gateway/OpenRouter endpoint, and correlation-safe error logs. It does not add a direct provider path or Google backend.
+- **Async/runtime operations** remain bounded to the Workers platform surface (R2, Queues, Workflows, and Cron when a slice requires them). No platform or core-foundation worktree is part of this evidence.
+- **Observability**: request events are JSON, correlation-safe, and omit URL/query, account identifiers, authorization, request content, prompts, and completions. Wrangler Observability is enabled in the worker configuration. `cloudflare_only` is the default sink mode; `better_stack` is configuration-gated and requires out-of-band Cloudflare log-delivery provisioning plus an opaque operator evidence identifier. The repository does not contain a delivery URL or source token, and does not represent the identifier as proof of ingestion.
+
+## Verified slices
+
+### AI Gateway/OpenRouter adapter
+
+Worktree: `workers-ai-gateway`, commit `2b22fd79a`.
+
+- `bun test apps/backend-worker/test/openrouter.gateway.test.ts`: **10 passed**.
+- `bun run --cwd apps/backend-worker typecheck`: **passed**.
+- Prettier check on changed TypeScript: **passed**.
+- `wrangler deploy --dry-run --config apps/backend-worker/wrangler.jsonc`: **passed**.
+- `git diff --check origin/v5...HEAD`: **passed**.
+
+The tests cover request shape, correlation header, response bounds, redaction, malformed upstream responses, and readiness fail-closed behavior.
+
+### D1-authoritative tasks vertical slice
+
+Worktree: `workers-d1-vertical-slice`, commits `d02778936` and `61452d06a`.
+
+- `bun x vitest run test/d1-tasks.integration.test.ts`: **1 passed**.
+- `bun run typecheck`: **passed**.
+- `wrangler deploy --dry-run --strict`: **passed**, including the D1 binding.
+- Prettier and `git diff --check`: **passed** after the ratified tasks contract was formatted in `61452d06a`.
+
+The integration test inserts same-account and foreign-account rows and verifies that the worker returns only the authenticated account's D1 task with the ratified completeness envelope.
+
+### Vectorize vs AI Search permission-filtered benchmark
+
+Worktree: `workers-retrieval-benchmark`, commits `4da4ac0dc` and `d0b09c470`.
+
+- `bun run check`: **25 passed**, with format, lint, typecheck, and tests passing.
+- `bun run run`: both in-memory candidate providers passed account-isolation and deletion gates; the intentionally bad provider failed the sensitivity gates.
+- Local synthetic metrics: Vectorize p95 latency `13 ms`, p95 index lag `240 ms`; AI Search p95 latency `19 ms`, p95 index lag `90 ms`. Recall/MRR/nDCG were `0.583/0.667/0.602` for both in this fixture.
+- `bun run build` followed by Wrangler dry-run: **passed**.
+
+These are local simulations only. No provider winner is selected; hosted comparison requires a deliberate synthetic-only staging run.
+
+### CI, readiness, rollback, and observability
+
+Worktree: `workers-observability`, commits `66853a0ed` and `b2f54fb2f`.
+
+- `bun test test/worker.contract.test.ts test/ready.verify.test.ts`: **54 passed**.
+- `bun run typecheck`: **passed**.
+- Prettier check: **passed**.
+- `bun run deploy:dry-run`: **passed**.
+
+The slice includes guarded staging delivery checks, a no-secret readiness verifier, privacy-safe telemetry tests, and `ROLLBACK.md`. No deploy, push, credential access, or secret value was used for this evidence.
+
+### Attachment staging vertical slice
+
+Worktree: `agents-attachments-async`, uncommitted.
+
+- `bun test apps/backend-worker/test/attachments.contract.test.ts`: **26 passed**.
+- `bun x vitest run test/attachments.integration.test.ts`: **5 passed**.
+- `bun run --cwd apps/backend-worker typecheck`: **passed**.
+- `bun run --cwd apps/backend-worker lint`: **passed**.
+- Prettier check: **passed**.
+- `wrangler deploy --dry-run --strict`: **passed**, including R2 and Queue producer bindings.
+- `git diff --check`: **passed**.
+
+The slice adds `POST /v1/chat-attachments`, which accepts only bounded, validated attachment metadata (`opId`, `displayName`, `mimeType`, `sizeBytes`) as JSON — never file bytes through the Worker body. D1 is authoritative for attachment metadata (`0003_attachments.sql`, `chat_attachments` table with account-scoped `op_id` idempotency and `r2_key` uniqueness). R2 holds bytes only; the Worker produces an explicit staging/upload contract (`StagedAttachment` + `UploadContract`) with a presigned R2 PUT URL (`createPresignedR2Url`) that uses AWS SigV4 signing via the Web Crypto API and is wired through the route only when the full signing configuration is present. A Queue producer (`ATTACHMENT_INGEST`) sends an async coordination message after staging; the Queue is not authoritative. The route fails closed with `503 service_unavailable` when the `ATTACHMENTS` R2 binding, the `ATTACHMENT_INGEST` Queue binding, or the R2 direct-upload signing configuration (`R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`) is absent or invalid, and the 503 is returned BEFORE any D1 row is created or any Queue message is sent.
+
+#### Provisioned-resource proof boundary
+
+The presigned R2 upload URL requires a non-secret R2 account host id (`R2_ACCOUNT_ID`, the Cloudflare R2 S3 endpoint account id, distinct from the authenticated Omi `STAGING_ACCOUNT_ID`), a non-secret bucket name (`R2_BUCKET_NAME`, mirroring the `ATTACHMENTS` R2 binding), and R2 S3 API credentials (`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`) provisioned as Worker secrets via Wrangler. The non-secret vars are declared in `wrangler.jsonc` (`R2_ACCOUNT_ID` ships empty so a deploy fails closed until an operator fills it in); the credentials are not present in the repository and are not faked. The route validates the full signing configuration strictly via `parseSignedUploadConfig` and returns `503 service_unavailable` BEFORE creating any D1 row or sending any Queue message when any required field is absent or malformed; R2 and Queue binding presence alone is NOT sufficient. The `createPresignedR2Url` seam is exercised both directly with test credentials and through the Worker route in local tests (contract and integration) with test-only credential values injected at the call boundary. The `upload.url` field is a usable signed PUT URL when the full configuration is present and is never produced otherwise. No R2 bucket ID, Queue ID, or resource ARN is fabricated. The `wrangler deploy --dry-run --strict` validates the binding configuration structure; it does not prove the named R2 bucket or Queue exists. A staging deployment requires an operator to fill in `R2_ACCOUNT_ID` and provision the R2 bucket (`omi-v5-backend-staging-attachments`), the Queue (`omi-v5-attachment-ingest`), and the R2 S3 credentials out of band before the upload contract becomes functional.
+
+## Remaining gate
+
+This evidence is local and commit-scoped. It is not a deployment approval and does not authorize `deploy:staging`, pushing, or accessing secrets. Before any staged rollout, rerun the scoped gates from the exact candidate commit, verify the configured secret bindings out of band, require the release verifier to match the expected environment and sink mode, and follow the rollback document. The correlation policy is: `request_id` identifies one Worker fetch event; `correlation_id` equals that request identifier for request telemetry and identifies the generation passed to the AI Gateway for asynchronous generation telemetry. Operators join the two only through the generation transition evidence and must never use request content, account data, URLs, authorization, prompts, completions, or sink credentials as correlation fields.

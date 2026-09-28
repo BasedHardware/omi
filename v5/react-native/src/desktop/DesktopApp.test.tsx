@@ -1,0 +1,2053 @@
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import React from 'react';
+import ReactTestRenderer, {act} from 'react-test-renderer';
+import {
+  NativeModules,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+} from 'react-native';
+import {DesktopApp} from './DesktopApp';
+import {DesktopChat} from './DesktopChat';
+import {subscribeDesktopSearchCommand} from '../desktopCommands';
+
+// Set by the desktopCommands mock; holds the ⌘F handler so tests can enter
+// search-on-Home the way the real command does. var (not let) because the
+// hoisted jest.mock factory assigns it during module import.
+var mockSearchCommandHandler: (() => void) | undefined;
+
+function runSearchCommand() {
+  expect(mockSearchCommandHandler).toBeInstanceOf(Function);
+  mockSearchCommandHandler?.();
+}
+
+jest.mock('../desktopCommands', () => ({
+  subscribeDesktopSearchCommand: jest.fn((handler: () => void) => {
+    mockSearchCommandHandler = handler;
+    return {remove: jest.fn()};
+  }),
+}));
+
+jest.mock('../app/useReduceMotion', () => ({
+  useReduceMotion: () => true,
+}));
+
+jest.mock('../omiNative', () => ({
+  omiBackend: {request: jest.fn()},
+  subscribeOmiBackendSessionInvalidated: jest.fn(() => () => undefined),
+}));
+
+jest.mock('./ShippingPressable', () => {
+  const ReactModule = require('react');
+  const {FocusPressable} = require('../ui/Pressable');
+  return {
+    ShippingPressable: ({
+      children,
+      ...props
+    }: React.ComponentProps<typeof FocusPressable>) =>
+      ReactModule.createElement(FocusPressable, props, children),
+  };
+});
+
+jest.mock('./ShippingStage', () => {
+  const ReactModule = require('react');
+  const {View} = require('react-native');
+  return {
+    ShippingGlassMount: ({
+      children,
+      style,
+    }: {
+      children?: React.ReactNode;
+      style?: object;
+    }) => ReactModule.createElement(View, {style}, children),
+    ShippingListInsert: ({children}: {children?: React.ReactNode}) =>
+      ReactModule.createElement(View, null, children),
+    ShippingSearchFocus: ({
+      children,
+      style,
+    }: {
+      children?: React.ReactNode;
+      style?: object;
+    }) => ReactModule.createElement(View, {style}, children),
+    ShippingStage: ({
+      children,
+      style,
+    }: {
+      children?: React.ReactNode;
+      style?: object;
+    }) => ReactModule.createElement(View, {style}, children),
+  };
+});
+
+jest.mock('../desktopSettingsClient', () => {
+  const prefs = {
+    audioMode: 'off',
+    floatingBar: true,
+    fontScale: 100,
+    interfaceSounds: true,
+    meetingNoteScreenshots: true,
+    notificationsEnabled: false,
+    openOmiShortcut: true,
+    pushToTalk: true,
+    rewindRetentionDays: 14,
+    screenCapture: false,
+    softwarePlane: 'old',
+    liveVoiceProvider: 'gpt_live',
+    stampedV5Origin: null,
+    transcriptionAutoDetect: true,
+    vadGate: true,
+  };
+  return {
+    defaultDesktopPreferences: () => prefs,
+    // The shell gates its first paint on prefsLoaded; resolving via a
+    // synchronous thenable keeps every existing initial-render assertion
+    // (inside one act()) seeing the loaded shell, not the probe.
+    loadDesktopPreferences: jest.fn(() => ({
+      then(onFulfilled: (value: typeof prefs) => void) {
+        onFulfilled(prefs);
+        return {catch: () => undefined};
+      },
+    })),
+    loadPermissionStatus: jest.fn(async () => ({
+      microphone: 'unknown',
+      notifications: 'unknown',
+      screen: 'unknown',
+    })),
+    requestDesktopPermission: jest.fn(async () => 'unknown'),
+    setDesktopPreference: jest.fn(async () => prefs),
+  };
+});
+
+jest.mock('../desktopCloudClient', () => ({
+  loadAccountSettings: jest.fn(async () => {
+    throw new Error('unused');
+  }),
+  loadConnectors: jest.fn(async () => ({
+    apps: [],
+    enabledError: null,
+    enabledIds: [],
+    ownerUid: null,
+  })),
+  setPrivateCloudSync: jest.fn(),
+  setStoreRecordingPermission: jest.fn(),
+}));
+
+const outcomes = {
+  conversations: {
+    status: 'success' as const,
+    value: {
+      items: [
+        {
+          kind: 'conversation' as const,
+          id: 'conversation-1',
+          title: 'Product review',
+          summary: 'Reviewed the current desktop direction.',
+          searchableText: 'product review current desktop direction',
+          createdAt: '2026-08-30T10:00:00.000Z',
+          updatedAt: '2026-08-30T10:10:00.000Z',
+          startedAt: '2026-08-30T10:00:00.000Z',
+          finishedAt: '2026-08-30T10:10:00.000Z',
+          starred: false,
+          status: 'completed',
+          source: 'desktop',
+          visibility: 'private' as const,
+          folderId: null,
+          locked: false,
+          discarded: false,
+        },
+      ],
+      page: {
+        windowStatus: 'complete' as const,
+        complete: true,
+        hasMore: false,
+        nextCursor: null,
+        completenessStatus: 'complete' as const,
+        reasons: [],
+      },
+    },
+  },
+  memories: {
+    status: 'success' as const,
+    value: {
+      items: [],
+      page: {
+        windowStatus: 'complete' as const,
+        complete: true,
+        hasMore: false,
+        nextCursor: null,
+        completenessStatus: 'complete' as const,
+        reasons: [],
+      },
+    },
+  },
+  tasks: {
+    status: 'success' as const,
+    value: {
+      accountEpoch: null,
+      items: [
+        {
+          kind: 'task' as const,
+          id: 'task-1',
+          title: 'Ship the desktop chrome',
+          summary: 'Finish the Home stage.',
+          searchableText: 'ship the desktop chrome finish the home stage',
+          completed: false,
+          completedAt: null,
+          dueAt: null,
+          owner: null,
+          source: 'desktop',
+          provenance: [],
+          sortOrder: 0,
+          indentLevel: 0,
+          createdAt: 1756540800,
+          updatedAt: 1756540800,
+          revision: null,
+        },
+      ],
+      page: {
+        windowStatus: 'complete' as const,
+        complete: true,
+        hasMore: false,
+        nextCursor: null,
+        completenessStatus: 'complete' as const,
+        reasons: [],
+      },
+    },
+  },
+};
+
+function renderedText(renderer: ReactTestRenderer.ReactTestRenderer): string {
+  return renderer.root
+    .findAllByType(Text)
+    .flatMap(node =>
+      Array.isArray(node.props.children)
+        ? node.props.children
+        : [node.props.children],
+    )
+    .filter(
+      (value): value is string | number =>
+        typeof value === 'string' || typeof value === 'number',
+    )
+    .join(' ');
+}
+
+function pressText(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  label: string,
+) {
+  let node: ReactTestRenderer.ReactTestInstance | null = renderer.root.find(
+    candidate => candidate.type === Text && candidate.props.children === label,
+  );
+  while (node !== null && typeof node.props.onPress !== 'function') {
+    node = node.parent;
+  }
+  if (node === null) {
+    throw new Error(`No pressable contains ${label}`);
+  }
+  node.props.onPress();
+}
+
+const renderers: ReactTestRenderer.ReactTestRenderer[] = [];
+
+afterEach(() => {
+  act(() => {
+    renderers.splice(0).forEach(renderer => renderer.unmount());
+  });
+});
+
+function renderDesktop(
+  overrides: Partial<React.ComponentProps<typeof DesktopApp>> = {},
+) {
+  let renderer: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = ReactTestRenderer.create(
+      <DesktopApp
+        activeGenerationId={null}
+        authError={null}
+        chatBusy={false}
+        chatError={null}
+        draft=""
+        hasOlderChat={false}
+        loadingOlderChat={false}
+        messages={[]}
+        onDraftChange={jest.fn()}
+        onLoadOlderChat={jest.fn()}
+        onRefresh={jest.fn()}
+        onSend={jest.fn()}
+        onSignIn={jest.fn()}
+        onSignOut={jest.fn()}
+        onStop={jest.fn()}
+        outcomes={outcomes}
+        readsPhase="ready"
+        session="ready"
+        signingIn={false}
+        {...overrides}
+      />,
+    );
+  });
+  renderers.push(renderer!);
+  return renderer!;
+}
+
+// The rail no longer has a Chat destination: the overlay opens from the
+// Activity page's checklist, which mounts once the preference read settles.
+async function openChatOverlay(renderer: ReactTestRenderer.ReactTestRenderer) {
+  await act(async () => {
+    await Promise.resolve();
+  });
+  await act(async () => {
+    renderer.root
+      .find(
+        node => node.props.accessibilityLabel === 'Guide: Ask about your day',
+      )
+      .props.onPress();
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Chat overlay',
+    ).length,
+  ).toBeGreaterThan(0);
+}
+
+test('Chat suggestions prepare an editable draft without sending', async () => {
+  const onDraftChange = jest.fn();
+  const onSend = jest.fn();
+  const renderer = renderDesktop({onDraftChange, onSend});
+  await openChatOverlay(renderer);
+  act(() =>
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel ===
+          'Try: Turn these thoughts into a plan',
+      )
+      .props.onPress(),
+  );
+  expect(onDraftChange).toHaveBeenCalledWith('Turn these thoughts into a plan');
+  expect(onSend).not.toHaveBeenCalled();
+  expect(renderer.root.findByType(DesktopChat).props.submission).toBe(0);
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .props.accessibilityState.selected,
+  ).toBe(true);
+});
+
+test.each([
+  {chatBusy: true},
+  {loadingHistory: true},
+  {chatError: 'Unavailable'},
+])(
+  'Chat suggestions are absent while the conversation cannot accept them: %p',
+  async props => {
+    const renderer = renderDesktop(props);
+    await openChatOverlay(renderer);
+    expect(
+      renderer.root.findAll(node =>
+        String(node.props.accessibilityLabel).startsWith('Try:'),
+      ),
+    ).toHaveLength(0);
+  },
+);
+
+test('renders the shipping search-first desktop hierarchy', () => {
+  const renderer = renderDesktop();
+  const tree = renderedText(renderer);
+  const placeholders = renderer.root
+    .findAllByType(TextInput)
+    .map(node => node.props.placeholder);
+  expect(placeholders).toContain('Ask about your day…');
+  expect(placeholders).not.toContain('Ask a follow-up…');
+  expect(tree).toContain('Home');
+  expect(tree).toContain('Conversations');
+  expect(tree).toContain('Tasks');
+  expect(tree).not.toContain('Apps');
+  expect(tree).toContain('Product review');
+  expect(tree).toContain('Ship the desktop chrome');
+  expect(tree).not.toContain("I'm ready.");
+  expect(tree).not.toContain('Saved data unavailable');
+  expect(tree).not.toContain('Omi disconnected');
+  expect(tree).not.toContain('Devices');
+  expect(tree).not.toContain('Your day is clear');
+  expect(renderer.root.findAllByType(ScrollView).length).toBeGreaterThan(0);
+});
+
+test.each(['tasks', 'conversations'] as const)(
+  'Activity filters isolate %s without hiding the rest of the timeline',
+  section => {
+    const tasks = Array.from({length: 5}, (_, index) => ({
+      ...outcomes.tasks.value.items[0],
+      id: `preview-task-${index}`,
+      title: `Preview task ${index}`,
+    }));
+    const conversations = Array.from({length: 5}, (_, index) => ({
+      ...outcomes.conversations.value.items[0],
+      id: `preview-conversation-${index}`,
+      title: `Preview conversation ${index}`,
+    }));
+    const renderer = renderDesktop({
+      outcomes: {
+        ...outcomes,
+        tasks: {
+          ...outcomes.tasks,
+          value: {...outcomes.tasks.value, items: tasks},
+        },
+        conversations: {
+          ...outcomes.conversations,
+          value: {...outcomes.conversations.value, items: conversations},
+        },
+      },
+    });
+    const all = renderedText(renderer);
+    for (const prefix of ['Preview task', 'Preview conversation']) {
+      for (let index = 0; index < 5; index++) {
+        expect(all).toContain(`${prefix} ${index}`);
+      }
+    }
+    expect(all).not.toContain('Open Recall');
+    act(() => {
+      renderer.root
+        .find(
+          node =>
+            node.props.accessibilityLabel ===
+            (section === 'tasks' ? 'Filter Tasks' : 'Filter Conversations'),
+        )
+        .props.onPress();
+    });
+    const page = renderedText(renderer);
+    const prefix =
+      section === 'tasks' ? 'Preview task' : 'Preview conversation';
+    const other = section === 'tasks' ? 'Preview conversation' : 'Preview task';
+    for (let index = 0; index < 5; index++) {
+      expect(page).toContain(`${prefix} ${index}`);
+      expect(page).not.toContain(`${other} ${index}`);
+    }
+    expect(page).not.toContain('Open Recall');
+  },
+);
+
+test('persistent capture toggle uses the existing owner across Settings and Home', async () => {
+  const capture = {
+    available: true,
+    capturing: false,
+    busy: false,
+    error: null,
+    start: jest.fn(async () => undefined),
+    stop: jest.fn(async () => undefined),
+  };
+  const hook = jest
+    .spyOn(require('../app/useRewindCapture'), 'useRewindCapture')
+    .mockReturnValue(capture);
+  try {
+    const renderer = renderDesktop();
+    const openSettings = () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Settings')
+        .props.onPress();
+    const toggle = () =>
+      renderer.root
+        .findAll(
+          node => node.props.accessibilityLabel === 'Screen capture setting',
+        )
+        .find(
+          node =>
+            node.props.accessibilityState != null &&
+            typeof node.props.onPress === 'function',
+        )!;
+    await act(async () => openSettings());
+    expect(toggle().props.accessibilityState.checked).toBe(false);
+    await act(async () => toggle().props.onPress());
+    expect(capture.start).toHaveBeenCalledTimes(1);
+    capture.capturing = true;
+    await act(async () => openSettings());
+    expect(
+      renderer.root.findAll(
+        node => node.props.accessibilityLabel === 'Screen capture setting',
+      ),
+    ).toHaveLength(0);
+    await act(async () => openSettings());
+    expect(toggle().props.accessibilityState.checked).toBe(true);
+    await act(async () => toggle().props.onPress());
+    expect(capture.stop).toHaveBeenCalledTimes(1);
+    act(() => renderer.unmount());
+    renderers.splice(renderers.indexOf(renderer), 1);
+  } finally {
+    hook.mockRestore();
+  }
+});
+
+test('keyboard search from Chat focuses the persistent omnibar', async () => {
+  const focus = jest.mocked(TextInput.prototype.focus);
+  focus.mockClear();
+  const renderer = renderDesktop();
+  await openChatOverlay(renderer);
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Ask Omi',
+  );
+  const command = jest
+    .mocked(subscribeDesktopSearchCommand)
+    .mock.calls.at(-1)![0];
+  act(() => command());
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Search Recall',
+  );
+  expect(focus).toHaveBeenCalledTimes(1);
+  act(() => command());
+  expect(focus).toHaveBeenCalledTimes(2);
+});
+
+test('Recall click remains a search while a chat generation is active', async () => {
+  const onSend = jest.fn();
+  const onStop = jest.fn();
+  const renderer = renderDesktop({
+    activeGenerationId: 'active',
+    draft: 'query',
+    onSend,
+    onStop,
+  });
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Search mode')
+      .props.onPress(),
+  );
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search')
+      .props.onPress(),
+  );
+  expect(onSend).not.toHaveBeenCalled();
+  expect(onStop).not.toHaveBeenCalled();
+});
+
+test('Chat shows disabled Sending until there is an actual cancellable request', async () => {
+  const onStop = jest.fn();
+  const onSend = jest.fn();
+  const renderer = renderDesktop({
+    chatBusy: true,
+    draft: 'pending',
+    onStop,
+    onSend,
+  });
+  await openChatOverlay(renderer);
+  const pending = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Sending…',
+  );
+  expect(pending.props.disabled).toBe(true);
+  act(() => pending.props.onPress());
+  expect(onStop).not.toHaveBeenCalled();
+  expect(onSend).not.toHaveBeenCalled();
+  const props = renderer.root.findByType(DesktopApp)
+    .props as React.ComponentProps<typeof DesktopApp>;
+  act(() =>
+    renderer.update(<DesktopApp {...props} activeGenerationId="admitted" />),
+  );
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Stop')
+      .props.onPress(),
+  );
+  expect(onStop).toHaveBeenCalledTimes(1);
+});
+
+test('a timeline search with no matches does not claim the timeline is empty', () => {
+  const renderer = renderDesktop({draft: 'unmatched query'});
+  act(() => runSearchCommand());
+  expect(renderedText(renderer)).toContain(
+    'Nothing in your timeline matches yet.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Your timeline fills in as Omi captures your day.',
+  );
+});
+
+test('empty Ask is disabled and Enter cannot send, and Ask stays on Home', () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({draft: '   ', onSend});
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Ask Omi',
+  );
+  const send = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Send',
+  );
+  expect(send.props.disabled).toBe(true);
+  act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
+  act(() => send.props.onPress());
+  expect(onSend).not.toHaveBeenCalled();
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Ask mode')
+      .props.onPress(),
+  );
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Ask Omi',
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Chat with Omi',
+    ),
+  ).toHaveLength(0);
+  expect(renderedText(renderer)).toContain('Product review');
+});
+
+test.each(['initial-loading', 'refreshing', 'unavailable'] as const)(
+  'Home hides more actions during %s',
+  readsPhase => {
+    const renderer = renderDesktop({
+      readsPhase,
+      ...(readsPhase === 'unavailable' ? {outcomes: null} : {}),
+    });
+    expect(
+      renderer.root.findAll(
+        node =>
+          node.props.accessibilityLabel === 'Show more tasks' ||
+          node.props.accessibilityLabel === 'Show more conversations',
+      ),
+    ).toHaveLength(0);
+  },
+);
+
+test('Activity search results stay filterable and empty timelines never offer dead actions', () => {
+  const renderer = renderDesktop({draft: 'product'});
+  act(() => runSearchCommand());
+  expect(
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Show more tasks' ||
+        node.props.accessibilityLabel === 'Show more conversations' ||
+        node.props.accessibilityLabel === 'Open tasks' ||
+        node.props.accessibilityLabel === 'Open conversations',
+    ),
+  ).toHaveLength(0);
+  expect(renderedText(renderer)).toContain('Product review');
+  expect(renderedText(renderer)).not.toContain('Ship the desktop chrome');
+  const empty = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      tasks: {...outcomes.tasks, value: {...outcomes.tasks.value, items: []}},
+      conversations: {
+        ...outcomes.conversations,
+        value: {...outcomes.conversations.value, items: []},
+      },
+    },
+  });
+  expect(
+    empty.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Show more tasks' ||
+        node.props.accessibilityLabel === 'Show more conversations',
+    ),
+  ).toHaveLength(0);
+  expect(renderedText(empty)).toContain(
+    'Your timeline fills in as Omi captures your day.',
+  );
+});
+
+test('Home pre-admission sending disables Ask while Search remains usable', () => {
+  const onSend = jest.fn();
+  const onStop = jest.fn();
+  const renderer = renderDesktop({
+    chatBusy: true,
+    draft: 'pending request',
+    onSend,
+    onStop,
+  });
+  const sending = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Sending…',
+  );
+  expect(sending.props.disabled).toBe(true);
+  act(() => sending.props.onPress());
+  act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
+  expect(onSend).not.toHaveBeenCalled();
+  expect(onStop).not.toHaveBeenCalled();
+  act(() => runSearchCommand());
+  const search = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Search',
+  );
+  expect(search.props.disabled).toBe(false);
+  act(() => search.props.onPress());
+  expect(onSend).not.toHaveBeenCalled();
+  expect(onStop).not.toHaveBeenCalled();
+});
+
+test('the Chat overlay keeps one omnibar and navigation closes it without a leftover surface', async () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({draft: 'question', onSend});
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Search mode')
+      .props.onPress(),
+  );
+  // Selecting a filter walks Home, closes the overlay, and resets to Ask.
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Filter All')
+      .props.onPress(),
+  );
+  await openChatOverlay(renderer);
+  expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Ask Omi',
+  );
+  act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
+  expect(onSend).toHaveBeenCalledTimes(1);
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Search mode')
+      .props.onPress(),
+  );
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Search Recall',
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Recall screen history',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Chat overlay',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Chat with Omi',
+    ),
+  ).toHaveLength(0);
+});
+
+test('only an explicit Ask submission resumes following after reading earlier messages', async () => {
+  const scrollToEnd = jest
+    .spyOn(ScrollView.prototype, 'scrollToEnd')
+    .mockImplementation(() => undefined);
+  const onSend = jest.fn();
+  const onLoadOlderChat = jest.fn();
+  try {
+    const renderer = renderDesktop({
+      draft: 'a new question',
+      hasOlderChat: true,
+      onSend,
+      onLoadOlderChat,
+      messages: [
+        {
+          id: 'initial',
+          text: 'Earlier conversation',
+          sender: 'human',
+          createdAt: 1,
+          generationOutcome: null,
+        },
+      ],
+    });
+    await openChatOverlay(renderer);
+    const list = () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Chat with Omi')
+        .findByType(ScrollView);
+    const scrollUp = () =>
+      list().props.onScroll({
+        nativeEvent: {
+          contentOffset: {x: 0, y: 0},
+          contentSize: {width: 600, height: 2000},
+          layoutMeasurement: {width: 600, height: 500},
+        },
+      });
+    act(() => {
+      list().props.onScrollBeginDrag();
+      scrollUp();
+      list().props.onScrollEndDrag();
+    });
+    scrollToEnd.mockClear();
+    const props = renderer.root.findByType(DesktopApp)
+      .props as React.ComponentProps<typeof DesktopApp>;
+    act(() =>
+      renderer.update(
+        <DesktopApp
+          {...props}
+          messages={[
+            ...props.messages,
+            {
+              id: 'passive',
+              text: 'Incoming message',
+              sender: 'ai',
+              createdAt: 2,
+              generationOutcome: null,
+            },
+          ]}
+        />,
+      ),
+    );
+    act(() => list().props.onContentSizeChange(600, 2200));
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    act(() =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Load earlier messages')
+        .props.onPress(),
+    );
+    expect(onLoadOlderChat).toHaveBeenCalledTimes(1);
+    act(() => list().props.onContentSizeChange(600, 2400));
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(scrollToEnd).toHaveBeenCalledWith({animated: false});
+    scrollToEnd.mockClear();
+    act(scrollUp);
+    act(() => list().props.onContentSizeChange(600, 2600));
+    expect(scrollToEnd).toHaveBeenLastCalledWith({animated: false});
+    act(scrollUp);
+    act(() => list().props.onContentSizeChange(600, 3200));
+    expect(scrollToEnd).toHaveBeenLastCalledWith({animated: false});
+    act(() => list().props.onLayout({nativeEvent: {layout: {height: 400}}}));
+    expect(scrollToEnd).toHaveBeenCalledTimes(3);
+    act(() => {
+      list().props.onScrollBeginDrag();
+      scrollUp();
+      list().props.onScrollEndDrag();
+    });
+    scrollToEnd.mockClear();
+    act(() => list().props.onContentSizeChange(600, 2800));
+    expect(scrollToEnd).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+    renderers.splice(renderers.indexOf(renderer), 1);
+  } finally {
+    scrollToEnd.mockRestore();
+  }
+});
+
+test('omnibar send uses the existing chat send path', () => {
+  const onSend = jest.fn();
+  const onDraftChange = jest.fn();
+  const renderer = renderDesktop({
+    draft: 'What did we decide?',
+    onDraftChange,
+    onSend,
+  });
+  const omnibar = renderer.root
+    .findAllByType(TextInput)
+    .find(node => node.props.placeholder === 'Ask about your day…');
+  expect(omnibar).toBeDefined();
+  expect(omnibar!.props.value).toBe('What did we decide?');
+  act(() => {
+    omnibar!.props.onChangeText('Follow up');
+  });
+  expect(onDraftChange).toHaveBeenCalledWith('Follow up');
+  act(() => {
+    omnibar!.props.onSubmitEditing();
+  });
+  expect(onSend).toHaveBeenCalled();
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
+  });
+  expect(onSend).toHaveBeenCalledTimes(2);
+});
+
+test('sending from a filtered page answers inline and an active response can stop', async () => {
+  const onSend = jest.fn();
+  const onStop = jest.fn();
+  const renderer = renderDesktop({onSend, onStop, draft: 'Send from Tasks'});
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Filter Tasks')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).not.toContain('Screen history');
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Send')
+      .props.onPress();
+  });
+  expect(onSend).toHaveBeenCalledTimes(1);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Inline chat answer',
+    ).length,
+  ).toBeGreaterThan(1);
+  expect(
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
+  ).toEqual(['Ask about your day…']);
+
+  await act(async () => {
+    renderer.update(
+      <DesktopApp
+        activeGenerationId="generation-1"
+        authError={null}
+        chatBusy
+        chatError={null}
+        draft=""
+        hasOlderChat={false}
+        loadingOlderChat={false}
+        messages={[]}
+        onDraftChange={jest.fn()}
+        onLoadOlderChat={jest.fn()}
+        onRefresh={jest.fn()}
+        onSend={onSend}
+        onSignIn={jest.fn()}
+        onSignOut={jest.fn()}
+        onStop={onStop}
+        outcomes={outcomes}
+        readsPhase="ready"
+        session="ready"
+        signingIn={false}
+      />,
+    );
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Stop')
+      .props.onPress();
+  });
+  expect(onStop).toHaveBeenCalledTimes(1);
+  expect(onSend).toHaveBeenCalledTimes(1);
+});
+
+test('desktop chat renders a truthful failed terminal state', async () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'failed-1',
+        text: '',
+        sender: 'ai',
+        createdAt: 1,
+        generationOutcome: 'failed',
+        generationRetryable: true,
+      },
+    ],
+  });
+  await openChatOverlay(renderer);
+  expect(renderedText(renderer)).toContain('Response failed. Try again.');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Failed response',
+    ),
+  ).not.toHaveLength(0);
+});
+
+test('desktop chat can load earlier messages', async () => {
+  const onLoadOlderChat = jest.fn();
+  const renderer = renderDesktop({hasOlderChat: true, onLoadOlderChat});
+  await openChatOverlay(renderer);
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Load earlier messages')
+      .props.onPress();
+  });
+  expect(onLoadOlderChat).toHaveBeenCalledTimes(1);
+});
+
+test('the Chat overlay opens full loaded history with one persistent omnibar', async () => {
+  const messages = Array.from({length: 5}, (_, index) => ({
+    id: `chat-${index}`,
+    text: `Loaded message ${index}`,
+    sender: 'human' as const,
+    generationOutcome: null,
+    createdAt: index,
+  }));
+  const renderer = renderDesktop({messages});
+  expect(renderedText(renderer)).not.toContain('Loaded message');
+  await openChatOverlay(renderer);
+  for (const message of messages) {
+    expect(renderedText(renderer)).toContain(message.text);
+  }
+  expect(
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
+  ).toEqual(['Ask about your day…']);
+});
+
+test('Recall submits without sending chat', async () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({draft: 'a saved moment', onSend});
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Search mode')
+      .props.onPress(),
+  );
+  expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
+  await act(async () =>
+    renderer.root.findByType(TextInput).props.onSubmitEditing(),
+  );
+  expect(onSend).not.toHaveBeenCalled();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Chat with Omi',
+    ),
+  ).toHaveLength(0);
+});
+
+test('Recall typing debounces the shared input into actual timeline reads', async () => {
+  jest.useFakeTimers();
+  const previous = NativeModules.OmiRewind;
+  const listFrames = jest.fn(async () => ({frames: [], nextCursor: null}));
+  NativeModules.OmiRewind = {listFrames};
+  try {
+    const onDraftChange = jest.fn();
+    const renderer = renderDesktop({onDraftChange});
+    await act(async () =>
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Use Search mode')
+        .props.onPress(),
+    );
+    listFrames.mockClear();
+    act(() =>
+      renderer.root.findByType(TextInput).props.onChangeText('project notes'),
+    );
+    expect(onDraftChange).toHaveBeenCalledWith('project notes');
+    const props = renderer.root.findByType(DesktopApp)
+      .props as React.ComponentProps<typeof DesktopApp>;
+    await act(async () =>
+      renderer.update(<DesktopApp {...props} draft="project notes" />),
+    );
+    await act(async () => jest.advanceTimersByTime(199));
+    expect(listFrames).not.toHaveBeenCalled();
+    await act(async () => jest.advanceTimersByTime(1));
+    expect(listFrames).toHaveBeenCalledWith(
+      expect.objectContaining({query: 'project notes', source: 'captured'}),
+    );
+    expect(listFrames).toHaveBeenCalledWith(
+      expect.objectContaining({query: 'project notes', source: 'shipping'}),
+    );
+    expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
+    act(() => renderer.unmount());
+    renderers.splice(renderers.indexOf(renderer), 1);
+  } finally {
+    NativeModules.OmiRewind = previous;
+    jest.useRealTimers();
+  }
+});
+
+test('ready-to-onboarding transitions unmount the omnibar rather than cover it', () => {
+  const renderer = renderDesktop();
+  const props = renderer.root.findByType(DesktopApp)
+    .props as React.ComponentProps<typeof DesktopApp>;
+  expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
+  for (const session of [
+    'probing',
+    'signed-out',
+    'ready',
+    'signed-out',
+  ] as const) {
+    act(() => renderer.update(<DesktopApp {...props} session={session} />));
+    expect(renderer.root.findAllByType(TextInput)).toHaveLength(
+      session === 'ready' ? 1 : 0,
+    );
+    expect(renderedText(renderer).includes('Welcome to Omi')).toBe(
+      session === 'signed-out',
+    );
+  }
+});
+
+test('signed-out Mac sees only the Welcome, never product chrome', () => {
+  const onSignIn = jest.fn();
+  const renderer = renderDesktop({
+    onSignIn,
+    outcomes: null,
+    readsPhase: 'unavailable',
+    session: 'signed-out',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Welcome to Omi');
+  expect(tree).toContain('Get started');
+  expect(tree).not.toContain('Sign in');
+  // No nav pills, no omnibar, no Home currents, no Settings.
+  expect(
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
+  ).not.toContain('Ask about your day…');
+  for (const nav of ['Activity', 'Conversations', 'Recall', 'Tasks']) {
+    expect(
+      renderer.root.findAll(node => node.props.accessibilityLabel === nav),
+    ).toHaveLength(0);
+  }
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Settings'),
+  ).toHaveLength(0);
+  expect(tree).not.toContain('No tasks yet');
+  expect(tree).not.toContain('Conversations will show here');
+  expect(tree).not.toContain('Screen history');
+  expect(tree).not.toContain('Sign in to load conversations and memories.');
+  expect(tree).not.toContain('Restoring your session…');
+  expect(tree).not.toContain('Saved data unavailable');
+  expect(tree).not.toContain('Omi disconnected');
+  expect(tree).not.toContain('Devices');
+  act(() => pressText(renderer, 'Get started'));
+  expect(renderedText(renderer)).toContain('Cloud AI services');
+  act(() => pressText(renderer, 'Continue'));
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Sign in')
+      .props.onPress();
+  });
+  expect(onSignIn).toHaveBeenCalled();
+});
+
+test('signed-out Mac shows a safe sign-in failure', () => {
+  const renderer = renderDesktop({
+    authError: 'Sign in was not completed. Try again.',
+    session: 'signed-out',
+  });
+  expect(renderedText(renderer)).toContain(
+    'Sign in was not completed. Try again.',
+  );
+});
+
+test('the session probe holds an empty window with no product copy', () => {
+  const renderer = renderDesktop({
+    outcomes: null,
+    readsPhase: 'initial-loading',
+    session: 'probing',
+  });
+  const tree = renderedText(renderer);
+  expect(
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
+  ).not.toContain('Ask about your day…');
+  for (const nav of [
+    'Activity',
+    'Conversations',
+    'Recall',
+    'Tasks',
+    'Settings',
+  ]) {
+    expect(
+      renderer.root.findAll(node => node.props.accessibilityLabel === nav),
+    ).toHaveLength(0);
+  }
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home currents',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home tasks',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toHaveLength(0);
+  expect(tree).not.toContain('Restoring your session…');
+  expect(tree).not.toContain('Welcome to Omi');
+  expect(tree).not.toContain('Sign in');
+  expect(tree).not.toContain('Saved data unavailable');
+  expect(renderer.root.findAllByType(Text)).toHaveLength(0);
+});
+
+test('post-setup prove-it cue shows only after reads settle ready', async () => {
+  const renderer = renderDesktop({
+    postSetupHomeCue: 'proven',
+    readsPhase: 'ready',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain(
+    'Home can read conversations, memories, and tasks from your account',
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home prove-it',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(tree).not.toContain('Claude');
+  act(() => {
+    renderer.root
+      .findAll(node => node.props.accessibilityLabel === 'Continue')[0]
+      .props.onPress();
+  });
+  // Continue fires the confetti burst, then closes after a short beat.
+  await act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 720));
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home prove-it',
+    ),
+  ).toHaveLength(0);
+  expect(renderedText(renderer)).not.toContain(
+    'Home can read conversations, memories, and tasks from your account',
+  );
+});
+
+test('post-setup unavailable path keeps the honest banner without prove-it', () => {
+  const renderer = renderDesktop({
+    outcomes: null,
+    postSetupHomeCue: 'unavailable',
+    readsPhase: 'unavailable',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain("Some of your history isn't loaded yet.");
+  expect(tree).toContain('Try again');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home prove-it',
+    ),
+  ).toHaveLength(0);
+  expect(tree).not.toContain(
+    'Home can read conversations, memories, and tasks from your account',
+  );
+});
+
+test('ready Home without a post-setup cue stays quiet', () => {
+  const renderer = renderDesktop({readsPhase: 'ready'});
+  expect(renderedText(renderer)).not.toContain(
+    'Home can read conversations, memories, and tasks from your account',
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home prove-it',
+    ),
+  ).toHaveLength(0);
+});
+
+test('keeps an unavailable read as an inline shell state', () => {
+  const renderer = renderDesktop({
+    outcomes: null,
+    readsPhase: 'unavailable',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain("Some of your history isn't loaded yet.");
+  expect(tree).toContain('Try again');
+  expect(
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
+  ).toContain('Ask about your day…');
+  expect(tree).not.toContain('Saved data unavailable');
+  expect(tree).not.toContain('Sign in to Omi cloud');
+  expect(tree).not.toContain('Offline · showing what is available on this Mac');
+});
+
+test('keeps degraded read state visible away from Home', () => {
+  const renderer = renderDesktop({readsPhase: 'saved-but-refresh-failed'});
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Filter Tasks')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    "Some of your history isn't loaded yet.",
+  );
+});
+
+test('a partial first read window still surfaces in the Activity filters', () => {
+  const renderer = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      conversations: {
+        ...outcomes.conversations,
+        value: {
+          ...outcomes.conversations.value,
+          page: {
+            ...outcomes.conversations.value.page,
+            windowStatus: 'unknown',
+            complete: false,
+            hasMore: true,
+            completenessStatus: 'unknown',
+            reasons: ['limit_reached'],
+          },
+        },
+      },
+    },
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Filter Conversations')
+      .props.onPress();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Product review');
+  expect(tree).not.toContain('Ship the desktop chrome');
+  expect(tree).not.toContain(
+    'Showing the first 50 conversations. More may be available.',
+  );
+});
+
+test('signed-out first paint shows no chat transport error and no shell', () => {
+  const renderer = renderDesktop({
+    chatError: 'Chat is temporarily unavailable.',
+    outcomes: null,
+    readsPhase: 'unavailable',
+    session: 'signed-out',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Welcome to Omi');
+  expect(tree).not.toContain('Chat is temporarily unavailable.');
+  expect(
+    renderer.root
+      .findAllByType(Text)
+      .filter(
+        node => node.props.accessibilityLabel === 'Chat transport notice',
+      ),
+  ).toHaveLength(0);
+});
+
+test('chat transport errors appear only in the Chat overlay', async () => {
+  const renderer = renderDesktop({
+    chatError: 'Chat is temporarily unavailable.',
+  });
+  expect(renderedText(renderer)).not.toContain(
+    'Chat is temporarily unavailable.',
+  );
+  await openChatOverlay(renderer);
+  expect(renderedText(renderer)).toContain('Chat is temporarily unavailable.');
+  expect(
+    renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
+  ).toEqual(['Ask about your day…']);
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Filter All')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'Chat is temporarily unavailable.',
+  );
+});
+
+test('chat empty copy stays truthful while history loads or fails', async () => {
+  const renderer = renderDesktop({
+    loadingHistory: true,
+    messages: [],
+  });
+  await openChatOverlay(renderer);
+  expect(renderedText(renderer)).toContain('Loading conversation…');
+  expect(renderedText(renderer)).not.toContain('What’s on your mind?');
+  const props = renderer.root.findByType(DesktopApp)
+    .props as React.ComponentProps<typeof DesktopApp>;
+  act(() =>
+    renderer.update(
+      <DesktopApp
+        {...props}
+        loadingHistory={false}
+        chatError="Chat is temporarily unavailable."
+        messages={[]}
+      />,
+    ),
+  );
+  expect(renderedText(renderer)).toContain('Chat is temporarily unavailable.');
+  expect(renderedText(renderer)).not.toContain('What’s on your mind?');
+  act(() =>
+    renderer.update(
+      <DesktopApp
+        {...props}
+        loadingHistory={false}
+        chatError={null}
+        messages={[]}
+      />,
+    ),
+  );
+  expect(renderedText(renderer)).toContain('What’s on your mind?');
+});
+
+test('desktop chat, library and recall lists are ScrollViews', () => {
+  expect(
+    readFileSync(resolve(__dirname, 'DesktopChat.tsx'), 'utf8'),
+  ).not.toContain('FlatList');
+  expect(
+    readFileSync(resolve(__dirname, 'DesktopPages.tsx'), 'utf8'),
+  ).not.toContain('FlatList');
+  expect(
+    readFileSync(resolve(__dirname, 'DesktopRewind.tsx'), 'utf8'),
+  ).not.toContain('FlatList');
+});
+
+test('Settings opens the shipping multi-pane IA including Advanced', async () => {
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('General');
+  expect(tree).toContain('Account & Plan');
+  expect(tree).not.toContain('Permissions');
+  expect(tree).not.toContain('Floating Bar');
+  expect(tree).not.toContain('Shortcuts');
+  expect(tree).not.toContain('Font Size');
+  expect(tree).not.toContain('Interface Sounds');
+  expect(tree).toContain('AI & Automation');
+  expect(tree).not.toContain('Old backend');
+  expect(tree).not.toContain('New backend');
+  expect(tree).toContain('Screen Capture');
+  expect(tree).toContain('Audio Recording');
+  expect(tree).toContain('Notifications');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  const advanced = renderedText(renderer);
+  expect(advanced).toContain('AI & Automation');
+  expect(advanced).toContain('Backend');
+  expect(advanced).toContain('Old backend');
+  expect(advanced).toContain('New backend');
+  expect(advanced).toContain('Live voice');
+  expect(advanced).toContain('GPT Live 1');
+  expect(advanced).toContain('Gemini Live');
+  expect(advanced).not.toContain('workers.dev');
+});
+
+test('searches real projections instead of a fake timeline', () => {
+  const renderer = renderDesktop({
+    draft: 'product',
+  });
+  act(() => runSearchCommand());
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Product review');
+  expect(tree).not.toContain('Ship the desktop chrome');
+  expect(tree).not.toContain('0 screen moments');
+  expect(tree).not.toContain('💬');
+  expect(tree).not.toContain('🧠');
+});
+
+test('Home renders real memories alongside conversations', () => {
+  const memory = {
+    kind: 'memory' as const,
+    id: 'memory-1',
+    title: 'Prefers concise release notes',
+    summary: 'Release notes should lead with the outcome.',
+    searchableText:
+      'prefers concise release notes release notes should lead with the outcome',
+    citations: [],
+    timestamp: 1788492408,
+    provenance: {
+      label: null,
+      synthesisVersion: 'v1',
+      inputDigest: 'input',
+      outputDigest: 'output',
+    },
+  };
+  const renderer = renderDesktop({
+    outcomes: {
+      ...outcomes,
+      memories: {
+        status: 'success',
+        value: {...outcomes.memories.value, items: [memory]},
+      },
+    },
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Prefers concise release notes');
+  expect(tree).toContain('Memory');
+  expect(tree).toContain('Product review');
+  expect(tree).toContain('Conversation');
+});
+
+test('Home explore checklist guides to the Recall filter', async () => {
+  const renderer = renderDesktop();
+  await act(async () => {
+    await Promise.resolve();
+  });
+  const home = renderedText(renderer);
+  expect(home).toContain('Getting started');
+  expect(home).toContain('Find something you saw');
+  expect(home).not.toContain('Open Recall');
+  await act(async () => {
+    renderer.root
+      .find(
+        node =>
+          node.props.accessibilityLabel === 'Guide: Find something you saw',
+      )
+      .props.onPress();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Filter Recall')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Filter Recall',
+    ).props.accessibilityState.selected,
+  ).toBe(true);
+  const {setDesktopPreference} = jest.requireMock(
+    '../desktopSettingsClient',
+  ) as {setDesktopPreference: jest.Mock};
+  expect(setDesktopPreference).toHaveBeenCalledWith(
+    'exploreProgress',
+    'recall',
+  );
+});
+
+const kitFiles = [
+  'DesktopApp.tsx',
+  'DesktopChromeV5.tsx',
+  'DesktopTopChrome.tsx',
+  'DesktopHome.tsx',
+  'DesktopPages.tsx',
+  'DesktopRows.tsx',
+  'DesktopSettings.tsx',
+] as const;
+
+const kitSources = Object.fromEntries(
+  kitFiles.map(fileName => [
+    fileName,
+    readFileSync(resolve(__dirname, fileName), 'utf8'),
+  ]),
+) as Record<(typeof kitFiles)[number], string>;
+
+const allKitSource = kitFiles.map(fileName => kitSources[fileName]).join('\n');
+
+test('static tripwire: desktop stage preserves real state copy and shared glass ownership', () => {
+  expect(allKitSource).toContain('ScrollView');
+  expect(allKitSource).not.toContain('function GlassSurface');
+  expect(allKitSource).not.toContain("I'm ready.");
+  expect(allKitSource).not.toContain('Ask a follow-up');
+  expect(allKitSource).toContain('accessibilityLabel="Home currents"');
+  expect(allKitSource).toContain('accessibilityLabel="Home tasks"');
+  expect(allKitSource).toContain('visibleChatError');
+  expect(allKitSource).not.toContain('omnibarError');
+});
+
+test('static layout guard: v5 keeps its sliding nav pill; v5.1 chrome is filters over a field omnibar', () => {
+  const chrome = kitSources['DesktopTopChrome.tsx'];
+  const chromeV5 = kitSources['DesktopChromeV5.tsx'];
+  const app = kitSources['DesktopApp.tsx'];
+  const home = kitSources['DesktopHome.tsx'];
+  expect(app).toMatch(/root:\s*\{[^}]*padding:\s*desktopWindowInset/);
+  expect(chrome).toContain('height: desktopOmnibarHeight');
+  expect(chrome).toContain('width: desktopTrafficLightRowWidth');
+  expect(chromeV5).toContain('styles.navPill');
+  expect(chrome).toMatch(
+    /omnibarInput:\s*\{[^}]*textAlignVertical:\s*'center'/,
+  );
+  expect(chrome).toMatch(/omnibarInput:\s*\{[^}]*paddingVertical:\s*6/);
+  expect(chrome).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
+  expect(chrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
+  expect(home).not.toMatch(/filterRow:\s*\{/);
+  expect(home).not.toContain('chatScrollRef');
+  expect(chromeV5).toContain('placed.current');
+  expect(chromeV5).toContain('navFrameMoved');
+  expect(chromeV5).toContain('animating.current');
+  expect(chromeV5).not.toMatch(/navTextActive:\s*\{[^}]*fontWeight/);
+  expect(chromeV5).toMatch(/navText:\s*\{[^}]*fontWeight:\s*'500'/);
+  expect(chrome).toContain('accessibilityLabel="Activity filters"');
+  expect(allKitSource).not.toMatch(/composer:\s*\{/);
+});
+
+test('failed reads never claim an empty timeline', () => {
+  const errorOutcomes = {
+    conversations: {
+      status: 'error' as const,
+      error:
+        'The selected Omi service is unavailable. Check the connection, then retry.',
+    },
+    memories: {
+      status: 'error' as const,
+      error:
+        'The selected Omi service is unavailable. Check the connection, then retry.',
+    },
+    tasks: {
+      status: 'error' as const,
+      error: 'Omi cloud needs a signed-in session.',
+    },
+  };
+  const renderer = renderDesktop({
+    outcomes: errorOutcomes,
+    readsPhase: 'unavailable',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Conversations are unavailable.');
+  expect(tree).toContain('Memories are unavailable.');
+  expect(tree).toContain('Tasks are unavailable.');
+  expect(tree).not.toContain(
+    'Your timeline fills in as Omi captures your day.',
+  );
+  expect(tree).not.toContain('Nothing captured yet.');
+  expect(tree).not.toContain('No tasks yet');
+});
+
+test('a successful empty read is the only path to the empty claims', async () => {
+  const emptyOutcomes = {
+    conversations: {
+      status: 'success' as const,
+      value: {
+        items: [],
+        page: {
+          windowStatus: 'complete' as const,
+          complete: true,
+          hasMore: false,
+          nextCursor: null,
+          completenessStatus: 'complete' as const,
+          reasons: [],
+        },
+      },
+    },
+    memories: {
+      status: 'success' as const,
+      value: {
+        items: [],
+        page: {
+          windowStatus: 'complete' as const,
+          complete: true,
+          hasMore: false,
+          nextCursor: null,
+          completenessStatus: 'complete' as const,
+          reasons: [],
+        },
+      },
+    },
+    tasks: {
+      status: 'success' as const,
+      value: {
+        accountEpoch: null,
+        items: [],
+        page: {
+          windowStatus: 'complete' as const,
+          complete: true,
+          hasMore: false,
+          nextCursor: null,
+          completenessStatus: 'complete' as const,
+          reasons: [],
+        },
+      },
+    },
+  };
+  const renderer = renderDesktop({
+    outcomes: emptyOutcomes,
+    readsPhase: 'ready',
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('Your timeline fills in as Omi captures your day.');
+  expect(tree).not.toContain('Conversations are unavailable.');
+  expect(tree).not.toContain(
+    'Conversations will show here when your day is loaded.',
+  );
+});
+
+test('Apps is a wrapped gallery that does not invent catalog entries', async () => {
+  const pages = kitSources['DesktopPages.tsx'];
+  expect(pages).toMatch(/appGrid:\s*\{[^}]*flexWrap:\s*'wrap'/);
+  expect(pages).toMatch(/appSlot:\s*\{[^}]*width:\s*'50%'/);
+  expect(pages).not.toMatch(/appCard:\s*\{[^}]*flex:\s*1/);
+  expect(pages).toContain('loadConnectors');
+  expect(pages).toContain('Not connected');
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  const tree = renderedText(renderer);
+  expect(tree).toContain('No apps are available.');
+  expect(tree).not.toContain('Calendar');
+  expect(tree).not.toContain('ChatGPT');
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI assistants')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('OpenClaw');
+  expect(renderedText(renderer)).not.toContain('Calendar');
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Connect data')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('Calendar');
+  expect(renderedText(renderer)).not.toContain('OpenClaw');
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Explore Calendar')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('No account has been connected');
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Your apps')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('No apps are available.');
+  expect(renderedText(renderer)).not.toContain('Calendar');
+});
+
+test('Apps reports a catalog failure instead of showing invented data', async () => {
+  const {loadConnectors} = jest.requireMock('../desktopCloudClient') as {
+    loadConnectors: jest.Mock;
+  };
+  loadConnectors.mockRejectedValueOnce(new Error('offline'));
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Apps')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain('Apps could not be loaded.');
+  expect(renderedText(renderer)).not.toContain('Google Calendar');
+});
+
+test('Settings persists a plane switch before reloading the workspace', async () => {
+  const onWorkspaceReload = jest.fn();
+  const {setDesktopPreference} = jest.requireMock(
+    '../desktopSettingsClient',
+  ) as {setDesktopPreference: jest.Mock};
+  setDesktopPreference.mockClear();
+  const renderer = renderDesktop({onWorkspaceReload});
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  await act(async () => {
+    pressText(renderer, 'New backend');
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(setDesktopPreference).toHaveBeenCalledWith('softwarePlane', 'new');
+  expect(onWorkspaceReload).toHaveBeenCalledTimes(1);
+});
+
+test('re-selecting the current backend segment does not wipe the workspace', async () => {
+  const onWorkspaceReload = jest.fn();
+  const {setDesktopPreference} = jest.requireMock(
+    '../desktopSettingsClient',
+  ) as {setDesktopPreference: jest.Mock};
+  setDesktopPreference.mockClear();
+  const renderer = renderDesktop({onWorkspaceReload});
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  // Arriving at Settings legitimately ticks the explore checklist off; the
+  // assertion below is about pane writes only.
+  setDesktopPreference.mockClear();
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  await act(async () => {
+    pressText(renderer, 'Old backend');
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(setDesktopPreference).not.toHaveBeenCalled();
+  expect(onWorkspaceReload).not.toHaveBeenCalled();
+});
+
+test('Settings disables backend switching while admission is pending', async () => {
+  const renderer = renderDesktop({chatBusy: true});
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'Stop the active response before switching backends.',
+  );
+  for (const option of ['New backend', 'Old backend']) {
+    expect(
+      renderer.root.find(
+        node =>
+          node.props.accessibilityRole === 'button' &&
+          node.props.accessibilityState?.disabled === true &&
+          node.findAllByType(Text).some(text => text.props.children === option),
+      ),
+    ).toBeDefined();
+  }
+});
+
+test('Settings surfaces a failed mutation and does not reload the workspace', async () => {
+  const onWorkspaceReload = jest.fn();
+  const {setDesktopPreference} = jest.requireMock(
+    '../desktopSettingsClient',
+  ) as {setDesktopPreference: jest.Mock};
+  const renderer = renderDesktop({onWorkspaceReload});
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  // The explore checklist marks Settings on arrival; the rejection below must
+  // target the pane mutation, not the checklist write.
+  setDesktopPreference.mockClear();
+  setDesktopPreference.mockRejectedValueOnce(new Error('write failed'));
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'AI & Automation')
+      .props.onPress();
+  });
+  await act(async () => {
+    pressText(renderer, 'New backend');
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain(
+    'Settings change could not be saved. Try again.',
+  );
+  expect(onWorkspaceReload).not.toHaveBeenCalled();
+});
+
+test('Settings does not persist audio capture when microphone access is denied', async () => {
+  const settings = jest.requireMock('../desktopSettingsClient') as {
+    requestDesktopPermission: jest.Mock;
+    setDesktopPreference: jest.Mock;
+  };
+  settings.requestDesktopPermission.mockResolvedValueOnce('denied');
+  settings.setDesktopPreference.mockClear();
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    pressText(renderer, 'always');
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(settings.requestDesktopPermission).toHaveBeenCalledWith('microphone');
+  expect(settings.setDesktopPreference).not.toHaveBeenCalledWith(
+    'audioMode',
+    'always',
+  );
+  expect(renderedText(renderer)).toContain(
+    'Microphone access is denied in System Settings.',
+  );
+});
+
+test('Settings surfaces sign-out failures without leaving the ready shell', async () => {
+  const onSignOut = jest.fn(async () => {
+    throw new Error('sign out failed');
+  });
+  const renderer = renderDesktop({onSignOut});
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Sign out')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(onSignOut).toHaveBeenCalledTimes(1);
+  expect(renderedText(renderer)).toContain('Sign out failed. Try again.');
+  expect(renderedText(renderer)).toContain('Account & Plan');
+});
+
+test('Settings reports a subscription read failure as unavailable', async () => {
+  const {loadAccountSettings} = jest.requireMock('../desktopCloudClient') as {
+    loadAccountSettings: jest.Mock;
+  };
+  loadAccountSettings.mockResolvedValueOnce({
+    profile: null,
+    profileError: null,
+    subscription: null,
+    subscriptionError: 'Plan is temporarily unavailable.',
+    storeRecordingPermission: null,
+    storeRecordingError: null,
+    trainingOptedIn: null,
+    trainingError: null,
+    privateCloudSync: null,
+    privateCloudSyncError: null,
+    webhooks: null,
+    webhooksError: null,
+  });
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Account & Plan')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain('Plan is temporarily unavailable.');
+  expect(renderedText(renderer)).not.toContain(
+    'Plan details load after sign-in.',
+  );
+});
+
+test('Settings does not expose cloud mutations when account values failed to load', async () => {
+  const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Alerts & Privacy')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain(
+    'Cloud recording storage status is unavailable.',
+  );
+  expect(renderedText(renderer)).toContain(
+    'Private cloud sync status is unavailable.',
+  );
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Update'),
+  ).toHaveLength(0);
+});
+
+test('desktop General settings mounts the live device composition slot', async () => {
+  const renderer = renderDesktop({
+    deviceContent: <Text>Live device controls</Text>,
+  });
+  expect(renderedText(renderer)).not.toContain('Live device controls');
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+  });
+  expect(renderedText(renderer)).toContain('Live device controls');
+  await act(async () => renderer.unmount());
+});
+
+test('Settings does not inherit unrelated chat and history failures', async () => {
+  const renderer = renderDesktop({
+    chatError: 'This request cannot be completed.',
+    readsPhase: 'unavailable',
+  });
+  expect(renderedText(renderer)).not.toContain(
+    'This request cannot be completed.',
+  );
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  expect(renderedText(renderer)).toContain('Screen Capture');
+  expect(renderedText(renderer)).not.toContain(
+    'This request cannot be completed.',
+  );
+  expect(renderedText(renderer)).not.toContain(
+    "Some of your history isn't loaded yet.",
+  );
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Filter All')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).not.toContain(
+    'This request cannot be completed.',
+  );
+});
+
+test('web wheel and scrollbar events pause following through the actual scroll node and retire listeners', () => {
+  const previousOS = Platform.OS;
+  Object.defineProperty(Platform, 'OS', {configurable: true, value: 'web'});
+  const node = Object.assign(new EventTarget(), {
+    ownerDocument: new EventTarget(),
+  });
+  const remove = jest.spyOn(node, 'removeEventListener');
+  const documentRemove = jest.spyOn(node.ownerDocument, 'removeEventListener');
+  const getNode = jest
+    .spyOn(ScrollView.prototype, 'getScrollableNode')
+    .mockReturnValue(node);
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  const scroll = jest
+    .spyOn(ScrollView.prototype, 'scrollToEnd')
+    .mockImplementation(() => undefined);
+  const props = {
+    submission: 0,
+    messages: [],
+    busy: false,
+    error: null,
+    hasOlder: false,
+    loadingOlder: false,
+    onLoadOlder: jest.fn(),
+    onClose: jest.fn(),
+  };
+  try {
+    act(() => {
+      tree = ReactTestRenderer.create(<DesktopChat {...props} />);
+    });
+    const list = () => tree.root.findByType(ScrollView);
+    const move = (y: number) =>
+      list().props.onScroll({
+        nativeEvent: {
+          contentOffset: {x: 0, y},
+          contentSize: {width: 600, height: 2000},
+          layoutMeasurement: {width: 600, height: 500},
+        },
+      });
+    act(() => list().props.onContentSizeChange(600, 2000));
+    scroll.mockClear();
+    act(() => {
+      node.dispatchEvent(new Event('wheel'));
+      move(1000);
+    });
+    act(() => list().props.onContentSizeChange(600, 2200));
+    expect(scroll).not.toHaveBeenCalled();
+    act(() => tree.update(<DesktopChat {...props} submission={1} />));
+    expect(scroll).toHaveBeenCalled();
+    scroll.mockClear();
+    act(() => {
+      node.dispatchEvent(new Event('pointerdown'));
+      move(1500);
+      move(500);
+      node.ownerDocument.dispatchEvent(new Event('pointerup'));
+    });
+    act(() => list().props.onContentSizeChange(600, 2400));
+    expect(scroll).not.toHaveBeenCalled();
+    act(() => tree.unmount());
+    expect(remove.mock.calls.map(call => call[0])).toEqual([
+      'wheel',
+      'touchmove',
+      'pointerdown',
+      'keydown',
+    ]);
+    expect(documentRemove.mock.calls.map(call => call[0])).toEqual([
+      'pointerup',
+      'pointercancel',
+    ]);
+  } finally {
+    getNode.mockRestore();
+    scroll.mockRestore();
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      value: previousOS,
+    });
+  }
+});

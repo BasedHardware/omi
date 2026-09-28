@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "@omi-core/ratified-contracts",
+    "version": "0.8.0"
+  },
+  "compatibility": "additive",
+  "provenanceSha256": "e11b65788233dff82727c12a2e472c429054ea06ed3f0e395362c940d7903182",
+  "sourceDigest": "69601bc089bfe9f0d4551a73a854c44e4aa14b7a66aeb60413fc3d6b5eff5938",
+  "tarballSha256": "6d9dbed324a36573ba05705b8240613ecfdec67bc319d5d55bbca1f2583a8853",
+  "files": [
+    "package/PROVENANCE.json",
+    "package/README.md",
+    "package/dist/pagination/cursor.d.ts",
+    "package/dist/pagination/cursor.js",
+    "package/dist/projections/synthesized.d.ts",
+    "package/dist/projections/synthesized.js",
+    "package/dist/projections/tasks.d.ts",
+    "package/dist/projections/tasks.js",
+    "package/dist/recall/trace.d.ts",
+    "package/dist/recall/trace.js",
+    "package/dist/wire/json.d.ts",
+    "package/dist/wire/json.js",
+    "package/dist/write/ops.d.ts",
+    "package/dist/write/ops.js",
+    "package/fixtures/manifest.json",
+    "package/fixtures/page-conformance.json",
+    "package/fixtures/read-page-windows.json",
+    "package/fixtures/recall-completeness.json",
+    "package/fixtures/recall-trace.json",
+    "package/fixtures/status-matrix.json",
+    "package/fixtures/tasks-read-conformance.json",
+    "package/fixtures/tasks-read-shape.json",
+    "package/fixtures/write-ops-conformance.json",
+    "package/fixtures/write-ops-outcomes.json",
+    "package/package.json"
+  ]
+}

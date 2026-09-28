@@ -1,0 +1,111 @@
+:root {
+  --omi-web-canvas: #0f0f0f;
+  --omi-web-canvas-raised: #0f0f0f;
+  --omi-web-surface: #1a1a1a;
+  --omi-web-surface-hover: #252525;
+  --omi-web-accent: #ffffff;
+  --omi-web-text: #ffffff;
+  --omi-web-text-muted: #b0b0b0;
+  --omi-web-line: rgba(255, 255, 255, 0.08);
+  color-scheme: dark;
+  font-family: "DM Sans", Avenir Next, Avenir, ui-rounded, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+html {
+  background: var(--omi-web-canvas);
+}
+
+body {
+  min-width: 320px;
+  background: var(--omi-web-canvas);
+  color: var(--omi-web-text);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--omi-web-accent);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: rgba(255, 255, 255, 0.24);
+  color: var(--omi-web-text);
+}
+
+#app {
+  min-height: 100dvh;
+  isolation: isolate;
+}
+
+#app > div {
+  height: 100%;
+  min-height: 0;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--omi-web-canvas);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a3940;
+  border: 3px solid var(--omi-web-canvas);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #515b70;
+}
+
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,99 @@
+[
+  {
+    "wireCase": "read-signed-out",
+    "status": 200,
+    "body": { "identity": null, "entitlement": null },
+    "accepted": true
+  },
+  {
+    "wireCase": "read-entitlement-absent",
+    "status": 200,
+    "body": {
+      "identity": { "displayName": "", "email": "" },
+      "entitlement": null
+    },
+    "accepted": true
+  },
+  {
+    "wireCase": "read-metered",
+    "status": 200,
+    "body": {
+      "identity": { "displayName": "Alex Rivera", "email": "alex@example.com" },
+      "entitlement": {
+        "planLabel": "Omi Plus",
+        "limitKey": "memories",
+        "used": 42,
+        "limit": 100,
+        "limitReached": false,
+        "upgradeAvailable": true
+      }
+    },
+    "accepted": true
+  },
+  {
+    "wireCase": "read-unmetered",
+    "status": 200,
+    "body": {
+      "identity": { "displayName": "Alex Rivera", "email": "alex@example.com" },
+      "entitlement": {
+        "planLabel": "Omi Plus",
+        "limitKey": "memories",
+        "used": 7,
+        "limit": null,
+        "limitReached": false,
+        "upgradeAvailable": true
+      }
+    },
+    "accepted": true
+  },
+  {
+    "wireCase": "delete-success",
+    "status": 204,
+    "body": null,
+    "accepted": true
+  },
+  {
+    "wireCase": "missing-envelope-field",
+    "status": 200,
+    "body": { "identity": null },
+    "accepted": false
+  },
+  {
+    "wireCase": "extra-envelope-field",
+    "status": 200,
+    "body": { "identity": null, "entitlement": null, "appearance": "dark" },
+    "accepted": false
+  },
+  {
+    "wireCase": "signed-out-with-entitlement",
+    "status": 200,
+    "body": {
+      "identity": null,
+      "entitlement": {
+        "planLabel": "Omi Plus",
+        "limitKey": "memories",
+        "used": 7,
+        "limit": null,
+        "limitReached": false,
+        "upgradeAvailable": true
+      }
+    },
+    "accepted": false
+  },
+  {
+    "wireCase": "unmetered-limit-reached",
+    "status": 200,
+    "body": {
+      "identity": { "displayName": "Alex Rivera", "email": "alex@example.com" },
+      "entitlement": {
+        "planLabel": "Omi Plus",
+        "limitKey": "memories",
+        "used": 7,
+        "limit": null,
+        "limitReached": true,
+        "upgradeAvailable": true
+      }
+    },
+    "accepted": false
+  }
+]

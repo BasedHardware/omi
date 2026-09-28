@@ -1,0 +1,28 @@
+[package]
+name = "omi-simulator"
+version = "0.2.0"
+edition = "2021"
+description = "Crepuscularity (GPUI) macOS Omi BLE peripheral simulator for RN v5 local discovery"
+publish = false
+
+[[bin]]
+name = "omi-simulator"
+path = "src/main.rs"
+
+[dependencies]
+# Crepuscularity UI framework (https://crepuscularity.tsc.hk · tschk/crepuscularity).
+# Not an Omi API / CDN / firmware host.
+# Registry deps since crepuscularity 0.9.19 (crates gpui-ce / gpui_ce_platform are publishable).
+crepuscularity-gpui = "0.5.10"
+
+# view! macro resolves `gpui::` — same gpui-ce registry crate crepuscularity-gpui 0.5.10 uses.
+# font-kit must stay on BOTH gpui and gpui_platform or the window renders with no text.
+gpui = { package = "gpui-ce", version = "0.2.2", default-features = false, features = ["font-kit"] }
+gpui_platform = { package = "gpui_ce_platform", version = "0.1.0", features = ["font-kit"] }
+
+ble-peripheral-rust = "0.2"
+uuid = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+log = "0.4"
+env_logger = "0.11"
+cpal = "0.15"
