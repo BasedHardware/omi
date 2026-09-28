@@ -10,6 +10,8 @@ import logging
 import os
 from enum import Enum
 
+from fastapi import HTTPException
+
 from database import conversations as conversations_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.redis_db import get_cached_user_geolocation
@@ -31,6 +33,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.jit_rollout import JITDecisionStage
 from utils.log_sanitizer import sanitize_pii
+from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
     classify_finalization_failure,
     finalization_diagnostic_id,
@@ -333,7 +336,14 @@ async def finalize_persisted_conversation(
         # _get_structured wraps provider/parser errors in a safe HTTPException.
         # Its cause retains the original class, but neither message nor
         # traceback is safe to emit because either can contain transcript text.
-        source_error = error.__cause__ if isinstance(error.__cause__, Exception) else error
+        source_error = (
+            error.__cause__
+            if isinstance(error, HTTPException)
+            and error.status_code == 500
+            and error.detail == GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
+            and isinstance(error.__cause__, Exception)
+            else error
+        )
         reason = classify_finalization_failure(source_error)
         record_finalization_failure(reason)
         # WARNING, not ERROR: this fires on every failed attempt, including
