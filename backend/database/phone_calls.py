@@ -21,17 +21,18 @@ def _hash_phone_number(phone_number: str) -> str:
     """Create a deterministic hash of a phone number for queryable lookup."""
     if not isinstance(phone_number, str):
         raise ValueError('phone_number must be a string')
-    return hashlib.sha256(phone_number.encode('utf-8')).hexdigest()
+    return hashlib.sha256(phone_number.strip().encode('utf-8')).hexdigest()
 
 
 def _prepare_phone_number_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     """Encrypt phone_number field if data protection level is enhanced."""
     data = copy.deepcopy(data)
-    if level == 'enhanced' and 'phone_number' in data:
-        # Store hash for lookup queries
-        data['phone_number_hash'] = _hash_phone_number(data['phone_number'])
+    if level == 'enhanced' and 'phone_number' in data and isinstance(data['phone_number'], str):
+        normalized_phone = data['phone_number'].strip()
+        # Store hash for lookup queries (normalized with strip to match read-path lookups)
+        data['phone_number_hash'] = _hash_phone_number(normalized_phone)
         # Encrypt the actual phone number
-        data['phone_number'] = encryption.encrypt(data['phone_number'], uid)
+        data['phone_number'] = encryption.encrypt(normalized_phone, uid)
     return data
 
 

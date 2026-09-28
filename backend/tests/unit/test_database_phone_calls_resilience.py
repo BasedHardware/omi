@@ -106,6 +106,19 @@ def test_hash_phone_number_deterministic():
     assert len(h1) == 64
 
 
+def test_hash_phone_number_normalizes_whitespace():
+    h1 = phone_db._hash_phone_number("+15551234567")
+    h2 = phone_db._hash_phone_number("   +15551234567   ")
+    assert h1 == h2
+
+
+def test_prepare_phone_number_for_write_normalizes_hash_parity():
+    raw_data = {"phone_number": "   +15551234567   "}
+    prepared = phone_db._prepare_phone_number_for_write(raw_data, "user-1", "enhanced")
+    expected_hash = phone_db._hash_phone_number("+15551234567")
+    assert prepared["phone_number_hash"] == expected_hash
+
+
 # ---------------------------------------------------------------------------
 # upsert_phone_number validation and merge writes
 # ---------------------------------------------------------------------------
