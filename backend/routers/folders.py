@@ -71,31 +71,32 @@ def create_folder(request: CreateFolderRequest, uid: str = Depends(auth.get_curr
     return folder
 
 
-def _get_valid_folder(uid: str, folder_id: str) -> dict:
-    """Get a folder the Folder model can serve. Like GET /v1/folders, a malformed doc counts as not found."""
-    folder = folders_db.get_folder(uid, folder_id)
-    if not folder:
-        raise HTTPException(status_code=404, detail="Folder not found")
+def _raise_if_malformed(uid: str, folder_id: str, folder: dict) -> None:
+    """Like GET /v1/folders, treat a doc the Folder model cannot serve as not found instead of a 500."""
     try:
         Folder.model_validate(folder)
     except ValidationError as e:
         invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
         logger.warning(f"Malformed folder doc {folder_id} for uid {uid}: missing/invalid fields {invalid_fields}")
         raise HTTPException(status_code=404, detail="Folder not found")
-    return folder
 
 
 @router.get('/v1/folders/{folder_id}', response_model=Folder, tags=['folders'])
 def get_folder(folder_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get a specific folder by ID."""
-    return _get_valid_folder(uid, folder_id)
+    folder = folders_db.get_folder(uid, folder_id)
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    _raise_if_malformed(uid, folder_id, folder)
+    return folder
 
 
 @router.patch('/v1/folders/{folder_id}', response_model=Folder, tags=['folders'])
 def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Update folder metadata (name, description, color, icon, order)."""
-    # Validate before writing: a malformed folder is rejected untouched instead of updated and then 500ing.
-    _get_valid_folder(uid, folder_id)
+    folder = folders_db.get_folder(uid, folder_id)
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
 
     update_data = request.model_dump(exclude_unset=True)
     # Released clients serialize an omitted field as null, not absent. The Folder model requires
@@ -105,6 +106,10 @@ def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depen
     for field in ('name', 'color', 'icon', 'order'):
         if update_data.get(field) is None and field in update_data:
             update_data.pop(field)
+
+    # Validate the folder as this update would leave it, before writing: a folder that would still be malformed
+    # is rejected untouched instead of written and then 500ing, and a PATCH that fixes the bad field repairs it.
+    _raise_if_malformed(uid, folder_id, {**folder, **update_data})
 
     if update_data:
         folders_db.update_folder(uid, folder_id, update_data)

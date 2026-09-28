@@ -6,8 +6,10 @@ response validation, so the client got HTTP 500. PATCH wrote to Firestore before
 the update landed on a folder the API could not return.
 
 `GET /v1/folders` already skips such docs (`Folder.model_validate` + `ValidationError`). The
-single-folder routes now apply the same check and answer 404 "Folder not found", and PATCH makes
-it before writing.
+single-folder routes now apply the same check and answer 404 "Folder not found". PATCH makes it
+on the folder as the update would leave it, before writing: an update that leaves the folder
+malformed is rejected with no write, and one that supplies a valid value for the bad field still
+repairs the folder and returns 200, as it did before.
 """
 
 from datetime import datetime, timezone
@@ -35,6 +37,21 @@ MALFORMED_FOLDERS = {
     'null_name': {**VALID_FOLDER, 'id': 'f_bad', 'name': None},
 }
 
+# (stored doc, PATCH body) where the update leaves the folder malformed.
+UNREPAIRED_PATCHES = {
+    'other_field_on_null_name': (MALFORMED_FOLDERS['null_name'], {'description': 'new'}),
+    'explicit_null_on_null_name': (MALFORMED_FOLDERS['null_name'], {'name': None}),
+    'name_on_legacy_without_timestamps': (MALFORMED_FOLDERS['legacy_missing_name_and_timestamps'], {'name': 'Fixed'}),
+}
+
+# (damage to a valid stored doc, PATCH body that supplies a valid value for the damaged field).
+REPAIRING_PATCHES = {
+    'null_name': ({'name': None}, {'name': 'Fixed'}),
+    'null_color': ({'color': None}, {'color': '#10B981'}),
+    'null_order': ({'order': None}, {'order': 2}),
+    'overlong_description': ({'description': 'x' * 501}, {'description': 'short'}),
+}
+
 
 @pytest.fixture
 def client():
@@ -44,9 +61,19 @@ def client():
     return TestClient(app, raise_server_exceptions=False)
 
 
+def _fake_store(monkeypatch, doc):
+    """Serve `doc` from folders_db and apply updates on top of it. Returns the stored versions."""
+    versions = [dict(doc)]
+    monkeypatch.setattr(folders.folders_db, 'get_folder', lambda uid, folder_id: dict(versions[-1]))
+    monkeypatch.setattr(
+        folders.folders_db, 'update_folder', lambda uid, folder_id, data: versions.append({**versions[-1], **data})
+    )
+    return versions
+
+
 @pytest.mark.parametrize('doc', MALFORMED_FOLDERS.values(), ids=MALFORMED_FOLDERS.keys())
 def test_get_malformed_folder_is_not_found(client, monkeypatch, doc):
-    monkeypatch.setattr(folders.folders_db, 'get_folder', lambda uid, folder_id: dict(doc))
+    _fake_store(monkeypatch, doc)
 
     response = client.get('/v1/folders/f_bad')
 
@@ -54,20 +81,30 @@ def test_get_malformed_folder_is_not_found(client, monkeypatch, doc):
     assert response.json() == {'detail': 'Folder not found'}
 
 
-def test_patch_malformed_folder_is_not_found_and_not_written(client, monkeypatch):
-    writes = []
-    monkeypatch.setattr(folders.folders_db, 'get_folder', lambda uid, folder_id: dict(MALFORMED_FOLDERS['null_name']))
-    monkeypatch.setattr(folders.folders_db, 'update_folder', lambda uid, folder_id, data: writes.append(data))
+@pytest.mark.parametrize('doc, body', UNREPAIRED_PATCHES.values(), ids=UNREPAIRED_PATCHES.keys())
+def test_patch_leaving_folder_malformed_is_not_found_and_not_written(client, monkeypatch, doc, body):
+    versions = _fake_store(monkeypatch, doc)
 
-    response = client.patch('/v1/folders/f_bad', json={'description': 'new'})
+    response = client.patch('/v1/folders/f_bad', json=body)
 
     assert response.status_code == 404
     assert response.json() == {'detail': 'Folder not found'}
-    assert writes == []
+    assert versions == [doc]
+
+
+@pytest.mark.parametrize('damage, body', REPAIRING_PATCHES.values(), ids=REPAIRING_PATCHES.keys())
+def test_patch_repairing_malformed_folder_is_saved(client, monkeypatch, damage, body):
+    versions = _fake_store(monkeypatch, {**VALID_FOLDER, **damage})
+
+    response = client.patch('/v1/folders/f_valid', json=body)
+
+    assert response.status_code == 200
+    assert {field: response.json()[field] for field in body} == body
+    assert len(versions) == 2
 
 
 def test_get_valid_folder_is_served(client, monkeypatch):
-    monkeypatch.setattr(folders.folders_db, 'get_folder', lambda uid, folder_id: dict(VALID_FOLDER))
+    _fake_store(monkeypatch, VALID_FOLDER)
 
     response = client.get('/v1/folders/f_valid')
 
