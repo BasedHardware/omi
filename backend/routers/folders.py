@@ -34,7 +34,16 @@ def get_folders(uid: str = Depends(auth.get_current_user_uid)):
     folders = folders_db.get_folders(uid)
     if not folders:
         folders = folders_db.initialize_system_folders(uid)
-    return folders
+
+    valid_folders: List[Folder] = []
+    for f in folders:
+        try:
+            valid_folders.append(Folder.model_validate(f))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(f"Skipping invalid folder {f.get('id')} for uid {uid}: {invalid_fields}")
+            continue
+    return valid_folders
 
 
 @router.post('/v1/folders', response_model=Folder, tags=['folders'])
@@ -62,7 +71,11 @@ def get_folder(folder_id: str, uid: str = Depends(auth.get_current_user_uid)):
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
-    return folder
+    try:
+        return Folder.model_validate(folder)
+    except ValidationError as e:
+        logger.error(f"Folder {folder_id} for uid {uid} is corrupted: {e}")
+        raise HTTPException(status_code=500, detail="Stored folder document is corrupted")
 
 
 @router.patch('/v1/folders/{folder_id}', response_model=Folder, tags=['folders'])
