@@ -151,7 +151,7 @@ Future<void> openHomeDeepLink(
       await _prepareChat(context, id);
       if (!context.mounted) return;
       // D1: chat is a normal pushed page everywhere.
-      unawaited(routeToPage(context, const ChatPage(isPivotBottom: false)));
+      unawaited(routeToPage(context, ChatPage(isPivotBottom: false, initialDraft: link.query['draft'])));
     case 'settings':
       // The sheet is pushed synchronously, so a page pushed next lands on top of it.
       unawaited(openSettings());

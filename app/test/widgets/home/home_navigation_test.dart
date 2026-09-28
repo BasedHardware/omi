@@ -25,6 +25,12 @@ void main() {
       expect(link.query['share'], '1');
     });
 
+    test('preserves an encoded Siri question as a chat draft', () {
+      final link = HomeDeepLink.parse('/chat?draft=What%20did%20Sam%20say%3F')!;
+      expect(link.alias, 'chat');
+      expect(link.query['draft'], 'What did Sam say?');
+    });
+
     test('accepts a route without a leading slash and ignores empty segments', () {
       final link = HomeDeepLink.parse('apps//xyz')!;
       expect(link.alias, 'apps');

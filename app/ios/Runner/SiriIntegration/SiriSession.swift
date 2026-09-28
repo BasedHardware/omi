@@ -195,6 +195,73 @@ struct OmiNativeAPI {
     #if OMI_SIRI_PROBE
     static var testSession: URLSession?
     #endif
+    static func terminalChatAnswer(_ line: String) throws -> String? {
+        guard line.hasPrefix("done: ") else { return nil }
+        let encoded = String(line.dropFirst(6))
+        guard let data = Data(base64Encoded: encoded),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let answer = object["text"] as? String,
+              !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { throw SiriSession.Failure.server }
+        return answer
+    }
+    /// Mobile Ask Omi uses the same authenticated, persistent chat stream as
+    /// MessageProvider. Only a terminal done frame is a completed answer.
+    func ask(question: String, owner config: SiriSession.Config) async throws -> String {
+        try await withThrowingTaskGroup(of: String.self) { group in
+            group.addTask { try await streamChatAnswer(question: question, owner: config) }
+            group.addTask {
+                try await Task.sleep(nanoseconds: 18_000_000_000)
+                throw SiriSession.Failure.network
+            }
+            defer { group.cancelAll() }
+            guard let answer = try await group.next() else { throw SiriSession.Failure.network }
+            return answer
+        }
+    }
+    private func streamChatAnswer(question: String, owner config: SiriSession.Config) async throws -> String {
+        guard let base = URL(string: config.baseUrl),
+              let url = URL(string: "/v2/messages", relativeTo: base)?.absoluteURL,
+              url.host == base.host else { throw SiriSession.Failure.invalidConfiguration }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 18
+        request.setValue("Bearer \(try await SiriSession.shared.token(for: config))", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("ios", forHTTPHeaderField: "X-App-Platform")
+        request.setValue(config.deviceIdHash, forHTTPHeaderField: "X-Device-Id-Hash")
+        request.setValue(config.appVersion, forHTTPHeaderField: "X-App-Version")
+        request.setValue(config.appBuild, forHTTPHeaderField: "X-App-Build")
+        request.httpBody = try SafeJSON.data(withJSONObject: ["text": question, "file_ids": []])
+        try SiriSession.shared.validateOwner(config)
+        #if OMI_SIRI_PROBE
+        let session = Self.testSession ?? .shared
+        #else
+        let session = URLSession.shared
+        #endif
+        let bytes: URLSession.AsyncBytes
+        let response: URLResponse
+        do { (bytes, response) = try await session.bytes(for: request) }
+        catch { throw SiriSession.Failure.network }
+        try SiriSession.shared.validateOwner(config)
+        guard let http = response as? HTTPURLResponse else { throw SiriSession.Failure.network }
+        switch http.statusCode {
+        case 200: break
+        case 401, 403: throw SiriSession.Failure.auth
+        case 402: throw SiriSession.Failure.quota
+        case 429: throw SiriSession.Failure.rateLimited
+        default: throw SiriSession.Failure.server
+        }
+        do {
+            for try await line in bytes.lines {
+                try SiriSession.shared.validateOwner(config)
+                if let answer = try Self.terminalChatAnswer(line) { return answer }
+            }
+        } catch SiriSession.Failure.auth { throw SiriSession.Failure.auth }
+        catch SiriSession.Failure.server { throw SiriSession.Failure.server }
+        catch { throw SiriSession.Failure.network }
+        throw SiriSession.Failure.network
+    }
     func request(method: String, path: String, body: [String: Any],
                  owner: SiriSession.Config? = nil) async throws -> [String: Any] {
         guard let config = owner ?? SiriSession.shared.currentConfig() else { throw SiriSession.Failure.auth }

@@ -192,9 +192,18 @@ final class SiriIntentServiceTests: XCTestCase {
 
   func testClassicShortcutsUseTheCorrectExecutionProcess() {
     XCTAssertFalse(RememberIntent.openAppWhenRun)
+    XCTAssertFalse(AskOmiIntent.openAppWhenRun)
     XCTAssertTrue(StartListeningIntent.openAppWhenRun)
     XCTAssertTrue(StopListeningIntent.openAppWhenRun)
-    XCTAssertEqual(OmiAppShortcuts.appShortcuts.count, 3)
+    XCTAssertEqual(OmiAppShortcuts.appShortcuts.count, 4)
+  }
+
+  func testAskOmiFailureIsNeverSpokenAsAnAnswer() {
+    XCTAssertEqual(SiriFailure.auth.message(for: "ask"), "Open Omi and sign in first.")
+    XCTAssertEqual(
+      SiriFailure.network.message(for: "ask"),
+      "Omi couldn't finish the answer. Open Omi and ask in chat.")
+    XCTAssertEqual(SiriFailure.unsupported.message(for: "ask"), "What would you like to ask Omi?")
   }
 
   func testBackendFailuresHaveTypedSpokenOutcomes() {

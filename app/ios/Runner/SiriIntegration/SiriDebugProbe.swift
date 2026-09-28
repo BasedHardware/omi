@@ -17,9 +17,10 @@ enum SiriDebugProbe {
     private static func classicShortcutAvailability() -> Bool {
         let shortcuts = OmiAppShortcuts.appShortcuts
         _ = RememberIntent()
+        _ = AskOmiIntent()
         _ = StartOmiListeningIntent()
         _ = StopOmiListeningIntent()
-        return shortcuts.count == 3 && !RememberIntent.openAppWhenRun &&
+        return shortcuts.count == 4 && !RememberIntent.openAppWhenRun && !AskOmiIntent.openAppWhenRun &&
             StartOmiListeningIntent.openAppWhenRun && StopOmiListeningIntent.openAppWhenRun
     }
 
@@ -51,6 +52,12 @@ enum SiriDebugProbe {
             let unavailableSession = SiriSession(defaults: nil)
             let unavailableFailsSafe = unavailableSession.currentConfig() == nil
             NSLog("[SiriProbe] missingSessionSuiteUnavailable=%@", unavailableFailsSafe ? "PASS" : "FAIL")
+            let terminal = "done: " + Data("{\"text\":\"The answer\"}".utf8).base64EncodedString()
+            let answerValid = (try? OmiNativeAPI.terminalChatAnswer(terminal)) == "The answer"
+            let partialIgnored = (try? OmiNativeAPI.terminalChatAnswer("data: partial")) == nil
+            let emptyRejected = (try? OmiNativeAPI.terminalChatAnswer("done: e30=")) == nil
+            NSLog("[SiriProbe] askOmiTerminalAnswer=%@",
+                  answerValid && partialIgnored && emptyRejected ? "PASS" : "FAIL")
             let production = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12")
             let development = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12.development")
             let productionKeys = [production.ownerKey, production.pendingWipeOwnersKey,
