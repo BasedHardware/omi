@@ -160,7 +160,7 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
             logger.exception('listen finalization reconciliation claim failed job=%s', job_id)
             result['skipped'] += 1
             continue
-        if claimed['status'] != 'queued' or claimed['dispatch_generation'] is None:
+        if not claimed.get('created') or claimed['status'] != 'queued' or claimed['dispatch_generation'] is None:
             result['skipped'] += 1
             continue
         try:
@@ -471,8 +471,8 @@ def final_attempt_failed(
             # Dead-lettering is authoritative; a best-effort metric lookup must
             # never change its terminal outcome.
             logger.exception('listen finalization terminal metric lookup failed job=%s', job_id)
-        # Dead-lettering flips the bound conversation to discarded inside its
-        # own transaction, bypassing the update hooks; converge the search
+        # Dead-lettering closes the bound conversation inside its own
+        # transaction, bypassing the update hooks; converge the search
         # projection. Fail-open: never change the terminal outcome.
         try:
             job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
