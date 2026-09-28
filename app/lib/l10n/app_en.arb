@@ -13557,5 +13557,29 @@
     "appearance": "Appearance",
     "appearanceSystem": "System",
     "appearanceLight": "Light",
-    "appearanceDark": "Dark"
+    "appearanceDark": "Dark",
+    "chatDiscardRecording": "Discard",
+    "@chatDiscardRecording": {
+        "description": "Discard the current chat voice recording without transcription"
+    },
+    "voiceQuestionNoSpeech": "Didn't catch that — try again",
+    "@voiceQuestionNoSpeech": {
+        "description": "Shown in chat when a pendant voice question contains no detectable speech."
+    },
+    "sendToSupport": "Send to support",
+    "@sendToSupport": {
+        "description": "Device diagnostics support upload"
+    },
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "@deviceDiagnosticsUploadDescription": {
+        "description": "Device diagnostics support upload"
+    },
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "@deviceDiagnosticsTicket": {
+        "description": "Device diagnostics support upload"
+    },
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
+    "@deviceDiagnosticsUploadFailed": {
+        "description": "Device diagnostics support upload"
+    }
 }

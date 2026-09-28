@@ -121,3 +121,13 @@ def _positive_int(raw: str, name: str) -> int:
     if value <= 0:
         raise ValueError(f'{name} must be greater than zero')
     return value
+
+
+def translation_profile_gate_enabled() -> bool:
+    """Reversible admission prior; read mutable env at the decision boundary."""
+    return process_environ.get('TRANSLATION_PROFILE_GATE_ENABLED', 'true').lower() == 'true'
+
+
+def translation_output_guard_enabled() -> bool:
+    """Conservative edit checks still have a recall rollback switch."""
+    return process_environ.get('TRANSLATION_OUTPUT_GUARD_ENABLED', 'true').lower() == 'true'

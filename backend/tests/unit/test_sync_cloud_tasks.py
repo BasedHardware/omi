@@ -1106,6 +1106,7 @@ def _load_sync_router_for_fast_path():
     from utils.stt import speaker_identity as actual_speaker_identity
     from utils import manual_speaker_assignments as actual_manual_assignments
     from utils.sync import lanes as actual_sync_lanes
+    from utils import capture_evidence as actual_capture_evidence
 
     saved_modules = {}
     prior_utils_sync = sys.modules.get('utils.sync')
@@ -1340,6 +1341,11 @@ def _load_sync_router_for_fast_path():
     # scope, and MagicMock parents for utils / utils.stt are not packages.
     sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
     sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+    # Keep the S1 evidence envelope builder real (pure, stdlib-only): the sync
+    # pipeline imports unknown_envelope at module scope, and a MagicMock parent
+    # for utils is not a package.
+    saved_modules['utils.capture_evidence'] = sys.modules.get('utils.capture_evidence')
+    sys.modules['utils.capture_evidence'] = actual_capture_evidence
     saved_modules['utils.sync.lanes'] = sys.modules.get('utils.sync.lanes')
     # Keep SyncLane real: the dispatch job payload JSON-serializes lane as a str-enum
     # value, and a MagicMock lane breaks json.dumps. lanes.py is stdlib-only.

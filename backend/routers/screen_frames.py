@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
@@ -53,6 +54,9 @@ router = APIRouter()
 MAX_CANDIDATE_DECODED_BYTES = 20 * 1024 * 1024
 
 CAPTURE_WINDOW_SLACK_SECONDS = 120
+CONTENT_WINDOW_POLICY = 'meeting-content-v1'
+LEGACY_CONTENT_WINDOW_TOLERANCE_SECONDS = 30
+LEGACY_LIFECYCLE_FINGERPRINT = 'legacy-lifecycle-v1'
 IDEMPOTENCY_TTL_SECONDS = 86400
 EMPTY_FRAME_SET = ConversationScreenFrameSet(revision=0, banner=None, strip=[])
 
@@ -82,15 +86,74 @@ def _require_adjudication_admission(uid: str, conversation: Dict[str, Any]) -> N
         raise HTTPException(status_code=409, detail={"code": "meeting_note_screenshots_disabled"})
 
 
-def _validate_capture_window(conversation: Dict[str, Any], candidates: List[ScreenFrameCandidateIn]) -> None:
+def _selection_fingerprint(lower: datetime, upper: datetime) -> str:
+    lower_ms = round(lower.timestamp() * 1000)
+    upper_ms = round(upper.timestamp() * 1000)
+    return f'{CONTENT_WINDOW_POLICY}:{lower_ms}:{upper_ms}'
+
+
+def _trusted_content_window(conversation: Dict[str, Any]) -> tuple[datetime, datetime] | None:
+    """Project transcript offsets only when their wall-clock origin is trustworthy.
+
+    Legacy listen rows can preserve a socket-first-audio ``started_at`` across a rollover, while
+    their transcript offsets restart at zero. In that shape, the projection disagrees with
+    ``finished_at`` and must not be used to retrieve screen content.
+    """
     started_at = conversation.get('started_at')
-    finished_at = conversation.get('finished_at')
-    if started_at is None or finished_at is None:
-        raise HTTPException(status_code=400, detail={"code": "conversation_window_unavailable"})
+    if not isinstance(started_at, datetime):
+        return None
+
+    spans: list[tuple[float, float]] = []
+    for segment in conversation.get('transcript_segments') or []:
+        if not isinstance(segment, dict) or not str(segment.get('text') or '').strip():
+            continue
+        start = segment.get('start')
+        end = segment.get('end')
+        if isinstance(start, bool) or isinstance(end, bool) or not isinstance(start, (int, float)):
+            continue
+        if not isinstance(end, (int, float)) or not math.isfinite(start) or not math.isfinite(end):
+            continue
+        if start < 0 or end <= start:
+            continue
+        spans.append((float(start), float(end)))
+    if not spans:
+        return None
+
     started_at = _ensure_aware(started_at)
-    finished_at = _ensure_aware(finished_at)
-    lower = started_at - timedelta(seconds=CAPTURE_WINDOW_SLACK_SECONDS)
-    upper = finished_at + timedelta(seconds=CAPTURE_WINDOW_SLACK_SECONDS)
+    lower = started_at + timedelta(seconds=min(start for start, _ in spans))
+    upper = started_at + timedelta(seconds=max(end for _, end in spans))
+    audio_timeline = conversation.get('audio_timeline')
+    external_data = conversation.get('external_data') or {}
+    has_trusted_origin = (isinstance(audio_timeline, dict) and audio_timeline.get('version') == 2) or (
+        isinstance(external_data, dict) and bool(external_data.get('from_segments_client_session_id'))
+    )
+    if not has_trusted_origin:
+        finished_at = conversation.get('finished_at')
+        if not isinstance(finished_at, datetime):
+            return None
+        difference = abs((upper - _ensure_aware(finished_at)).total_seconds())
+        if difference > LEGACY_CONTENT_WINDOW_TOLERANCE_SECONDS:
+            return None
+    return lower, upper
+
+
+def _validate_capture_window(conversation: Dict[str, Any], candidates: List[ScreenFrameCandidateIn]) -> str:
+    trusted_window = _trusted_content_window(conversation)
+    if trusted_window is not None:
+        lower, upper = trusted_window
+        fingerprint = _selection_fingerprint(lower, upper)
+    else:
+        # Backward compatibility for released clients: their request has no policy fingerprint.
+        # The current Mac client never submits candidates for this fallback window.
+        started_at = conversation.get('started_at')
+        finished_at = conversation.get('finished_at')
+        if started_at is None or finished_at is None:
+            raise HTTPException(status_code=400, detail={"code": "conversation_window_unavailable"})
+        started_at = _ensure_aware(started_at)
+        finished_at = _ensure_aware(finished_at)
+        lower = started_at - timedelta(seconds=CAPTURE_WINDOW_SLACK_SECONDS)
+        upper = finished_at + timedelta(seconds=CAPTURE_WINDOW_SLACK_SECONDS)
+        fingerprint = LEGACY_LIFECYCLE_FINGERPRINT
     for candidate in candidates:
         captured_at = _ensure_aware(candidate.captured_at)
         if not (lower <= captured_at <= upper):
@@ -101,6 +164,7 @@ def _validate_capture_window(conversation: Dict[str, Any], candidates: List[Scre
                     "client_frame_id": candidate.client_frame_id,
                 },
             )
+    return fingerprint
 
 
 def _request_fingerprint(request: ScreenFrameAdjudicationRequest) -> str:
@@ -177,7 +241,7 @@ def adjudicate_screen_frames(
 
     conversation = _get_owned_conversation(uid, request.subject.id)
     _require_adjudication_admission(uid, conversation)
-    _validate_capture_window(conversation, request.candidates)
+    selection_fingerprint = _validate_capture_window(conversation, request.candidates)
 
     for candidate in request.candidates:
         try:
@@ -238,7 +302,9 @@ def adjudicate_screen_frames(
     # is exactly the case this exists for. `revision` cannot record it, because nothing was
     # approved to bump it, so without this the client cannot tell that it already offered these
     # frames and had them refused, and re-uploads them on every reopen.
-    screen_frames_db.mark_conversation_screen_frames_adjudicated(uid, request.subject.id)
+    screen_frames_db.mark_conversation_screen_frames_adjudicated(
+        uid, request.subject.id, selection_fingerprint=selection_fingerprint
+    )
 
     frame_set, committed = enforcement.enforce_and_persist(uid, request.subject.id, policy.max_persisted, new_frames)
     response = ScreenFrameAdjudicationResponse(

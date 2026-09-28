@@ -2,6 +2,42 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.409",
+      "date": "2026-09-28",
+      "changes": [
+        "Recording now waits for the microphone after an app update and resumes on its own when the input becomes available"
+      ]
+    },
+    {
+      "version": "0.12.408",
+      "date": "2026-09-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.407",
+      "date": "2026-09-27",
+      "changes": [
+        "Long conversation titles and related generated labels now remain readable through wrapping or tooltips on mobile and macOS.",
+        "Stopped conversation notes from showing screenshots captured outside the conversation's trusted transcript window"
+      ]
+    },
+    {
+      "version": "0.12.406",
+      "date": "2026-09-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.405",
+      "date": "2026-09-27",
+      "changes": [
+        "Fixed desktop chat usage showing unlimited for keys that do not power chat, and clarified that BYOK covers supported features rather than every Omi service"
+      ]
+    },
+    {
       "version": "0.12.404",
       "date": "2026-09-27",
       "changes": [

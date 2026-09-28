@@ -133,6 +133,64 @@ def test_legacy_completed_index_and_missing_person(world):
         db.assign_conversation_speaker('u', 'c', person_id='new', segment_index=0)
 
 
+def test_bridged_speaker_assignment_uses_donor_segment_ids(world):
+    store, survivor_path, original = world
+    donor_path = ('users', 'u', 'conversations', 'donor')
+    store.rows[donor_path] = dict(
+        id='donor',
+        deleted=True,
+        sync_merged_into='c',
+        transcript_segments=[dict(original[1], speaker_id=4)],
+    )
+    store.rows[survivor_path]['transcript_segments'] = [
+        dict(original[0], speaker_id=4),
+        dict(original[1], speaker_id=12),
+    ]
+
+    raw, resolved, _, _ = db.assign_conversation_speaker('u', 'donor', person_id='new', speaker_id=4)
+
+    assert raw['id'] == 'c'
+    assert resolved == ['s1']
+    assert raw['transcript_segments'][0]['person_id'] is None
+    assert raw['transcript_segments'][1]['person_id'] == 'new'
+    assert store.rows[donor_path]['deleted'] is True
+
+
+def test_bridged_assignment_prefers_shipped_app_segment_ids_over_stale_speaker_number(world):
+    store, survivor_path, original = world
+    store.rows[('users', 'u', 'conversations', 'donor')] = dict(
+        id='donor', deleted=True, sync_merged_into='c', transcript_segments=[dict(original[1], speaker_id=7)]
+    )
+    store.rows[survivor_path]['transcript_segments'] = [
+        dict(original[0], speaker_id=4),
+        dict(original[1], speaker_id=12),
+    ]
+
+    raw, resolved, _, _ = db.assign_conversation_speaker(
+        'u', 'donor', person_id='new', speaker_id=4, segment_ids=['s1']
+    )
+
+    assert resolved == ['s1']
+    assert raw['transcript_segments'][0]['person_id'] is None
+    assert raw['transcript_segments'][1]['person_id'] == 'new'
+
+
+def test_bridged_assignment_rejects_missing_or_deleted_survivor(world):
+    store, survivor_path, original = world
+    donor_path = ('users', 'u', 'conversations', 'donor')
+    store.rows[donor_path] = dict(
+        id='donor',
+        deleted=True,
+        sync_merged_into='c',
+        transcript_segments=[dict(original[1], id='lost')],
+    )
+    with pytest.raises(ValueError, match='no longer'):
+        db.assign_conversation_speaker('u', 'donor', person_id='new', speaker_id=4)
+    store.rows[survivor_path]['deleted'] = True
+    with pytest.raises(LookupError):
+        db.assign_conversation_speaker('u', 'donor', person_id='new', speaker_id=4)
+
+
 def test_silent_flush_retries_dirty_write_and_publishes_acknowledged_identity(world):
     import asyncio
     from types import SimpleNamespace
@@ -183,6 +241,68 @@ def test_silent_flush_retries_dirty_write_and_publishes_acknowledged_identity(wo
         delivered = processor._deliver_segments.call_args.args[0]
         assert any(item['id'] == 's1' and item['person_id'] == 'new' for item in delivered)
         assert len(delivered) < len(snapshot['transcript_segments']) + 1
+
+    asyncio.run(exercise())
+
+
+def test_interleaved_flush_retries_newer_speaker_decision(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
+
+    async def exercise():
+        stored = [dict(id='s', speaker_id=1, text='Synthetic speech', start=0, end=6, is_user=False)]
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        writes = []
+
+        async def load(_conversation_id, *, force_refresh=False):
+            return {'id': 'c', 'transcript_segments': deepcopy(stored)}
+
+        async def persist(_fn, _uid, _cid, segments, **_kwargs):
+            writes.append(deepcopy(segments))
+            if len(writes) == 1:
+                entered.set()
+                await release.wait()
+            stored[:] = deepcopy(segments)
+            return deepcopy(segments)
+
+        state = SimpleNamespace(active=False, speaker_map_dirty=True, speaker_map_version=1)
+        speakers = SimpleNamespace(
+            speaker_to_person={1: ('user', 'User')},
+            segment_assignments={},
+            segment_identity_status={},
+            voice_identity_status={1: SpeakerIdentityStatus.user},
+        )
+        host = SimpleNamespace(
+            request=SimpleNamespace(uid='u'),
+            state=state,
+            speakers=speakers,
+            persistence=SimpleNamespace(call=persist),
+        )
+        processor = _flush_processor(host)
+        processor.cache = SimpleNamespace(get=load, protection_level='standard', update_segments=lambda _s: None)
+        monkeypatch.setattr(
+            transcripts,
+            'deserialize_conversation',
+            lambda data: SimpleNamespace(
+                id='c', transcript_segments=[TranscriptSegment(**raw) for raw in data['transcript_segments']]
+            ),
+        )
+        task = asyncio.create_task(processor.flush_speaker_assignments('c'))
+        await entered.wait()
+        speakers.speaker_to_person.clear()
+        speakers.voice_identity_status[1] = SpeakerIdentityStatus.ambiguous
+        state.speaker_map_version += 1
+        state.speaker_map_dirty = True
+        release.set()
+        await task
+
+        assert len(writes) == 2
+        assert writes[0][0]['is_user'] is True
+        assert writes[1][0]['is_user'] is False
+        assert stored[0]['speaker_identity_status'] == 'ambiguous'
+        assert state.speaker_map_dirty is False
 
     asyncio.run(exercise())
 

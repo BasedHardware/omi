@@ -249,6 +249,26 @@ actor ConversationFinalizationService {
       uploadSegments: uploadSegments,
       startedAt: bundle.session.startedAt
     )
+    let captureEvidence: APIClient.CaptureEvidenceLineage?
+    if ProcessInfo.processInfo.environment["CAPTURE_EVIDENCE_V1_DARK_WRITE"] == "1" {
+      let units = bundle.segments.compactMap { segment -> APIClient.CaptureEvidenceLineage.Unit? in
+        guard let id = segment.id, segment.startTime.isFinite, segment.endTime.isFinite,
+          segment.startTime >= 0, segment.endTime > segment.startTime
+        else { return nil }
+        return .init(
+          id: String(id),
+          startMs: Int64((segment.startTime * 1000).rounded()),
+          endMs: Int64((segment.endTime * 1000).rounded()))
+      }
+      let root = Self.localClientConversationId(session: bundle.session, sessionId: sessionId)
+      let complete = units.count == bundle.segments.count && units.count <= 64
+      captureEvidence = .init(
+        version: 1, capability: "stable_artifact", captureRoot: root,
+        clockDomain: "desktop_session_ms", lineage: complete ? "complete" : "incomplete",
+        units: complete ? units : [])
+    } else {
+      captureEvidence = nil
+    }
     let request = APIClient.CreateConversationFromSegmentsRequest(
       transcript_segments: uploadSegments,
       source: bundle.session.source,
@@ -258,7 +278,8 @@ actor ConversationFinalizationService {
       client_conversation_id: Self.localClientConversationId(session: bundle.session, sessionId: sessionId),
       conversation_role: bundle.session.conversationRole.rawValue,
       conversation_finalization_reason: bundle.session.finalizationReason?.rawValue,
-      client_processing: clientProcessing
+      client_processing: clientProcessing,
+      captureEvidence: captureEvidence
     )
     let response = try await apiClient.createConversationFromSegments(request)
     let status = LocalConversationStatus(rawValue: response.status) ?? .processing

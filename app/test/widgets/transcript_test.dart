@@ -144,6 +144,27 @@ void main() {
       expect(find.text('Speaker 1'), findsOneWidget);
     });
 
+    testWidgets('unavailable resolution does not render chunk ids as distinct people', (tester) async {
+      final segments = [segmentFor('first', 27), segmentFor('second', 28)];
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: TranscriptWidget(segments: segments, unresolvedSpeakers: true)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Speaker ?'), findsNWidgets(2));
+      expect(find.text('Speaker 1'), findsNothing);
+      expect(find.text('Speaker 2'), findsNothing);
+    });
+
     testWidgets('Tag button is removed from UI', (tester) async {
       final segment = segmentFor('seg3', 1);
 

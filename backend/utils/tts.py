@@ -35,12 +35,14 @@ GEMINI_TTS_URL = (
 )
 GEMINI_PCM_MIME_PREFIX = 'audio/l16'
 GEMINI_SAMPLE_RATE = 24_000
-DEFAULT_GEMINI_VOICE = 'Aoede'
-DEFAULT_GEMINI_STYLE = 'Warm, natural, conversational, and easy to understand.'
+DEFAULT_GEMINI_VOICE = 'Charon'
+DEFAULT_GEMINI_STYLE = (
+    'Clear, friendly, neutral assistant voice at a natural conversational pace; no dramatic emphasis.'
+)
 
 _MOBILE_VOICE_MAP = {
     # Sloane, the released mobile client's default ElevenLabs voice.
-    'BAMYoBHLZM7lJgJAmFz0': 'Aoede',
+    'BAMYoBHLZM7lJgJAmFz0': 'Charon',
 }
 _DESKTOP_VOICE_MAP = {
     'alloy': 'Schedar',

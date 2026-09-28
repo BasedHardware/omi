@@ -14,8 +14,10 @@ from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config.audio_timeline import audio_timeline_v2_enabled, live_speaker_capture_clock_enabled
+from config.capture_evidence import capture_evidence_dark_write_enabled
 from routers.listen.contracts import ConversationCaptureOrigin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
+from utils.capture_evidence import SourcePositionMap, parse_live_frame
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -219,6 +221,7 @@ class ListenReceiver:
         # minimum available channel buffers, and custom-STT segments carry a
         # client clock; both stay without the clock entirely.
         self.capture_timeline: Any = None
+        self._pending_source_frame: dict | None = None
         self.capture_timeline_v2 = False
         if (
             not host.is_multi_channel
@@ -236,6 +239,8 @@ class ListenReceiver:
             # `_note_accepted_frame`, so retention is time-based (120 s) and a
             # hard entry cap counts conversation switches, not frames.
             host.state.conversation_sample_ranges = deque(maxlen=CAPTURE_RANGE_MAX_RUNS)
+            if capture_evidence_dark_write_enabled():
+                host.state.source_position_map = SourcePositionMap()
         # The loop this receiver serves. Deepgram's SDK delivers transcripts on
         # its own thread; those callbacks hop back onto this loop (see
         # `_run_on_listen_loop`) so timeline/send-map state is only ever
@@ -1460,6 +1465,10 @@ class ListenReceiver:
         elif kind == 'client_state':
             if not self.host.state.realtime_demand.observe(payload):
                 logger.debug('Ignored malformed or over-budget client_state')
+        elif kind == 'capture_evidence_frame' and capture_evidence_dark_write_enabled():
+            # The next binary message alone may consume this claim. A new
+            # control message supersedes an unpaired one, never a later frame.
+            self._pending_source_frame = payload
         elif kind == 'finalization_reason':
             reason = payload.get('reason')
             if reason in {
@@ -1499,6 +1508,7 @@ class ListenReceiver:
             decision = max(decisions, key=lambda value: value.get('generation', 0))
             self.host.speakers.segment_assignments[sid] = 'user' if decision['is_user'] else decision['person_id']
         self.host.state.speaker_map_dirty = True
+        self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
         person_id = payload.get('person_id')
         if (
             isinstance(person_id, str)
@@ -1537,6 +1547,8 @@ class ListenReceiver:
                     break
                 data = message.get('bytes')
                 if data is not None:
+                    source_claim = self._pending_source_frame
+                    self._pending_source_frame = None
                     if len(data) <= 2:
                         continue
                     now = time.time()
@@ -1585,6 +1597,15 @@ class ListenReceiver:
                         # (opcode-101 start) is v2-only: with the flag off the
                         # wire must stay byte-identical to the legacy session.
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
+                        source_map = self.host.state.source_position_map
+                        if source_map is not None:
+                            source_map.accept(
+                                parse_live_frame(source_claim, len(data)) if source_claim else None,
+                                sample_start=start_sample,
+                                sample_count=end_sample - start_sample,
+                                rate_hz=request.sample_rate,
+                                payload=bytes(data),
+                            )
                         self._note_accepted_frame(start_sample, end_sample)
                         self._write_ring_buffer_frame(decoded, now, start_sample)
                         if not self.host.use_custom_stt:

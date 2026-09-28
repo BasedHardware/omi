@@ -51,7 +51,8 @@ Union and clamp speaker intervals to real WAV frames. Rank distinct intervals by
 length; pack up to 30 seconds without inter-turn silence into at most three
 balanced clips, each at most ten seconds. Compare their normalized mean embedding
 using the same helper as live. Preserve sync's one-second **total** eligibility
-floor and the existing longest-segment speaker priority for person dedup.
+floor and the existing longest-segment speaker priority for named-person dedup.
+Owner claims are arbitrated jointly as described below.
 
 Synthetic accounting proves four nonoverlapping two-second turns yield eight
 embedded seconds rather than two (4x evidence, still one call). A long speaker
@@ -106,3 +107,31 @@ confidence intervals by duration and service. Choose any new operating point on
 tuning data under an agreed false-accept constraint, then assess it once on the
 untouched holdout. Human corrections can prioritize cases for review but cannot
 supply the unbiased negatives this experiment requires.
+
+
+## Owner-only enrollment and competing voices (2026-09-27)
+
+`arbitrate_owner_matches` supplements the enrolled-print decision with a margin
+against the next unidentified voice's owner distance. At the reported 0.631/0.645
+distances, both voices become `ambiguous`; neither projects to `is_user=True`.
+A clearly separated 0.53/0.73 pair still accepts the first voice on live/sync.
+The 0.65 per-clip threshold, 0.10 margin and 0.50 conversation-centroid threshold
+remain unchanged. Confidently named other people do not compete for the owner.
+
+Sync collects all available voice decisions before publishing assignments. Live
+retains evidence within the conversation and retracts earlier accepts when a
+competitor arrives, including persisted segments and client corrections.
+Conversation resolution arbitrates before identity-based merging, so a shared
+owner print cannot merge two distinct voices; a manually identified owner reserves
+the identity. Ambiguity persists behind the unchanged legacy wire fields and
+feeds the existing free “Is this you?” prompt. Identity is still optional
+metadata, with no new dependency in capture, conversation or memory writes.
+
+These tests prove arbitration and projection, not production recall or accuracy.
+A single observed voice retains the existing similarity-only decision until
+another voice supplies evidence. Missing embeddings cannot provide a runner-up.
+Sync arbitration first spans one uploaded batch; the final resolver spans the
+aligned, stored conversation. Live sessions use their observed diarized voices;
+final resolution continues to skip unaligned live audio. Clustering errors can
+still mix speakers or split one owner into competing voices. No stored-history
+backfill or model change is included.

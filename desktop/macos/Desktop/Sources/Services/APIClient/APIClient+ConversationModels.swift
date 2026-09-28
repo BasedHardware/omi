@@ -229,6 +229,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
       && lhs.localSummary == rhs.localSummary
       && lhs.captureGroup == rhs.captureGroup
+      && lhs.audioTimelineVersion == rhs.audioTimelineVersion
+      && lhs.createdFromSegments == rhs.createdFromSegments
   }
 
   let id: String
@@ -255,6 +257,10 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   /// bounded adapter.
   let audioFiles: [CaptureAudioFile]
   let conversationAudio: CaptureConversationAudio?
+  /// Provenance needed to decide whether transcript offsets have a stable wall-clock origin.
+  let audioTimelineVersion: Int?
+  /// Desktop `/from-segments` conversations anchor offsets to the client session start.
+  let createdFromSegments: Bool
 
   let status: ConversationStatus
   let discarded: Bool
@@ -323,6 +329,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     language = wire.language
     audioFiles = (wire.audioFiles ?? []).map(CaptureAudioFile.init)
     conversationAudio = wire.conversationAudio.map(CaptureConversationAudio.init)
+    audioTimelineVersion = wire.audioTimeline?.version
+    createdFromSegments =
+      (wire.externalData?["from_segments_client_session_id"]?.value as? String)?.isEmpty == false
     status = wire.status.map { ConversationStatus(rawValue: $0.rawValue) ?? .completed } ?? .completed
     discarded = wire.discarded ?? false
     deleted = false  // backend REST Conversation schema does not expose deleted
@@ -373,6 +382,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     language: String?,
     audioFiles: [CaptureAudioFile] = [],
     conversationAudio: CaptureConversationAudio? = nil,
+    audioTimelineVersion: Int? = nil,
+    createdFromSegments: Bool = false,
     status: ConversationStatus,
     discarded: Bool,
     deleted: Bool,
@@ -400,6 +411,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.language = language
     self.audioFiles = audioFiles
     self.conversationAudio = conversationAudio
+    self.audioTimelineVersion = audioTimelineVersion
+    self.createdFromSegments = createdFromSegments
     self.status = status
     self.discarded = discarded
     self.deleted = deleted
