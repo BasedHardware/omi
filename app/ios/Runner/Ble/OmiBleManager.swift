@@ -292,6 +292,10 @@ final class OmiBleManager: NSObject {
             return
         }
         guard action == .retry else {
+            // Characteristic callbacks from the first batch can still arrive
+            // after the retry starts. CoreBluetooth provides no attempt ID, so
+            // only the retry's deadline can declare terminal failure.
+            guard reason == "timeout" else { return }
             reportDiscoveryFailure(uuid: uuid, reason: reason)
             return
         }
