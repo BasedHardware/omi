@@ -33,7 +33,7 @@ class BootRecoveryApp extends StatelessWidget {
                     const SizedBox(height: 16),
                     Text(
                       // omi-ux-allow: hardcoded-text -- mandated copy before localization boots.
-                      'Recovery mode — some features paused; tap to retry full startup',
+                      'Recovery mode: the app is paused to protect your data. Retry starts the full app.',
                       key: const Key('boot_recovery_banner'),
                       textAlign: TextAlign.center,
                       style: OmiType.title2,

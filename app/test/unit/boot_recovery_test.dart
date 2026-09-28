@@ -48,18 +48,6 @@ void main() {
     expect(BootRecovery.countsFailure(StateError('recoverable stage')), isTrue);
   });
 
-  test('only the explicit derivative stages are skipped', () async {
-    BootRecovery.safeModeActive = true;
-    for (final stage in BootRecovery.skippedStages) {
-      expect(BootRecovery.skipStage(stage), isTrue);
-    }
-    for (final stage in ['firebase_init', 'shared_preferences', 'resolve_auth', 'crash_reporter']) {
-      expect(BootRecovery.skipStage(stage), isFalse);
-    }
-    BootRecovery.safeModeActive = false;
-    expect(BootRecovery.skipStage('ble_setup'), isFalse);
-  });
-
   test('interrupted stage is counted on next launch', () async {
     final directory = await Directory.systemTemp.createTemp('boot-recovery-');
     try {
@@ -80,7 +68,8 @@ void main() {
     await tester.pumpWidget(BootRecoveryApp(onRetry: () async {
       retries++;
     }));
-    expect(find.text('Recovery mode — some features paused; tap to retry full startup'), findsOneWidget);
+    expect(
+        find.text('Recovery mode: the app is paused to protect your data. Retry starts the full app.'), findsOneWidget);
     await tester.tap(find.byKey(const Key('boot_recovery_retry')));
     expect(retries, 1);
   });

@@ -13,7 +13,6 @@ class BootRecovery {
   static const _timeKey = 'boot.failure_at_ms';
   static const schemaKey = 'boot.schema_version';
   static const window = Duration(minutes: 10);
-  static const skippedStages = {'restore_onboarding', 'bind_owner', 'opus_load', 'ble_setup', 'service_manager_start'};
 
   static bool safeModeActive = false;
   final SharedPreferences prefs;
@@ -29,7 +28,6 @@ class BootRecovery {
     return count >= 3 && age >= 0 && age <= window.inMilliseconds;
   }
 
-  static bool skipStage(String stage) => safeModeActive && skippedStages.contains(stage);
   static bool countsFailure(Object error) => error is! StartupConfigurationError;
 
   Future<int> failed(String stage) async {

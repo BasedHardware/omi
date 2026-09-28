@@ -302,34 +302,20 @@ Future _init() async {
     // Restore onboarding state from server if not already set locally
     // This handles the case where cached credentials are used on startup
     if (!SharedPreferencesUtil().onboardingCompleted) {
-      if (BootRecovery.skipStage('restore_onboarding')) {
-        await BootJournal.instance.record('restore_onboarding', 'skipped');
-      } else {
-        await PhysicalQualification.startupStage('restore_onboarding', AuthService.instance.restoreOnboardingState);
-      }
+      await PhysicalQualification.startupStage('restore_onboarding', AuthService.instance.restoreOnboardingState);
     }
     // Fail-closed cutover gate before product traffic / offline uploads.
     // Anonymous Firebase sessions are not cutover product owners.
     final bootstrapUser = FirebaseAuth.instance.currentUser;
     if (bootstrapUser != null && !bootstrapUser.isAnonymous) {
-      if (BootRecovery.skipStage('bind_owner')) {
-        await BootJournal.instance.record('bind_owner', 'skipped');
-      } else {
-        await PhysicalQualification.startupStage(
-            'bind_owner', () => AccountCutoverRuntime.instance.bindAuthenticatedOwner(bootstrapUser.uid));
-      }
+      await PhysicalQualification.startupStage(
+          'bind_owner', () => AccountCutoverRuntime.instance.bindAuthenticatedOwner(bootstrapUser.uid));
     }
   }
-  if (BootRecovery.skipStage('opus_load')) {
-    await BootJournal.instance.record('opus_load', 'skipped');
-  } else {
-    initOpus(await PhysicalQualification.startupStage<dynamic>('opus_load', opus_flutter.load));
-  }
+  initOpus(await PhysicalQualification.startupStage<dynamic>('opus_load', opus_flutter.load));
 
   // Register native BLE bridge
-  if (BootRecovery.skipStage('ble_setup')) {
-    await BootJournal.instance.record('ble_setup', 'skipped');
-  } else if (PhysicalQualification.enabled) {
+  if (PhysicalQualification.enabled) {
     BleFlutterApi.setUp(BleBridge.instance);
     BleBridge.instance.stateRestoredCallback = (List<String> peripheralUuids) {
       Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
@@ -363,11 +349,7 @@ Future _init() async {
       return true;
     };
   }
-  if (BootRecovery.skipStage('service_manager_start')) {
-    await BootJournal.instance.record('service_manager_start', 'skipped');
-  } else {
-    await PhysicalQualification.startupStage('service_manager_start', ServiceManager.instance().start);
-  }
+  await PhysicalQualification.startupStage('service_manager_start', ServiceManager.instance().start);
   return;
 }
 
@@ -382,21 +364,18 @@ Future<void> _start({bool forceFull = false}) async {
       BootRecovery.safeModeActive = !forceFull && recovery.shouldRecover;
       if (BootRecovery.safeModeActive) {
         await BootJournal.instance.record('safe_boot', 'begin');
-        for (final stage in BootRecovery.skippedStages) {
-          await BootJournal.instance.record(stage, 'skip_decision');
-        }
+        await BootJournal.instance.record('full_startup', 'paused');
         try {
           AnalyticsManager().track('Mobile Recovery Mode Entered', properties: {'stage': recovery.failingStage});
         } catch (_) {}
+        await BootJournal.instance.record('safe_boot', 'completed');
+        runApp(BootRecoveryApp(onRetry: () => _start(forceFull: true)));
+        return;
       }
     }
     await _init();
     if (!PhysicalQualification.enabled) {
-      if (BootRecovery.safeModeActive) {
-        await BootJournal.instance.record('safe_boot', 'completed');
-      } else {
-        await recovery!.fullBootSucceeded();
-      }
+      await recovery!.fullBootSucceeded();
     }
   } catch (error, stack) {
     if (PhysicalQualification.enabled) {
@@ -422,18 +401,11 @@ Future<void> _start({bool forceFull = false}) async {
         if (failures >= 3 && !BootRecovery.safeModeActive) {
           BootRecovery.safeModeActive = true;
           await BootJournal.instance.record('safe_boot', 'begin');
-          for (final skipped in BootRecovery.skippedStages) {
-            await BootJournal.instance.record(skipped, 'skip_decision');
-          }
+          await BootJournal.instance.record('full_startup', 'paused');
           try {
             AnalyticsManager().track('Mobile Recovery Mode Entered', properties: {'stage': stage});
           } catch (_) {}
-          try {
-            await _init();
-            await BootJournal.instance.record('safe_boot', 'completed');
-          } catch (recoveryError) {
-            await BootJournal.instance.record('safe_boot', 'failed', error: recoveryError);
-          }
+          await BootJournal.instance.record('safe_boot', 'completed');
           runApp(BootRecoveryApp(onRetry: () => _start(forceFull: true)));
           return;
         }
@@ -455,7 +427,7 @@ Future<void> _start({bool forceFull = false}) async {
       unawaited(PhysicalQualification.runtimeEvent('first_frame_callback'));
     });
   }
-  runApp(BootRecovery.safeModeActive ? BootRecoveryApp(onRetry: () => _start(forceFull: true)) : const MyApp());
+  runApp(const MyApp());
   if (PhysicalQualification.enabled) unawaited(PhysicalQualification.runtimeEvent('run_app_returned'));
 }
 
