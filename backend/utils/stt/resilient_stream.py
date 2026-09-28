@@ -117,6 +117,13 @@ def filter_replayed_segments(
 class ReplayFilterMixin:
     host: Any
 
+    def _window_ring(self) -> ResilientAudio | None:
+        return (
+            getattr(self, '_window_replay_audio', None)
+            if getattr(self.host, 'stt_model', None) == 'parakeet-window'
+            else None
+        )
+
     def _filter_replayed_segments(self, segments: list[dict[str, Any]], provider: str | None) -> list[dict[str, Any]]:
         return filter_replayed_segments(
             segments,

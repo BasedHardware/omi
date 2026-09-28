@@ -1067,8 +1067,8 @@ class ListenReceiver(ReplayFilterMixin):
         self._resilient_closing = True
         if self._resilient_audio is not None:
             self._resilient_audio.close()
-        if self._window_replay_audio is not None:
-            self._window_replay_audio.close()
+        if (ring := getattr(self, '_window_replay_audio', None)) is not None:
+            ring.close()
         sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
         for socket in sockets:
             target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
@@ -1343,7 +1343,7 @@ class ListenReceiver(ReplayFilterMixin):
         sample_rate = rebuild[1]
         previous = self.stt_socket
         previous_selection = (self.host.stt_service, self.host.stt_language, self.host.stt_model)
-        window_ring = self._window_replay_audio if self.host.stt_model == 'parakeet-window' else None
+        window_ring = self._window_ring()
         replay = window_ring.snapshot() if window_ring is not None else ()
         if replay and epoch is not None:
             epoch.replay_origin_sample = replay[0][0]
@@ -1511,7 +1511,7 @@ class ListenReceiver(ReplayFilterMixin):
                 return
             outbound_audio = bytes(buffer)
             outbound_start_sample = self._stt_buffer_start_sample
-            window_ring = self._window_replay_audio if self.host.stt_model == 'parakeet-window' else None
+            window_ring = self._window_ring()
             if window_ring is not None and window_ring.would_overflow(outbound_audio, outbound_start_sample):
                 raw = getattr(self.stt_socket, 'raw', None)
                 if raw is not None:
@@ -1532,8 +1532,8 @@ class ListenReceiver(ReplayFilterMixin):
             if sent:
                 if self._resilient_audio is not None and self.host.stt_service == STTService.soniox:
                     self._resilient_audio.append(outbound_audio, outbound_start_sample)
-                if self._window_replay_audio is not None and self.host.stt_model == 'parakeet-window':
-                    self._window_replay_audio.append(outbound_audio, outbound_start_sample)
+                if (ring := self._window_ring()) is not None:
+                    ring.append(outbound_audio, outbound_start_sample)
                 self._capture('capture_outbound_stt', outbound_audio)
                 self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
                 self._stt_buffer_start_sample = None
@@ -1896,8 +1896,8 @@ class ListenReceiver(ReplayFilterMixin):
         self._resilient_closing = True
         if self._resilient_audio is not None:
             self._resilient_audio.close()
-        if self._window_replay_audio is not None:
-            self._window_replay_audio.close()
+        if (ring := getattr(self, '_window_replay_audio', None)) is not None:
+            ring.close()
         for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
             if socket:
                 try:
