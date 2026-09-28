@@ -131,7 +131,7 @@ jobs:
             python3 backend/scripts/scheduler_reconcile.py \
               --environment prod --project "${{ vars.GCP_PROJECT_ID }}" \
               --apply --jobs omi-admin-stats-precompute
+            python3 backend/scripts/scheduler_reconcile.py \
+              --environment prod --project "${{ vars.GCP_PROJECT_ID }}" \
+              --check --jobs omi-admin-stats-precompute
           fi
-          python3 backend/scripts/scheduler_reconcile.py \
-            --environment "$SCHEDULER_ENVIRONMENT" \
-            --project "${{ vars.GCP_PROJECT_ID }}" --check

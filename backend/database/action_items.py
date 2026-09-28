@@ -221,6 +221,10 @@ def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial:
         action_item_data.setdefault('provenance', [])
         action_item_data.setdefault('sort_order', 0)
         action_item_data.setdefault('indent_level', 0)
+    else:
+        for field in ('description', 'owner', 'source', 'provenance', 'sort_order', 'indent_level', 'exported'):
+            if field in action_item_data and action_item_data.get(field) is None:
+                action_item_data.pop(field)
     # Normalize date fields to timezone-aware UTC datetimes. These can arrive as
     # ISO strings or datetime objects from tool-/LLM-created action items (extraction
     # models use plain ``datetime``, not ``AwareDatetime``). Firestore rejects

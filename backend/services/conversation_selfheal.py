@@ -27,7 +27,12 @@ import database.conversations as conversations_db
 from services.capture_wedge import run_capture_wedge_check
 from utils.conversations import lifecycle
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.conversations.recovery import raw_transcript_bytes, recovery_audio_file_ids, structured_is_rich
+from utils.conversations.recovery import (
+    raw_transcript_bytes,
+    recovery_audio_file_ids,
+    structured_is_rich,
+    verified_recovery_discard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +178,10 @@ def _verify_pending_attempts(
             raw_transcript_bytes(conversation) >= int(job.get('selfheal_transcript_bytes') or 0)
             and recorded_ids <= current_ids
         )
-        if preserved and structured_is_rich(conversation.get('structured')):
+        valid_output = structured_is_rich(conversation.get('structured')) or verified_recovery_discard(
+            conversation.get('discarded'), conversation.get('relevance_decision')
+        )
+        if preserved and valid_output:
             _log_action('verified', reason='ok', uid=uid, conversation_id=conversation_id)
             counters['verified'] += 1
         else:

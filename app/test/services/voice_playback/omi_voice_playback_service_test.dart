@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/http/api/tts.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
+import 'package:omi/services/voice_playback/progressive_tts_audio_source.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -19,6 +20,26 @@ const _firstSentence = 'This is the first sentence for playback testing.';
 const _twoChunkReply =
     '$_firstSentence And then the reply continues with additional words until the chunker is past the first ideal window.';
 final _mp3 = Uint8List.fromList(const [1, 2, 3]);
+
+TtsSynthesisRequest _streamRequest(
+  Stream<List<int>> bytes, {
+  int? contentLength,
+  Future<void> Function()? onCancel,
+}) {
+  Future<void> cancel() => onCancel?.call() ?? Future<void>.value();
+
+  return TtsSynthesisRequest(
+    response: Future.value(
+      TtsAudioStream(
+        bytes: bytes,
+        contentLength: contentLength,
+        contentType: 'audio/mpeg',
+        cancel: cancel,
+      ),
+    ),
+    cancel: cancel,
+  );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -60,18 +81,25 @@ void main() {
   });
 
   Future<void> install({
-    required Future<Uint8List?> Function(String text) synthesize,
+    Future<Uint8List?> Function(String text)? synthesize,
+    TtsSynthesisRequest Function(String text)? synthesizeStream,
     Future<void> Function(Uint8List bytes)? play,
+    Future<Duration> Function(ProgressiveTtsAudioSource source)? playStream,
+    Future<void> Function()? stopPlayback,
+    Duration? streamStallTimeout,
     VoicePlaybackOutputSnapshot output = const VoicePlaybackOutputSnapshot(
       headphonesConnected: true,
       checkFailed: false,
       route: VoiceReplyPlaybackOutputRoute.bluetooth,
     ),
   }) async {
+    assert(synthesize != null || synthesizeStream != null);
     service.debugHooks = VoicePlaybackDebugHooks(
-      synthesize: ({required String text}) => synthesize(text),
+      synthesize: synthesize == null ? null : ({required String text}) => synthesize(text),
+      synthesizeStream: synthesizeStream == null ? null : ({required String text}) => synthesizeStream(text),
       play: play ?? (bytes) async => plays.add(bytes),
-      stopPlayback: () async {},
+      playStream: playStream,
+      stopPlayback: stopPlayback ?? () async {},
       speak: (text) async => spoken.add(text),
       stopSpeak: () async {},
       probeOutput: () async {
@@ -85,6 +113,7 @@ void main() {
         delays.add(completer);
         return completer.future;
       },
+      streamStallTimeout: streamStallTimeout,
     );
   }
 
@@ -334,6 +363,7 @@ void main() {
     await service.beginResponse(messageId: 'again');
     service.debugNotifyPlaybackCompleted();
     service.debugNotifyPlaybackCompleted();
+    await pumpEventQueue();
     await releaseDelays();
     await flush();
     expect(playbackEvents(), hasLength(2));
@@ -397,6 +427,165 @@ void main() {
     expect(event['chunks_played'], 0);
     expect(event['first_audio_latency_ms'], greaterThanOrEqualTo(0));
     expect(event['first_audio_latency_ms'], 40);
+  });
+
+  test('progressive playback starts after prebuffer before the response completes', () async {
+    SharedPreferencesUtil().voiceResponseMode = 2;
+    final bytes = StreamController<List<int>>();
+    final playbackStarted = Completer<void>();
+    addTearDown(() async {
+      if (!bytes.isClosed) await bytes.close();
+    });
+    await install(
+      synthesizeStream: (_) => _streamRequest(bytes.stream, contentLength: 8192),
+      playStream: (source) async {
+        playbackStarted.complete();
+        await source.settled;
+        return const Duration(milliseconds: 300);
+      },
+    );
+
+    await service.beginResponse(messageId: 'progressive');
+    service.updateStreamingResponse(messageId: 'progressive', fullText: _firstSentence, isFinal: true);
+    bytes.add(Uint8List(progressiveTtsPrebufferBytes));
+
+    await playbackStarted.future.timeout(const Duration(seconds: 1));
+    expect(bytes.isClosed, isFalse, reason: 'playback must begin while HTTP bytes are still arriving');
+    expect(playbackEvents(), isEmpty);
+
+    bytes.add(Uint8List(progressiveTtsPrebufferBytes));
+    await bytes.close();
+    await pumpEventQueue();
+    await releaseDelays();
+    await flush();
+
+    expect(spoken, isEmpty);
+    expect(playbackEvents().single['outcome'], 'played');
+  });
+
+  test('mid-stream failure plays buffered audio then speaks only the remaining suffix', () async {
+    SharedPreferencesUtil().voiceResponseMode = 2;
+    final bytes = StreamController<List<int>>();
+    final playbackStarted = Completer<void>();
+    await install(
+      synthesizeStream: (_) => _streamRequest(bytes.stream, contentLength: progressiveTtsPrebufferBytes * 2),
+      playStream: (source) async {
+        playbackStarted.complete();
+        await source.settled;
+        return const Duration(milliseconds: 300);
+      },
+    );
+
+    await service.beginResponse(messageId: 'partial');
+    service.updateStreamingResponse(messageId: 'partial', fullText: _firstSentence, isFinal: true);
+    bytes.add(Uint8List(progressiveTtsPrebufferBytes));
+    await playbackStarted.future.timeout(const Duration(seconds: 1));
+    bytes.addError(StateError('connection reset'));
+    await bytes.close();
+    await pumpEventQueue();
+    await releaseDelays();
+    await flush();
+
+    expect(spoken, hasLength(1));
+    expect(spoken.single, isNot(_firstSentence));
+    expect(_firstSentence.endsWith(spoken.single), isTrue);
+    final event = playbackEvents().single;
+    expect(event['outcome'], 'played_with_fallback');
+    expect(event['chunks_played'], 1);
+    expect(event['fallback_reason'], 'no_response');
+  });
+
+  test('interrupt cancels the response subscription and abort trigger without fallback', () async {
+    SharedPreferencesUtil().voiceResponseMode = 2;
+    var subscriptionCancelled = false;
+    var requestCancelled = false;
+    final bytes = StreamController<List<int>>(onCancel: () => subscriptionCancelled = true);
+    final playbackStarted = Completer<void>();
+    await install(
+      synthesizeStream: (_) => _streamRequest(
+        bytes.stream,
+        contentLength: 8192,
+        onCancel: () async => requestCancelled = true,
+      ),
+      playStream: (source) async {
+        playbackStarted.complete();
+        await source.settled;
+        return const Duration(milliseconds: 100);
+      },
+    );
+
+    await service.beginResponse(messageId: 'cancel-stream');
+    service.updateStreamingResponse(messageId: 'cancel-stream', fullText: _firstSentence, isFinal: true);
+    bytes.add(Uint8List(progressiveTtsPrebufferBytes));
+    await playbackStarted.future.timeout(const Duration(seconds: 1));
+    await service.interrupt(source: VoiceReplyPlaybackInterruptSource.userTyped);
+    await pumpEventQueue();
+    await flush();
+
+    expect(subscriptionCancelled, isTrue);
+    expect(requestCancelled, isTrue);
+    expect(spoken, isEmpty);
+    expect(playbackEvents().single['outcome'], 'interrupted');
+  });
+
+  test('a stream with no bytes times out and falls back instead of hanging', () async {
+    SharedPreferencesUtil().voiceResponseMode = 2;
+    final bytes = StreamController<List<int>>();
+    var playCalled = false;
+    await install(
+      synthesizeStream: (_) => _streamRequest(bytes.stream),
+      playStream: (source) async {
+        playCalled = true;
+        return Duration.zero;
+      },
+      streamStallTimeout: const Duration(milliseconds: 20),
+    );
+
+    await service.beginResponse(messageId: 'stall');
+    service.updateStreamingResponse(messageId: 'stall', fullText: _firstSentence, isFinal: true);
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    await pumpEventQueue();
+    await releaseDelays();
+    await flush();
+
+    expect(playCalled, isFalse);
+    expect(spoken, [_firstSentence]);
+    expect(playbackEvents().single['outcome'], 'fallback_only');
+    expect(playbackEvents().single['fallback_reason'], 'no_response');
+  });
+
+  test('multiple progressive chunks preserve synthesis and playback order', () async {
+    SharedPreferencesUtil().voiceResponseMode = 2;
+    final synthesized = <String>[];
+    final playedIds = <int>[];
+    var nextId = 0;
+    await install(
+      synthesizeStream: (text) {
+        synthesized.add(text);
+        final id = ++nextId;
+        return _streamRequest(
+          Stream<List<int>>.fromIterable([
+            Uint8List.fromList(List<int>.filled(progressiveTtsPrebufferBytes, id)),
+          ]),
+          contentLength: progressiveTtsPrebufferBytes,
+        );
+      },
+      playStream: (source) async {
+        final data = await source.collectBytes();
+        playedIds.add(data.first);
+        return const Duration(milliseconds: 100);
+      },
+    );
+
+    await service.beginResponse(messageId: 'ordered');
+    service.updateStreamingResponse(messageId: 'ordered', fullText: _twoChunkReply, isFinal: true);
+    await pumpEventQueue();
+    await releaseDelays();
+    await flush();
+
+    expect(synthesized, [_firstSentence, _twoChunkReply.substring(_firstSentence.length).trim()]);
+    expect(playedIds, [1, 2]);
+    expect(playbackEvents().single['chunks_played'], 2);
   });
 
   test('a superseded in-flight synthesis cannot enter the next lifecycle', () async {

@@ -71,6 +71,21 @@ can prioritize Parakeet only when that live-model capability matches; it never
 overrides the selected service/language/model tuple. All providers implement the
 `STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
 
+When `STT_ROUTING_MODE=shadow`, listen computes a fleet score from bounded
+provider/language transcript outcomes but still connects in configured order.
+`on` ranks only the legs that were already eligible for the session. The
+windowed Parakeet allocation and the language arm keep their selected primary;
+account benches exclude a provider regardless of score. A 2% deterministic
+probe floor lets lower-score eligible providers demonstrate recovery. The
+background Redis refresh has a 75 ms default deadline; stale cache falls back
+to process-local health. Neither Redis reads nor writes run on the connection
+path. `off` returns to configured
+order without a code change. Each leg emits `text` only when it produces its
+first nonempty text within `STT_NO_TEXT_SECONDS` of VAD-confirmed speech;
+eligible legs that miss the deadline emit `no_text`. The existing terminal
+session metric below remains the user-facing SLI. See the
+[live STT routing runbook](runbooks/live-stt-routing.md).
+
 Soniox streams final token deltas whose network-frame boundaries can split a
 word. Its adapter retains the pending word across frames, preserving subword
 text until whitespace, a speaker change, a gap of at least three seconds, or
@@ -102,6 +117,10 @@ callback even when the provider completion deadline expires. Off-loop finish
 and finalize calls schedule their work on the provider loop. These contracts
 are exercised in `tests/unit/test_soniox_token_boundaries.py`, including the
 downstream transcript merge that inserts spaces between distinct segments.
+The live transaction merges incoming words after applying current speaker
+identity, so their `speaker_match_source` matches the saved tail. It still
+reads manual speaker receipts inside the transaction before joining segments;
+receipt-covered words remain separate.
 
 The managed Soniox leg keeps active VAD gating: after speech it forwards the
 four-second hangover, then withholds silence and sends a keepalive control every
@@ -686,6 +705,16 @@ verdicts are measured but deliberately produce nothing in v1 because the task
 extractor and capture policy have no question-routing destination. This path
 has no realtime wake-word state or notification surface.
 
+After `_write_action_items` persists extracted tasks, its background
+`auto_sync_action_items_batch` worker exports them to the configured default
+task integration. Cloud exports are independent: each item retains one result
+in input order, and a read, OAuth refresh, or export-marker failure does not
+erase earlier successes or skip later items. Per-item exceptions emit bounded
+degraded telemetry and a generic failure; shared configuration failures still
+stop the batch and cancellation propagates. Apple Reminders retains its single
+push. This is best-effort export, not a durable retry queue: the worker does not
+automatically repeat an uncertain provider create after a failed marker write.
+
 With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
 a normalized meeting roster in the CONVERSATION METADATA prefix: participant
 names and organizations come from the resolved calendar or screen-derived
@@ -743,13 +772,22 @@ or raw exception text. `blocked_byok` is an explicit recovery state: durable
 offline BYOK is not supported without a separately reviewed credential broker;
 the worker must never silently use Omi keys.
 
-A stale `in_progress` row with content can also be finalized by the opt-in
-self-heal sweep as a `SERVER_RECOVERY` admission on the same conversation id —
+A stale `in_progress` row with content can also be finalized by the always-on
+backend reconciliation sweep (or the opt-in self-heal sweep) as a
+`SERVER_RECOVERY` admission on the same conversation id —
 never a new conversation — through this same durable job ledger. The recovery
 run reuses normal persistence but is fenced by a pre-persist structured guard:
-output carrying only the deterministic minimum raises before the
-completed-status transaction, leaving the row's content and lifecycle state
-for the existing dead-letter review workflow.
+kept output carrying only the deterministic minimum raises before the
+completed-status transaction. An explicit relevance discard is a valid
+terminal outcome without rich structure only when the sweep verifies its
+persisted server-recovery verdict and preserved transcript and audio IDs. With
+`LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED`, a clear rule-level
+ordinary discard skips the paid notes model, and the first minimal result ends
+the job instead of retrying the same content. The lease-fenced terminal write
+sets a still-bound conversation to completed and visible with its transcript
+retained; explicit reprocess remains available. Provider and parser failures
+stay on the ordinary retry budget. Turning the flag off restores the previous
+retry behavior.
 
 Live listen sessions also hold a five-minute lease on their user-scoped
 `recording_sessions` document. Accepted decoded audio renews it at most once a

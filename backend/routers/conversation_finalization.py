@@ -20,6 +20,7 @@ from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.processing_trigger import trigger_for_finalization_job
+from utils.conversations.recovery import RecoveryStructureUnavailableError, recovery_minimum_terminal_enabled
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
     ConversationFinalizationError,
@@ -223,7 +224,39 @@ async def run_listen_finalization_job(
                 final_attempt=max(task_retry_count, failed_attempts)
                 >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
             )
-        except ConversationFinalizationError:
+        except ConversationFinalizationError as error:
+            if recovery_minimum_terminal_enabled() and isinstance(error.__cause__, RecoveryStructureUnavailableError):
+                # A completed fanout wins even if its worker failed before
+                # acknowledging the job. The lease-fenced transaction also
+                # preserves a still-bound conversation as visible transcript.
+                if job.get('fanout_status') == 'completed':
+                    completed = await run_blocking(
+                        db_executor,
+                        jobs_db.mark_finalization_completed,
+                        job_id,
+                        dispatch_generation,
+                        claimed_lease_epoch,
+                    )
+                    if not completed:
+                        return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+                    return JSONResponse(status_code=200, content={'status': 'done'})
+                terminal = await run_blocking(
+                    db_executor,
+                    final_attempt_failed,
+                    job_id,
+                    dispatch_generation,
+                    claimed_lease_epoch,
+                    max(task_retry_count, failed_attempts) + 1,
+                    failure_code='recovery_structure_unavailable',
+                )
+                if not terminal:
+                    return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+                logger.error(
+                    'listen finalization recovery minimum terminal job_hash=%s dispatch_generation=%s',
+                    finalization_diagnostic_id(job_id),
+                    dispatch_generation,
+                )
+                return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             terminal = await _retry_or_dead_letter(
                 job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, 'processing_failed'
             )

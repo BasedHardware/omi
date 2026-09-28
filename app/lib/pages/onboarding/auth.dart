@@ -51,7 +51,7 @@ class _AuthComponentState extends State<AuthComponent> {
               const SizedBox(height: 32),
 
               // Sign in buttons
-              if (Platform.isIOS || Platform.isAndroid) ...[
+              if (!provider.isLocalDevProfile && (Platform.isIOS || Platform.isAndroid)) ...[
                 SizedBox(
                   width: double.infinity,
                   height: 56,
@@ -86,32 +86,33 @@ class _AuthComponentState extends State<AuthComponent> {
               ],
 
               // Google sign in button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: () {
-                    OmiHaptics.selection();
-                    provider.onGoogleSignIn(widget.onSignIn);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: OmiColors.accent,
-                    foregroundColor: OmiColors.onAccent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const FaIcon(FontAwesomeIcons.google, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        context.l10n.signInWithGoogle,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                      ),
-                    ],
+              if (!provider.isLocalDevProfile)
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      OmiHaptics.selection();
+                      provider.onGoogleSignIn(widget.onSignIn);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: OmiColors.accent,
+                      foregroundColor: OmiColors.onAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const FaIcon(FontAwesomeIcons.google, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          context.l10n.signInWithGoogle,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
               // Local development sign-in. Only rendered for a local_dev
               // build: community builds cannot complete a real OAuth flow,
