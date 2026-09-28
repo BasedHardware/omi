@@ -183,12 +183,14 @@ enum SilentMicDiagnosticTelemetry {
 
   static func armedProperties(
     attemptID: String, phase: String, trigger: String, launchContext: String,
-    updateAttemptID: String?, duration: String, presenceReason: String? = nil
+    updateAttemptID: String?, duration: String, presenceReason: String? = nil,
+    flapCount: Int = 0, continuedEpisode: Bool = false
   ) -> [String: Any] {
     var properties: [String: Any] = [
       "platform": "macos", "attempt_id": attemptID, "phase": phase,
       "trigger": trigger, "launch_context": launchContext,
       "update_attempt_id": updateAttemptID ?? "none", "armed_duration": duration,
+      "flap_count": countBucket(flapCount), "continued_episode": continuedEpisode,
     ]
     if let presenceReason { properties["presence_reason"] = presenceReason }
     return properties
