@@ -1045,10 +1045,24 @@ actor InsightAssistant: ProactiveAssistant {
   /// read-only and excluded-app filtered regardless of which proactive engine is active:
   /// `read_only` keeps the executor on its SELECT-only path (a read-only pool reader), and
   /// the privacy rewrite keeps excluded apps' OCR out of the model's context.
+  ///
+  /// `ChatToolExecutor.execute` is MainActor-isolated. That closure cannot be a default
+  /// argument on the seam below: Swift 6 rejects a main-actor default value in a
+  /// nonisolated context. Production calls this overload; tests pass `execute`.
+  /// The seam is `nonisolated(nonsending)` so the closure stays on the caller's actor
+  /// instead of being sent into a `@concurrent` method.
+  @MainActor
   static func executeInvestigationSQL(
     _ query: String,
+    excludedApps: Set<String>
+  ) async -> String {
+    await executeInvestigationSQL(query, excludedApps: excludedApps) { await ChatToolExecutor.execute($0) }
+  }
+
+  nonisolated(nonsending) static func executeInvestigationSQL(
+    _ query: String,
     excludedApps: Set<String>,
-    execute: (ToolCall) async -> String = { await ChatToolExecutor.execute($0) }
+    execute: (ToolCall) async -> String
   ) async -> String {
     await execute(InsightSQLPrivacy.investigationToolCall(query: query, excludedApps: excludedApps))
   }
