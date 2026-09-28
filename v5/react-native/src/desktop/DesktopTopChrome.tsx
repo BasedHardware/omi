@@ -49,6 +49,7 @@ const filterIcons: Record<ActivityFilterId, MaterialIconName> = {
 export type OmnibarMode = 'Ask' | 'Search';
 
 type Props = {
+  hostMode?: boolean;
   chatBusy?: boolean;
   mode?: OmnibarMode;
   onModeChange?: (mode: OmnibarMode) => void;
@@ -82,6 +83,7 @@ type Props = {
 };
 
 export function DesktopChrome({
+  hostMode = false,
   chatBusy = false,
   mode = 'Ask',
   onModeChange,
@@ -289,7 +291,7 @@ export function DesktopChrome({
         <View
           accessibilityLabel="Window controls"
           style={styles.windowControls}>
-          <DesktopTrafficLights />
+          {!hostMode && <DesktopTrafficLights />}
         </View>
         <View style={styles.omnibar}>
           <View style={styles.modes}>

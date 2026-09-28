@@ -93,7 +93,7 @@ import {
 
 export {omiDotColor};
 
-type AppProps = {initialRoute?: string};
+type AppProps = {initialRoute?: string; hostMode?: boolean};
 
 const quickPrompts = [
   'What did I talk about today?',
@@ -122,7 +122,7 @@ const routeByMobileRoute: Record<MobileRoute, Route> = {
   apps: 'Connectors',
 };
 
-function App({initialRoute}: AppProps): React.JSX.Element {
+function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
   const {width} = useWindowDimensions();
   const macDesktop = Platform.OS === 'macos';
   const nativeSessionRequired =
@@ -205,10 +205,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     signInAndRefresh,
     signOutAndRefresh,
     signingIn,
-  } = useOnboarding(nativeSessionRequired, refreshReadsViaRef);
+  } = useOnboarding(nativeSessionRequired, refreshReadsViaRef, hostMode);
   // Cloud reads/chat need a live session: onboarding done AND signed in. A
   // returning signed-out user sits in the shell's Welcome-back card instead.
-  const sessionReady = onboardingRequired === false && !returningUser;
+  const sessionReady =
+    !hostMode && onboardingRequired === false && !returningUser;
   const {
     allHomeReadsUnavailable,
     tasksLoadingMore,
@@ -281,7 +282,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       cancelled = true;
     };
   }, []);
-  const ambient = useAmbientAudio(audioMode, sessionReady);
+  const ambient = useAmbientAudio(audioMode, sessionReady && !hostMode);
   const {
     deviceBusy,
     deviceScanMessage,
@@ -292,7 +293,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     scanForOmi,
     toggleDevice,
   } = useNativeDevices({
-    enabled: onboardingRequired === false,
+    enabled: onboardingRequired === false && !hostMode,
   });
   const searchRef = useRef<TextInput>(null);
   // Drops the previous session's transcript, cursors, and message bookkeeping
@@ -1078,7 +1079,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     // the product shell. The probe keeps traffic-light space and the mark,
     // and a signed-out Mac sees Welcome, so no signed-in IA leaks before
     // OmiAuth establishes a real session. DesktopApp enforces the same gate.
-    if (onboardingRequired !== false) {
+    if (onboardingRequired !== false && !hostMode) {
       // First-run onboarding and the session probe render before the product
       // shell, but the window material already follows the appearance pref —
       // they must read the same theme or light mode shows dark ink on glass.
@@ -1099,6 +1100,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     return (
       <PageShell macDesktop workspaceMaterial>
         <DesktopApp
+          hostMode={hostMode}
           {...taskMutations}
           activeGenerationId={activeGenerationId ?? activeOmiRequestId}
           authError={authError}
@@ -1120,7 +1122,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           hasOlderChat={hasOlderChat}
           loadingOlderChat={loadingOlderChat}
           loadingHistory={!chatHistorySettled}
-          liveVoiceControl={desktopLiveControl}
+          liveVoiceControl={hostMode ? undefined : desktopLiveControl}
           ambient={ambient}
           messages={messages}
           reads={reads}
@@ -1154,7 +1156,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           }}
           initialAppearance={appearance}
           onAppearanceChange={setAppearance}
-          captureAutoStart={screenCaptureEnabled}
+          captureAutoStart={!hostMode && screenCaptureEnabled}
           onWorkspaceReload={retireWorkspace}
           outcomes={readOutcomes}
           postSetupHomeCue={postSetupHomeCue}

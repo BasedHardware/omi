@@ -27,13 +27,9 @@ if xcode_clang.include?(' ')
   ENV['PATH'] = "#{File.expand_path('scripts', __dir__)}:#{ENV['PATH']}"
 end
 
-target 'RnRuntime-macOS' do
+def configure_omi_react_native
   platform :macos, '14.0'
   use_native_modules!(['ruby', '-e', 'print ARGV[0]', phone_only_filtered_config])
-
-  # Flags change depending on the env values.
-  flags = get_default_flags()
-
   use_react_native!(
     :path => '../node_modules/react-native-macos',
     :hermes_enabled => false,
@@ -41,21 +37,26 @@ target 'RnRuntime-macOS' do
     # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
+end
 
-  post_install do |installer|
-    react_native_post_install(installer)
-    installer.pods_project.targets.each do |target|
-      target.build_configurations.each do |configuration|
-        configuration.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '14.0'
-        # The generated CocoaPods project otherwise points at the iOS package.
-        # macOS codegen script phases must inspect the macOS React Native tree.
-        configuration.build_settings['REACT_NATIVE_PATH'] = '${PODS_ROOT}/../../node_modules/react-native-macos'
-      end
+target 'RnRuntime-macOS' do
+  configure_omi_react_native
+end
 
+target 'OmiV5Runtime' do
+  configure_omi_react_native
+end
+
+post_install do |installer|
+  react_native_post_install(installer)
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |configuration|
+      configuration.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '14.0'
+      # The generated CocoaPods project otherwise points at the iOS package.
+      # macOS codegen script phases must inspect the macOS React Native tree.
+      configuration.build_settings['REACT_NATIVE_PATH'] = '${PODS_ROOT}/../../node_modules/react-native-macos'
       if target.name == 'fmt'
-        target.build_configurations.each do |configuration|
-          configuration.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
-        end
+        configuration.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
       end
     end
   end
