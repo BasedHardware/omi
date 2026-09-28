@@ -39,6 +39,7 @@ from .firestore_index_registry import (
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
 )
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
+from .conversation_photo_read import photo_doc_for_read
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
@@ -420,8 +421,7 @@ def get_conversation_photos(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     photos_ref = conversation_ref.collection('photos')
-    photos = [doc.to_dict() for doc in photos_ref.stream()]
-    return photos
+    return [photo_doc_for_read(doc) for doc in photos_ref.stream()]
 
 
 def iter_all_conversation_photos(uid: str):

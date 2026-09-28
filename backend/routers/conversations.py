@@ -1234,7 +1234,7 @@ def get_conversation_photos(
     conversation_id: str, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "frame_requests:read"))
 ):
     _get_valid_conversation_by_id(uid, conversation_id)
-    return [ConversationPhoto.from_storage(p) for p in conversations_db.get_conversation_photos(uid, conversation_id)]
+    return conversations_db.get_conversation_photos(uid, conversation_id)
 
 
 @router.get(
