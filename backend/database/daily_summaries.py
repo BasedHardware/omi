@@ -72,8 +72,9 @@ def upsert_desktop_daily_usage(
     clean_uid = _clean_uid(uid)
     clean_date = _clean_date(date, 'date')
     clean_device_id = _clean_id(client_device_id, 'client_device_id')
-    clean_tz = timezone_name.strip() if isinstance(timezone_name, str) and timezone_name.strip() else 'UTC'
-    if not isinstance(counters, dict):
+    clean_tz = timezone_name.strip() if timezone_name and timezone_name.strip() else 'UTC'
+    raw_counters: Any = counters
+    if not isinstance(raw_counters, dict):
         raise ValueError('counters must be a dictionary')
 
     user_ref = db.collection('users').document(clean_uid)
@@ -93,9 +94,9 @@ def upsert_desktop_daily_usage(
         }
         for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS:
             previous = existing.get(field, 0)
-            previous_value = previous if isinstance(previous, int) and not isinstance(previous, bool) else 0
-            incoming = counters.get(field, 0)
-            incoming_value = incoming if isinstance(incoming, int) and not isinstance(incoming, bool) else 0
+            previous_value = int(previous) if type(previous) is int else 0
+            incoming = raw_counters.get(field, 0)
+            incoming_value = int(incoming) if type(incoming) is int else 0
             payload[field] = max(previous_value, incoming_value)
         write_transaction.set(usage_ref, payload)
 
@@ -110,15 +111,17 @@ def get_desktop_daily_usage(uid: str, date: str) -> Dict[str, int]:
     clean_uid = _clean_uid(uid)
     clean_date = _clean_date(date, 'date')
     user_ref = db.collection('users').document(clean_uid)
-    query = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).where(filter=FieldFilter('date', '==', clean_date))
-    totals = {field: 0 for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS}
-    for doc in query.stream():
-        raw = doc.to_dict()
+    docs = (
+        user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).where(filter=FieldFilter('date', '==', clean_date)).stream()
+    )
+    totals: Dict[str, int] = {field: 0 for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS}
+    for doc in docs:
+        raw = doc.to_dict() or {}
         if not isinstance(raw, dict):
             continue
         for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS:
-            value = raw.get(field)
-            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            value = raw.get(field, 0)
+            if type(value) is int and value >= 0:
                 totals[field] += value
     return totals
 
@@ -135,13 +138,14 @@ def create_daily_summary(uid: str, summary_data: Dict[str, Any]) -> str:
         The summary ID
     """
     clean_uid = _clean_uid(uid)
-    if not isinstance(summary_data, dict):
+    raw_data: Any = summary_data
+    if not isinstance(raw_data, dict):
         raise ValueError('summary_data must be a dictionary')
-    summary_id = _clean_id(summary_data.get('id'), 'summary_id')
+    summary_id = _clean_id(raw_data.get('id'), 'summary_id')
 
     user_ref = db.collection('users').document(clean_uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
-    payload = dict(summary_data)
+    payload = dict(raw_data)
     payload['id'] = summary_id
     summary_ref.set(payload)
     return summary_id
@@ -214,15 +218,15 @@ def get_daily_summaries(
         List of summary data dicts
     """
     clean_uid = _clean_uid(uid)
-    safe_limit = max(1, min(int(limit) if isinstance(limit, int) and not isinstance(limit, bool) else 30, 100))
-    safe_offset = max(0, int(offset) if isinstance(offset, int) and not isinstance(offset, bool) else 0)
+    safe_limit = max(1, min(int(limit) if type(limit) is int else 30, 100))
+    safe_offset = max(0, int(offset) if type(offset) is int else 0)
 
     user_ref = db.collection('users').document(clean_uid)
     query = user_ref.collection(DAILY_SUMMARIES_COLLECTION)
 
-    if start_date is not None and isinstance(start_date, str) and start_date.strip():
+    if start_date and start_date.strip():
         query = query.where(filter=FieldFilter('date', '>=', start_date.strip()))
-    if end_date is not None and isinstance(end_date, str) and end_date.strip():
+    if end_date and end_date.strip():
         query = query.where(filter=FieldFilter('date', '<=', end_date.strip()))
 
     query = query.order_by('date', direction=firestore.Query.DESCENDING)
@@ -246,7 +250,8 @@ def update_daily_summary(uid: str, summary_id: str, summary_data: Dict[str, Any]
     """
     clean_uid = _clean_uid(uid)
     clean_summary_id = _clean_id(summary_id, 'summary_id')
-    if not isinstance(summary_data, dict):
+    raw_data: Any = summary_data
+    if not isinstance(raw_data, dict):
         raise ValueError('summary_data must be a dictionary')
 
     user_ref = db.collection('users').document(clean_uid)
@@ -254,7 +259,7 @@ def update_daily_summary(uid: str, summary_id: str, summary_data: Dict[str, Any]
     # Force id back to the existing doc id: the generator always allocates a
     # fresh UUID, and we don't want that leaking into the stored payload
     # where readers key off summary['id'].
-    payload: Dict[str, Any] = {**summary_data, 'id': clean_summary_id}
+    payload: Dict[str, Any] = {**raw_data, 'id': clean_summary_id}
     summary_ref.set(payload)
 
 
@@ -281,11 +286,12 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
 def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> None:
     clean_uid = _clean_uid(uid)
     clean_summary_id = _clean_id(summary_id, 'summary_id')
-    if not isinstance(visibility, str) or not visibility.strip():
+    clean_vis = visibility.strip() if visibility and visibility.strip() else None
+    if not clean_vis:
         raise ValueError('visibility must be a non-empty string')
     user_ref = db.collection('users').document(clean_uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(clean_summary_id)
-    summary_ref.update({'visibility': visibility.strip()})
+    summary_ref.update({'visibility': clean_vis})
 
 
 def get_summaries_count(uid: str) -> int:
