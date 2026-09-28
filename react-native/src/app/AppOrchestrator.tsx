@@ -1371,7 +1371,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         !compact && !macDesktop && styles.shellWide,
         macDesktop && styles.macShell,
       ]}>
-      {!compact ? nav : null}
+      {!compact && sessionReady ? nav : null}
       <View
         style={[
           styles.paneInset,
