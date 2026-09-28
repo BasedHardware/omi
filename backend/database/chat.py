@@ -958,6 +958,7 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
     Migrates a batch of chat messages to the target protection level.
     """
     batch = db.batch()
+    batch_count = 0
     messages_ref = db.collection('users').document(uid).collection('messages')
     doc_refs = [messages_ref.document(msg_id) for msg_id in message_doc_ids]
     doc_snapshots = db.get_all(doc_refs)

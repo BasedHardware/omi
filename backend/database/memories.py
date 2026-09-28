@@ -1503,6 +1503,7 @@ def migrate_memories_level_batch(
     """
     database = _get_db(firestore_client)
     batch = database.batch()
+    batch_count = 0
     memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     doc_refs = [memories_ref.document(mem_id) for mem_id in memory_ids]
     doc_snapshots = database.get_all(doc_refs)
