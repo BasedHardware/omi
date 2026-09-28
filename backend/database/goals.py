@@ -889,7 +889,10 @@ def _append_goal_progress_event(
             goal_patch['metric'] = event.metric.model_dump(mode='python')
             goal_patch.update(_metric_aliases(event.metric))
         write_transaction.update(goal_ref, goal_patch)
-        if authority_account_generation is not None and record.metric is not None:
+        # History is a projection of this journal commit for every producer.
+        # Keeping it here prevents partial saves and post-commit writers from
+        # overwriting newer progress; idempotent replays return before any write.
+        if record.metric is not None:
             history_ref = goal_ref.collection(goal_history_collection).document(history_date)
             write_transaction.set(
                 history_ref,
@@ -951,7 +954,7 @@ def update_goal_progress(
         return None
     metric = _metric_from_storage(goal) or GoalMetric(type=GoalType.numeric, current=0, target=0)
     metric = metric.model_copy(update={'current': current_value})
-    record = _append_goal_progress_event(
+    _append_goal_progress_event(
         uid,
         goal_id,
         GoalProgressEventCreate(
@@ -969,9 +972,6 @@ def update_goal_progress(
         first_write_wins=idempotency_key is not None,
         firestore_client=firestore_client,
     )
-    persisted_value = record.metric.current if record.metric is not None else current_value
-    if authority_account_generation is None:
-        save_goal_progress_history(uid, goal_id, persisted_value, firestore_client=firestore_client)
     return get_goal_by_id(uid, goal_id, firestore_client=firestore_client)
 
 
@@ -982,19 +982,6 @@ def get_task_workflow_account_generation(uid: str, *, firestore_client: Any = No
     if not snapshot.exists:
         return 0
     return int(parse_snapshot_strict(TaskWorkflowControl, snapshot).account_generation)
-
-
-def save_goal_progress_history(
-    uid: str,
-    goal_id: str,
-    value: float,
-    *,
-    firestore_client: Any = None,
-) -> None:
-    now = datetime.now(timezone.utc)
-    history_date = _history_date_str(uid, now, firestore_client=firestore_client)
-    history_ref = _goal_ref(uid, goal_id, firestore_client=firestore_client).collection(goal_history_collection)
-    history_ref.document(history_date).set({'date': history_date, 'value': value, 'recorded_at': now}, merge=True)
 
 
 def get_goal_history(
@@ -1053,7 +1040,6 @@ __all__ = [
     'goal_document_ref',
     'list_goal_progress_events',
     'normalize_goal_storage',
-    'save_goal_progress_history',
     'transition_goal_lifecycle',
     'unfocus_goal',
     'update_goal',
