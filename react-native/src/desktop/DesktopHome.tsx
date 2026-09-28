@@ -59,19 +59,22 @@ const GLANCE_REFRESH_MS = 5 * 60 * 1000;
 type GlanceLine = {title: string; copy: string};
 
 /**
- * Asks the v5 worker for an AI-composed glance line (weather + live Mac
- * context). Any failure — old backend, offline, malformed response — simply
- * leaves the local line in place, so the glance always renders something.
+ * Asks the v5 worker for an AI-composed glance line (live Mac context, recent
+ * topics, weather). Any failure — old backend, offline, malformed response —
+ * simply leaves the local line in place, so the glance always renders
+ * something.
  */
 function useRemoteGlanceLine(input: {
   frame: GlanceFrame | null;
   counts: {conversations: number; memories: number; tasks: number};
+  topics: string[];
 }): GlanceLine | null {
   const [line, setLine] = useState<GlanceLine | null>(null);
   const fetchedAtRef = useRef(0);
+  const topicsKey = input.topics.join('\n');
   const contextKey = `${input.frame?.appName ?? ''}|${
     input.counts.conversations
-  }|${input.counts.memories}|${input.counts.tasks}`;
+  }|${input.counts.memories}|${input.counts.tasks}|${topicsKey}`;
   useEffect(() => {
     let cancelled = false;
     const fetchLine = async () => {
@@ -91,6 +94,7 @@ function useRemoteGlanceLine(input: {
           frontApp: input.frame?.appName.slice(0, 120) ?? '',
           windowTitle: input.frame?.windowTitle.slice(0, 120) ?? '',
           counts: input.counts,
+          topics: input.topics,
           localTimeIso: new Date().toISOString(),
         }),
       });
@@ -139,25 +143,41 @@ function useRemoteGlanceLine(input: {
   return line;
 }
 
-// Playful local fallbacks when there is nothing urgent and no live frame.
-// Real news/weather would need a worker endpoint; these stay on-device and
-// rotate on their own so the glance always says something.
-const GLANCE_IDLE_LINES: {title: string; copy: string}[] = [
+// Local fun-fact fallback for when there is no live frame and the worker line
+// has not arrived: the glance is never placeholder filler, it is at least
+// genuinely fun. Deterministic rotation by time of day, no network needed.
+const GLANCE_FUN_LINES: {title: string; copy: string}[] = [
   {
-    title: 'Nothing urgent',
-    copy: 'The Mac is quiet. A calm moment is still your moment.',
+    title: 'Three hearts',
+    copy: 'An octopus has three hearts, and two of them stop beating whenever it swims.',
   },
   {
-    title: 'Ready when you are',
-    copy: 'Say something when you want Omi listening.',
+    title: 'Eternal honey',
+    copy: 'Honey found in ancient Egyptian tombs is still considered safe to eat.',
   },
   {
-    title: 'All caught up',
-    copy: 'Enjoy the calm — Omi will speak up when something matters.',
+    title: 'Older than trees',
+    copy: 'Sharks were already swimming the oceans before trees existed.',
   },
   {
-    title: 'Listening for what matters',
-    copy: 'Omi is listening for what matters next.',
+    title: 'Venus days',
+    copy: 'A single day on Venus stretches on longer than its whole year around the Sun.',
+  },
+  {
+    title: "Scotland's unicorn",
+    copy: 'The unicorn is the official national animal of Scotland.',
+  },
+  {
+    title: 'Shortest war',
+    copy: 'The Anglo-Zanzibar War of 1896 lasted around 38 minutes.',
+  },
+  {
+    title: 'Otter handholding',
+    copy: 'Sea otters hold hands while they sleep so they do not drift apart.',
+  },
+  {
+    title: 'Berry confusion',
+    copy: 'Bananas count as berries, while strawberries famously do not.',
   },
 ];
 
@@ -213,11 +233,9 @@ function useGlanceFrame(): GlanceFrame | null {
 }
 
 function glanceLine({
-  counts,
   frame,
   minuteOfDay,
 }: {
-  counts: {conversations: number; memories: number; tasks: number};
   frame: GlanceFrame | null;
   minuteOfDay: number;
 }): {title: string; copy: string} {
@@ -234,34 +252,8 @@ function glanceLine({
           : frame.appName,
     };
   }
-  const total =
-    counts.conversations + counts.memories + counts.tasks > 0 || frame != null;
-  if (total) {
-    const parts: string[] = [];
-    if (counts.conversations > 0) {
-      parts.push(
-        `${counts.conversations} conversation${
-          counts.conversations === 1 ? '' : 's'
-        }`,
-      );
-    }
-    if (counts.memories > 0) {
-      parts.push(
-        `${counts.memories} memor${counts.memories === 1 ? 'y' : 'ies'}`,
-      );
-    }
-    if (counts.tasks > 0) {
-      parts.push(`${counts.tasks} task${counts.tasks === 1 ? '' : 's'}`);
-    }
-    return {
-      title: 'Your day so far',
-      copy: parts.length
-        ? parts.join(', ') + ' captured.'
-        : 'Captures on this Mac only so far.',
-    };
-  }
-  return GLANCE_IDLE_LINES[
-    Math.floor(minuteOfDay / 3) % GLANCE_IDLE_LINES.length
+  return GLANCE_FUN_LINES[
+    Math.floor(minuteOfDay / 30) % GLANCE_FUN_LINES.length
   ];
 }
 
@@ -297,17 +289,35 @@ export function GlanceCard({outcomes}: {outcomes: DesktopReadOutcomes | null}) {
     outcomes?.tasks?.status === 'success'
       ? outcomes.tasks.value.items.length
       : 0;
+  // Recent conversation titles, then memory titles: trimmed, deduplicated,
+  // capped at six, so the worker can tailor the glance to what the user has
+  // actually been thinking about.
+  const topics = useMemo(() => {
+    const titles: string[] = [];
+    const push = (title: string) => {
+      const trimmed = title.trim();
+      if (trimmed.length > 0 && !titles.includes(trimmed)) {
+        titles.push(trimmed.slice(0, 80));
+      }
+    };
+    if (outcomes?.conversations?.status === 'success') {
+      for (const item of outcomes.conversations.value.items) {
+        push(item.title);
+      }
+    }
+    if (outcomes?.memories?.status === 'success') {
+      for (const item of outcomes.memories.value.items) {
+        push(item.title);
+      }
+    }
+    return titles.slice(0, 6);
+  }, [outcomes]);
   const remote = useRemoteGlanceLine({
     counts: {conversations, memories, tasks},
     frame,
+    topics,
   });
-  const line =
-    remote ??
-    glanceLine({
-      counts: {conversations, memories, tasks},
-      frame,
-      minuteOfDay,
-    });
+  const line = remote ?? glanceLine({frame, minuteOfDay});
   return (
     <View accessibilityLabel="At a glance">
       <PageHeading title={line.title} subtitle={line.copy} />

@@ -1104,6 +1104,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           liveVoiceControl={desktopLiveControl}
           ambient={ambient}
           messages={messages}
+          reads={reads}
           onDraftChange={setDraft}
           onLoadOlderChat={() => {
             loadOlderMessages().catch(() => undefined);

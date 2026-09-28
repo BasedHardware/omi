@@ -1,8 +1,8 @@
-import type {DesktopRoute} from './DesktopTopChrome';
-
 // First-run exploration checklist. Each item completes the first time the
 // user actually arrives at the surface it points at, and progress persists
-// through the exploreProgress desktop preference (CSV of check ids).
+// through the exploreProgress desktop preference (CSV of check ids). Each
+// interface version maps check ids to its own destinations: v5.1 targets the
+// Activity filter chips, v5 targets the pages rail.
 export type ExploreCheck =
   | 'recall'
   | 'chat'
@@ -13,26 +13,17 @@ export type ExploreCheck =
 export type ExploreChecklistItem = {
   id: ExploreCheck;
   label: string;
-  route: DesktopRoute;
 };
 
 export const EXPLORE_CHECKLIST: ExploreChecklistItem[] = [
-  {id: 'recall', label: 'Find something you saw', route: 'Rewind'},
-  {id: 'chat', label: 'Ask about your day', route: 'Chat'},
-  {
-    id: 'conversations',
-    label: 'Browse your conversations',
-    route: 'Conversations',
-  },
-  {id: 'tasks', label: 'Check your tasks', route: 'Tasks'},
-  {id: 'settings', label: 'Make Omi yours', route: 'Settings'},
+  {id: 'recall', label: 'Find something you saw'},
+  {id: 'chat', label: 'Ask about your day'},
+  {id: 'conversations', label: 'Browse your conversations'},
+  {id: 'tasks', label: 'Check your tasks'},
+  {id: 'settings', label: 'Make Omi yours'},
 ];
 
 const VALID_IDS = new Set<string>(EXPLORE_CHECKLIST.map(item => item.id));
-
-export function exploreCheckForRoute(route: DesktopRoute): ExploreCheck | null {
-  return EXPLORE_CHECKLIST.find(item => item.route === route)?.id ?? null;
-}
 
 export function parseExploreProgress(value: unknown): Set<ExploreCheck> {
   const done = new Set<ExploreCheck>();

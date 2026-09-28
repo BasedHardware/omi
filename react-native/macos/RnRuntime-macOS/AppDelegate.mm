@@ -12,7 +12,9 @@
 #import <stdio.h>
 
 static const CGFloat OmiWindowInset = 12.0;
-static const CGFloat OmiChromeRowHeight = 52.0;
+// Matches desktopOmnibarHeight in desktopChrome.ts: the top chrome row the
+// traffic lights and drag surface align to. v5 and v5.1 shells share it.
+static const CGFloat OmiChromeRowHeight = 44.0;
 static NSString *const OmiWindowPresentationChanged = @"OmiWindowPresentationChanged";
 
 // An inert React marker changes the existing window, never reparents React

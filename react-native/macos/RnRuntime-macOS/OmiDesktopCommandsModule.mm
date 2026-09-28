@@ -47,6 +47,7 @@ static NSString *OmiDesktopDefaultsKey(NSString *preference) {
       @"pushToTalk" : @"shortcut_pttEnabled",
       @"liveVoiceProvider" : @"omi.live.voiceProvider",
       @"appearance" : @"omi.appearance",
+      @"uiVersion" : @"omi.uiVersion",
       @"exploreProgress" : @"omi.onboarding.exploreProgress",
     };
   });
@@ -60,6 +61,8 @@ static NSDictionary *OmiDesktopPreferenceSnapshot(void) {
   NSString *liveVoiceProvider = [defaults stringForKey:@"omi.live.voiceProvider"] ?: @"gpt_live";
   NSString *appearance = [defaults stringForKey:@"omi.appearance"];
   if (![appearance isKindOfClass:NSString.class] || ![@[@"dark", @"light"] containsObject:appearance]) appearance = @"dark";
+  NSString *uiVersion = [defaults stringForKey:@"omi.uiVersion"];
+  if (![uiVersion isKindOfClass:NSString.class] || ![@[@"v5", @"v5.1"] containsObject:uiVersion]) uiVersion = @"v5.1";
   // Same source of truth as the backend module: launch environment first,
   // then the persisted dev origin for Finder/Dock launches.
   NSURL *stampedV5 = OmiValidatedV5BackendURLFromEnvironment();
@@ -88,6 +91,7 @@ static NSDictionary *OmiDesktopPreferenceSnapshot(void) {
         ? YES : [defaults boolForKey:@"shortcut_pttEnabled"]),
     @"liveVoiceProvider" : liveVoiceProvider,
     @"appearance" : appearance,
+    @"uiVersion" : uiVersion,
     @"exploreProgress" : [defaults stringForKey:@"omi.onboarding.exploreProgress"] ?: @"",
   };
 }

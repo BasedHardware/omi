@@ -22,11 +22,17 @@ export const desktopPreferenceKeys = {
   pushToTalk: 'shortcut_pttEnabled',
   liveVoiceProvider: 'omi.live.voiceProvider',
   appearance: 'omi.appearance',
+  uiVersion: 'omi.uiVersion',
   exploreProgress: 'omi.onboarding.exploreProgress',
 } as const;
 
 export type AudioRecordingMode = 'off' | 'always' | 'meetings';
 export type DesktopAppearance = 'dark' | 'light';
+
+// Major interface revisions shipped in this app. v5 is the pages IA (rail
+// destinations Home/Chat/Conversations/Recall/Tasks), v5.1 is the Activity IA
+// (unified timeline + chrome filters). Settings switches between them.
+export type DesktopUiVersion = 'v5' | 'v5.1';
 export type LiveVoiceProvider = 'gpt_live' | 'gemini_live';
 export type PermissionKind = 'screen' | 'microphone' | 'notifications';
 export type PermissionState = 'unknown' | 'granted' | 'denied';
@@ -47,6 +53,7 @@ export type DesktopPreferences = {
   pushToTalk: boolean;
   liveVoiceProvider: LiveVoiceProvider;
   appearance: DesktopAppearance;
+  uiVersion: DesktopUiVersion;
   exploreProgress: string;
   stampedV5Origin: string | null;
 };
@@ -77,6 +84,7 @@ const memoryPreferences: DesktopPreferences = {
   pushToTalk: true,
   liveVoiceProvider: 'gpt_live',
   appearance: 'dark',
+  uiVersion: 'v5.1',
   exploreProgress: '',
   stampedV5Origin: null,
 };
@@ -97,6 +105,13 @@ export function parseDesktopAppearance(value: unknown): DesktopAppearance {
     return 'light';
   }
   return 'dark';
+}
+
+export function parseDesktopUiVersion(value: unknown): DesktopUiVersion {
+  if (value === 'v5') {
+    return 'v5';
+  }
+  return 'v5.1';
 }
 
 export function parseLiveVoiceProvider(value: unknown): LiveVoiceProvider {
@@ -147,6 +162,7 @@ function snapshotFromRecord(
     pushToTalk: record.pushToTalk !== false,
     liveVoiceProvider: parseLiveVoiceProvider(record.liveVoiceProvider),
     appearance: parseDesktopAppearance(record.appearance),
+    uiVersion: parseDesktopUiVersion(record.uiVersion),
     exploreProgress:
       typeof record.exploreProgress === 'string' ? record.exploreProgress : '',
     stampedV5Origin,
