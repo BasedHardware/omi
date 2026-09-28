@@ -642,7 +642,11 @@ def _assert_durable_success(stack: Stack, uid: str, job_id: str) -> str:
     if not isinstance(content_id, str):
         raise StackFailure('task content id is missing')
     ledger = (
-        stack.firestore.collection('users').document(uid).collection('sync_content_ledger').document(content_id).get()
+        stack.firestore.collection('users')
+        .document(uid)
+        .collection('sync_content_ledger_offline')
+        .document(content_id)
+        .get()
     )
     ledger_data = ledger.to_dict() if ledger.exists else None
     if not isinstance(ledger_data, dict) or ledger_data.get('status') != 'completed':
@@ -721,7 +725,11 @@ def _content_ledger_data(stack: Stack, uid: str, task: dict[str, Any]) -> dict[s
     if not isinstance(content_id, str):
         raise StackFailure('Sync task omitted durable content identity')
     ledger = (
-        stack.firestore.collection('users').document(uid).collection('sync_content_ledger').document(content_id).get()
+        stack.firestore.collection('users')
+        .document(uid)
+        .collection('sync_content_ledger_offline')
+        .document(content_id)
+        .get()
     )
     ledger_data = ledger.to_dict() if ledger.exists else None
     if not isinstance(ledger_data, dict):
@@ -860,7 +868,7 @@ def _persistence_fenced_backfill_is_terminal(stack: Stack) -> None:
     if not isinstance(body, dict):
         raise StackFailure('captured backfill task body is missing')
     backfill_task = {**task, 'body': {**body, 'lane': 'backfill'}}
-    slot_key = f'sync_backfill:inflight:{uid}'
+    slot_key = f'offline:sync_backfill:inflight:{uid}'
     worker_redis = redis.Redis(host='127.0.0.1', port=stack.redis_port)
     worker_redis.set(slot_key, job_id)
 
