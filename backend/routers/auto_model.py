@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter, Depends
 
 from models.auto_model import AutoModelPick
+from utils.log_sanitizer import sanitize
 from utils.other.endpoints import get_current_user_uid
 
 router = APIRouter()
@@ -38,8 +39,13 @@ _cache_lock = asyncio.Lock()
 
 
 def _score(quality, speed):
-    q = min(max(quality, 0.0), 100.0) / 100.0
-    s = min(max(speed, 0.0), SPEED_CAP) / SPEED_CAP
+    try:
+        quality_f = float(quality)
+        speed_f = float(speed)
+    except (TypeError, ValueError):
+        return None
+    q = min(max(quality_f, 0.0), 100.0) / 100.0
+    s = min(max(speed_f, 0.0), SPEED_CAP) / SPEED_CAP
     return QUALITY_WEIGHT * q + SPEED_WEIGHT * s
 
 
@@ -51,21 +57,27 @@ async def _fetch_and_score():
     async with httpx.AsyncClient(timeout=20.0) as client:
         resp = await client.get(AA_URL, headers={"x-api-key": key})
         resp.raise_for_status()
-        models = resp.json().get("data", [])
+        data = resp.json()
+        models = data.get("data", []) if isinstance(data, dict) else []
 
     def best_score(substr):
         best = None
+        if not isinstance(models, list):
+            return None
         for m in models:
-            slug = (m.get("slug") or m.get("id") or m.get("name") or "").lower()
-            if substr not in slug:
+            if not isinstance(m, dict):
                 continue
-            evals = m.get("evaluations") or {}
+            slug = m.get("slug") or m.get("id") or m.get("name") or ""
+            if not isinstance(slug, str) or substr not in slug.lower():
+                continue
+            evals = m.get("evaluations")
+            evals = evals if isinstance(evals, dict) else {}
             quality = evals.get("artificial_analysis_intelligence_index")
             speed = m.get("median_output_tokens_per_second")
             if quality is None or speed is None:
                 continue
             sc = _score(quality, speed)
-            if best is None or sc > best:
+            if sc is not None and (best is None or sc > best):
                 best = sc
         return best
 
@@ -90,9 +102,13 @@ async def auto_model_pick(uid: str = Depends(get_current_user_uid)):
                     provider, detail = await _fetch_and_score()
                     _cache.update(provider=provider, ts=now, detail=detail)
                 except Exception as e:
-                    logger.error(f"auto model-pick fetch failed: {e}")
+                    logger.error("auto model-pick fetch failed: %s", sanitize(e))
                     if _cache["provider"] is None:
-                        _cache.update(provider="geminiFlashLive", ts=now, detail={"reason": f"error: {e}"})
+                        _cache.update(
+                            provider="geminiFlashLive",
+                            ts=now,
+                            detail={"reason": "Model evaluation unavailable; defaulting to Gemini"},
+                        )
     return {
         "provider": _cache["provider"],
         "updated_at": _cache["ts"],
