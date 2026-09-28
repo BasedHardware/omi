@@ -292,6 +292,105 @@ void main() {
     expect(reprocessCalls, 1);
   });
 
+  testWidgets('leaving while a save is in flight regenerates once after acknowledgement', (tester) async {
+    final save = Completer<bool>();
+    final refreshedIds = <String>[];
+    final provider = ConversationDetailProvider(
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) => save.future,
+      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        expectSync(requireSpeakerReceipt, isTrue);
+        refreshedIds.add(id);
+        return null;
+      },
+    );
+    select(provider, conversation(id: 'first'));
+    final assignment = provider.assignSpeaker(['s'], 'named-person');
+    provider.dispose();
+    expect(refreshedIds, isEmpty);
+
+    save.complete(true);
+    expect(await assignment, isTrue);
+    await tester.pump();
+    expect(refreshedIds, ['first']);
+    await tester.pump(const Duration(seconds: 4));
+    expect(refreshedIds, ['first']);
+  });
+
+  testWidgets('switching conversations mid-save refreshes the saved conversation', (tester) async {
+    final save = Completer<bool>();
+    final refreshedIds = <String>[];
+    final provider = ConversationDetailProvider(
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) => id == 'first' ? save.future : Future.value(true),
+      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        refreshedIds.add(id);
+        return null;
+      },
+    );
+    select(provider, conversation(id: 'first'));
+    final firstAssignment = provider.assignSpeaker(['s'], 'named-person');
+    select(provider, conversation(id: 'second'));
+    final secondAssignment = provider.assignSpeaker(['s'], 'second-person');
+    save.complete(true);
+
+    expect(await firstAssignment, isTrue);
+    expect(await secondAssignment, isTrue);
+    await tester.pump();
+    expect(refreshedIds, ['first']);
+    expect(provider.conversation.id, 'second');
+    expect(provider.offerSpeakerSummaryRefresh, isTrue);
+    await tester.pump(const Duration(seconds: 4));
+    expect(refreshedIds, ['first', 'second']);
+    provider.dispose();
+    await tester.pump(const Duration(seconds: 4));
+    expect(refreshedIds, ['first', 'second']);
+  });
+
+  testWidgets('leaving during a failed save never regenerates', (tester) async {
+    final save = Completer<bool>();
+    var regenerations = 0;
+    final provider = ConversationDetailProvider(
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) => save.future,
+      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        regenerations++;
+        return null;
+      },
+    );
+    select(provider, conversation());
+    final assignment = provider.assignSpeaker(['s'], 'named-person');
+    provider.dispose();
+    save.complete(false);
+
+    expect(await assignment, isFalse);
+    await tester.pump(const Duration(seconds: 4));
+    expect(regenerations, 0);
+  });
+
+  testWidgets('ended sync donor refresh follows the bridged conversation', (tester) async {
+    const donorId = '00000000-0000-5000-8000-000000000001';
+    const survivorId = '3883d17e-0000-4000-8000-000000000000';
+    final save = Completer<bool>();
+    final refreshedIds = <String>[];
+    final provider = ConversationDetailProvider(
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) => save.future,
+      fetchConversation: (id) async {
+        expectSync(id, donorId);
+        return conversation(id: survivorId);
+      },
+      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        refreshedIds.add(id);
+        return null;
+      },
+    );
+    select(provider, conversation(id: donorId));
+    final assignment = provider.assignSpeaker(['s'], 'named-person');
+    provider.dispose();
+    save.complete(true);
+
+    expect(await assignment, isTrue);
+    await tester.pump();
+    expect(refreshedIds, [survivorId]);
+  });
+
   testWidgets('a speaker save adopts the bridged survivor and removes the retired list row', (tester) async {
     const donorId = '00000000-0000-5000-8000-000000000001';
     const survivorId = '3883d17e-0000-4000-8000-000000000000';

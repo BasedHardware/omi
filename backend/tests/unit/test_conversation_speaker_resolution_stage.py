@@ -204,12 +204,38 @@ def test_manual_receipt_is_applied_before_prompt_without_audio_or_resolution(env
     conversation.transcript_segments[0].is_user = True
     conversation.transcript_segments[0].speaker_match_source = 'sync_embedding'
 
-    stage.resolve_speakers_for_processing('u1', conversation)
+    assert stage.resolve_speakers_for_processing('u1', conversation) is True
 
     segment = conversation.transcript_segments[0]
     assert segment.person_id == 'nick'
     assert not segment.is_user
     assert segment.speaker_match_source is None
+
+
+def test_receipt_acknowledgement_requires_a_successful_read_and_application(env, monkeypatch):
+    conversation = _conversation([0], pcs=False)
+    assert stage.resolve_speakers_for_processing('u1', conversation) is True  # Confirmed empty.
+
+    def fail_read(uid, conversation_id):
+        raise RuntimeError('receipt store unavailable')
+
+    monkeypatch.setattr(stage.conversations_db, 'get_manual_speaker_receipt', fail_read)
+    assert stage.resolve_speakers_for_processing('u1', conversation) is False
+
+    monkeypatch.setattr(
+        stage.conversations_db,
+        'get_manual_speaker_receipt',
+        lambda uid, cid: {'speakers': {'0': {'generation': 1, 'person_id': 'nick', 'is_user': False}}},
+    )
+    assert stage.resolve_speakers_for_processing('u1', conversation) is True
+    assert conversation.transcript_segments[0].person_id == 'nick'
+
+    monkeypatch.setattr(
+        stage.conversations_db,
+        'get_manual_speaker_receipt',
+        lambda uid, cid: {'segments': {'retired-segment': {'generation': 1, 'person_id': 'lost', 'is_user': False}}},
+    )
+    assert stage.resolve_speakers_for_processing('u1', conversation) is False
 
 
 def test_without_stored_audio_fragmented_ids_are_marked_uncountable(env, monkeypatch):
