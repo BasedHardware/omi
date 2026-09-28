@@ -502,7 +502,9 @@ export function DesktopSettings({
       />
       <Row
         copy={
-          prefs.appearance === 'light'
+          prefs.appearance === 'system'
+            ? 'Follows macOS light and dark.'
+            : prefs.appearance === 'light'
             ? 'Light chrome and surfaces across the app.'
             : 'Dark chrome and surfaces across the app.'
         }
@@ -513,12 +515,22 @@ export function DesktopSettings({
               runAction(async () => {
                 await setPref(
                   'appearance',
-                  value === 'Light' ? 'light' : 'dark',
+                  value === 'System'
+                    ? 'system'
+                    : value === 'Light'
+                    ? 'light'
+                    : 'dark',
                 );
               });
             }}
-            options={['Dark', 'Light'] as const}
-            value={prefs.appearance === 'light' ? 'Light' : 'Dark'}
+            options={['System', 'Light', 'Dark'] as const}
+            value={
+              prefs.appearance === 'system'
+                ? 'System'
+                : prefs.appearance === 'light'
+                ? 'Light'
+                : 'Dark'
+            }
           />
         }
       />

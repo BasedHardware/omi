@@ -29,8 +29,9 @@ static NSAppearance *OmiInkGlassAppearance(void)
 
 static BOOL OmiGlassLightMode(void)
 {
-  return [NSUserDefaults.standardUserDefaults stringForKey:@"omi.appearance"] != nil &&
-      [[NSUserDefaults.standardUserDefaults stringForKey:@"omi.appearance"] isEqual:@"light"];
+  // Same resolution as the window: light, dark, or the current macOS
+  // appearance when the preference is system.
+  return [OmiPreferredDesktopAppearance() isEqual:NSAppearanceNameAqua];
 }
 
 @interface OmiGlassPanelView ()

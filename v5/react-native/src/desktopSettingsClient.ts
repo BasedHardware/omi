@@ -27,7 +27,19 @@ export const desktopPreferenceKeys = {
 } as const;
 
 export type AudioRecordingMode = 'off' | 'always' | 'meetings';
-export type DesktopAppearance = 'dark' | 'light';
+/** 'system' follows macOS light/dark; the theme resolves it at render time. */
+export type DesktopAppearance = 'dark' | 'light' | 'system';
+
+/** Resolves an appearance preference to the theme actually drawn. */
+export function resolveDesktopAppearance(
+  appearance: DesktopAppearance,
+  systemScheme: string | null | undefined,
+): 'dark' | 'light' {
+  if (appearance === 'system') {
+    return systemScheme === 'light' ? 'light' : 'dark';
+  }
+  return appearance;
+}
 
 // Major interface revisions shipped in this app. v5 is the pages IA (rail
 // destinations Home/Chat/Conversations/Recall/Tasks), v5.1 is the Activity IA
@@ -101,8 +113,8 @@ export function parseAudioRecordingMode(value: unknown): AudioRecordingMode {
 }
 
 export function parseDesktopAppearance(value: unknown): DesktopAppearance {
-  if (value === 'light') {
-    return 'light';
+  if (value === 'light' || value === 'system') {
+    return value;
   }
   return 'dark';
 }

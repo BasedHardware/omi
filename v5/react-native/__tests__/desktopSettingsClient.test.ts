@@ -5,6 +5,8 @@ import {
   parseLiveVoiceProvider,
   parseStampedV5Origin,
   setDesktopPreference,
+  parseDesktopAppearance,
+  resolveDesktopAppearance,
 } from '../src/desktopSettingsClient';
 import {NativeModules} from 'react-native';
 import {
@@ -138,4 +140,14 @@ test('loads and writes the live voice provider through desktop preferences', asy
   );
 
   delete modules.OmiDesktopCommands;
+});
+
+test('appearance accepts System and resolves it from the OS scheme', () => {
+  expect(parseDesktopAppearance('system')).toBe('system');
+  expect(parseDesktopAppearance('light')).toBe('light');
+  expect(parseDesktopAppearance('sepia')).toBe('dark');
+  expect(resolveDesktopAppearance('system', 'light')).toBe('light');
+  expect(resolveDesktopAppearance('system', 'dark')).toBe('dark');
+  expect(resolveDesktopAppearance('system', null)).toBe('dark');
+  expect(resolveDesktopAppearance('light', 'dark')).toBe('light');
 });

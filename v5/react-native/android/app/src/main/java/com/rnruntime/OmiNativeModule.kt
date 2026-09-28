@@ -1,6 +1,7 @@
 package com.rnruntime
 
 import android.app.Activity
+import android.content.Context
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -19,6 +20,28 @@ class OmiNativeModule(private val context: ReactApplicationContext) : ReactConte
   }
 
   override fun getName() = "OmiNative"
+
+  // Appearance (System / Light / Dark) is a device-local UI preference,
+  // exported as a constant so the first frame already uses the stored scheme.
+  private val uiPreferences by lazy { context.getSharedPreferences("omi.ui", Context.MODE_PRIVATE) }
+  private val appearances = setOf("system", "light", "dark")
+
+  private fun storedAppearance(): String {
+    val value = uiPreferences.getString("appearance", null)
+    return if (value != null && value in appearances) value else "system"
+  }
+
+  override fun getConstants(): Map<String, Any> = mapOf("appearance" to storedAppearance())
+
+  @ReactMethod
+  fun setAppearance(appearance: String, promise: Promise) {
+    if (appearance !in appearances) {
+      promise.reject("OMI_APPEARANCE_INVALID", "Unknown appearance")
+      return
+    }
+    uiPreferences.edit().putString("appearance", appearance).apply()
+    promise.resolve(appearance)
+  }
 
   @ReactMethod
   fun addListener(eventName: String) {}
