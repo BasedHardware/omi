@@ -1506,8 +1506,11 @@ only committed IDs drive live updates and `SegmentsDeletedEvent`.
 Translation and inference flushes use `segment_update_fields`: they can update
 existing IDs but cannot restore retired IDs or replace speech text/timestamps.
 Both lifecycle processor writers reapply the current receipt before committing.
-This preserves attribution while leaving summary refresh explicit; processor
-content freshness for non-sync rows is a separate pre-existing limitation.
+The processor also reads and applies that receipt to its in-memory transcript
+before building the summary prompt, including when audio-based speaker resolution
+is unavailable. The mobile detail page regenerates an existing summary once
+after acknowledged speaker edits drain, and keeps its retry action if that call
+fails. Processor content freshness for non-sync rows remains a separate limitation.
 Protection migration re-encodes the receipt and transcript in one per-document
 transaction; the stored level outranks a live caller's cached hint.
 

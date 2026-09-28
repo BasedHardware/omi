@@ -42,10 +42,19 @@ void main() {
   });
   test('transport exception preserves identity and permits an acknowledged retry', () async {
     var fail = true;
-    final provider = ConversationDetailProvider(assignSpeaker: (id, ids, {isUser, personId, speakerId}) async {
-      if (fail) throw StateError('synthetic transport failure');
-      return true;
-    });
+    var reprocessCalls = 0;
+    final provider = ConversationDetailProvider(
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) async {
+        if (fail) throw StateError('synthetic transport failure');
+        return true;
+      },
+      reprocess: (id, {appId}) async {
+        reprocessCalls++;
+        final refreshed = conversation(overview: 'Named summary');
+        refreshed.transcriptSegments.single.personId = 'new';
+        return refreshed;
+      },
+    );
     select(provider, conversation());
     expect(await provider.assignSpeaker(['s'], 'new'), isFalse);
     expect(provider.conversation.transcriptSegments.single.personId, isNull);
@@ -53,34 +62,51 @@ void main() {
     fail = false;
     expect(await provider.assignSpeaker(['s'], 'new'), isTrue);
     expect(provider.conversation.transcriptSegments.single.personId, 'new');
-    expect(provider.offerSpeakerSummaryRefresh, isTrue);
+    expect(provider.offerSpeakerSummaryRefresh, isFalse);
+    expect(reprocessCalls, 1);
     provider.dispose();
   });
 
-  test('only changed acknowledged assignments on summarized completed content offer reprocessing', () async {
+  test('only changed acknowledged assignments on summarized completed content regenerate once', () async {
     for (final status in [ConversationStatus.completed, ConversationStatus.in_progress]) {
       for (final overview in ['Summary', '']) {
         var saved = false;
-        final provider =
-            ConversationDetailProvider(assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => saved);
+        var reprocessCalls = 0;
+        final provider = ConversationDetailProvider(
+          assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => saved,
+          reprocess: (id, {appId}) async {
+            reprocessCalls++;
+            return conversation(overview: 'Named summary');
+          },
+        );
         select(provider, conversation(status: status, overview: overview));
         expect(await provider.assignSpeaker(['s'], 'new'), isFalse);
         expect(provider.conversation.transcriptSegments.single.personId, isNull);
         expect(provider.offerSpeakerSummaryRefresh, isFalse);
         saved = true;
         expect(await provider.assignSpeaker(['s'], 'new'), isTrue);
-        expect(provider.offerSpeakerSummaryRefresh, status == ConversationStatus.completed && overview.isNotEmpty);
+        expect(reprocessCalls, status == ConversationStatus.completed && overview.isNotEmpty ? 1 : 0);
+        expect(provider.offerSpeakerSummaryRefresh, isFalse);
         provider.dispose();
       }
     }
-    final provider = ConversationDetailProvider(assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true);
+    var reprocessCalls = 0;
+    final provider = ConversationDetailProvider(
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
+      reprocess: (id, {appId}) async {
+        reprocessCalls++;
+        return conversation(overview: 'Named summary');
+      },
+    );
     final target = conversation();
     target.transcriptSegments.single.personId = 'same';
     select(provider, target);
     await provider.assignSpeaker(['s'], 'same');
     expect(provider.offerSpeakerSummaryRefresh, isFalse);
+    expect(reprocessCalls, 0);
     await provider.assignSpeaker(['s'], 'corrected');
-    expect(provider.offerSpeakerSummaryRefresh, isTrue);
+    expect(reprocessCalls, 1);
+    expect(provider.offerSpeakerSummaryRefresh, isFalse);
     provider.dispose();
   });
 
@@ -96,19 +122,18 @@ void main() {
           return fail ? await result.future : conversation(overview: 'Named summary');
         });
     select(provider, conversation());
-    await provider.assignSpeaker(['s'], 'new');
+    final assignment = provider.assignSpeaker(['s'], 'new');
+    await tester.pump();
     await tester.pumpWidget(MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: SpeakerSummaryAction(provider: provider))));
-    expect(requests, 0);
-    await tester.tap(find.byKey(const ValueKey('speaker-summary-refresh')));
-    await tester.pump();
+    expect(requests, 1);
     expect(await provider.reprocessConversation(), isFalse);
     expect(await provider.assignSpeaker(['s'], 'racing-edit'), isFalse);
     expect(provider.conversation.transcriptSegments.single.personId, 'new');
-    expect(requests, 1);
     result.complete(null);
+    expect(await assignment, isTrue);
     await tester.pumpAndSettle();
     expect(provider.offerSpeakerSummaryRefresh, isTrue);
     expect(provider.conversation.transcriptSegments.single.personId, 'new');
@@ -136,7 +161,35 @@ void main() {
     expect(reprocessCalls, 0);
     saved.complete(true);
     expect(await assignment, isTrue);
+    expect(reprocessCalls, 1);
     expect(provider.offerSpeakerSummaryRefresh, isTrue);
+    provider.dispose();
+  });
+
+  test('queued corrections regenerate only after the final saved label', () async {
+    final firstSave = Completer<bool>();
+    final assigned = <String>[];
+    var reprocessCalls = 0;
+    final provider = ConversationDetailProvider(
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) {
+        assigned.add(personId!);
+        return firstSave.future;
+      },
+      reprocess: (id, {appId}) async {
+        reprocessCalls++;
+        return null;
+      },
+    );
+    select(provider, conversation());
+    final first = provider.assignSpeaker(['s'], 'first');
+    final second = provider.assignSpeaker(['s'], 'second');
+    expect(reprocessCalls, 0);
+    firstSave.complete(true);
+    expect(await first, isFalse);
+    expect(await second, isTrue);
+    expect(assigned, ['second']);
+    expect(reprocessCalls, 1);
+    expect(provider.conversation.transcriptSegments.single.personId, 'second');
     provider.dispose();
   });
 
@@ -159,6 +212,7 @@ void main() {
         fetchedIds.add(id);
         return survivor;
       },
+      reprocess: (id, {appId}) async => null,
     );
     provider.conversationProvider = list;
     select(provider, donor);

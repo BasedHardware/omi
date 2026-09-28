@@ -220,6 +220,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         final refreshId = _speakerRefreshId;
         _speakerRefreshId = null;
         if (refreshId != null && refreshId == conversationOrNull?.id) await refreshConversation();
+        // A completed conversation's summary may predate this manual label.
+        // Wait for all queued edits (and any bridge redirect), then regenerate
+        // once from the saved labels. A failure keeps the retry action visible.
+        if (!_isDisposed && offerSpeakerSummaryRefresh) await reprocessConversation();
       }
     }
   }
