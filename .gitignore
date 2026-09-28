@@ -18,3 +18,11 @@ apps/backend-worker/.wrangler/
 .dev.vars
 .dev.vars.*
 .omi-pi*.md
+
+# Swift app build artifacts
+*.xcodeproj
+.swiftpm/
+.build/
+app/Platforms/android/.gradle/
+app/Platforms/android/local.properties
+app/Platforms/android/.kotlin/
