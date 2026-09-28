@@ -382,6 +382,15 @@ def isolate_e2e_state(fake_firestore, fake_redis, fake_storage):
         clear_user_data(DEV_UID)
         fake_redis.flushall()
         clear_fake_storage()
+        # Listen admission is process-local; the fixed E2E uid must start with
+        # a fresh burst for each isolated test, just like the fake stores.
+        try:
+            from utils.listen_reconnect_budget import listen_reconnect_budget
+
+            with listen_reconnect_budget._lock:
+                listen_reconnect_budget._buckets.clear()
+        except Exception:
+            pass
         try:
             import utils.http_client as http_client
 

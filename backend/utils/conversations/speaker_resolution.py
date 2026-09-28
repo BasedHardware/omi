@@ -31,6 +31,7 @@ import database.conversations as conversations_db
 import database.users as users_db
 from models.conversation import Conversation, ConversationSpeakers
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
+from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.metrics import OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL, OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES
 from utils.observability.fallback import record_fallback
 from utils.other.storage import (
@@ -322,13 +323,19 @@ def apply_speaker_resolution(
             segment.speaker_match_source = MATCH_SOURCE
 
 
-def resolve_speakers_for_processing(uid: str, conversation: Any) -> None:
-    """Rewrite ``conversation``'s speaker ids to one per voice; never raises."""
-    if not resolution_enabled() or not isinstance(conversation, Conversation) or not conversation.transcript_segments:
-        return
+def resolve_speakers_for_processing(uid: str, conversation: Any) -> bool:
+    """Resolve voices and return whether the manual receipt was read and applied."""
+    if not isinstance(conversation, Conversation) or not conversation.transcript_segments:
+        return False
     began = time.monotonic()
+    receipt: Mapping[str, Any] = {}
+    receipt_read = False
+    receipt_applied = False
     try:
-        _resolve(uid, conversation, deadline=began + _budget_seconds())
+        receipt = conversations_db.get_manual_speaker_receipt(uid, conversation.id)
+        receipt_read = True
+        if resolution_enabled():
+            _resolve(uid, conversation, receipt=receipt, deadline=began + _budget_seconds())
     except Exception as error:
         record_fallback(
             component='other',
@@ -344,10 +351,49 @@ def resolve_speakers_for_processing(uid: str, conversation: Any) -> None:
             conversation.id,
             type(error).__name__,
         )
-        _without_resolution(conversation, 'failed')
+        if resolution_enabled():
+            _without_resolution(conversation, 'failed')
+    finally:
+        # The persistence transaction reapplies this receipt, but the summary
+        # prompt is built first. A resolved voice may include earlier unlabeled
+        # fragments; apply the same authority to the in-memory transcript.
+        if receipt_read and (receipt.get('speakers') or receipt.get('segments')):
+            try:
+                identity_fields = (
+                    'id',
+                    'speaker_id',
+                    'is_user',
+                    'person_id',
+                    'speaker_identity_status',
+                    'speaker_match_source',
+                )
+                current = [
+                    {field: getattr(segment, field) for field in identity_fields}
+                    for segment in conversation.transcript_segments
+                ]
+                speakers = receipt.get('speakers') or {}
+                overrides = receipt.get('segments') or {}
+                matched = any(
+                    segment['id'] in overrides or str(segment['speaker_id']) in speakers for segment in current
+                )
+                labeled_segments = apply_manual_assignments(current, dict(receipt))
+                for segment, labeled in zip(conversation.transcript_segments, labeled_segments):
+                    segment.is_user = labeled['is_user']
+                    segment.person_id = labeled['person_id']
+                    segment.speaker_identity_status = labeled['speaker_identity_status']
+                    segment.speaker_match_source = labeled['speaker_match_source']
+                receipt_applied = matched
+            except Exception as error:
+                logger.warning(
+                    'event=conversation_speaker_resolution outcome=manual_receipt_failed exception_type=%s',
+                    type(error).__name__,
+                )
+        elif receipt_read:
+            receipt_applied = True  # A successful read confirmed there is no manual receipt.
+    return receipt_applied
 
 
-def _resolve(uid: str, conversation: Conversation, *, deadline: float) -> None:
+def _resolve(uid: str, conversation: Conversation, *, receipt: Mapping[str, Any], deadline: float) -> None:
     began = time.monotonic()
     segments = conversation.transcript_segments
     input_ids = len({s.speaker_id for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL})
@@ -374,7 +420,6 @@ def _resolve(uid: str, conversation: Conversation, *, deadline: float) -> None:
     if new_embeddings or stale:
         upload_speaker_embedding_cache(uid, conversation.id, encode_cache(cache))
 
-    receipt = conversations_db.get_manual_speaker_receipt(uid, conversation.id)
     resolution = resolve_conversation_speakers(
         segments,
         {sid: vector for sid, (_, vector) in cache.items()},

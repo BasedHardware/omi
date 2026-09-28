@@ -1,10 +1,10 @@
 {
   "caps": {
-    "internal_time_to_signal_minutes": 45,
-    "pr_linux_minutes_per_day": 16000,
-    "pr_macos_minutes_per_day": 2500
+    "internal_time_to_signal_minutes": 46,
+    "pr_linux_minutes_per_day": 11900,
+    "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "Seeded above 2026-09-26 per-job p50 x 1.25: 14,715 Linux, 2,151 macOS minutes/day and 37 minutes critical path",
+  "caps_rationale": "Ratchet: post-#19593 budgeted totals (10799 Linux, 1437 macOS min/day, 41 min critical path) + 10% headroom. Lower after each weekly re-seed; raising needs a rationale change.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,
@@ -64,13 +64,13 @@
       "budget_p50_minutes": 3,
       "display_name": "Hermetic Backend E2E",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 103,
-      "if": "needs.scope.outputs.applies == 'true'",
+      "expected_runs_per_day": 61,
+      "if": "needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -82,13 +82,13 @@
       "budget_p50_minutes": 11,
       "display_name": "Listen Pusher Stack Gauntlet",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 103,
-      "if": "needs.scope.outputs.applies == 'true'",
+      "expected_runs_per_day": 18,
+      "if": "needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true' && needs.scope.outputs.run_listen == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -119,17 +119,41 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "backend-hermetic-e2e.yml/post-merge-failure-issues": {
+      "budget_p50_minutes": 5,
+      "display_name": "Post-merge hermetic failure issues",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "scope",
+        "hermetic-e2e",
+        "listen-pusher-stack-gauntlet",
+        "sync-cloud-tasks-stack-gauntlet",
+        "replay-harness-phase0a-gauntlet"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "backend-hermetic-e2e.yml/replay-harness-phase0a-gauntlet": {
       "budget_p50_minutes": 3,
       "display_name": "Replay Harness Phase 0A Feasibility (advisory)",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 103,
-      "if": "needs.scope.outputs.applies == 'true'",
+      "expected_runs_per_day": 1,
+      "if": "needs.scope.outputs.applies == 'true' && (github.event_name == 'push' || github.event_name == 'schedule')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -159,13 +183,13 @@
       "budget_p50_minutes": 5,
       "display_name": "Sync Cloud Tasks Stack Gauntlet",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 103,
-      "if": "needs.scope.outputs.applies == 'true'",
+      "expected_runs_per_day": 12,
+      "if": "needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true' && needs.scope.outputs.run_sync == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -177,13 +201,13 @@
       "budget_p50_minutes": 3,
       "display_name": "Backend unit guardrails",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 107,
-      "if": null,
+      "expected_runs_per_day": 65,
+      "if": "needs.ci-tier.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
-      "needs": [],
+      "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -225,11 +249,30 @@
       "matrix": {},
       "matrix_size": 1,
       "needs": [
+        "ci-tier",
         "backend-unit-shard",
         "backend-unit-guardrails"
       ],
       "owner": "CI maintainers",
       "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-unit-tests.yml/ci-tier": {
+      "budget_p50_minutes": 1,
+      "display_name": "Resolve CI Tier",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 107,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "New in #19593: one label read; 2026-09-28 PR run took 23s",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -350,7 +393,7 @@
       "display_name": "Desktop Siri Xcode 27 Advisory",
       "expected_runs_class": "unsampled-pr-sentinel",
       "expected_runs_per_day": 1,
-      "if": "${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}",
+      "if": "${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
@@ -389,13 +432,13 @@
       "budget_p50_minutes": 34,
       "display_name": "Desktop Swift Release Compile",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 25,
-      "if": "${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_release_test_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}",
+      "expected_runs_per_day": 4,
+      "if": "${{ needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.should_release_compile == 'true' }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
       "reusable": null,
       "runner": "macos",
       "runner_counts": {
@@ -408,7 +451,7 @@
       "display_name": "Desktop Swift Static & Test Contracts",
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 30,
-      "if": "${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}",
+      "if": "${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
@@ -420,6 +463,27 @@
         "macos": 1
       },
       "runs_on": "macos-26"
+    },
+    "desktop-swift-ci.yml/post-merge-failure-issue": {
+      "budget_p50_minutes": 5,
+      "display_name": "Post-merge Desktop Swift Release Compile failure issue",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "changes",
+        "desktop-swift-release-compile"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
     },
     "desktop-windows-ci.yml/build-linux": {
       "budget_p50_minutes": 9,
@@ -1097,6 +1161,24 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.ref == 'refs/heads/main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_cloud_run_metrics_egress.yml/provision-live-alerts": {
+      "budget_p50_minutes": 5,
+      "display_name": "provision-live-alerts",
+      "expected_runs_class": "non-pr",
       "expected_runs_per_day": 0,
       "if": "github.ref == 'refs/heads/main'",
       "matrix": {},
@@ -1824,13 +1906,13 @@
       "budget_p50_minutes": 17,
       "display_name": "Dart Analyze & Tests",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 40,
-      "if": "needs.changes.outputs.has_app_dart == 'true'",
+      "expected_runs_per_day": 25,
+      "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_dart == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1842,13 +1924,13 @@
       "budget_p50_minutes": 13,
       "display_name": "Android Compile Smoke",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 39,
-      "if": "needs.changes.outputs.has_app_compile_smoke == 'true'",
+      "expected_runs_per_day": 8,
+      "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1860,13 +1942,13 @@
       "budget_p50_minutes": 7,
       "display_name": "Android JVM Unit Tests",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 39,
-      "if": "needs.changes.outputs.has_app_compile_smoke == 'true'",
+      "expected_runs_per_day": 8,
+      "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1896,13 +1978,13 @@
       "budget_p50_minutes": 25,
       "display_name": "Dart Tests (Pacific/Kiritimati)",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 40,
-      "if": "needs.changes.outputs.has_app_dart == 'true'",
+      "expected_runs_per_day": 1,
+      "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_dart == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1915,7 +1997,7 @@
       "display_name": "Generated Files",
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 21,
-      "if": "needs.changes.outputs.has_flutter_generated == 'true'",
+      "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_flutter_generated == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
@@ -1933,7 +2015,7 @@
       "display_name": "iOS Compile Check",
       "expected_runs_class": "sampled-pr-day",
       "expected_runs_per_day": 24,
-      "if": "needs.changes.outputs.has_app_ios_compile == 'true'",
+      "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_ios_compile == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
@@ -1950,13 +2032,13 @@
       "budget_p50_minutes": 9,
       "display_name": "Seeded Journeys (hermetic)",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 39,
-      "if": "needs.changes.outputs.has_app_journeys == 'true'",
+      "expected_runs_per_day": 5,
+      "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_journeys == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_journeys_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1984,6 +2066,30 @@
       ],
       "owner": "CI maintainers",
       "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/post-merge-failure-issues": {
+      "budget_p50_minutes": 5,
+      "display_name": "Post-merge mobile failure issues",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "changes",
+        "journeys-hermetic",
+        "android-compile-smoke",
+        "android-unit-tests",
+        "dart-tests-kiritimati"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2176,6 +2282,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "python-cli-ci.yml/ci-tier": {
+      "budget_p50_minutes": 1,
+      "display_name": "Resolve CI Tier",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 66,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "New in #19593: one label read; 2026-09-28 PR run took 23s",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "python-cli-ci.yml/tests": {
       "budget_p50_minutes": 3,
       "display_name": "${{ matrix.label }}",
@@ -2193,25 +2317,37 @@
             "label": "Linux / Python 3.12",
             "os": "ubuntu-latest",
             "python-version": "3.12"
-          },
-          {
-            "label": "Windows ACL / Python 3.12",
-            "os": "windows-latest",
-            "python-version": "3.12"
           }
         ]
       },
-      "matrix_size": 3,
+      "matrix_size": 2,
       "needs": [],
       "owner": "CI maintainers",
       "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
       "reusable": null,
       "runner": "dynamic",
       "runner_counts": {
-        "linux": 2,
-        "windows": 1
+        "linux": 2
       },
       "runs_on": "${{ matrix.os }}"
+    },
+    "python-cli-ci.yml/windows-acl": {
+      "budget_p50_minutes": 5,
+      "display_name": "Windows ACL / Python 3.12",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "needs.ci-tier.outputs.full_ci == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "ci-tier",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "windows",
+      "runner_counts": {
+        "windows": 1
+      },
+      "runs_on": "windows-latest"
     },
     "release-eligibility.yml/release-eligibility": {
       "budget_p50_minutes": 5,
@@ -2326,7 +2462,7 @@
       "display_name": "image-smoke",
       "expected_runs_class": "unsampled-pr-sentinel",
       "expected_runs_per_day": 1,
-      "if": "github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository",
+      "if": "github.event_name == 'workflow_dispatch'",
       "matrix": "${{ fromJSON(needs.source-closure.outputs.matrix) }}",
       "matrix_size": 1,
       "needs": "source-closure",
@@ -2609,6 +2745,14 @@
         "pull_request": {
           "branches": "main"
         },
+        "push": {
+          "branches": "main"
+        },
+        "schedule": [
+          {
+            "cron": "53 4 * * *"
+          }
+        ],
         "workflow_dispatch": ""
       }
     },
@@ -2626,6 +2770,7 @@
             "config/deployment-setting-classification.json",
             "firestore.indexes.json",
             ".github/actions/detect-changes/**",
+            ".github/actions/ci-tier/**",
             ".github/actions/deploy-backend-stack/**",
             ".github/actions/sync-backfill-lifecycle/**",
             ".github/actions/release-eligibility/action.yml",
@@ -2678,6 +2823,7 @@
             "config/deployment-setting-classification.json",
             "firestore.indexes.json",
             ".github/actions/detect-changes/**",
+            ".github/actions/ci-tier/**",
             ".github/actions/deploy-backend-stack/**",
             ".github/actions/sync-backfill-lifecycle/**",
             ".github/actions/release-eligibility/action.yml",
@@ -3663,6 +3809,8 @@
           "paths": [
             "backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml",
             "backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml",
+            "backend/charts/monitoring/alerts/live-stt.json",
+            "backend/charts/monitoring/live-alert-gate.json",
             ".github/workflows/gcp_cloud_run_metrics_egress.yml"
           ]
         },
@@ -4483,7 +4631,12 @@
         "pull_request": "",
         "push": {
           "branches": "main"
-        }
+        },
+        "schedule": [
+          {
+            "cron": "41 4 * * *"
+          }
+        ]
       }
     },
     "mobile_internal_build.yml": {
@@ -4719,6 +4872,7 @@
           ],
           "paths": [
             "sdks/python-cli/**",
+            ".github/actions/ci-tier/**",
             ".github/workflows/python-cli-ci.yml"
           ]
         },
@@ -4728,6 +4882,7 @@
           ],
           "paths": [
             "sdks/python-cli/**",
+            ".github/actions/ci-tier/**",
             ".github/workflows/python-cli-ci.yml"
           ]
         }

@@ -2,6 +2,20 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.414",
+      "date": "2026-09-28",
+      "changes": [
+        "Fixed Rewind video encoding in macOS releases built with Xcode 27"
+      ]
+    },
+    {
+      "version": "0.12.413",
+      "date": "2026-09-28",
+      "changes": [
+        "Fixed repeated recording restarts when a microphone briefly alternates between silence and live audio"
+      ]
+    },
+    {
       "version": "0.12.412",
       "date": "2026-09-28",
       "changes": [

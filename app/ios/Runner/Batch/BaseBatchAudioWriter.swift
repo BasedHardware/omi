@@ -356,8 +356,7 @@ class BaseBatchAudioWriter {
               data.count <= 4_096,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let geolocation = json["geolocation"],
-              JSONSerialization.isValidJSONObject(geolocation),
-              let geolocationData = try? JSONSerialization.data(withJSONObject: geolocation) else { return nil }
+              let geolocationData = try? SafeJSON.data(withJSONObject: geolocation) else { return nil }
         return String(data: geolocationData, encoding: .utf8)
     }
 
@@ -440,6 +439,6 @@ class BaseBatchAudioWriter {
     }
 
     private func setStorageFullFlag(_ full: Bool) {
-        UserDefaults.standard.set(full, forKey: "flutter.batchStorageFull")
+        try? SafeDefaults.store(.bool(full), forKey: "flutter.batchStorageFull")
     }
 }

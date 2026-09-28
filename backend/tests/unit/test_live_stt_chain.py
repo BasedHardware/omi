@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from config.stt_provider_policy import STTServingSurface, model_is_enabled, provider_for_service
-from utils.stt import connect_metrics, provider_resilience as resilience, streaming as st
+from utils.stt import connect_metrics, live_chain, provider_resilience as resilience, streaming as st
 from utils.stt.live_rollout import managed_chain_enabled, window_allocation
 from utils.stt.soniox import soniox_death_reason
 from utils.stt.stream_close import PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED
@@ -72,6 +72,15 @@ def test_allocation_is_stable_bounded_and_default_dark(monkeypatch):
     assert not window_allocation('user')
 
 
+def test_one_percent_canary_leads_without_reordering_vendor_control(monkeypatch):
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '1')
+    monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    allocated = next(str(i) for i in range(10000) if window_allocation(str(i)))
+    control = next(str(i) for i in range(10000) if not window_allocation(str(i)))
+    assert st.get_stt_service_for_language('en', window_uid=allocated)[0] == st.STTService.parakeet
+    assert st.get_stt_service_for_language('en', window_uid=control)[0] == st.STTService.modulate
+
+
 @pytest.mark.parametrize('primary', list(st.STTService))
 @pytest.mark.asyncio
 async def test_every_primary_walks_config_order_and_feeds_each_leg(monkeypatch, primary):
@@ -115,6 +124,86 @@ async def test_failed_session_provider_is_never_revisited(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_all_open_provider_breakers_shed_without_connecting(monkeypatch):
+    monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox', 'parakeet'])
+    callbacks = {service: AsyncMock(return_value=socket()) for service in st.STTService}
+    for service in st.STTService:
+        st._circuit_for_primary(service).record_account_failure(600)
+
+    with pytest.raises(live_chain.ProviderChainUnavailable) as raised:
+        await live_chain.connect_configured_chain(
+            primary_service=st.STTService.modulate,
+            connect_primary=callbacks[st.STTService.modulate],
+            callbacks=callbacks,
+            failed=set(),
+            models=['modulate-velma-2', 'soniox', 'parakeet'],
+        )
+
+    assert raised.value.retry_after >= 1
+    for callback in callbacks.values():
+        callback.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_expired_breaker_still_admits_its_half_open_probe(monkeypatch):
+    monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'modulate-velma-2', 'parakeet'])
+    now = [0.0]
+    probe_circuit = resilience.ProviderCircuitBreaker(failure_threshold=1, cooldown_seconds=30, clock=lambda: now[0])
+    probe_circuit.record_failure()
+    monkeypatch.setattr(st, '_soniox_circuit', probe_circuit)
+    for service in (st.STTService.modulate, st.STTService.parakeet, st.STTService.deepgram):
+        st._circuit_for_primary(service).record_account_failure(600)
+    now[0] = 31
+
+    soniox = AsyncMock(return_value=socket())
+    unused = {service: AsyncMock(return_value=socket()) for service in st.STTService}
+    _, selected = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.soniox,
+        connect_primary=soniox,
+        callbacks=unused,
+        failed=set(),
+        models=['soniox', 'modulate-velma-2', 'parakeet'],
+    )
+
+    assert selected == st.STTService.soniox
+    soniox.assert_awaited_once()
+    for callback in unused.values():
+        callback.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_idle_half_open_recovery_probe_is_not_shed(monkeypatch):
+    monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'modulate-velma-2', 'parakeet'])
+    now = [0.0]
+    probe_circuit = resilience.ProviderCircuitBreaker(
+        failure_threshold=1, cooldown_seconds=30, serve_error_cooldown_seconds=30, clock=lambda: now[0]
+    )
+    probe_circuit.record_serve_failure()
+    now[0] = 31
+    assert probe_circuit.allow_request()
+    probe_circuit.record_success()  # Grace success leaves a serve-error bench half-open.
+    assert probe_circuit.state == 'half_open'
+    monkeypatch.setattr(st, '_soniox_circuit', probe_circuit)
+    st._modulate_circuit.record_account_failure(600)
+    st._parakeet_circuit.record_account_failure(600)
+
+    recovering = AsyncMock(return_value=socket())
+    callbacks = {service: AsyncMock(return_value=socket()) for service in st.STTService}
+    _, selected = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.soniox,
+        connect_primary=recovering,
+        callbacks=callbacks,
+        failed=set(),
+        models=['soniox', 'modulate-velma-2', 'parakeet'],
+    )
+
+    assert selected == st.STTService.soniox
+    recovering.assert_awaited_once()
+    callbacks[st.STTService.modulate].assert_not_awaited()
+    callbacks[st.STTService.parakeet].assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_open_primary_skips_to_healthy_tail_then_serve_error_last_resort(monkeypatch):
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
     st._modulate_circuit.record_serve_failure()
@@ -125,10 +214,11 @@ async def test_open_primary_skips_to_healthy_tail_then_serve_error_last_resort(m
     primary.assert_not_called()
     tail.assert_awaited_once()
     st._soniox_circuit.record_serve_failure()
-    await st.connect_stt_socket_with_fallback(
-        primary_service=st.STTService.modulate, connect_primary=primary, connect_soniox=tail
-    )
-    primary.assert_awaited_once()
+    with pytest.raises(live_chain.ProviderChainUnavailable):
+        await st.connect_stt_socket_with_fallback(
+            primary_service=st.STTService.modulate, connect_primary=primary, connect_soniox=tail
+        )
+    primary.assert_not_called()
     tail.assert_awaited_once()
 
 
@@ -184,7 +274,16 @@ async def test_configured_chain_emits_exhausted_only_when_terminal(monkeypatch):
 @pytest.mark.asyncio
 async def test_cancelled_probe_is_released_and_socket_closed(monkeypatch):
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2'])
-    st._modulate_circuit.record_serve_failure()
+    now = [0.0]
+    circuit = resilience.ProviderCircuitBreaker(
+        failure_threshold=1,
+        cooldown_seconds=30,
+        serve_error_cooldown_seconds=30,
+        clock=lambda: now[0],
+    )
+    circuit.record_serve_failure()
+    now[0] = 31
+    monkeypatch.setattr(st, '_modulate_circuit', circuit)
     started = asyncio.Event()
 
     async def connect():

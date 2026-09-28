@@ -208,7 +208,8 @@ runs:
           --environment "$ENVIRONMENT" --project '${{ inputs.project_id }}' \
           --apply --jobs sync-backfill-uid-sequencer
         python3 "$DEPLOY_CONTROL_SCRIPT_DIR/scheduler_reconcile.py" \
-          --environment "$ENVIRONMENT" --project '${{ inputs.project_id }}' --check
+          --environment "$ENVIRONMENT" --project '${{ inputs.project_id }}' \
+          --check --jobs sync-backfill-uid-sequencer
 
     - name: Provision and verify sync ledger TTL
       if: ${{ inputs.mode == 'platform' && inputs.provision_sync_ledger_ttl == 'true' }}

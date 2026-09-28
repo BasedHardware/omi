@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable, Protocol
 
 from models.message_event import MessageServiceStatusEvent
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
+from utils.metrics import OMI_LISTEN_STT_UNAVAILABLE_TOTAL
 from utils.observability.transcription import record_live_stt_failure, record_live_stt_pre_audio_failure
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -186,6 +187,44 @@ class LiveSTTClientSocket(Protocol):
     async def send_json(self, data: Any) -> None: ...
 
     async def close(self, code: int = 1000, reason: str | None = None) -> None: ...
+
+
+async def terminate_live_stt_backoff(
+    websocket: LiveSTTClientSocket,
+    session: LiveSTTSession,
+    *,
+    reason: str,
+    retry_after: int,
+) -> bool:
+    """Send the existing terminal status and close before session work starts."""
+
+    if reason not in {'provider_unavailable', 'reconnect_budget'}:
+        raise ValueError('unsupported live STT backoff reason')
+    if session.stt_terminal_failure:
+        return False
+    session.stt_terminal_failure = True
+    session.active = False
+    session.close_code = LIVE_STT_FAILURE_CLOSE_CODE
+    OMI_LISTEN_STT_UNAVAILABLE_TOTAL.labels(reason=reason).inc()
+    event = MessageServiceStatusEvent(
+        status='stt_failed',
+        status_text='Transcription temporarily unavailable',
+        outcome=TranscriptionOutcome.UPSTREAM_ERROR.value,
+        retryable=True,
+        reason=reason,
+        retry_after=max(1, min(int(retry_after), 3600)),
+    )
+    sent = False
+    try:
+        await websocket.send_json(event.to_json())
+        sent = True
+    except Exception as error:
+        logger.warning('Unable to deliver terminal live STT status error_type=%s', type(error).__name__)
+    try:
+        await websocket.close(code=LIVE_STT_FAILURE_CLOSE_CODE, reason=LIVE_STT_FAILURE_CLOSE_REASON)
+    except Exception as error:
+        logger.info('Unable to close client after terminal live STT backoff error_type=%s', type(error).__name__)
+    return sent
 
 
 def live_stt_upstream_failure(provider: str | None) -> TranscriptionFailure:
