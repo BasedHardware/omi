@@ -25,21 +25,25 @@ void main() {
     try {
       void flutterHandler(FlutterErrorDetails details) {}
       bool platformHandler(Object error, StackTrace stack) => true;
+      var crashlyticsInitialized = false;
       await BootCrashHandlers.install(
         initialize: () async {
           expect(FlutterError.onError, same(flutterHandler));
           expect(PlatformDispatcher.instance.onError, same(platformHandler));
+          crashlyticsInitialized = true;
         },
         flutterError: flutterHandler,
         platformError: platformHandler,
       );
+      expect(crashlyticsInitialized, isTrue);
       await PhysicalQualification.startupStage('resolve_auth', () async {
+        expect(crashlyticsInitialized, isTrue);
         expect(FlutterError.onError, same(flutterHandler));
         expect(PlatformDispatcher.instance.onError, same(platformHandler));
       });
-      final states = (await BootJournal.instance.read()).map((row) => row['stage']).toList();
-      expect(states, contains('crash_reporter'));
-      expect(states, contains('resolve_auth'));
+      final states = (await BootJournal.instance.read()).map((row) => '${row['stage']}:${row['state']}').toList();
+      expect(
+          states, ['crash_reporter:begin', 'crash_reporter:completed', 'resolve_auth:begin', 'resolve_auth:completed']);
     } finally {
       FlutterError.onError = previousFlutter;
       PlatformDispatcher.instance.onError = previousPlatform;
