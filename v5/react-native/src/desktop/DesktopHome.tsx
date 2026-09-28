@@ -323,7 +323,7 @@ const createStyles = (token: DesktopTokens) =>
   StyleSheet.create({
     scroll: {flex: 1},
     home: {flex: 1, gap: 12},
-    columns: {gap: 16, marginBottom: 16},
+    columns: {gap: 32, marginBottom: 16},
     columnsWide: {flexDirection: 'row'},
     column: {flex: 1, minWidth: 0},
     exploreRow: {
@@ -383,13 +383,10 @@ const createStyles = (token: DesktopTokens) =>
     },
     pressed: {opacity: 0.78},
     list: {flex: 1},
+    // Quiet sections: a label over rows, no filled or bordered slab.
     section: {
-      backgroundColor: token.color.glassStrong,
-      borderWidth: 1,
-      borderColor: token.color.line,
-      borderRadius: 18,
-      gap: 12,
-      padding: 24,
+      gap: 8,
+      paddingVertical: 8,
     },
     listContent: {
       paddingTop: 8,
@@ -398,6 +395,6 @@ const createStyles = (token: DesktopTokens) =>
       maxWidth: 1040,
       width: '100%',
       alignSelf: 'center',
-      gap: 16,
+      gap: 24,
     },
   });
