@@ -23,7 +23,7 @@ from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
-from utils.goals_response import normalize_goal_history_entry
+from utils.goals_response import normalize_goal_history_entry, normalize_goal_response
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.client_processing import ClientProcessing
 from config.capture_evidence import capture_evidence_dark_write_enabled
@@ -2442,13 +2442,10 @@ class UpdateGoalRequest(BaseModel):
         return value
 
 
-def _serialize_goal_datetimes(goal: dict) -> dict:
-    """Convert datetime objects to ISO strings for JSON serialization."""
-    if 'created_at' in goal and hasattr(goal['created_at'], 'isoformat'):
-        goal['created_at'] = goal['created_at'].isoformat()
-    if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
-        goal['updated_at'] = goal['updated_at'].isoformat()
-    return goal
+def _goal_response(goal: dict) -> dict:
+    """Shape a stored goal like the app's goal routes do, so qualitative (metric-less) and legacy
+    goals satisfy GoalResponse instead of failing response validation."""
+    return normalize_goal_response(goal)
 
 
 @router.get("/v1/dev/user/goals", tags=["Goals"], response_model=List[GoalResponse], operation_id="listGoals")
@@ -2475,7 +2472,7 @@ def get_goals(
     else:
         goals = goals_db.get_user_goals(uid, limit=limit)
 
-    return [_serialize_goal_datetimes(g) for g in goals]
+    return [_goal_response(g) for g in goals]
 
 
 @router.get("/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="getGoal")
@@ -2494,7 +2491,7 @@ def get_goal(
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    return _serialize_goal_datetimes(goal)
+    return _goal_response(goal)
 
 
 @router.post("/v1/dev/user/goals", tags=["Goals"], response_model=GoalResponse, operation_id="createGoal")
@@ -2534,7 +2531,7 @@ def create_goal(
     }
 
     created_goal = goals_db.create_goal(uid, goal_data)
-    return _serialize_goal_datetimes(created_goal)
+    return _goal_response(created_goal)
 
 
 @router.patch("/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="updateGoal")
@@ -2567,7 +2564,7 @@ def update_goal(
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    return _serialize_goal_datetimes(updated_goal)
+    return _goal_response(updated_goal)
 
 
 @router.patch(
@@ -2592,7 +2589,7 @@ def update_goal_progress(
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    return _serialize_goal_datetimes(updated_goal)
+    return _goal_response(updated_goal)
 
 
 @router.get(
