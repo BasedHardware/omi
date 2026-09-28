@@ -2,7 +2,8 @@
 
 Failure-Class: FC-typed-failure-collapsed-to-generic — instance fix; the AAC
 decoder collapsed every FFmpeg rejection into ``b''`` so the receiver's
-decode-failure contract (per-frame warning, streak, ``silent_mic`` fallback)
+decode-failure contract (per-session warning, per-frame counter, streak,
+``silent_mic`` fallback)
 never fired for AAC, leaving only FFmpeg's context-free
 ``ERROR:libav.aac:Channel element 1.7 is not allocated`` / ``Reserved bit
 set.`` native lines (~130 events / 30 min across the ``libav.aac`` family,
