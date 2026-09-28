@@ -377,10 +377,14 @@ def get_screen_activity_tool(
     try:
         start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
         end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-    except ValueError as e:
-        return f"Error: Invalid date format. Use YYYY-MM-DDTHH:MM:SS+HH:MM. Details: {e}"
+    except ValueError:
+        return "Error: Invalid date format. Use YYYY-MM-DDTHH:MM:SS+HH:MM."
 
-    summary = screen_activity_db.get_screen_activity_summary(uid, start_date=start_dt, end_date=end_dt)
+    try:
+        summary = screen_activity_db.get_screen_activity_summary(uid, start_date=start_dt, end_date=end_dt)
+    except Exception as e:
+        logger.error(f"get_screen_activity_tool - error retrieving summary: {type(e).__name__}")
+        return "Error: Failed to retrieve screen activity."
 
     apps_dict: Dict[str, Dict[str, Any]] = cast(Dict[str, Dict[str, Any]], summary['apps'])
     if not apps_dict:
