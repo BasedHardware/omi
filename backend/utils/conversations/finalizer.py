@@ -127,6 +127,7 @@ async def finalize_persisted_conversation(
             return ConversationFinalizationDisposition.fenced
         conversation.status = ConversationStatus.processing
 
+    phase = 'geolocation'
     try:
         # A location persisted with the recording session or WAL is the
         # canonical start-time snapshot. Redis remains only a compatibility
@@ -159,6 +160,7 @@ async def finalize_persisted_conversation(
         persistence: dict[str, bool] = {'owned': True}
         derived_effects: list = []
         derived_disposition: list[DerivedEffectsDisposition] = [DerivedEffectsDisposition.RUN]
+        phase = 'processing'
         if conversation.status != ConversationStatus.completed:
             conversation = await run_blocking(
                 postprocess_executor,
@@ -198,6 +200,7 @@ async def finalize_persisted_conversation(
         # precede every derived effect (calendar, usage/app, vector,
         # action/goal, audio, webhook, memory) so a losing finalizer produces
         # zero canonical side effects (#10468 r5).
+        phase = 'fanout_claim'
         fanout = await run_blocking(
             db_executor,
             lifecycle_service.claim_finalization_fanout,
@@ -229,6 +232,7 @@ async def finalize_persisted_conversation(
         # the empty-bundle memory fallback, and third-party app webhooks. Capture
         # receipt, keyframes, and arrival intent are not derived intelligence
         # (§1.7) and must still run so a free-tier desktop meeting wakes Chat.
+        phase = 'derived_effects'
         skip_derived_effects = derived_disposition[0] == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
         if skip_derived_effects:
             logger.info(
@@ -243,6 +247,7 @@ async def finalize_persisted_conversation(
             # extraction inside that lease so a temporary fail-closed gate
             # leaves the job retryable instead of dropping the source.
             await run_blocking(postprocess_executor, extract_memories, uid, conversation)
+        phase = 'integrations'
         if not skip_derived_effects:
             await trigger_external_integrations(
                 uid,
@@ -255,6 +260,7 @@ async def finalize_persisted_conversation(
         # durable fanout projection completed. Desktop waits on that projection
         # before waking Chat; ordering the marker first closes the small window
         # where a completed projection existed without a notes-ready intent.
+        phase = 'meeting_receipt'
         await run_blocking(
             db_executor,
             record_and_persist_finalized_meeting_receipt,
@@ -264,6 +270,7 @@ async def finalize_persisted_conversation(
         )
         # This is a metadata-only durable outbox write. Pixels remain local and
         # an offline desktop can satisfy it on a later screen-sync recovery.
+        phase = 'frame_request'
         if not getattr(conversation, 'discarded', False):
             decision = await resolve_frame_request_authority(
                 uid,
@@ -301,6 +308,7 @@ async def finalize_persisted_conversation(
                     sanitize_pii(uid),
                     type(error).__name__,
                 )
+        phase = 'fanout_complete'
         fanout_completed = await run_blocking(
             db_executor,
             lifecycle_service.complete_finalization_fanout,
@@ -327,7 +335,11 @@ async def finalize_persisted_conversation(
         # operators for self-healing traffic (2026-09-06: 5-7/30min bursts
         # against ~210-255 healthy processing/30min).
         logger.warning(
-            'persisted conversation finalization failed failure=processing_failed reason=%s',
+            'persisted conversation finalization failed failure=processing_failed reason=%s phase=%s '
+            'exception_type=%s cause_type=%s',
             reason.value,
+            phase,
+            type(error).__name__,
+            type(error.__cause__).__name__ if error.__cause__ is not None else 'none',
         )
         raise ConversationFinalizationError('processing_failed') from error

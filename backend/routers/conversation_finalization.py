@@ -104,6 +104,7 @@ async def run_listen_finalization_job(
 
     release_lock = True
     claimed_lease_epoch: int | None = None
+    effective_retry_count = task_retry_count
     job: dict[str, Any] | None = None
     try:
         claim = await run_blocking(
@@ -130,6 +131,10 @@ async def run_listen_finalization_job(
         if claim_status != 'claimed':
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
         claimed_lease_epoch = claim['lease_epoch']
+        # Reconciliation creates a new named Cloud Task generation, whose retry
+        # header starts at zero. The job's persisted count follows actual failed
+        # processing attempts across generations and is the durable budget.
+        effective_retry_count = max(task_retry_count, int(claim.get('attempt_count') or 0))
         if claimed_lease_epoch is None:
             logger.error('listen finalization claim returned no lease epoch job=%s', job_id)
             return JSONResponse(status_code=500, content={'status': 'retry'})
@@ -137,7 +142,7 @@ async def run_listen_finalization_job(
         job = await run_blocking(db_executor, jobs_db.get_finalization_job, job_id)
         if not job or not isinstance(job.get('uid'), str) or not isinstance(job.get('conversation_id'), str):
             terminal = await _retry_or_dead_letter(
-                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, 'invalid_job'
+                job_id, dispatch_generation, claimed_lease_epoch, effective_retry_count, 'invalid_job'
             )
             if terminal:
                 logger.error('listen finalization final attempt failed job=%s error=invalid_job', job_id)
@@ -167,11 +172,11 @@ async def run_listen_finalization_job(
                 dispatch_generation=dispatch_generation,
                 lease_epoch=claimed_lease_epoch,
                 trigger=trigger_for_finalization_job(job),
-                final_attempt=task_retry_count >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
+                final_attempt=effective_retry_count >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
             )
         except ConversationFinalizationError:
             terminal = await _retry_or_dead_letter(
-                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, 'processing_failed'
+                job_id, dispatch_generation, claimed_lease_epoch, effective_retry_count, 'processing_failed'
             )
             if terminal:
                 logger.error('listen finalization final attempt failed job=%s failure=processing_failed', job_id)
@@ -215,7 +220,7 @@ async def run_listen_finalization_job(
                     job_id,
                     dispatch_generation,
                     claimed_lease_epoch,
-                    task_retry_count,
+                    effective_retry_count,
                     'worker_failed',
                 )
             except Exception:

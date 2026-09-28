@@ -679,6 +679,38 @@ async def test_worker_dead_letters_the_final_failed_attempt(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_worker_uses_persisted_failures_after_task_generation_resets_retry_header(monkeypatch):
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
+    monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 4},
+    )
+    monkeypatch.setattr(
+        jobs_db, 'get_finalization_job', lambda job_id: {'uid': 'uid-1', 'conversation_id': 'conversation-1'}
+    )
+    finalizer = AsyncMock(side_effect=ConversationFinalizationError('processing_failed'))
+    monkeypatch.setattr(finalization_router, 'finalize_persisted_conversation', finalizer)
+    dead_letter = MagicMock(return_value=True)
+    retryable = MagicMock()
+    monkeypatch.setattr(finalization_router, 'final_attempt_failed', dead_letter)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
+    monkeypatch.setattr(finalization_router, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 5)
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'job_id': 'job-1', 'dispatch_generation': 8}), task_retry_count=0
+    )
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'dead_letter'}
+    assert finalizer.await_args.kwargs['final_attempt'] is True
+    dead_letter.assert_called_once_with('job-1', 8, 4, 5)
+    retryable.assert_not_called()
+
+
+@pytest.mark.anyio
 async def test_worker_completes_claimed_job(monkeypatch):
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
@@ -1618,7 +1650,7 @@ async def test_finalizer_skips_fanout_when_atomic_claim_is_fenced(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_finalizer_retries_canonical_memory_extraction_before_fanout(monkeypatch):
+async def test_finalizer_retries_canonical_memory_extraction_before_fanout(monkeypatch, caplog):
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
@@ -1626,7 +1658,7 @@ async def test_finalizer_retries_canonical_memory_extraction_before_fanout(monke
         id='conversation-1', status=ConversationStatus.processing, language='en', discarded=False
     )
     process = MagicMock(return_value=conversation)
-    extract = MagicMock(side_effect=RuntimeError('canonical write gate unavailable'))
+    extract = MagicMock(side_effect=RuntimeError('private transcript text'))
     claim_fanout = MagicMock(
         return_value={'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'}
     )
@@ -1654,6 +1686,15 @@ async def test_finalizer_retries_canonical_memory_extraction_before_fanout(monke
             dispatch_generation=2,
             lease_epoch=3,
         )
+
+    failure_logs = [
+        record.getMessage()
+        for record in caplog.records
+        if 'persisted conversation finalization failed' in record.message
+    ]
+    assert len(failure_logs) == 1
+    assert 'phase=derived_effects exception_type=RuntimeError cause_type=none' in failure_logs[0]
+    assert 'private transcript text' not in failure_logs[0]
 
     assert process.call_args.kwargs['defer_derived_effects'] is True
     # The ownership fence (fanout claim) now runs before extract_memories;
