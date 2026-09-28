@@ -3,7 +3,8 @@
 Thin per-platform shells for the shared Swift app (`Package.swift` at the
 repo root). Each host does **only** bootstrap, injection of platform
 implementations, and window/permission plumbing — every product surface
-comes from `OmiUI.RootView(model: OmiUI.AppModel)`, and all transport
+comes from `OmiUI.RootView` rendering the injected `OmiUI.AppStore`
+(`RootView().environmentObject(store)`), and all transport
 policy comes from `OmiKit` (which binds the C++ `native-core/` middleware).
 
 ```
@@ -81,7 +82,7 @@ open omi-v5-macOS.xcodeproj # run; grants needed: Screen Recording + Mic
 
 **Verified: Kotlin transpile output only.** `swift build --scratch-path
 .build/scratch-platforms` from the repo root generates the skipstone
-Kotlin (`omi.kit.NativePolicyBridge`, `omi.ui.RootView`, `omi.ui.AppModel`)
+Kotlin (`omi.kit.NativePolicyBridge`, `omi.ui.RootView`, `omi.ui.AppStore`)
 that this Gradle project wires as source sets; no Gradle/NDK build has run
 (no Android SDK on this machine). See `android/README.md` for exact
 developer steps (`swift build` → `gradlew :app:assembleDebug`), the

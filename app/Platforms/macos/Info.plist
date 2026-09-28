@@ -18,5 +18,11 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Omi uses Bluetooth to connect to your Omi device and stream its audio.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Omi records audio for your private transcript when capture is on.</string>
+	<key>OMIFirebaseAPIKey</key>
+	<string></string>
 </dict>
 </plist>

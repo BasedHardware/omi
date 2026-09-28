@@ -7,28 +7,29 @@ import OmiKit
 import OmiUI
 
 // macOS host shell. Bootstrap + injection + window/permission plumbing only;
-// all product UI comes from OmiUI.RootView over OmiUI.AppModel.
+// all product UI comes from OmiUI.RootView over the injected AppStore.
 //
 // Injection contract (see ../README.md):
 //   - OmiKit.Policy.bridge defaults to DefaultPolicyBridge, which links the
-//     real native-core C++ through CNativeCore — nothing to replace on macOS.
-//   - Auth uses the browser + loopback callback flow (docs/auth-and-sessions.md);
-//     the native session module owns the exchange and calls
-//     AppModel.updateSignedIn(_:) when it lands.
+//     real native-core C++ through CNativeCore — nothing to replace here.
+//   - Services come from OmiBootstrap: keychain credentials, browser +
+//     loopback auth (LoopbackAuthPortal), the authenticated HTTP transport,
+//     UserDefaults-backed settings, the CoreBluetooth device transport, and
+//     the ScreenCaptureKit rewind engine (OmiRewindEngine).
+//   - `-omiDemoData` swaps in the labeled in-memory demo bundle for
+//     screenshots and UI exploration (DemoServices.swift).
 //
 // Window contract (docs/desktop-app.md, values pinned in the RN tree's
-// `AppDelegate.mm` / `desktopChrome.ts` and asserted by
-// `react-native/__tests__/macOSNativeBoundary.test.ts`):
+// `AppDelegate.mm` / `desktopChrome.ts`):
 //   - real behind-window NSVisualEffectView glass (HUDWindow material dark,
 //     UnderWindowBackground light), never a full-bleed SwiftUI background;
 //   - titlebar material hidden; a titlebar accessory spacer of
 //     OmiChromeRowHeight + OmiWindowInset reserves chrome row 1;
-//   - traffic lights are positioned by shifting the whole titlebar container
-//     (never individual buttons) so they center on the chrome row;
-//   - dragging is AppKit's movableByWindowBackground path;
-//   - the capture toggle hides when Screen Recording permission is
-//     unavailable (probe in OmiPermissions below);
-//   - every rebuild resets the Screen Recording TCC grant.
+//   - the app draws its own traffic-light row (OmiUI Desktop); the host maps
+//     its windowCommand notifications onto the real AppKit button paths
+//     (performClose:/performMiniaturize:/performZoom:) and publishes
+//     Edit → Search (Cmd+K) as the searchCommand notification;
+//   - dragging is AppKit's movableByWindowBackground path.
 
 enum OmiChrome {
     /// Must equal `desktopWindowInset` in react-native/src/desktop/desktopChrome.ts.
@@ -39,14 +40,10 @@ enum OmiChrome {
 
 // MARK: - Permissions
 
-/// Permission probing for the chrome's capture toggle. The full chrome
-/// contract (toggle state, permission guide) is asserted by the RN boundary
-/// test suite; this host only supplies the availability signal.
+/// Permission probing for host-side capture availability. The capture state
+/// machine itself lives in OmiUI (AppStore + RewindCaptureControlling).
 @MainActor
 enum OmiPermissions {
-    /// Capture is offerable only with Screen Recording granted. Rebuilds
-    /// reset the TCC grant, so this is re-probed per launch (and would be
-    /// re-probed on window focus once the capture session seam lands).
     static func screenRecordingAvailable() -> Bool {
         CGPreflightScreenCaptureAccess()
     }
@@ -75,11 +72,11 @@ struct OmiWindowDresser {
         // accessory spacer of the full chrome height plus the window inset.
         installChromeSpacer()
 
-        // Center the traffic lights on the chrome row by shifting the whole
-        // titlebar container — never individual buttons (hover glyphs desync).
-        if let container = window.standardWindowButton(.closeButton)?.superview?.superview {
-            container.frame.origin.y = chromeRowCenterOffset(in: container)
-        }
+        // The app draws its own traffic lights on the chrome row; the system
+        // buttons stay hidden behind the full-size content view.
+        window.standardWindowButton(.closeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
     }
 
     private func installChromeSpacer() {
@@ -94,23 +91,13 @@ struct OmiWindowDresser {
         spacer.layoutAttribute = .top
         window.addTitlebarAccessoryViewController(spacer)
     }
-
-    /// Distance to move the titlebar container down so the light centers sit
-    /// on the middle of the chrome row (the row begins `windowInset` below
-    /// the window's top edge and is `chromeRowHeight` tall).
-    private func chromeRowCenterOffset(in container: NSView) -> CGFloat {
-        let windowTopInContainerY = container.superview.map { $0.bounds.height - container.frame.maxY } ?? 0
-        let rowCenterFromWindowTop = OmiChrome.windowInset + OmiChrome.chromeRowHeight / 2
-        let lightCenterInContainer = container.bounds.height / 2
-        return windowTopInContainerY + rowCenterFromWindowTop - lightCenterInContainer
-    }
 }
 
 /// Backgrounds the hosting view with real behind-window glass, mirroring
 /// `OmiGlassPanelView.mm` (NSVisualEffectMaterialHUDWindow dark /
 /// UnderWindowBackground light). Content above it stays transparent so the
-/// desktop shows through; light mode will paint its opaque paper background
-/// in the OmiUI surface once the desktop theme lands there.
+/// desktop shows through; light mode paints its opaque paper background in
+/// the OmiUI desktop surface.
 struct OmiGlassBackground: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
@@ -147,19 +134,75 @@ struct OmiWindowAccessor: NSViewRepresentable {
     }
 }
 
+// MARK: - App delegate (window commands)
+
+/// Maps the OmiUI desktop surface's traffic-light commands onto the real
+/// AppKit window paths, and labels the demo run in the window title.
+final class OmiAppDelegate: NSObject, NSApplicationDelegate {
+    private var windowCommandObserver: NSObjectProtocol?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        windowCommandObserver = NotificationCenter.default.addObserver(
+            forName: Notification.Name(DesktopWindowSignals.windowCommand),
+            object: nil, queue: .main
+        ) { [weak self] note in
+            self?.performWindowCommand(from: note)
+        }
+        if OmiBootstrap.demoMode {
+            NSApp.mainWindow?.title = "Omi — Demo Data"
+        }
+    }
+
+    private func performWindowCommand(from note: Notification) {
+        guard let raw = note.userInfo?["command"] as? String,
+            let command = DesktopWindowCommand(rawValue: raw),
+            let window = NSApp.keyWindow ?? NSApp.mainWindow
+        else { return }
+        switch command {
+        case .close: window.performClose(nil)
+        case .minimize: window.performMiniaturize(nil)
+        case .zoom: window.performZoom(nil)
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let windowCommandObserver {
+            NotificationCenter.default.removeObserver(windowCommandObserver)
+        }
+    }
+}
+
 // MARK: - App
 
 @main
 struct OmiHostApp: App {
-    @State private var model = AppModel()
+    @NSApplicationDelegateAdaptor(OmiAppDelegate.self) private var delegate
+    @StateObject private var store: AppStore
+
+    init() {
+        _store = StateObject(wrappedValue: OmiBootstrap.makeStore())
+    }
 
     var body: some Scene {
         WindowGroup {
-            RootView(model: model)
+            RootView()
+                .environmentObject(store)
                 .background(OmiGlassBackground())
                 .background(OmiWindowAccessor())
         }
         .windowStyle(.automatic)
-        .defaultSize(width: 900, height: 700)
+        .defaultSize(width: 1_020, height: 720)
+        .commands {
+            // Edit → Search (Cmd+K): the desktop surface consumes the
+            // searchCommand notification (Search mode, Home, omnibar focus).
+            CommandGroup(after: .textEditing) {
+                Button("Find in Omi…") {
+                    NotificationCenter.default.post(
+                        name: Notification.Name(DesktopWindowSignals.searchCommand),
+                        object: nil)
+                }
+                .keyboardShortcut("k", modifiers: .command)
+            }
+        }
     }
 }
