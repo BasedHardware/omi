@@ -561,7 +561,7 @@ environment_shared:
             category: rollout
           SYNC_BACKFILL_UID_SEQUENCER:
             provisional: true
-            value: 'off'
+            value: 'on'
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
@@ -693,7 +693,7 @@ environment_shared:
             category: rollout
           SYNC_BACKFILL_UID_SEQUENCER:
             provisional: true
-            value: 'off'
+            value: 'on'
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
