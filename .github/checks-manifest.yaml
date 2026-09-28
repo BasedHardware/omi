@@ -657,6 +657,21 @@ checks:
     triggers: [".github/scripts/check_runner_cost_policy.py", ".github/scripts/test_check_runner_cost_policy.py"]
     lanes: ["local", "ci"]
     reason: "runner cost-policy fixtures must keep rejecting the paid larger-runner label"
+  - id: ci-budget
+    command: ["python3", ".github/scripts/check_ci_budget.py", "--base", "{base}"]
+    triggers: [".github/workflows/**/*.yml", ".github/workflows/**/*.yaml", ".github/ci-budget.yaml", ".github/scripts/check_ci_budget.py", ".github/scripts/measure_ci_budget.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "review workflow and job trigger, matrix, runner and p50 budget changes against the daily PR minute and internal signal caps"
+  - id: ci-budget-fixtures
+    command: ["python3", ".github/scripts/test_check_ci_budget.py"]
+    triggers: [".github/workflows/**/*.yml", ".github/workflows/**/*.yaml", ".github/ci-budget.yaml", ".github/scripts/check_ci_budget.py", ".github/scripts/test_check_ci_budget.py"]
+    lanes: ["local", "ci"]
+    reason: "offline fixtures pin inventory drift, trigger widening, matrix and runner expansion, budget raises and caps"
+  - id: ci-budget-sampler-fixtures
+    command: ["python3", ".github/scripts/test_measure_ci_budget.py"]
+    triggers: [".github/scripts/measure_ci_budget.py", ".github/scripts/test_measure_ci_budget.py", ".github/workflows/ci-budget-audit.yml"]
+    lanes: ["local", "ci"]
+    reason: "weekly audit must skip unused jobs, detect over-budget p50, and update one tracking issue"
   - id: windows-sync-pr-retirement-contract
     command: ["python3", ".github/scripts/test_retire_superseded_sync_prs.py"]
     triggers: [".github/workflows/desktop_windows_release.yml", ".github/scripts/retire_superseded_sync_prs.py", ".github/scripts/test_retire_superseded_sync_prs.py"]
