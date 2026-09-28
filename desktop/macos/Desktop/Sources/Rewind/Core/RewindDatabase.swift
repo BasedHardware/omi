@@ -2654,6 +2654,7 @@ actor RewindDatabase {
     Self.registerConversationSummarySectionsMigration(on: &migrator)
     Self.registerConversationLocalSummaryMigration(on: &migrator)
     Self.registerConversationCaptureGroupMigration(on: &migrator)
+    SiriMemoryExpirySchema.registerMigration(on: &migrator)
     LocalEmbeddingStore.registerMigration(on: &migrator)
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
@@ -2661,7 +2662,6 @@ actor RewindDatabase {
       defaults: .standard,
       ownerID: contextBucketOwnerID)
   }
-
   /// Kept as one callable migration boundary so a populated legacy table can be exercised in a
   /// focused test without reproducing the entire historical migration ledger.
   static func installScreenActivitySyncStateSchema(_ db: Database) throws {

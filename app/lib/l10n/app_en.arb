@@ -13566,6 +13566,8 @@
     "@voiceQuestionNoSpeech": {
         "description": "Shown in chat when a pendant voice question contains no detectable speech."
     },
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.",
     "sendToSupport": "Send to support",
     "@sendToSupport": {
         "description": "Device diagnostics support upload"

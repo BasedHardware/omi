@@ -11228,6 +11228,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get voiceQuestionNoSpeech => '잘 듣지 못했어요 — 다시 시도해 주세요';
 
   @override
+  String get siriIndexSetting => 'Siri 및 Apple Intelligence와 함께 Omi 사용';
+
+  @override
+  String get siriIndexSettingDescription => 'Siri가 이 기기에서 대화, 기억, 작업을 찾도록 허용합니다. 끄면 Apple 검색에서 삭제됩니다.';
+
+  @override
   String get sendToSupport => 'Send to support';
 
   @override

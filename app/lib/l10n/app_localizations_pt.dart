@@ -11431,6 +11431,13 @@ class AppLocalizationsPt extends AppLocalizations {
   String get voiceQuestionNoSpeech => 'Não entendi — tente novamente';
 
   @override
+  String get siriIndexSetting => 'Usar Omi com Siri e Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Permita que a Siri encontre suas conversas, memórias e tarefas neste dispositivo. Desativar remove esses itens da busca da Apple.';
+
+  @override
   String get sendToSupport => 'Enviar ao suporte';
 
   @override

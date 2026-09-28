@@ -21,7 +21,7 @@ class _RecordingMemoriesProvider extends MemoriesProvider {
   int restored = 0;
 
   @override
-  void deleteMemory(Memory memory) => deleted.add(memory.id);
+  Future<void> deleteMemory(Memory memory) async => deleted.add(memory.id);
 
   @override
   Future<bool> restoreLastDeletedMemory({String? id}) async {
