@@ -11348,6 +11348,18 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'ஒற்றை தட்டு';
+
+  @override
+  String get singleTapAction => 'ஒற்றை தட்டு நடவடிக்கை';
+
+  @override
+  String get tripleTap => 'மூன்று முறை தட்டு';
+
+  @override
+  String get tripleTapAction => 'மூன்று முறை தட்டு நடவடிக்கை';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'Omi-யின் பதில்களைக் கேளுங்கள்';
 
   @override

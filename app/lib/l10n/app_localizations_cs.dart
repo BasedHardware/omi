@@ -11268,6 +11268,18 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'Jednoduché klepnutí';
+
+  @override
+  String get singleTapAction => 'Akce jednoduchého klepnutí';
+
+  @override
+  String get tripleTap => 'Trojité klepnutí';
+
+  @override
+  String get tripleTapAction => 'Akce trojitého klepnutí';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'Poslechněte si odpovědi Omi';
 
   @override

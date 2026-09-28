@@ -11257,6 +11257,18 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'Enkelttryk';
+
+  @override
+  String get singleTapAction => 'Enkelttryk-handling';
+
+  @override
+  String get tripleTap => 'Tredobbelttryk';
+
+  @override
+  String get tripleTapAction => 'Tredobbelttryk-handling';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'Hør Omis svar';
 
   @override

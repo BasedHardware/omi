@@ -11261,6 +11261,18 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get singleTap => 'Jedno ťuknutie';
+
+  @override
+  String get singleTapAction => 'Akcia jedného ťuknutia';
+
+  @override
+  String get tripleTap => 'Trojité ťuknutie';
+
+  @override
+  String get tripleTapAction => 'Akcia trojitého ťuknutia';
+
+  @override
   String get deviceOnboardingVoiceReplyTitle => 'Vypočujte si odpovede Omi';
 
   @override
