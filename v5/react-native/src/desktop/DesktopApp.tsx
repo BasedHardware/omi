@@ -195,8 +195,9 @@ export function DesktopApp({
   );
   const [groupBy, setGroupBy] = useState<TimelineGrouping>('date');
   // Interface revision: v5 keeps the pages IA selectable from Settings.
-  const [uiVersion, setUiVersion] =
-    useState<DesktopUiVersion>(initialUiVersion ?? 'v5.1');
+  const [uiVersion, setUiVersion] = useState<DesktopUiVersion>(
+    initialUiVersion ?? 'v5.1',
+  );
   // Saved-v5 users would see one paint of v5.1 chrome before preferences
   // resolve; hold the loading mark until the first read settles.
   const [prefsLoaded, setPrefsLoaded] = useState(false);

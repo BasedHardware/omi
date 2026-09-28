@@ -19,12 +19,7 @@ import {ShippingListInsert} from './ShippingStage';
 import {MaterialIcon} from '../ui/MaterialIcon';
 
 import {EXPLORE_CHECKLIST, type ExploreCheck} from './exploreChecklist';
-import {
-  EmptyCopy,
-  ReadRow,
-  SectionTitle,
-  TaskRow,
-} from './DesktopRows';
+import {EmptyCopy, ReadRow, SectionTitle, TaskRow} from './DesktopRows';
 import {
   type DesktopTokens,
   useDesktopTheme,

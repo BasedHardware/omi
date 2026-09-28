@@ -461,7 +461,9 @@ export function UnifiedTimeline({
   const renderEntry = (entry: TimelineEntry): React.ReactNode => {
     const kind = kindMeta[entry.kind];
     const meta =
-      entry.atMs === 0 ? kind.label : `${kind.label} · ${timeLabel(entry.atMs)}`;
+      entry.atMs === 0
+        ? kind.label
+        : `${kind.label} · ${timeLabel(entry.atMs)}`;
     // Memories are single-voice (title and summary carry the same sentence
     // from both backends), so the sentence is the title and there is no
     // subtitle — but the row keeps the same shape as every other entry.

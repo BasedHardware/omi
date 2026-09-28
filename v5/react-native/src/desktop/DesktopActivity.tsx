@@ -122,7 +122,10 @@ export function DesktopActivity({
         header={
           <View>
             {showNotice ? (
-              <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
+              <DesktopReadBanner
+                onRefresh={onRefresh}
+                readsPhase={readsPhase}
+              />
             ) : null}
             {exploreDone !== null &&
             exploreDone.size < EXPLORE_CHECKLIST.length ? (
