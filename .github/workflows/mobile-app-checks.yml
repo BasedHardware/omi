@@ -7,10 +7,16 @@ on:
   # made GitHub skip the entire workflow — the iOS job never existed, which
   # reads as "green" and proves nothing.
   pull_request:
+  schedule:
+    - cron: '41 4 * * *'
+
+permissions:
+  contents: read
+  issues: read
 
 concurrency:
-  group: mobile-app-checks-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: mobile-app-checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
@@ -19,10 +25,13 @@ jobs:
     timeout-minutes: 20
     outputs:
       diff_base: ${{ steps.changes.outputs.diff_base }}
+      full_ci: ${{ steps.tier.outputs.full_ci }}
       has_app_codegen: ${{ steps.changes.outputs.has_app_codegen }}
       has_app_compile_smoke: ${{ steps.changes.outputs.has_app_compile_smoke }}
+      has_app_android_pr: ${{ steps.changes.outputs.has_app_android_pr }}
       has_app_ios_compile: ${{ steps.changes.outputs.has_app_ios_compile }}
       has_app_journeys: ${{ steps.changes.outputs.has_app_journeys }}
+      has_app_journeys_pr: ${{ steps.changes.outputs.has_app_journeys_pr }}
       has_app_dart: ${{ steps.changes.outputs.has_app_dart }}
       has_app_l10n: ${{ steps.changes.outputs.has_app_l10n }}
       has_flutter_generated: ${{ steps.changes.outputs.has_flutter_generated }}
@@ -37,6 +46,10 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      - name: Resolve current CI tier
+        id: tier
+        uses: ./.github/actions/ci-tier
+
       - name: Detect changed paths
         id: changes
         uses: ./.github/actions/detect-changes
@@ -46,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: changes
-    if: needs.changes.outputs.has_flutter_generated == 'true'
+    if: needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_flutter_generated == 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -111,7 +124,7 @@ jobs:
     name: Dart Analyze & Tests
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.has_app_dart == 'true'
+    if: needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_dart == 'true'
     timeout-minutes: 30
     steps:
       - name: Checkout code
@@ -238,7 +251,7 @@ jobs:
     name: Seeded Journeys (hermetic)
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.has_app_journeys == 'true'
+    if: github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_journeys == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_journeys_pr == 'true')
     timeout-minutes: 30
     steps:
       - name: Checkout code
@@ -301,7 +314,7 @@ jobs:
     name: Android Compile Smoke
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.has_app_compile_smoke == 'true'
+    if: github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')
     timeout-minutes: 25
     steps:
       - name: Checkout code
@@ -428,7 +441,7 @@ jobs:
     name: Android JVM Unit Tests
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.has_app_compile_smoke == 'true'
+    if: github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')
     timeout-minutes: 25
     steps:
       - name: Checkout code
@@ -513,7 +526,7 @@ jobs:
     name: iOS Compile Check
     runs-on: macos-26
     needs: changes
-    if: needs.changes.outputs.has_app_ios_compile == 'true'
+    if: needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_ios_compile == 'true'
     # Local cold Xcode time was 334s on an M-series Mac. Hosted macos-26 still
     # pays Flutter SDK, pub get, build_runner, and CocoaPods on top of that.
     # Expect ~20-30 min warm / ~35 min cold; 40 is the wedge-guard.
@@ -643,13 +656,12 @@ jobs:
           PY
 
   dart-tests-kiritimati:
-    # Parallel second pass of the hermetic Dart suite under the far timezones
-    # the harness Z1 contract names. Not on the critical path (needs: changes
-    # only). Expected red until harness Z1 (PR #14313) merges.
+    # Full far-timezone suite runs on main and nightly; PRs retain the ordinary
+    # Dart suite. An unrelated fork does not claim timezone coverage.
     name: Dart Tests (Pacific/Kiritimati)
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.has_app_dart == 'true'
+    if: github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_dart == 'true')
     timeout-minutes: 60
     steps:
       - name: Checkout code
@@ -732,6 +744,12 @@ jobs:
       - name: Aggregate conditional mobile checks
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
+          FULL_CI: ${{ needs.changes.outputs.full_ci }}
+          HAS_GENERATED: ${{ needs.changes.outputs.has_flutter_generated }}
+          HAS_DART: ${{ needs.changes.outputs.has_app_dart }}
+          HAS_JOURNEYS: ${{ needs.changes.outputs.has_app_journeys_pr }}
+          HAS_ANDROID: ${{ needs.changes.outputs.has_app_android_pr }}
+          HAS_IOS: ${{ needs.changes.outputs.has_app_ios_compile }}
           GENERATED_FILES_RESULT: ${{ needs.generated-files.result }}
           ANALYZE_AND_TEST_RESULT: ${{ needs.analyze-and-test.result }}
           JOURNEYS_RESULT: ${{ needs.journeys-hermetic.result }}
@@ -744,6 +762,14 @@ jobs:
           if [[ "$CHANGES_RESULT" != "success" ]]; then
             echo "Detect Changes did not complete successfully: $CHANGES_RESULT" >&2
             exit 1
+          fi
+          if [[ "$FULL_CI" != "true" ]]; then
+            if [[ "$HAS_GENERATED" == true || "$HAS_DART" == true || "$HAS_JOURNEYS" == true || "$HAS_ANDROID" == true || "$HAS_IOS" == true ]]; then
+              echo 'deferred: fork PR — a maintainer adds label ci:full, then Re-run all jobs' | tee -a "$GITHUB_STEP_SUMMARY" >&2
+              exit 1
+            fi
+            echo 'Mobile Release Eligibility: no mobile heavy checks selected' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
           for result in \
             "$GENERATED_FILES_RESULT" \
@@ -762,3 +788,47 @@ jobs:
             esac
           done
           echo "Mobile Release Eligibility: success"
+
+  post-merge-failure-issues:
+    name: Post-merge mobile failure issues
+    needs: [changes, journeys-hermetic, android-compile-smoke, android-unit-tests, dart-tests-kiritimati]
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update one issue per failed suite
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOURNEYS: ${{ needs.journeys-hermetic.result }}
+          ANDROID_COMPILE: ${{ needs.android-compile-smoke.result }}
+          ANDROID_JVM: ${{ needs.android-unit-tests.result }}
+          TIMEZONES: ${{ needs.dart-tests-kiritimati.result }}
+          EVENT: ${{ github.event_name }}
+          JOURNEYS_EXPECTED: ${{ needs.changes.outputs.has_app_journeys }}
+          ANDROID_EXPECTED: ${{ needs.changes.outputs.has_app_compile_smoke }}
+          TIMEZONES_EXPECTED: ${{ needs.changes.outputs.has_app_dart }}
+        run: |
+          set -euo pipefail
+          failed=0
+          for spec in "Seeded Journeys:$JOURNEYS:$JOURNEYS_EXPECTED" "Android Compile Smoke:$ANDROID_COMPILE:$ANDROID_EXPECTED" "Android JVM Unit Tests:$ANDROID_JVM:$ANDROID_EXPECTED" "Dart Far Timezones:$TIMEZONES:$TIMEZONES_EXPECTED"; do
+            suite="${spec%%:*}"
+            rest="${spec#*:}"
+            result="${rest%%:*}"
+            expected="${rest#*:}"
+            [[ "$EVENT" == push && "$expected" != true && "$result" == skipped ]] && continue
+            [[ "$result" == success ]] && continue
+            failed=1
+            title="CI post-merge failure: $suite"
+            issue_number="$(gh issue list --repo "$REPO" --state open --search "\"$title\" in:title" --limit 100 --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+            printf 'The %s suite was %s on a main or nightly run.\n\nEvidence: %s\n' "$suite" "$result" "$RUN_URL" > /tmp/ci-suite-issue.md
+            if [[ -n "$issue_number" ]]; then
+              gh issue edit "$issue_number" --repo "$REPO" --body-file /tmp/ci-suite-issue.md
+            else
+              gh issue create --repo "$REPO" --title "$title" --body-file /tmp/ci-suite-issue.md
+            fi
+          done
+          exit "$failed"

@@ -701,6 +701,16 @@ class SiriIntegration extends SiriEventsApi {
     final rows = await _host.takeTelemetry();
     for (final row in rows) {
       if (row.kind == 'intent') {
+        if (row.intent == 'askOmi') {
+          final outcomes = siri_events.SiriAskOmiPerformedOutcome.values.where((value) => value.name == row.outcome);
+          const TypedEvents().emit(siri_events.SiriAskOmiPerformed(
+            platform: siri_events.SiriAskOmiPerformedPlatform.ios,
+            outcome: outcomes.isEmpty ? siri_events.SiriAskOmiPerformedOutcome.server : outcomes.first,
+            latencyMs: row.latencyMs,
+            invokedVia: siri_events.SiriAskOmiPerformedInvokedVia.unknown,
+          ));
+          continue;
+        }
         final intents = siri_events.SiriIntentPerformedIntent.values.where((value) => value.name == row.intent);
         if (intents.isEmpty) continue;
         final outcomes = siri_events.SiriIntentPerformedOutcome.values.where((value) => value.name == row.outcome);

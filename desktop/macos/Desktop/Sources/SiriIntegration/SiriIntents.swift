@@ -20,20 +20,24 @@ enum SiriIntentTelemetry {
         ? "complete"
         : name == "open"
           ? "open"
-          : name == "start_listening" || name == "stop_listening" ? name : "create"
+          : name == "ask_omi"
+            ? "ask"
+            : name == "start_listening" || name == "stop_listening" ? name : "create"
       throw SiriActionFailure(action: action, failure: failure)
     }
   }
 
   @MainActor
   private static func record(_ name: String, outcome: String, started: Date) {
+    var properties: [String: Any] = [
+      "platform": "macos", "outcome": outcome,
+      "latency_ms": Int(Date().timeIntervalSince(started) * 1_000),
+      "invoked_via": "unknown",
+    ]
+    if name != "ask_omi" { properties["intent"] = name }
     PostHogManager.shared.track(
-      "Siri Intent Performed",
-      properties: [
-        "intent": name, "platform": "macos", "outcome": outcome,
-        "latency_ms": Int(Date().timeIntervalSince(started) * 1_000),
-        "invoked_via": "unknown",
-      ])
+      name == "ask_omi" ? "Siri Ask Omi Performed" : "Siri Intent Performed",
+      properties: properties)
   }
 }
 
@@ -51,6 +55,65 @@ struct RememberIntent: AppIntent {
     }
     let content = SiriIntentService.normalizedMemory(saved.content)
     return .result(dialog: IntentDialog("Got it. I'll remember that \(content)."))
+  }
+}
+
+struct OpenOmiChatIntent: AppIntent {
+  static let title: LocalizedStringResource = "Open Omi chat"
+  static let openAppWhenRun = true
+  @Parameter(title: "Draft") var draft: String?
+  @Parameter(title: "Owner") var ownerID: String?
+
+  @MainActor
+  func perform() async throws -> some IntentResult {
+    guard let ownerID,
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID)
+    else {
+      throw SiriFailure.auth
+    }
+    AppDelegate.summonWindowTarget()?.openMainAppChat(
+      appendingDraft: draft ?? "", authorization: authorization)
+    return .result()
+  }
+}
+
+struct AskOmiIntent: AppIntent {
+  static let title: LocalizedStringResource = "Ask Omi"
+  static let description = IntentDescription("Ask a question in Omi chat.")
+  static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+  static let openAppWhenRun = false
+
+  @Parameter(title: "Question", requestValueDialog: "What would you like to ask Omi?")
+  var question: String
+
+  @MainActor
+  func perform() async throws -> some IntentResult & ProvidesDialog {
+    let value = question.trimmingCharacters(in: .whitespacesAndNewlines)
+    let openChat = OpenOmiChatIntent()
+    openChat.ownerID = RuntimeOwnerIdentity.captureAuthorizationSnapshot()?.ownerID
+    if value.lowercased().hasPrefix("remember ") || value.lowercased().hasPrefix("to remember ") {
+      let prefix = value.lowercased().hasPrefix("to remember ") ? "to remember " : "remember "
+      _ = try await SiriIntentTelemetry.perform("ask_omi") {
+        try await SiriIntentService.remember(String(value.dropFirst(prefix.count)))
+      }
+      return .result(opensIntent: openChat, dialog: "Saved to Omi")
+    }
+    let result = try await SiriIntentTelemetry.perform("ask_omi") {
+      try await SiriIntentService.ask(value)
+    }
+    switch result {
+    case .draft:
+      openChat.draft = value
+      return .result(opensIntent: openChat, dialog: "Open Omi to finish your question in chat.")
+    case .pending:
+      return .result(opensIntent: openChat, dialog: "Omi couldn't finish the answer here. Open Omi chat to check it.")
+    case .answered(let answer):
+      guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        return .result(opensIntent: openChat, dialog: "Open Omi chat to continue.")
+      }
+      let spoken = answer.count > 450 ? String(answer.prefix(447)) + "…" : answer
+      return .result(opensIntent: openChat, dialog: IntentDialog("\(spoken) Open Omi to continue."))
+    }
   }
 }
 
@@ -229,11 +292,22 @@ extension StopListeningIntent {
 struct OmiAppShortcuts: AppShortcutsProvider {
   static var appShortcuts: [AppShortcut] {
     AppShortcut(
+      intent: AskOmiIntent(),
+      phrases: [
+        "Ask \(.applicationName)",
+        "Ask \(.applicationName) a question",
+        "Ask a question in \(.applicationName)",
+        "Ask \(.applicationName) something",
+        "I have a question for \(.applicationName)",
+        "Ask \(.applicationName) to do something",
+      ], shortTitle: "Ask Omi", systemImageName: "bubble.left.and.text.bubble.right")
+    AppShortcut(
       intent: RememberIntent(),
       phrases: [
         "Remember something in \(.applicationName)",
         "Tell \(.applicationName) to remember",
         "Add a memory to \(.applicationName)",
+        "Ask \(.applicationName) to remember",
       ], shortTitle: "Remember", systemImageName: "brain.head.profile")
     AppShortcut(
       intent: StartListeningIntent(),
