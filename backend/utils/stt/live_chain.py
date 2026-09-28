@@ -184,10 +184,6 @@ async def connect_configured_chain(
         connect = callbacks.get(service)
         if connect is None or provider_for_service(service) in failed:
             continue
-        state = fleet_states.get(service.value)
-        if mode == 'on' and state is not None and state.bench and state.bench_until <= time.time():
-            if not health.try_admit_recovery_probe(service.value):
-                continue
         circuit = _circuit_for_primary(service)
         if not circuit.allow_request(max_probes=probes):
             primary_open |= service == primary_service
@@ -200,6 +196,11 @@ async def connect_configured_chain(
                     outcome='degraded',
                 )
             continue
+        state = fleet_states.get(service.value)
+        if mode == 'on' and state is not None and state.bench and state.bench_until <= time.time():
+            if not health.try_admit_recovery_probe(service.value):
+                circuit.release_probe()
+                continue
         result = await attempt(service, connect)
         if result is not None:
             return result

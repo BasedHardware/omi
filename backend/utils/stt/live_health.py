@@ -16,7 +16,7 @@ import redis.asyncio as aioredis
 
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from utils.executors import start_background_task
-from utils.stt.live_metrics import LEG_TRANSCRIPT_OUTCOME, ROUTING_DECISION
+from utils.stt.live_metrics import FLEET_HEALTH_WRITE_DROPPED, LEG_TRANSCRIPT_OUTCOME, ROUTING_DECISION
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ INTEREST_STALE_SECONDS = 900.0
 LOCAL_PROBE_INTERVAL_SECONDS = 10.0
 LOCAL_EVENTS_CAP = 256
 LOCAL_KEYS_CAP = 256
+WRITE_IN_FLIGHT_LIMITS = {'result': 8, 'bench': 4}
 KEY_PREFIX = 'omi:live-stt:v1'
 
 
@@ -85,6 +86,7 @@ class FleetHealth:
         self._probe_ready: dict[str, float] = {}
         self._probe_pending: set[str] = set()
         self._local_probe_next: dict[str, float] = {}
+        self._writes_in_flight = {'result': 0, 'bench': 0}
         seed = f'{os.getpid()}:{time.monotonic_ns()}'.encode()
         self._probe_jitter = probe_jitter or (
             lambda provider: int.from_bytes(hashlib.sha256(seed + provider.encode()).digest()[:4], 'big') / 2**32 * 5.0
@@ -136,7 +138,7 @@ class FleetHealth:
             events.append((self._clock(), outcome == 'text'))
             while len(events) > LOCAL_EVENTS_CAP:
                 events.popleft()
-        self.schedule(self._write_result(provider, lang, outcome))
+        self.schedule(self._write_result(provider, lang, outcome), kind='result')
 
     async def _write_result(self, provider: str, language: str, outcome: str) -> None:
         if self._clock() < self._redis_retry_at:
@@ -163,20 +165,51 @@ class FleetHealth:
             self._redis_retry_at = self._clock() + 10.0
             logger.debug('STT fleet health write fell back to local state', exc_info=True)
 
-    def schedule(self, coroutine: Any) -> None:
+    def schedule(self, coroutine: Any, *, kind: str) -> None:
         if mode() == 'off':
             coroutine.close()
             return
         try:
             loop = asyncio.get_running_loop()
             self._loop = loop
-            start_background_task(coroutine, name='live_stt_fleet_health_write')
+            on_loop = True
         except RuntimeError:
+            on_loop = False
             loop = self._loop
             if loop is None or loop.is_closed():
                 coroutine.close()
+                FLEET_HEALTH_WRITE_DROPPED.labels(kind=kind).inc()
                 return
-            loop.call_soon_threadsafe(lambda: start_background_task(coroutine, name='live_stt_fleet_health_write'))
+        with self._lock:
+            if self._writes_in_flight[kind] >= WRITE_IN_FLIGHT_LIMITS[kind]:
+                coroutine.close()
+                FLEET_HEALTH_WRITE_DROPPED.labels(kind=kind).inc()
+                return
+            self._writes_in_flight[kind] += 1
+
+        def release() -> None:
+            with self._lock:
+                self._writes_in_flight[kind] -= 1
+
+        def launch() -> None:
+            try:
+                task = start_background_task(coroutine, name=f'live_stt_fleet_{kind}_write')
+            except RuntimeError:
+                coroutine.close()
+                release()
+                FLEET_HEALTH_WRITE_DROPPED.labels(kind=kind).inc()
+            else:
+                task.add_done_callback(lambda _task: release())
+
+        if on_loop:
+            launch()
+        else:
+            try:
+                loop.call_soon_threadsafe(launch)
+            except RuntimeError:
+                coroutine.close()
+                release()
+                FLEET_HEALTH_WRITE_DROPPED.labels(kind=kind).inc()
 
     def quarantine(self, provider: str, kind: str, seconds: float) -> None:
         if provider not in PROVIDERS or kind not in {'account', 'selection'} or mode() == 'off':
@@ -184,7 +217,7 @@ class FleetHealth:
         until = self._clock() + max(1.0, seconds)
         with self._lock:
             self._benches[provider] = kind, until
-        self.schedule(self._write_bench(provider, kind, until))
+        self.schedule(self._write_bench(provider, kind, until), kind='bench')
 
     async def _write_bench(self, provider: str, kind: str, until: float) -> None:
         if self._clock() < self._redis_retry_at:
@@ -202,7 +235,7 @@ class FleetHealth:
             logger.debug('STT fleet bench write fell back to local state', exc_info=True)
 
     def cached_snapshot(self, providers: list[str], language: str | None) -> dict[str, ProviderState]:
-        """Read only pod memory on the connection path; stale fleet data is ignored."""
+        """Read only pod memory on connect; keep known benches when scores go stale."""
         providers = [provider for provider in providers if provider in PROVIDERS]
         lang = bounded_language(language)
         local = {provider: self._local_score(provider, lang) for provider in providers}
@@ -220,14 +253,16 @@ class FleetHealth:
                 and now - self._cache_at <= CACHE_STALE_SECONDS
                 and now >= self._redis_retry_at
             )
-            if not fresh:
-                return local
             result: dict[str, ProviderState] = {}
             for provider in providers:
-                cached = self._cached_scores.get((provider, lang), local[provider])
+                cached = self._cached_scores.get((provider, lang), local[provider]) if fresh else local[provider]
                 kind, until = self._cached_benches.get(provider, ('', 0.0))
                 fallback = local[provider]
-                if fallback.excluded and fallback.bench_until > until:
+                if fallback.bench and (
+                    (fallback.bench == 'account' and fallback.bench_until > now and kind != 'account')
+                    or (until <= now and fallback.bench_until > until)
+                    or (fallback.bench == kind and fallback.bench_until > until)
+                ):
                     kind, until = fallback.bench or '', fallback.bench_until
                 result[provider] = ProviderState(cached.score, cached.samples, kind or None, until)
             return result

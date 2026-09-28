@@ -45,8 +45,16 @@ sum by (provider, language, outcome) (rate(omi_stt_leg_transcript_outcome_total{
 sum by (provider, outcome) (rate(omi_stt_provider_connect_total{job="backend-listen-metrics"}[15m]))
 max by (provider, kind) (omi_stt_provider_circuit_open{job="backend-listen-metrics"})
 histogram_quantile(0.95, sum by (le) (rate(omi_stt_routing_decision_seconds_bucket{job="backend-listen-metrics"}[10m])))
+sum by (kind) (rate(omi_stt_fleet_health_write_dropped_total{job="backend-listen-metrics"}[5m]))
 sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[5m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[5m])), 1)
 ```
+
+Fleet scores fall back to pod-local evidence after 15 seconds without a
+refresh. A known account or selection bench remains in force through its
+recorded cooldown even while scores are stale. Redis health writes are limited
+to eight result writes and four reserved bench writes per pod; dropped writes
+increment `omi_stt_fleet_health_write_dropped_total{kind="result|bench"}`.
+Local scores and benches continue to update when this counter rises.
 
 The `omi-modulate-failing-soniox` Telegram rule names the active spend lever.
 The existing `Omi - Services Alerting (Telegram)` Grafana contact point must

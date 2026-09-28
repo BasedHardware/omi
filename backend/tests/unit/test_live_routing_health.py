@@ -10,7 +10,7 @@ from collections import deque
 from types import SimpleNamespace
 
 import pytest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from utils.stt import live_health, live_session, streaming as st
 
@@ -91,6 +91,42 @@ def test_language_key_has_closed_vocabulary():
 
 
 @pytest.mark.asyncio
+async def test_stale_scores_keep_known_fleet_account_bench(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    now = [time.time()]
+    bench_until = now[0] + 600
+
+    class BenchedRedis:
+        async def mget(self, keys):
+            return [
+                (
+                    f'account:{bench_until}'
+                    if key.endswith(':state:soniox')
+                    else 9 if ':score:soniox:' in key and key.endswith(':text') else None
+                )
+                for key in keys
+            ]
+
+    health = live_health.FleetHealth(clock=lambda: now[0], redis_client=BenchedRedis())
+    health.cached_snapshot(['soniox'], 'en')
+    await health.refresh_once()
+    assert health.cached_snapshot(['soniox'], 'en')['soniox'].score == pytest.approx(28 / 29)
+    now[0] += live_health.CACHE_STALE_SECONDS + 1
+    state = health.cached_snapshot(['soniox'], 'en')['soniox']
+    assert state.score == 0.5  # Fleet score expired; the known account bench did not.
+    assert state.bench == 'account'
+    assert state.bench_until == bench_until
+    assert state.excluded
+    assert live_health.ordered_providers(['soniox'], {'soniox': state}, 'uid') == []
+    health._benches['soniox'] = ('selection', bench_until + 30)
+    assert health.cached_snapshot(['soniox'], 'en')['soniox'].bench == 'account'
+    health._client = DownRedis()
+    await health.refresh_once()
+    assert health._cache_at is None
+    assert health.cached_snapshot(['soniox'], 'en')['soniox'].bench == 'account'
+
+
+@pytest.mark.asyncio
 async def test_fleet_cache_refreshes_off_path_and_stale_data_uses_local_score(monkeypatch):
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     now = [time.time()]
@@ -105,6 +141,58 @@ async def test_fleet_cache_refreshes_off_path_and_stale_data_uses_local_score(mo
     assert health.cached_snapshot(['soniox'], 'en')['soniox'].score == pytest.approx(28 / 29)
     now[0] += live_health.CACHE_STALE_SECONDS + 1
     assert health.cached_snapshot(['soniox'], 'en')['soniox'].score == 0.5
+
+
+@pytest.mark.asyncio
+async def test_redis_blackhole_bounds_background_outcome_writes(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_REDIS_TIMEOUT_SECONDS', '0.1')
+    dropped = live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get()
+    bench_dropped = live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='bench')._value.get()
+
+    class BlackholeRedis:
+        def __init__(self):
+            self.active = 0
+            self.maximum = 0
+
+        def pipeline(self, *, transaction):
+            assert transaction is False
+            return self
+
+        def incr(self, _key):
+            return self
+
+        def expire(self, _key, _seconds):
+            return self
+
+        async def execute(self):
+            self.active += 1
+            self.maximum = max(self.maximum, self.active)
+            try:
+                await asyncio.sleep(1)
+            finally:
+                self.active -= 1
+
+        async def set(self, *_args, **_kwargs):
+            await asyncio.sleep(1)
+
+    redis = BlackholeRedis()
+    health = live_health.FleetHealth(redis_client=redis)
+    for _ in range(1000):
+        health.record('soniox', 'en', 'no_text')
+    assert health._writes_in_flight['result'] == live_health.WRITE_IN_FLIGHT_LIMITS['result']
+    assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get() - dropped == 992
+    for _ in range(100):
+        health.quarantine('soniox', 'account', 60)
+    assert health._writes_in_flight['bench'] == live_health.WRITE_IN_FLIGHT_LIMITS['bench']
+    assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='bench')._value.get() - bench_dropped == 96
+    # Outcome burst cannot starve the reserved account-quarantine slots.
+    await asyncio.sleep(0.01)
+    assert redis.maximum <= live_health.WRITE_IN_FLIGHT_LIMITS['result']
+    deadline = asyncio.get_running_loop().time() + 1.0
+    while any(health._writes_in_flight.values()) and asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(0.01)
+    assert health._writes_in_flight == {'result': 0, 'bench': 0}
 
 
 @pytest.mark.asyncio
@@ -170,6 +258,9 @@ async def test_hanging_redis_adds_under_five_ms_to_connection_decision(monkeypat
 
         def deferred_result_callbacks(self):
             return (lambda: None), (lambda: None)
+
+        def release_probe(self):
+            pass
 
     async def connect():
         return RawSocket()
@@ -239,6 +330,9 @@ async def test_hanging_recovery_lease_is_not_awaited_by_connection(monkeypatch):
 
         def deferred_result_callbacks(self):
             return (lambda: None), (lambda: None)
+
+        def release_probe(self):
+            pass
 
     async def connect():
         return RawSocket()
@@ -347,6 +441,60 @@ async def test_on_account_bench_overrides_better_score(monkeypatch):
     )
     assert actual == st.STTService.modulate
     soniox.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('local_allowed,claims,releases', [(False, 0, 0), (True, 1, 1)])
+async def test_local_probe_is_checked_before_fleet_lease_and_released_on_denial(
+    monkeypatch, local_allowed, claims, releases
+):
+    from utils.stt import live_chain
+
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setenv('STT_ROUTING_PROBE_PERCENT', '0')
+    monkeypatch.setattr(
+        live_chain.health,
+        'cached_snapshot',
+        lambda _providers, _language: {
+            'soniox': live_health.ProviderState(bench='account', bench_until=time.time() - 1),
+            'modulate': live_health.ProviderState(),
+        },
+    )
+    admit = Mock(return_value=False)
+    monkeypatch.setattr(live_chain.health, 'try_admit_recovery_probe', admit)
+
+    class Circuit:
+        def __init__(self, allowed):
+            self.allowed = allowed
+            self.releases = 0
+
+        def allow_request(self, **_kwargs):
+            return self.allowed
+
+        def deferred_result_callbacks(self):
+            return (lambda: None), (lambda: None)
+
+        def release_probe(self):
+            self.releases += 1
+
+    circuits = {'soniox': Circuit(local_allowed), 'modulate': Circuit(True)}
+    monkeypatch.setattr(st, '_circuit_for_primary', lambda service: circuits[service.value])
+    monkeypatch.setattr(live_chain, 'fallback_socket_is_serving', AsyncMock(return_value=True))
+    soniox = AsyncMock(return_value=RawSocket())
+    modulate = AsyncMock(return_value=RawSocket())
+    _, chosen = await live_chain.connect_configured_chain(
+        primary_service=st.STTService.soniox,
+        connect_primary=soniox,
+        callbacks={st.STTService.soniox: soniox, st.STTService.modulate: modulate},
+        failed=set(),
+        models=['soniox', 'modulate-velma-2'],
+        routing_uid='test-user',
+        routing_language='en',
+    )
+    assert chosen == st.STTService.modulate
+    soniox.assert_not_awaited()
+    assert admit.call_count == claims
+    assert circuits['soniox'].releases == releases
 
 
 class RawSocket:
