@@ -1,10 +1,11 @@
 """Read-side normalization of conversation photo documents.
 
 ``ConversationPhoto.base64`` is a required str, and every response that carries photos validates
-against it: the photos list and, through ``@with_photos``, the conversation detail, in-progress and
-developer reads. Legacy photo docs were stored without ``base64``. Such a doc has no inline pixels,
-which the model spells ``''`` (as GCS-backed frame evidence does), so it is served that way rather
-than failing the whole response. Every heal is logged and counted so the records stay visible.
+against it: the photos list and, through ``@with_photos``, each conversation read that attaches them
+(detail, in-progress, processing, developer and integration reads). Legacy photo docs were stored
+without ``base64``. Such a doc has no inline pixels, which the model spells ``''`` (as GCS-backed
+frame evidence does), so it is served that way rather than failing the whole response. Every heal is
+logged and counted so the records stay visible.
 """
 
 import logging
