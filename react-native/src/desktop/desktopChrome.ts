@@ -1,13 +1,37 @@
-// Chat is not a page: it lives in an overlay opened from the omnibar. The
-// rail is the Activity page plus its deeper surfaces.
-export const desktopNavItems = [
-  'Home',
-  'Conversations',
-  'Rewind',
-  'Tasks',
+// v5.1: Chat is not a page (it lives in an overlay opened from the omnibar)
+// and Conversations/Recall/Tasks are not pages either — they filter the
+// Activity timeline. The chrome's second row IS the filter row; the first row
+// is the omnibar. The v5 pages IA lives on as a selectable interface version
+// (DesktopShellV5 + DesktopChromeV5).
+export const desktopActivityFilters = [
+  'all',
+  'conversations',
+  'recall',
+  'tasks',
 ] as const;
 
-export type DesktopNavItem = (typeof desktopNavItems)[number];
+export type ActivityFilterId = (typeof desktopActivityFilters)[number];
+
+export const desktopTimelineGroupings = ['date', 'type', 'topic'] as const;
+
+export type TimelineGrouping = (typeof desktopTimelineGroupings)[number];
+
+export function desktopFilterLabel(id: ActivityFilterId): string {
+  if (id === 'recall') {
+    return 'Recall';
+  }
+  if (id === 'all') {
+    return 'All';
+  }
+  if (id === 'conversations') {
+    return 'Conversations';
+  }
+  return 'Tasks';
+}
+
+export function isShippingActivityFilter(label: string): boolean {
+  return (desktopActivityFilters as readonly string[]).includes(label);
+}
 
 export const desktopSettingsPanes = [
   'General',
@@ -24,12 +48,12 @@ export type DesktopSettingsPane = (typeof desktopSettingsPanes)[number];
 
 export const desktopSearchPlaceholder = "Search what you've seen and heard…";
 
-// Even 12pt inset from every window edge. Traffic lights sit on the nav row
-// (not the omnibar row) and share that row's vertical center with Home.
-// AppDelegate.mm mirrors the nav-row numbers.
+// Even 12pt inset from every window edge. Traffic lights sit on the FIRST
+// chrome row — the omnibar row — and share that row's vertical center.
+// AppDelegate.mm mirrors these numbers (OmiChromeRowHeight == omnibar height).
 export const desktopWindowInset = 12;
-export const desktopNavBarHeight = 52;
 export const desktopOmnibarHeight = 44;
+export const desktopFilterRowHeight = 36;
 export const desktopTrafficLightButton = 14;
 export const desktopTrafficLightSpacing = 8;
 export const desktopTrafficLightTrailing = 16;
@@ -83,10 +107,8 @@ export function visibleChatError(
   return chatError;
 }
 
-export function isShippingDesktopNav(label: string): boolean {
-  return (desktopNavItems as readonly string[]).includes(label);
-}
-
+// Legacy v5 chrome support: the pages-IA shell still slides a selection pill
+// across measured rail items, so the frame-diff helper stays exported.
 export const desktopNavLayoutEpsilon = 0.5;
 
 export type DesktopNavFrame = {x: number; width: number};

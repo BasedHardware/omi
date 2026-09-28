@@ -21,19 +21,20 @@ test('macOS PageShell does not inset the nav below the titlebar', () => {
 
 test('static layout guard: DesktopApp keeps an even window inset around one chrome row', () => {
   expect(desktopApp).toMatch(/root:\s*\{[^}]*padding:\s*desktopWindowInset/);
-  expect(desktopChrome).toContain('height: desktopNavBarHeight');
+  expect(desktopChrome).toContain('height: desktopOmnibarHeight');
   expect(desktopChrome).toContain('accessibilityLabel="Window controls"');
   expect(desktopChrome).toContain('width: desktopTrafficLightRowWidth');
   expect(desktopChrome).toContain('height: desktopTrafficLightButton');
   expect(desktopChrome).not.toContain('marginLeft');
   expect(desktopChrome).toMatch(/row:\s*\{[^}]*alignItems:\s*'center'/);
-  expect(desktopChrome).toMatch(/navHit:\s*\{[^}]*alignItems:\s*'center'/);
-  expect(desktopChrome).toMatch(/navHit:\s*\{[^}]*justifyContent:\s*'center'/);
+  expect(desktopChrome).toMatch(/filterHit:\s*\{[^}]*alignItems:\s*'center'/);
+  expect(desktopChrome).toMatch(
+    /filterHit:\s*\{[^}]*justifyContent:\s*'center'/,
+  );
   expect(desktopChrome).toContain('desktopSearchPlaceholder');
   expect(desktopChrome).toMatch(/omnibar:\s*\{/);
   expect(desktopChrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
   expect(desktopChrome).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
-  expect(desktopChrome).toContain('styles.navPill');
   expect(desktopChrome).toContain('accessibilityLabel="Settings"');
   expect(desktopChrome).not.toMatch(/navTextActive:\s*\{[^}]*fontWeight/);
 });

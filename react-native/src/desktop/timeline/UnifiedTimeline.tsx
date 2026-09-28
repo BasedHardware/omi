@@ -10,6 +10,7 @@ import type {
   TaskProjection,
 } from '../../desktopReadClient';
 import {OmiLoadingMark} from '../../ui/OmiLoadingMark';
+import {type ActivityFilterId, type TimelineGrouping} from '../desktopChrome';
 import {
   type DesktopTokens,
   useDesktopTheme,
@@ -17,8 +18,6 @@ import {
 } from '../DesktopTheme';
 
 type EntryKind = 'conversation' | 'memory' | 'task' | 'capture';
-
-export type ActivityFilter = 'all' | 'conversations' | 'recall' | 'tasks';
 
 export type TimelineEntry = {
   id: string;
@@ -90,7 +89,7 @@ function captureEntry(item: CaptureGroupSummary): TimelineEntry {
   };
 }
 
-function entryFilterBucket(kind: EntryKind): ActivityFilter {
+function entryFilterBucket(kind: EntryKind): ActivityFilterId {
   if (kind === 'capture') {
     return 'recall';
   }
@@ -112,7 +111,7 @@ export function mergeTimeline(
   outcomes: DesktopReadOutcomes | null,
   query = '',
   captures: CaptureGroupSummary[] = [],
-  filter: ActivityFilter = 'all',
+  filter: ActivityFilterId = 'all',
 ): {entries: TimelineEntry[]; failures: string[]} {
   if (outcomes === null) {
     return {entries: [], failures: []};
@@ -187,6 +186,211 @@ function timeLabel(atMs: number): string {
   });
 }
 
+export type TimelineSection = {
+  key: string;
+  label: string;
+  entries: TimelineEntry[];
+};
+
+function sectionForGrouping(
+  entry: TimelineEntry,
+  grouping: TimelineGrouping,
+  topicOf: (entry: TimelineEntry) => string,
+): string {
+  if (grouping === 'type') {
+    return kindMeta[entry.kind].label;
+  }
+  if (grouping === 'topic') {
+    return topicOf(entry);
+  }
+  return dayLabel(entry.atMs);
+}
+
+const TOPIC_STOPWORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'that',
+  'this',
+  'from',
+  'have',
+  'has',
+  'are',
+  'was',
+  'were',
+  'will',
+  'your',
+  'about',
+  'into',
+  'over',
+  'after',
+  'before',
+  'what',
+  'when',
+  'they',
+  'them',
+  'their',
+  'there',
+  'where',
+  'which',
+  'while',
+  'would',
+  'could',
+  'should',
+  'been',
+  'being',
+  'does',
+  'done',
+  'just',
+  'like',
+  'some',
+  'more',
+  'than',
+  'then',
+  'because',
+  'also',
+  'very',
+  'much',
+  'many',
+  'most',
+  'other',
+  'such',
+  'only',
+  'both',
+  'each',
+  'once',
+  'here',
+  'how',
+  'who',
+  'whom',
+  'its',
+  'our',
+  'you',
+  'she',
+  'him',
+  'her',
+  'his',
+  'says',
+  'said',
+  'new',
+  'now',
+  'one',
+  'two',
+  'all',
+  'can',
+  'get',
+  'got',
+  'make',
+  'made',
+  'out',
+  'up',
+  'down',
+  'not',
+  'but',
+  'yet',
+  'off',
+  'own',
+  'same',
+  'so',
+  'too',
+  'very',
+  'sobre',
+  'via',
+  'using',
+  'used',
+  'use',
+]);
+
+function topicTokens(entry: TimelineEntry): string[] {
+  const haystack = `${entry.title} ${entry.detail}`.toLowerCase();
+  const matches = haystack.match(/[a-z][a-z0-9+#]*/g) ?? [];
+  const seen = new Set<string>();
+  const tokens: string[] = [];
+  for (const token of matches) {
+    if (token.length < 4 || TOPIC_STOPWORDS.has(token) || seen.has(token)) {
+      continue;
+    }
+    seen.add(token);
+    tokens.push(token);
+  }
+  return tokens;
+}
+
+const OTHER_TOPIC = 'Everything else';
+
+/**
+ * Groups entries into collapsible timeline sections. `date` buckets by day,
+ * `type` by entry kind, and `topic` by the most-shared significant keyword —
+ * entries that share no repeated keyword land in "Everything else" (last).
+ */
+export function groupTimelineSections(
+  entries: TimelineEntry[],
+  grouping: TimelineGrouping,
+): TimelineSection[] {
+  if (grouping === 'topic') {
+    const frequency = new Map<string, number>();
+    const entryTokens = new Map<string, string[]>();
+    for (const entry of entries) {
+      const tokens = topicTokens(entry);
+      entryTokens.set(entry.id, tokens);
+      for (const token of tokens) {
+        frequency.set(token, (frequency.get(token) ?? 0) + 1);
+      }
+    }
+    const topicOf = (entry: TimelineEntry): string => {
+      const tokens = entryTokens.get(entry.id) ?? [];
+      let best: string | null = null;
+      let bestCount = 1;
+      for (const token of tokens) {
+        const count = frequency.get(token) ?? 0;
+        if (count > bestCount) {
+          best = token;
+          bestCount = count;
+        }
+      }
+      if (best === null) {
+        return OTHER_TOPIC;
+      }
+      return best.charAt(0).toUpperCase() + best.slice(1);
+    };
+    const sections: TimelineSection[] = [];
+    const other: TimelineEntry[] = [];
+    for (const entry of entries) {
+      const label = topicOf(entry);
+      if (label === OTHER_TOPIC) {
+        other.push(entry);
+        continue;
+      }
+      let section = sections.find(item => item.label === label);
+      if (section === undefined) {
+        section = {key: `topic-${label}`, label, entries: []};
+        sections.push(section);
+      }
+      section.entries.push(entry);
+    }
+    if (other.length > 0) {
+      sections.push({key: 'topic-other', label: OTHER_TOPIC, entries: other});
+    }
+    return sections;
+  }
+  const sections: TimelineSection[] = [];
+  for (const entry of entries) {
+    const label = sectionForGrouping(entry, grouping, () => OTHER_TOPIC);
+    let section = sections.find(item => item.label === label);
+    if (section === undefined) {
+      section = {
+        key: `${grouping}-${label}`,
+        label,
+        entries: [],
+      };
+      sections.push(section);
+    }
+    section.entries.push(entry);
+  }
+  return sections;
+}
+
 const kindMeta: Record<EntryKind, {icon: MaterialIconName; label: string}> = {
   conversation: {icon: 'chat_bubble', label: 'Conversation'},
   memory: {icon: 'auto_awesome', label: 'Memory'},
@@ -205,6 +409,7 @@ export function UnifiedTimeline({
   loading,
   captures = [],
   filter = 'all',
+  groupBy = 'date',
   onOpenEntry,
   header,
 }: {
@@ -212,7 +417,9 @@ export function UnifiedTimeline({
   query?: string;
   loading: boolean;
   captures?: CaptureGroupSummary[];
-  filter?: ActivityFilter;
+  filter?: ActivityFilterId;
+  /** How entries collapse into sections: by day, kind, or shared topic. */
+  groupBy?: TimelineGrouping;
   onOpenEntry?: (entry: TimelineEntry) => void;
   /** Optional content rendered above the feed inside the scroll view. */
   header?: React.ReactNode;
@@ -220,7 +427,60 @@ export function UnifiedTimeline({
   const styles = useDesktopStyleSheets(createStyles);
   const {tokens: token} = useDesktopTheme();
   const {entries, failures} = mergeTimeline(outcomes, query, captures, filter);
-  let lastDay = '';
+  const sections = React.useMemo(
+    () => groupTimelineSections(entries, groupBy),
+    [entries, groupBy],
+  );
+  const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
+  const toggleSection = (key: string) => {
+    setCollapsed(previous => {
+      const next = new Set(previous);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+  const renderEntry = (entry: TimelineEntry): React.ReactNode => {
+    const meta = kindMeta[entry.kind].icon;
+    const body = (
+      <View style={styles.row}>
+        <View style={styles.rowIcon}>
+          <MaterialIcon name={meta} size={16} color={token.color.inkMuted} />
+        </View>
+        <View style={styles.rowBody}>
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            {entry.title}
+          </Text>
+          {entry.detail.trim() !== '' ? (
+            <Text style={styles.rowDetail} numberOfLines={2}>
+              {entry.detail}
+            </Text>
+          ) : null}
+          <Text style={styles.rowMeta}>
+            {kindMeta[entry.kind].label}
+            {entry.atMs === 0 ? '' : ` · ${timeLabel(entry.atMs)}`}
+          </Text>
+        </View>
+      </View>
+    );
+    return (
+      <View key={entry.id}>
+        {onOpenEntry ? (
+          <Pressable
+            accessibilityLabel={`${kindMeta[entry.kind].label} ${entry.title}`}
+            style={styles.rowPress}
+            onPress={() => onOpenEntry(entry)}>
+            {body}
+          </Pressable>
+        ) : (
+          body
+        )}
+      </View>
+    );
+  };
   return (
     <View style={styles.root}>
       <ScrollView
@@ -245,51 +505,31 @@ export function UnifiedTimeline({
             {failure}
           </Text>
         ))}
-        {entries.map(entry => {
-          const day = dayLabel(entry.atMs);
-          const showDay = day !== lastDay;
-          lastDay = day;
-          const meta = kindMeta[entry.kind].icon;
-          const body = (
-            <View style={styles.row}>
-              <View style={styles.rowIcon}>
+        {sections.map(section => {
+          const isCollapsed = collapsed.has(section.key);
+          return (
+            <View key={section.key}>
+              <Pressable
+                accessibilityLabel={`${isCollapsed ? 'Expand' : 'Collapse'} ${
+                  section.label
+                } section`}
+                accessibilityRole="button"
+                style={styles.sectionHeader}
+                onPress={() => toggleSection(section.key)}>
                 <MaterialIcon
-                  name={meta}
+                  name="expand_more"
                   size={16}
                   color={token.color.inkMuted}
+                  style={isCollapsed ? styles.chevronClosed : undefined}
                 />
-              </View>
-              <View style={styles.rowBody}>
-                <Text style={styles.rowTitle} numberOfLines={1}>
-                  {entry.title}
+                <Text style={styles.sectionLabel}>{section.label}</Text>
+                <Text style={styles.sectionCount}>
+                  {section.entries.length}
                 </Text>
-                {entry.detail.trim() !== '' ? (
-                  <Text style={styles.rowDetail} numberOfLines={2}>
-                    {entry.detail}
-                  </Text>
-                ) : null}
-                <Text style={styles.rowMeta}>
-                  {kindMeta[entry.kind].label}
-                  {entry.atMs === 0 ? '' : ` · ${timeLabel(entry.atMs)}`}
-                </Text>
-              </View>
-            </View>
-          );
-          return (
-            <View key={entry.id}>
-              {showDay ? <Text style={styles.day}>{day}</Text> : null}
-              {onOpenEntry ? (
-                <Pressable
-                  accessibilityLabel={`${kindMeta[entry.kind].label} ${
-                    entry.title
-                  }`}
-                  style={styles.rowPress}
-                  onPress={() => onOpenEntry(entry)}>
-                  {body}
-                </Pressable>
-              ) : (
-                body
-              )}
+              </Pressable>
+              {isCollapsed
+                ? null
+                : section.entries.map(entry => renderEntry(entry))}
             </View>
           );
         })}
@@ -308,6 +548,34 @@ const createStyles = (token: DesktopTokens) =>
       width: '100%',
       alignSelf: 'center',
     },
+    sectionHeader: {
+      alignItems: 'center',
+      backgroundColor: token.color.glassQuiet,
+      borderColor: token.color.line,
+      borderRadius: 10,
+      borderWidth: 1,
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 18,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    sectionLabel: {
+      color: token.color.ink,
+      flex: 1,
+      fontFamily: token.font,
+      fontSize: 12,
+      fontWeight: '600',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+    },
+    sectionCount: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: 11,
+      fontVariant: ['tabular-nums'],
+    },
+    chevronClosed: {transform: [{rotate: '-90deg'}]},
     day: {
       color: token.color.inkMuted,
       fontFamily: token.font,

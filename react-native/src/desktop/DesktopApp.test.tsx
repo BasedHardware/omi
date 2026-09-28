@@ -452,11 +452,7 @@ test('persistent capture toggle uses the existing owner across Settings and Home
     await act(async () => toggle().props.onPress());
     expect(capture.start).toHaveBeenCalledTimes(1);
     capture.capturing = true;
-    await act(async () =>
-      renderer.root
-        .find(node => node.props.accessibilityLabel === 'Activity')
-        .props.onPress(),
-    );
+    await act(async () => openSettings());
     expect(
       renderer.root.findAll(
         node => node.props.accessibilityLabel === 'Screen capture setting',
@@ -674,10 +670,10 @@ test('the Chat overlay keeps one omnibar and navigation closes it without a left
       .find(node => node.props.accessibilityLabel === 'Use Search mode')
       .props.onPress(),
   );
-  // Leaving Recall for Activity resets the omnibar to Ask.
+  // Selecting a filter walks Home, closes the overlay, and resets to Ask.
   await act(async () =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Activity')
+      .find(node => node.props.accessibilityLabel === 'Filter All')
       .props.onPress(),
   );
   await openChatOverlay(renderer);
@@ -689,7 +685,7 @@ test('the Chat overlay keeps one omnibar and navigation closes it without a left
   expect(onSend).toHaveBeenCalledTimes(1);
   await act(async () =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Recall')
+      .find(node => node.props.accessibilityLabel === 'Use Search mode')
       .props.onPress(),
   );
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
@@ -844,7 +840,7 @@ test('sending from a filtered page answers inline and an active response can sto
   const renderer = renderDesktop({onSend, onStop, draft: 'Send from Tasks'});
   act(() => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .find(node => node.props.accessibilityLabel === 'Filter Tasks')
       .props.onPress();
   });
   expect(renderedText(renderer)).not.toContain('Screen history');
@@ -1213,7 +1209,7 @@ test('keeps degraded read state visible away from Home', () => {
   const renderer = renderDesktop({readsPhase: 'saved-but-refresh-failed'});
   act(() => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Tasks')
+      .find(node => node.props.accessibilityLabel === 'Filter Tasks')
       .props.onPress();
   });
   expect(renderedText(renderer)).toContain(
@@ -1287,7 +1283,7 @@ test('chat transport errors appear only in the Chat overlay', async () => {
   ).toEqual(['Ask about your day…']);
   await act(async () =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Activity')
+      .find(node => node.props.accessibilityLabel === 'Filter All')
       .props.onPress(),
   );
   expect(renderedText(renderer)).not.toContain(
@@ -1427,7 +1423,7 @@ test('Home renders real memories alongside conversations', () => {
   expect(tree).toContain('Conversation');
 });
 
-test('Home explore checklist guides to the real Rewind destination', async () => {
+test('Home explore checklist guides to the Recall filter', async () => {
   const renderer = renderDesktop();
   await act(async () => {
     await Promise.resolve();
@@ -1447,15 +1443,15 @@ test('Home explore checklist guides to the real Rewind destination', async () =>
   });
   await act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Recall')
+      .find(node => node.props.accessibilityLabel === 'Filter Recall')
       .props.onPress();
     await Promise.resolve();
   });
   expect(
-    renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Recall screen history',
-    ).length,
-  ).toBeGreaterThan(0);
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Filter Recall',
+    ).props.accessibilityState.selected,
+  ).toBe(true);
   const {setDesktopPreference} = jest.requireMock(
     '../desktopSettingsClient',
   ) as {setDesktopPreference: jest.Mock};
@@ -1467,6 +1463,7 @@ test('Home explore checklist guides to the real Rewind destination', async () =>
 
 const kitFiles = [
   'DesktopApp.tsx',
+  'DesktopChromeV5.tsx',
   'DesktopTopChrome.tsx',
   'DesktopHome.tsx',
   'DesktopPages.tsx',
@@ -1494,14 +1491,15 @@ test('static tripwire: desktop stage preserves real state copy and shared glass 
   expect(allKitSource).not.toContain('omnibarError');
 });
 
-test('static layout guard: chrome keeps a sliding nav pill, structured home cards, and a field omnibar', () => {
+test('static layout guard: v5 keeps its sliding nav pill; v5.1 chrome is filters over a field omnibar', () => {
   const chrome = kitSources['DesktopTopChrome.tsx'];
+  const chromeV5 = kitSources['DesktopChromeV5.tsx'];
   const app = kitSources['DesktopApp.tsx'];
   const home = kitSources['DesktopHome.tsx'];
   expect(app).toMatch(/root:\s*\{[^}]*padding:\s*desktopWindowInset/);
-  expect(chrome).toContain('height: desktopNavBarHeight');
+  expect(chrome).toContain('height: desktopOmnibarHeight');
   expect(chrome).toContain('width: desktopTrafficLightRowWidth');
-  expect(chrome).toContain('styles.navPill');
+  expect(chromeV5).toContain('styles.navPill');
   expect(chrome).toMatch(
     /omnibarInput:\s*\{[^}]*textAlignVertical:\s*'center'/,
   );
@@ -1510,11 +1508,12 @@ test('static layout guard: chrome keeps a sliding nav pill, structured home card
   expect(chrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
   expect(home).not.toMatch(/filterRow:\s*\{/);
   expect(home).not.toContain('chatScrollRef');
-  expect(chrome).toContain('placed.current');
-  expect(chrome).toContain('navFrameMoved');
-  expect(chrome).toContain('animating.current');
-  expect(chrome).not.toMatch(/navTextActive:\s*\{[^}]*fontWeight/);
-  expect(chrome).toMatch(/navText:\s*\{[^}]*fontWeight:\s*'500'/);
+  expect(chromeV5).toContain('placed.current');
+  expect(chromeV5).toContain('navFrameMoved');
+  expect(chromeV5).toContain('animating.current');
+  expect(chromeV5).not.toMatch(/navTextActive:\s*\{[^}]*fontWeight/);
+  expect(chromeV5).toMatch(/navText:\s*\{[^}]*fontWeight:\s*'500'/);
+  expect(chrome).toContain('accessibilityLabel="Activity filters"');
   expect(allKitSource).not.toMatch(/composer:\s*\{/);
 });
 
@@ -1959,7 +1958,7 @@ test('Settings does not inherit unrelated chat and history failures', async () =
   );
   act(() =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Activity')
+      .find(node => node.props.accessibilityLabel === 'Filter All')
       .props.onPress(),
   );
   expect(renderedText(renderer)).not.toContain(

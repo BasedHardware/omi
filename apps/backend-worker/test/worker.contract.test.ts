@@ -515,6 +515,60 @@ describe("worker request contract", () => {
     expect((await response.json()) as unknown).toEqual(emptyConversationPage());
   });
 
+  test("the glance endpoint accepts topics and enriches without the gateway", async () => {
+    const originalFetch = globalThis.fetch;
+    const requestedUrls: string[] = [];
+    globalThis.fetch = mock(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        requestedUrls.push(url);
+        if (url.startsWith("https://hn.algolia.com/")) {
+          return Response.json({
+            hits: [
+              { title: "Astronomers catch a planet being born" },
+              { title: 5 },
+            ],
+          });
+        }
+        return originalFetch(input, init);
+      }
+    ) as never;
+    try {
+      const response = await fetchWorker("/v1/desktop/glance", {
+        method: "POST",
+        headers: {
+          ...authenticatedHeaders,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          topics: ["Rust lifetimes", "  ", 42, null, "Sourdough starters"],
+          localTimeIso: "2026-09-28T09:15:00+07:00",
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      const body = (await response.json()) as {
+        title: string;
+        copy: string;
+        source: string;
+      };
+      // Without gateway configuration the reply is still a usable local line.
+      expect(body.source).toBe("local");
+      expect(body.title.length).toBeGreaterThan(0);
+      expect(body.copy.length).toBeGreaterThan(0);
+      // Headline enrichment went out keyless, carrying nothing user-specific.
+      expect(
+        requestedUrls.some((url) =>
+          url.startsWith("https://hn.algolia.com/api/v1/search")
+        )
+      ).toBe(true);
+      expect(accountCalls).toEqual([]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("a staging credential cannot select a Firebase account partition", async () => {
     const response = await fetchWorker(
       "/v1/chat-generations/generation-id/events",

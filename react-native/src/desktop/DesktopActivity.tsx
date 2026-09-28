@@ -9,9 +9,9 @@ import {DesktopReadBanner, GlanceCard} from './DesktopHome';
 import {EXPLORE_CHECKLIST, type ExploreCheck} from './exploreChecklist';
 import {groupRewindFrames} from './rewindTimeline';
 import {SectionTitle} from './DesktopRows';
+import type {ActivityFilterId, TimelineGrouping} from './desktopChrome';
 import {
   UnifiedTimeline,
-  type ActivityFilter,
   type CaptureGroupSummary,
 } from './timeline/UnifiedTimeline';
 import {
@@ -21,15 +21,8 @@ import {
 } from './DesktopTheme';
 
 // The Home page: one Activity timeline of conversations, recall captures, and
-// tasks. The old per-surface pages became filters here; Recall stays a real
-// page because it is the detail viewer for captures.
-const ACTIVITY_FILTERS: {id: ActivityFilter; label: string}[] = [
-  {id: 'all', label: 'All'},
-  {id: 'conversations', label: 'Conversations'},
-  {id: 'recall', label: 'Recall'},
-  {id: 'tasks', label: 'Tasks'},
-];
-
+// tasks. Filters and grouping live in the top chrome; this page renders the
+// merged feed, the glance line, and the getting-started checklist.
 export const ACTIVITY_CAPTURE_PAGE = 60;
 
 /**
@@ -96,9 +89,9 @@ export function DesktopActivity({
   captureRevision,
   exploreDone = null,
   filter,
+  groupBy,
   onCapturePress,
   onExploreItem,
-  onFilterChange,
   onRefresh,
   outcomes,
   query,
@@ -106,10 +99,10 @@ export function DesktopActivity({
 }: {
   captureRevision: number;
   exploreDone?: Set<ExploreCheck> | null;
-  filter: ActivityFilter;
+  filter: ActivityFilterId;
+  groupBy: TimelineGrouping;
   onCapturePress: (capture: CaptureGroupSummary) => void;
   onExploreItem: (check: ExploreCheck) => void;
-  onFilterChange: (filter: ActivityFilter) => void;
   onRefresh: () => void;
   outcomes: DesktopReadOutcomes | null;
   query: string;
@@ -124,38 +117,10 @@ export function DesktopActivity({
       <UnifiedTimeline
         captures={captures}
         filter={filter}
+        groupBy={groupBy}
         header={
           <View>
             <GlanceCard outcomes={outcomes} />
-            <View
-              accessibilityLabel="Activity filters"
-              accessibilityRole="tablist"
-              style={styles.filters}>
-              {ACTIVITY_FILTERS.map(item => {
-                const selected = item.id === filter;
-                return (
-                  <FocusPressable
-                    key={item.id}
-                    accessibilityLabel={`Filter ${item.label}`}
-                    accessibilityRole="button"
-                    accessibilityState={{selected}}
-                    onPress={() => onFilterChange(item.id)}
-                    style={({pressed}) => [
-                      styles.filter,
-                      selected && styles.filterSelected,
-                      pressed && styles.pressed,
-                    ]}>
-                    <Text
-                      style={[
-                        styles.filterText,
-                        selected && styles.filterTextSelected,
-                      ]}>
-                      {item.label}
-                    </Text>
-                  </FocusPressable>
-                );
-              })}
-            </View>
             {exploreDone !== null &&
             exploreDone.size < EXPLORE_CHECKLIST.length ? (
               <View accessibilityLabel="Home explore" style={styles.section}>
@@ -222,32 +187,6 @@ export function DesktopActivity({
 const createStyles = (token: DesktopTokens) =>
   StyleSheet.create({
     root: {flex: 1},
-    filters: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-      marginBottom: 4,
-      marginTop: 14,
-    },
-    filter: {
-      borderRadius: token.radius.chip,
-      borderWidth: 1,
-      borderColor: token.color.line,
-      paddingHorizontal: 14,
-      paddingVertical: 7,
-      backgroundColor: token.color.glassQuiet,
-    },
-    filterSelected: {
-      backgroundColor: token.color.glassSelected,
-      borderColor: token.color.ink,
-    },
-    filterText: {
-      color: token.color.inkMuted,
-      fontFamily: token.font,
-      fontSize: 12,
-      fontWeight: '600',
-    },
-    filterTextSelected: {color: token.color.ink},
     section: {
       gap: 4,
       marginTop: 14,

@@ -21,6 +21,7 @@ import {
   setDesktopPreference,
   type AudioRecordingMode,
   type DesktopPreferences,
+  type DesktopUiVersion,
   type LiveVoiceProvider,
   type PermissionKind,
   type PermissionState,
@@ -50,6 +51,8 @@ type Props = {
   onSignOut: () => void | Promise<void>;
   onWorkspaceReload?: () => void;
   onPreferencesChange?: (prefs: DesktopPreferences) => void;
+  /** Live interface-version switch (Settings → General → Interface). */
+  onUiVersionChange?: (version: DesktopUiVersion) => void;
   softwarePlaneLocked: boolean;
 };
 
@@ -341,6 +344,7 @@ export function DesktopSettings({
   onSignOut,
   onWorkspaceReload,
   onPreferencesChange,
+  onUiVersionChange,
   session,
   signingIn,
   softwarePlaneLocked,
@@ -509,6 +513,27 @@ export function DesktopSettings({
             }}
             options={['Dark', 'Light'] as const}
             value={prefs.appearance === 'light' ? 'Light' : 'Dark'}
+          />
+        }
+      />
+      <Row
+        copy={
+          prefs.uiVersion === 'v5'
+            ? 'Pages: rail destinations for Home, Chat, Conversations, Recall, and Tasks.'
+            : 'Activity: one unified timeline with filters, grouping, and the omnibar up top.'
+        }
+        title="Interface"
+        trailing={
+          <Segmented
+            onChange={value => {
+              runAction(async () => {
+                const next: DesktopUiVersion = value === 'v5' ? 'v5' : 'v5.1';
+                await setPref('uiVersion', next);
+                onUiVersionChange?.(next);
+              });
+            }}
+            options={['v5.1', 'v5'] as const}
+            value={prefs.uiVersion === 'v5' ? 'v5' : 'v5.1'}
           />
         }
       />

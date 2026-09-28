@@ -2,17 +2,22 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {StyleSheet, Text, TextInput, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
-import type {DesktopReadOutcomes} from '../desktopReadClient';
+import type {
+  DesktopReadOutcomes,
+  DesktopReadProjection,
+} from '../desktopReadClient';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import type {PostSetupHomeCue} from '../app/usePostSetupHomeCue';
 import {DesktopOnboarding} from './DesktopOnboarding';
 import {
-  desktopNavBarHeight,
+  desktopOmnibarHeight,
   desktopTrafficLightButton,
   desktopTrafficLightRowWidth,
   visibleChatError,
   desktopWindowInset,
+  type ActivityFilterId,
   type DesktopSession,
+  type TimelineGrouping,
 } from './desktopChrome';
 import {
   DesktopChrome,
@@ -22,20 +27,19 @@ import {
 import {PostSetupConfetti, PostSetupOverlay} from './PostSetupOverlay';
 import {DesktopThemeProvider, type DesktopThemeName} from './DesktopTheme';
 import {DesktopActivity} from './DesktopActivity';
-import type {
-  ActivityFilter,
-  CaptureGroupSummary,
-} from './timeline/UnifiedTimeline';
+import type {CaptureGroupSummary} from './timeline/UnifiedTimeline';
+import {DesktopShellV5} from './DesktopShellV5';
 import type {TaskMutationProps} from '../ui/TaskEditor';
 import {DesktopSettings} from './DesktopSettings';
-import type {DesktopPreferences} from '../desktopSettingsClient';
+import type {
+  DesktopPreferences,
+  DesktopUiVersion,
+} from '../desktopSettingsClient';
 import {
   loadDesktopPreferences,
   setDesktopPreference,
 } from '../desktopSettingsClient';
 import {
-  EXPLORE_CHECKLIST,
-  exploreCheckForRoute,
   parseExploreProgress,
   serializeExploreProgress,
   type ExploreCheck,
@@ -93,6 +97,8 @@ type Props = TaskMutationProps & {
   activeGenerationId: string | null;
   authError: string | null;
   outcomes: DesktopReadOutcomes | null;
+  /** Library rows for the selectable v5 pages interface. */
+  reads?: DesktopReadProjection[];
   readsPhase: ReadsPhase;
   postSetupHomeCue?: PostSetupHomeCue;
   session: DesktopSession;
@@ -149,10 +155,12 @@ export function DesktopApp({
   captureAutoStart = false,
   outcomes,
   postSetupHomeCue = null,
+  reads = [],
   readsPhase,
   session,
   returning = false,
   signingIn,
+  ...taskMutationsRest
 }: Props) {
   const [captureRevision, setCaptureRevision] = useState(0);
   const capture = useRewindCapture(
@@ -161,7 +169,10 @@ export function DesktopApp({
     captureAutoStart,
   );
   const [route, setRoute] = useState<DesktopRoute>('Home');
-  const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
+  const [activityFilter, setActivityFilter] = useState<ActivityFilterId>('all');
+  const [groupBy, setGroupBy] = useState<TimelineGrouping>('date');
+  // Interface revision: v5 keeps the pages IA selectable from Settings.
+  const [uiVersion, setUiVersion] = useState<DesktopUiVersion>('v5.1');
   const [focusCaptureId, setFocusCaptureId] = useState<string | null>(null);
   // Chat is an overlay, not a page: small asks answer inline under the
   // omnibar and the full transcript opens here on demand.
@@ -170,7 +181,9 @@ export function DesktopApp({
   const [exploreDone, setExploreDone] = useState<Set<ExploreCheck> | null>(
     null,
   );
-  const [guideTarget, setGuideTarget] = useState<DesktopRoute | null>(null);
+  const [guideTarget, setGuideTarget] = useState<
+    ActivityFilterId | 'Settings' | null
+  >(null);
   const guideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearGuideTimer = useCallback(() => {
     if (guideTimer.current !== null) {
@@ -184,6 +197,7 @@ export function DesktopApp({
       .then(prefs => {
         if (!cancelled) {
           setExploreDone(parseExploreProgress(prefs?.exploreProgress));
+          setUiVersion(prefs?.uiVersion ?? 'v5.1');
         }
       })
       .catch(() => {
@@ -196,6 +210,14 @@ export function DesktopApp({
     };
   }, []);
   useEffect(() => clearGuideTimer, [clearGuideTimer]);
+
+  const markExploreDone = useCallback((next: Set<ExploreCheck>) => {
+    setExploreDone(next);
+    setDesktopPreference(
+      'exploreProgress',
+      serializeExploreProgress(next),
+    ).catch(() => undefined);
+  }, []);
   // Arriving at a surface ticks its checklist item off, once, forever. The
   // Activity page's filters count as arriving at the surface they select.
   useEffect(() => {
@@ -212,41 +234,53 @@ export function DesktopApp({
         : activityFilter === 'recall'
         ? ('recall' as ExploreCheck)
         : null
-      : exploreCheckForRoute(route);
+      : route === 'Settings'
+      ? ('settings' as ExploreCheck)
+      : null;
     if (check === null || exploreDone.has(check)) {
       return;
     }
-    const next = new Set(exploreDone);
-    next.add(check);
-    setExploreDone(next);
-    setDesktopPreference(
-      'exploreProgress',
-      serializeExploreProgress(next),
-    ).catch(() => undefined);
-  }, [exploreDone, route, activityFilter, chatOpen]);
+    markExploreDone(new Set(exploreDone).add(check));
+  }, [exploreDone, markExploreDone, route, activityFilter, chatOpen]);
   useEffect(() => {
-    if (guideTarget !== null && route === guideTarget) {
+    if (guideTarget === null) {
+      return;
+    }
+    const arrived =
+      guideTarget === 'Settings'
+        ? route === 'Settings'
+        : route === 'Home' && activityFilter === guideTarget;
+    if (arrived) {
       clearGuideTimer();
       setGuideTarget(null);
     }
-  }, [clearGuideTimer, guideTarget, route]);
+  }, [activityFilter, clearGuideTimer, guideTarget, route]);
   const startExploreGuide = (check: ExploreCheck) => {
-    const item = EXPLORE_CHECKLIST.find(entry => entry.id === check);
-    if (item === undefined) {
-      return;
-    }
-    // Chat has no rail pill to point at — opening the overlay is the
-    // destination itself.
-    if (item.route === 'Chat') {
+    // v5.1 destinations: the chat overlay, the settings gear, or the filter
+    // chip the checklist item selects.
+    if (check === 'chat') {
       setMode('Ask');
       setChatOpen(true);
       return;
     }
-    if (route === item.route) {
+    if (check === 'settings') {
+      if (route === 'Settings') {
+        return;
+      }
+      clearGuideTimer();
+      setRoute('Settings');
+      setGuideTarget('Settings');
+      guideTimer.current = setTimeout(() => setGuideTarget(null), 6000);
+      return;
+    }
+    const target = check as ActivityFilterId;
+    if (route === 'Home' && activityFilter === target) {
       return;
     }
     clearGuideTimer();
-    setGuideTarget(item.route);
+    setRoute('Home');
+    setActivityFilter(target);
+    setGuideTarget(target);
     guideTimer.current = setTimeout(() => setGuideTarget(null), 6000);
   };
   const openCaptureFromActivity = (capture: CaptureGroupSummary) => {
@@ -279,23 +313,23 @@ export function DesktopApp({
       openChat();
       return;
     }
-    // Conversations and Tasks are filters of the Activity timeline, not
-    // standalone pages.
     setChatOpen(false);
-    if (next === 'Home') {
-      setRoute('Home');
-      setActivityFilter('all');
-    } else if (next === 'Conversations' || next === 'Tasks') {
-      setRoute('Home');
-      setActivityFilter(next === 'Conversations' ? 'conversations' : 'tasks');
-    } else {
-      setRoute(next);
-    }
+    setRoute(next);
     if (next === 'Rewind') {
       setMode('Search');
     } else if (mode === 'Search') {
       setMode('Ask');
     }
+  };
+  // Chrome filter selection: filters live on the Activity page, so selecting
+  // one from any other route returns Home with that filter applied.
+  const selectFilter = (next: ActivityFilterId) => {
+    setChatOpen(false);
+    if (mode === 'Search') {
+      setMode('Ask');
+    }
+    setActivityFilter(next);
+    setRoute('Home');
   };
   const omnibarRef = useRef<TextInput>(null);
   useEffect(() => {
@@ -315,18 +349,6 @@ export function DesktopApp({
   }, []);
   const chatNotice =
     chatOpen || inlineAnswerOpen ? visibleChatError(session, chatError) : null;
-  // Which rail pill reads as selected: Conversations/Tasks select themselves
-  // even though they are filters of the Activity page.
-  const activeNav =
-    route === 'Home'
-      ? activityFilter === 'conversations'
-        ? ('Conversations' as const)
-        : activityFilter === 'tasks'
-        ? ('Tasks' as const)
-        : ('Home' as const)
-      : route === 'Settings' || route === 'Chat'
-      ? null
-      : route;
   // Session gate. Until OmiAuth reports a real cloud session with onboarding
   // complete, this shell paints no product IA at all: the probe keeps an
   // empty window (traffic-light spacer only) and a signed-out Mac sees the
@@ -361,6 +383,50 @@ export function DesktopApp({
       </DesktopThemeProvider>
     );
   }
+  if (uiVersion === 'v5') {
+    return (
+      <DesktopThemeProvider
+        initialName={initialAppearance}
+        onSetName={onAppearanceChange}>
+        <DesktopRoot>
+          <DesktopShellV5
+            activeGenerationId={activeGenerationId}
+            ambient={ambient}
+            capture={capture}
+            captureRevision={captureRevision}
+            chatBusy={chatBusy}
+            chatError={chatError}
+            deviceContent={deviceContent}
+            draft={draft}
+            exploreDone={exploreDone}
+            hasOlderChat={hasOlderChat}
+            loadingHistory={loadingHistory}
+            loadingOlderChat={loadingOlderChat}
+            liveVoiceControl={liveVoiceControl}
+            messages={messages}
+            onDraftChange={onDraftChange}
+            onExploreDone={markExploreDone}
+            onLoadOlderChat={onLoadOlderChat}
+            onPreferencesChange={onPreferencesChange}
+            onRefresh={onRefresh}
+            onSend={onSend}
+            onSignIn={onSignIn}
+            onSignOut={onSignOut}
+            onStop={onStop}
+            onUiVersionChange={setUiVersion}
+            onWorkspaceReload={onWorkspaceReload}
+            outcomes={outcomes}
+            postSetupHomeCue={postSetupHomeCue}
+            reads={reads ?? []}
+            readsPhase={readsPhase}
+            session={session}
+            signingIn={signingIn}
+            {...taskMutationsRest}
+          />
+        </DesktopRoot>
+      </DesktopThemeProvider>
+    );
+  }
   return (
     <DesktopThemeProvider
       initialName={initialAppearance}
@@ -378,6 +444,9 @@ export function DesktopApp({
           onModeChange={next => {
             setMode(next);
             if (next === 'Search') {
+              // Search Recall is the Rewind screen: leave any overlay behind.
+              setChatOpen(false);
+              setInlineAnswerOpen(false);
               setRoute('Rewind');
             } else if (route === 'Rewind') {
               setRoute('Home');
@@ -385,6 +454,10 @@ export function DesktopApp({
             }
           }}
           onNavigate={navigate}
+          filter={activityFilter}
+          onFilterChange={selectFilter}
+          groupBy={groupBy}
+          onGroupByChange={setGroupBy}
           guideTarget={guideTarget}
           captureActive={capture.capturing}
           captureAvailable={capture.available}
@@ -414,7 +487,6 @@ export function DesktopApp({
           }}
           onStop={onStop}
           route={route}
-          activeNav={activeNav}
           inlineCard={
             inlineAnswerOpen && !chatOpen ? (
               <InlineAskCard
@@ -434,9 +506,9 @@ export function DesktopApp({
                 captureRevision={captureRevision}
                 exploreDone={exploreDone}
                 filter={activityFilter}
+                groupBy={groupBy}
                 onCapturePress={openCaptureFromActivity}
                 onExploreItem={startExploreGuide}
-                onFilterChange={setActivityFilter}
                 onRefresh={onRefresh}
                 outcomes={outcomes}
                 query={mode === 'Search' ? draft : ''}
@@ -456,6 +528,7 @@ export function DesktopApp({
                   deviceContent={deviceContent}
                   onSignIn={onSignIn}
                   onSignOut={onSignOut}
+                  onUiVersionChange={setUiVersion}
                   onWorkspaceReload={onWorkspaceReload}
                   onPreferencesChange={onPreferencesChange}
                   session={session}
@@ -660,7 +733,7 @@ const styles = StyleSheet.create({
   probe: {flex: 1},
   probeRow: {
     flexDirection: 'row',
-    height: desktopNavBarHeight,
+    height: desktopOmnibarHeight,
   },
   probeMark: {
     alignItems: 'center',

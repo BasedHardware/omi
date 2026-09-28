@@ -46,7 +46,7 @@ test('puts traffic lights in the content chrome next to Home', () => {
   expect(source).toContain('NSWindowTitleHidden');
   expect(source).toContain('positionOmiTrafficLights');
   expect(source).toMatch(/OmiWindowInset\s*=\s*12\.0/);
-  expect(source).toMatch(/OmiChromeRowHeight\s*=\s*52\.0/);
+  expect(source).toMatch(/OmiChromeRowHeight\s*=\s*44\.0/);
   expect(source).toContain('NSWindowStyleMaskFullSizeContentView');
   expect(source).toContain('titlebarAppearsTransparent = YES');
   expect(source).toContain('NSTitlebarSeparatorStyleNone');

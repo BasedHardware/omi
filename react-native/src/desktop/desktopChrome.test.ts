@@ -1,20 +1,22 @@
 import {
+  desktopActivityFilters,
+  desktopFilterLabel,
+  desktopFilterRowHeight,
   desktopGlassCornerRadius,
   desktopMotion,
-  desktopNavBarHeight,
   desktopOmnibarHeight,
-  desktopNavItems,
   desktopSearchPlaceholder,
   desktopSettingsPanes,
   desktopStageFade,
   desktopSystemFontFamily,
+  desktopTimelineGroupings,
   desktopTrafficLightButton,
   desktopTrafficLightClusterWidth,
   desktopTrafficLightRowWidth,
   desktopTrafficLightSpacing,
   desktopTrafficLightTrailing,
   desktopWindowInset,
-  isShippingDesktopNav,
+  isShippingActivityFilter,
   navFrameMoved,
   visibleChatError,
 } from './desktopChrome';
@@ -34,18 +36,25 @@ import {
 
 const workerOrigin = 'https://omi-v5-backend-staging.example.workers.dev';
 
-test('desktop chrome rail is Activity-scoped; chat lives in the overlay', () => {
-  expect(desktopNavItems).toEqual(['Home', 'Conversations', 'Rewind', 'Tasks']);
-  expect(isShippingDesktopNav('Apps')).toBe(false);
-  expect(isShippingDesktopNav('Home')).toBe(true);
-  expect(isShippingDesktopNav('Conversations')).toBe(true);
-  expect(isShippingDesktopNav('Chat')).toBe(false);
-  expect(isShippingDesktopNav('Library')).toBe(false);
-  expect(isShippingDesktopNav('Memories')).toBe(false);
+test('desktop chrome is Activity-scoped; the rail is filters, chat an overlay', () => {
+  expect(desktopActivityFilters).toEqual([
+    'all',
+    'conversations',
+    'recall',
+    'tasks',
+  ]);
+  expect(desktopFilterLabel('all')).toBe('All');
+  expect(desktopFilterLabel('conversations')).toBe('Conversations');
+  expect(desktopFilterLabel('recall')).toBe('Recall');
+  expect(desktopFilterLabel('tasks')).toBe('Tasks');
+  expect(isShippingActivityFilter('all')).toBe(true);
+  expect(isShippingActivityFilter('Home')).toBe(false);
+  expect(isShippingActivityFilter('Chat')).toBe(false);
+  expect(isShippingActivityFilter('Library')).toBe(false);
+  expect(desktopTimelineGroupings).toEqual(['date', 'type', 'topic']);
   expect(desktopSearchPlaceholder).toBe("Search what you've seen and heard…");
   expect(desktopSystemFontFamily).toBe('System');
   expect(desktopGlassCornerRadius).toBe(22);
-  expect(desktopNavBarHeight).toBe(52);
 });
 
 test('window chrome geometry is one even inset with an inline light cluster', () => {
@@ -112,9 +121,9 @@ test('settings IA keeps wired panes and drops no-op duplicates', () => {
   expect(desktopSettingsPanes).not.toContain('Shortcuts');
 });
 
-test('omnibar sits on its own row under the nav', () => {
+test('omnibar row 1 with the filter row beneath it', () => {
   expect(desktopOmnibarHeight).toBe(44);
-  expect(desktopNavBarHeight).toBe(52);
+  expect(desktopFilterRowHeight).toBe(36);
 });
 
 test('nav pill frames ignore sub-point jitter', () => {

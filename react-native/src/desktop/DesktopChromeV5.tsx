@@ -12,17 +12,13 @@ import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
 import {FocusPressable} from '../ui/Pressable';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {
-  desktopActivityFilters,
-  desktopFilterLabel,
-  desktopFilterRowHeight,
   desktopMotion,
   desktopOmnibarHeight,
   desktopSearchPlaceholder,
-  desktopTimelineGroupings,
   desktopTrafficLightButton,
   desktopTrafficLightRowWidth,
-  type ActivityFilterId,
-  type TimelineGrouping,
+  navFrameMoved,
+  type DesktopNavFrame,
 } from './desktopChrome';
 import {desktopEaseSmoothOut} from './desktopMotion';
 import {ShippingPressable} from './ShippingPressable';
@@ -32,36 +28,43 @@ import {
   useDesktopStyleSheets,
 } from './DesktopTheme';
 
-// v5.1 routes: Home is the Activity page, Rewind is the capture-detail viewer
-// reached from timeline entries or Search, and Chat is the overlay id used by
-// the explore checklist (never a chrome destination). Conversations and Tasks
-// are filters, not routes.
-export type DesktopRoute = 'Home' | 'Rewind' | 'Settings' | 'Chat';
+// The v5 pages IA, kept as the selectable "v5" interface version. Rail ids
+// to human labels; Rewind has always shipped as "Recall".
+export const desktopNavItemsV5 = [
+  'Home',
+  'Chat',
+  'Conversations',
+  'Rewind',
+  'Tasks',
+] as const;
 
-const filterIcons: Record<ActivityFilterId, MaterialIconName> = {
-  all: 'view_timeline',
-  conversations: 'chat_bubble',
-  recall: 'history',
-  tasks: 'checklist',
+export type DesktopNavItemV5 = (typeof desktopNavItemsV5)[number];
+
+export type DesktopRouteV5 = DesktopNavItemV5 | 'Settings';
+
+const navIcons: Record<DesktopNavItemV5, MaterialIconName> = {
+  Home: 'home',
+  Chat: 'chat',
+  Conversations: 'chat_bubble',
+  Rewind: 'history',
+  Tasks: 'checklist',
 };
 
-export type OmnibarMode = 'Ask' | 'Search';
+export function desktopNavLabelV5(label: DesktopNavItemV5): string {
+  return label === 'Rewind' ? 'Recall' : label;
+}
+
+export type OmnibarModeV5 = 'Ask' | 'Search';
 
 type Props = {
   chatBusy?: boolean;
-  mode?: OmnibarMode;
-  onModeChange?: (mode: OmnibarMode) => void;
+  mode?: OmnibarModeV5;
+  onModeChange?: (mode: OmnibarModeV5) => void;
   liveControl?: React.ReactNode;
   activeGenerationId: string | null;
-  route: DesktopRoute;
-  onNavigate: (route: DesktopRoute) => void;
-  // The Activity filters that replace the old page switcher. Selecting one
-  // filters the timeline on Home.
-  filter: ActivityFilterId;
-  onFilterChange: (filter: ActivityFilterId) => void;
-  // Timeline grouping shown beside the filters: by date, type, or topic.
-  groupBy: TimelineGrouping;
-  onGroupByChange: (grouping: TimelineGrouping) => void;
+  route: DesktopRouteV5;
+  onNavigate: (route: DesktopRouteV5) => void;
+  // Screen-capture toggle shown in the nav row when capture is available.
   captureActive?: boolean;
   captureAvailable?: boolean;
   captureBusy?: boolean;
@@ -71,16 +74,13 @@ type Props = {
   onSend: () => void;
   onStop: () => void;
   chatNotice: string | null;
-  // Small inline answer card pinned under the omnibar, like the mobile app's
-  // reply bubble. Rendered by the app shell; the chrome only places it.
-  inlineCard?: React.ReactNode;
   omnibarRef: React.RefObject<TextInput | null>;
   // When set, a decorative fake cursor travels to this destination in the
-  // chrome (a filter chip or the settings gear) and nudges it until dismissed.
-  guideTarget?: ActivityFilterId | 'Settings' | null;
+  // chrome (nav pill or the settings gear) and nudges it until dismissed.
+  guideTarget?: DesktopRouteV5 | null;
 };
 
-export function DesktopChrome({
+export function DesktopChromeV5({
   chatBusy = false,
   mode = 'Ask',
   onModeChange,
@@ -90,15 +90,10 @@ export function DesktopChrome({
   draft,
   omnibarRef,
   onDraftChange,
+  onNavigate,
   onSend,
   onStop,
-  onNavigate,
   route,
-  filter,
-  onFilterChange,
-  groupBy,
-  onGroupByChange,
-  inlineCard,
   captureActive = false,
   captureAvailable = false,
   captureBusy = false,
@@ -110,10 +105,85 @@ export function DesktopChrome({
   const reduceMotion = useReduceMotion();
   const canStop = mode === 'Ask' && activeGenerationId !== null;
   const sending = mode === 'Ask' && chatBusy && !canStop;
+  const [frames, setFrames] = useState<
+    Partial<Record<DesktopNavItemV5, DesktopNavFrame>>
+  >({});
+  const pillX = useRef(new Animated.Value(0)).current;
+  const pillW = useRef(new Animated.Value(0)).current;
+  const pillOpacity = useRef(new Animated.Value(0)).current;
+  const placed = useRef(false);
+  const animating = useRef(false);
+  const lastTarget = useRef({x: -1, width: -1});
+  const activeNav = route === 'Settings' ? null : route;
+  const activeFrame = activeNav === null ? undefined : frames[activeNav];
+  const activeX = activeFrame?.x;
+  const activeWidth = activeFrame?.width;
 
-  // Sliding selection pill for the omnibar mode switcher.
+  useEffect(() => {
+    if (activeNav === null) {
+      pillOpacity.setValue(0);
+      return;
+    }
+    if (activeX === undefined || activeWidth === undefined) {
+      return;
+    }
+    const target = {x: activeX, width: activeWidth};
+    const same = !navFrameMoved(lastTarget.current, target);
+    if (same) {
+      pillOpacity.setValue(1);
+      return;
+    }
+    lastTarget.current = target;
+    if (!placed.current || reduceMotion) {
+      pillX.setValue(target.x);
+      pillW.setValue(target.width);
+      pillOpacity.setValue(1);
+      placed.current = true;
+      return;
+    }
+    animating.current = true;
+    const ease = desktopEaseSmoothOut();
+    const animation = Animated.parallel([
+      Animated.timing(pillX, {
+        duration: desktopMotion.navMs,
+        easing: ease,
+        toValue: target.x,
+        useNativeDriver: false,
+      }),
+      Animated.timing(pillW, {
+        duration: desktopMotion.navMs,
+        easing: ease,
+        toValue: target.width,
+        useNativeDriver: false,
+      }),
+      Animated.timing(pillOpacity, {
+        duration: desktopMotion.quickMs,
+        easing: ease,
+        toValue: 1,
+        useNativeDriver: false,
+      }),
+    ]);
+    animation.start(() => {
+      animating.current = false;
+    });
+    return () => {
+      animation.stop();
+      animating.current = false;
+    };
+  }, [
+    activeNav,
+    activeWidth,
+    activeX,
+    pillOpacity,
+    pillW,
+    pillX,
+    reduceMotion,
+  ]);
+
+  // Sliding selection pill for the omnibar mode switcher, mirroring the nav
+  // pill above so the two controls feel like one system.
   const [modeFrames, setModeFrames] = useState<
-    Partial<Record<OmnibarMode, {x: number; width: number}>>
+    Partial<Record<OmnibarModeV5, {x: number; width: number}>>
   >({});
   const modePillX = useRef(new Animated.Value(0)).current;
   const modePillW = useRef(new Animated.Value(0)).current;
@@ -168,15 +238,12 @@ export function DesktopChrome({
     width: number;
     height: number;
   } | null>(null);
-  const [filtersBox, setFiltersBox] = useState<{
+  const [navBox, setNavBox] = useState<{
     x: number;
     y: number;
     width: number;
     height: number;
   } | null>(null);
-  const [chipFrames, setChipFrames] = useState<
-    Partial<Record<ActivityFilterId, {x: number; width: number}>>
-  >({});
   const [gearBox, setGearBox] = useState<{
     x: number;
     y: number;
@@ -200,20 +267,17 @@ export function DesktopChrome({
         height: gearBox.height,
       };
     }
-    if (filtersBox === null) {
-      return null;
-    }
-    const frame = chipFrames[guideTarget];
-    if (frame === undefined) {
+    const frame = frames[guideTarget];
+    if (frame === undefined || navBox === null) {
       return null;
     }
     return {
-      x: rowBox.x + filtersBox.x + frame.x,
-      y: rowBox.y + filtersBox.y,
+      x: rowBox.x + navBox.x + frame.x,
+      y: rowBox.y + navBox.y,
       width: frame.width,
-      height: filtersBox.height,
+      height: navBox.height,
     };
-  }, [chipFrames, filtersBox, gearBox, guideTarget, rowBox]);
+  }, [frames, gearBox, guideTarget, navBox, rowBox]);
   const guidePoint = useMemo(() => {
     if (guideRect === null) {
       return null;
@@ -290,123 +354,70 @@ export function DesktopChrome({
           pointerEvents="none"
           style={styles.windowControls}
         />
-        <View style={styles.omnibar}>
-          <View style={styles.modes}>
-            <Animated.View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                top: 4,
-                bottom: 4,
-                left: 0,
-                borderRadius: 10,
-                backgroundColor: token.color.glassSelected,
-                transform: [{translateX: modePillX}],
-                width: modePillW,
-                opacity: modePillOpacity,
-              }}
-            />
-            {(['Ask', 'Search'] as const).map(value => {
-              const iconName = value === 'Ask' ? 'chat_bubble' : 'search';
-              return (
-                <FocusPressable
-                  key={value}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Use ${value} mode`}
-                  accessibilityState={{selected: mode === value}}
-                  onLayout={event => {
-                    const {x, width} = event.nativeEvent.layout;
-                    setModeFrames(current => ({
-                      ...current,
-                      [value]: {x, width},
-                    }));
-                  }}
-                  onPress={() => onModeChange?.(value)}
-                  style={styles.modeButton}>
-                  <MaterialIcon
-                    name={iconName}
-                    size={15}
-                    color={
-                      mode === value ? token.color.ink : token.color.inkMuted
+        <View
+          onLayout={event => {
+            const {x, y, width, height} = event.nativeEvent.layout;
+            setNavBox({height, width, x, y});
+          }}
+          style={styles.nav}>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.navPill,
+              {
+                opacity: pillOpacity,
+                transform: [{translateX: pillX}],
+                width: pillW,
+              },
+            ]}
+          />
+          {desktopNavItemsV5.map((label, index) => {
+            const iconName = navIcons[label];
+            const active = route === label;
+            return (
+              <View
+                key={label}
+                onLayout={event => {
+                  if (animating.current) {
+                    return;
+                  }
+                  const {x, width} = event.nativeEvent.layout;
+                  setFrames(current => {
+                    const next = {width, x};
+                    if (!navFrameMoved(current[label], next)) {
+                      return current;
                     }
-                  />
+                    return {...current, [label]: next};
+                  });
+                }}
+                style={[
+                  styles.navItem,
+                  index < desktopNavItemsV5.length - 1 && styles.navItemFollow,
+                ]}>
+                <FocusPressable
+                  accessibilityLabel={label === 'Rewind' ? 'Recall' : label}
+                  accessibilityRole="button"
+                  accessibilityState={{selected: active}}
+                  onPress={() => onNavigate(label)}
+                  style={({pressed}) => [
+                    styles.navHit,
+                    pressed && styles.pressed,
+                  ]}>
+                  <View style={styles.navIcon}>
+                    <MaterialIcon
+                      color={token.color.ink}
+                      name={iconName}
+                      size={14}
+                    />
+                  </View>
                   <Text
-                    style={[
-                      styles.modeText,
-                      mode === value && styles.modeTextActive,
-                    ]}>
-                    {value}
+                    style={[styles.navText, active && styles.navTextActive]}>
+                    {label === 'Rewind' ? 'Recall' : label}
                   </Text>
                 </FocusPressable>
-              );
-            })}
-          </View>
-          <TextInput
-            accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search Recall'}
-            blurOnSubmit={false}
-            onChangeText={onDraftChange}
-            onSubmitEditing={() => {
-              if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
-                onSend();
-              }
-            }}
-            placeholder={
-              mode === 'Search'
-                ? desktopSearchPlaceholder
-                : 'Ask about your day…'
-            }
-            placeholderTextColor={token.color.inkMuted}
-            ref={omnibarRef}
-            style={styles.omnibarInput}
-            value={draft}
-          />
-          {liveControl ? (
-            <View style={styles.liveSlot}>{liveControl}</View>
-          ) : null}
-          <FocusPressable
-            accessibilityLabel={
-              canStop
-                ? 'Stop'
-                : sending
-                ? 'Sending…'
-                : mode === 'Ask'
-                ? 'Send'
-                : 'Search'
-            }
-            accessibilityRole="button"
-            disabled={mode === 'Ask' && !canStop && (chatBusy || !draft.trim())}
-            onPress={() => {
-              if (canStop) {
-                onStop();
-              } else if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
-                onSend();
-              }
-            }}
-            style={({pressed}) => [
-              styles.send,
-              mode === 'Ask' &&
-                !canStop &&
-                (chatBusy || !draft.trim()) &&
-                styles.sendDisabled,
-              pressed && styles.pressed,
-            ]}>
-            {canStop ? (
-              <MaterialIcon name="stop" size={14} color={token.color.dark} />
-            ) : mode === 'Ask' ? (
-              <MaterialIcon
-                name="arrow_upward"
-                size={18}
-                color={token.color.dark}
-              />
-            ) : (
-              <MaterialIcon name="search" size={17} color={token.color.dark} />
-            )}
-          </FocusPressable>
-          {inlineCard ? (
-            <View pointerEvents="box-none" style={styles.inlineCardSlot}>
-              {inlineCard}
-            </View>
-          ) : null}
+              </View>
+            );
+          })}
         </View>
         {onToggleCapture !== null && captureAvailable ? (
           <ShippingPressable
@@ -441,14 +452,124 @@ export function DesktopChrome({
             const {x, y, width, height} = event.nativeEvent.layout;
             setGearBox({height, width, x, y});
           }}
-          // The gear toggles: it opens Settings and also walks back Home.
-          onPress={() => onNavigate(route === 'Settings' ? 'Home' : 'Settings')}
+          onPress={() => onNavigate('Settings')}
           style={[
             styles.settingsButton,
             route === 'Settings' && styles.settingsButtonActive,
           ]}>
           <MaterialIcon name="settings" color={token.color.ink} size={17} />
         </ShippingPressable>
+      </View>
+      <View style={styles.omnibar}>
+        <View style={styles.modes}>
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 4,
+              bottom: 4,
+              left: 0,
+              borderRadius: 10,
+              backgroundColor: token.color.glassSelected,
+              transform: [{translateX: modePillX}],
+              width: modePillW,
+              opacity: modePillOpacity,
+            }}
+          />
+          {(['Ask', 'Search'] as const).map(value => {
+            const iconName = value === 'Ask' ? 'chat_bubble' : 'search';
+            return (
+              <FocusPressable
+                key={value}
+                accessibilityRole="button"
+                accessibilityLabel={`Use ${value} mode`}
+                accessibilityState={{selected: mode === value}}
+                onLayout={event => {
+                  const {x, width} = event.nativeEvent.layout;
+                  setModeFrames(current => ({
+                    ...current,
+                    [value]: {x, width},
+                  }));
+                }}
+                onPress={() => onModeChange?.(value)}
+                style={styles.modeButton}>
+                <MaterialIcon
+                  name={iconName}
+                  size={15}
+                  color={
+                    mode === value ? token.color.ink : token.color.inkMuted
+                  }
+                />
+                <Text
+                  style={[
+                    styles.modeText,
+                    mode === value && styles.navTextActive,
+                  ]}>
+                  {value}
+                </Text>
+              </FocusPressable>
+            );
+          })}
+        </View>
+        <TextInput
+          accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search Recall'}
+          blurOnSubmit={false}
+          onChangeText={onDraftChange}
+          onSubmitEditing={() => {
+            if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
+              onSend();
+            }
+          }}
+          placeholder={
+            mode === 'Search' ? desktopSearchPlaceholder : 'Ask about your day…'
+          }
+          placeholderTextColor={token.color.inkMuted}
+          ref={omnibarRef}
+          style={styles.omnibarInput}
+          value={draft}
+        />
+        {liveControl ? (
+          <View style={styles.liveSlot}>{liveControl}</View>
+        ) : null}
+        <FocusPressable
+          accessibilityLabel={
+            canStop
+              ? 'Stop'
+              : sending
+              ? 'Sending…'
+              : mode === 'Ask'
+              ? 'Send'
+              : 'Search'
+          }
+          accessibilityRole="button"
+          disabled={mode === 'Ask' && !canStop && (chatBusy || !draft.trim())}
+          onPress={() => {
+            if (canStop) {
+              onStop();
+            } else if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
+              onSend();
+            }
+          }}
+          style={({pressed}) => [
+            styles.send,
+            mode === 'Ask' &&
+              !canStop &&
+              (chatBusy || !draft.trim()) &&
+              styles.sendDisabled,
+            pressed && styles.pressed,
+          ]}>
+          {canStop ? (
+            <MaterialIcon name="stop" size={14} color={token.color.dark} />
+          ) : mode === 'Ask' ? (
+            <MaterialIcon
+              name="arrow_upward"
+              size={18}
+              color={token.color.dark}
+            />
+          ) : (
+            <MaterialIcon name="search" size={17} color={token.color.dark} />
+          )}
+        </FocusPressable>
       </View>
       {chatNotice === null ? null : (
         <Text
@@ -458,92 +579,6 @@ export function DesktopChrome({
           {chatNotice}
         </Text>
       )}
-      <View
-        accessibilityLabel="Activity filters"
-        accessibilityRole="tablist"
-        onLayout={event => {
-          const {x, y, width, height} = event.nativeEvent.layout;
-          setFiltersBox({height, width, x, y});
-        }}
-        style={styles.filterRow}>
-        {desktopActivityFilters.map(id => {
-          const selected = id === filter;
-          return (
-            <FocusPressable
-              key={id}
-              accessibilityLabel={`Filter ${desktopFilterLabel(id)}`}
-              accessibilityRole="button"
-              accessibilityState={{selected}}
-              onLayout={event => {
-                const {x, width} = event.nativeEvent.layout;
-                setChipFrames(current => {
-                  const next = {x, width};
-                  if (
-                    current[id] !== undefined &&
-                    Math.abs(current[id]!.x - next.x) < 0.5 &&
-                    Math.abs(current[id]!.width - next.width) < 0.5
-                  ) {
-                    return current;
-                  }
-                  return {...current, [id]: next};
-                });
-              }}
-              onPress={() => onFilterChange(id)}
-              style={({pressed}) => [
-                styles.filterHit,
-                selected && styles.filterHitSelected,
-                pressed && styles.pressed,
-              ]}>
-              <MaterialIcon
-                name={filterIcons[id]}
-                size={14}
-                color={selected ? token.color.ink : token.color.inkMuted}
-              />
-              <Text
-                style={[
-                  styles.filterText,
-                  selected && styles.filterTextActive,
-                ]}>
-                {desktopFilterLabel(id)}
-              </Text>
-            </FocusPressable>
-          );
-        })}
-        <View style={styles.groupBySlot} />
-        <View
-          accessibilityLabel="Timeline grouping"
-          accessibilityRole="tablist"
-          style={styles.groupBy}>
-          {desktopTimelineGroupings.map(value => {
-            const selected = value === groupBy;
-            return (
-              <FocusPressable
-                key={value}
-                accessibilityLabel={`Group by ${value}`}
-                accessibilityRole="button"
-                accessibilityState={{selected}}
-                onPress={() => onGroupByChange(value)}
-                style={({pressed}) => [
-                  styles.groupHit,
-                  selected && styles.groupHitSelected,
-                  pressed && styles.pressed,
-                ]}>
-                <Text
-                  style={[
-                    styles.groupText,
-                    selected && styles.groupTextSelected,
-                  ]}>
-                  {value === 'date'
-                    ? 'Date'
-                    : value === 'type'
-                    ? 'Type'
-                    : 'Topic'}
-                </Text>
-              </FocusPressable>
-            );
-          })}
-        </View>
-      </View>
       {guideTarget !== null && guideRect !== null ? (
         <Animated.View
           accessibilityLabel="Explore guide highlight"
@@ -629,9 +664,8 @@ const createStyles = (token: DesktopTokens) =>
       borderRadius: 12,
     },
     modeText: {fontSize: 12, color: token.color.inkMuted},
-    modeTextActive: {color: token.color.ink},
     chrome: {
-      gap: 10,
+      gap: 14,
       marginBottom: 4,
     },
     guideCursor: {
@@ -660,7 +694,8 @@ const createStyles = (token: DesktopTokens) =>
     row: {
       alignItems: 'center',
       flexDirection: 'row',
-      gap: 10,
+      // Matches the v5.1 top (omnibar) row: AppDelegate mirrors one
+      // OmiChromeRowHeight for every interface version.
       height: desktopOmnibarHeight,
     },
     windowControls: {
@@ -668,9 +703,53 @@ const createStyles = (token: DesktopTokens) =>
       height: desktopTrafficLightButton,
       width: desktopTrafficLightRowWidth,
     },
-    omnibar: {
+    nav: {
       alignItems: 'center',
       flex: 1,
+      flexDirection: 'row',
+      flexShrink: 1,
+      position: 'relative',
+    },
+    navPill: {
+      backgroundColor: token.color.glassSelected,
+      borderRadius: token.radius.chip,
+      bottom: 6,
+      left: 0,
+      position: 'absolute',
+      top: 6,
+    },
+    navItem: {
+      height: 40,
+      paddingHorizontal: 10,
+      zIndex: 1,
+    },
+    navItemFollow: {
+      marginRight: 4,
+    },
+    navHit: {
+      alignItems: 'center',
+      flex: 1,
+      flexDirection: 'row',
+      height: 40,
+      justifyContent: 'center',
+    },
+    navIcon: {
+      marginRight: 7,
+    },
+    navText: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.nav,
+      fontWeight: '500',
+    },
+    navTextActive: {
+      color: token.color.ink,
+    },
+    omnibar: {
+      alignItems: 'center',
+      alignSelf: 'center',
+      width: '100%',
+      maxWidth: 992,
       backgroundColor: token.color.glassStrong,
       borderWidth: 1,
       borderColor: token.color.line,
@@ -678,20 +757,9 @@ const createStyles = (token: DesktopTokens) =>
       flexDirection: 'row',
       gap: 8,
       height: desktopOmnibarHeight,
-      maxWidth: 992,
       minWidth: 220,
       paddingHorizontal: 8,
       paddingVertical: 6,
-    },
-    // The inline ask answer hangs just below the omnibar without pushing the
-    // page layout underneath it.
-    inlineCardSlot: {
-      position: 'absolute',
-      top: '100%',
-      left: 0,
-      right: 0,
-      marginTop: 8,
-      zIndex: 6,
     },
     omnibarInput: {
       color: token.color.ink,
@@ -725,6 +793,12 @@ const createStyles = (token: DesktopTokens) =>
       backgroundColor: token.color.ink,
     },
     sendDisabled: {opacity: 0.3},
+    sendText: {
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: token.type.caption,
+      fontWeight: '600',
+    },
     settingsButton: {
       alignItems: 'center',
       backgroundColor: 'rgba(0,0,0,0)',
@@ -740,62 +814,5 @@ const createStyles = (token: DesktopTokens) =>
       borderColor: token.color.line,
       borderWidth: 1,
     },
-    filterRow: {
-      alignItems: 'center',
-      flexDirection: 'row',
-      gap: 6,
-      height: desktopFilterRowHeight,
-      maxWidth: 992,
-      width: '100%',
-      alignSelf: 'center',
-    },
-    filterHit: {
-      alignItems: 'center',
-      borderRadius: 14,
-      flexDirection: 'row',
-      gap: 7,
-      height: 30,
-      justifyContent: 'center',
-      paddingHorizontal: 12,
-    },
-    filterHitSelected: {
-      backgroundColor: token.color.glassSelected,
-    },
-    filterText: {
-      color: token.color.inkMuted,
-      fontFamily: token.font,
-      fontSize: token.type.nav,
-      fontWeight: '500',
-    },
-    filterTextActive: {
-      color: token.color.ink,
-    },
-    groupBySlot: {flex: 1},
-    groupBy: {
-      alignItems: 'center',
-      borderRadius: 12,
-      borderColor: token.color.line,
-      borderWidth: 1,
-      flexDirection: 'row',
-      gap: 2,
-      padding: 2,
-    },
-    groupHit: {
-      alignItems: 'center',
-      borderRadius: 10,
-      height: 24,
-      justifyContent: 'center',
-      paddingHorizontal: 10,
-    },
-    groupHitSelected: {
-      backgroundColor: token.color.glassSelected,
-    },
-    groupText: {
-      color: token.color.inkMuted,
-      fontFamily: token.font,
-      fontSize: 11,
-      fontWeight: '600',
-    },
-    groupTextSelected: {color: token.color.ink},
     pressed: {opacity: 0.78},
   });
