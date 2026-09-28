@@ -200,32 +200,15 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        # The task invoker already has run.invoker on backend-sync. Reuse its
-        # audience/identity; no new service account or queue is needed.
-        SERVICE_JSON="$(gcloud run services describe '${{ inputs.service }}-sync' \
-          --region='${{ inputs.region }}' --project='${{ inputs.project_id }}' \
-          --format='json(status.url,spec.template.spec.containers[0].env)')"
-        SERVICE_URL="$(jq -r '.status.url // empty' <<< "$SERVICE_JSON")"
-        INVOKER_SA="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name == "SYNC_TASKS_INVOKER_SA") | .value] | first // empty' <<< "$SERVICE_JSON")"
-        test -n "$SERVICE_URL"
-        test -n "$INVOKER_SA"
-        JOB='sync-backfill-uid-sequencer'
-        COMMON=(
-          --location='${{ inputs.region }}'
-          --project='${{ inputs.project_id }}'
-          --schedule='*/2 * * * *'
-          --time-zone='UTC'
-          --uri="${SERVICE_URL}/v2/sync-backfill-sequencer/sweep"
-          --http-method='POST'
-          --oidc-service-account-email="$INVOKER_SA"
-          --oidc-token-audience="${SERVICE_URL}/v2/sync-jobs/run"
-          --attempt-deadline='180s'
-        )
-        if gcloud scheduler jobs describe "$JOB" --location='${{ inputs.region }}' --project='${{ inputs.project_id }}' >/dev/null 2>&1; then
-          gcloud scheduler jobs update http "$JOB" "${COMMON[@]}"
-        else
-          gcloud scheduler jobs create http "$JOB" "${COMMON[@]}"
-        fi
+        python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+        DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
+        ENVIRONMENT=dev
+        if [[ '${{ inputs.project_id }}' == 'based-hardware' ]]; then ENVIRONMENT=prod; fi
+        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/scheduler_reconcile.py" \
+          --environment "$ENVIRONMENT" --project '${{ inputs.project_id }}' \
+          --apply --jobs sync-backfill-uid-sequencer
+        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/scheduler_reconcile.py" \
+          --environment "$ENVIRONMENT" --project '${{ inputs.project_id }}' --check
 
     - name: Provision and verify sync ledger TTL
       if: ${{ inputs.mode == 'platform' && inputs.provision_sync_ledger_ttl == 'true' }}
