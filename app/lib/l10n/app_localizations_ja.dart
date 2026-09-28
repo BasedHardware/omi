@@ -11038,7 +11038,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get openCall => '通話を開く';
 
   @override
-  String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';
+  String get captureRecoveryBanner => 'Omiが音声を送信していません — タップして再接続';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '携帯で録音する前に、ペンダントの Transcribe Later を停止してください。';
@@ -11241,6 +11241,48 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'フィードバックを送る';
+
+  @override
+  String get feedbackAllGood => '問題なし';
+
+  @override
+  String get feedbackChatWithUs => '詳しくは？チャットでご連絡ください';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => '正確でない';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => '不完全';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => '関係がない';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => '文脈が違う';
+
+  @override
+  String get feedbackReasonSummaryOther => 'その他';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => '音声がない';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => '文字起こしが不正確';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => '話者が違う';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => '遅い・止まっている';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => '分断・重複している';
+
+  @override
+  String get feedbackReasonRecordingOther => 'その他';
 
   @override
   String get searchPeople => '人物を検索';

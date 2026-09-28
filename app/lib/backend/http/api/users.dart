@@ -111,6 +111,18 @@ class MobileFeedbackReceipt {
   }
 }
 
+/// Signature of [submitMobileFeedback]. Callers that surface the feedback flow
+/// accept an override of this shape so tests can observe the request path.
+typedef MobileFeedbackSubmit = Future<MobileFeedbackReceipt?> Function({
+  required MobileFeedbackKind kind,
+  required String targetId,
+  required int value,
+  MobileFeedbackReason? reason,
+  String? correlationId,
+  String? feedbackId,
+  required MobileFeedbackTargetKind targetKind,
+});
+
 Future<MobileFeedbackReceipt?> submitMobileFeedback({
   required MobileFeedbackKind kind,
   required String targetId,

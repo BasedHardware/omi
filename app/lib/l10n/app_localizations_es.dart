@@ -11254,7 +11254,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get openCall => 'Abrir llamada';
 
   @override
-  String get captureRecoveryBanner => 'El audio del colgante no llega a la app — toca para reparar';
+  String get captureRecoveryBanner => 'Omi no está enviando audio — toca para volver a conectar';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11465,6 +11465,48 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'No se pudieron enviar los datos de diagnóstico. Inténtalo de nuevo.';
+
+  @override
+  String get feedbackGiveFeedback => 'Enviar comentarios';
+
+  @override
+  String get feedbackAllGood => 'Todo bien';
+
+  @override
+  String get feedbackChatWithUs => '¿Más detalle? Chatea con nosotros';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inexacto';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incompleto';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'No es relevante';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Contexto equivocado';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Otra cosa';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Falta el audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Transcripción deficiente';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Orador equivocado';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Con retraso o atascado';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmentado o duplicado';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Otra cosa';
 
   @override
   String get searchPeople => 'Buscar personas';

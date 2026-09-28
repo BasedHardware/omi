@@ -11203,7 +11203,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get openCall => 'कॉल खोलें';
 
   @override
-  String get captureRecoveryBanner => 'पेंडेंट का ऑडियो ऐप तक नहीं पहुंच रहा है — ठीक करने के लिए टैप करें';
+  String get captureRecoveryBanner => 'Omi ऑडियो नहीं भेज रहा है — फिर से कनेक्ट करने के लिए टैप करें';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11411,6 +11411,48 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'प्रतिक्रिया दें';
+
+  @override
+  String get feedbackAllGood => 'सब ठीक है';
+
+  @override
+  String get feedbackChatWithUs => 'और बताना है? हमसे चैट करें';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'ग़लत';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'अधूरा';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'अप्रासंगिक';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'ग़लत संदर्भ';
+
+  @override
+  String get feedbackReasonSummaryOther => 'कुछ और';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'ऑडियो गायब';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'ट्रांसक्रिप्शन खराब';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'ग़लत वक्ता';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'देरी या अटकना';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'टुकड़ों में या डुप्लिकेट';
+
+  @override
+  String get feedbackReasonRecordingOther => 'कुछ और';
 
   @override
   String get searchPeople => 'लोगों को खोजें';
