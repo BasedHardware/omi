@@ -189,8 +189,9 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
               const SizedBox(height: OmiSpacing.md),
               TextFormField(
                 controller: _descriptionController,
-                decoration: appFormInputDecoration(label: l10n.descriptionOptional),
+                decoration: appFormInputDecoration(label: l10n.descriptionOptional).copyWith(hintMaxLines: 1),
                 style: TextStyle(color: OmiColors.textPrimary),
+                minLines: 1,
                 maxLines: 2,
               ),
               const SizedBox(height: OmiSpacing.md),
