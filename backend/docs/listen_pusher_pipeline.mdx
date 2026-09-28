@@ -1115,7 +1115,10 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 
 The flag-off capture clock exposes `omi_audio_timeline_segments_total{mode="legacy",outcome="mapped|rejected"}`
 for the accepted-send denominator and `omi_audio_timeline_rejects_total{mode="legacy|v2",reason="...",provider="..."}`
-for bounded reject reasons. `omi_audio_timeline_mapped_total{mode="legacy|v2",provider="..."}`
+for bounded reject reasons. Reject and mapped children appear on events only;
+idle exporters no longer pre-create their mode × provider × send path × reason
+products. Use the scrape target's `up` to check exporter liveness.
+`omi_audio_timeline_mapped_total{mode="legacy|v2",provider="..."}`
 attributes successful mappings to the same closed provider set (Modulate,
 Soniox, Deepgram, Parakeet, unknown). Callback failures are separate batch
 events in `omi_audio_timeline_callback_errors_total`; they do not inflate the

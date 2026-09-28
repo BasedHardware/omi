@@ -610,7 +610,6 @@ def send_message(
     mobile_journey_attempt = ClientJourneyAttempt(
         'mobile_chat',
         resolve_client_kind_from_headers(request.headers),
-        app_build=extract_app_build(request),
     )
 
     async def generate_stream():
