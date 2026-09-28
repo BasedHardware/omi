@@ -39,6 +39,8 @@ overlay:
           value: parakeet-window,soniox
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
+        STT_RESILIENT_RECONNECT:
+          value: 'false'
         STT_LEARNED_LANGUAGE_PROFILE:
           value: 'true'
         STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
