@@ -59,10 +59,14 @@ struct CapturePresence: Equatable {
   let lidClosed: Bool?
   let appActive: Bool
 
+  static func screenLockState(from session: [String: Any]?) -> Bool? {
+    session?["CGSSessionScreenIsLocked"] as? Bool
+  }
+
   @MainActor static func current() -> Self {
     let session = CGSessionCopyCurrentDictionary() as? [String: Any]
     let console = session?["kCGSSessionOnConsoleKey"] as? Bool
-    let locked: Bool? = session.map { $0["CGSSessionScreenIsLocked"] as? Bool ?? false }
+    let locked = screenLockState(from: session)
     var displays = [CGDirectDisplayID](repeating: 0, count: 16)
     var count: UInt32 = 0
     let status = CGGetOnlineDisplayList(UInt32(displays.count), &displays, &count)

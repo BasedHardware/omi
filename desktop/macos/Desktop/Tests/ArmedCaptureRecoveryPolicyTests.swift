@@ -183,6 +183,18 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
     XCTAssertEqual(
       policy.signal(.appActive, now: start.addingTimeInterval(31), presence: unknown, inputIsBuiltIn: nil), .probe)
 
+    let unknownLid = CapturePresence(
+      screenLocked: false, displaysAsleep: false, consoleSessionActive: true,
+      lidClosed: nil, appActive: true)
+    var lidPolicy = ArmedCaptureRecoveryPolicy()
+    _ = lidPolicy.enter(now: start)
+    XCTAssertEqual(
+      lidPolicy.signal(.backoff, now: start.addingTimeInterval(30), presence: unknownLid, inputIsBuiltIn: nil),
+      .retrySkipped(reason: .unknown, until: start.addingTimeInterval(60)))
+    XCTAssertEqual(
+      lidPolicy.signal(.displayChanged, now: start.addingTimeInterval(31), presence: unknownLid, inputIsBuiltIn: nil),
+      .probe)
+
     let clamshell = CapturePresence(
       screenLocked: false, displaysAsleep: false, consoleSessionActive: true,
       lidClosed: true, appActive: false)
@@ -198,6 +210,13 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
     XCTAssertEqual(
       uncertain.signal(.inputChanged, now: start.addingTimeInterval(31), presence: clamshell, inputIsBuiltIn: nil),
       .probe)
+  }
+
+  func testMissingScreenLockFactRemainsUnknown() {
+    XCTAssertNil(CapturePresence.screenLockState(from: nil))
+    XCTAssertNil(CapturePresence.screenLockState(from: [:]))
+    XCTAssertEqual(CapturePresence.screenLockState(from: ["CGSSessionScreenIsLocked": true]), true)
+    XCTAssertEqual(CapturePresence.screenLockState(from: ["CGSSessionScreenIsLocked": false]), false)
   }
 
   func testManualAndPermissionPoliciesRemainTerminal() {

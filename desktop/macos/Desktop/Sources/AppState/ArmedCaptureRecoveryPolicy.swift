@@ -49,7 +49,7 @@ struct ArmedCaptureRecoveryPolicy {
     if presence.displaysAsleep == true { return .displaysAsleep }
     if presence.lidClosed == true, inputIsBuiltIn == true { return .lidClosedBuiltIn }
     if presence.consoleSessionActive == nil || presence.screenLocked == nil || presence.displaysAsleep == nil
-      || (presence.lidClosed == true && inputIsBuiltIn == nil)
+      || presence.lidClosed == nil || (presence.lidClosed == true && inputIsBuiltIn == nil)
     {
       return .unknown
     }
