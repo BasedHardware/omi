@@ -1,4 +1,4 @@
-"""Hermetic unit tests for TaskLink error sanitization in the action items router.
+"""Hermetic unit tests for TaskLink error sanitization in the action items router (#19589, #19590).
 
 Verifies that:
 1. Internal TaskLinkResolverUnavailableError (e.g. 'Ticket 04 ... resolver is not registered')
