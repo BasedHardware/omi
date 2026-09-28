@@ -823,8 +823,8 @@
       "safe_next_action": "Open the Backend-listen dashboard Live transcription health row: check the per-provider success panels and breaker-open gauges, then inspect provider account state (top up balance) before touching routing.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
       "threshold": "$A >= 50 && $B < 0.90 for 10m",
-      "evaluated_bad": "Synthetic contract: 100 counted sessions of which 80 transcribed (ratio 0.80 < 0.90); and a window with 100 no_transcript and no transcribed series at all (numerator zero-fills via 'or vector(0)', ratio 0, still fires).",
-      "evaluated_good": "Synthetic contract: 100 counted sessions of which 99 transcribed (ratio 0.99); and zero counted sessions (no data, healthy)."
+      "evaluated_bad": "Synthetic incident shape: no transcribed series and a sustained near-zero success ratio; a 20x reconnect storm creates many no_transcript WebSocket outcomes, which increase the denominator and cannot dilute the ratio. At >=50 outcomes per 5m, the condition remains true and fires after 10m.",
+      "evaluated_good": "Synthetic contract: 99 of 100 counted sessions transcribed; zero counted sessions stays healthy because the volume guard is false."
     },
     "labels": {
       "alert_identity": "omi-live-transcription-success-low",
@@ -1348,6 +1348,126 @@
     },
     "labels": {
       "alert_identity": "omi-soniox-runway-90",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-soniox-budget-exhausted",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Soniox balance exhausted — top up now",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=\"soniox\",reason=\"provider_budget_exhausted\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-28T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Soniox balance exhausted — top up now",
+      "user_impact": "Soniox refused a live stream because its organization balance or project budget is exhausted; sessions depending on Soniox may lose transcription.",
+      "scope": "backend-listen omi_stt_stream_close_total{provider=\"soniox\",reason=\"provider_budget_exhausted\"}; one or more closes in the rolling 5m window.",
+      "verification": "Local rule contract only; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Top up Soniox or restore the approved project budget, then verify a new stream succeeds.",
+      "runbook": "backend/docs/operational/soniox-typed-rejections.md",
+      "threshold": "sum(increase(omi_stt_stream_close_total{provider=\"soniox\",reason=\"provider_budget_exhausted\"}[5m])) > 0",
+      "evaluated_bad": "Synthetic contract: at least one Soniox provider_budget_exhausted stream close in the rolling 5m window fires immediately.",
+      "evaluated_good": "Synthetic contract: zero Soniox provider_budget_exhausted stream closes in the rolling 5m window stays healthy."
+    },
+    "labels": {
+      "alert_identity": "omi-soniox-budget-exhausted",
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "critical",
