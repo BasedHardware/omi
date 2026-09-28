@@ -482,6 +482,7 @@ class SiriIntegration extends SiriEventsApi {
       }
       _minimumSourceEpoch = _nextEpoch();
     } else {
+      if (_pendingReconciles.isNotEmpty) _ownerWideRefreshAt = null;
       _pendingReconciles.clear();
       _removalRetry?.cancel();
       _removalRetry = null;
