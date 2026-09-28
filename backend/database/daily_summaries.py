@@ -3,25 +3,25 @@ Daily Summaries database module
 
 Structure:
 users/{uid}/daily_summaries/{summary_id}
-    * id: str
-    * date: str (YYYY-MM-DD)
-    * created_at: timestamp
-    * headline: str
-    * overview: str
-    * day_emoji: str
-    * highlights: List[TopicHighlight]
-    * action_items: List[ActionItemSummary]
-    * people_mentioned: List[PersonMentioned]
-    * memorable_moments: List[MemorabeMoment]
-    * stats: DayStats
-    * tomorrow_focus: str
-    * overall_sentiment: str
+    ├── id: str
+    ├── date: str (YYYY-MM-DD)
+    ├── created_at: timestamp
+    ├── headline: str
+    ├── overview: str
+    ├── day_emoji: str
+    ├── highlights: List[TopicHighlight]
+    ├── action_items: List[ActionItemSummary]
+    ├── people_mentioned: List[PersonMentioned]
+    ├── memorable_moments: List[MemorabeMoment]
+    ├── stats: DayStats
+    ├── tomorrow_focus: str
+    └── overall_sentiment: str
 
 users/{uid}/desktop_daily_usage/{date}__{client_device_id}
-    * date/timezone/client_device_id
-    * watching_seconds/listening_seconds
-    * proactive_cards_shown/proactive_cards_acted/ptt_turns
-    * updated_at
+    ├── date/timezone/client_device_id
+    ├── watching_seconds/listening_seconds
+    ├── proactive_cards_shown/proactive_cards_acted/ptt_turns
+    └── updated_at
 """
 
 from datetime import datetime, timezone
@@ -209,7 +209,7 @@ def get_daily_summaries(
 
     Args:
         uid: User ID
-        limit: Maximum number of summaries to return (clamped 1-100)
+        limit: Maximum number of summaries to return (clamped 1-200 to accommodate MCP +1 pagination)
         offset: Number of summaries to skip (non-negative)
         start_date: Filter summaries from this date (YYYY-MM-DD)
         end_date: Filter summaries until this date (YYYY-MM-DD)
@@ -218,7 +218,7 @@ def get_daily_summaries(
         List of summary data dicts
     """
     clean_uid = _clean_uid(uid)
-    safe_limit = max(1, min(int(limit) if type(limit) is int else 30, 100))
+    safe_limit = max(1, min(int(limit) if type(limit) is int else 30, 200))
     safe_offset = max(0, int(offset) if type(offset) is int else 0)
 
     user_ref = db.collection('users').document(clean_uid)
@@ -286,9 +286,7 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
 def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> None:
     clean_uid = _clean_uid(uid)
     clean_summary_id = _clean_id(summary_id, 'summary_id')
-    clean_vis = visibility.strip() if visibility and visibility.strip() else None
-    if not clean_vis:
-        raise ValueError('visibility must be a non-empty string')
+    clean_vis = _clean_id(visibility, 'visibility')
     user_ref = db.collection('users').document(clean_uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(clean_summary_id)
     summary_ref.update({'visibility': clean_vis})
