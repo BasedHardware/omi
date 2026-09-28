@@ -340,8 +340,12 @@ env:
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
     value: "100"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
-    value: "100"
+    value: "1"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
+    value: "1"
+  - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
+    value: "dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local"
+  - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
     value: "1"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
@@ -360,7 +364,7 @@ env:
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
   - name: STT_SERVICE_MODELS
-    value: "parakeet-window,soniox"
+    value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL

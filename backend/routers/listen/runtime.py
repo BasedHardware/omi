@@ -58,7 +58,8 @@ from utils.observability.transcription import (
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.product_telemetry import emit_product_event
 from utils.stt.streaming import get_stt_service_for_language
-from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
+from utils.stt.live_rollout import managed_chain_enabled, window_allocation, window_selection_kwargs
+from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME
 from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
@@ -386,13 +387,17 @@ class ListenSessionRuntime:
         if getattr(self, 'use_custom_stt', False):
             return
         try:
+            outcome = self._session_transcript_outcome()
             record_live_session_transcript_outcome(
-                outcome=self._session_transcript_outcome(),
+                outcome=outcome,
                 uid=self.request.uid,
                 source=self.request.source,
                 platform=self.client_device_context.platform,
                 recording_id=self.request.client_conversation_id,
             )
+            WINDOW_CANARY_OUTCOME.labels(
+                arm='window' if window_allocation(self.request.uid) else 'control', outcome=outcome
+            ).inc()
         except Exception as error:
             logger.warning('Listen session transcript outcome metric failed type=%s', type(error).__name__)
 
