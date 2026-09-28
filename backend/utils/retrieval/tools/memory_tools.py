@@ -284,7 +284,7 @@ def get_memories_tool(
                     break
         memories = visible[max(offset, 0) : target_end]
     except Exception as e:
-        logger.error(e)
+        logger.error(f"❌ Error fetching memories: {e}", exc_info=True)
 
     # Bound how many memories are formatted for the chat model so a broad question cannot flood
     # its context and freeze it (#4927). The DB returns newest-first, so this keeps the most recent.
@@ -522,9 +522,5 @@ def search_memories_tool(
         return result.strip()
 
     except Exception as e:
-        error_msg = f"Error performing memory search: {str(e)}"
-        logger.info(f"❌ search_memories_tool - {error_msg}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Error searching memories: {str(e)}"
+        logger.error(f"❌ Error searching memories: {e}", exc_info=True)
+        return "Error searching memories. Please try again."
