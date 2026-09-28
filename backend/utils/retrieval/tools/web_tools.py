@@ -297,7 +297,7 @@ async def fetch_url_tool(url: str) -> str:
         return f'Error: {sanitize(str(e))}'
     except Exception as e:
         logger.error(f"fetch_url_tool - error fetching {sanitize(url)}: {sanitize(str(e))}")
-        return f'Error: Failed to fetch the URL. {sanitize(str(e))}'
+        return 'Error: Failed to fetch the URL. Please try again later.'
 
     if status != 200:
         logger.warning(f"fetch_url_tool - HTTP {status} for {sanitize(url)}")
