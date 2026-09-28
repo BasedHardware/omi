@@ -5,6 +5,10 @@ validation, but a doc missing `id` / `captured_at` or holding a non-numeric `ran
 non-iterable `labels` fails earlier, inside _to_api_frame, with KeyError / ValueError / TypeError.
 Those escaped the loop and 500'd GET /v1/conversations/{id}/screenshots and the public
 GET /v1/conversations/{id}/shared/screenshots, hiding every good screenshot in the note.
+
+Only reading the stored doc is guarded that widely. URL signing is not: google-auth's credential
+errors subclass ValueError / TypeError, and a broken signing setup must still fail the read
+instead of quietly serving an empty screenshots set.
 """
 
 import logging
@@ -13,6 +17,7 @@ from datetime import datetime, timezone
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from google.auth import exceptions as google_auth_exceptions
 
 from models.conversation_enums import ConversationVisibility
 from routers import screen_frames as screen_frames_router
@@ -90,13 +95,17 @@ def _conversation(visibility: ConversationVisibility) -> dict:
     return {"id": CONVERSATION_ID, "deleted": False, "visibility": visibility.value}
 
 
-def test_owner_screenshots_route_serves_the_good_frames(stored_frames, monkeypatch):
-    stored_frames.extend([_GOOD, _WITHOUT_CAPTURED_AT])
+def _get_owner_screenshots(monkeypatch):
     conversation = _conversation(ConversationVisibility.private)
     monkeypatch.setattr(screen_frames_router.conversations_db, "get_conversation", lambda *_: conversation)
     monkeypatch.setattr(screen_frames_router.users_db, "get_meeting_note_screenshots_enabled", lambda *_: True)
+    return _client().get(f"/v1/conversations/{CONVERSATION_ID}/screenshots")
 
-    response = _client().get(f"/v1/conversations/{CONVERSATION_ID}/screenshots")
+
+def test_owner_screenshots_route_serves_the_good_frames(stored_frames, monkeypatch):
+    stored_frames.extend([_GOOD, _WITHOUT_CAPTURED_AT])
+
+    response = _get_owner_screenshots(monkeypatch)
 
     assert response.status_code == 200
     assert response.json()["banner"]["id"] == "good"
@@ -115,3 +124,20 @@ def test_public_shared_screenshots_route_serves_the_good_frames(stored_frames, m
     assert response.status_code == 200
     assert response.json()["banner"]["id"] == "good"
     assert response.json()["strip"] == []
+
+
+@pytest.mark.parametrize(
+    "credential_error",
+    [google_auth_exceptions.MalformedError, google_auth_exceptions.InvalidType],
+    ids=["MalformedError(ValueError)", "InvalidType(TypeError)"],
+)
+def test_a_url_signing_failure_still_fails_the_read(stored_frames, monkeypatch, credential_error):
+    def broken_signing(*_):
+        raise credential_error("service account info was not in the expected format")
+
+    monkeypatch.setattr(enforcement.storage, "get_screen_frame_signed_url", broken_signing)
+    stored_frames.append(_GOOD)
+
+    with pytest.raises(credential_error):
+        enforcement.build_frame_set_response(UID, CONVERSATION_ID)
+    assert _get_owner_screenshots(monkeypatch).status_code == 500
