@@ -1,5 +1,12 @@
 import {FocusPressable as Pressable} from '../ui/Pressable';
-import React, {memo, useCallback, useId, useMemo, useState} from 'react';
+import React, {
+  memo,
+  useCallback,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -23,15 +30,23 @@ import type {
   ConversationProjection,
   TaskProjection,
 } from '../desktopReadClient';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import {markInk} from './MobileTheme';
+import {OmiPageState} from '../design/primitives';
+import type {OmiTheme} from '../design/tokens';
 import {
-  mobileColor,
-  mobileRadius,
-  mobileSpace,
-  mobileType,
-} from './mobileTokens';
+  MobileGroup,
+  MobileInlineState,
+  MobileRow,
+  MobileSectionHeader,
+  TaskMark,
+} from './MobileList';
+import {epochOf, mobileWhenLabel} from './mobileDates';
 
 function ContentEdges({children}: {children: React.ReactNode}) {
   const id = useId();
+  const theme = useOmiTheme();
+  const styles = useOmiStyles(createStyles);
   return (
     <View style={styles.flex}>
       {children}
@@ -47,12 +62,12 @@ function ContentEdges({children}: {children: React.ReactNode}) {
             <LinearGradient id={`${id}-${edge}`} x1="0" y1="0" x2="0" y2="1">
               <Stop
                 offset="0"
-                stopColor={mobileColor.background}
+                stopColor={theme.color.canvas}
                 stopOpacity={edge === 'top' ? 1 : 0}
               />
               <Stop
                 offset="1"
-                stopColor={mobileColor.background}
+                stopColor={theme.color.canvas}
                 stopOpacity={edge === 'top' ? 0 : 1}
               />
             </LinearGradient>
@@ -115,13 +130,16 @@ export type MobileAppSurfaceProps = TaskMutationProps & {
   onRouteChange: (route: MobileRoute) => void;
   onViewTasks: () => void;
   onViewConversations: () => void;
+  /** Re-reads the account projections after a failed read (Try Again). */
+  onRetryReads?: () => void;
 };
 
 type DashboardRow =
   | {kind: 'tasks'; key: 'tasks'}
   | {kind: 'conversations'; key: 'conversations'};
 
-const StatePanel = memo(function StatePanel({
+/** Home's inline section state: honest about loading and failed reads. */
+const SectionState = memo(function SectionState({
   status,
   noun,
 }: {
@@ -130,21 +148,26 @@ const StatePanel = memo(function StatePanel({
 }) {
   const copy = {
     loading: `Loading ${noun}…`,
-    empty: noun === 'tasks' ? "Nothing's waiting on you." : `No ${noun} yet`,
+    empty: noun === 'tasks' ? "Nothing's waiting on you." : `No ${noun} yet.`,
     offline: `Couldn’t refresh ${noun}`,
     error: `Couldn’t load ${noun}`,
   }[status];
   return (
-    <View
+    <MobileInlineState
       accessibilityLabel={`${noun} ${status} state`}
-      accessibilityRole={
-        status === 'error' || status === 'offline' ? 'alert' : undefined
-      }
-      style={styles.statePanel}>
-      <Text style={styles.stateText}>{copy}</Text>
-    </View>
+      label={copy}
+      tone={status === 'error' || status === 'offline' ? 'alert' : 'quiet'}
+    />
   );
 });
+
+function formatDue(dueAt: number): string {
+  return `Due ${new Date(dueAt).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })}`;
+}
 
 const TaskRow = memo(function TaskRow({
   task,
@@ -157,96 +180,75 @@ const TaskRow = memo(function TaskRow({
   onEdit?: (id: string) => void;
   busy: boolean;
 }) {
+  const theme = useOmiTheme();
+  const styles = useOmiStyles(createStyles);
+  const meta = [
+    !task.completed && task.dueAt !== null ? formatDue(task.dueAt) : null,
+    task.owner,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   return (
-    <View style={styles.taskRow}>
-      <Pressable
-        accessibilityLabel={`${
-          onToggle
-            ? task.completed
-              ? 'Reopen'
-              : 'Complete'
-            : task.completed
-            ? 'Completed'
-            : 'Open'
-        } ${task.title}`}
-        accessibilityRole={onToggle ? 'checkbox' : 'text'}
-        accessibilityState={{
-          checked: task.completed,
-          disabled: !onToggle || busy,
-          busy,
-        }}
-        disabled={!onToggle || busy}
-        onPress={() => onToggle?.(task.id)}
-        style={styles.taskToggle}>
-        <View style={[styles.checkbox, task.completed && styles.checkboxDone]}>
-          {task.completed && (
+    <MobileRow
+      accessibilityLabel={`${
+        onToggle
+          ? task.completed
+            ? 'Reopen'
+            : 'Complete'
+          : task.completed
+          ? 'Completed'
+          : 'Open'
+      } ${task.title}`}
+      accessibilityRole={onToggle ? 'checkbox' : 'text'}
+      accessibilityState={{
+        checked: task.completed,
+        disabled: !onToggle || busy,
+        busy,
+      }}
+      disabled={!onToggle || busy}
+      onPress={() => onToggle?.(task.id)}
+      leading={<TaskMark done={task.completed} />}
+      title={task.title}
+      titleStyle={task.completed ? 'done' : 'default'}
+      subtitle={meta === '' ? null : meta}
+      trailing={
+        onEdit ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${task.title}`}
+            disabled={busy}
+            onPress={() => onEdit(task.id)}
+            style={styles.rowAction}>
             <MaterialIcon
-              name="check"
-              color={mobileColor.background}
-              size={14}
+              name="edit"
+              color={theme.color.inkTertiary}
+              size={theme.size.iconSmall}
             />
-          )}
-        </View>
-        <View style={styles.taskCopy}>
-          <Text
-            style={[styles.taskText, task.completed && styles.taskTextDone]}>
-            {task.title}
-          </Text>
-          {((!task.completed && task.dueAt !== null) || task.owner) && (
-            <Text style={styles.taskMeta}>
-              {[
-                !task.completed && task.dueAt !== null
-                  ? `Due ${new Date(task.dueAt).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                      timeZone: 'UTC',
-                    })}`
-                  : null,
-                task.owner,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </Text>
-          )}
-        </View>
-      </Pressable>
-      {onEdit && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Edit ${task.title}`}
-          disabled={busy}
-          onPress={() => onEdit(task.id)}
-          style={styles.taskEdit}>
-          <MaterialIcon name="edit" color={mobileColor.textMuted} size={16} />
-        </Pressable>
-      )}
-    </View>
+          </Pressable>
+        ) : undefined
+      }
+    />
   );
 });
 
 const ConversationRow = memo(function ConversationRow({
   conversation,
+  nowMs,
 }: {
   conversation: MobileConversation;
+  nowMs: number;
 }) {
   return (
-    <View style={styles.conversationRow}>
-      <View style={styles.conversationHeading}>
-        <Text numberOfLines={2} style={styles.conversationTitle}>
-          {conversation.title}
-        </Text>
-        <Text style={styles.taskMeta}>
-          {new Date(
-            conversation.startedAt ?? conversation.createdAt,
-          ).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}
-        </Text>
-      </View>
-      {conversation.summary !== '' && (
-        <Text numberOfLines={2} style={styles.taskMeta}>
-          {conversation.summary}
-        </Text>
+    <MobileRow
+      title={conversation.title || 'Untitled conversation'}
+      titleStyle={conversation.title ? 'default' : 'placeholder'}
+      titleLines={1}
+      trailingText={mobileWhenLabel(
+        epochOf(conversation.startedAt ?? conversation.createdAt),
+        nowMs,
       )}
-    </View>
+      subtitle={conversation.summary === '' ? null : conversation.summary}
+    />
   );
 });
 
@@ -256,11 +258,16 @@ const tabItems: Array<{
   icon: MaterialIconName;
 }> = [
   {route: 'home', label: 'Home', icon: 'home'},
-  {route: 'chat', label: 'Conversations', icon: 'chat_bubble'},
+  {route: 'chat', label: 'Conversations', icon: 'forum'},
   {route: 'tasks', label: 'Tasks', icon: 'checklist'},
   {route: 'settings', label: 'Settings', icon: 'settings'},
 ];
 
+/**
+ * Four icon destinations, like the shipping phone app: selected is ink,
+ * unselected is tertiary ink, no pill slab. The label is the accessible name
+ * (and the web tooltip).
+ */
 function MobileTabBar({
   activeRoute,
   onRouteChange,
@@ -268,6 +275,8 @@ function MobileTabBar({
   activeRoute: MobileRoute;
   onRouteChange: (route: MobileRoute) => void;
 }) {
+  const theme = useOmiTheme();
+  const styles = useOmiStyles(createStyles);
   const selectedRoute = activeRoute === 'apps' ? 'settings' : activeRoute;
   return (
     <View accessibilityRole="tablist" style={styles.tabBar}>
@@ -278,53 +287,19 @@ function MobileTabBar({
           accessibilityState={{selected: selectedRoute === route}}
           key={route}
           onPress={() => onRouteChange(route)}
-          style={[
-            styles.tabButton,
-            selectedRoute === route && styles.tabActive,
-          ]}>
-          <View style={styles.tabIcon}>
-            <MaterialIcon
-              color={
-                selectedRoute === route
-                  ? mobileColor.text
-                  : mobileColor.textSubtle
-              }
-              name={icon}
-              size={22}
-            />
-          </View>
-          <Text
-            style={[
-              styles.tabLabel,
-              selectedRoute === route && styles.tabLabelActive,
-            ]}>
-            {label}
-          </Text>
+          {...({title: label} as object)}
+          style={({pressed}) => [styles.tabButton, pressed && styles.pressed]}>
+          <MaterialIcon
+            color={
+              selectedRoute === route
+                ? theme.color.ink
+                : theme.color.inkTertiary
+            }
+            name={icon}
+            size={26}
+          />
         </Pressable>
       ))}
-    </View>
-  );
-}
-
-function SectionHeader({
-  action,
-  actionLabel,
-  title,
-}: {
-  action: () => void;
-  actionLabel: string;
-  title: string;
-}) {
-  return (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${actionLabel} ${title.toLowerCase()}`}
-        onPress={action}
-        style={styles.quietButton}>
-        <Text style={styles.quietButtonText}>{actionLabel}</Text>
-      </Pressable>
     </View>
   );
 }
@@ -353,15 +328,22 @@ export function MobileAppSurface({
   writesAvailable = false,
   onViewConversations,
   onViewTasks,
+  onRetryReads,
   conversations,
   conversationStatus,
   tasks,
   taskStatus,
 }: MobileAppSurfaceProps): React.JSX.Element {
   const reduceMotion = useReduceMotion();
+  const theme = useOmiTheme();
+  const styles = useOmiStyles(createStyles);
+  const nowMs = useRef(Date.now()).current;
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
-  const openTasks = tasks.filter(task => !task.completed);
+  const openTasks = useMemo(
+    () => tasks.filter(task => !task.completed),
+    [tasks],
+  );
   const taskFeedback = useMemo(
     () => (
       <>
@@ -401,75 +383,82 @@ export function MobileAppSurface({
     ],
     [],
   );
+  const renderTask = useCallback(
+    (task: MobileTask) => (
+      <TaskRow
+        key={task.id}
+        onToggle={writesAvailable ? onTaskToggle : undefined}
+        onEdit={writesAvailable && onTaskEdit ? setSelectedTaskId : undefined}
+        busy={busyTaskId !== null}
+        task={task}
+      />
+    ),
+    [writesAvailable, onTaskToggle, onTaskEdit, busyTaskId],
+  );
 
   const renderRow = useCallback(
     ({item}: {item: DashboardRow}) => {
       if (item.kind === 'tasks') {
         return (
           <View style={styles.section}>
-            <SectionHeader
-              action={onViewTasks}
-              actionLabel="See all"
-              title="Action items"
+            <MobileSectionHeader
+              title="Tasks"
+              action={{
+                label: 'See All',
+                accessibilityLabel: 'See all tasks',
+                onPress: onViewTasks,
+              }}
             />
             {taskFeedback}
-            {taskStatus === 'ready' ? (
-              openTasks.length === 0 ? (
-                <StatePanel noun="tasks" status="empty" />
+            <MobileGroup inset={52}>
+              {taskStatus === 'ready' ? (
+                openTasks.length === 0 ? (
+                  <SectionState noun="tasks" status="empty" />
+                ) : (
+                  openTasks.slice(0, 3).map(renderTask)
+                )
               ) : (
-                <View>
-                  {openTasks.slice(0, 3).map(task => (
-                    <TaskRow
-                      key={task.id}
-                      onToggle={writesAvailable ? onTaskToggle : undefined}
-                      onEdit={
-                        writesAvailable && onTaskEdit
-                          ? setSelectedTaskId
-                          : undefined
-                      }
-                      busy={busyTaskId !== null}
-                      task={task}
-                    />
-                  ))}
-                </View>
-              )
-            ) : (
-              <StatePanel noun="tasks" status={taskStatus} />
-            )}
+                <SectionState noun="tasks" status={taskStatus} />
+              )}
+            </MobileGroup>
           </View>
         );
       }
       return (
         <View style={styles.section}>
-          <SectionHeader
-            action={onViewConversations}
-            actionLabel="See all"
-            title="Recent conversations"
+          <MobileSectionHeader
+            title="Recent Conversations"
+            action={{
+              label: 'See All',
+              accessibilityLabel: 'See all conversations',
+              onPress: onViewConversations,
+            }}
           />
-          {conversationStatus === 'ready' ? (
-            conversations.length === 0 ? (
-              <StatePanel noun="conversations" status="empty" />
+          <MobileGroup>
+            {conversationStatus === 'ready' ? (
+              conversations.length === 0 ? (
+                <SectionState noun="conversations" status="empty" />
+              ) : (
+                conversations
+                  .slice(0, 3)
+                  .map(conversation => (
+                    <ConversationRow
+                      key={conversation.id}
+                      conversation={conversation}
+                      nowMs={nowMs}
+                    />
+                  ))
+              )
             ) : (
-              conversations
-                .slice(0, 3)
-                .map(conversation => (
-                  <ConversationRow
-                    key={conversation.id}
-                    conversation={conversation}
-                  />
-                ))
-            )
-          ) : (
-            <StatePanel noun="conversations" status={conversationStatus} />
-          )}
+              <SectionState noun="conversations" status={conversationStatus} />
+            )}
+          </MobileGroup>
         </View>
       );
     },
     [
-      onTaskToggle,
-      onTaskEdit,
-      writesAvailable,
-      busyTaskId,
+      styles,
+      renderTask,
       taskFeedback,
       onViewConversations,
       onViewTasks,
@@ -477,6 +466,7 @@ export function MobileAppSurface({
       conversationStatus,
       openTasks,
       taskStatus,
+      nowMs,
     ],
   );
 
@@ -487,23 +477,31 @@ export function MobileAppSurface({
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.flex}>
           {activeRoute === 'apps' && !chatContent && (
-            <View style={styles.topBar}>
+            <View style={styles.navBar}>
+              <Text
+                accessibilityRole="header"
+                numberOfLines={1}
+                style={styles.navTitle}>
+                Apps
+              </Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Back to Settings"
                 onPress={() => onRouteChange('settings')}
-                style={styles.backButton}>
+                style={({pressed}) => [
+                  styles.backButton,
+                  pressed && styles.pressed,
+                ]}>
                 <MaterialIcon
                   name="chevron_left"
-                  size={20}
-                  color={mobileColor.text}
+                  size={theme.size.icon + 4}
+                  color={theme.color.ink}
                 />
-                <Text style={styles.quietButtonText}>Settings</Text>
+                <Text style={styles.backText}>Settings</Text>
               </Pressable>
-              <Text style={styles.sectionTitle}>Apps</Text>
             </View>
           )}
-          <View style={[styles.flex, styles.stage]}>
+          <View style={[styles.flex, !chatContent && styles.stage]}>
             <ContentEdges>
               {chatContent ? (
                 chatContent
@@ -517,44 +515,54 @@ export function MobileAppSurface({
                 </View>
               ) : activeRoute === 'tasks' ? (
                 taskStatus === 'ready' ? (
-                  <FlatList
-                    contentContainerStyle={styles.secondaryList}
-                    data={tasks}
-                    keyExtractor={task => task.id}
-                    ListFooterComponent={<>{taskPagination}</>}
-                    ListHeaderComponent={taskFeedback}
-                    ListEmptyComponent={
-                      <StatePanel noun="tasks" status="empty" />
-                    }
-                    renderItem={({item}) => (
-                      <TaskRow
-                        onToggle={writesAvailable ? onTaskToggle : undefined}
-                        onEdit={
-                          writesAvailable && onTaskEdit
-                            ? setSelectedTaskId
-                            : undefined
-                        }
-                        busy={busyTaskId !== null}
-                        task={item}
-                      />
-                    )}
+                  <TaskList
+                    tasks={tasks}
+                    header={taskFeedback}
+                    footer={taskPagination}
+                    renderTask={renderTask}
                   />
                 ) : (
-                  <View style={[styles.secondaryList, styles.flex]}>
-                    <StatePanel noun="tasks" status={taskStatus} />
+                  <View
+                    accessibilityLabel={`tasks ${taskStatus} state`}
+                    style={[styles.pageList, styles.flex]}>
+                    {taskStatus === 'loading' ? (
+                      <OmiPageState kind="loading" label="Loading tasks…" />
+                    ) : taskStatus === 'empty' ? (
+                      <OmiPageState
+                        kind="empty"
+                        icon="checklist"
+                        title="No Tasks"
+                        message="Nothing's waiting on you."
+                      />
+                    ) : (
+                      <OmiPageState
+                        kind="error"
+                        title={
+                          taskStatus === 'offline'
+                            ? 'Couldn’t Refresh Tasks'
+                            : 'Couldn’t Load Tasks'
+                        }
+                        onRetry={onRetryReads}
+                      />
+                    )}
                     {taskPagination}
                   </View>
                 )
               ) : activeRoute === 'chat' ? (
                 conversationContent ?? (
-                  <StatePanel noun="conversations" status="error" />
+                  <OmiPageState
+                    kind="error"
+                    title="Couldn’t Load Conversations"
+                    onRetry={onRetryReads}
+                  />
                 )
               ) : (
-                <View style={styles.secondaryEmpty}>
-                  <Text style={styles.secondaryPrompt}>
-                    No apps connected yet
-                  </Text>
-                </View>
+                <OmiPageState
+                  kind="empty"
+                  icon="extension"
+                  title="No Apps Yet"
+                  message="Apps you connect to Omi will appear here."
+                />
               )}
             </ContentEdges>
           </View>
@@ -577,8 +585,9 @@ export function MobileAppSurface({
           <View accessibilityLabel="Omi" style={styles.brand}>
             <OmiAvatar
               tone="ink"
-              size={28}
+              size={24}
               motion="breathe"
+              inkColor={markInk(theme)}
               reduceMotion={reduceMotion}
             />
             <Text style={styles.brandText}>omi</Text>
@@ -588,7 +597,10 @@ export function MobileAppSurface({
             accessibilityRole="button"
             accessibilityState={{expanded: devicePanel != null}}
             onPress={onOpenDevice}
-            style={styles.deviceButton}>
+            style={({pressed}) => [
+              styles.deviceButton,
+              pressed && styles.devicePressed,
+            ]}>
             <View
               style={[
                 styles.connectionDot,
@@ -601,9 +613,11 @@ export function MobileAppSurface({
           </Pressable>
         </View>
         {deviceMessage && (
-          <Text accessibilityRole="alert" style={styles.deviceMessage}>
-            {deviceMessage}
-          </Text>
+          <View style={styles.notice}>
+            <Text accessibilityRole="alert" style={styles.noticeText}>
+              {deviceMessage}
+            </Text>
+          </View>
         )}
         <ContentEdges>
           {searchContent ?? (
@@ -612,15 +626,23 @@ export function MobileAppSurface({
               data={rows}
               ListHeaderComponent={
                 devicePanel || capture.active ? (
-                  <View>
+                  <View style={styles.homeHeader}>
                     {devicePanel}
                     {capture.active && (
-                      <Text numberOfLines={2} style={styles.captureStatus}>
-                        {capture.waitingForAudio
-                          ? 'Waiting for audio'
-                          : 'Listening'}
-                        {capture.transcript ? ` · ${capture.transcript}` : ''}
-                      </Text>
+                      <View style={styles.capture}>
+                        <View
+                          style={[
+                            styles.captureDot,
+                            capture.waitingForAudio && styles.captureDotWaiting,
+                          ]}
+                        />
+                        <Text numberOfLines={2} style={styles.captureStatus}>
+                          {capture.waitingForAudio
+                            ? 'Waiting for audio'
+                            : 'Listening'}
+                          {capture.transcript ? ` · ${capture.transcript}` : ''}
+                        </Text>
+                      </View>
                     )}
                   </View>
                 ) : null
@@ -638,201 +660,238 @@ export function MobileAppSurface({
   );
 }
 
-const styles = StyleSheet.create({
+type TaskListRow =
+  | {kind: 'label'; key: string; label: string}
+  | {
+      kind: 'task';
+      key: string;
+      task: MobileTask;
+      first: boolean;
+      last: boolean;
+    };
+
+/** The Tasks tab: To Do then Done, each one grouped surface. */
+function TaskList({
+  tasks,
+  header,
+  footer,
+  renderTask,
+}: {
+  tasks: readonly MobileTask[];
+  header: React.ReactElement;
+  footer: React.ReactNode;
+  renderTask: (task: MobileTask) => React.ReactNode;
+}) {
+  const styles = useOmiStyles(createStyles);
+  const data = useMemo<TaskListRow[]>(() => {
+    const rowsFor = (label: string, items: MobileTask[]): TaskListRow[] =>
+      items.length === 0
+        ? []
+        : [
+            {kind: 'label', key: `label:${label}`, label},
+            ...items.map((task, index) => ({
+              kind: 'task' as const,
+              key: task.id,
+              task,
+              first: index === 0,
+              last: index === items.length - 1,
+            })),
+          ];
+    return [
+      ...rowsFor(
+        'To Do',
+        tasks.filter(task => !task.completed),
+      ),
+      ...rowsFor(
+        'Done',
+        tasks.filter(task => task.completed),
+      ),
+    ];
+  }, [tasks]);
+  return (
+    <FlatList
+      contentContainerStyle={styles.pageList}
+      data={data}
+      keyExtractor={row => row.key}
+      ListFooterComponent={<>{footer}</>}
+      ListHeaderComponent={header}
+      ListEmptyComponent={
+        <View accessibilityLabel="tasks empty state">
+          <OmiPageState
+            kind="empty"
+            icon="checklist"
+            title="No Tasks"
+            message="Nothing's waiting on you."
+          />
+        </View>
+      }
+      renderItem={({item}) =>
+        item.kind === 'label' ? (
+          <MobileSectionHeader title={item.label} />
+        ) : (
+          <View
+            style={[
+              styles.listCell,
+              item.first && styles.listCellFirst,
+              item.last && styles.listCellLast,
+            ]}>
+            {item.first ? null : <View style={styles.listSeparator} />}
+            {renderTask(item.task)}
+          </View>
+        )
+      }
+    />
+  );
+}
+
+const createStyles = (t: OmiTheme) => ({
   flex: {flex: 1},
-  edgeFade: {position: 'absolute', left: 0},
-  stage: {paddingTop: 12},
-  safeArea: {backgroundColor: mobileColor.background, flex: 1},
-  brand: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  brandText: {fontSize: 24, fontWeight: '600', color: mobileColor.text},
-  backButton: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  edgeFade: {position: 'absolute' as const, left: 0},
+  stage: {paddingTop: t.space.xs},
+  safeArea: {backgroundColor: t.color.canvas, flex: 1},
+  pressed: {opacity: t.motion.pressedOpacity},
+  brand: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: t.space.sm,
+    flexShrink: 0,
+  },
+  brandText: {
+    ...t.type.title,
+    color: t.color.ink,
   },
   topBar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: mobileSpace.sm,
-    paddingHorizontal: mobileSpace.md,
-    paddingTop: mobileSpace.sm,
+    alignItems: 'center' as const,
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    gap: t.space.md,
+    minHeight: 52,
+    paddingHorizontal: t.layout.pageGutter.mobile,
+    paddingTop: t.space.xs,
   },
-  secondaryList: {
-    flexGrow: 1,
-    paddingBottom: 24,
-    paddingHorizontal: mobileSpace.md,
-    paddingTop: mobileSpace.sm,
+  navBar: {
+    minHeight: t.size.hitTarget + t.space.xs,
+    justifyContent: 'center' as const,
+    paddingHorizontal: t.space.sm,
   },
-  secondaryEmpty: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    padding: mobileSpace.xl,
+  navTitle: {
+    ...t.type.headline,
+    color: t.color.ink,
+    position: 'absolute' as const,
+    left: 96,
+    right: 96,
+    textAlign: 'center' as const,
   },
-  secondaryPrompt: {...mobileType.title, color: mobileColor.text},
-  secondaryCopy: {
-    ...mobileType.body,
-    color: mobileColor.textMuted,
-    marginTop: mobileSpace.sm,
-    textAlign: 'center',
+  backButton: {
+    alignSelf: 'flex-start' as const,
+    minHeight: t.size.hitTarget,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingRight: t.space.sm,
   },
+  backText: {...t.type.body, color: t.color.ink},
   deviceButton: {
     flexShrink: 1,
-    alignItems: 'center',
-    backgroundColor: mobileColor.surface,
-    borderRadius: mobileRadius.round,
-    flexDirection: 'row',
-    gap: mobileSpace.sm,
-    minHeight: 44,
-    paddingHorizontal: mobileSpace.md,
+    minWidth: 0,
+    alignItems: 'center' as const,
+    backgroundColor: t.color.surface,
+    borderRadius: t.radius.pill,
+    flexDirection: 'row' as const,
+    gap: t.space.sm,
+    minHeight: t.size.hitTarget,
+    paddingHorizontal: t.space.lg,
   },
+  devicePressed: {backgroundColor: t.color.surfaceRaised},
   connectionDot: {
-    backgroundColor: mobileColor.connected,
-    borderRadius: mobileRadius.round,
-    height: 10,
-    width: 10,
+    backgroundColor: t.color.live,
+    borderRadius: 4,
+    height: 8,
+    width: 8,
   },
-  connectionDotOffline: {backgroundColor: mobileColor.textSubtle},
+  connectionDotOffline: {backgroundColor: t.color.inkTertiary},
   deviceLabel: {
-    fontSize: 14,
-    lineHeight: 20,
+    ...t.type.subhead,
+    fontWeight: '600' as const,
     flexShrink: 1,
-    color: mobileColor.text,
-    fontWeight: '600',
+    color: t.color.ink,
   },
-  deviceMessage: {
-    ...mobileType.body,
-    color: mobileColor.text,
-    padding: mobileSpace.md,
+  notice: {
+    marginHorizontal: t.layout.pageGutter.mobile,
+    marginTop: t.space.sm,
+    padding: t.space.md,
+    borderRadius: t.radius.row,
+    backgroundColor: t.color.surface,
   },
+  noticeText: {...t.type.subhead, color: t.color.ink},
   content: {
-    gap: mobileSpace.sm,
-    paddingBottom: 12,
-    paddingHorizontal: mobileSpace.md,
-    paddingTop: mobileSpace.sm,
+    gap: t.space.lg,
+    paddingBottom: t.space.xxl,
+    paddingHorizontal: t.layout.pageGutter.mobile,
+    paddingTop: t.space.sm,
   },
+  homeHeader: {gap: t.space.md},
+  capture: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: t.space.sm,
+    paddingHorizontal: t.space.xs,
+  },
+  captureDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: t.color.live,
+  },
+  captureDotWaiting: {backgroundColor: t.color.warning},
   captureStatus: {
-    ...mobileType.caption,
-    color: mobileColor.textMuted,
-    paddingVertical: 8,
-  },
-  section: {
-    gap: 0,
-    backgroundColor: mobileColor.surface,
-    borderColor: mobileColor.border,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: mobileRadius.lg,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  sectionHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 2,
-  },
-  sectionTitle: {
+    ...t.type.footnote,
+    color: t.color.inkSecondary,
     flexShrink: 1,
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: '600',
-    color: mobileColor.text,
   },
-  quietButton: {
-    borderRadius: mobileRadius.round,
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: mobileSpace.sm,
-    paddingVertical: mobileSpace.sm,
+  section: {gap: t.space.xs},
+  rowAction: {
+    minHeight: t.size.hitTarget,
+    minWidth: t.size.hitTarget,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  quietButtonText: {...mobileType.caption, color: mobileColor.textMuted},
-  taskRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: mobileSpace.sm,
-    minHeight: 64,
-    paddingVertical: mobileSpace.sm,
+  pageList: {
+    flexGrow: 1,
+    paddingBottom: t.space.xxl,
+    paddingHorizontal: t.layout.pageGutter.mobile,
+    paddingTop: t.space.xs,
   },
-  taskToggle: {
-    flex: 1,
-    minHeight: 44,
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
+  listCell: {backgroundColor: t.color.surface},
+  listCellFirst: {
+    borderTopLeftRadius: t.radius.card,
+    borderTopRightRadius: t.radius.card,
+    overflow: 'hidden' as const,
   },
-  taskEdit: {
-    minHeight: 44,
-    minWidth: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+  listCellLast: {
+    borderBottomLeftRadius: t.radius.card,
+    borderBottomRightRadius: t.radius.card,
+    marginBottom: t.space.sm,
+    overflow: 'hidden' as const,
   },
-  checkbox: {
-    borderColor: mobileColor.textSubtle,
-    borderRadius: mobileRadius.round,
-    borderWidth: 1.5,
-    height: 22,
-    width: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxDone: {backgroundColor: mobileColor.textSubtle},
-  taskCopy: {flex: 1, gap: 3},
-  taskText: {fontSize: 15, lineHeight: 22, color: mobileColor.text},
-  taskMeta: {fontSize: 12, lineHeight: 18, color: mobileColor.textMuted},
-  taskTextDone: {
-    color: mobileColor.textSubtle,
-    textDecorationLine: 'line-through',
-  },
-  conversationRow: {
-    paddingVertical: 12,
-    gap: 5,
-  },
-  conversationHeading: {flexDirection: 'row', alignItems: 'baseline', gap: 12},
-  conversationTitle: {
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '500',
-    color: mobileColor.text,
-  },
-  statePanel: {
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingVertical: 8,
-  },
-  stateText: {
-    ...mobileType.body,
-    color: mobileColor.textMuted,
+  listSeparator: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 52,
+    backgroundColor: t.color.separator,
   },
   tabBar: {
-    alignItems: 'center',
-    backgroundColor: mobileColor.surfaceQuiet,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: mobileColor.border,
-    borderRadius: mobileRadius.lg,
-    marginHorizontal: 10,
-    marginBottom: 8,
-    flexDirection: 'row',
-    minHeight: 68,
+    alignItems: 'stretch' as const,
+    backgroundColor: t.color.canvas,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: t.color.separator,
+    flexDirection: 'row' as const,
     flexShrink: 0,
-    justifyContent: 'space-around',
-    padding: 4,
-    gap: 2,
+    minHeight: 52,
+    paddingHorizontal: t.space.sm,
   },
   tabButton: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     flex: 1,
-    justifyContent: 'center',
-    minHeight: 60,
-    gap: 3,
-    borderRadius: 18,
+    justifyContent: 'center' as const,
+    minHeight: 52,
   },
-  tabIcon: {paddingVertical: 4},
-  tabActive: {backgroundColor: mobileColor.surfaceRaised},
-  tabLabel: {fontSize: 10, color: mobileColor.textSubtle},
-  tabLabelActive: {color: mobileColor.text},
-  tabGlyph: {color: mobileColor.textSubtle, fontSize: 30},
-  tabGlyphActive: {color: mobileColor.text},
 });

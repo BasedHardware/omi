@@ -71,7 +71,7 @@ async function finishMobileSetup(
   await press('Continue');
   await press('TikTok');
   await press('Continue');
-  await press("I'll do these later");
+  await press('Not Now');
 }
 
 afterEach(() => {
@@ -154,15 +154,13 @@ test('action items open from Home or the restored Tasks tab', async () => {
   expect(control(renderer, 'Tasks')).toBeDefined();
   expect(control(renderer, 'Open calls')).toBeUndefined();
   expect(control(renderer, 'Start Live voice')).toBeUndefined();
-  await act(async () =>
-    control(renderer, 'See all action items').props.onPress(),
-  );
+  await act(async () => control(renderer, 'See all tasks').props.onPress());
   expect(control(renderer, 'Tasks').props.accessibilityState.selected).toBe(
     true,
   );
   expect(control(renderer, 'Start Live voice')).toBeUndefined();
   await act(async () => control(renderer, 'Home').props.onPress());
-  expect(control(renderer, 'See all action items')).toBeDefined();
+  expect(control(renderer, 'See all tasks')).toBeDefined();
   expect(control(renderer, 'Start Live voice')).toBeUndefined();
   await act(async () => control(renderer, 'Tasks').props.onPress());
   expect(control(renderer, 'Tasks').props.accessibilityState.selected).toBe(
@@ -258,7 +256,7 @@ test.each(['ios', 'android'] as const)(
       const renderer = await renderApp();
       expect(control(renderer, 'First-run onboarding')).toBeDefined();
       expect(control(renderer, 'Open Omi device')).toBeUndefined();
-      await act(async () => control(renderer, 'Sign in').props.onPress());
+      await act(async () => control(renderer, 'Sign In').props.onPress());
       expect(mockAuth.signIn).toHaveBeenCalled();
       expect(control(renderer, 'Open Omi device')).toBeDefined();
     } finally {
@@ -287,7 +285,7 @@ test.each([true, false])(
       await act(async () =>
         control(
           renderer,
-          connect ? 'Connect your Omi' : 'Continue without a device',
+          connect ? 'Connect Your Omi' : 'Continue Without a Device',
         ).props.onPress(),
       );
       expect(control(renderer, 'First-run onboarding')).toBeUndefined();
