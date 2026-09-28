@@ -10,7 +10,7 @@ import asyncio
 import pytz
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from database import (
     conversations as conversations_db,
@@ -622,7 +622,11 @@ def get_single_person(
     person = get_person(uid, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
-    person = Person(**person)
+    try:
+        person = Person(**person)
+    except ValidationError as e:
+        logger.error(f"Stored person {person_id} for user {uid} is corrupted: {e}")
+        raise HTTPException(status_code=502, detail="Stored person record is malformed")
     if include_speech_samples:
         # Convert stored GCS paths to signed URLs
         stored_paths = person.speech_samples
