@@ -41,6 +41,21 @@ def test_session_profile(monkeypatch, language, multi, expected, group):
     assert profile.arm == ('hintable' if multi and group == 'non_en' else 'na')
 
 
+def test_english_only_learned_sessions_remain_english_only(monkeypatch):
+    monkeypatch.setenv('STT_LEARNED_LANGUAGE_PROFILE', 'true')
+    sessions = [{'en': 10}] * 3
+    profile = LiveLanguageProfile.create('en', multi=True, uid='u', learned_sessions=sessions)
+    assert (profile.primary, profile.expected, profile.primary_group, profile.source) == (
+        'en',
+        ('en',),
+        'en',
+        'learned',
+    )
+    assert classify_output('hello', profile, 'en') == ('in_profile', 'en')
+    assert classify_output('hola', profile, 'es') == ('out_of_profile', 'es')
+    assert soniox_hints('multi', profile) == []
+
+
 def test_hash_allocation_is_stable_and_dark_by_default(monkeypatch):
     monkeypatch.delenv('STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT', raising=False)
     assert not hintable_allocation('u')
@@ -87,6 +102,11 @@ def test_soniox_hints_expand_equivalents_with_deduplication_and_cap():
     hints = soniox_hints('multi', serbian)
     assert hints == ['sr', 'hr', 'bs']
     assert len(hints) <= 3
+
+    # Primary variants keep priority when learned languages and English also
+    # occupy the expected set; the three-hint provider cap still applies.
+    learned_serbian = LiveLanguageProfile('sr', ('sr', 'pt', 'en'), 'non_en', 'control', True, source='learned')
+    assert soniox_hints('multi', learned_serbian) == ['sr', 'hr', 'bs']
 
     learned = LiveLanguageProfile('pt', ('pt', 'hi', 'en'), 'non_en', 'control', True, source='learned')
     assert soniox_hints('multi', learned) == ['pt', 'hi', 'ur']
@@ -226,6 +246,9 @@ def test_classification_prefers_provider_language_and_keeps_short_segments_unkno
     profile = LiveLanguageProfile.create('pt', multi=True, uid='u')
     assert classify_output('a', profile, 'pt') == ('in_profile', 'pt')
     assert classify_output('a', profile, 'it') == ('out_of_profile', 'it')
+    assert classify_output('a', profile, 'es') == ('out_of_profile', 'es')
+    spanish = LiveLanguageProfile.create('es', multi=True, uid='u')
+    assert classify_output('a', spanish, 'pt') == ('out_of_profile', 'pt')
     assert classify_output('a', profile, 'pt-BR') == ('in_profile', 'pt')
     hindi = LiveLanguageProfile.create('hi', multi=True, uid='u')
     urdu = LiveLanguageProfile.create('ur', multi=True, uid='u')
