@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.409",
+      "date": "2026-09-28",
+      "changes": [
+        "Recording now waits for the microphone after an app update and resumes on its own when the input becomes available"
+      ]
+    },
+    {
       "version": "0.12.408",
       "date": "2026-09-27",
       "changes": [
