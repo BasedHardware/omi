@@ -102,6 +102,7 @@ static inline void notify_press()
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+        bt_conn_unref(conn);
     }
 }
 
@@ -112,6 +113,7 @@ static inline void notify_unpress()
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+        bt_conn_unref(conn);
     }
 }
 
@@ -122,6 +124,7 @@ static inline void notify_tap()
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+        bt_conn_unref(conn);
     }
 }
 
@@ -132,6 +135,7 @@ static inline void notify_double_tap()
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+        bt_conn_unref(conn);
     }
 }
 
@@ -142,6 +146,7 @@ static inline void notify_long_tap()
     struct bt_conn *conn = get_current_connection();
     if (conn != NULL) {
         bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+        bt_conn_unref(conn);
     }
 }
 

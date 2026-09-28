@@ -39,6 +39,13 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size);
 struct bt_conn *get_current_connection();
 
 /**
+ * @brief Check whether the current central is subscribed to audio notifications
+ *
+ * @return true if a central is connected and has enabled audio notifications
+ */
+bool transport_is_audio_subscribed(void);
+
+/**
  * @brief Acquire / release a shared BLE TX-throttle slot.
  *
  * The audio pusher and the storage-sync path both take a slot before each bulk
