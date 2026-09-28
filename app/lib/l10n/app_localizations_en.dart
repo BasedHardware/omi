@@ -11474,4 +11474,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Show all $count people';
   }
+
+  @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get singleTapAction => 'Single Tap Action';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
+  String get tripleTapAction => 'Triple Tap Action';
 }

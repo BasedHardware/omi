@@ -11486,4 +11486,16 @@ class AppLocalizationsBn extends AppLocalizations {
   String showAllPeople(int count) {
     return 'সমস্ত ($count) জনকে দেখান';
   }
+
+  @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get singleTapAction => 'Single Tap Action';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
+  String get tripleTapAction => 'Triple Tap Action';
 }

@@ -632,10 +632,26 @@ class SharedPreferencesUtil {
 
   set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
 
-  // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
-  int get doubleTapAction => getInt('doubleTapAction');
+  // Remappable device button gestures (#2825).
+  // Single: 0 ask (default), 1 end, 2 mute, 3 star.
+  int get singleTapAction => getInt('singleTapAction');
+
+  set singleTapAction(int value) => saveInt('singleTapAction', value);
+
+  // Double: stored 0 = end, 1 = mute, 2 = star, 3 = off.
+  // Unset key resolves to mute (issue default); an explicit 0 keeps end conversation.
+  int get doubleTapAction {
+    final stored = _preferences?.getInt('doubleTapAction');
+    if (stored == null) return 1;
+    return stored;
+  }
 
   set doubleTapAction(int value) => saveInt('doubleTapAction', value);
+
+  // Triple: 0 end (default), 1 mute, 2 star, 3 off.
+  int get tripleTapAction => getInt('tripleTapAction');
+
+  set tripleTapAction(int value) => saveInt('tripleTapAction', value);
 
   // Keep backward compatibility
   bool get doubleTapPausesMuting => doubleTapAction == 1;

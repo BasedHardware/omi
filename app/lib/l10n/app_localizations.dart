@@ -20924,6 +20924,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show all {count} people'**
   String showAllPeople(int count);
+
+  /// Device button gesture: one short press
+  ///
+  /// In en, this message translates to:
+  /// **'Single Tap'**
+  String get singleTap;
+
+  /// Single tap action setting
+  ///
+  /// In en, this message translates to:
+  /// **'Single Tap Action'**
+  String get singleTapAction;
+
+  /// Device button gesture: three quick presses
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Tap'**
+  String get tripleTap;
+
+  /// Triple tap action setting
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Tap Action'**
+  String get tripleTapAction;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

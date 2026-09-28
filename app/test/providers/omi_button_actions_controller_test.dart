@@ -381,4 +381,58 @@ void main() {
     provider.dispose();
     onboarding.dispose();
   });
+
+  test('trailing release after a tap-started question does not end the session', () {
+    final provider = _NoSocketCaptureProvider(speakerHaptic: (_, __) async => true);
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+
+    // Firmware sends code 5 ~40 ms after every tap; must not kill tap-started sessions.
+    provider.handleButtonEventForTesting('test-id', 5);
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+    provider.dispose();
+  });
+
+  test('legacy hold then release ends the voice session', () {
+    final provider = _NoSocketCaptureProvider(speakerHaptic: (_, __) async => true);
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 3);
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+    provider.handleButtonEventForTesting('test-id', 5);
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    provider.dispose();
+  });
+
+  test('remapped single tap to mute does not open a voice session', () {
+    final provider = _NoSocketCaptureProvider(speakerHaptic: (_, __) async => true);
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+    SharedPreferencesUtil().singleTapAction = 2; // mute
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    provider.dispose();
+  });
+
+  test('progressive taps path fires ask on single when higher taps are off', () {
+    final provider = _NoSocketCaptureProvider(speakerHaptic: (_, __) async => true);
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+    provider.deviceHasButtonTapsForTesting = true;
+    SharedPreferencesUtil().tripleTapAction = 3; // off
+    SharedPreferencesUtil().doubleTapAction = 3; // off
+
+    provider.handleButtonTapsForTesting('test-id', [1, 1]);
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+
+    // Legacy stream must not double-fire when taps capability is set.
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+
+    // A second progressive tap ends the session.
+    provider.handleButtonTapsForTesting('test-id', [1, 1]);
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    provider.dispose();
+  });
 }
