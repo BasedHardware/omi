@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Platform,
   Text,
   type StyleProp,
   type TextProps,
@@ -75,6 +76,13 @@ export function MaterialIcon({
   // "NULL CGColor argument in colorWithCGColor:" for Text color props like a
   // transparent fill.
   void fill;
+  // Material Symbols Rounded rides ~12% of the glyph size above center under
+  // CoreText (macOS/iOS) even with lineHeight pinned to the font size —
+  // measured on the shipping chrome (filter chips render ~1.5–2 px high at
+  // size 14). Nudge the ink down so flex centering in pills puts it
+  // dead-center. Browsers center half-leading symmetrically, so web keeps 0.
+  const coreTextNudge =
+    Platform.OS === 'macos' || Platform.OS === 'ios' ? size * 0.125 : 0;
   return (
     <Text
       allowFontScaling={false}
@@ -89,6 +97,7 @@ export function MaterialIcon({
           lineHeight: size,
           textAlign: 'center',
           color,
+          transform: [{translateY: coreTextNudge}],
         },
         style,
       ]}>
