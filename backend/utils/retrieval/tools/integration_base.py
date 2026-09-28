@@ -41,7 +41,8 @@ def get_integration_checked(
     try:
         integration = users_db.get_integration(uid, key)
     except Exception as e:
-        return None, f"{error_prefix}: {str(e)}"
+        logger.error(f"{error_prefix}: {str(e)}", exc_info=True)
+        return None, f"{error_prefix}: Failed to retrieve integration"
     if not integration or not integration.get('connected'):
         return None, not_connected_msg
     return integration, None
@@ -81,7 +82,8 @@ def parse_iso_with_tz(
             return None, f"Error: {field_name} must include timezone {tz_required_msg}: {value}"
         return dt, None
     except ValueError as e:
-        return None, f"Error: Invalid {field_name} format. Expected {tz_required_msg}: {value} - {str(e)}"
+        logger.warning(f"Invalid {field_name} format for {value}: {str(e)}")
+        return None, f"Error: Invalid {field_name} format. Expected {tz_required_msg}: {value}"
 
 
 def prepare_access(
@@ -137,9 +139,11 @@ def retry_on_auth(
                 try:
                     return call_fn(**call_kwargs), None
                 except Exception as e2:
-                    return None, f"Error after token refresh: {str(e2)}"
+                    logger.error(f"Error after token refresh for user {uid}: {str(e2)}", exc_info=True)
+                    return None, "Error: Service temporarily unavailable after token refresh"
             return None, expired_msg
-        return None, f"Error: {msg}"
+        logger.error(f"External service error for user {uid}: {str(e)}", exc_info=True)
+        return None, "Error: An error occurred while communicating with the service"
 
 
 async def retry_on_auth_async(
@@ -168,6 +172,8 @@ async def retry_on_auth_async(
                 try:
                     return await call_fn(**call_kwargs), None
                 except Exception as e2:
-                    return None, f"Error after token refresh: {str(e2)}"
+                    logger.error(f"Error after token refresh for user {uid}: {str(e2)}", exc_info=True)
+                    return None, "Error: Service temporarily unavailable after token refresh"
             return None, expired_msg
-        return None, f"Error: {msg}"
+        logger.error(f"External service error for user {uid}: {str(e)}", exc_info=True)
+        return None, "Error: An error occurred while communicating with the service"
