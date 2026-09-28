@@ -154,6 +154,7 @@ def get_violation_counts(uid: str) -> Dict[str, int]:
                 if created.tzinfo is None:
                     created = created.replace(tzinfo=timezone.utc)
             else:
+                logger.warning(f"Skipping fair-use event {doc.id} with corrupt created_at: {created!r}")
                 continue
             count_30d += 1
             if created >= cutoff_7d:
