@@ -9,11 +9,27 @@ if (tracked.exitCode !== 0) {
 }
 
 const files = tracked.stdout.toString().trim().split("\n").filter(Boolean);
+
+// Swift is allowed only where the package manifest declares a target path
+// (Package.swift itself excepted).
+const packageSwift = await Bun.file(
+  import.meta.dir + "/../Package.swift",
+).text();
+const targetPaths = [...packageSwift.matchAll(/path:\s*"([^"]+)"/g)].map(
+  (match) => match[1],
+);
+
 const forbidden = files.filter((file) => {
   if (file === "tools/OmiSimulator" || file.startsWith("tools/OmiSimulator/"))
     return false;
-  return /^(app|backend|desktop|spikes|web)\/|\.swift$|(^|\/)(node_modules|Pods|DerivedData|dist)(\/|$)|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/.test(
-    file
+  if (/\.swift$/.test(file)) {
+    if (file === "Package.swift") return false;
+    return !targetPaths.some(
+      (targetPath) => file === targetPath || file.startsWith(targetPath + "/"),
+    );
+  }
+  return /(^|\/)(node_modules|Pods|DerivedData|\.build|dist)(\/|$)|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/.test(
+    file,
   );
 });
 
@@ -23,7 +39,7 @@ if (forbidden.length > 0) {
 }
 
 const sourceFiles = files.filter((file) =>
-  /\.(c|cc|cpp|h|m|mm|ts|tsx)$/.test(file)
+  /\.(c|cc|cpp|h|m|mm|ts|tsx)$/.test(file),
 );
 for (const file of sourceFiles) {
   const text = await Bun.file(import.meta.dir + "/../" + file).text();

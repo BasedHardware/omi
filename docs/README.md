@@ -8,6 +8,7 @@ the code they describe (`AGENTS.md` files — see the root
 
 | Doc | Covers |
 |---|---|
+| [`../app/AGENTS.md`](../app/AGENTS.md) | Swift cross-platform app (OmiKit/OmiUI): tree map, commands, Skip transpiler rules |
 | [desktop-app.md](desktop-app.md) | macOS desktop app: architecture, chrome/timeline contracts, capture, UX behavior, build and debug recipes |
 | [mobile.md](mobile.md) | iOS/Android app surfaces, navigation, tasks and conversations behavior |
 | [pwa.md](pwa.md) | Web/PWA build: shell caching, layout review preview, tests |

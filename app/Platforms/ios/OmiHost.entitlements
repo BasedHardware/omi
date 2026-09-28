@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  The react-native iOS target ships no entitlements file; the session
+	  keychain lives in the app's own sandbox access group. This file exists
+	  so the signing config is explicit and grows deliberately: add the
+	  HealthKit / battery entitlements here only if the RN tree gains them.
+	-->
+</dict>
+</plist>

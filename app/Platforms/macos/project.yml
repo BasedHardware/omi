@@ -1,0 +1,35 @@
+name: omi-v5-macOS
+options:
+  bundleIdPrefix: org.reactjs.native
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+packages:
+  omi:
+    # The Swift package lives at the repository root.
+    path: ../../..
+
+targets:
+  OmiHost:
+    type: application
+    platform: macOS
+    sources:
+      - Sources
+    dependencies:
+      - package: omi
+        products:
+          - OmiKit
+          - OmiUI
+    info:
+      path: Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.reactjs.native.omi-v5-macos
+        MARKETING_VERSION: 1.0
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "5.10"
+        CODE_SIGN_ENTITLEMENTS: OmiHost.entitlements
+        ENABLE_PREVIEWS: true
+        # Single-window policy: WindowGroup hosts exactly one window; the
+        # Info.plist carries no secondary window scenes.

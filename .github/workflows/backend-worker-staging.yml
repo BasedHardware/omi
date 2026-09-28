@@ -25,13 +25,6 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Install portable backend dependencies
         run: bun install --cwd backends/example-platform --frozen-lockfile
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - name: Android HTTP transport regression
-        run: scripts/test-android-http
       # Worker typechecking imports workspace packages whose declaration output is
       # intentionally not checked in. Build those packages only — the root
       # `bun run build` also compiles the PWA and needs an optional Rollup
@@ -46,8 +39,10 @@ jobs:
         run: bun run --cwd apps/backend-worker typecheck
       - name: Test
         run: bun run --cwd apps/backend-worker test
-      - name: Client contract regressions
-        run: bun run --cwd react-native test -- --runInBand && bun run --cwd pwa test
+      - name: PWA tests
+        run: bun run --cwd pwa test
+      - name: Native C++ boundary suites
+        run: bun run native:test
       - name: Portable backend contracts
         run: bun run platform:check
       - name: Portable PostgreSQL integration and runtime parity
@@ -56,14 +51,16 @@ jobs:
       - name: Dry run deploy
         run: bun run --cwd apps/backend-worker deploy:dry-run
 
-  apple-auth:
-    name: Validate Apple OAuth callback
+  swift:
+    name: Swift package build and test
     runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Apple OAuth callback regression
-        run: scripts/test-apple-auth
+      - name: Build (runs the Skip skipstone transpilation)
+        run: swift build
+      - name: Test
+        run: swift test
 
   deploy:
     name: Deploy to staging

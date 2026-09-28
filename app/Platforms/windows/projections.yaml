@@ -1,0 +1,32 @@
+# Swift on Windows — swift-winrt projections + WinUI 3 host
+#
+# THIS FILE RUNS ON WINDOWS ONLY. There is no Windows SDK or swift-winrt
+# toolchain on this macOS dev machine; this host is source-complete but
+# unbuilt (see README.md).
+#
+# swift-winrt (https://github.com/thebrowsercompany/swift-winrt) consumes a
+# YAML config like this one and emits Swift projections of the Windows
+# Runtime namespaces the host needs. The format mirrors the tool's
+# `--config` YAML: module names map to WinRT namespaces, and each namespace
+# names the Swift module it projects into.
+
+settings:
+  # Where the generated Swift sources land.
+  output: ./Generated
+  # The SwiftPM module the projections are grouped into.
+  swift_module: OmiWindowsProjection
+
+namespace_mappings:
+  # Bluetooth (device scanning/connection parity with CoreBluetooth).
+  Windows.Devices.Bluetooth: OmiWindowsProjection
+  # Radios (Bluetooth/wireless state for the connection gallery).
+  Windows.Devices.Radios: OmiWindowsProjection
+  # File system access (recording journal storage).
+  Windows.Storage: OmiWindowsProjection
+  # Networking primitives (loopback auth callback server, connectivity).
+  Windows.Networking: OmiWindowsProjection
+  Windows.Networking.Connectivity: OmiWindowsProjection
+  # Credential UI/persistence helpers.
+  Windows.Security.Credentials: OmiWindowsProjection
+  # Window chrome: title bar theming to match the macOS glass contract.
+  Windows.UI.ViewManagement: OmiWindowsProjection

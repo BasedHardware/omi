@@ -8,9 +8,9 @@ live in `docs/` (indexed in `docs/README.md`).
 
 | Working on | Read |
 |---|---|
-| React Native app (shared code, clients, UI kit) | `react-native/AGENTS.md` |
-| macOS desktop app | `react-native/AGENTS.md` + `docs/desktop-app.md` |
-| iOS / Android app | `react-native/AGENTS.md` + `docs/mobile.md` |
+| Swift cross-platform app (OmiKit, OmiUI, tests) | `app/AGENTS.md` |
+| macOS desktop app | `app/AGENTS.md` + `docs/desktop-app.md` |
+| iOS / Android app | `app/AGENTS.md` + `docs/mobile.md` |
 | PWA (web build) | `pwa/AGENTS.md` + `docs/pwa.md` |
 | Cloudflare staging backend (Workers) | `apps/backend-worker/AGENTS.md` + `docs/backend-worker.md` |
 | Provider-independent backend (example-platform) | `backends/example-platform/AGENTS.md` |
@@ -27,12 +27,17 @@ live in `docs/` (indexed in `docs/README.md`).
 ## Repository conventions
 
 - Use Bun for every JavaScript and TypeScript command.
-- Keep product UI, routes, state, motion, and lifecycle orchestration in React
-  Native. Objective-C++ is limited to platform bootstrap, real macOS material
-  and window behavior, credential-bearing transport policy, desktop commands,
-  and the C++ codec boundary. Swift sources, legacy product trees,
-  compatibility aliases, and direct authenticated JavaScript networking are
-  not allowed.
+- This is the v5-swift rewrite branch: the native clients are one Swift
+  package (`Package.swift`). Product UI, routes, state, motion, and
+  lifecycle orchestration live in OmiKit + OmiUI under `app/` (SkipUI
+  transpiles OmiUI to Kotlin for Android). Swift is allowed only inside
+  `app/` and only in Package.swift-declared target paths.
+- The C++ middleware stays C++: `native-core/` is compiled in place by the
+  `CNativeCore` target and consumed through its C ABI behind OmiKit's
+  Policy facade. Never re-derive or port the codec, transport policy, HTTP
+  plan facade, or recording rules.
+- Credentials live in the platform credential stores behind OmiKit's
+  `CredentialStoring` — never in view models, never in JS.
 - The active Omi BLE simulator under `tools/OmiSimulator/` is a **Rust
   Crepuscularity (GPUI) desktop app** with a local CoreBluetooth GATT
   peripheral. Crepuscularity (`https://crepuscularity.tsc.hk` /

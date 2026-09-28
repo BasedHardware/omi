@@ -74,6 +74,15 @@ public enum Policy {
     public static func recordingRetryableStatus(_ status: Int) -> Bool {
         bridge.recordingRetryableStatus(status)
     }
+    public static func recordingOwnerKeyValid(_ ownerKey: String) -> Bool {
+        bridge.recordingOwnerKeyValid(ownerKey)
+    }
+    public static func recordingReceiptValid(_ receipt: String) -> Bool {
+        bridge.recordingReceiptValid(receipt)
+    }
+    public static func recordingUUIDValid(_ value: String) -> Bool {
+        bridge.recordingUUIDValid(value)
+    }
     public static func packetChecksum(_ data: [UInt8]) -> UInt32 {
         bridge.packetChecksum(data)
     }
