@@ -682,11 +682,18 @@ def add_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
 
+    batch_count = 0
     for file_data in files_data:
         file_ref = user_ref.collection('files').document(file_data['id'])
         batch.set(file_ref, file_data)
+        batch_count += 1
+        if batch_count >= BATCH_LIMIT:
+            batch.commit()
+            batch = db.batch()
+            batch_count = 0
 
-    batch.commit()
+    if batch_count > 0:
+        batch.commit()
 
 
 def get_chat_files(uid: str, files_id: Optional[List[str]] = None) -> List[Dict[str, Any]]:
@@ -754,11 +761,18 @@ def delete_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
 
+    batch_count = 0
     for file_data in files_data:
         file_ref = user_ref.collection('files').document(file_data["id"])
         batch.delete(file_ref)
+        batch_count += 1
+        if batch_count >= BATCH_LIMIT:
+            batch.commit()
+            batch = db.batch()
+            batch_count = 0
 
-    batch.commit()
+    if batch_count > 0:
+        batch.commit()
 
 
 def add_chat_session(uid: str, chat_session_data: Dict[str, Any]) -> Dict[str, Any]:
