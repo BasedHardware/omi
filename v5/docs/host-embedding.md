@@ -12,9 +12,9 @@ and cohort flag delivery belong to B2b/B5.
 | Measurement | Result | Command / evidence |
 | --- | --- | --- |
 | JSC framework build (arm64 and x86_64) | Pass, 57 s warm build; 40,570,880 bytes XCFramework | `v5/react-native/scripts/build-host-framework.sh`; `/tmp/v5-host-framework-final2.log`. Both slices built separately, then combined with `lipo` into a universal framework. |
-| SwiftPM, framework absent | Pass, 74.29 s | `xcrun swift build -c debug --package-path desktop/macos/Desktop`; `/tmp/v5-host-swift-without.log` |
+| SwiftPM, framework absent | Pass, 74.29 s | `xcrun swift build -c debug --package-path desktop/macos/Desktop`; `/tmp/v5-host-swift-without.log` Re-verified by the orchestrator with `--manifest-cache none`: pass. |
 | SwiftPM, framework present | Pass, 7.37 s incremental; `V5HostKit` compiled and executable linked | Same command after framework generation; `/tmp/v5-host-swift-with-final.log` |
-| App bundle payload delta | Calculated +33,464,849 bytes (+31.9 MiB) | Debug host executable without framework: 261,564,208 bytes; with framework: 254,510,176 bytes. The added universal framework file payload is 40,518,881 bytes. This is a `run.sh`-equivalent unsigned bundle calculation; a fully assembled or signed app was not measured. |
+| App bundle payload delta | Framework payload added to `Contents/Frameworks`: 40,518,881 bytes (universal). Host executable delta: not measured | The two host executables came from separate debug builds (261,564,208 bytes without, 254,510,176 with), so their difference is build noise, not the framework's cost. A signed, fully assembled bundle has not been measured. |
 | Exported symbols | Pass, exactly 2 global exports: `OmiV5Host` class and metaclass | `nm -gU <slice>/OmiV5Runtime.framework/OmiV5Runtime` on the universal slice. The three ObjC protocols are declared in the public module header; a Swift import/conformance link probe passed. |
 | Duplicate symbol warnings | 0 | Searched both arch `xcodebuild` logs and the SwiftPM link log for `duplicate symbol`. A duplicate `-rpath` warning in a Swift test link is unrelated to runtime symbol exports. |
 
@@ -23,6 +23,14 @@ provider registration. Registration is intentionally inert in B2; authenticated
 reads remain disabled in JS host mode until B3 connects the shipping session.
 The same gate disables v5 Rewind capture and ambient audio. The standalone v5
 app continues to use its existing native session and capture path.
+
+**Toggling the framework locally.** The manifest checks whether
+`Vendor/OmiV5Runtime.xcframework` exists, but SwiftPM caches manifest
+evaluation without tracking that check. After deleting the framework, a cached
+manifest still declares the binary target and the build fails with "does not
+contain a binary artifact". Build once with `--manifest-cache none`, or run
+`xcrun swift package --package-path desktop/macos/Desktop reset`. Clean CI
+checkouts are unaffected.
 
 ## GUI acceptance runbook for the orchestrator and David
 

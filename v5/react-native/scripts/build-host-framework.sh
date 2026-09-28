@@ -17,8 +17,9 @@ fi
 
 start_time="$(date +%s)"
 (
-  cd "$rn_dir/macos"
-  pod install
+  cd "$rn_dir"
+  # The Gemfile pins CocoaPods; a global pod would rewrite Podfile.lock.
+  bundle exec pod install --project-directory=macos
 )
 (
   cd "$rn_dir"

@@ -1,5 +1,5 @@
-import Foundation
 // swift-tools-version: 6.0
+import Foundation
 import PackageDescription
 
 // Required macos-26 CI has Swift 6.3 and lacks the iOS/macOS 27 App Intents
