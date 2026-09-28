@@ -11,7 +11,13 @@
 
 #import <LocalAuthentication/LocalAuthentication.h>
 #import <Security/Security.h>
+// Shared with iOS (ios/RnRuntime/OmiBackendModule.mm imports this file), so
+// platform UI frameworks stay conditional.
+#if TARGET_OS_OSX
 #import <AppKit/AppKit.h>
+#else
+#import <UIKit/UIKit.h>
+#endif
 
 static NSString *const OmiContractVersion = @"1.0.0";
 static NSString *const OmiDevelopmentBackendUnsupportedBody = @"{\"error\":{\"code\":\"development_backend_unsupported\",\"retryable\":false,\"action\":\"none\"}}";
@@ -1144,10 +1150,15 @@ RCT_REMAP_METHOD(copyToClipboard,
     return;
   }
   dispatch_async(dispatch_get_main_queue(), ^{
+#if TARGET_OS_OSX
     NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
     [pasteboard clearContents];
     if ([pasteboard setString:text forType:NSPasteboardTypeString]) resolve(@YES);
     else reject(@"OMI_CLIPBOARD_WRITE", @"Could not copy the link", nil);
+#else
+    UIPasteboard.generalPasteboard.string = text;
+    resolve(@YES);
+#endif
   });
 }
 
