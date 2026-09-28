@@ -138,13 +138,32 @@ test('the Omi contract gate rejects before a write', async () => {
   expect(requests).toHaveLength(0);
 });
 
-test('share URL contains the mac source and a random 32 digit hex sid', () => {
-  const first = conversationShareUrl('abc');
-  const second = conversationShareUrl('abc');
+test('share URL contains the mac source and a random 32 digit hex sid', async () => {
+  const hex = (byte: number) => `${byte}`.padStart(2, '0').repeat(32);
+  const entropy = {
+    createWriteId: async () => hex(1),
+  } as unknown as OmiBackend;
+  const first = await conversationShareUrl(entropy, 'abc');
+  const otherEntropy = {
+    createWriteId: async () => hex(2),
+  } as unknown as OmiBackend;
+  const second = await conversationShareUrl(otherEntropy, 'abc');
   expect(first).toMatch(
     /^https:\/\/h\.omi\.me\/conversations\/abc\?s=mac&sid=[0-9a-f]{32}$/,
   );
   expect(second).not.toBe(first);
+});
+
+test('share sid rejects entropy that cannot fill 128 bits', async () => {
+  const shortEntropy = {
+    createWriteId: async () => 'ff',
+  } as unknown as OmiBackend;
+  await expect(conversationShareUrl(shortEntropy, 'abc')).rejects.toThrow(
+    'Share id entropy is unavailable',
+  );
+  await expect(
+    conversationShareUrl({} as unknown as OmiBackend, 'abc'),
+  ).rejects.toThrow('Share id entropy is unavailable');
 });
 
 describe('legacy memory writes', () => {

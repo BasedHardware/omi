@@ -303,14 +303,22 @@ function LegacyConversationBody({
                 }
                 await reload();
                 onRefresh?.();
-                const url = conversationShareUrl(conversation.id);
+                let url: string | null = null;
                 try {
+                  url = await conversationShareUrl(
+                    omiBackend!,
+                    conversation.id,
+                  );
                   if (!omiBackend?.copyToClipboard)
                     throw new Error('Clipboard is unavailable');
                   await omiBackend.copyToClipboard(url);
                   setNotice('Copied');
                 } catch {
-                  setNotice(`Sharing enabled. Copy this link: ${url}`);
+                  setNotice(
+                    url === null
+                      ? 'Sharing enabled'
+                      : `Sharing enabled. Copy this link: ${url}`,
+                  );
                 }
               } finally {
                 writePending.current = false;
