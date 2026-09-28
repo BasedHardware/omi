@@ -310,9 +310,12 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     # The gate keeps the exact check name and fails closed on any shard or
     # guardrail result that is not a plain success.
     assert "name: Backend unit suite" in workflow
-    assert "needs: [backend-unit-shard, backend-unit-guardrails]" in workflow
+    assert "needs: [ci-tier, backend-unit-shard, backend-unit-guardrails]" in workflow
     assert 'if [ "$SHARD_RESULT" != "success" ]' in workflow
-    assert 'if [ "$GUARDRAILS_RESULT" != "success" ]' in workflow
+    # Guardrails are required on internal PRs, main, and ci:full forks; an
+    # unlabeled fork must report them skipped, never silently green.
+    assert 'guardrails_required=success' in workflow
+    assert 'if [ "$GUARDRAILS_RESULT" != "$guardrails_required" ]' in workflow
     # The runner slices the deterministic selection round-robin with the
     # one-based mapping (line i runs in shard ((i - 1) % total) + 1, so
     # shard labels match the files they carry); `index` is an awk builtin,
@@ -455,7 +458,7 @@ def test_mobile_generated_files_only_run_for_codegen_or_localization_changes():
     assert asset_outputs["has_app_codegen"] == "true"
     assert asset_outputs["has_flutter_generated"] == "true"
 
-    assert "if: needs.changes.outputs.has_flutter_generated == 'true'" in generated
+    assert "needs.changes.outputs.has_flutter_generated == 'true'" in generated
     assert "if: needs.changes.outputs.has_app_codegen == 'true'" in generated
     assert "if: needs.changes.outputs.has_app_l10n == 'true'" in generated
     assert 'fetch-depth: 1' in generated
