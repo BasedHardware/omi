@@ -36,6 +36,68 @@ from ._client import db
 
 logger = logging.getLogger(__name__)
 
+# Upper bound for admin/recent-event reads. Keeps callers from requesting
+# unbounded (or negative) result sets from Firestore.
+MAX_QUERY_LIMIT = 200
+
+
+def _clean_id(value: Any, field: str) -> str:
+    """Validate and trim an identifier used in a Firestore path.
+
+    Raises ValueError for blank/whitespace-only or non-string values so we
+    never build corrupt paths such as ``users//fair_use_state/current``.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} must be a non-empty string")
+    return value.strip()
+
+
+def _clean_uid(uid: Any) -> str:
+    """Validate and trim a user id."""
+    return _clean_id(uid, 'uid')
+
+
+def _clean_limit(limit: Any, default: int) -> int:
+    """Coerce a query limit into the safe interval [1, MAX_QUERY_LIMIT]."""
+    try:
+        value = int(limit)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return max(1, min(value, MAX_QUERY_LIMIT))
+
+
+def _safe_datetime(value: Any) -> Optional[datetime]:
+    """Best-effort conversion of a stored timestamp to aware UTC datetime.
+
+    Returns None for values that cannot be interpreted as a timestamp so a
+    single corrupt record cannot crash enforcement calculations.
+    """
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+    # Firestore Timestamp-like objects expose to_datetime().
+    to_datetime = getattr(value, 'to_datetime', None)
+    if callable(to_datetime):
+        try:
+            parsed = to_datetime()
+        except Exception:  # noqa: BLE001 - defensive against arbitrary corrupt values
+            return None
+        if isinstance(parsed, datetime):
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+    return None
+
 
 # ---------------------------------------------------------------------------
 # Fair-use state (users/{uid}/fair_use_state/current)
@@ -44,6 +106,7 @@ logger = logging.getLogger(__name__)
 
 def get_fair_use_state(uid: str) -> Dict[str, Any]:
     """Get the current fair-use enforcement state for a user."""
+    uid = _clean_uid(uid)
     ref = db.collection('users').document(uid).collection('fair_use_state').document('current')
     doc = ref.get()
     if getattr(doc, "exists", False):
@@ -54,13 +117,18 @@ def get_fair_use_state(uid: str) -> Dict[str, Any]:
 
 def update_fair_use_state(uid: str, updates: Dict[str, Any]) -> None:
     """Update fair-use state atomically."""
+    uid = _clean_uid(uid)
     ref = db.collection('users').document(uid).collection('fair_use_state').document('current')
-    updates['updated_at'] = datetime.now(timezone.utc)
-    ref.set(updates, merge=True)
+    # Clone so injecting the timestamp does not mutate the caller's dict.
+    payload: Dict[str, Any] = dict(updates)
+    payload['updated_at'] = datetime.now(timezone.utc)
+    ref.set(payload, merge=True)
 
 
 def set_fair_use_stage(uid: str, stage: str, **kwargs: Any) -> None:
     """Set enforcement stage with optional extra fields."""
+    uid = _clean_uid(uid)
+    stage = _clean_id(stage, 'stage')
     updates: Dict[str, Any] = {'stage': stage, **kwargs}
     update_fair_use_state(uid, updates)
 
@@ -81,15 +149,20 @@ def _generate_case_ref() -> str:
 
 def create_fair_use_event(uid: str, event_data: Dict[str, Any]) -> str:
     """Create a new fair-use violation event. Returns the event ID."""
+    uid = _clean_uid(uid)
     ref = db.collection('users').document(uid).collection('fair_use_events').document()
-    event_data['created_at'] = datetime.now(timezone.utc)
-    event_data['case_ref'] = _generate_case_ref()
-    ref.set(event_data)
+    # Clone so injecting timestamps/case refs does not mutate the caller's dict.
+    payload: Dict[str, Any] = dict(event_data)
+    payload['created_at'] = datetime.now(timezone.utc)
+    payload['case_ref'] = _generate_case_ref()
+    ref.set(payload)
     return str(ref.id)
 
 
 def get_fair_use_events(uid: str, limit: int = 50) -> List[Dict[str, Any]]:
     """Get recent fair-use events for a user, newest first."""
+    uid = _clean_uid(uid)
+    limit = _clean_limit(limit, 50)
     ref = db.collection('users').document(uid).collection('fair_use_events')
     docs = ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).stream()
     events: List[Dict[str, Any]] = []
@@ -103,6 +176,7 @@ def get_fair_use_events(uid: str, limit: int = 50) -> List[Dict[str, Any]]:
 
 def get_violation_counts(uid: str) -> Dict[str, int]:
     """Count violations in the last 7 and 30 days."""
+    uid = _clean_uid(uid)
     ref = db.collection('users').document(uid).collection('fair_use_events')
     now = datetime.now(timezone.utc)
 
@@ -115,20 +189,24 @@ def get_violation_counts(uid: str) -> Dict[str, int]:
     for doc in docs:
         raw: object = doc.to_dict()
         data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-        created = data.get('created_at')
-        if created:
-            # Normalize to aware UTC for comparison (Firestore may return aware datetimes)
-            if isinstance(created, datetime) and created.tzinfo is None:
-                created = created.replace(tzinfo=timezone.utc)
-            count_30d += 1
-            if created >= cutoff_7d:
-                count_7d += 1
+        # Skip docs whose timestamp is missing or corrupt instead of crashing
+        # the whole enforcement check on a single bad record.
+        created = _safe_datetime(data.get('created_at'))
+        if created is None:
+            logger.warning("Skipping fair-use event with invalid created_at for uid=%s", uid)
+            continue
+        count_30d += 1
+        if created >= cutoff_7d:
+            count_7d += 1
 
     return {'violation_count_7d': count_7d, 'violation_count_30d': count_30d}
 
 
 def resolve_fair_use_event(uid: str, event_id: str, admin_uid: str, notes: str = "") -> None:
     """Mark a fair-use event as resolved by admin."""
+    uid = _clean_uid(uid)
+    event_id = _clean_id(event_id, 'event_id')
+    admin_uid = _clean_id(admin_uid, 'admin_uid')
     ref = db.collection('users').document(uid).collection('fair_use_events').document(event_id)
     ref.update(
         {
@@ -142,6 +220,8 @@ def resolve_fair_use_event(uid: str, event_id: str, admin_uid: str, notes: str =
 
 def reset_fair_use_state(uid: str, admin_uid: str) -> None:
     """Reset a user's fair-use state to clean (admin action)."""
+    uid = _clean_uid(uid)
+    admin_uid = _clean_id(admin_uid, 'admin_uid')
     update_fair_use_state(
         uid,
         {
@@ -168,6 +248,9 @@ def get_flagged_users(stage_filter: Optional[str] = None, limit: int = 100) -> L
     """Get users with active fair-use enforcement, for admin dashboard."""
     # Query all users who have fair_use_state with stage != 'none'
     # This requires a collection group query on fair_use_state
+    limit = _clean_limit(limit, 100)
+    if stage_filter is not None and isinstance(stage_filter, str):
+        stage_filter = stage_filter.strip() or None
     query = db.collection_group('fair_use_state')
     if stage_filter:
         query = query.where('stage', '==', stage_filter)
