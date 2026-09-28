@@ -458,13 +458,15 @@ def final_attempt_failed(
     failure_code: str = 'final_attempt_failed',
     firestore_client: Any = None,
 ) -> bool:
+    dead_letter_kwargs = {'firestore_client': firestore_client}
+    if failure_code != 'final_attempt_failed':
+        dead_letter_kwargs['failure_code'] = failure_code
     marked = jobs_db.mark_finalization_dead_letter(
         job_id,
         dispatch_generation,
         lease_epoch,
         retry_count,
-        failure_code=failure_code,
-        firestore_client=firestore_client,
+        **dead_letter_kwargs,
     )
     if marked:
         LISTEN_FINALIZATION_DEAD_LETTER_TOTAL.inc()
