@@ -25,6 +25,18 @@ from typing import Any, Dict, List, Optional
 
 
 
+DONE_WORDS = {"true", "yes", "1", "done", "completed"}
+
+
+def is_completed(value: Any) -> bool:
+    """Normalize completion state handling booleans, numbers, and loose string representations."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    return isinstance(value, str) and value.strip().lower() in DONE_WORDS
+
+
 def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
     """Safely parse an ISO-8601 datetime string and normalize to UTC."""
     if not iso_str or not isinstance(iso_str, str):
@@ -42,7 +54,7 @@ def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
 
 def format_action_item(item: Dict[str, Any], include_metadata: bool = True) -> str:
     """Format a single action item dictionary into a Markdown task line."""
-    completed = bool(item.get("completed", False))
+    completed = is_completed(item.get("completed", False))
     desc = str(item.get("description") or "").strip().replace("\r\n", " ").replace("\n", " ")
     if not desc:
         desc = "Untitled action item"
@@ -80,7 +92,7 @@ def items_to_markdown(
 ) -> str:
     """Render a list of action items into a structured Markdown document with YAML frontmatter."""
     total = len(items)
-    completed_count = sum(1 for it in items if it.get("completed"))
+    completed_count = sum(1 for it in items if is_completed(it.get("completed")))
     open_count = total - completed_count
 
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -105,8 +117,8 @@ def items_to_markdown(
     ]
 
     if group_by == "status":
-        open_items = [it for it in items if not it.get("completed")]
-        done_items = [it for it in items if it.get("completed")]
+        open_items = [it for it in items if not is_completed(it.get("completed"))]
+        done_items = [it for it in items if is_completed(it.get("completed"))]
 
         lines.append("## 📌 Pending Tasks")
         lines.append("")
@@ -235,9 +247,9 @@ def main() -> None:
 
     # Filter by status if requested
     if args.status == "open":
-        items = [it for it in items if not it.get("completed")]
+        items = [it for it in items if not is_completed(it.get("completed"))]
     elif args.status == "completed":
-        items = [it for it in items if it.get("completed")]
+        items = [it for it in items if is_completed(it.get("completed"))]
 
     if not items:
         msg = f"No action items found matching filter (status={args.status})."

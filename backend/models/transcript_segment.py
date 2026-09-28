@@ -61,6 +61,7 @@ class SpeakerIdentityStatus(str, Enum):
     user = 'user'
     not_user = 'not_user'
     no_match = 'no_match'
+    ambiguous = 'ambiguous'
 
 
 class TranscriptSegment(BaseModel):

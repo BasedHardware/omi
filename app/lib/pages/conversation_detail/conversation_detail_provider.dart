@@ -18,6 +18,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -30,18 +31,24 @@ typedef SpeakerAssignmentCall = Future<bool> Function(
   int? speakerId,
 });
 typedef ConversationReprocessCall = Future<ServerConversation?> Function(String, {String? appId});
+typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
+  static final RegExp _syncConversationId = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-');
   ConversationDetailProvider({
     SpeakerAssignmentCall? assignSpeaker,
     ConversationReprocessCall? reprocess,
+    ConversationDetailFetchCall? fetchConversation,
   })  : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
-        _reprocess = reprocess ?? reProcessConversationServer;
+        _reprocess = reprocess ?? reProcessConversationServer,
+        _fetchConversation = fetchConversation ?? getConversationById;
   final SpeakerAssignmentCall _assignSpeaker;
   final ConversationReprocessCall _reprocess;
+  final ConversationDetailFetchCall _fetchConversation;
   String? _speakerSummaryConversationId;
   int _speakerEditGeneration = 0;
   int _pendingSpeakerSaves = 0;
+  String? _speakerRefreshId;
   bool get _savingSpeaker => _pendingSpeakerSaves > 0;
   Future<void> _speakerSaveTail = Future.value();
 
@@ -194,6 +201,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         );
         return false;
       }
+      // A sync bridge may have retired the ID while this detail page stayed
+      // open. Refresh after the queued edits drain so each edit still targets
+      // the same optimistic conversation, then adopt the survivor ID.
+      if (_syncConversationId.hasMatch(target.id)) _speakerRefreshId = target.id;
       if (!_isDisposed && generation == _speakerEditGeneration && identical(conversationOrNull, target)) {
         if (changed) {
           if (target.status == ConversationStatus.completed && target.structured.overview.trim().isNotEmpty) {
@@ -205,6 +216,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       return true;
     } finally {
       _pendingSpeakerSaves--;
+      if (_pendingSpeakerSaves == 0) {
+        final refreshId = _speakerRefreshId;
+        _speakerRefreshId = null;
+        if (refreshId != null && refreshId == conversationOrNull?.id) await refreshConversation();
+      }
     }
   }
 
@@ -363,6 +379,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (trimmed.isEmpty) return;
 
     if (appId == null) {
+      final ownerUid = SharedPreferencesUtil().uid;
       final editedConversation = conversation;
       final editedStructured = editedConversation.structured;
       final oldOverview = editedStructured.overview;
@@ -381,6 +398,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         null,
         trimmed,
       );
+      if (success && ownerUid.isNotEmpty && ownerUid == SharedPreferencesUtil().uid) {
+        await SiriIntegration.current.upsertConversations([editedConversation], expectedUid: ownerUid);
+      }
       if (!success && !_isDisposed && identical(conversationOrNull, editedConversation)) {
         // A refresh or a newer edit may have replaced this state while the
         // request was pending. Roll back only the exact optimistic snapshot
@@ -529,13 +549,17 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (target == null) return null;
     final title = text.trim();
     final previous = target.structured.title;
+    final ownerUid = SharedPreferencesUtil().uid;
     if (title.isEmpty || title == previous.trim()) {
       if (titleController != null && titleController!.text != previous) titleController!.text = previous;
       return null;
     }
     target.structured.title = title;
     notifyListeners();
-    final saved = await updateConversationTitle(target.id, title);
+    final saved = await persistTitleEdit(target.id, title);
+    if (saved && ownerUid.isNotEmpty && ownerUid == SharedPreferencesUtil().uid) {
+      await SiriIntegration.current.upsertConversations([target], expectedUid: ownerUid);
+    }
     if (!saved && !_isDisposed) {
       target.structured.title = previous;
       if (_cachedConversationId == target.id && titleController != null) titleController!.text = previous;
@@ -543,6 +567,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
     return saved;
   }
+
+  @visibleForTesting
+  Future<bool> persistTitleEdit(String conversationId, String title) => updateConversationTitle(conversationId, title);
 
   /// Folds an edit made in the shared task editor back into this conversation's task list.
   void applyTaskEdit(
@@ -863,11 +890,20 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   Future<void> refreshConversation() async {
     try {
-      final updatedConversation = await getConversationById(conversation.id);
+      final openedId = conversation.id;
+      final updatedConversation = await _fetchConversation(openedId);
       if (_isDisposed) return;
-      if (updatedConversation != null) {
+      if (updatedConversation != null && conversationOrNull?.id == openedId) {
+        if (updatedConversation.id != openedId) {
+          if (!_syncConversationId.hasMatch(openedId)) return;
+          _cachedConversationId = updatedConversation.id;
+          selectedDate = conversationLocalDayKey(updatedConversation.startedAt ?? updatedConversation.createdAt);
+          if (_speakerSummaryConversationId == openedId) _speakerSummaryConversationId = updatedConversation.id;
+          conversationProvider?.replaceBridgedConversation(openedId, updatedConversation);
+        } else {
+          conversationProvider?.updateConversation(updatedConversation);
+        }
         _cachedConversation = updatedConversation;
-        conversationProvider?.updateConversation(updatedConversation);
         notifyListeners();
       }
     } catch (e) {

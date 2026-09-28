@@ -40,6 +40,7 @@ def proactive_env(monkeypatch):
     monkeypatch.setattr(app_int, "get_prompt_memories", lambda uid: ("Zach", "likes tea"))
     monkeypatch.setattr(app_int, "send_app_notification", MagicMock())
     monkeypatch.setattr(app_int, "incr_daily_notification_count", MagicMock())
+    monkeypatch.setattr(app_int, "_user_day_zone", lambda _uid: timezone.utc)
 
     llm = MagicMock()
     llm.invoke.return_value.content = "Here is your nudge."

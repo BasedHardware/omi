@@ -103,6 +103,7 @@ class ListenSessionState:
     speaker_id_enabled: bool = False
     speaker_id_done: asyncio.Event = field(default_factory=asyncio.Event)
     speaker_map_dirty: bool = False
+    speaker_map_version: int = 0
     first_audio_byte_timestamp: Optional[float] = None
     # Capture sample clock (single-channel server-STT sessions): the per-socket
     # sample cursor, per-conversation pinned first-audio origins (wall seconds),
@@ -113,6 +114,7 @@ class ListenSessionState:
     # admits the v2 *persistence* (projected times, started_at pin, marker,
     # pusher projection) for this recording only.
     capture_timeline: Any = None
+    source_position_map: Any = None
     capture_timeline_v2: bool = False
     conversation_capture_origins: Dict[str, 'ConversationCaptureOrigin'] = field(default_factory=dict)
     conversations_awaiting_capture_origin: set = field(default_factory=set)

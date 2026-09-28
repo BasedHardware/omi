@@ -695,8 +695,8 @@ actor ActionItemStorage {
     } else {
       log(message)
     }
+    SiriIndexHooks.tasksChanged(items.map(\.id))
   }
-
   /// Reconcile dashboard visibility fields from authoritative server rows without
   /// overwriting user-editable task content. This deliberately bypasses the
   /// 60-second optimistic-update guard in `syncTaskActionItems` only for completion
@@ -765,6 +765,7 @@ actor ActionItemStorage {
     }
 
     if reconciled > 0 {
+      SiriIndexHooks.tasksChanged(items.map(\.id))
       HomeKnowledgeCountInvalidation.post(
         logMessage: "ActionItemStorage: Reconciled \(reconciled) dashboard visibility fields from backend"
       )
@@ -785,11 +786,9 @@ actor ActionItemStorage {
       log("ActionItemStorage: markAbsentTasksAsStaged skipped — empty API set")
       return
     }
-
     let db = try await ensureInitialized()
-
-    let deleted = try await authorization.withCommitLease {
-      try await db.write { database -> Int in
+    let deletedIds = try await authorization.withCommitLease {
+      try await db.write { database -> [String] in
         try authorization.require()
         let records =
           try ActionItemRecord
@@ -798,22 +797,23 @@ actor ActionItemStorage {
           .filter(Column("backendId") != nil)
           .fetchAll(database)
 
-        var count = 0
+        var deletedIds: [String] = []
         for record in records {
           guard let backendId = record.backendId, !backendId.isEmpty else { continue }
           if !apiIds.contains(backendId) {
             try record.delete(database)
-            count += 1
+            deletedIds.append(backendId)
           }
         }
         try authorization.require()
-        return count
+        return deletedIds
       }
     }
 
-    if deleted > 0 {
+    if !deletedIds.isEmpty {
+      await SiriIndexHooks.tasksDeleted(deletedIds)
       HomeKnowledgeCountInvalidation.post(
-        logMessage: "ActionItemStorage: Hard-deleted \(deleted) absent tasks during full sync"
+        logMessage: "ActionItemStorage: Hard-deleted \(deletedIds.count) absent tasks during full sync"
       )
     }
   }
@@ -838,9 +838,8 @@ actor ActionItemStorage {
     }
 
     let db = try await ensureInitialized()
-
-    let deleted = try await authorization.withCommitLease {
-      try await db.write { database -> Int in
+    let deletedIds = try await authorization.withCommitLease {
+      try await db.write { database -> [String] in
         try authorization.require()
         let records =
           try ActionItemRecord
@@ -850,7 +849,7 @@ actor ActionItemStorage {
           .filter(Column("backendSynced") == true)
           .fetchAll(database)
 
-        var count = 0
+        var deletedIds: [String] = []
         for record in records {
           guard let backendId = record.backendId, !backendId.isEmpty else { continue }
           if !apiIds.contains(backendId) {
@@ -858,19 +857,21 @@ actor ActionItemStorage {
               sql: "DELETE FROM action_items WHERE id = ?",
               arguments: [record.id]
             )
-            count += 1
+            deletedIds.append(backendId)
           }
         }
         try authorization.require()
-        return count
+        return deletedIds
       }
     }
 
-    if deleted > 0 {
-      HomeKnowledgeCountInvalidation.post(logMessage: "ActionItemStorage: hard-deleted \(deleted) absent tasks")
+    if !deletedIds.isEmpty {
+      await SiriIndexHooks.tasksDeleted(deletedIds)
+      HomeKnowledgeCountInvalidation.post(
+        logMessage: "ActionItemStorage: hard-deleted \(deletedIds.count) absent tasks")
     }
 
-    return deleted
+    return deletedIds.count
   }
 
   /// Returns all active scored tasks for batch-syncing scores to backend
@@ -892,7 +893,6 @@ actor ActionItemStorage {
   ) async throws {
     try authorization.require()
     let db = try await ensureInitialized()
-
     try await authorization.withCommitLease {
       try await db.write { database in
         try authorization.require()
@@ -906,6 +906,7 @@ actor ActionItemStorage {
 
     HomeKnowledgeCountInvalidation.post(
       logMessage: "ActionItemStorage: Hard deleted action item with backendId \(backendId)")
+    await SiriIndexHooks.taskDeleted(backendId)
   }
 
   // MARK: - Local Extraction Operations
@@ -1007,6 +1008,7 @@ actor ActionItemStorage {
     }
 
     log("ActionItemStorage: Marked action item \(id) as synced (backendId: \(backendId))")
+    SiriIndexHooks.tasksChanged([backendId])
   }
 
   /// Get action items that haven't been synced to backend yet
@@ -1033,9 +1035,7 @@ actor ActionItemStorage {
   }
 
   // MARK: - Update Operations
-
   /// Optimistically update completion status locally (before API call)
-  /// Sets updatedAt to Date() so auto-refresh timestamp check skips this record
   func updateCompletionStatus(
     backendId: String,
     completed: Bool,
@@ -1059,10 +1059,9 @@ actor ActionItemStorage {
 
     HomeKnowledgeCountInvalidation.post(
       logMessage: "ActionItemStorage: Locally set completed=\(completed) for \(backendId)")
+    SiriIndexHooks.tasksChanged([backendId])
   }
-
   /// Optimistically update task fields locally (before API call)
-  /// Sets updatedAt to Date() so auto-refresh timestamp check skips this record
   func updateActionItemFields(
     backendId: String,
     description: String? = nil,
@@ -1112,6 +1111,7 @@ actor ActionItemStorage {
     }
 
     log("ActionItemStorage: Locally updated fields for \(backendId)")
+    SiriIndexHooks.tasksChanged([backendId])
   }
 
   /// Batch update sort orders and indent levels in SQLite
@@ -1209,8 +1209,8 @@ actor ActionItemStorage {
 
     HomeKnowledgeCountInvalidation.post(
       logMessage: "ActionItemStorage: Tombstoned action item \(backendId) pending backend delete")
+    await SiriIndexHooks.taskDeleted(backendId)
   }
-
   /// The server acknowledged the delete: clear the pending flag but keep the tombstone.
   ///
   /// Hard-deleting the row here (the previous shape) threw away the only record of *who*
@@ -1242,8 +1242,8 @@ actor ActionItemStorage {
 
     HomeKnowledgeCountInvalidation.post(
       logMessage: "ActionItemStorage: Backend acknowledged deletion of \(backendId)")
+    await SiriIndexHooks.taskDeleted(backendId)
   }
-
   /// Backend IDs whose deletion the server has not yet acknowledged.
   func getPendingBackendDeletionIds() async throws -> [String] {
     let db = try await ensureInitialized()
@@ -1280,8 +1280,8 @@ actor ActionItemStorage {
 
     HomeKnowledgeCountInvalidation.post(
       logMessage: "ActionItemStorage: Hard-deleted action item with backendId \(backendId)")
+    await SiriIndexHooks.taskDeleted(backendId)
   }
-
   // MARK: - FTS5 Search & Context Methods
 
   /// Full-text search on action item descriptions using FTS5 with BM25 ranking

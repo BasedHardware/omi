@@ -10,6 +10,19 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/gen/siri_pigeon.g.dart';
+import 'package:omi/services/siri_integration.dart';
+
+class _SiriConversationHost extends SiriIndexApi {
+  final conversations = <String, SiriConversation>{};
+
+  @override
+  Future<void> upsertConversations(String uid, List<SiriConversation> rows) async {
+    for (final row in rows) {
+      conversations[row.id] = row;
+    }
+  }
+}
 
 /// A conversation whose first-party summary lives entirely in `sections`, with
 /// whatever app results the case under test needs.
@@ -47,6 +60,11 @@ class _PersistingProvider extends ConversationDetailProvider {
   Future<bool> persistSummaryEdit(String conversationId, String? appId, String content) {
     return handler(conversationId, appId, content);
   }
+}
+
+class _TitlePersistingProvider extends ConversationDetailProvider {
+  @override
+  Future<bool> persistTitleEdit(String conversationId, String title) async => true;
 }
 
 ConversationDetailProvider _providerWithPersistence(
@@ -104,6 +122,52 @@ void main() {
     expect(summary.kind, ConversationSummaryKind.overview);
     expect(summary.appId, isNull);
     expect(summary.content, 'Short compatibility paragraph.');
+  });
+
+  test('confirmed first-party summary edit updates Siri projection', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'summary-owner'});
+    await SharedPreferencesUtil.init();
+    final host = _SiriConversationHost();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'summary-owner');
+    addTearDown(() => SiriIntegration.testInstance = null);
+    final conversation = _conversation();
+    final provider = _providerWithPersistence(conversation, (_, __, ___) async => true);
+
+    await provider.saveEditingSummarySelection(provider.getSummarySelection(), 'Edited overview');
+
+    expect(host.conversations['conv-1']?.summary, 'Edited overview');
+  });
+
+  test('confirmed title edit updates Siri projection', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'summary-owner'});
+    await SharedPreferencesUtil.init();
+    final host = _SiriConversationHost();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'summary-owner');
+    addTearDown(() => SiriIntegration.testInstance = null);
+    final conversation = _conversation();
+    final provider = _TitlePersistingProvider();
+    addTearDown(provider.dispose);
+    provider.selectedDate = conversationLocalDayKey(conversation.createdAt);
+    provider.setCachedConversation(conversation);
+
+    expect(await provider.saveTitle('Edited title'), isTrue);
+    expect(host.conversations['conv-1']?.title, 'Edited title');
+  });
+
+  test('late title confirmation cannot publish into another account index', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'summary-owner'});
+    await SharedPreferencesUtil.init();
+    final host = _SiriConversationHost();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'different-owner');
+    addTearDown(() => SiriIntegration.testInstance = null);
+    final conversation = _conversation();
+    final provider = _TitlePersistingProvider();
+    addTearDown(provider.dispose);
+    provider.selectedDate = conversationLocalDayKey(conversation.createdAt);
+    provider.setCachedConversation(conversation);
+
+    expect(await provider.saveTitle('Old owner title'), isTrue);
+    expect(host.conversations, isEmpty);
   });
 
   test('duplicate app ids are read-only instead of editing the first match', () async {

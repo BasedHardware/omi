@@ -601,6 +601,11 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "iOS BLE diagnostics must not poll RSSI while closed, and frequent battery notifications must not rewrite the complete history on every packet"
+  - id: ios-userdefaults-plist-values
+    command: ["python3", "app/ios/test/check_userdefaults_plist_values.py"]
+    triggers: ["app/ios/**/*.swift", "app/ios/test/check_userdefaults_plist_values.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "TestFlight 1.0.553 crashed when battery history wrote NSNull to UserDefaults; future Swift null placeholders and Optional<Any> coalescing require review before merge"
   - id: ios-ble-connection-policy
     command: ["ruby", "app/ios/test/omi_ble_connection_policy_test.rb"]
     triggers: ["app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/test/omi_ble_connection_policy_test.rb", ".github/checks-manifest.yaml"]

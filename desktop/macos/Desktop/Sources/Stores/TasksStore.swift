@@ -2945,8 +2945,8 @@ class TasksStore: ObservableObject {
         )
       }
       guard isCurrent(lease) else { return }
-
       // Spawn next recurring instance when completing a recurring task
+      if newCompleted, operationOverrides == nil, #available(macOS 27, *) { SiriDonations.taskCompleted(task.id) }
       if newCompleted, let rule = task.recurrenceRule, !rule.isEmpty {
         let baseDueDate = task.dueAt ?? Date()
         if let nextDue = nextFutureDueDate(from: baseDueDate, rule: rule) {

@@ -66,7 +66,15 @@ class _WalService implements IWalService {
 SyncUploadGate _offlineGate() {
   return SyncUploadGate(
     limiter: SyncRateLimiter.instance,
-    uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
+    uploader: (files,
+        {onUploadProgress,
+        conversationId,
+        captureEvidence,
+        recordingSessionId,
+        audioStartSeconds,
+        audioEndSeconds,
+        claimLiveCapture = false,
+        geolocation}) async {
       throw StateError('unexpected upload in banner test');
     },
     fairUseStatusLoader: () async => {'stage': 'none'},

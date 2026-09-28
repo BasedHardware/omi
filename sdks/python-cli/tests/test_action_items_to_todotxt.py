@@ -76,8 +76,13 @@ class TestActionItemsToTodoTxt(unittest.TestCase):
         self.assertEqual(ai2todo.task_text("move due:2026-01-01"), f"move due{ZWSP}:2026-01-01")
         self.assertEqual(ai2todo.task_text("see https://example.com"), "see https://example.com")
         self.assertEqual(ai2todo.task_text("x marks the spot"), ZWSP + "x marks the spot")
+        self.assertEqual(ai2todo.task_text("x"), ZWSP + "x")
         self.assertEqual(ai2todo.task_text("(A) urgent"), ZWSP + "(A) urgent")
+        self.assertEqual(ai2todo.task_text("(A)"), ZWSP + "(A)")
         self.assertEqual(ai2todo.task_text("2026-10-01 launch"), ZWSP + "2026-10-01 launch")
+        self.assertEqual(ai2todo.task_text("2026-10-01"), ZWSP + "2026-10-01")
+        self.assertEqual(ai2todo.task_text("xylophone"), "xylophone")
+        self.assertEqual(ai2todo.task_text("(Action)"), "(Action)")
         self.assertEqual(ai2todo.task_text("a + b"), "a + b")
         self.assertEqual(ai2todo.task_text(None), "(no description)")
         self.assertEqual(ai2todo.task_text("会議の\n準備"), "会議の 準備")
@@ -134,6 +139,25 @@ class TestActionItemsToTodoTxt(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 1)
         self.assertFalse(destination.exists())
+
+    def test_issue_19382_bare_completion_and_priority_regression(self):
+        """Regression test for Issue #19382: bare 'x' or '(A)' descriptions must not become syntax when metadata is appended."""
+        items = [
+            {"id": "open-x", "description": "x", "completed": False},
+            {"id": "open-priority", "description": "(A)", "completed": False},
+            {"id": "normal", "description": "buy milk", "completed": False},
+            {"id": "real-done", "description": "done task", "completed": True},
+        ]
+        counts, lines = self.export(items, zone=timezone.utc)
+        self.assertEqual(counts, (4, 4))
+        # open-x must NOT start with bare "x "
+        self.assertIn(f"{ZWSP}x omi:open-x", lines)
+        # open-priority must NOT start with bare "(A) "
+        self.assertIn(f"{ZWSP}(A) omi:open-priority", lines)
+        # normal control item
+        self.assertIn("buy milk omi:normal", lines)
+        # real-done control item
+        self.assertIn("x done task omi:real-done", lines)
 
 
 if __name__ == "__main__":

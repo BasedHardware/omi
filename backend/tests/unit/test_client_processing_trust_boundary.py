@@ -603,6 +603,13 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # `structured` is the deterministic minimum; it carries no client text,
         # so the integration redactor must not strip it.
         'processing_state',
+        # S1 capture evidence: server-authored internal receipt, NOT
+        # projection-family. Pydantic-excluded (`Field(exclude=True)`), never
+        # serialized to any client, and written only at explicit persistence
+        # seams behind `CAPTURE_EVIDENCE_V1_DARK_WRITE`. Classifying it
+        # projection-family would make `_invalidate_client_processing` and
+        # `strip_client_processing` strip/delete the dark write itself.
+        'capture_evidence',
         'transcript_segments',
         'transcript_segments_compressed',
         'geolocation',

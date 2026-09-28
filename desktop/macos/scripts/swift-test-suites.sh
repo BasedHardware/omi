@@ -671,7 +671,10 @@ done < <(cut -f1 "$suite_map" | sort -u)
 # Missing the first surface blocked a release cut in #11511. Missing the latter
 # two let MemoryAtlas change `auth_userId` while Kernel projection installed its
 # temporary reset owner in #12039, failing the owner-scoped clear.
-auth_domain_marker_pattern='RuntimeOwnerAuthorityTestFixture|RuntimeOwnerIdentity\.withAutomationOwnerIfMissing|RewindStorageTestIsolation\.(captureAuthSnapshot|signInForTests|restoreAuthSnapshot)'
+# LocalEmbeddingIndexer.indexFinalizedSession captures and revalidates the
+# effective owner, which reads the production-standard auth defaults domain.
+# Keep its caller suites out of parallel cfprefsd traffic on hosted macOS.
+auth_domain_marker_pattern='RuntimeOwnerAuthorityTestFixture|RuntimeOwnerIdentity\.withAutomationOwnerIfMissing|RewindStorageTestIsolation\.(captureAuthSnapshot|signInForTests|restoreAuthSnapshot)|LocalEmbeddingIndexer\.shared\.indexFinalizedSession'
 declare -a auth_domain_files=()
 while IFS= read -r auth_domain_file; do
   auth_domain_files+=("$auth_domain_file")
