@@ -132,12 +132,24 @@ enum SiriIntentService {
     let result = try await APIClient.shared.createMemory(
       content: content, visibility: "private", category: .manual, tags: ["siri"],
       expectedOwnerId: authorization.ownerID, authorizationSnapshot: authorization)
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw SiriFailure.cancelled }
-    do {
-      try await MemoryStorage.shared.syncServerMemory(
+    return await confirmedMemoryResult(result) {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+        throw LocalMutationAuthorizationError.revoked
+      }
+      _ = try await MemoryStorage.shared.syncServerMemory(
         result, authorization: TasksStore.localMutationAuthorization(snapshot: authorization))
-    } catch LocalMutationAuthorizationError.revoked {
-      throw SiriFailure.cancelled
+    }
+  }
+
+  /// A confirmed backend create is the Remember success boundary. A cache
+  /// refresh may be deferred after an account transition without causing a
+  /// second server write on the user's next attempt.
+  static func confirmedMemoryResult(
+    _ result: ServerMemory,
+    cache: @Sendable () async throws -> Void
+  ) async -> ServerMemory {
+    do {
+      try await cache()
     } catch {
       log("Siri memory cache refresh deferred: \(error.localizedDescription)")
     }

@@ -100,20 +100,18 @@ final class EffectiveOwnerDatabaseBoundaryTests: XCTestCase {
         isLocked: false, tags: ["siri"], reasoning: nil, currentActivity: nil,
         inputDeviceName: nil, windowTitle: nil, headline: nil)
       let write = Task {
-        try await MemoryStorage.shared.syncServerMemory(
-          memory, authorization: TasksStore.localMutationAuthorization(snapshot: snapshot),
-          beforeLocalWrite: { await gate.pauseBeforeWrite() },
-          onIndexChange: { _ in indexCalls.increment() })
+        await SiriIntentService.confirmedMemoryResult(memory) {
+          try await MemoryStorage.shared.syncServerMemory(
+            memory, authorization: TasksStore.localMutationAuthorization(snapshot: snapshot),
+            beforeLocalWrite: { await gate.pauseBeforeWrite() },
+            onIndexChange: { _ in indexCalls.increment() })
+        }
       }
       await gate.waitUntilEntered()
       await setOwner(ownerB)
       await gate.release()
-      do {
-        _ = try await write.value
-        XCTFail("The superseded Siri write must be rejected")
-      } catch let error as LocalMutationAuthorizationError {
-        XCTAssertEqual(error, .revoked)
-      }
+      let confirmed = await write.value
+      XCTAssertEqual(confirmed.id, memory.id, "The server already confirmed Remember")
       let ownerBMemory = try await MemoryStorage.shared.getMemoryByBackendId(memory.id)
       XCTAssertNil(ownerBMemory)
       await RewindDatabase.shared.close()
