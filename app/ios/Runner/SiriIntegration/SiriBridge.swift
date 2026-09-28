@@ -265,15 +265,15 @@ enum SiriTelemetry {
         var rows = defaults.array(forKey: key) as? [[String: Any]] ?? []
         rows.append(["uid": uid, "kind": kind, "intent": intent, "outcome": outcome,
                      "latencyMs": latencyMs, "entityCounts": entityCounts])
-        let records = rows.suffix(100).map { row in
-            [
-                "uid": .string(row["uid"] as? String ?? ""),
-                "kind": .string(row["kind"] as? String ?? ""),
-                "intent": .string(row["intent"] as? String ?? ""),
-                "outcome": .string(row["outcome"] as? String ?? ""),
-                "latencyMs": .int64(row["latencyMs"] as? Int64 ?? 0),
-                "entityCounts": .int64(row["entityCounts"] as? Int64 ?? 0),
-            ]
+        let records: [[String: PlistValue]] = rows.suffix(100).map { row in
+            var record: [String: PlistValue] = [:]
+            record["uid"] = .string(row["uid"] as? String ?? "")
+            record["kind"] = .string(row["kind"] as? String ?? "")
+            record["intent"] = .string(row["intent"] as? String ?? "")
+            record["outcome"] = .string(row["outcome"] as? String ?? "")
+            record["latencyMs"] = .int64(row["latencyMs"] as? Int64 ?? 0)
+            record["entityCounts"] = .int64(row["entityCounts"] as? Int64 ?? 0)
+            return record
         }
         try? SafeDefaults.setPlistRecords(records, forKey: key, in: defaults)
     }
