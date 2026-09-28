@@ -45,7 +45,9 @@ environments:
         region: us-central1
         schedule: "*/2 * * * *"
         time_zone: UTC
-        state: ENABLED
+        # Dev shares prod Firestore and Redis: its sweeper claimed and failed prod
+        # jobs (2026-09-28). Keep paused until sequencer state is environment-scoped.
+        state: PAUSED
         target:
           type: http
           uri: https://backend-sync-dt5lrfkkoa-uc.a.run.app/v2/sync-backfill-sequencer/sweep

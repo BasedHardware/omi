@@ -108,6 +108,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
+            # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
+            "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MEETING_RECEIPT_RECONCILER_ENABLED",
             "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
@@ -202,6 +204,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
+            # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
+            "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MCP_OAUTH_CLIENTS_JSON",
             "MEETING_RECEIPT_RECONCILER_ENABLED",

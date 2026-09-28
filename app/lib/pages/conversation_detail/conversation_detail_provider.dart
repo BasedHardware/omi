@@ -25,18 +25,10 @@ import 'package:omi/pages/conversation_detail/conversation_summary_selection.dar
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-typedef SpeakerAssignmentCall = Future<bool> Function(
-  String,
-  List<String>, {
-  bool? isUser,
-  String? personId,
-  int? speakerId,
-});
-typedef ConversationReprocessCall = Future<ServerConversation?> Function(
-  String, {
-  String? appId,
-  bool requireSpeakerReceipt,
-});
+typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
+    {bool? isUser, String? personId, int? speakerId});
+typedef ConversationReprocessCall = Future<ServerConversation?> Function(String,
+    {String? appId, bool requireSpeakerReceipt});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
@@ -124,9 +116,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       return null;
     }
     final selected = target.transcriptSegments
-        .where(
-          (s) => speakerId == null ? segmentIds.contains(s.id) : s.speakerId == speakerId,
-        )
+        .where((s) => speakerId == null ? segmentIds.contains(s.id) : s.speakerId == speakerId)
         .toList();
     if (selected.isEmpty) return null;
     // A new edit extends the labeling session even if its save is still in
@@ -135,12 +125,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     _speakerSummaryRefreshTimer = null;
     final self = personId == 'user';
     final person = self ? null : personId;
-    final before = {
-      for (final segment in selected) segment: (segment.isUser, segment.personId),
-    };
-    final changed = selected.any(
-      (s) => s.isUser != self || s.personId != person,
-    );
+    final before = {for (final segment in selected) segment: (segment.isUser, segment.personId)};
+    final changed = selected.any((s) => s.isUser != self || s.personId != person);
     final generation = ++_speakerEditGeneration;
     _speakerEditGenerationByConversation[target.id] = generation;
     _pendingSpeakerSaves++;
@@ -196,13 +182,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
           createdId = null;
         }
         if (createdId == null || createdId.isEmpty) {
-          _rollbackSpeakerAssignment(
-            target,
-            selected,
-            before,
-            generation,
-            onFailed,
-          );
+          _rollbackSpeakerAssignment(target, selected, before, generation, onFailed);
           return false;
         }
         resolvedId = createdId;
@@ -227,23 +207,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
           speakerId: speakerId,
         );
         if (!saved) {
-          _rollbackSpeakerAssignment(
-            target,
-            selected,
-            before,
-            generation,
-            onFailed,
-          );
+          _rollbackSpeakerAssignment(target, selected, before, generation, onFailed);
           return false;
         }
       } catch (_) {
-        _rollbackSpeakerAssignment(
-          target,
-          selected,
-          before,
-          generation,
-          onFailed,
-        );
+        _rollbackSpeakerAssignment(target, selected, before, generation, onFailed);
         return false;
       }
       // A sync bridge may have retired the ID while this detail page stayed
@@ -499,11 +467,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     segment.text = newText.trim();
     notifyListeners();
 
-    final success = await updateConversationSegmentText(
-      conversation.id,
-      segment.id,
-      newText.trim(),
-    );
+    final success = await updateConversationSegmentText(conversation.id, segment.id, newText.trim());
     if (!success && !_isDisposed) {
       conversation.transcriptSegments[segmentIndex].text = oldText;
       notifyListeners();
@@ -529,11 +493,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       editedStructured.sections = [];
       notifyListeners();
 
-      final success = await persistSummaryEdit(
-        editedConversation.id,
-        null,
-        trimmed,
-      );
+      final success = await persistSummaryEdit(editedConversation.id, null, trimmed);
       if (success && ownerUid.isNotEmpty && ownerUid == SharedPreferencesUtil().uid) {
         await SiriIntegration.current.upsertConversations([editedConversation], expectedUid: ownerUid);
       }
@@ -553,9 +513,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
 
     final editedConversation = conversation;
-    final index = editedConversation.appResults.indexWhere(
-      (r) => r.appId == appId,
-    );
+    final index = editedConversation.appResults.indexWhere((r) => r.appId == appId);
     if (index < 0) return;
     final editedResult = editedConversation.appResults[index];
     final oldContent = editedResult.content;
@@ -564,11 +522,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     editedResult.content = trimmed;
     notifyListeners();
 
-    final success = await persistSummaryEdit(
-      editedConversation.id,
-      appId,
-      trimmed,
-    );
+    final success = await persistSummaryEdit(editedConversation.id, appId, trimmed);
     if (!success && !_isDisposed && identical(conversationOrNull, editedConversation)) {
       // See the first-party branch above: never roll back over a refreshed
       // conversation, replaced result, or newer edit.
@@ -584,21 +538,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// The persistence seam keeps optimistic summary state testable without
   /// sending a request. Production delegates to the summary PATCH endpoint.
   @visibleForTesting
-  Future<bool> persistSummaryEdit(
-    String conversationId,
-    String? appId,
-    String content,
-  ) {
+  Future<bool> persistSummaryEdit(String conversationId, String? appId, String content) {
     return updateConversationSummary(conversationId, appId, content);
   }
 
   /// Save an edit against the same summary identity used for display. Legacy
   /// app output without an id, duplicate app ids, and stale selections are
   /// read-only because the current mutation API addresses results by app id.
-  Future<void> saveEditingSummarySelection(
-    ConversationSummarySelection selection,
-    String newContent,
-  ) async {
+  Future<void> saveEditingSummarySelection(ConversationSummarySelection selection, String newContent) async {
     if (!selection.canEdit(conversation)) return;
     if (!selection.isApp) {
       await _saveEditingSummary(null, newContent);
@@ -616,10 +563,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  void setProviders(
-    AppProvider provider,
-    ConversationProvider conversationProvider,
-  ) {
+  void setProviders(AppProvider provider, ConversationProvider conversationProvider) {
     this.conversationProvider = conversationProvider;
     appProvider = provider;
     notifyListeners();
@@ -708,12 +652,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   Future<bool> persistTitleEdit(String conversationId, String title) => updateConversationTitle(conversationId, title);
 
   /// Folds an edit made in the shared task editor back into this conversation's task list.
-  void applyTaskEdit(
-    ActionItem item, {
-    String? description,
-    bool? completed,
-    bool deleted = false,
-  }) {
+  void applyTaskEdit(ActionItem item, {String? description, bool? completed, bool deleted = false}) {
     final items = conversationOrNull?.structured.actionItems;
     if (items == null || !items.contains(item)) return;
     if (deleted) {
@@ -734,10 +673,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   void undoDeleteActionItem(int idx) {
-    conversation.structured.actionItems.insert(
-      idx,
-      deletedActionItems.removeLast(),
-    );
+    conversation.structured.actionItems.insert(idx, deletedActionItems.removeLast());
     notifyListeners();
   }
 
@@ -766,9 +702,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     // The title saves when editing ends (Done or leaving the field); the title field calls
     // [saveTitle] and reports the outcome.
 
-    canDisplaySeconds = TranscriptSegment.canDisplaySeconds(
-      conversation.transcriptSegments,
-    );
+    canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
 
     loadPreferredSummarizationApp();
 
@@ -795,11 +729,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     updateReprocessConversationLoadingState(true);
     updateReprocessConversationId(conversation.id);
     try {
-      var updatedConversation = await _reprocess(
-        target.id,
-        appId: appId,
-        requireSpeakerReceipt: requireSpeakerReceipt,
-      );
+      var updatedConversation = await _reprocess(target.id, appId: appId, requireSpeakerReceipt: requireSpeakerReceipt);
       if (_isDisposed) return false;
       PlatformManager.instance.analytics.reProcessConversation(conversation);
       updateReprocessConversationLoadingState(false);
@@ -868,9 +798,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (suggestedAppIds.isEmpty || appProvider == null) return [];
 
     return appProvider!.apps
-        .where(
-          (app) => suggestedAppIds.contains(app.id) && app.worksWithMemories() && app.enabled,
-        )
+        .where((app) => suggestedAppIds.contains(app.id) && app.worksWithMemories() && app.enabled)
         .toList();
   }
 
@@ -942,23 +870,17 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   App? findAppById(String? appId) {
     if (appId == null) return null;
 
-    final enabledApp = _cachedEnabledConversationApps.firstWhereOrNull(
-      (app) => app.id == appId,
-    );
+    final enabledApp = _cachedEnabledConversationApps.firstWhereOrNull((app) => app.id == appId);
     if (enabledApp != null) return enabledApp;
 
-    final suggestedApp = _cachedSuggestedApps.firstWhereOrNull(
-      (app) => app.id == appId,
-    );
+    final suggestedApp = _cachedSuggestedApps.firstWhereOrNull((app) => app.id == appId);
     if (suggestedApp != null) return suggestedApp;
 
     // The two caches above only fill after the summary sheet fetches. The durable
     // app catalog (appProvider.apps) is loaded at startup, so a real app_id must
     // resolve here instead of rendering "Unknown App" until the sheet is opened
     // (SCA-359).
-    final providerApp = appProvider?.apps.firstWhereOrNull(
-      (app) => app.id == appId,
-    );
+    final providerApp = appProvider?.apps.firstWhereOrNull((app) => app.id == appId);
     return providerApp;
   }
 
@@ -978,9 +900,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         app.enabled = true;
 
         // Add to cached enabled apps if not already there
-        final existingIndex = _cachedEnabledConversationApps.indexWhere(
-          (a) => a.id == app.id,
-        );
+        final existingIndex = _cachedEnabledConversationApps.indexWhere((a) => a.id == app.id);
         if (existingIndex == -1) {
           _cachedEnabledConversationApps.add(app);
         } else {
@@ -1000,9 +920,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Adds an app to the cached enabled conversation apps list
   /// Used when a new app is created and installed from the quick template creator
   void addToEnabledConversationApps(App app) {
-    final existingIndex = _cachedEnabledConversationApps.indexWhere(
-      (a) => a.id == app.id,
-    );
+    final existingIndex = _cachedEnabledConversationApps.indexWhere((a) => a.id == app.id);
     if (existingIndex == -1) {
       _cachedEnabledConversationApps.add(app);
     } else {
@@ -1021,9 +939,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Checks if a suggested app is available/enabled for the user
   bool isSuggestedAppAvailable(String appId) {
     if (appProvider == null) return false;
-    return appProvider!.apps.any(
-      (app) => app.id == appId && app.worksWithMemories() && app.enabled,
-    );
+    return appProvider!.apps.any((app) => app.id == appId && app.worksWithMemories() && app.enabled);
   }
 
   void setCachedConversation(ServerConversation conversation) {
@@ -1094,9 +1010,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   /// Helper method to update the local conversation state with a calendar event
-  void _updateLocalConversationWithCalendarEvent(
-    CalendarEventLink? calendarEvent,
-  ) {
+  void _updateLocalConversationWithCalendarEvent(CalendarEventLink? calendarEvent) {
     if (_cachedConversation != null) {
       final updatedConversation = ServerConversation(
         id: _cachedConversation!.id,
@@ -1133,9 +1047,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Auto-links the conversation to the best overlapping calendar event
   Future<CalendarEventLink?> autoLinkCalendarEvent() async {
     try {
-      final calendarEvent = await conv_api.autoLinkCalendarEvent(
-        conversation.id,
-      );
+      final calendarEvent = await conv_api.autoLinkCalendarEvent(conversation.id);
       if (calendarEvent != null) {
         _updateLocalConversationWithCalendarEvent(calendarEvent);
       }
@@ -1149,10 +1061,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Links the conversation to a specific calendar event by event ID
   Future<CalendarEventLink?> linkCalendarEvent(String eventId) async {
     try {
-      final calendarEvent = await conv_api.linkCalendarEvent(
-        conversation.id,
-        eventId,
-      );
+      final calendarEvent = await conv_api.linkCalendarEvent(conversation.id, eventId);
       if (calendarEvent != null) {
         _updateLocalConversationWithCalendarEvent(calendarEvent);
       }
@@ -1172,11 +1081,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       final timeMin = conversationStart.subtract(const Duration(hours: 2));
       final timeMax = conversationEnd.add(const Duration(hours: 2));
 
-      return await listGoogleCalendarEvents(
-        timeMin: timeMin,
-        timeMax: timeMax,
-        maxResults: 30,
-      );
+      return await listGoogleCalendarEvents(timeMin: timeMin, timeMax: timeMax, maxResults: 30);
     } catch (e) {
       debugPrint('Error listing calendar events: $e');
       return [];
@@ -1213,9 +1118,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final lastUsedId = getLastUsedSummarizationAppId();
     if (lastUsedId == null || appProvider == null) return null;
 
-    return appProvider!.apps.firstWhereOrNull(
-      (app) => app.id == lastUsedId && app.worksWithMemories() && app.enabled,
-    );
+    return appProvider!.apps.firstWhereOrNull((app) => app.id == lastUsedId && app.worksWithMemories() && app.enabled);
   }
 
   bool _isDisposed = false;

@@ -170,10 +170,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                l10n.connectExternalAiTools,
-                style: OmiType.body.copyWith(color: OmiColors.textSecondary),
-              ),
+              Text(l10n.connectExternalAiTools, style: OmiType.body.copyWith(color: OmiColors.textSecondary)),
               const SizedBox(height: OmiSpacing.xxl),
               TextFormField(
                 controller: _nameController,
@@ -219,10 +216,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
                   children: [
                     const OmiSpinner(size: OmiSpinnerSize.small),
                     const SizedBox(width: OmiSpacing.xs),
-                    Text(
-                      l10n.authorizingMcpServer,
-                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                    ),
+                    Text(l10n.authorizingMcpServer, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                   ],
                 ),
                 const SizedBox(height: OmiSpacing.sm),
