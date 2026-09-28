@@ -11209,7 +11209,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get openCall => 'Åbn opkald';
 
   @override
-  String get captureRecoveryBanner => 'Lyden fra vedhænget når ikke frem til appen — tryk for at reparere';
+  String get captureRecoveryBanner => 'Omi sender ikke lyd — tryk for at oprette forbindelse igen';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

@@ -11218,7 +11218,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openCall => 'Mở cuộc gọi';
 
   @override
-  String get captureRecoveryBanner => 'Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa';
+  String get captureRecoveryBanner => 'Omi không gửi âm thanh — chạm để kết nối lại';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

@@ -343,7 +343,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     bool requireFeatureGate = true,
     Map<String, Object> extraProperties = const {},
   }) async {
-    if (state.episode != null) return;
+    if (!_canDeclare(state, trigger)) return;
     var allowed = true;
     if (requireFeatureGate) {
       try {
@@ -352,7 +352,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         allowed = false;
       }
     }
-    if (!allowed || state.episode != null) return;
+    if (!allowed || !_canDeclare(state, trigger)) return;
     final episode = CaptureWedgeEpisode(deviceId: deviceId, source: source, trigger: trigger, declaredAt: _now());
     state.episode = episode;
     _safeTrack('Capture Wedge Detected', {
@@ -365,6 +365,14 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     });
     notifyListeners();
     unawaited(_attemptRecovery(episode));
+  }
+
+  bool _isTelemetryOnlyTrigger(String trigger) =>
+      trigger == triggerBytesSentNoTranscript || trigger == triggerUploadSilence;
+
+  bool _canDeclare(_DeviceWedgeState state, String trigger) {
+    final active = state.episode;
+    return active == null || (_isTelemetryOnlyTrigger(active.trigger) && !_isTelemetryOnlyTrigger(trigger));
   }
 
   Future<void> _attemptRecovery(CaptureWedgeEpisode episode) async {
@@ -386,6 +394,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       _retryInFlightDevices.remove(episode.deviceId);
     }
     if (_episodeFor(episode.deviceId) != episode) return;
+    if (_isTelemetryOnlyTrigger(episode.trigger)) return;
     episode.promptVisible = true;
     notifyListeners();
   }

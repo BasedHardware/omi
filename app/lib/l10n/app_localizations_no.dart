@@ -11223,7 +11223,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get openCall => 'Åpne anrop';
 
   @override
-  String get captureRecoveryBanner => 'Lyden fra anhenget når ikke frem til appen — trykk for å reparere';
+  String get captureRecoveryBanner => 'Omi sender ikke lyd — trykk for å koble til igjen';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

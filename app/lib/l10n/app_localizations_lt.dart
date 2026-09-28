@@ -11242,7 +11242,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get openCall => 'Atidaryti skambutį';
 
   @override
-  String get captureRecoveryBanner => 'Pakabuko garsas nepasiekia programėlės — palieskite, kad ištaisytumėte';
+  String get captureRecoveryBanner => 'Omi nesiunčia garso — palieskite, kad prisijungtumėte iš naujo';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

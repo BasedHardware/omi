@@ -3543,7 +3543,7 @@
     "recordWith": "Записати через",
     "moreWaysToRecord": "Інші способи запису",
     "openCall": "Відкрити дзвінок",
-    "captureRecoveryBanner": "Звук кулона не надходить до застосунку — натисніть, щоб виправити",
+    "captureRecoveryBanner": "Omi не передає звук — натисніть, щоб підключитися знову",
     "phoneRecordingBlockedByPendantBatch": "Зупиніть Transcribe Later на підвісці перед записом на телефоні.",
     "captureNotTranscribing": "Немає транскрипції",
     "captureAudioSavedTranscribesLater": "Аудіо збережено, транскрипція пізніше",

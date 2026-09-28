@@ -11103,7 +11103,7 @@
     "recordWith": "Snemaj z",
     "moreWaysToRecord": "Več načinov snemanja",
     "openCall": "Odpri klic",
-    "captureRecoveryBanner": "Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo",
+    "captureRecoveryBanner": "Omi ne pošilja zvoka — tapnite za ponovno povezavo",
     "phoneRecordingBlockedByPendantBatch": "Pred snemanjem s telefonom ustavite Transcribe Later na obesku.",
     "captureNotTranscribing": "Ni prepisa",
     "captureAudioSavedTranscribesLater": "Zvok shranjen, prepis pozneje",

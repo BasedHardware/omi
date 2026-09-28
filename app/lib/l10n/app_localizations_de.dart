@@ -11315,7 +11315,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get openCall => 'Anruf öffnen';
 
   @override
-  String get captureRecoveryBanner => 'Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen';
+  String get captureRecoveryBanner => 'Omi sendet keinen Ton — zum erneuten Verbinden tippen';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

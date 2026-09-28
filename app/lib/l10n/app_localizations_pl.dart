@@ -11258,7 +11258,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get openCall => 'Otwórz połączenie';
 
   @override
-  String get captureRecoveryBanner => 'Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić';
+  String get captureRecoveryBanner => 'Omi nie wysyła dźwięku — dotknij, aby połączyć ponownie';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

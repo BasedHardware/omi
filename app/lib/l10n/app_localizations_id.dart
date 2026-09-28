@@ -11233,7 +11233,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get openCall => 'Buka panggilan';
 
   @override
-  String get captureRecoveryBanner => 'Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki';
+  String get captureRecoveryBanner => 'Omi tidak mengirim audio — ketuk untuk menghubungkan kembali';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

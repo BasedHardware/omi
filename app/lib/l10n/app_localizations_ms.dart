@@ -11252,7 +11252,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get openCall => 'Buka panggilan';
 
   @override
-  String get captureRecoveryBanner => 'Audio loket tidak sampai ke aplikasi — ketik untuk membaiki';
+  String get captureRecoveryBanner => 'Omi tidak menghantar audio — ketik untuk menyambung semula';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

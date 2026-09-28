@@ -3578,7 +3578,7 @@
     "recordWith": "Enregistrer avec",
     "moreWaysToRecord": "Autres façons d'enregistrer",
     "openCall": "Ouvrir l'appel",
-    "captureRecoveryBanner": "Le son du pendentif n'arrive pas à l'application — touchez pour réparer",
+    "captureRecoveryBanner": "Omi n’envoie pas de son — touchez pour vous reconnecter",
     "phoneRecordingBlockedByPendantBatch": "Arrêtez Transcribe Later sur votre pendentif avant d'enregistrer avec votre téléphone.",
     "captureNotTranscribing": "Pas de transcription",
     "captureAudioSavedTranscribesLater": "Audio enregistré, transcrit plus tard",

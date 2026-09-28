@@ -3543,7 +3543,7 @@
     "recordWith": "Tallennustapa",
     "moreWaysToRecord": "Lisää tallennustapoja",
     "openCall": "Avaa puhelu",
-    "captureRecoveryBanner": "Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla",
+    "captureRecoveryBanner": "Omi ei lähetä ääntä — yhdistä uudelleen napauttamalla",
     "phoneRecordingBlockedByPendantBatch": "Lopeta Transcribe Later riipuksessa ennen kuin nauhoitat puhelimella.",
     "captureNotTranscribing": "Ei litterointia",
     "captureAudioSavedTranscribesLater": "Ääni tallennettu, litteroidaan myöhemmin",

@@ -3543,7 +3543,7 @@
     "recordWith": "บันทึกด้วย",
     "moreWaysToRecord": "วิธีบันทึกเพิ่มเติม",
     "openCall": "เปิดการโทร",
-    "captureRecoveryBanner": "เสียงจากจี้ไม่ถึงแอป — แตะเพื่อซ่อมแซม",
+    "captureRecoveryBanner": "Omi ไม่ส่งเสียง — แตะเพื่อเชื่อมต่อใหม่",
     "phoneRecordingBlockedByPendantBatch": "หยุด Transcribe Later บนจี้ของคุณก่อนบันทึกด้วยโทรศัพท์",
     "captureNotTranscribing": "ไม่ได้ถอดความ",
     "captureAudioSavedTranscribesLater": "บันทึกเสียงแล้ว จะถอดความภายหลัง",

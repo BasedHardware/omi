@@ -11232,7 +11232,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get openCall => 'Öppna samtal';
 
   @override
-  String get captureRecoveryBanner => 'Ljudet från hänget når inte appen — tryck för att reparera';
+  String get captureRecoveryBanner => 'Omi skickar inget ljud — tryck för att ansluta igen';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

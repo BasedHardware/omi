@@ -11220,7 +11220,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get openCall => 'Otevřít hovor';
 
   @override
-  String get captureRecoveryBanner => 'Zvuk přívěsku se do aplikace nedostává — opravte klepnutím';
+  String get captureRecoveryBanner => 'Omi neodesílá zvuk — klepnutím se znovu připojte';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

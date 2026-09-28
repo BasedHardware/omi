@@ -325,7 +325,7 @@ void main() {
       monitor.onCaptureSessionEnded(connectedSession(monitor), binaryBytesSent: 320);
     }
 
-    test('three byte-producing sessions with no transcript declare an ungated wedge', () async {
+    test('three byte-producing sessions with no transcript track and retry without a prompt', () async {
       flagEnabled = false;
       final monitor = makeMonitor(withRetry: true);
       noTranscriptSession(monitor);
@@ -333,7 +333,7 @@ void main() {
       noTranscriptSession(monitor);
       await pumpEventQueue();
 
-      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerBytesSentNoTranscript);
+      expect(monitor.visiblePrompt, isNull);
       expect(retriedDevices, ['dev-a']);
       expect(forEvent('Capture Wedge Detected').single['trigger'], 'bytes_sent_no_transcript');
     });
@@ -350,7 +350,7 @@ void main() {
       expect(monitor.visiblePrompt, isNull);
     });
 
-    test('connected watchdog declares while the byte-producing socket never ends', () async {
+    test('two minutes of byte-producing silence tracks and retries without a prompt', () async {
       var transferRetries = 0;
       final monitor = makeMonitor(transferRetry: () async => transferRetries++);
       final handle = connectedSession(monitor);
@@ -361,16 +361,35 @@ void main() {
       await pumpEventQueue();
 
       expect(transferRetries, 1);
-      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerBytesSentNoTranscript);
+      expect(monitor.visiblePrompt, isNull);
       final detected = forEvent('Capture Wedge Detected').single;
+      expect(detected['trigger'], CaptureWedgeMonitor.triggerBytesSentNoTranscript);
       expect(detected['bytes_since_last_transcript'], 640);
       expect(detected['socket_still_connected'], isTrue);
+      monitor.dispose();
+    });
+
+    test('a later zero-byte streak can replace a quiet no-transcript episode', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      final handle = connectedSession(monitor);
+      monitor.onSocketBytesSent(handle, 640);
+      now = now.add(CaptureWedgeMonitor.connectedNoTranscriptWindow);
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt, isNull);
+
+      zeroSession(monitor);
+      zeroSession(monitor);
+      zeroSession(monitor);
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerZeroByteStreak);
+      expect(forEvent('Capture Wedge Detected'), hasLength(2));
       monitor.dispose();
     });
   });
 
   group('upload silence', () {
-    test('two-hour local backlog is surfaced and wakes transfer even with the legacy flag off', () async {
+    test('two-hour local backlog tracks and wakes transfer without a prompt', () async {
       var transferRetries = 0;
       flagEnabled = false;
       final monitor = makeMonitor(transferRetry: () async => transferRetries++);
@@ -379,7 +398,7 @@ void main() {
       await pumpEventQueue();
 
       expect(transferRetries, 1);
-      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerUploadSilence);
+      expect(monitor.visiblePrompt, isNull);
       final detected = forEvent('Capture Wedge Detected').single;
       expect(detected['pending_wal_count'], 4);
       expect(detected['oldest_pending_age_seconds'], 7200);
@@ -393,7 +412,7 @@ void main() {
 
       monitor.observeWalBacklog(pendingCount: 2, oldestPendingAt: now.subtract(const Duration(hours: 3)));
       await pumpEventQueue();
-      expect(monitor.visiblePrompt, isNotNull);
+      expect(monitor.visiblePrompt, isNull);
       monitor.onUploadCompleted();
       expect(monitor.visiblePrompt, isNull);
       expect(forEvent('Capture Recovery Resolved'), hasLength(1));
@@ -417,6 +436,18 @@ void main() {
       expect(detected['retained_wal_count'], 720);
       expect(detected['retention_policy'], 'oldest_first_count_cap');
       monitor.dispose();
+    });
+
+    test('storage risk supersedes a quiet upload episode and remains visible', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeWalBacklog(pendingCount: 2, oldestPendingAt: now.subtract(const Duration(hours: 3)));
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt, isNull);
+
+      monitor.observeStorageAtRisk(engagedAt: now, evictedCount: 1, retainedCount: 720);
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
+      expect(forEvent('Capture Wedge Detected'), hasLength(2));
     });
   });
 

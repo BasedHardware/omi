@@ -11286,7 +11286,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get openCall => 'Apri chiamata';
 
   @override
-  String get captureRecoveryBanner => 'L\'audio del ciondolo non arriva all\'app — tocca per riparare';
+  String get captureRecoveryBanner => 'Omi non invia audio — tocca per riconnetterti';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

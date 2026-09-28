@@ -3578,7 +3578,7 @@
     "recordWith": "Nagraj za pomocą",
     "moreWaysToRecord": "Więcej sposobów nagrywania",
     "openCall": "Otwórz połączenie",
-    "captureRecoveryBanner": "Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić",
+    "captureRecoveryBanner": "Omi nie wysyła dźwięku — dotknij, aby połączyć ponownie",
     "phoneRecordingBlockedByPendantBatch": "Zatrzymaj Transcribe Later na wisiorku, zanim zaczniesz nagrywać telefonem.",
     "captureNotTranscribing": "Brak transkrypcji",
     "captureAudioSavedTranscribesLater": "Dźwięk zapisany, transkrypcja później",

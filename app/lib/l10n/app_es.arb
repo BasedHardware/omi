@@ -3543,7 +3543,7 @@
     "recordWith": "Grabar con",
     "moreWaysToRecord": "Más formas de grabar",
     "openCall": "Abrir llamada",
-    "captureRecoveryBanner": "El audio del colgante no llega a la app — toca para reparar",
+    "captureRecoveryBanner": "Omi no está enviando audio — toca para volver a conectar",
     "phoneRecordingBlockedByPendantBatch": "Detén Transcribe Later en tu colgante antes de grabar con el teléfono.",
     "captureNotTranscribing": "Sin transcripción",
     "captureAudioSavedTranscribesLater": "Audio guardado, se transcribirá después",

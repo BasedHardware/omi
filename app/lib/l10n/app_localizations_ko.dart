@@ -11042,7 +11042,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get openCall => '통화 열기';
 
   @override
-  String get captureRecoveryBanner => '펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구';
+  String get captureRecoveryBanner => 'Omi가 오디오를 보내지 않고 있습니다 — 탭하여 다시 연결하세요';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '휴대폰으로 녹음하기 전에 펜던트에서 Transcribe Later를 중지하세요.';

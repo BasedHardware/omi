@@ -11299,7 +11299,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get openCall => 'Άνοιγμα κλήσης';
 
   @override
-  String get captureRecoveryBanner => 'Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή';
+  String get captureRecoveryBanner => 'Το Omi δεν στέλνει ήχο — πατήστε για επανασύνδεση';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

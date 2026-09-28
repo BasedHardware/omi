@@ -11244,7 +11244,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get openCall => 'Відкрити дзвінок';
 
   @override
-  String get captureRecoveryBanner => 'Звук кулона не надходить до застосунку — натисніть, щоб виправити';
+  String get captureRecoveryBanner => 'Omi не передає звук — натисніть, щоб підключитися знову';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Зупиніть Transcribe Later на підвісці перед записом на телефоні.';

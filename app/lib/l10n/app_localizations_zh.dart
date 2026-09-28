@@ -11019,7 +11019,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openCall => '打开通话';
 
   @override
-  String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
+  String get captureRecoveryBanner => 'Omi 未发送音频 — 轻点以重新连接';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '在用手机录音之前，请先停止吊坠上的“稍后转录”。';

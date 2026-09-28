@@ -3543,7 +3543,7 @@
     "recordWith": "Запис с",
     "moreWaysToRecord": "Още начини за запис",
     "openCall": "Отвори обаждането",
-    "captureRecoveryBanner": "Звукът от висулката не достига до приложението — докоснете, за да поправите",
+    "captureRecoveryBanner": "Omi не изпраща аудио — докоснете, за да се свържете отново",
     "phoneRecordingBlockedByPendantBatch": "Спрете Transcribe Later на висулката си, преди да записвате с телефона.",
     "captureNotTranscribing": "Без транскрипция",
     "captureAudioSavedTranscribesLater": "Аудиото е запазено, транскрипция по-късно",

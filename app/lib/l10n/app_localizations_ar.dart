@@ -11155,7 +11155,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get openCall => 'فتح المكالمة';
 
   @override
-  String get captureRecoveryBanner => 'صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح';
+  String get captureRecoveryBanner => 'أومي لا يرسل الصوت — انقر لإعادة الاتصال';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'أوقف «النسخ لاحقًا» على قلادتك قبل التسجيل بهاتفك.';

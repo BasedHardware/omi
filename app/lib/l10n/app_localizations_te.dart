@@ -11271,7 +11271,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get openCall => 'కాల్‌ను తెరవండి';
 
   @override
-  String get captureRecoveryBanner => 'పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి';
+  String get captureRecoveryBanner => 'Omi ఆడియో పంపడం లేదు — మళ్లీ కనెక్ట్ చేయడానికి ట్యాప్ చేయండి';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
