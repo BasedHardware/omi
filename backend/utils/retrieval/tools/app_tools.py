@@ -261,7 +261,7 @@ def create_app_tool(
                     db_executor, record_app_webhook_failure, app_id, 0, type(e).__name__, ENDPOINT_MCP_TOOL
                 )
                 await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, type(e).__name__)
-                return f"Error calling MCP tool {app_tool.name}: {e}"
+                return f"Error calling MCP tool {app_tool.name}. Please try again later."
 
         return StructuredTool(
             name=tool_name,
@@ -437,7 +437,7 @@ async def _call_tool_endpoint(
             db_executor, record_app_webhook_failure, app_id, 0, type(e).__name__, ENDPOINT_CHAT_TOOL
         )
         await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, type(e).__name__)
-        return f"Error calling {app_tool.name}: {str(e)}"
+        return f"Error calling {app_tool.name}. Please try again later."
 
 
 def load_app_tools(uid: str) -> List[BaseTool]:
