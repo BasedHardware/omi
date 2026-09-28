@@ -201,12 +201,13 @@ runs:
       run: |
         set -euo pipefail
         python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+        DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
         ENVIRONMENT=dev
         if [[ '${{ inputs.project_id }}' == 'based-hardware' ]]; then ENVIRONMENT=prod; fi
-        python3 backend/scripts/scheduler_reconcile.py \
+        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/scheduler_reconcile.py" \
           --environment "$ENVIRONMENT" --project '${{ inputs.project_id }}' \
           --apply --jobs sync-backfill-uid-sequencer
-        python3 backend/scripts/scheduler_reconcile.py \
+        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/scheduler_reconcile.py" \
           --environment "$ENVIRONMENT" --project '${{ inputs.project_id }}' --check
 
     - name: Provision and verify sync ledger TTL
