@@ -75,7 +75,9 @@ prometheus:
         memory: 2G
       limits:
         cpu: "2"
-        memory: 4Gi
+        # 2026-09-28: 4Gi OOM-killed Prometheus (CrashLoopBackOff during WAL replay);
+        # raised to 8Gi. The request stays 2G because the monitoring node's requests are ~94% committed.
+        memory: 8Gi
     storageSpec:
     # Using PersistentVolumeClaim
       volumeClaimTemplate:
