@@ -591,6 +591,23 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "iOS BLE diagnostics must not poll RSSI while closed, and frequent battery notifications must not rewrite the complete history on every packet"
+  - id: ios-safe-foundation-sinks
+    command: ["ruby", "app/ios/test/safe_foundation_sinks_test.rb"]
+    triggers: ["app/ios/Runner/SafeFoundationSinks.swift", "app/ios/test/safe_foundation_sinks_test.rb", "app/ios/Runner.xcodeproj/project.pbxproj"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Hostile plist, JSON, record, and floating-point inputs must fail safely at the native sinks"
+  - id: ios-swiftlint
+    command: ["bash", "app/ios/scripts/swiftlint-wrapper.sh", "lint"]
+    triggers: ["app/ios/**/*.swift", "app/ios/.swiftlint.yml", "app/ios/.swiftlint-baseline.json", "app/ios/scripts/swiftlint-wrapper.sh", "app/ios/scripts/prepare-swiftlint-baseline.py"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Pinned SwiftLint rejects new iOS native safety violations outside the committed baseline"
+  - id: ios-swiftlint-baseline
+    command: ["python3", "app/ios/scripts/check-swiftlint-baseline.py", "--base", "{base}"]
+    triggers: ["app/ios/**/*.swift", "app/ios/.swiftlint-baseline.json", "app/ios/scripts/check-swiftlint-baseline.py"]
+    lanes: ["local", "ci"]
+    reason: "iOS SwiftLint baseline may only shrink and suppressions need a named rule and reason"
   - id: ios-userdefaults-plist-values
     command: ["python3", "app/ios/test/check_userdefaults_plist_values.py"]
     triggers: ["app/ios/**/*.swift", "app/ios/test/check_userdefaults_plist_values.py", ".github/checks-manifest.yaml"]
