@@ -170,3 +170,4 @@ BEGIN
         SELECT 1 FROM omi_memory.listen_formation_finalizations f WHERE f.account_id=v_account AND f.session_id=p_session_id));
   RETURN omi_memory.read_listen_audio_transcription(p_session_id);
 END $function$;
+
