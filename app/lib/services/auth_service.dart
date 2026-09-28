@@ -704,6 +704,11 @@ class AuthService {
       Uri.parse('${Env.authApiBaseUrl}v1/auth/local-dev/custom-token'),
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
       body: {'uid': uid},
+    ).timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => throw StateError(
+        'Cannot reach the local development server. Connect the iPhone to the same Wi-Fi as the Mac and try again.',
+      ),
     );
 
     if (response.statusCode == 404) {
@@ -722,7 +727,12 @@ class AuthService {
       throw Exception('Local development sign-in returned no custom token');
     }
 
-    final credential = await FirebaseAuth.instance.signInWithCustomToken(customToken);
+    final credential = await FirebaseAuth.instance.signInWithCustomToken(customToken).timeout(
+          const Duration(seconds: 8),
+          onTimeout: () => throw StateError(
+            'Cannot reach the local Firebase Auth emulator. Connect the iPhone to the same Wi-Fi as the Mac and try again.',
+          ),
+        );
     await _updateUserPreferences(credential, 'local_dev');
     Logger.debug('Local development sign-in successful');
     return credential;
