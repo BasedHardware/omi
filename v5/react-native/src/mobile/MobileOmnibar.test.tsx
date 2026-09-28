@@ -1,6 +1,6 @@
 import React from 'react';
 import Renderer, {act} from 'react-test-renderer';
-import {TextInput} from 'react-native';
+import {StyleSheet, TextInput} from 'react-native';
 import {MobileOmnibar} from './MobileOmnibar';
 
 test('stop is offered in every mode; Search submits when nothing can be stopped', () => {
@@ -76,5 +76,49 @@ test('the pushed Chat page keeps one Ask composer without a Search switch', () =
   expect(tree.root.findByType(TextInput).props.accessibilityLabel).toBe(
     'Ask Omi',
   );
+  act(() => tree.unmount());
+});
+
+test('one growing field: Return adds a line on the chat page and submits on Home', () => {
+  const props = {
+    mode: 'Ask' as const,
+    value: 'Draft',
+    onChange: jest.fn(),
+    onModeChange: jest.fn(),
+    onSubmit: jest.fn(),
+    onStop: jest.fn(),
+    busy: false,
+    canStop: false,
+    inputRef: {current: null},
+  };
+  let tree!: Renderer.ReactTestRenderer;
+  act(() => {
+    tree = Renderer.create(<MobileOmnibar {...props} />);
+  });
+  const input = tree.root.findByType(TextInput);
+  expect(input.props.multiline).toBe(true);
+  expect(input.props.submitBehavior).toBe('submit');
+  act(() => tree.update(<MobileOmnibar {...props} chatPage />));
+  // Same instance: sending from Home keeps focus and the keyboard.
+  expect(tree.root.findByType(TextInput)).toBe(input);
+  expect(input.props.submitBehavior).toBe('newline');
+  const lineHeight = 22;
+  act(() =>
+    input.props.onContentSizeChange({
+      nativeEvent: {contentSize: {height: lineHeight * 3 + 22}},
+    }),
+  );
+  const grown = StyleSheet.flatten(input.props.style).height;
+  expect(grown).toBeGreaterThan(44);
+  act(() =>
+    input.props.onContentSizeChange({
+      nativeEvent: {contentSize: {height: 5000}},
+    }),
+  );
+  const capped = StyleSheet.flatten(input.props.style).height;
+  expect(capped).toBeLessThan(5000);
+  expect(input.props.scrollEnabled).toBe(true);
+  act(() => tree.update(<MobileOmnibar {...props} chatPage value="" />));
+  expect(StyleSheet.flatten(input.props.style).height).toBe(44);
   act(() => tree.unmount());
 });

@@ -286,9 +286,12 @@ function Preview() {
   );
   const [chatError, setChatError] = useState<string | null>(
     chatState === "error"
-      ? "Example error: your message could not be sent. Try again."
+      ? "Example error: your message wasn’t sent. Your draft is still here."
+      : chatState === "history-error"
+      ? "Chat history could not be loaded. Check your connection and try again."
       : null
   );
+  const chatHistoryFailed = chatState === "history-error";
   const [deviceOpen, setDeviceOpen] = useState(deviceState !== null);
   const [deviceNote, setDeviceNote] = useState<string | null>(
     deviceState === "error"
@@ -303,8 +306,20 @@ function Preview() {
   const composerRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
-    if (!chatState || chatState === "empty" || chatState === "error") return [];
-    const base = 1789641000;
+    if (
+      !chatState ||
+      chatState === "empty" ||
+      chatState === "error" ||
+      chatState === "history-error" ||
+      chatState === "loading"
+    )
+      return [];
+    // Fixture times are relative to the day the preview runs so the day
+    // separators read "Yesterday" / "Today" (the long thread spans both).
+    const morning = new Date();
+    morning.setHours(9, 30, 0, 0);
+    const base = Math.floor(morning.getTime() / 1000);
+    const yesterday = base - 24 * 60 * 60 + 6 * 60 * 60;
     const human = (id: string, text: string, offset: number): ChatMessage => ({
       id,
       sender: "human",
@@ -335,19 +350,49 @@ function Preview() {
       ),
     ];
     if (chatState === "long") {
+      const at = (id: string, message: ChatMessage, seconds: number) => ({
+        ...message,
+        id,
+        createdAt: seconds,
+      });
       return [
-        ...Array.from({ length: 5 }, (_, index) => [
-          human(
+        // Yesterday afternoon: a few turns, two of them back to back.
+        ...Array.from({ length: 3 }, (_, index) => [
+          at(
             `long-human-${index}`,
-            `What should I do after step ${index + 1}?`,
-            120 + index * 120
+            human("", `What should I do after step ${index + 1}?`, 0),
+            yesterday + index * 900
           ),
-          ai(
+          at(
             `long-ai-${index}`,
-            "Keep the plan small and check the outcome before adding more work.\n\n- Write one action.\n- Assign an owner.\n- Review tomorrow.",
-            180 + index * 120
+            ai(
+              "",
+              "Keep the plan small and check the outcome before adding more work.\n\n- Write one action.\n- Assign an owner.\n- Review tomorrow.",
+              0
+            ),
+            yesterday + index * 900 + 40
           ),
         ]).flat(),
+        at(
+          "long-human-followup",
+          human("", "And if the owner is busy?", 0),
+          yesterday + 2 * 900 + 120
+        ),
+        at(
+          "long-human-followup-2",
+          human("", "Say they’re out all week.", 0),
+          yesterday + 2 * 900 + 150
+        ),
+        at(
+          "long-ai-followup",
+          ai(
+            "",
+            "Then pick a backup owner now, before the week starts, and tell them what `done` looks like.",
+            0
+          ),
+          yesterday + 2 * 900 + 200
+        ),
+        // Today: the Markdown showcase.
         human(
           "markdown-human",
           "Show me the checklist and an example command.",
@@ -355,7 +400,7 @@ function Preview() {
         ),
         ai(
           "markdown-ai",
-          "## Next steps\n\n1. Pick the **smallest** useful action.\n2. Record what changed.\n\n```sh\necho 'review the plan'\n```\n\nSee [the example](https://example.com/guide) for context.",
+          "## Next steps\n\n1. Pick the **smallest** useful action.\n2. Record what changed in `notes.md`.\n\n```sh\necho 'review the plan' && grep -n 'owner' notes.md | sort | uniq -c | head -n 20 # a long line scrolls sideways\n```\n\nSee [the example](https://example.com/guide) for context.",
           860
         ),
       ];
@@ -517,6 +562,7 @@ function Preview() {
               hasOlderChat: false,
               loadingOlderChat: false,
               loadingHistory: chatState === "loading",
+              chatHistoryFailed,
               chatBusy,
               chatError,
               onRefresh: noop,
@@ -527,6 +573,7 @@ function Preview() {
               onSend: noop,
               onStop: noop,
               onRetryChat: noop,
+              onRetryChatHistory: noop,
             })
           : surface === "mobile" || (surface === "mobile-setup" && complete)
           ? mobileRoot(
@@ -543,6 +590,8 @@ function Preview() {
                       busy: chatBusy,
                       error: chatError,
                       loadingHistory: chatState === "loading",
+                      historyFailed: chatHistoryFailed,
+                      onRetryHistory: noop,
                       hasOlder: false,
                       loadingOlder: false,
                       onLoadOlder: noop,
@@ -551,8 +600,10 @@ function Preview() {
                         setRoute(beforeChat.current);
                       },
                       prompts: [
+                        "What did I talk about today?",
+                        "Show my pending tasks",
                         "What should I remember?",
-                        "Help me find a next step",
+                        "Summarize my recent conversations",
                       ],
                       onUsePrompt: (prompt) => {
                         setDraft(prompt);

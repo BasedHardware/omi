@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {StyleSheet} from 'react-native';
 import {Streamdown, type Components} from 'streamdown';
 import type {ChatMessageContentProps} from './ChatMessageContent.types';
@@ -17,6 +17,84 @@ function safeLink(value: string) {
     return undefined;
   }
 }
+function textOf(node: React.ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map(textOf).join('');
+  }
+  if (React.isValidElement(node)) {
+    return textOf((node.props as {children?: React.ReactNode}).children);
+  }
+  return '';
+}
+
+/**
+ * A fenced code block: a quiet header with the language and a Copy button,
+ * and one horizontal scroll for the code (same shape as ChatCodeBlock on
+ * native).
+ */
+function WebCodeBlock({children}: {children?: React.ReactNode}) {
+  const child = React.Children.toArray(children)[0];
+  const className = React.isValidElement(child)
+    ? String((child.props as {className?: string}).className ?? '')
+    : '';
+  const language = /language-([\w+#-]+)/.exec(className)?.[1];
+  const code = textOf(children).replace(/\n$/, '');
+  const [copied, setCopied] = useState<'ready' | 'copied' | 'failed'>('ready');
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) {
+        clearTimeout(timer.current);
+      }
+    },
+    [],
+  );
+  const label =
+    copied === 'copied'
+      ? 'Copied'
+      : copied === 'failed'
+      ? 'Copy unavailable'
+      : 'Copy code';
+  return (
+    <div className="omi-chat-code">
+      <div className="omi-chat-code-header">
+        <span>{language ?? 'Code'}</span>
+        <button
+          type="button"
+          aria-label={label}
+          title={label}
+          onClick={() => {
+            const clipboard = (
+              navigator as Navigator & {
+                clipboard?: {writeText(value: string): Promise<void>};
+              }
+            ).clipboard;
+            if (!clipboard) {
+              setCopied('failed');
+              return;
+            }
+            clipboard
+              .writeText(code)
+              .then(() => {
+                setCopied('copied');
+                if (timer.current !== null) {
+                  clearTimeout(timer.current);
+                }
+                timer.current = setTimeout(() => setCopied('ready'), 1600);
+              })
+              .catch(() => setCopied('failed'));
+          }}>
+          {copied === 'copied' ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre>{children}</pre>
+    </div>
+  );
+}
+
 const components: Components = {
   strong: ({children}) => <strong>{children}</strong>,
   em: ({children}) => <em>{children}</em>,
@@ -45,8 +123,10 @@ const components: Components = {
       aria-label={checked ? 'Completed task' : 'Incomplete task'}
     />
   ),
-  pre: ({children}) => <pre>{children}</pre>,
-  code: ({children}) => <code>{children}</code>,
+  pre: ({children}) => <WebCodeBlock>{children}</WebCodeBlock>,
+  code: ({children, className}) => (
+    <code className={className}>{children}</code>
+  ),
 };
 const allowedElements = [
   'p',

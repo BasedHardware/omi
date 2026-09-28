@@ -1,5 +1,5 @@
-import React from 'react';
-import {StyleSheet, TextInput, View} from 'react-native';
+import React, {useEffect, useState} from 'react';
+import {Platform, StyleSheet, TextInput, View} from 'react-native';
 import {MaterialIcon} from '../ui/MaterialIcon';
 
 import {FocusPressable} from '../ui/Pressable';
@@ -12,6 +12,13 @@ export type MobileOmnibarMode = 'Ask' | 'Search';
  * The shared Ask/Search composer: one capsule on a raised surface, mode
  * icons inline on the left, and an ink send circle on the right (the same
  * shape the chat transcript's composer rule describes).
+ *
+ * The field is one TextInput instance on every page, so sending from Home
+ * and landing on the pushed chat page keeps focus and the keyboard. It grows
+ * with the draft (up to eight lines on the chat page). On the chat page
+ * Return adds a line and the circle sends, as in every messaging app; on the
+ * Home dock Return submits. On web, Enter submits and Shift+Enter adds a
+ * line.
  */
 export function MobileOmnibar({
   mode,
@@ -51,6 +58,15 @@ export function MobileOmnibar({
     }
   };
   const glyph = disabled ? theme.color.inkDisabled : theme.color.onInk;
+  const lineHeight = theme.type.body.lineHeight;
+  const minHeight = theme.size.hitTarget;
+  const maxHeight = lineHeight * (chatPage ? 8 : 4) + (minHeight - lineHeight);
+  const [height, setHeight] = useState(minHeight);
+  useEffect(() => {
+    if (value === '') {
+      setHeight(minHeight);
+    }
+  }, [minHeight, value]);
   return (
     <View
       accessibilityLabel={chatPage ? 'Chat composer' : 'Ask and search dock'}
@@ -84,12 +100,37 @@ export function MobileOmnibar({
           value={value}
           onChangeText={onChange}
           onSubmitEditing={submit}
-          returnKeyType={mode === 'Ask' ? 'send' : 'search'}
+          multiline
+          submitBehavior={chatPage ? 'newline' : 'submit'}
+          blurOnSubmit={false}
+          onKeyPress={event => {
+            const key = event.nativeEvent as {key?: string; shiftKey?: boolean};
+            if (Platform.OS === 'web' && key.key === 'Enter' && !key.shiftKey) {
+              (event as {preventDefault?: () => void}).preventDefault?.();
+              submit();
+            }
+          }}
+          onContentSizeChange={event => {
+            const next = Math.min(
+              maxHeight,
+              Math.max(
+                minHeight,
+                Math.ceil(event.nativeEvent.contentSize.height),
+              ),
+            );
+            setHeight(current => (current === next ? current : next));
+          }}
+          scrollEnabled={height >= maxHeight}
+          textAlignVertical="center"
+          {...(Platform.OS === 'web' ? {rows: 1} : {})}
+          returnKeyType={
+            chatPage ? 'default' : mode === 'Ask' ? 'send' : 'search'
+          }
           placeholder={mode === 'Ask' ? 'Ask Omi…' : 'Search Omi…'}
           placeholderTextColor={theme.color.inkTertiary}
           keyboardAppearance={theme.scheme}
           selectionColor={theme.color.ink}
-          style={styles.input}
+          style={[styles.input, {height}]}
         />
         {mode === 'Search' && value.length > 0 && (
           <FocusPressable
@@ -143,9 +184,10 @@ const createStyles = (t: OmiTheme) => ({
   },
   field: {
     flexDirection: 'row' as const,
-    alignItems: 'center' as const,
+    alignItems: 'flex-end' as const,
     minHeight: t.size.control + 4,
     paddingHorizontal: t.space.xs,
+    paddingVertical: 3,
     gap: 2,
     borderRadius: t.radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
@@ -165,10 +207,12 @@ const createStyles = (t: OmiTheme) => ({
     ...t.type.body,
     flex: 1,
     minWidth: 0,
-    minHeight: t.size.hitTarget,
     paddingHorizontal: t.space.sm,
-    paddingVertical: 0,
+    paddingTop: (t.size.hitTarget - t.type.body.lineHeight) / 2,
+    paddingBottom: (t.size.hitTarget - t.type.body.lineHeight) / 2,
     color: t.color.ink,
+    // The capsule is the focus affordance on web.
+    ...(Platform.OS === 'web' ? {outlineStyle: 'none' as never} : {}),
   },
   clear: {
     width: t.size.hitTarget,

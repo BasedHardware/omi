@@ -291,60 +291,77 @@ export function DesktopChrome({
           {!hostMode && <DesktopTrafficLights />}
         </View>
         <View style={styles.omnibar}>
-          <View style={styles.modes}>
-            <Animated.View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                top: 4,
-                bottom: 4,
-                left: 0,
-                borderRadius: 16,
-                backgroundColor: token.color.glassSelected,
-                transform: [{translateX: modePillX}],
-                width: modePillW,
-                opacity: modePillOpacity,
-              }}
-            />
-            {(['Ask', 'Search'] as const).map(value => {
-              const iconName = value === 'Ask' ? 'chat_bubble' : 'search';
-              return (
-                <FocusPressable
-                  key={value}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Use ${value} mode`}
-                  accessibilityState={{selected: mode === value}}
-                  onLayout={event => {
-                    const {x, width} = event.nativeEvent.layout;
-                    setModeFrames(current => ({
-                      ...current,
-                      [value]: {x, width},
-                    }));
-                  }}
-                  onPress={() => onModeChange?.(value)}
-                  style={styles.modeButton}>
-                  <MaterialIcon
-                    name={iconName}
-                    size={15}
-                    color={
-                      mode === value ? token.color.ink : token.color.inkMuted
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.modeText,
-                      mode === value && styles.modeTextActive,
-                    ]}>
-                    {value}
-                  </Text>
-                </FocusPressable>
-              );
-            })}
-          </View>
+          {chatActive ? null : (
+            <View style={styles.modes}>
+              <Animated.View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  top: 4,
+                  bottom: 4,
+                  left: 0,
+                  borderRadius: 16,
+                  backgroundColor: token.color.glassSelected,
+                  transform: [{translateX: modePillX}],
+                  width: modePillW,
+                  opacity: modePillOpacity,
+                }}
+              />
+              {(['Ask', 'Search'] as const).map(value => {
+                const iconName = value === 'Ask' ? 'chat_bubble' : 'search';
+                return (
+                  <FocusPressable
+                    key={value}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use ${value} mode`}
+                    accessibilityState={{selected: mode === value}}
+                    onLayout={event => {
+                      const {x, width} = event.nativeEvent.layout;
+                      setModeFrames(current => ({
+                        ...current,
+                        [value]: {x, width},
+                      }));
+                    }}
+                    onPress={() => onModeChange?.(value)}
+                    style={styles.modeButton}>
+                    <MaterialIcon
+                      name={iconName}
+                      size={15}
+                      color={
+                        mode === value ? token.color.ink : token.color.inkMuted
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.modeText,
+                        mode === value && styles.modeTextActive,
+                      ]}>
+                      {value}
+                    </Text>
+                  </FocusPressable>
+                );
+              })}
+            </View>
+          )}
           {chatActive ? (
-            <Text style={styles.chatDestination} accessibilityRole="header">
-              Chat
-            </Text>
+            // In Chat the composer at the bottom is the only place to type
+            // a message, so the omnibar becomes Search only: one press opens
+            // Recall with its search field focused.
+            <FocusPressable
+              accessibilityRole="search"
+              accessibilityLabel="Search Recall"
+              accessibilityHint="Opens Recall to search your history"
+              onPress={() => onModeChange?.('Search')}
+              style={styles.searchOnly}>
+              <MaterialIcon
+                name="search"
+                size={16}
+                color={token.color.inkMuted}
+              />
+              <Text numberOfLines={1} style={styles.searchOnlyText}>
+                {desktopSearchPlaceholder}
+              </Text>
+            </FocusPressable>
           ) : (
             <TextInput
               accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search Recall'}
@@ -485,9 +502,20 @@ export function DesktopChrome({
           accessibilityLabel="Open Chat"
           accessibilityState={{selected: chatActive}}
           onPress={() => onNavigate(chatActive ? 'Home' : 'Chat')}
-          style={[styles.modeButton, chatActive && styles.chatSelected]}>
-          <MaterialIcon name="chat_bubble" size={15} color={token.color.ink} />
-          <Text style={styles.modeText}>Chat</Text>
+          style={({pressed}) => [
+            styles.filterHit,
+            chatActive && styles.filterHitSelected,
+            pressed && styles.pressed,
+          ]}>
+          <MaterialIcon
+            name="forum"
+            size={14}
+            color={chatActive ? token.color.ink : token.color.inkMuted}
+          />
+          <Text
+            style={[styles.filterText, chatActive && styles.filterTextActive]}>
+            Chat
+          </Text>
         </FocusPressable>
         {desktopActivityFilters.map(id => {
           // Filters belong to the Activity page: away from it (Settings,
@@ -657,13 +685,21 @@ const createStyles = (token: DesktopTokens) =>
     },
     modeText: {fontSize: 12, color: token.color.inkMuted},
     modeTextActive: {color: token.color.ink},
-    chatSelected: {backgroundColor: token.color.glassSelected},
-    chatDestination: {
-      color: token.color.ink,
+    searchOnly: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      borderRadius: 16,
+      flex: 1,
+      flexDirection: 'row',
+      gap: 8,
+      minWidth: 0,
+      paddingHorizontal: 10,
+    },
+    searchOnlyText: {
+      color: token.color.inkMuted,
       flex: 1,
       fontFamily: token.font,
       fontSize: token.type.search,
-      fontWeight: '600',
     },
     chrome: {
       gap: 10,

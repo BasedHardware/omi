@@ -59,7 +59,7 @@ index.js → App.tsx → src/app/AppOrchestrator.tsx
 ### Desktop shell (`src/desktop/`)
 
 - **Routes** (`DesktopApp.tsx`): `'Home'` (the Activity page), `'Rewind'`
-  (capture detail), `'Settings'`. **Chat is an overlay, not a route.**
+  (capture detail), `'Settings'`. **Chat is a stage destination (`chatOpen`), not a route** — see `../docs/chat-ux.md`.
 - **Chrome layout contract** (`DesktopTopChrome.tsx` + `desktopChrome.ts`):
   row 1 = omnibar with the traffic-light inset spacer, plus capture toggle
   and settings gear; row 2 = Activity filters (All / Conversations / Recall

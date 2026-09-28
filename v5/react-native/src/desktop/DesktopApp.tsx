@@ -121,6 +121,9 @@ type Props = TaskMutationProps & {
   onSend: () => void;
   onStop: () => void;
   onRetryChat?: (message: ChatMessage) => void;
+  /** The chat history read failed (not an empty conversation). */
+  chatHistoryFailed?: boolean;
+  onRetryChatHistory?: () => void;
   onWorkspaceReload?: () => void;
   onPreferencesChange?: (prefs: DesktopPreferences) => void;
   initialAppearance?: DesktopThemeName;
@@ -156,6 +159,8 @@ export function DesktopApp({
   onSend,
   onStop,
   onRetryChat,
+  chatHistoryFailed = false,
+  onRetryChatHistory,
   onSignIn,
   onCancelSignIn,
   onSignOut,
@@ -322,10 +327,6 @@ export function DesktopApp({
     setMode('Ask');
     setRoute('Home');
     setChatOpen(true);
-  };
-  const closeChat = () => {
-    setChatOpen(false);
-    setRoute('Home');
   };
   useEffect(() => {
     const browserDocument = (
@@ -501,6 +502,8 @@ export function DesktopApp({
             onSignOut={onSignOut}
             onStop={onStop}
             onRetryChat={onRetryChat}
+            chatHistoryFailed={chatHistoryFailed}
+            onRetryChatHistory={onRetryChatHistory}
             onUiVersionChange={setUiVersion}
             onWorkspaceReload={onWorkspaceReload}
             outcomes={outcomes}
@@ -530,7 +533,6 @@ export function DesktopApp({
           draft={draft}
           omnibarRef={omnibarRef}
           onDraftChange={onDraftChange}
-          liveControl={chatOpen ? liveVoiceControl : undefined}
           mode={mode}
           onModeChange={next => {
             if (next === 'Search') {
@@ -590,7 +592,6 @@ export function DesktopApp({
                 }}
                 onStop={onStop}
                 canStop={activeGenerationId !== null}
-                onClose={closeChat}
                 onRetry={onRetryChat}
                 onSuggest={prompt => {
                   onDraftChange(prompt);
@@ -599,6 +600,9 @@ export function DesktopApp({
                 hasOlder={hasOlderChat}
                 loadingOlder={loadingOlderChat}
                 loadingHistory={loadingHistory}
+                historyFailed={chatHistoryFailed}
+                onRetryHistory={onRetryChatHistory}
+                composerAccessory={liveVoiceControl}
                 onLoadOlder={onLoadOlderChat}
               />
             ) : route === 'Home' ? (

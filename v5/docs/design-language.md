@@ -69,9 +69,14 @@ readable on glass; tertiary is for opaque surfaces only.
   **Try Again**; empty is a glyph, a Title Case title, one sentence and at most
   one action. Failed reads never claim to be empty.
 - **Chat.** Your message sits in a quiet bubble on the right (`surfaceRaised`
-  on mobile, ink fill on desktop glass). Omi answers as flat text beside its
-  mark, with no bubble. The composer is a capsule; send is an ink circle when
-  enabled.
+  on mobile, `fillSelected` ink fill on desktop glass), at most 75% wide.
+  Omi answers as flat, full-width text with no bubble and no avatar; the Omi
+  mark appears only while Omi is thinking or writing. Day separators replace
+  per-message times; actions sit in a small bar under a reply (visible on the
+  newest, on hover or focus elsewhere). On desktop the transcript draws on
+  the window glass in the chat column, never in a panel of its own. The
+  composer is a capsule; send is an ink circle when enabled and Stop while
+  Omi answers. Details: `docs/chat-ux.md`.
 - **Toggles** look like switches (track + knob), ink track when on.
 - **Glass (desktop).** Panels share one corner radius (22) and one soft
   shadow; cards inside a panel have no shadow. Tertiary ink is not allowed on

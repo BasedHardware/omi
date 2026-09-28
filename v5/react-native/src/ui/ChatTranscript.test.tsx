@@ -83,16 +83,17 @@ test('each completed Omi reply offers a copy action for its full text', async ()
         }}
         animate={false}
         compact
+        latest
         reduceMotion
         onCopy={onCopy}
       />,
     );
   });
-  const copy = tree.root.find(node =>
+  const copy = tree.root.findAll(node =>
     String(node.props.accessibilityLabel)
       .toLowerCase()
       .includes('copy response'),
-  );
+  )[0];
   await act(async () => copy.props.onPress());
   expect(onCopy).toHaveBeenCalledWith('Full answer\nwith details');
   expect(JSON.stringify(tree.toJSON())).toContain('Copied');
@@ -181,15 +182,14 @@ test.each([false, true])(
             node.type === Text && node.props.children === 'Message content',
         ).parent!.props.style,
       );
-    if (desktop) {
-      expect(bubble().backgroundColor).toBe('rgba(255, 255, 255, 0.14)');
-      expect(bubble().borderRadius).toBe(18);
-      expect(bubble().borderWidth).toBe(0);
-    } else {
-      // Mobile follows the same convention: a quiet surface bubble for you.
-      expect(bubble().backgroundColor).toBe(omiPalettes.dark.surfaceRaised);
-      expect(bubble().borderWidth).toBe(0);
-    }
+    // Your words: a quiet bubble on the right, at most three quarters wide.
+    // Desktop uses the ink-weighted fill on glass; phones the raised grey.
+    expect(bubble().backgroundColor).toBe(
+      desktop ? omiPalettes.dark.fillSelected : omiPalettes.dark.surfaceRaised,
+    );
+    expect(bubble().borderRadius).toBe(20);
+    expect(bubble().borderWidth).toBeUndefined();
+    expect(bubble().maxWidth).toBe('75%');
     act(() =>
       tree.update(
         <ChatMessageRow
@@ -280,7 +280,8 @@ test('streaming assistant row keeps the Omi mark moving and replaces skeleton wi
         />,
       ),
     );
-    expect(tree.root.findByType(OmiAvatar).props.animate).toBe(false);
+    // A settled reply carries no avatar: the mark is only the live indicator.
+    expect(tree.root.findAllByType(OmiAvatar)).toHaveLength(0);
     act(() => tree.unmount());
   } finally {
     loop.mockRestore();

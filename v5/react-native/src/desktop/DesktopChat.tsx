@@ -1,16 +1,21 @@
-import React, {useCallback, useLayoutEffect, useRef, useState} from 'react';
-import {Platform, ScrollView, Text, TextInput, View} from 'react-native';
-import {MaterialIcon} from '../ui/MaterialIcon';
+import React, {useRef} from 'react';
+import {Text, TextInput, View} from 'react-native';
 
-import {isStreamingAssistant, type ChatMessage} from '../chatClient';
-import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
-import {FocusPressable} from '../ui/Pressable';
-import {OmiAvatar} from '../ui/OmiAvatar';
-import {ShippingPressable} from './ShippingPressable';
+import type {ChatMessage} from '../chatClient';
+import {ChatComposer} from '../ui/ChatComposer';
+import {ChatThread} from '../ui/ChatThread';
+import {MaterialIcon} from '../ui/MaterialIcon';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
-import {OmiButton} from '../design/primitives';
+import {OmiButton, OmiPageState} from '../design/primitives';
 import type {OmiTheme} from '../design/tokens';
+
+export const desktopChatSuggestions = [
+  'Help me think through a decision',
+  'Turn these thoughts into a plan',
+  'Help me prepare for a conversation',
+  'What did I talk about today?',
+] as const;
 
 type Props = {
   submission: number;
@@ -20,6 +25,9 @@ type Props = {
   hasOlder: boolean;
   loadingOlder: boolean;
   loadingHistory?: boolean;
+  /** The history read failed: say so instead of showing an empty chat. */
+  historyFailed?: boolean;
+  onRetryHistory?: () => void;
   onLoadOlder: () => void;
   onSuggest?: (prompt: string) => void;
   draft?: string;
@@ -27,9 +35,18 @@ type Props = {
   onSend?: () => void;
   onStop?: () => void;
   canStop?: boolean;
-  onClose?: () => void;
   onRetry?: (message: ChatMessage) => void;
+  /** Optional control inside the composer (Live voice). */
+  composerAccessory?: React.ReactNode;
 };
+
+/**
+ * The desktop Chat destination. It is part of the window, not a sheet: the
+ * transcript draws on the same glass as Activity in a centered reading
+ * column and scrolls under the chrome; the composer is a capsule anchored
+ * to the bottom of that column. With no messages yet, the greeting, the
+ * composer and a few suggestions sit together in the middle of the page.
+ */
 export function DesktopChat({
   submission,
   messages,
@@ -38,6 +55,8 @@ export function DesktopChat({
   hasOlder,
   loadingOlder,
   loadingHistory = false,
+  historyFailed = false,
+  onRetryHistory,
   onLoadOlder,
   onSuggest,
   draft = '',
@@ -45,373 +64,134 @@ export function DesktopChat({
   onSend,
   onStop,
   canStop = false,
-  onClose,
   onRetry,
+  composerAccessory,
 }: Props) {
   const styles = useOmiStyles(createStyles);
   const theme = useOmiTheme();
-  const list = useRef<ScrollView>(null);
-  const composerInput = useRef<TextInput>(null);
-  const follow = useRef(true);
-  const userScrolling = useRef(false);
-  const pointerScrolling = useRef(false);
-  const [following, setFollowing] = useState(true);
-  const contentHeight = useRef(0);
-  const scrollToBottom = useCallback(() => {
-    if (follow.current) {
-      list.current?.scrollToEnd({animated: false});
-    }
-  }, []);
-  const stopFollowing = useCallback(() => {
-    follow.current = false;
-    setFollowing(false);
-  }, []);
-  const jumpToLatest = useCallback(() => {
-    follow.current = true;
-    setFollowing(true);
-    list.current?.scrollToEnd({animated: true});
-  }, []);
-  const beginUserScroll = useCallback(() => {
-    userScrolling.current = true;
-    stopFollowing();
-  }, [stopFollowing]);
-  useLayoutEffect(() => {
-    if (Platform.OS !== 'web') {
-      return;
-    }
-    const node = list.current?.getScrollableNode() as
-      | (EventTarget & {ownerDocument: EventTarget})
-      | undefined;
-    if (!node) {
-      return;
-    }
-    const pointerDown = (event: Event) => {
-      if (event.target === node) {
-        pointerScrolling.current = true;
-        beginUserScroll();
-      }
-    };
-    const pointerUp = () => {
-      pointerScrolling.current = false;
-      userScrolling.current = false;
-    };
-    const keyDown = (event: Event) => {
-      if (
-        'key' in event &&
-        typeof event.key === 'string' &&
-        [
-          'ArrowUp',
-          'ArrowDown',
-          'PageUp',
-          'PageDown',
-          'Home',
-          'End',
-          ' ',
-        ].includes(event.key)
-      ) {
-        beginUserScroll();
-      }
-    };
-    node.addEventListener('wheel', beginUserScroll, {passive: true});
-    node.addEventListener('touchmove', beginUserScroll, {passive: true});
-    node.addEventListener('pointerdown', pointerDown);
-    node.addEventListener('keydown', keyDown);
-    node.ownerDocument.addEventListener('pointerup', pointerUp);
-    node.ownerDocument.addEventListener('pointercancel', pointerUp);
-    return () => {
-      node.removeEventListener('wheel', beginUserScroll);
-      node.removeEventListener('touchmove', beginUserScroll);
-      node.removeEventListener('pointerdown', pointerDown);
-      node.removeEventListener('keydown', keyDown);
-      node.ownerDocument.removeEventListener('pointerup', pointerUp);
-      node.ownerDocument.removeEventListener('pointercancel', pointerUp);
-    };
-  }, [beginUserScroll]);
-  useLayoutEffect(() => {
-    userScrolling.current = false;
-    follow.current = true;
-    setFollowing(true);
-  }, [submission]);
-  useLayoutEffect(() => {
-    if (following) {
-      scrollToBottom();
-    }
-  }, [following, submission, scrollToBottom]);
   const reduceMotion = useReduceMotion();
-  const empty =
-    messages.length === 0 ? (
-      loadingHistory ? (
-        <View style={styles.empty}>
-          <Text style={styles.muted}>Loading conversation…</Text>
-        </View>
-      ) : error ? (
-        <View style={styles.empty}>
-          <Text accessibilityRole="header" style={styles.title}>
-            Your message wasn’t sent
-          </Text>
-          <Text style={[styles.muted, styles.emptyCopy]}>
-            Your draft is ready below. Press Send to try again.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.empty}>
-          <OmiAvatar
-            tone="ink"
-            inkColor={theme.color.ink}
-            size={72}
-            motion="arrive"
-            reduceMotion={reduceMotion}
+  const composerInput = useRef<TextInput>(null);
+  const historyError = historyFailed && messages.length === 0;
+  // Nothing to read yet: greet, and keep the composer with the greeting. A
+  // failed first send keeps this layout (the draft stays in the composer).
+  const resting =
+    messages.length === 0 &&
+    !hasOlder &&
+    !loadingHistory &&
+    !busy &&
+    !historyFailed;
+  const sendError = error !== null && !historyError ? error : null;
+  const canCompose = Boolean(onDraftChange && onSend && onStop);
+  const composer =
+    canCompose || sendError !== null ? (
+      <View key="composer" style={[styles.column, styles.composerColumn]}>
+        {sendError !== null ? (
+          <View
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+            style={styles.notice}>
+            <MaterialIcon
+              name="info"
+              size={theme.size.iconSmall}
+              color={theme.color.danger}
+            />
+            <Text style={styles.noticeText}>{sendError}</Text>
+          </View>
+        ) : null}
+        {onDraftChange && onSend && onStop ? (
+          <ChatComposer
+            inputRef={composerInput}
+            value={draft}
+            onChangeText={onDraftChange}
+            onSend={onSend}
+            onStop={onStop}
+            canStop={canStop}
+            busy={busy}
+            accessory={composerAccessory}
           />
+        ) : null}
+      </View>
+    ) : null;
+  if (resting) {
+    return (
+      <View style={styles.root} accessibilityLabel="Chat with Omi">
+        <View key="lead" style={[styles.column, styles.greeting]}>
           <Text accessibilityRole="header" style={styles.title}>
             What’s on your mind?
           </Text>
-          <Text style={[styles.muted, styles.emptyCopy]}>
+          <Text style={styles.subtitle}>
             Ask about a conversation, a task, or something you want to remember.
           </Text>
-          {onSuggest && !busy ? (
+        </View>
+        {composer}
+        <View key="tail" style={[styles.column, styles.tail]}>
+          {onSuggest && error === null ? (
             <View style={styles.suggestions}>
-              {[
-                'Help me think through a decision',
-                'Turn these thoughts into a plan',
-                'Help me prepare for a conversation',
-              ].map(prompt => (
-                <ShippingPressable
+              {desktopChatSuggestions.map(prompt => (
+                <OmiButton
                   key={prompt}
-                  accessibilityRole="button"
+                  label={prompt}
+                  compact
                   accessibilityLabel={`Try: ${prompt}`}
                   onPress={() => {
                     onSuggest(prompt);
                     composerInput.current?.focus();
                   }}
-                  style={styles.suggestion}>
-                  <Text style={styles.suggestionText}>{prompt}</Text>
-                  <MaterialIcon
-                    name="arrow_outward"
-                    size={15}
-                    color={theme.color.inkSecondary}
-                  />
-                </ShippingPressable>
+                />
               ))}
             </View>
           ) : null}
         </View>
-      )
-    ) : null;
-  const sendDisabled = !canStop && (busy || !draft.trim());
+      </View>
+    );
+  }
   return (
     <View style={styles.root} accessibilityLabel="Chat with Omi">
-      <View style={styles.history}>
-        <ScrollView
-          ref={list}
-          contentContainerStyle={styles.messages}
-          onLayout={() => {
-            scrollToBottom();
-          }}
-          onScrollBeginDrag={beginUserScroll}
-          onScrollEndDrag={() => {
-            userScrolling.current = false;
-          }}
-          onMomentumScrollBegin={() => {
-            userScrolling.current = true;
-          }}
-          onMomentumScrollEnd={() => {
-            userScrolling.current = false;
-          }}
-          scrollEventThrottle={16}
-          onScroll={event => {
-            const {contentOffset, contentSize, layoutMeasurement} =
-              event.nativeEvent;
-            if (userScrolling.current) {
-              const atBottom =
-                contentOffset.y + layoutMeasurement.height >=
-                contentSize.height - 48;
-              follow.current = atBottom;
-              setFollowing(atBottom);
-              if (Platform.OS === 'web' && !pointerScrolling.current) {
-                userScrolling.current = false;
-              }
-            }
-          }}
-          onContentSizeChange={(width, height) => {
-            contentHeight.current = height;
-            scrollToBottom();
-          }}>
-          {hasOlder ? (
-            <FocusPressable
-              accessibilityRole="button"
-              accessibilityLabel="Load earlier messages"
-              disabled={loadingOlder}
-              onPress={() => {
-                userScrolling.current = false;
-                stopFollowing();
-                onLoadOlder();
-              }}
-              style={styles.earlier}>
-              <Text style={styles.muted}>
-                {loadingOlder ? 'Loading earlier…' : 'Load earlier messages'}
-              </Text>
-            </FocusPressable>
-          ) : null}
-          {empty}
-          {messages.map(item => (
-            <ChatMessageRow
-              key={item.id}
-              message={item}
-              compact={false}
-              desktop
-              animate={false}
-              reduceMotion={reduceMotion}
-              onRetry={onRetry ? () => onRetry(item) : undefined}
+      <ChatThread
+        key="lead"
+        messages={messages}
+        busy={busy}
+        desktop
+        submission={submission}
+        hasOlder={hasOlder}
+        loadingOlder={loadingOlder}
+        onLoadOlder={onLoadOlder}
+        onRetry={onRetry}
+        reduceMotion={reduceMotion}
+        header={
+          messages.length > 0 ? null : loadingHistory ? (
+            <OmiPageState kind="loading" label="Loading conversation…" />
+          ) : historyError ? (
+            <OmiPageState
+              kind="error"
+              title="Couldn’t Load Chat"
+              message={error ?? 'Chat history could not be loaded.'}
+              onRetry={onRetryHistory}
             />
-          ))}
-          {busy && !messages.some(isStreamingAssistant) ? (
-            <ChatThinking reduceMotion={reduceMotion} desktop />
-          ) : null}
-        </ScrollView>
-      </View>
-      {!following && messages.length > 0 ? (
-        <OmiButton
-          label="Jump to Latest"
-          compact
-          onPress={jumpToLatest}
-          style={styles.jump}
-        />
-      ) : null}
-      {error ? (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {error}
-        </Text>
-      ) : null}
-      {onDraftChange && onSend && onStop ? (
-        <View style={styles.composerRow}>
-          {onClose ? (
-            <OmiButton
-              label="Activity"
-              compact
-              variant="plain"
-              onPress={onClose}
-            />
-          ) : null}
-          <View style={styles.composer}>
-            <TextInput
-              ref={composerInput}
-              accessibilityLabel="Message Omi"
-              placeholder="Ask Omi…"
-              placeholderTextColor={theme.color.inkSecondary}
-              value={draft}
-              onChangeText={onDraftChange}
-              onKeyPress={event => {
-                if (event.nativeEvent.key === 'Escape') {
-                  event.currentTarget.blur();
-                }
-              }}
-              onSubmitEditing={() => {
-                if (!busy && draft.trim()) {
-                  onSend();
-                }
-              }}
-              style={styles.input}
-            />
-            {/* Send is an ink circle (stop square while Omi answers), the
-                same control as the mobile composer. */}
-            <FocusPressable
-              accessibilityRole="button"
-              accessibilityLabel={canStop ? 'Stop' : 'Send'}
-              accessibilityState={{disabled: sendDisabled}}
-              disabled={sendDisabled}
-              onPress={
-                canStop
-                  ? onStop
-                  : () => {
-                      if (!busy && draft.trim()) {
-                        onSend();
-                      }
-                    }
-              }
-              style={state => [
-                styles.send,
-                sendDisabled && styles.sendDisabled,
-                state.pressed && styles.sendPressed,
-              ]}>
-              <MaterialIcon
-                name={canStop ? 'stop' : 'arrow_upward'}
-                size={16}
-                color={
-                  sendDisabled ? theme.color.inkSecondary : theme.color.onInk
-                }
-              />
-            </FocusPressable>
-          </View>
-        </View>
-      ) : null}
+          ) : null
+        }
+      />
+      {composer}
     </View>
   );
 }
+
 const createStyles = (t: OmiTheme) => ({
-  root: {
-    flex: 1,
+  // No panel: the page is the window's own surface, like Activity.
+  root: {flex: 1, minHeight: 0},
+  column: {
     width: '100%' as const,
-    maxWidth: 900,
+    maxWidth: t.layout.chatColumn + 2 * t.layout.pageGutter.desktop,
     alignSelf: 'center' as const,
-    backgroundColor: t.color.surface,
-    borderColor: t.color.separator,
-    borderWidth: 1,
-    borderRadius: t.radius.card,
-    overflow: 'hidden' as const,
+    paddingHorizontal: t.layout.pageGutter.desktop,
   },
-  history: {flex: 1},
-  jump: {alignSelf: 'center' as const, marginBottom: t.space.sm},
-  composerRow: {
-    flexDirection: 'row' as const,
+  composerColumn: {paddingBottom: t.space.lg, gap: t.space.sm},
+  greeting: {
+    flex: 1,
+    justifyContent: 'flex-end' as const,
     alignItems: 'center' as const,
     gap: t.space.sm,
-    padding: t.space.md,
-    borderTopWidth: 1,
-    borderTopColor: t.color.separator,
-  },
-  composer: {
-    flex: 1,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: t.space.sm,
-    minHeight: t.size.control,
-    paddingHorizontal: t.space.md,
-    borderRadius: t.radius.pill,
-    borderWidth: 1,
-    borderColor: t.color.hairline,
-    backgroundColor: t.color.surfaceRaised,
-  },
-  send: {
-    width: 30,
-    height: 30,
-    borderRadius: t.radius.pill,
-    backgroundColor: t.color.ink,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  sendDisabled: {backgroundColor: t.color.fillSelected},
-  sendPressed: {opacity: t.motion.pressedOpacity},
-  input: {
-    ...t.type.body,
-    color: t.color.ink,
-    flex: 1,
-    minWidth: 0,
-    paddingVertical: t.space.sm,
-  },
-  messages: {
-    padding: t.space.xl,
-    gap: t.space.xl,
-    flexGrow: 1,
-    maxWidth: t.layout.chatColumn + 2 * t.space.xl,
-    width: '100%' as const,
-    alignSelf: 'center' as const,
-  },
-  empty: {
-    flex: 1,
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-    gap: t.space.md,
-    padding: t.space.xxl,
+    paddingBottom: t.space.xxl,
   },
   title: {
     ...t.type.title,
@@ -419,39 +199,24 @@ const createStyles = (t: OmiTheme) => ({
     marginTop: t.space.sm,
     textAlign: 'center' as const,
   },
-  emptyCopy: {textAlign: 'center' as const, maxWidth: 400},
+  subtitle: {
+    ...t.type.subhead,
+    color: t.color.inkSecondary,
+    textAlign: 'center' as const,
+    maxWidth: 420,
+  },
+  tail: {flex: 1, paddingTop: t.space.xs},
   suggestions: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     justifyContent: 'center' as const,
     gap: t.space.sm,
-    marginTop: t.space.lg,
-    alignSelf: 'stretch' as const,
   },
-  suggestion: {
+  notice: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: t.space.sm,
-    minHeight: t.size.control,
-    paddingHorizontal: t.space.md + 2,
-    borderRadius: t.radius.pill,
-    borderColor: t.color.hairline,
-    borderWidth: 1,
-    overflow: 'hidden' as const,
+    paddingHorizontal: t.space.md,
   },
-  suggestionText: {
-    ...t.type.subhead,
-    color: t.color.ink,
-  },
-  muted: {...t.type.subhead, color: t.color.inkSecondary},
-  earlier: {alignSelf: 'center' as const, padding: t.space.sm + 2},
-  error: {
-    ...t.type.subhead,
-    color: t.color.danger,
-    backgroundColor: t.color.dangerSurface,
-    margin: t.space.md,
-    paddingHorizontal: t.space.lg,
-    paddingVertical: t.space.md,
-    borderRadius: t.radius.row,
-  },
+  noticeText: {...t.type.subhead, color: t.color.ink, flex: 1},
 });
