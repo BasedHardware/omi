@@ -757,7 +757,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               children: [
                                 _SectionCount(orderedItems.length),
                                 const SizedBox(width: 8),
-                                const Icon(Icons.close, size: 14, color: OmiColors.textTertiary),
+                                Icon(Icons.close, size: 14, color: OmiColors.textTertiary),
                               ],
                             ),
                           )
@@ -771,7 +771,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           semanticLabel: context.l10n.tasksClearCompleted,
                           reach: const EdgeInsets.only(left: 30),
                           onTap: () => _confirmClearCompleted(provider, orderedItems),
-                          child: const Icon(Icons.close, size: 14, color: OmiColors.textTertiary),
+                          child: Icon(Icons.close, size: 14, color: OmiColors.textTertiary),
                         ),
                     ],
                   ),
@@ -1012,7 +1012,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               Container(
                 height: 2,
                 margin: EdgeInsets.only(left: barLeft, right: 4),
-                decoration: const BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
+                decoration: BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
               ),
             _buildDraggableTaskItem(item, provider, indentLevel, indentWidth, categoryItems),
             // Drop indicator below
@@ -1020,7 +1020,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               Container(
                 height: 2,
                 margin: EdgeInsets.only(left: barLeft, right: 4),
-                decoration: const BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
+                decoration: BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
               ),
           ],
         );
@@ -1152,8 +1152,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       secondaryBackground: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20.0),
-        decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
-        child: const Icon(Icons.delete_outline, color: OmiColors.textPrimary),
+        decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
+        child: Icon(Icons.delete_outline, color: OmiColors.textPrimary),
       ),
       onDismissed: (direction) {
         if (direction == DismissDirection.endToStart) {
@@ -1259,7 +1259,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Container(
                     width: 1.5,
                     height: 20,
-                    decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.pillAll),
+                    decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.pillAll),
                   ),
                 ),
               // Completion circle — always shown. Read-only in selection mode
@@ -1301,7 +1301,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(Icons.check_circle_outline, size: 12, color: OmiColors.textTertiary),
+                            Icon(Icons.check_circle_outline, size: 12, color: OmiColors.textTertiary),
                             const SizedBox(width: 4),
                             Text(
                               context.l10n.exportedToPlatform(_exportPlatformLabel(item.exportPlatform!)),
@@ -1420,10 +1420,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       },
       background: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
-        decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
+        decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete_outline, color: OmiColors.textPrimary),
+        child: Icon(Icons.delete_outline, color: OmiColors.textPrimary),
       ),
       child: goalContent,
     );

@@ -12,7 +12,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
-from models.audio_file import AudioFile
+from models.audio_file import AudioFile, ChunkSpan
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
@@ -31,6 +31,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
@@ -894,6 +895,48 @@ def get_conversation_raw_snapshot(
     return snapshot.to_dict()
 
 
+def resolve_sync_conversation_redirect(uid: str, conversation_id: str, *, max_hops: int = 16) -> Optional[str]:
+    """Resolve a server-authored sync bridge for an owner read.
+
+    User deletion is terminal, including deletion of the survivor. Do not
+    follow arbitrary deleted rows or expose another account's conversation.
+    """
+    seen: set[str] = set()
+    current_id = conversation_id
+    for _ in range(max_hops):
+        if current_id in seen:
+            return None
+        seen.add(current_id)
+        row = get_conversation_raw_snapshot(uid, current_id)
+        if not row:
+            return None
+        if not row.get('deleted'):
+            return current_id
+        successor = row.get('sync_merged_into')
+        if not isinstance(successor, str) or not successor:
+            return None
+        current_id = successor
+    return None
+
+
+def get_manual_speaker_receipt(uid: str, conversation_id: str, *, firestore_client: Any = None) -> dict:
+    """The conversation's manual speaker receipt alone, without reading its transcript."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshot = (
+        client.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+        .get(field_paths=['manual_speaker_assignments', 'manual_speaker_assignments_compressed'])
+    )
+    data = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+    if not data:
+        return {}
+    return decode_manual_speaker_assignments(
+        uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
+    )
+
+
 def get_public_shared_conversation_bounded(
     uid: str,
     conversation_id: str,
@@ -1264,30 +1307,11 @@ def create_audio_files_from_chunks(
     if not chunks:
         return []
 
-    # Group chunks based on gap rule (90s threshold accommodates both 5s and 60s chunk durations)
+    # Group chunks based on gap rule (90s threshold accommodates both 5s and 60s
+    # chunk durations). v2 listings split at actual uncovered ends or overlaps.
     audio_files = []
-    current_group = []
-    gap_threshold = 90  # seconds — must exceed max chunk duration (60s) to avoid false splits
-
-    for i, chunk in enumerate(chunks):
-        if not current_group:
-            current_group.append(chunk)
-        else:
-            # Check if there's a gap between chunks exceeding the threshold
-            prev_chunk = current_group[-1]
-            time_gap = chunk['timestamp'] - prev_chunk['timestamp']
-            if time_gap > gap_threshold:
-                # Gap detected, finalize current group
-                audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
-                if audio_file:
-                    audio_files.append(audio_file)
-                current_group = [chunk]
-            else:
-                current_group.append(chunk)
-
-    # Finalize last group
-    if current_group:
-        audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
+    for chunk_group in group_chunks_by_coverage(chunks, gap_threshold=90):
+        audio_file = _finalize_audio_file_group(uid, conversation_id, chunk_group, audio_files)
         if audio_file:
             audio_files.append(audio_file)
 
@@ -1318,13 +1342,47 @@ def _finalize_audio_file_group(
     # Extract timestamps
     timestamps = [chunk['timestamp'] for chunk in chunk_group]
 
+    # v2 groups carry validated contiguous coverage spans from blob metadata;
+    # duration is the authoritative span extent, never an encoded-size guess.
+    spans: List[Tuple[float, float]] = []
+    for chunk in chunk_group:
+        span = chunk.get('span')
+        if not isinstance(span, dict):
+            spans = []
+            break
+        try:
+            start = float(span['start'])
+            samples = float(span['samples'])
+            rate = float(span['sample_rate'])
+        except (KeyError, TypeError, ValueError):
+            spans = []
+            break
+        if samples <= 0 or rate <= 0:
+            spans = []
+            break
+        spans.append((start, start + samples / rate))
+
+    if spans:
+        started_at = datetime.fromtimestamp(spans[0][0], tz=timezone.utc)
+        duration = spans[-1][1] - spans[0][0]
+        return AudioFile(
+            id=file_id,
+            uid=uid,
+            conversation_id=conversation_id,
+            chunk_timestamps=timestamps,
+            provider='gcp',
+            started_at=started_at,
+            duration=duration,
+            chunk_spans=[ChunkSpan(start=round(start, 3), end=round(end, 3)) for start, end in spans],
+        )
+
     # Calculate started_at and duration from timestamps and blob sizes
     started_at = datetime.fromtimestamp(chunk_group[0]['timestamp'], tz=timezone.utc)
     last_chunk_start = datetime.fromtimestamp(chunk_group[-1]['timestamp'], tz=timezone.utc)
     # Estimate last chunk duration from blob size (PCM16 mono at 16kHz = 32000 bytes/sec).
     # Approximate for opus-encoded blobs; conversation_audio.captured_duration (from
     # decoded PCM) is the display source of truth.
-    last_chunk_size = chunk_group[-1].get('size', 0)
+    last_chunk_size = chunk_group[-1].get('size') or 0
     last_chunk_duration = last_chunk_size / 32000.0 if last_chunk_size > 0 else 5.0
     duration = (last_chunk_start - started_at).total_seconds() + last_chunk_duration
 
@@ -1538,6 +1596,12 @@ def delete_conversation(uid, conversation_id):
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
+    # A shadow metric writer can have read the parent just before deletion and
+    # committed a child after our first enumeration. Its transaction prevents
+    # writes once the parent is gone; this second sweep catches that narrow
+    # pre-delete commit without leaving an orphan under a missing parent.
+    for sub in conversation_ref.collections():
+        delete_collection_recursive(sub, client=db)
     _delete_conversation_search_index(uid, conversation_id)
 
 
@@ -2383,17 +2447,55 @@ def assign_conversation_speaker(
     """Commit the manual edit, provenance and invalidation in one transaction."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
-    ref = user_ref.collection(conversations_collection).document(conversation_id)
+    collection = user_ref.collection(conversations_collection)
 
     @firestore.transactional
     def assign(transaction):
-        raw = ref.get(transaction=transaction).to_dict()
-        if not raw or raw.get('deleted'):
+        source = collection.document(conversation_id).get(transaction=transaction).to_dict()
+        if not source:
             raise LookupError('Conversation not found')
+        source_segments = None
+        selected_segment_ids = segment_ids
+        selected_speaker_id = speaker_id
+        selected_segment_index = segment_index
+        current_id = conversation_id
+        raw = source
+        seen = set()
+        while raw.get('deleted') and raw.get('sync_merged_into'):
+            if current_id in seen or len(seen) >= 16:
+                raise LookupError('Conversation not found')
+            seen.add(current_id)
+            if source_segments is None:
+                source_segments = _decode_transcript_segments_strict(
+                    uid, source.get('transcript_segments', []), bool(source.get('transcript_segments_compressed'))
+                )
+            current_id = raw['sync_merged_into']
+            raw = collection.document(current_id).get(transaction=transaction).to_dict()
+            if not raw:
+                raise LookupError('Conversation not found')
+        if raw.get('deleted'):
+            raise LookupError('Conversation not found')
+        ref = collection.document(current_id)
         if raw.get('is_locked'):
             raise PermissionError('Conversation is locked')
+        # A donor's numeric speaker IDs may have been reassigned on bridge.
+        # Carry its stable segment identities across instead of applying the
+        # number to a different voice in the surviving conversation.
+        if source_segments is not None:
+            if segment_ids:
+                source_ids = set(segment_ids)
+                selected = [s for s in source_segments if s.get('id') in source_ids]
+            elif segment_index is not None:
+                selected = source_segments[segment_index : segment_index + 1]
+            elif speaker_id is not None:
+                selected = [s for s in source_segments if s.get('speaker_id') == speaker_id]
+            else:
+                selected = []
+            selected_segment_ids = [s['id'] for s in selected if s.get('id')]
+            selected_speaker_id = None
+            selected_segment_index = None
         current = copy.deepcopy(raw)
-        current['id'] = conversation_id
+        current['id'] = current_id
         current['transcript_segments'] = _decode_transcript_segments_strict(
             uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
         )
@@ -2401,13 +2503,18 @@ def assign_conversation_speaker(
             uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
         )
         before = copy.deepcopy(current['transcript_segments'])
+        if source_segments is not None:
+            surviving_ids = {s.get('id') for s in before}
+            selected_segment_ids = [sid for sid in selected_segment_ids or [] if sid in surviving_ids]
+            if not selected_segment_ids:
+                raise ValueError('Selected speaker is no longer in the merged conversation')
         segments, receipt, resolved, previous = manual_assignment(
             current,
             person_id=person_id,
             is_user=is_user,
-            segment_ids=segment_ids,
-            speaker_id=speaker_id,
-            segment_index=segment_index,
+            segment_ids=selected_segment_ids,
+            speaker_id=selected_speaker_id,
+            segment_index=selected_segment_index,
             use_for_speech_training=use_for_speech_training,
         )
         # Read every person before any write; corrections fence in-flight profiles
@@ -2425,7 +2532,7 @@ def assign_conversation_speaker(
                 continue
             update = {'updated_at': datetime.now(timezone.utc)}
             source = person.get('speech_sample_source') or {}
-            if source.get('conversation_id') == conversation_id and set(source.get('segment_ids', [])) & set(resolved):
+            if source.get('conversation_id') == current_id and set(source.get('segment_ids', [])) & set(resolved):
                 removed.extend(person.get('speech_samples', []))
                 update.update(
                     speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
@@ -2445,7 +2552,7 @@ def assign_conversation_speaker(
 
     result = run_transactional(client, assign)
     current, _, _, before = result
-    record_speaker_review(uid, conversation_id, before, current['transcript_segments'])
+    record_speaker_review(uid, current['id'], before, current['transcript_segments'])
     return result
 
 
@@ -2457,6 +2564,8 @@ def update_conversation_segments(
     data_protection_level: str = None,
     *,
     started_at: datetime = None,
+    audio_timeline: Optional[dict] = None,
+    capture_evidence: Optional[dict] = None,
     firestore_client: Any = None,
     invalidate_client_processing: bool = True,
     return_segments: bool = False,
@@ -2484,6 +2593,12 @@ def update_conversation_segments(
     live-capture write loop). The transaction still clears a projection that
     is actually present on the document, so a finalize overlapping capture cannot
     leave a hash-bound summary of text that then changed.
+
+    Audio-timeline v2: ``audio_timeline`` is the fenced provenance pin. The
+    marker and the projected first-audio ``started_at`` apply atomically only
+    while the document has no marker yet, so a late receiver can never reset an
+    origin already emitted to clients. Once the marker exists, a ``started_at``
+    argument is ignored — the origin is pinned for the recording's life.
     """
     if live_segments is not None and segment_update_fields is not None:
         raise ValueError('Live merge and field-only segment updates are mutually exclusive')
@@ -2492,6 +2607,7 @@ def update_conversation_segments(
         'person_id',
         'is_user',
         'speaker_identity_status',
+        'speaker_match_source',
     }:
         raise ValueError('Field-only writers cannot change segment identity or speech boundaries')
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -2526,7 +2642,7 @@ def update_conversation_segments(
                         s,
                         **{
                             k: identities[s.get('id')][k]
-                            for k in ('person_id', 'is_user', 'speaker_identity_status')
+                            for k in ('person_id', 'is_user', 'speaker_identity_status', 'speaker_match_source')
                             if k in identities[s.get('id')]
                         },
                     )
@@ -2565,12 +2681,23 @@ def update_conversation_segments(
             # never reclaim it even if an older in-memory snapshot is empty.
             'has_content': bool(current.get('has_content')) or bool(accepted),
         }
+        if capture_evidence is not None:
+            update_payload['capture_evidence'] = capture_evidence
         if remap:
             update_payload['manual_speaker_assignments'] = receipt
         if finished_at:
             update_payload['finished_at'] = finished_at
-        if started_at:
+        pinned_timeline = isinstance(current.get('audio_timeline'), dict) and current.get('audio_timeline')
+        if audio_timeline is not None and not pinned_timeline:
+            # Fenced compare-and-set: the marker and the projected first-audio
+            # origin land in the same transaction, exactly once per row.
+            update_payload['audio_timeline'] = audio_timeline
+            if started_at:
+                update_payload['started_at'] = started_at
+        elif started_at and not pinned_timeline:
             update_payload['started_at'] = started_at
+        # With the marker already present, a stale started_at is ignored: the
+        # origin was pinned with the marker and must not move.
         prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
         if invalidate_client_processing:
             _invalidate_client_processing(prepared_payload)
@@ -2812,14 +2939,18 @@ def store_model_segments_result(uid: str, conversation_id: str, model_name: str,
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     segments_ref = conversation_ref.collection(model_name)
     batch = db.batch()
-    for i, segment in enumerate(segments):
+    count = 0
+    for segment in segments:
         segment_id = str(uuid.uuid4())
         segment_ref = segments_ref.document(segment_id)
         batch.set(segment_ref, segment.model_dump())
-        if i >= 400:
+        count += 1
+        if count >= 400:
             batch.commit()
             batch = db.batch()
-    batch.commit()
+            count = 0
+    if count > 0:
+        batch.commit()
 
 
 def store_model_emotion_predictions_result(
@@ -2848,7 +2979,8 @@ def store_model_emotion_predictions_result(
             batch.commit()
             batch = db.batch()
             count = 0
-    batch.commit()
+    if count > 0:
+        batch.commit()
 
 
 def get_conversation_transcripts_by_model(uid: str, conversation_id: str):

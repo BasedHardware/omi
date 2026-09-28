@@ -94,7 +94,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                     // Battery only: a bar glyph, never a coloured dot (live status lives on the
                     // capture card). Red appears only when critically low.
                     if (isCharging) ...[
-                      const Icon(Icons.bolt, color: OmiColors.textSecondary, size: 13),
+                      Icon(Icons.bolt, color: OmiColors.textSecondary, size: 13),
                       const SizedBox(width: 1),
                     ],
                     BatteryGlyph(level: batteryLevel, critical: low),
@@ -120,7 +120,11 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   const SizedBox(width: 4),
                   HeaderCircleButton(
                     semanticLabel: l10n.phoneCallsWithOmi,
-                    icon: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
+                    icon: Icon(
+                      Icons.phone_in_talk_rounded,
+                      color: OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white,
+                      size: 16,
+                    ),
                     onTap: () {
                       OmiHaptics.selection();
                       routeToPage(context, const PhoneCallsPage());
@@ -208,7 +212,7 @@ class _DevicePill extends StatelessWidget {
           height: 36,
           margin: _pillTargetMargin,
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
-          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.pillAll),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.pillAll),
           child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, children: children),
         ),
       ),
@@ -264,9 +268,14 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
   }
 
   /// The pendant is recording (or paused) in realtime mode: explain, and let the user choose.
+  /// A Transcribe Later pendant is excluded — its capture can't be taken over at all, so it
+  /// falls through to the refusal feedback rather than offering a choice that would fail.
   static bool _pendantHasCapture(CaptureProvider capture) {
     final source = capture.liveCaptureSource;
-    return source != null && source != 'phone' && !SharedPreferencesUtil().batchModeEnabled;
+    return source != null &&
+        source != 'phone' &&
+        !SharedPreferencesUtil().batchModeEnabled &&
+        !capture.isPendantBatchRecording;
   }
 
   void _showPendantListening(BuildContext context) {
@@ -314,7 +323,21 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       if (context.mounted) _maybeShowOptionsTip(context);
       return;
     }
-    await captureProvider.streamRecording();
+    if (captureProvider.isPendantBatchRecording) {
+      if (context.mounted) {
+        OmiFeedback.info(context, context.l10n.phoneRecordingBlockedByPendantBatch);
+      }
+      return;
+    }
+    try {
+      await captureProvider.streamRecording();
+    } catch (_) {
+      if (context.mounted) {
+        OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      }
+      return;
+    }
+    if (captureProvider.liveCaptureSource != 'phone') return;
     PlatformManager.instance.analytics.phoneMicRecordingStarted();
     // Phone-mic Transcribe Later (batch) has no live transcript — its surface is the
     // conversations-list batch card, so skip the capturing page (same as BLE batch).
@@ -367,7 +390,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
                   ? Container(
                       width: 18,
                       height: 18,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         color: OmiColors.textPrimary,
                         borderRadius: _stopGlyphRadius,
                       ),
@@ -377,7 +400,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
                       : Container(
                           width: 20,
                           height: 20,
-                          decoration: const BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
+                          decoration: BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
                         ),
             ),
           ),
@@ -412,7 +435,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
                           shape: BoxShape.circle,
                           border: Border.all(color: OmiColors.surface0, width: 2),
                         ),
-                        child: const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: OmiColors.textPrimary),
+                        child: Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: OmiColors.textPrimary),
                       ),
                     ),
                   ),
@@ -524,7 +547,7 @@ class _RecordOption extends StatelessWidget {
                   width: 44,
                   height: 44,
                   alignment: Alignment.center,
-                  decoration: const BoxDecoration(shape: BoxShape.circle, color: OmiColors.surface3),
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: OmiColors.surface3),
                   child: Icon(icon, color: OmiColors.textPrimary, size: 20),
                 ),
                 const SizedBox(width: 14),
@@ -539,7 +562,7 @@ class _RecordOption extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: OmiColors.textTertiary, size: 22),
+                Icon(Icons.chevron_right_rounded, color: OmiColors.textTertiary, size: 22),
               ],
             ),
           ),

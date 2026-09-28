@@ -159,7 +159,7 @@ class _TranscriptionJsonEditorPageState extends State<TranscriptionJsonEditorPag
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, color: OmiColors.danger, size: 18),
+          Icon(Icons.error_outline, color: OmiColors.danger, size: 18),
           const SizedBox(width: OmiSpacing.xs),
           Expanded(
             child: Text(context.l10n.invalidJsonError, style: OmiType.footnote.copyWith(color: OmiColors.danger)),

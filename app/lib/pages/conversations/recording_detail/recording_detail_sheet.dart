@@ -253,7 +253,7 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
   Widget _buildMenu(BuildContext context, LocalRecordingsProvider provider, LocalRecording rec) {
     return PopupMenuButton<String>(
       tooltip: context.l10n.moreOptions,
-      icon: const Icon(Icons.more_horiz_rounded, color: OmiColors.textSecondary),
+      icon: Icon(Icons.more_horiz_rounded, color: OmiColors.textSecondary),
       color: OmiColors.surface2,
       shape: const RoundedRectangleBorder(borderRadius: OmiRadius.mdAll),
       position: PopupMenuPosition.under,

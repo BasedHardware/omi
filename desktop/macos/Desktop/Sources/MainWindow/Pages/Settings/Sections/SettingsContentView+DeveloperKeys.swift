@@ -56,7 +56,7 @@ extension SettingsContentView {
           Text("Language model")
             .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(Ink.primary)
-          Text("Choose the provider that powers chat, memory, and insights. OpenRouter is selected by default.")
+          Text("Choose a provider for supported memory and insight features. Desktop chat supports Anthropic keys.")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
           Picker("LLM provider", selection: $devBYOKLLMProvider) {
@@ -171,6 +171,14 @@ extension SettingsContentView {
     APIKeyService.isByokActive
   }
 
+  var byokStatusTitle: String {
+    APIKeyService.isByokActive ? "Custom keys active" : "Bring your own keys"
+  }
+
+  var byokUsageDescription: String {
+    "Keys cover only supported features. Desktop chat supports Anthropic keys; other keys do not remove Omi's chat limit."
+  }
+
   @ViewBuilder
   var byokStatusBanner: some View {
     settingsCard(settingId: "advanced.devkeys.info") {
@@ -178,13 +186,12 @@ extension SettingsContentView {
         Image(systemName: hasAllBYOKKeys ? "checkmark.seal.fill" : "key.fill")
           .foregroundColor(hasAllBYOKKeys ? Ink.listeningGreen : Ink.secondary)
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-          Text(hasAllBYOKKeys ? "Free plan active" : "Use Omi free forever")
+          Text(byokStatusTitle)
             .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundColor(Ink.primary)
           Text(
-            hasAllBYOKKeys
-              ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac."
-              : "Choose a language model provider, then add its key. Deepgram is optional and only powers transcription. Keys stay on this Mac — we never store them on our servers."
+            byokUsageDescription
+              + " Deepgram is optional for transcription. Keys are saved on this Mac and sent with requests, never stored on Omi's servers."
           )
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)

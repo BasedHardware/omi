@@ -75,6 +75,8 @@ class WalListItem extends StatelessWidget {
         return (Colors.redAccent, l.syncStatusTooOld);
       case WalSyncDisplayState.unsupportedAudio:
         return (Colors.redAccent, l.syncStatusUnsupportedAudio);
+      case WalSyncDisplayState.uploadRejected:
+        return (Colors.redAccent, l.failedStatus);
       case WalSyncDisplayState.waiting:
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade500, l.syncStatusWaiting);
@@ -97,7 +99,8 @@ class WalListItem extends StatelessWidget {
     // leads to a detail page with nothing actionable on it.
     if (state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
-        state == WalSyncDisplayState.unsupportedAudio) {
+        state == WalSyncDisplayState.unsupportedAudio ||
+        state == WalSyncDisplayState.uploadRejected) {
       return OmiButton.destructive(
         label: context.l10n.delete,
         size: OmiButtonSize.compact,
@@ -133,7 +136,7 @@ class WalListItem extends StatelessWidget {
 
         return Container(
           clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
           child: Dismissible(
             key: Key(wal.id),
             direction:
@@ -175,7 +178,8 @@ class WalListItem extends StatelessWidget {
                             children: [
                               Text(
                                 source != null ? '$timeStr · $duration · $source' : '$timeStr · $duration',
-                                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                                style:
+                                    TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -202,7 +206,7 @@ class WalListItem extends StatelessWidget {
                               borderRadius: BorderRadius.circular(2),
                               child: LinearProgressIndicator(
                                 value: _calcProgress(wal),
-                                backgroundColor: const Color(0xFF3C3C43),
+                                backgroundColor: OmiColors.border,
                                 color: OmiColors.accent,
                                 minHeight: 3,
                               ),
@@ -265,7 +269,7 @@ class _SyncPageState extends State<SyncPage> {
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400),
+                style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w400),
               ),
             ),
             if (status != null) Text(status, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
@@ -285,7 +289,7 @@ class _SyncPageState extends State<SyncPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Container(
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
         child: GestureDetector(
           onTap: () => routeToPage(context, const SyncedConversationsPage()),
           child: Padding(
@@ -297,10 +301,10 @@ class _SyncPageState extends State<SyncPage> {
                 Expanded(
                   child: Text(
                     context.l10n.conversationsCreated(syncProvider.syncedConversationsPointers.length),
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                    style: TextStyle(color: OmiColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
+                Icon(Icons.chevron_right, color: OmiColors.border, size: 20),
               ],
             ),
           ),
@@ -313,7 +317,7 @@ class _SyncPageState extends State<SyncPage> {
     final isPhoneStorageOn = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
 
     return Container(
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
           Builder(
@@ -328,7 +332,7 @@ class _SyncPageState extends State<SyncPage> {
               );
             },
           ),
-          const Divider(height: 1, color: Color(0xFF3C3C43), indent: 52),
+          Divider(height: 1, color: OmiColors.border, indent: 52),
           Consumer<UserProvider>(
             builder: (context, userProvider, child) {
               final isCloudOn = userProvider.privateCloudSyncEnabled;
@@ -475,7 +479,7 @@ class _SyncPageState extends State<SyncPage> {
 
     String title;
     String? subtitle;
-    Color titleColor = Colors.white;
+    Color titleColor = OmiColors.textPrimary;
     Widget? action;
 
     if (isActive) {
@@ -531,12 +535,12 @@ class _SyncPageState extends State<SyncPage> {
       });
     } else {
       title = l.syncCardAllBackedUp;
-      titleColor = Colors.grey.shade400;
+      titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
       child: Row(
         children: [
           if (showSpinner) ...[
@@ -596,13 +600,13 @@ class _SyncPageState extends State<SyncPage> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: selected ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+              color: selected ? OmiColors.textPrimary.withValues(alpha: 0.08) : Colors.transparent,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               count > 0 ? '$label  $count' : label,
               style: TextStyle(
-                color: selected ? Colors.white : Colors.grey.shade500,
+                color: selected ? OmiColors.textPrimary : Colors.grey.shade500,
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
               ),
@@ -614,7 +618,7 @@ class _SyncPageState extends State<SyncPage> {
 
     return Container(
       padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(10)),
       child: Row(
         children: [
           chip(WalStatusFilter.pending, context.l10n.pending, syncProvider.pendingStatusCount),
@@ -1026,16 +1030,22 @@ class _StorageRow extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                      style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: OmiColors.textPrimary.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text('$count', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                      child: Text(
+                        '$count',
+                        style: TextStyle(
+                          color: OmiColors.active == OmiPalette.light ? OmiColors.textSecondary : Colors.grey.shade400,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ],
                 ),

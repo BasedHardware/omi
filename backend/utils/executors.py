@@ -109,6 +109,11 @@ sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_
 postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
+# Prompt-list verification may outlive its caller while a provider finishes.
+# Keep both the clip cut and inline STT away from shared feature pools.
+speaker_tag_verify_executor = MonitoredThreadPoolExecutor(
+    name="speaker_tag_verify", max_workers=2, max_queue_size=2, thread_name_prefix="tagverify"
+)
 # URL-form OAuth client_ids let an unauthenticated caller name an arbitrary
 # host to fetch. The pool stays tiny and strictly queued so a flood fails
 # fast with ExecutorSaturatedError instead of holding shared workers. The DNS
@@ -125,6 +130,7 @@ _ALL_EXECUTORS = [
     postprocess_executor,
     cleanup_executor,
     storage_executor,
+    speaker_tag_verify_executor,
     cimd_executor,
 ]
 

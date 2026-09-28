@@ -56,6 +56,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
+            "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             "PARAKEET_WINDOW_MAX_SESSIONS",
@@ -64,13 +66,26 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
+            "SONIOX_ESTIMATED_USD_PER_HOUR",
+            "SONIOX_MONTHLY_CEILING_USD",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_CONNECT_ORDER_FROM_CONFIG",
+            "STT_RESILIENT_RECONNECT",
+            "STT_LEARNED_LANGUAGE_PROFILE",
+            "STT_MULTI_LANGUAGE_HINTS",
+            "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
+            # Fleet live routing and runway polling run on backend-listen only.
+            "STT_NO_TEXT_SECONDS",
+            "STT_ROUTING_MODE",
+            "STT_ROUTING_PROBE_PERCENT",
+            "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "DEEPGRAM_SELF_HOSTED_ENABLED",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
+            # Legacy mobile HTTP TTS rollback; pusher mounts no TTS router.
+            "ELEVENLABS_API_KEY",
             "FAIR_USE_3DAY_SPEECH_MS",
             "FAIR_USE_BUCKET_SECONDS",
             "FAIR_USE_CHECK_INTERVAL_SECONDS",
@@ -87,7 +102,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "FAIR_USE_WEEKLY_SPEECH_MS",
             "GCP_LOCATION",
             "GEMINI_API_KEY",
-            "GOOGLE_CALENDAR_AUTO_LINK_ENABLED",
             "GROQ_API_KEY",
             "HOSTED_PUSHER_API_URL",
             "HOSTED_TRANSLATION_API_URL",
@@ -113,10 +127,16 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "OMI_PARITY_PACK_ROOT",
             "OPENROUTER_API_KEY",
             "POSTHOG_PROJECT_API_KEY",
+            # Only backend-listen serves api.omiapi.com; its shared-chat route
+            # validates the frontend service OIDC identity at the API edge.
+            "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE",
+            "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA",
             "PUBLIC_SHARED_CONVERSATION_CHAT_MODE",
             "RAPID_API_KEY",
             "REFERRAL_PUBLIC_BASE_URL",
             "TRANSLATION_SERVICE_MODELS",
+            # HTTP read-aloud routers mount only on backend-listen, not pusher.
+            "TTS_PROVIDER",
             "TWILIO_API_KEY_SECRET",
             "TWILIO_AUTH_TOKEN",
             "USE_VERTEX_AI",
@@ -128,6 +148,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "prod": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
+            "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             "PARAKEET_WINDOW_MAX_SESSIONS",
@@ -136,15 +158,28 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
+            "SONIOX_ESTIMATED_USD_PER_HOUR",
+            "SONIOX_MONTHLY_CEILING_USD",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_CONNECT_ORDER_FROM_CONFIG",
+            "STT_RESILIENT_RECONNECT",
+            "STT_LEARNED_LANGUAGE_PROFILE",
+            "STT_MULTI_LANGUAGE_HINTS",
+            "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
+            # Fleet live routing and runway polling run on backend-listen only.
+            "STT_NO_TEXT_SECONDS",
+            "STT_ROUTING_MODE",
+            "STT_ROUTING_PROBE_PERCENT",
+            "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
             "ACCOUNT_DELETION_TASKS_QUEUE",
             "BETA_PROMOTION_TOKEN",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
+            # Legacy mobile HTTP TTS rollback; pusher mounts no TTS router.
+            "ELEVENLABS_API_KEY",
             "FAIR_USE_3DAY_SPEECH_MS",
             "FAIR_USE_BUCKET_SECONDS",
             "FAIR_USE_CHECK_INTERVAL_SECONDS",
@@ -176,11 +211,17 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",
             "OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED",
             "POSTHOG_PROJECT_API_KEY",
+            # Only backend-listen serves api.omi.me; its shared-chat route
+            # validates the frontend service OIDC identity at the API edge.
+            "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE",
+            "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA",
             "PUBLIC_SHARED_CONVERSATION_CHAT_MODE",
             "REFERRAL_PUBLIC_BASE_URL",
             "SYNC_TASKS_LOCATION",
             "SYNC_TASKS_PROJECT",
             "TRANSLATION_SERVICE_MODELS",
+            # HTTP read-aloud routers mount only on backend-listen, not pusher.
+            "TTS_PROVIDER",
             "TWILIO_API_KEY_SECRET",
             "TWILIO_AUTH_TOKEN",
             "USE_VERTEX_AI",
@@ -198,15 +239,57 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     # streaming session selects Deepgram cloud, and a spent managed key made
     # the fallback hops dial a 402 account for days (FC-deterministic-provider-
     # rejection-burns-connect-retries).
-    "prod": frozenset({"DEEPGRAM_API_KEY", "DEEPGRAM_SELF_HOSTED_URL", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
+    "prod": frozenset(
+        {
+            "DEEPGRAM_API_KEY",
+            "DEEPGRAM_SELF_HOSTED_URL",
+            "REDIS_DB_HOST",
+            "TYPESENSE_HOST",
+            # Process-local final-pass shadow is admitted only on the prod pusher.
+            "TRANSCRIPTION_SHADOW_ENABLED",
+            "TRANSCRIPTION_SHADOW_KILL_SWITCH",
+            "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
+            "TRANSCRIPTION_SHADOW_PERCENT",
+            "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+        }
+    ),
 }
 
 # Shared keys whose *literal* values are allowed to differ. Name-only diffs
 # belong in the only-allowed sets above, not here.
 SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
     # Live TDT is a listen-only experiment; pusher retains its existing STT route.
-    "dev": frozenset({"DD_SERVICE", "STRIPE_ARCHITECT_MONTHLY_PRICE_ID", "STT_SERVICE_MODELS"}),
-    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "DEEPGRAM_SELF_HOSTED_ENABLED"}),
+    # Final-pass shadow runs on the dev pusher finalizer only. Backend-listen
+    # dispatches finalization but cannot own this process-local shadow worker.
+    "dev": frozenset(
+        {
+            "DD_SERVICE",
+            "STRIPE_ARCHITECT_MONTHLY_PRICE_ID",
+            "STT_SERVICE_MODELS",
+            "TRANSCRIPTION_SHADOW_ENABLED",
+            "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
+            "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+        }
+    ),
+    # The 1% windowed-TDT canary is listen-only. Pusher retains its streaming
+    # and prerecorded policy while allocated listen sessions may lead with TDT.
+    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "DEEPGRAM_SELF_HOSTED_ENABLED", "STT_SERVICE_MODELS"}),
+}
+
+DEV_SHADOW_VALUES = {
+    "TRANSCRIPTION_SHADOW_ENABLED": ("true", "false"),
+    "TRANSCRIPTION_SHADOW_KILL_SWITCH": ("false", "false"),
+    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": ("omi-release-probe", ""),
+    "TRANSCRIPTION_SHADOW_PERCENT": ("0", "0"),
+    "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": ("1", "0"),
+}
+
+PROD_SHADOW_VALUES = {
+    "TRANSCRIPTION_SHADOW_ENABLED": ("true", None),
+    "TRANSCRIPTION_SHADOW_KILL_SWITCH": ("false", None),
+    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": ("vi7SA9ckQCe4ccobWNxlbdcNdC23", None),
+    "TRANSCRIPTION_SHADOW_PERCENT": ("0", None),
+    "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": ("1", None),
 }
 
 
@@ -369,6 +452,16 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
 
         allowed_value_diff = SHARED_VALUE_DIFF_ALLOWED[env]
         shared = set(pusher_env) & set(listen_env)
+        for name, (expected_pusher, expected_listen) in (
+            DEV_SHADOW_VALUES if env == "dev" else PROD_SHADOW_VALUES
+        ).items():
+            actual_pusher = pusher_env[name].value if name in pusher_env else None
+            actual_listen = listen_env[name].value if name in listen_env else None
+            if (actual_pusher, actual_listen) != (expected_pusher, expected_listen):
+                errors.append(
+                    f"[{env}] shadow scope {name} must be pusher={expected_pusher!r} "
+                    f"listen={expected_listen!r}, got pusher={actual_pusher!r} listen={actual_listen!r}"
+                )
         for name in sorted(shared):
             pusher_value = pusher_env[name].value
             listen_value = listen_env[name].value

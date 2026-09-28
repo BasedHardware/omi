@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// The tab bar's two-bubbles glyph (FontAwesome `comments`, regular weight). Ask Omi uses the same
 /// glyph everywhere it appears, so the button and the tab read as one family.
@@ -48,6 +49,16 @@ double bottomNavBarClearance(BuildContext context) => kBottomNavBarHeight + bott
 /// Height of the home chat bar that floats above the tab row.
 const double kHomeChatBarHeight = 62;
 
+/// The tab bar's solid colour, which the Home chat bar's backdrop continues.
+Color get kBottomNavBackground =>
+    OmiColors.active == OmiPalette.dark ? const Color.fromARGB(255, 15, 15, 15) : OmiColors.surface0;
+
+/// Interpolate the light fade through transparent page-coloured pixels. A
+/// zero-alpha black transparent stop darkens intermediate gradient colours and
+/// shows up as a grey band against the light page.
+Color get _bottomNavFadeStart =>
+    OmiColors.active == OmiPalette.light ? OmiColors.surface0.withValues(alpha: 0) : Colors.transparent;
+
 /// Offset from the bottom of the screen to the bottom edge of the home chat bar.
 double bottomNavChatBarOffset(BuildContext context) =>
     kBottomNavRowHeight + kBottomNavChatBarGap + bottomNavBarReservedInset(context);
@@ -55,6 +66,37 @@ double bottomNavChatBarOffset(BuildContext context) =>
 /// Distance from the bottom of the screen that home-tab content must clear to
 /// stay out from under the floating chat bar, with a little air above it.
 double homeChatBarClearance(BuildContext context) => bottomNavChatBarOffset(context) + kHomeChatBarHeight + 20;
+
+/// The backdrop behind Home's floating [Ask Omi | record] row: it continues the tab bar's solid
+/// colour up through the row and fades out above it, so list content never shows between the chat
+/// bar and the record button or around them. Paint only; a [Stack] child placed before the row.
+class HomeChatBarBackdrop extends StatelessWidget {
+  const HomeChatBarBackdrop({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const height = kBottomNavChatBarGap + kHomeChatBarHeight + kBottomNavFadeHeight;
+    return Positioned(
+      left: 0,
+      right: 0,
+      // From the top of the tab row up to the fade above the chat bar.
+      bottom: kBottomNavRowHeight + bottomNavBarReservedInset(context),
+      height: height,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: const [0.0, kBottomNavFadeHeight / height, 1.0],
+              colors: [_bottomNavFadeStart, kBottomNavBackground, kBottomNavBackground],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class BottomNavBar extends StatefulWidget {
   const BottomNavBar({super.key, required this.onTabTap, this.onTabWarmup});
@@ -99,7 +141,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
                 // The fade ends where the tab row begins whatever the inset is,
                 // so the row and the inset below it are always solid.
                 stops: [0.0, kBottomNavFadeHeight / height, 1.0],
-                colors: const [Colors.transparent, Color.fromARGB(255, 15, 15, 15), Color.fromARGB(255, 15, 15, 15)],
+                colors: [_bottomNavFadeStart, kBottomNavBackground, kBottomNavBackground],
               ),
             ),
             child: Row(
@@ -149,7 +191,15 @@ class _BottomNavBarState extends State<BottomNavBar> {
           },
           child: SizedBox(
             height: kBottomNavRowHeight,
-            child: Center(child: FaIcon(icon, color: selectedIndex == index ? Colors.white : Colors.grey, size: 26)),
+            child: Center(
+              child: FaIcon(
+                icon,
+                color: selectedIndex == index
+                    ? (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white)
+                    : (OmiColors.active == OmiPalette.light ? OmiColors.textTertiary : Colors.grey),
+                size: 26,
+              ),
+            ),
           ),
         ),
       ),

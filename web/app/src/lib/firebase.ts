@@ -4,9 +4,12 @@ import {
   GoogleAuthProvider,
   OAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
   User,
+  AuthProvider as FirebaseAuthProvider,
 } from 'firebase/auth';
 import {
   getMessaging,
@@ -31,11 +34,11 @@ const firebaseConfig = {
 export const isFirebaseAuthConfigured =
   Boolean(
     firebaseConfig.apiKey &&
-    firebaseConfig.authDomain &&
-    firebaseConfig.projectId &&
-    firebaseConfig.storageBucket &&
-    firebaseConfig.messagingSenderId &&
-    firebaseConfig.appId,
+      firebaseConfig.authDomain &&
+      firebaseConfig.projectId &&
+      firebaseConfig.storageBucket &&
+      firebaseConfig.messagingSenderId &&
+      firebaseConfig.appId,
   ) &&
   firebaseConfig.apiKey !== 'preview' &&
   firebaseConfig.authDomain !== 'preview.local';
@@ -45,8 +48,8 @@ const app =
   typeof window === 'undefined' || !isFirebaseAuthConfigured
     ? null
     : getApps().length === 0
-      ? initializeApp(firebaseConfig)
-      : getApps()[0];
+    ? initializeApp(firebaseConfig)
+    : getApps()[0];
 
 // Initialize Firebase Auth
 export const auth = app ? getAuth(app) : (null as unknown as ReturnType<typeof getAuth>);
@@ -63,9 +66,27 @@ appleProvider.addScope('email');
 appleProvider.addScope('name');
 
 /**
- * Sign in with Google
+ * Phones cannot do popups. iOS Safari and Android Chrome open the popup in a
+ * separate window that the user has to leave the page to complete, and the
+ * sign-in SDK reports that as `auth/popup-closed-by-user` — the same code it
+ * uses when someone really does close the window. Mobile sign-in is therefore a
+ * full-page redirect, which comes back through `completeRedirectSignIn`.
+ *
+ * iPadOS reports itself as a Mac, so a device that cannot hover and points
+ * coarsely is treated as mobile too.
  */
-export const signInWithGoogle = async (): Promise<User | null> => {
+export function requiresRedirectSignIn(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (/Android|iPhone|iPad|iPod|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent)) {
+    return true;
+  }
+  return window.matchMedia?.('(hover: none) and (pointer: coarse)').matches ?? false;
+}
+
+async function signInWithProvider(
+  provider: FirebaseAuthProvider,
+  name: 'Google' | 'Apple',
+): Promise<User | null> {
   try {
     if (!isFirebaseAuthConfigured) {
       throw Object.assign(new Error('Firebase sign-in is not configured'), {
@@ -73,31 +94,42 @@ export const signInWithGoogle = async (): Promise<User | null> => {
       });
     }
     if (!app) throw new Error('Firebase auth is only available in a browser');
-    const result = await signInWithPopup(auth, googleProvider);
+    if (requiresRedirectSignIn()) {
+      // Navigates away; the session is picked up by `completeRedirectSignIn`
+      // when the provider sends the user back to this page.
+      await signInWithRedirect(auth, provider);
+      return null;
+    }
+    const result = await signInWithPopup(auth, provider);
     return result.user;
   } catch (error) {
-    console.error('Google sign-in error:', error);
+    console.error(`${name} sign-in error:`, error);
     throw error;
   }
-};
+}
+
+/**
+ * Sign in with Google
+ */
+export const signInWithGoogle = async (): Promise<User | null> =>
+  signInWithProvider(googleProvider, 'Google');
 
 /**
  * Sign in with Apple
  */
-export const signInWithApple = async (): Promise<User | null> => {
-  try {
-    if (!isFirebaseAuthConfigured) {
-      throw Object.assign(new Error('Firebase sign-in is not configured'), {
-        code: 'auth/configuration-not-found',
-      });
-    }
-    if (!app) throw new Error('Firebase auth is only available in a browser');
-    const result = await signInWithPopup(auth, appleProvider);
-    return result.user;
-  } catch (error) {
-    console.error('Apple sign-in error:', error);
-    throw error;
-  }
+export const signInWithApple = async (): Promise<User | null> =>
+  signInWithProvider(appleProvider, 'Apple');
+
+/**
+ * Read the result of a redirect sign-in. Resolves with the user when this page
+ * load is the tail of a redirect, and with null on any other load. Rejects with
+ * the provider's error, which is the only report a cancelled or refused
+ * redirect sign-in ever produces.
+ */
+export const completeRedirectSignIn = async (): Promise<User | null> => {
+  if (!app) return null;
+  const result = await getRedirectResult(auth);
+  return result?.user ?? null;
 };
 
 /**

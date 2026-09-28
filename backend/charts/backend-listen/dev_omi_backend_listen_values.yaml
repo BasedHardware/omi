@@ -106,6 +106,22 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  # Keep these aligned with the development GitHub environment variables used
+  # by the Cloud Run backend; api.omiapi.com is served by backend-listen.
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+    value: "https://backend-dt5lrfkkoa-uc.a.run.app"
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+    value: "1031333818730-compute@developer.gserviceaccount.com"
+  - name: TRANSCRIPTION_SHADOW_ENABLED
+    value: "false"
+  - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
+    value: "false"
+  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+    value: ""
+  - name: TRANSCRIPTION_SHADOW_PERCENT
+    value: "0"
+  - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
+    value: "0"
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://api.omiapi.com"
   - name: FREE_TIER_LOCAL_PROCESSING
@@ -127,6 +143,8 @@ env:
     value: "0.01"
   - name: USE_VERTEX_AI
     value: "true"
+  - name: TTS_PROVIDER
+    value: "gemini"
   # Direct-provider surfaces (desktop_proxy, omni_relay) write their attempts
   # to the gateway ledger under this switch; the manifest declares it, this is
   # where it actually reaches the pod.
@@ -137,6 +155,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GEMINI_API_KEY
+  - name: ELEVENLABS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: ELEVENLABS_API_KEY
   - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -199,14 +222,18 @@ env:
     value: "true"
   - name: MEMORY_OWNER_JEV_FLIP_ENABLED
     value: "true"
-  - name: WAKE_WORD_ADJUDICATION_ENABLED
+  - name: CAPTURE_JEV_SHADOW_ENABLED
     value: "true"
-  - name: GOOGLE_CALENDAR_AUTO_LINK_ENABLED
+  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: CAPTURE_JEV_SHADOW_PERCENT
+    value: "0"
+  - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
-    value: "off"
+    value: "gateway"
   - name: ACCOUNT_CUTOVER_ENFORCEMENT
     value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
@@ -292,9 +319,33 @@ env:
     value: "false"
   - name: STT_CONNECT_ORDER_FROM_CONFIG
     value: "true"
-  - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
+  - name: STT_RESILIENT_RECONNECT
+    value: "false"
+  - name: STT_ROUTING_MODE
+    value: "shadow"
+  - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
+    value: "0.075"
+  - name: STT_ROUTING_PROBE_PERCENT
+    value: "2"
+  - name: STT_NO_TEXT_SECONDS
+    value: "30"
+  - name: SONIOX_MONTHLY_CEILING_USD
+    value: "0"
+  - name: SONIOX_ESTIMATED_USD_PER_HOUR
+    value: "0.07537"
+  - name: STT_MULTI_LANGUAGE_HINTS
+    value: "true"
+  - name: STT_LEARNED_LANGUAGE_PROFILE
+    value: "true"
+  - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
     value: "100"
+  - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
+    value: "1"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
+    value: "1"
+  - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
+    value: "dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local"
+  - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
     value: "1"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
@@ -313,7 +364,7 @@ env:
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
   - name: STT_SERVICE_MODELS
-    value: "parakeet-window,soniox"
+    value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL
@@ -423,6 +474,11 @@ env:
         key: TWILIO_API_KEY_SECRET
   - name: VAD_GATE_MODE
     value: "active"
+  # Audio-timeline v2: one capture coordinate for segments and stored audio.
+  # Admits new eligible recordings only (single-channel, server STT);
+  # existing v1 sessions and resumed v1 conversations are unaffected.
+  - name: AUDIO_TIMELINE_V2
+    value: "true"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"

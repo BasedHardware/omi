@@ -408,6 +408,10 @@ class AsyncStreamingCallback(BaseCallbackHandler):
         else:
             await self.queue.put(f"think: {text}")
 
+    async def put_memory_action(self, action: str):
+        if action in {'saved', 'updated'}:
+            await self.queue.put(f"memory: {action}")
+
     def put_thought_nowait(self, text, app_id: Optional[str] = None):
         if app_id:
             self._put_nowait_threadsafe(f"think: {text}|app_id:{app_id}")
@@ -583,6 +587,11 @@ async def _execute_independent_tool_calls(
     for call, result in zip(validated, results_text):
         tool_name = name_of(call)
         logger.info('Tool ended: %s', tool_name)
+        if tool_name == 'save_user_preference_tool':
+            if result.startswith('Preference updated (memory_id='):
+                await callback.put_memory_action('updated')
+            elif result.startswith('Preference saved (memory_id='):
+                await callback.put_memory_action('saved')
         await _emit_calendar_status(callback, tool_name, result)
         try:
             safety_guard.check_context_size(result)
@@ -729,7 +738,10 @@ def _messages_to_anthropic(messages: List[Message]) -> list:
     anthropic_messages = []
     for msg in messages:
         role = "assistant" if msg.sender == "ai" else "user"
-        anthropic_messages.append({"role": role, "content": msg.text})
+        content = msg.text
+        if msg.sender != 'ai' and msg.files_id:
+            content += f"\n[Files attached to this turn: {', '.join(msg.files_id)}]"
+        anthropic_messages.append({"role": role, "content": content})
     return anthropic_messages
 
 
@@ -1512,6 +1524,18 @@ Available app tool names: {app_tool_names}
 
 IMPORTANT: Always call a matching integration tool when relevant. Never tell the user you don't have access to an integration if a matching tool exists above.
 </available_app_tools>"""
+
+    system_prompt += """
+<chat_memory_and_files>
+Every turn keeps the conversation history and memory tools. A file attached to
+an earlier turn is relevant only when the user's current request refers to it;
+use search_files_tool with the IDs shown in that turn's history when needed.
+When the user corrects a saved preference, look up its memory ID and call
+save_user_preference_tool with replace_memory_id. Set user_stated=true only
+for a preference the user directly asserted, not one inferred from context.
+Say a memory was updated only when the tool reports "Preference updated";
+an additional save is not an update. Do not claim a write after a tool error.
+</chat_memory_and_files>"""
 
     # Instruct the model to use fetch_url_tool for any direct URL in the conversation.
     system_prompt += """

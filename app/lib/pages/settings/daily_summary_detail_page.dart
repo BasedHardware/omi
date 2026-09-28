@@ -110,11 +110,18 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         if (mounted) OmiFeedback.error(context, context.l10n.failedToShareRecap);
         return;
       }
-      PlatformManager.instance.analytics.dailySummaryShared(summaryId: widget.summaryId, date: summary.date);
-      final url = recapShareUrl(widget.summaryId);
-      await SharePlus.instance.share(
+      final sid = newShareId();
+      final url = recapShareUrl(widget.summaryId, sid: sid);
+      final outcome = await SharePlus.instance.share(
         ShareParams(uri: Uri.parse(url), subject: summary.headline, sharePositionOrigin: shareSheetOrigin()),
       );
+      final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
+      PlatformManager.instance.analytics.track('Daily Summary Shared', properties: {
+        'summary_id': widget.summaryId,
+        'date': summary.date,
+        'share_id': sid,
+        if (targetApp != null) 'target_app': targetApp,
+      });
     } finally {
       if (mounted) setState(() => _isSharing = false);
     }
@@ -346,25 +353,25 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       expandedHeight: 150,
       pinned: true,
       backgroundColor: OmiColors.surface0,
-      leading: Center(child: OmiBackButton.circled(fillColor: Colors.black.withValues(alpha: 0.3))),
+      leading: Center(child: OmiBackButton.circled(fillColor: OmiColors.surface3)),
       actions: [
         OmiIconButton.filled(
           icon: _isSharing ? const OmiSpinner(size: OmiSpinnerSize.small) : const Icon(Icons.share_outlined),
           label: context.l10n.share,
-          fillColor: Colors.black.withValues(alpha: 0.3),
+          fillColor: OmiColors.surface3,
           onPressed: _isSharing ? null : _shareSummary,
         ),
         OmiIconButton.filled(
           icon: _isDeleting ? const OmiSpinner(size: OmiSpinnerSize.small) : const Icon(Icons.more_horiz),
           label: context.l10n.moreOptions,
-          fillColor: Colors.black.withValues(alpha: 0.3),
+          fillColor: OmiColors.surface3,
           onPressed: _isDeleting ? null : _showActionsSheet,
         ),
         const SizedBox(width: 8),
       ],
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -385,7 +392,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                   Text(
                     summary.formattedDate,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: OmiColors.textPrimary.withValues(alpha: 0.6),
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
@@ -400,8 +407,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                       Expanded(
                         child: Text(
                           summary.headline,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: OmiColors.textPrimary,
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
                             height: 1.2,
@@ -422,7 +429,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   }
 
   Widget _buildOverviewCard(DailySummary summary) {
-    return Text(summary.overview, style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.5));
+    return Text(summary.overview, style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, height: 1.5));
   }
 
   Widget _buildStatsRow(DailySummary summary) {
@@ -453,15 +460,15 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   Widget _buildStatItem(FaIconData icon, String value) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-      decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          FaIcon(icon, color: Colors.grey.shade400, size: 14),
+          FaIcon(icon, color: OmiColors.textSecondary, size: 14),
           const SizedBox(width: 8),
           Text(
             value,
-            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+            style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -544,7 +551,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             child: Container(
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -556,18 +563,18 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                       children: [
                         Text(
                           highlight.topic,
-                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                          style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           highlight.summary,
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.3),
+                          style: TextStyle(color: OmiColors.textSecondary, fontSize: 13, height: 1.3),
                         ),
                       ],
                     ),
                   ),
                   if (highlight.conversationIds.isNotEmpty)
-                    Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 18),
+                    Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 18),
                 ],
               ),
             ),
@@ -592,7 +599,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             if (completedItems.isNotEmpty)
               Text(
                 '${completedItems.length}/${summary.actionItems.length}',
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                style: TextStyle(color: OmiColors.textTertiary, fontSize: 13),
               ),
           ],
         ),
@@ -611,7 +618,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
         child: Row(
           children: [
             // Checkbox indicator
@@ -621,7 +628,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: item.completed ? Colors.green.withValues(alpha: 0.2) : Colors.transparent,
-                border: Border.all(color: item.completed ? Colors.green : Colors.grey.shade600, width: 1.5),
+                border: Border.all(color: item.completed ? Colors.green : OmiColors.textTertiary, width: 1.5),
               ),
               child: item.completed ? const Icon(Icons.check, color: Colors.green, size: 14) : null,
             ),
@@ -630,14 +637,14 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
               child: Text(
                 item.description,
                 style: TextStyle(
-                  color: item.completed ? Colors.grey.shade500 : Colors.white,
+                  color: item.completed ? OmiColors.textTertiary : OmiColors.textPrimary,
                   fontSize: 15,
                   height: 1.4,
                   decoration: item.completed ? TextDecoration.lineThrough : null,
                 ),
               ),
             ),
-            if (item.sourceConversationId != null) Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
+            if (item.sourceConversationId != null) Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
           ],
         ),
       ),
@@ -656,13 +663,13 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             child: Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(q.question, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
+                    child: Text(q.question, style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, height: 1.4)),
                   ),
-                  if (q.conversationId != null) Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
+                  if (q.conversationId != null) Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
                 ],
               ),
             ),
@@ -684,13 +691,13 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             child: Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(d.decision, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
+                    child: Text(d.decision, style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, height: 1.4)),
                   ),
-                  if (d.conversationId != null) Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
+                  if (d.conversationId != null) Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
                 ],
               ),
             ),
@@ -723,13 +730,13 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             child: Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(k.insight, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
+                    child: Text(k.insight, style: TextStyle(color: OmiColors.textPrimary, fontSize: 15, height: 1.4)),
                   ),
-                  if (k.conversationId != null) Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
+                  if (k.conversationId != null) Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
                 ],
               ),
             ),
@@ -742,7 +749,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+      style: TextStyle(color: OmiColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
     );
   }
 
@@ -770,7 +777,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           key: ValueKey('daily_summary_location_row_$index'),
           margin: const EdgeInsets.only(bottom: 6),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
           child: Row(
             children: [
               Expanded(
@@ -780,8 +787,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                   children: [
                     Text(
                       location.shortName,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: OmiColors.textPrimary,
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                         height: 1.3,
@@ -791,16 +798,16 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                       const SizedBox(height: 2),
                       Row(
                         children: [
-                          FaIcon(FontAwesomeIcons.clock, color: Colors.grey.shade500, size: 12),
+                          FaIcon(FontAwesomeIcons.clock, color: OmiColors.textTertiary, size: 12),
                           const SizedBox(width: 4),
-                          Text(timeText, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                          Text(timeText, style: TextStyle(color: OmiColors.textTertiary, fontSize: 13)),
                         ],
                       ),
                     ],
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
+              Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
             ],
           ),
         ),

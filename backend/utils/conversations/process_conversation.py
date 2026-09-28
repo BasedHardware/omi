@@ -66,11 +66,19 @@ from models.conversation_enums import (
     ConversationStatus,
     ExternalIntegrationConversationSource,
 )
-from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.conversations.deterministic_minimum import (
+    build_deterministic_minimum_structured,
+    deterministic_minimum_title,
+)
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
-from utils.conversations.recovery import RecoveryStructureUnavailableError, structured_is_rich
+from utils.conversations.recovery import (
+    RecoveryStructureUnavailableError,
+    recovery_minimum_terminal_enabled,
+    structured_is_rich,
+    verified_recovery_discard,
+)
 from utils.conversations.relevance import (
     RELEVANCE_DECISION_FIELD,
     Neighbor,
@@ -97,6 +105,7 @@ from utils.conversations.projection_payload import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.speaker_resolution import resolve_speakers_for_processing
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (
     classify_model_about,
@@ -195,10 +204,7 @@ from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
-from utils.conversations.calendar_linking import (
-    get_overlapping_calendar_event,
-    write_conversation_link_to_calendar_event,
-)
+from utils.conversations.calendar_linking import get_overlapping_calendar_event
 from utils.conversations.meeting_treatment import (
     MIN_MEETING_DURATION_SECONDS,
     MIN_TRANSCRIBED_SPEECH_SECONDS,
@@ -234,10 +240,6 @@ from utils.other.storage import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _calendar_auto_link_enabled() -> bool:
-    return os.getenv('GOOGLE_CALENDAR_AUTO_LINK_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
 def _flag_enabled(name: str, *, default: bool = False) -> bool:
@@ -575,6 +577,29 @@ def _get_structured(
 
         # Only described photos reach the model (ConversationPhoto.photos_as_string).
         has_described_photos = any((photo.description or '').strip() for photo in main_conv.photos or [])
+        if trigger is ProcessingTrigger.SERVER_RECOVERY and recovery_minimum_terminal_enabled():
+            # Recovery must preserve the row, but a clear rule-level discard
+            # would never reach the notes model during ordinary capture-end
+            # processing. Return a minimum so the worker closes the job with
+            # the transcript visible, without paying for a futile LLM call.
+            ordinary = decide_relevance(
+                trigger=ProcessingTrigger.CAPTURE_END,
+                texts=[segment.text for segment in segments],
+                speech_seconds=None,
+                # An undescribed photo still contains user data, so never
+                # classify that capture as obvious transcript filler.
+                has_photos=bool(main_conv.photos),
+                user_kept=user_kept,
+                exempt=is_release_probe_uid(uid),
+                trusted_wake_word=has_wake_word_marker,
+                model_discards=None,
+                calendar_retains=lambda: _calendar_overlap_retains_conversation(
+                    uid, main_conv.started_at, main_conv.finished_at
+                ),
+            )
+            if ordinary.discard and ordinary.decided_by == 'rule':
+                logger.info('selfheal recovery skipped paid notes reason=ordinary_rule_discard')
+                return Structured(), False
         # Jev replaces conv_discard only for transcript-only conversations, the
         # population it was measured on; photos and wake-word invocations keep
         # the existing model prompt (#14835).
@@ -709,8 +734,24 @@ def _get_conversation_obj(
     structured: Structured,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
     conversation_id: Optional[str] = None,
+    *,
+    relevance_discarded: Optional[bool] = None,
 ) -> Conversation:
-    discarded = structured.title == '' and not is_release_probe_uid(uid)
+    if relevance_discarded is False and not structured.title.strip():
+        # A kept conversation must never become an empty-title row merely
+        # because structure generation returned a partial object. Use the same
+        # deterministic, model-free title as the minimum-processing path. An
+        # explicit relevance discard keeps its empty title: that remains the
+        # durable discard verdict and is hidden by default at the list boundary.
+        structured.title = deterministic_minimum_title(
+            conversation,
+            tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
+        )
+    discarded = (
+        relevance_discarded
+        if relevance_discarded is not None
+        else structured.title == '' and not is_release_probe_uid(uid)
+    )
     # The empty-title fallback is the discard gate's second verdict and is
     # covered by the same release-probe exemption as the LLM discard above:
     # an LLM mood must not terminalize the probe lane's synthetic capture.
@@ -1589,7 +1630,7 @@ def _extract_memories_canonical(
         if _conversation_notes_v2_enabled() and conversation.started_at:
             person_ids = conversation.get_person_ids()
             people_records = users_db.get_people_by_ids(uid, list(set(person_ids))) if person_ids else []
-            prompt_people = [Person(**record) for record in people_records]
+            prompt_people = Person.deserialize_many_safe(people_records)
             calendar_context = _stored_meeting_context(conversation)
             prompt_transcript, prompt_speaker_map = conversation_transcript_and_speaker_map(
                 uid, conversation, prompt_people
@@ -2576,7 +2617,10 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
         and external_data.get('conversation_role') == 'meeting'
     ):
         try:
-            duration_s = (finished_at - started_at).total_seconds() if has_window else 0.0
+            # Transcript span, not the capture-session window (#4056): `started_at` is the
+            # streaming origin, so a short call inside a long socket would otherwise pay
+            # for calendar/screen reads the final treatment verdict then discards.
+            duration_s = conversation_duration_seconds(conversation) or 0.0
         except TypeError:
             duration_s = 0.0
         speech_s = deduplicated_transcribed_speech_seconds(getattr(conversation, 'transcript_segments', None) or [])
@@ -2600,7 +2644,12 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
             end_date=finished_at,
             limit=MAX_SCREEN_CONTEXT_ROWS,
         )
-        return context_from_screen_activity(rows, started_at=started_at, finished_at=finished_at)
+        return context_from_screen_activity(
+            rows,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=conversation_duration_seconds(conversation),
+        )
 
     context = resolve_meeting_context(
         direct=_stored_meeting_context(conversation),
@@ -2631,6 +2680,7 @@ def process_conversation(
     client_projection: ClientProcessing | None = None,
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
+    speaker_receipt_observer: Callable[[bool], None] | None = None,
 ) -> Conversation:
     """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
     fixes run-now, reprocess, JIT bypass, and relevance policy together.
@@ -2867,12 +2917,16 @@ def process_conversation(
         return cast(Conversation, conversation)
 
     _enrich_meeting_context(uid, conversation)
+    # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
+    speaker_receipt_applied = resolve_speakers_for_processing(uid, conversation)
+    if speaker_receipt_observer is not None:
+        speaker_receipt_observer(speaker_receipt_applied)
 
     person_ids = conversation.get_person_ids()
     people: List[Person] = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     decisions: list[RelevanceDecision] = []
@@ -2886,15 +2940,30 @@ def process_conversation(
         user_kept=user_kept,
         relevance_observer=decisions.append,
     )
-    conversation = _get_conversation_obj(uid, structured, conversation, conversation_id=generated_conversation_id)
+    conversation = _get_conversation_obj(
+        uid,
+        structured,
+        conversation,
+        conversation_id=generated_conversation_id,
+        relevance_discarded=discarded,
+    )
     _attach_client_projection(conversation, client_projection)
-    if trigger is ProcessingTrigger.SERVER_RECOVERY and not structured_is_rich(structured):
+    relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
+    explicit_recovery_discard = verified_recovery_discard(
+        conversation.discarded, relevance.as_record() if relevance is not None else None
+    )
+    if (
+        trigger is ProcessingTrigger.SERVER_RECOVERY
+        and not structured_is_rich(structured)
+        and not explicit_recovery_discard
+    ):
         sys.stdout.write(
             json.dumps(
                 {
                     'event': 'selfheal_guard',
                     'outcome': 'refused',
                     'reason': 'empty_structured',
+                    'relevance_verdict': relevance.verdict if relevance is not None else 'missing',
                     'uid': uid,
                     'conversation_id': conversation.id,
                 },
@@ -2904,7 +2973,15 @@ def process_conversation(
         )
         sys.stdout.flush()
         raise RecoveryStructureUnavailableError('server recovery produced no enriched structure')
-    relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
+    if (
+        trigger is ProcessingTrigger.SERVER_RECOVERY
+        and explicit_recovery_discard
+        and not structured_is_rich(structured)
+    ):
+        sys.stdout.write(
+            json.dumps({'event': 'selfheal_guard', 'outcome': 'accepted', 'reason': 'explicit_discard'}) + '\n'
+        )
+        sys.stdout.flush()
     if relevance is not None:
         record_decision(relevance)
 
@@ -2966,38 +3043,6 @@ def process_conversation(
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
 
     def _emit_derived_effects() -> None:
-        # Calendar auto-linking calls and mutates a user's Google Calendar during generic
-        # conversation processing. Keep it opt-in so normal sync/reprocess jobs do not
-        # fan out provider traffic for every connected user.
-        if (
-            _calendar_auto_link_enabled()
-            and not discarded
-            and conversation.started_at
-            and conversation.finished_at
-            and conversation.calendar_event is None
-        ):
-            try:
-                calendar_event = asyncio.run(
-                    get_overlapping_calendar_event(
-                        uid,
-                        conversation.started_at,
-                        conversation.finished_at,
-                    )
-                )
-                if calendar_event:
-                    conversation.calendar_event = calendar_event
-                    asyncio.run(
-                        write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation.id)
-                    )
-                    conversations_db.update_conversation(
-                        uid,
-                        conversation.id,
-                        {'calendar_event': calendar_event.model_dump(mode='json')},
-                    )
-            except Exception as e:
-                logger.error(f"Error during calendar event linking: {e}")
-                pass
-
         # AI-based folder assignment
         assigned_folder_id = None
         if not jit_defer_expensive and not discarded and not is_reprocess and not conversation.folder_id:
