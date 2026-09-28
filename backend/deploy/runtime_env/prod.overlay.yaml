@@ -16,6 +16,10 @@ overlay:
           value: 'true'
         STT_RESILIENT_RECONNECT:
           value: 'false'
+        STT_ROUTING_MODE:
+          value: shadow
+        SONIOX_MONTHLY_CEILING_USD:
+          value: '10000'
         STT_LEARNED_LANGUAGE_PROFILE:
           value: 'false'
         # 2026-09-27: first prod ramp of the Soniox-first arm for non-English multi-language

@@ -88,6 +88,24 @@ environments:
           STT_RESILIENT_RECONNECT:
             value: 'false'
             category: rollout
+          STT_ROUTING_MODE:
+            value: shadow
+            category: rollout
+          STT_ROUTING_REDIS_TIMEOUT_SECONDS:
+            value: '0.075'
+            category: rollout
+          STT_ROUTING_PROBE_PERCENT:
+            value: '2'
+            category: rollout
+          STT_NO_TEXT_SECONDS:
+            value: '30'
+            category: rollout
+          SONIOX_MONTHLY_CEILING_USD:
+            value: '0'
+            category: rollout
+          SONIOX_ESTIMATED_USD_PER_HOUR:
+            value: '0.07537'
+            category: rollout
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
             category: rollout
@@ -1781,6 +1799,24 @@ environments:
             category: rollout
           STT_RESILIENT_RECONNECT:
             value: 'false'
+            category: rollout
+          STT_ROUTING_MODE:
+            value: shadow
+            category: rollout
+          STT_ROUTING_REDIS_TIMEOUT_SECONDS:
+            value: '0.075'
+            category: rollout
+          STT_ROUTING_PROBE_PERCENT:
+            value: '2'
+            category: rollout
+          STT_NO_TEXT_SECONDS:
+            value: '30'
+            category: rollout
+          SONIOX_MONTHLY_CEILING_USD:
+            value: '10000'
+            category: rollout
+          SONIOX_ESTIMATED_USD_PER_HOUR:
+            value: '0.07537'
             category: rollout
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'

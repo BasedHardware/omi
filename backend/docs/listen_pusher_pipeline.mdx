@@ -71,6 +71,21 @@ can prioritize Parakeet only when that live-model capability matches; it never
 overrides the selected service/language/model tuple. All providers implement the
 `STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
 
+When `STT_ROUTING_MODE=shadow`, listen computes a fleet score from bounded
+provider/language transcript outcomes but still connects in configured order.
+`on` ranks only the legs that were already eligible for the session. The
+windowed Parakeet allocation and the language arm keep their selected primary;
+account benches exclude a provider regardless of score. A 2% deterministic
+probe floor lets lower-score eligible providers demonstrate recovery. The
+background Redis refresh has a 75 ms default deadline; stale cache falls back
+to process-local health. Neither Redis reads nor writes run on the connection
+path. `off` returns to configured
+order without a code change. Each leg emits `text` only when it produces its
+first nonempty text within `STT_NO_TEXT_SECONDS` of VAD-confirmed speech;
+eligible legs that miss the deadline emit `no_text`. The existing terminal
+session metric below remains the user-facing SLI. See the
+[live STT routing runbook](runbooks/live-stt-routing.md).
+
 Soniox streams final token deltas whose network-frame boundaries can split a
 word. Its adapter retains the pending word across frames, preserving subword
 text until whitespace, a speaker change, a gap of at least three seconds, or
