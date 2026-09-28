@@ -1,35 +1,40 @@
 import asyncio
-import types
-import sys
 from unittest.mock import Mock
 import pytest
 from fastapi import HTTPException
 
-# Stub firebase_admin if not already present in the environment
-if "firebase_admin" not in sys.modules:
-    fb = types.ModuleType("firebase_admin")
-    fb_auth = types.ModuleType("firebase_admin.auth")
-    fb.auth = fb_auth
-    sys.modules["firebase_admin"] = fb
-    sys.modules["firebase_admin.auth"] = fb_auth
 
-try:
-    from routers.auth import (
-        _bounded_provider_error,
-        _OAUTH_ERROR_CODES,
-        auth_callback_google,
-        auth_callback_apple_post,
-    )
-except ImportError:
-    from backend.routers.auth import (
-        _bounded_provider_error,
-        _OAUTH_ERROR_CODES,
-        auth_callback_google,
-        auth_callback_apple_post,
-    )
+def _get_auth():
+    import sys
+    import types
+
+    if "firebase_admin" not in sys.modules:
+        fb = types.ModuleType("firebase_admin")
+        fb_auth = types.ModuleType("firebase_admin.auth")
+        fb.auth = fb_auth
+        sys.modules["firebase_admin"] = fb
+        sys.modules["firebase_admin.auth"] = fb_auth
+
+    try:
+        from routers.auth import (
+            _bounded_provider_error,
+            _OAUTH_ERROR_CODES,
+            auth_callback_google,
+            auth_callback_apple_post,
+        )
+    except ImportError:
+        from backend.routers.auth import (
+            _bounded_provider_error,
+            _OAUTH_ERROR_CODES,
+            auth_callback_google,
+            auth_callback_apple_post,
+        )
+
+    return _bounded_provider_error, _OAUTH_ERROR_CODES, auth_callback_google, auth_callback_apple_post
 
 
 def test_bounded_provider_error_valid_known_codes():
+    _bounded_provider_error, _, _, _ = _get_auth()
     for code in [
         "access_denied",
         "invalid_request",
@@ -41,6 +46,7 @@ def test_bounded_provider_error_valid_known_codes():
 
 
 def test_bounded_provider_error_malicious_input_sanitized():
+    _bounded_provider_error, _, _, _ = _get_auth()
     malicious_inputs = [
         "<script>alert(1)</script>",
         "' OR 1=1 --",
@@ -57,12 +63,15 @@ def test_bounded_provider_error_malicious_input_sanitized():
 
 
 def test_bounded_provider_error_bounded_length():
+    _bounded_provider_error, _, _, _ = _get_auth()
     long_string = "a" * 1000
     res = _bounded_provider_error(long_string)
     assert len(res) <= 64
 
 
 def test_auth_callback_google_error_sanitization():
+    _, _, auth_callback_google, _ = _get_auth()
+
     async def _test():
         mock_request = Mock()
         # Malicious XSS error parameter
@@ -90,6 +99,8 @@ def test_auth_callback_google_error_sanitization():
 
 
 def test_auth_callback_apple_post_error_sanitization():
+    _, _, _, auth_callback_apple_post = _get_auth()
+
     async def _test():
         mock_request = Mock()
         # Malicious injection error parameter
