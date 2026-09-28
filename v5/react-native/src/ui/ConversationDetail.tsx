@@ -242,7 +242,7 @@ function LegacyConversationBody({
           accessibilityLabel="Retry conversation details"
           onPress={reload}
           style={styles.conversationTranscriptAction}>
-          <Text style={[styles.conversationDetailField, ink]}>Try again</Text>
+          <Text style={[styles.conversationDetailField, ink]}>Try Again</Text>
         </FocusPressable>
       </View>
     );
