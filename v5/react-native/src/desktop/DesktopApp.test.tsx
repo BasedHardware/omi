@@ -353,10 +353,19 @@ test('Chat suggestions prepare an editable draft without sending', async () => {
   expect(onDraftChange).toHaveBeenCalledWith('Turn these thoughts into a plan');
   expect(onSend).not.toHaveBeenCalled();
   expect(renderer.root.findByType(DesktopChat).props.submission).toBe(0);
+  // In Chat the omnibar is Search only: the composer is the one place to
+  // type a message, so there is no Ask mode to duplicate it.
   expect(
-    renderer.root.find(node => node.props.accessibilityLabel === 'Use Ask mode')
-      .props.accessibilityState.selected,
-  ).toBe(true);
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Use Ask mode',
+    ),
+  ).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Search Recall',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
 });
 
 test.each([
@@ -716,9 +725,10 @@ test('the Chat destination keeps one omnibar and navigation closes it without a 
   );
   act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
   expect(onSend).toHaveBeenCalledTimes(1);
+  // The Search-only omnibar leaves Chat for Recall.
   await act(async () =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Use Search mode')
+      .findAll(node => node.props.accessibilityLabel === 'Search Recall')[0]
       .props.onPress(),
   );
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
@@ -758,9 +768,13 @@ test('older v5 pages layout keeps the Chat composer with its transcript', async 
   );
   act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
   expect(onSend).toHaveBeenCalledTimes(1);
+  // No Activity button beside the composer: the navigation leaves Chat.
+  expect(
+    renderer.root.findAll(node => node.props.accessibilityLabel === 'Activity'),
+  ).toHaveLength(0);
   act(() =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Activity')
+      .findAll(node => node.props.accessibilityLabel === 'Home')[0]
       .props.onPress(),
   );
   expect(
@@ -1428,6 +1442,7 @@ test('chat transport errors appear only in the Chat destination', async () => {
 });
 
 test('chat empty copy stays truthful while history loads or fails', async () => {
+  const onRetryChatHistory = jest.fn();
   const renderer = renderDesktop({
     loadingHistory: true,
     messages: [],
@@ -1443,12 +1458,21 @@ test('chat empty copy stays truthful while history loads or fails', async () => 
         {...props}
         loadingHistory={false}
         chatError="Chat is temporarily unavailable."
+        chatHistoryFailed
+        onRetryChatHistory={onRetryChatHistory}
         messages={[]}
       />,
     ),
   );
   expect(renderedText(renderer)).toContain('Chat is temporarily unavailable.');
+  expect(renderedText(renderer)).toContain('Couldn’t Load Chat');
   expect(renderedText(renderer)).not.toContain('What’s on your mind?');
+  act(() =>
+    renderer.root
+      .findAll(node => node.props.accessibilityLabel === 'Try Again')[0]
+      .props.onPress(),
+  );
+  expect(onRetryChatHistory).toHaveBeenCalledTimes(1);
   act(() =>
     renderer.update(
       <DesktopApp
@@ -2119,13 +2143,20 @@ test('web wheel and scrollbar events pause following through the actual scroll n
     .mockImplementation(() => undefined);
   const props = {
     submission: 0,
-    messages: [],
+    messages: [
+      {
+        id: 'reply',
+        sender: 'ai' as const,
+        text: 'Answer',
+        createdAt: 1000,
+        generationOutcome: 'completed' as const,
+      },
+    ],
     busy: false,
     error: null,
     hasOlder: false,
     loadingOlder: false,
     onLoadOlder: jest.fn(),
-    onClose: jest.fn(),
   };
   try {
     act(() => {

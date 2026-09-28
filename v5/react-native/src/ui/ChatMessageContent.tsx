@@ -2,7 +2,6 @@ import React, {useMemo} from 'react';
 import {
   Alert,
   Linking,
-  Platform,
   StyleSheet,
   Text,
   View,
@@ -12,6 +11,7 @@ import {
 import {Renderer, useMarkdown, type MarkedStyles} from 'react-native-marked';
 import type {ChatMessageContentProps} from './ChatMessageContent.types';
 import {useOmiTheme} from '../design/OmiTheme';
+import {ChatCodeBlock, chatMonospace} from './ChatCodeBlock';
 
 class ChatMarkdownRenderer extends Renderer {
   constructor(private readonly base: TextStyle) {
@@ -44,20 +44,17 @@ class ChatMarkdownRenderer extends Renderer {
     );
   }
 
+  // Fenced code gets a language label, a Copy button and a horizontal
+  // scroll (ChatCodeBlock) instead of the library's bare scroll view.
   code(
     text: string,
     language?: string,
-    containerStyle?: ViewStyle,
-    textStyle?: TextStyle,
+    _containerStyle?: ViewStyle,
+    _textStyle?: TextStyle,
   ) {
-    return super.code(text, language, containerStyle, {
-      ...textStyle,
-      fontStyle: 'normal',
-      fontFamily:
-        Platform.OS === 'ios' || Platform.OS === 'macos'
-          ? 'Menlo'
-          : 'monospace',
-    });
+    return (
+      <ChatCodeBlock key={this.getKey()} code={text} language={language} />
+    );
   }
 
   // Model-authored image URLs must never trigger background network requests.
@@ -89,21 +86,18 @@ function MarkdownChatMessageContent({
       strong: {...base, fontWeight: '700'},
       em: {...base, fontStyle: 'italic'},
       link: {...base, color: theme.color.link, textDecorationLine: 'underline'},
-      h1: heading,
-      h2: heading,
+      h1: {...heading, fontSize: (base.fontSize ?? 15) + 4},
+      h2: {...heading, fontSize: (base.fontSize ?? 15) + 2},
       h3: heading,
       h4: heading,
       h5: heading,
       h6: heading,
       codespan: {
         ...base,
-        fontFamily:
-          Platform.OS === 'ios' || Platform.OS === 'macos'
-            ? 'Menlo'
-            : 'monospace',
-        backgroundColor: 'transparent',
+        fontFamily: chatMonospace,
+        fontSize: (base.fontSize ?? 15) - 1,
+        backgroundColor: theme.color.fillSelected,
       },
-      code: {backgroundColor: theme.color.fill, padding: theme.space.sm},
       paragraph: {marginTop: 0, marginBottom: 8},
       blockquote: {
         borderLeftColor: theme.color.hairline,
@@ -111,6 +105,7 @@ function MarkdownChatMessageContent({
         paddingLeft: theme.space.md,
       },
       table: {borderColor: theme.color.hairline},
+      hr: {backgroundColor: theme.color.separator, height: 1},
     };
   }, [style, theme]);
   const elements = useMarkdown(text, {renderer, styles});

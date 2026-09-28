@@ -464,58 +464,75 @@ export function DesktopChromeV5({
         </ShippingPressable>
       </View>
       <View style={styles.omnibar}>
-        <View style={styles.modes}>
-          <Animated.View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: 4,
-              bottom: 4,
-              left: 0,
-              borderRadius: 10,
-              backgroundColor: token.color.glassSelected,
-              transform: [{translateX: modePillX}],
-              width: modePillW,
-              opacity: modePillOpacity,
-            }}
-          />
-          {(['Ask', 'Search'] as const).map(value => {
-            const iconName = value === 'Ask' ? 'chat_bubble' : 'search';
-            return (
-              <FocusPressable
-                key={value}
-                accessibilityRole="button"
-                accessibilityLabel={`Use ${value} mode`}
-                accessibilityState={{selected: mode === value}}
-                onLayout={event => {
-                  const {x, width} = event.nativeEvent.layout;
-                  setModeFrames(current => ({
-                    ...current,
-                    [value]: {x, width},
-                  }));
-                }}
-                onPress={() => onModeChange?.(value)}
-                style={styles.modeButton}>
-                <MaterialIcon
-                  name={iconName}
-                  size={15}
-                  color={
-                    mode === value ? token.color.ink : token.color.inkMuted
-                  }
-                />
-                <Text
-                  style={[
-                    styles.modeText,
-                    mode === value && styles.navTextActive,
-                  ]}>
-                  {value}
-                </Text>
-              </FocusPressable>
-            );
-          })}
-        </View>
+        {route === 'Chat' ? null : (
+          <View style={styles.modes}>
+            <Animated.View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                top: 4,
+                bottom: 4,
+                left: 0,
+                borderRadius: 10,
+                backgroundColor: token.color.glassSelected,
+                transform: [{translateX: modePillX}],
+                width: modePillW,
+                opacity: modePillOpacity,
+              }}
+            />
+            {(['Ask', 'Search'] as const).map(value => {
+              const iconName = value === 'Ask' ? 'chat_bubble' : 'search';
+              return (
+                <FocusPressable
+                  key={value}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use ${value} mode`}
+                  accessibilityState={{selected: mode === value}}
+                  onLayout={event => {
+                    const {x, width} = event.nativeEvent.layout;
+                    setModeFrames(current => ({
+                      ...current,
+                      [value]: {x, width},
+                    }));
+                  }}
+                  onPress={() => onModeChange?.(value)}
+                  style={styles.modeButton}>
+                  <MaterialIcon
+                    name={iconName}
+                    size={15}
+                    color={
+                      mode === value ? token.color.ink : token.color.inkMuted
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.modeText,
+                      mode === value && styles.navTextActive,
+                    ]}>
+                    {value}
+                  </Text>
+                </FocusPressable>
+              );
+            })}
+          </View>
+        )}
         {route === 'Chat' ? (
-          <Text style={styles.omnibarInput}>Chat</Text>
+          // Chat owns its composer; here the omnibar is Search only.
+          <FocusPressable
+            accessibilityRole="search"
+            accessibilityLabel="Search Recall"
+            accessibilityHint="Opens Recall to search your history"
+            onPress={() => onModeChange?.('Search')}
+            style={styles.searchOnly}>
+            <MaterialIcon
+              name="search"
+              size={16}
+              color={token.color.inkMuted}
+            />
+            <Text numberOfLines={1} style={styles.searchOnlyText}>
+              {desktopSearchPlaceholder}
+            </Text>
+          </FocusPressable>
         ) : (
           <TextInput
             accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search Recall'}
@@ -771,6 +788,22 @@ const createStyles = (token: DesktopTokens) =>
       minWidth: 220,
       paddingHorizontal: 8,
       paddingVertical: 6,
+    },
+    searchOnly: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      borderRadius: 10,
+      flex: 1,
+      flexDirection: 'row',
+      gap: 8,
+      minWidth: 0,
+      paddingHorizontal: 10,
+    },
+    searchOnlyText: {
+      color: token.color.inkMuted,
+      flex: 1,
+      fontFamily: token.font,
+      fontSize: token.type.search,
     },
     omnibarInput: {
       color: token.color.ink,

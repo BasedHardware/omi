@@ -181,7 +181,7 @@ test('mobile Ask Omi opens the actual chat and reports a missing backend', async
       .props.onChangeText('Hello Omi');
   });
   await act(async () => control(renderer, 'Ask Omi').props.onSubmitEditing());
-  expect(control(renderer, 'Chat scroll region')).toBeDefined();
+  expect(control(renderer, 'Chat transcript')).toBeDefined();
   expect(control(renderer, 'Start Live voice')).toBeUndefined();
   expect(control(renderer, 'Open calls')).toBeUndefined();
   expect(control(renderer, 'Ask Omi')).toBe(input);
@@ -205,12 +205,12 @@ test('Search is default; switching to Ask retains the draft and returns to the p
   expect(control(renderer, 'Search loaded data').props.value).toBe(
     'Workspace ideas',
   );
-  expect(control(renderer, 'Chat scroll region')).toBeUndefined();
+  expect(control(renderer, 'Chat transcript')).toBeUndefined();
   expect(control(renderer, 'Search loaded conversations')).toBeUndefined();
   await act(async () => control(renderer, 'Ask mode').props.onPress());
   expect(control(renderer, 'Ask Omi')).toBe(input);
   await act(async () => control(renderer, 'Send to Omi').props.onPress());
-  expect(control(renderer, 'Chat scroll region')).toBeDefined();
+  expect(control(renderer, 'Chat transcript')).toBeDefined();
   await act(async () => control(renderer, 'Back from chat').props.onPress());
   expect(
     control(renderer, 'Conversations').props.accessibilityState.selected,
@@ -221,7 +221,7 @@ test('Search is default; switching to Ask retains the draft and returns to the p
     control(renderer, 'Search loaded data').props.onSubmitEditing(),
   );
   expect(control(renderer, 'Search results')).toBeDefined();
-  expect(control(renderer, 'Chat scroll region')).toBeUndefined();
+  expect(control(renderer, 'Chat transcript')).toBeUndefined();
 });
 
 test('mobile device panel exposes the existing scan and connection controls', async () => {

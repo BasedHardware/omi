@@ -55,6 +55,8 @@ type ShellProps = TaskMutationProps & {
   onSignOut: () => void;
   onStop: () => void;
   onRetryChat?: (message: ChatMessage) => void;
+  chatHistoryFailed?: boolean;
+  onRetryChatHistory?: () => void;
   onUiVersionChange?: (version: 'v5' | 'v5.1') => void;
   onWorkspaceReload?: () => void;
   outcomes: DesktopReadOutcomes | null;
@@ -102,6 +104,8 @@ export function DesktopShellV5({
   onSignOut,
   onStop,
   onRetryChat,
+  chatHistoryFailed = false,
+  onRetryChatHistory,
   onUiVersionChange,
   onWorkspaceReload,
   outcomes,
@@ -253,7 +257,6 @@ export function DesktopShellV5({
         draft={draft}
         omnibarRef={omnibarRef}
         onDraftChange={onDraftChange}
-        liveControl={route === 'Chat' ? liveVoiceControl : undefined}
         mode={mode}
         onModeChange={next => {
           setMode(next);
@@ -323,8 +326,10 @@ export function DesktopShellV5({
             }}
             onStop={onStop}
             canStop={activeGenerationId !== null}
-            onClose={() => navigate('Home')}
             onRetry={onRetryChat}
+            historyFailed={chatHistoryFailed}
+            onRetryHistory={onRetryChatHistory}
+            composerAccessory={liveVoiceControl}
             onSuggest={prompt => {
               setMode('Ask');
               onDraftChange(prompt);

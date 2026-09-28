@@ -14,6 +14,7 @@ const GLYPHS = {
   arrow_outward: 0xf8ce,
   arrow_selector_tool: 0xf82f,
   arrow_upward: 0xe5d8,
+  arrow_downward: 0xe5db,
   graphic_eq: 0xe1b8,
   auto_awesome: 0xe65f,
   book: 0xe86e,

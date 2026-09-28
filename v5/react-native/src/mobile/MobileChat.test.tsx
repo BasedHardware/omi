@@ -1,6 +1,6 @@
 import React from 'react';
 import Renderer, {act} from 'react-test-renderer';
-import {ScrollView, TextInput, View} from 'react-native';
+import {Pressable, ScrollView, Text, TextInput, View} from 'react-native';
 import {MobileChat} from './MobileChat';
 import {MobileOmnibar} from './MobileOmnibar';
 import {ChatThinking} from '../ui/ChatTranscript';
@@ -107,11 +107,12 @@ test('streaming chat uses one pending response, retains stop and gates older loa
       },
     ],
   });
-  expect(tree.root.findAllByType(ChatThinking)).toHaveLength(0);
+  // One thinking indicator: the pending reply's own, never a second row.
+  expect(tree.root.findAllByType(ChatThinking)).toHaveLength(1);
   expect(control('Waiting for response').props.accessibilityState.busy).toBe(
     true,
   );
-  expect(control('Load older messages').props.disabled).toBe(true);
+  expect(control('Load earlier messages').props.disabled).toBe(true);
   act(() => control('Stop response').props.onPress());
   expect(onStop).toHaveBeenCalledTimes(1);
   expect(onSend).not.toHaveBeenCalled();
@@ -135,8 +136,10 @@ test('scrolling away exposes Jump to Latest and restores follow on activation', 
     ],
     onJumpLatest,
   });
+  const scroll = tree.root.findByType(ScrollView);
+  // A programmatic scroll (content growing) never counts as leaving the end.
   act(() =>
-    tree.root.findByType(ScrollView).props.onScroll({
+    scroll.props.onScroll({
       nativeEvent: {
         contentOffset: {y: 0},
         contentSize: {height: 1000},
@@ -144,9 +147,107 @@ test('scrolling away exposes Jump to Latest and restores follow on activation', 
       },
     }),
   );
+  expect(control('Jump to Latest')).toBeUndefined();
+  act(() => {
+    scroll.props.onScrollBeginDrag();
+    scroll.props.onScroll({
+      nativeEvent: {
+        contentOffset: {y: 0},
+        contentSize: {height: 1000},
+        layoutMeasurement: {height: 200},
+      },
+    });
+  });
   act(() => control('Jump to Latest').props.onPress());
   expect(onJumpLatest).toHaveBeenCalledTimes(1);
   expect(scrollToEnd).toHaveBeenCalled();
   act(() => tree.unmount());
   scrollToEnd.mockRestore();
+});
+
+test('a failed history read says so with Try Again instead of an empty chat', () => {
+  const onRetryHistory = jest.fn();
+  const {tree, control} = setup({
+    historyFailed: true,
+    onRetryHistory,
+    error: 'Chat history could not be loaded.',
+  });
+  const text = JSON.stringify(tree.toJSON());
+  expect(text).toContain('Couldn’t Load Chat');
+  expect(text).not.toContain('What’s on your mind?');
+  expect(control('Try: Find my next step')).toBeUndefined();
+  act(() => control('Try Again').props.onPress());
+  expect(onRetryHistory).toHaveBeenCalledTimes(1);
+  act(() => tree.unmount());
+});
+
+test('a failed first send keeps the greeting, hides prompts and says so near the composer', () => {
+  const {tree, control} = setup({error: 'Message not sent.'});
+  expect(JSON.stringify(tree.toJSON())).toContain('What’s on your mind?');
+  expect(control('Try: Find my next step')).toBeUndefined();
+  const alert = tree.root.find(
+    node =>
+      node.props.accessibilityRole === 'alert' && typeof node.type !== 'string',
+  );
+  expect(alert.findAllByType(Text).map(node => node.props.children)).toContain(
+    'Message not sent.',
+  );
+  act(() => tree.unmount());
+});
+
+test('older replies open their actions with a long press; the newest shows its bar', () => {
+  const sheet = jest.fn();
+  const RN = require('react-native');
+  RN.ActionSheetIOS.showActionSheetWithOptions = sheet;
+  const onRetry = jest.fn();
+  const {tree, control} = setup({
+    onRetry,
+    messages: [
+      {
+        id: 'h1',
+        sender: 'human',
+        text: 'First',
+        createdAt: 1000,
+        generationOutcome: null,
+      },
+      {
+        id: 'a1',
+        sender: 'ai',
+        text: 'Older answer',
+        createdAt: 1001,
+        generationOutcome: 'completed',
+      },
+      {
+        id: 'h2',
+        sender: 'human',
+        text: 'Second',
+        createdAt: 1002,
+        generationOutcome: null,
+      },
+      {
+        id: 'a2',
+        sender: 'ai',
+        text: 'Newest answer',
+        createdAt: 1003,
+        generationOutcome: 'completed',
+      },
+    ],
+  });
+  // Phones show no permanent icons under older replies; the newest keeps one.
+  expect(
+    tree.root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Share or copy response' &&
+        typeof node.type !== 'string',
+    ).length,
+  ).toBeGreaterThan(0);
+  const older = tree.root
+    .findAllByType(Pressable)
+    .filter(node => typeof node.props.onLongPress === 'function');
+  expect(older).toHaveLength(1);
+  act(() => older[0].props.onLongPress());
+  expect(sheet).toHaveBeenCalledTimes(1);
+  expect(sheet.mock.calls[0][0].options).toEqual(['Share or Copy', 'Cancel']);
+  expect(control('Response').props.accessibilityHint).toContain('Long press');
+  act(() => tree.unmount());
 });

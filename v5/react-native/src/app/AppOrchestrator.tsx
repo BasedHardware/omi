@@ -152,6 +152,9 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
   const [hasOlderChat, setHasOlderChat] = useState(false);
   const [loadingOlderChat, setLoadingOlderChat] = useState(false);
   const [chatHistorySettled, setChatHistorySettled] = useState(false);
+  // A failed history read is not an empty conversation: the chat surfaces
+  // say so and offer Try Again instead of a greeting.
+  const [chatHistoryFailed, setChatHistoryFailed] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
   const [activeGenerationId, setActiveGenerationId] = useState<string | null>(
     null,
@@ -318,6 +321,7 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
     setChatBusy(false);
     setLoadingOlderChat(false);
     setChatHistorySettled(false);
+    setChatHistoryFailed(false);
     setActiveGenerationId(null);
     sendInFlightRef.current = null;
     stableChatMessageIds.clear();
@@ -372,6 +376,7 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
         setOlderChatCursor(page.olderCursor);
         setHasOlderChat(page.hasOlder);
         setChatError(null);
+        setChatHistoryFailed(false);
         setChatHistorySettled(true);
       })
       .catch(error => {
@@ -381,6 +386,7 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
           onboardingRequired === false
         ) {
           setChatError(chatHistoryErrorCopy(error));
+          setChatHistoryFailed(true);
           setChatHistorySettled(true);
           // A 401/unconfigured history load can mean the cloud session died;
           // re-probe it instead of keeping a ready shell on dead credentials.
@@ -735,6 +741,18 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
         setChatBusy(false);
       }
     }
+  };
+
+  // Re-read chat history after a failed load. Only while nothing is in
+  // flight: the history effect retires any active request on a new epoch.
+  const retryChatHistory = () => {
+    if (chatBusy || sendInFlightRef.current !== null) {
+      return;
+    }
+    setChatError(null);
+    setChatHistoryFailed(false);
+    setChatHistorySettled(false);
+    setChatEpoch(current => current + 1);
   };
 
   // Re-send the human message paired with a failed assistant response.
@@ -1148,6 +1166,8 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
             stopGeneration().catch(() => undefined);
           }}
           onRetryChat={retryChatMessage}
+          chatHistoryFailed={chatHistoryFailed}
+          onRetryChatHistory={retryChatHistory}
           onCancelSignIn={() => {
             cancelSignIn().catch(() => undefined);
           }}
@@ -1202,6 +1222,8 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
         setMobileMode(beforeMobileChat.current.mode);
       }}
       onRetry={retryChatMessage}
+      historyFailed={chatHistoryFailed}
+      onRetryHistory={retryChatHistory}
       onUsePrompt={prompt => {
         setMobileMode('Ask');
         setDraft(prompt);

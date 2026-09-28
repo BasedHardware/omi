@@ -1,10 +1,11 @@
 import React, {memo, useEffect, useRef, useState} from 'react';
+import * as ReactNative from 'react-native';
 import {
+  Alert,
   Animated,
   Easing,
   Platform,
-  Share,
-  StyleSheet,
+  Pressable,
   Text,
   View,
 } from 'react-native';
@@ -13,22 +14,81 @@ import type {OmiTheme} from '../design/tokens';
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {OmiAvatar} from './OmiAvatar';
 import {ChatMessageContent} from './ChatMessageContent';
-import {OmiButton, OmiIconButton} from '../design/primitives';
-import {omiBackend} from '../omiNative';
-import {styles} from './styles';
-import {
-  type DesktopTokens,
-  useDesktopTheme,
-  useDesktopStyleSheets,
-} from '../desktop/DesktopTheme';
+import {MaterialIcon, type MaterialIconName} from './MaterialIcon';
+import {FocusPressable} from './Pressable';
+import {OmiButton} from '../design/primitives';
+import {chatCopySharesOnPhone, copyChatText} from './chatClipboard';
+import {chatMessageMs, chatTimeLabel} from './chatTimeline';
 
-function formatChatTime(createdAt: number): string {
-  const milliseconds =
-    createdAt > 100_000_000_000 ? createdAt : createdAt * 1000;
-  return new Date(milliseconds).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+// One transcript for every surface (docs/chat-ux.md): your words sit in a
+// quiet bubble on the right; Omi answers as flat, full-width Markdown with no
+// bubble and no avatar. The Omi mark appears only while Omi is thinking or
+// still writing. Actions live in a small bar under a reply: always visible on
+// the newest reply, on hover or keyboard focus elsewhere (long-press on
+// phones). Day separators replace per-message timestamps.
+
+// Read per render (not at import) so tests and previews can switch platform.
+const isPhone = () => Platform.OS === 'ios' || Platform.OS === 'android';
+
+type CopyState = 'ready' | 'copied' | 'shared' | 'failed';
+
+function copyLabel(state: CopyState) {
+  return state === 'copied'
+    ? 'Copied'
+    : state === 'shared'
+    ? 'Shared'
+    : state === 'failed'
+    ? 'Copy unavailable'
+    : chatCopySharesOnPhone()
+    ? 'Share or copy response'
+    : 'Copy response';
+}
+
+/** Small quiet icon action with a tooltip; reports focus so its bar can show. */
+function ChatActionButton({
+  icon,
+  label,
+  onPress,
+  onFocusChange,
+}: {
+  icon: MaterialIconName;
+  label: string;
+  onPress: () => void;
+  onFocusChange?: (focused: boolean) => void;
+}) {
+  const theme = useOmiTheme();
+  const styles = useOmiStyles(createStyles);
+  return (
+    <FocusPressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      {...({tooltip: label, title: label} as object)}
+      onPress={onPress}
+      onFocus={() => onFocusChange?.(true)}
+      onBlur={() => onFocusChange?.(false)}
+      hitSlop={isPhone() ? 6 : 2}
+      style={state => [
+        styles.action,
+        (state as {hovered?: boolean}).hovered && styles.actionHovered,
+        state.pressed && styles.actionPressed,
+      ]}>
+      <MaterialIcon
+        name={icon}
+        size={theme.size.iconSmall}
+        color={theme.color.inkSecondary}
+      />
+    </FocusPressable>
+  );
+}
+
+/** Whether a reply row draws its action bar (and so reserves its height). */
+export function chatReplyHasActionBar(message: ChatMessage, latest: boolean) {
+  return (
+    message.sender === 'ai' &&
+    !isStreamingAssistant(message) &&
+    message.text.trim() !== '' &&
+    (!isPhone() || latest)
+  );
 }
 
 const ChatMessageRow = memo(function ChatMessageRow({
@@ -39,23 +99,21 @@ const ChatMessageRow = memo(function ChatMessageRow({
   onRetry,
   onCopy,
   reduceMotion,
+  latest = false,
 }: {
   animate: boolean;
+  /** Phone density (the pushed chat page and the legacy wide shell). */
   compact: boolean;
   desktop?: boolean;
   message: ChatMessage;
   onRetry?: () => void;
   onCopy?: (text: string) => Promise<void> | void;
   reduceMotion: boolean;
+  /** The newest Omi reply keeps its action bar visible. */
+  latest?: boolean;
 }) {
-  const {tokens: token} = useDesktopTheme();
-  const desktopStyles = useDesktopStyleSheets(createDesktopStyles);
-  const transcriptStyles = useDesktopStyleSheets(createTranscriptStyles);
-  const mobileBubbles = useOmiStyles(createMobileBubbleStyles);
-  const omiTheme = useOmiTheme();
-  // The mark keeps its own white on dark; light mobile reads theme ink.
-  const mobileInk =
-    omiTheme.scheme === 'light' ? omiTheme.color.ink : undefined;
+  const theme = useOmiTheme();
+  const styles = useOmiStyles(createStyles);
   const opacity = useRef(new Animated.Value(animate ? 0 : 1)).current;
   const translateY = useRef(
     new Animated.Value(animate && !reduceMotion ? 10 : 0),
@@ -68,13 +126,13 @@ const ChatMessageRow = memo(function ChatMessageRow({
     }
     const animation = Animated.parallel([
       Animated.timing(opacity, {
-        duration: reduceMotion ? 1 : 200,
+        duration: reduceMotion ? 1 : theme.motion.standard,
         easing: Easing.out(Easing.cubic),
         toValue: 1,
         useNativeDriver: true,
       }),
       Animated.timing(translateY, {
-        duration: reduceMotion ? 1 : 200,
+        duration: reduceMotion ? 1 : theme.motion.standard,
         easing: Easing.out(Easing.cubic),
         toValue: 0,
         useNativeDriver: true,
@@ -82,204 +140,223 @@ const ChatMessageRow = memo(function ChatMessageRow({
     ]);
     animation.start();
     return () => animation.stop();
-  }, [animate, opacity, reduceMotion, translateY]);
+  }, [animate, opacity, reduceMotion, theme.motion.standard, translateY]);
   const human = message.sender === 'human';
   const streaming = isStreamingAssistant(message);
   const waiting = streaming && message.text === '';
-  const [copyState, setCopyState] = useState<
-    'ready' | 'copied' | 'shared' | 'failed'
-  >('ready');
+  const failed = message.generationOutcome === 'failed';
+  const cancelled = message.generationOutcome === 'cancelled';
+  const retryable =
+    failed && message.generationRetryable === true && onRetry !== undefined;
+  const [copyState, setCopyState] = useState<CopyState>('ready');
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const resetCopy = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (resetCopy.current !== null) {
+        clearTimeout(resetCopy.current);
+      }
+    },
+    [],
+  );
   const copy = async () => {
     try {
+      let next: CopyState = 'copied';
       if (onCopy) {
         await onCopy(message.text);
-      } else if (omiBackend?.copyToClipboard) {
-        await omiBackend.copyToClipboard(message.text);
-      } else if (typeof navigator !== 'undefined' && 'clipboard' in navigator) {
-        await (
-          navigator as Navigator & {
-            clipboard: {writeText(text: string): Promise<void>};
-          }
-        ).clipboard.writeText(message.text);
-      } else if (Platform.OS === 'ios' || Platform.OS === 'android') {
-        const result = await Share.share({message: message.text});
-        if (result.action !== Share.dismissedAction) {
-          setCopyState('shared');
-        }
-        return;
       } else {
-        throw new Error('Clipboard unavailable');
+        const result = await copyChatText(message.text);
+        if (result === 'dismissed') {
+          return;
+        }
+        next = result;
       }
-      setCopyState('copied');
+      setCopyState(next);
+      if (resetCopy.current !== null) {
+        clearTimeout(resetCopy.current);
+      }
+      resetCopy.current = setTimeout(() => setCopyState('ready'), 1600);
     } catch {
       setCopyState('failed');
     }
   };
-  return (
-    <Animated.View
-      accessibilityLabel={
-        message.generationOutcome === 'failed'
-          ? 'Failed response'
-          : waiting
-          ? 'Waiting for response'
-          : undefined
+  const ms = chatMessageMs(message.createdAt);
+  const time = chatTimeLabel(ms);
+  const timeHint = {
+    accessibilityHint: `${human ? 'Sent' : 'Answered'} at ${time}`,
+    ...({tooltip: time, title: time} as object),
+  };
+  const mobile = compact && !desktop;
+  const textStyle = mobile ? styles.textMobile : styles.text;
+
+  if (human) {
+    return (
+      <Animated.View
+        style={[styles.humanRow, {opacity, transform: [{translateY}]}]}>
+        <View
+          {...timeHint}
+          style={[
+            styles.bubble,
+            mobile ? styles.bubbleMobile : styles.bubbleDesktop,
+          ]}>
+          <Text selectable style={textStyle}>
+            {message.text}
+          </Text>
+        </View>
+      </Animated.View>
+    );
+  }
+
+  const showActions = !streaming && message.text.trim() !== '';
+  // Phones cannot hover: only the newest reply shows its bar; older replies
+  // open the same actions with a long press.
+  const barVisible = latest || hovered || focused;
+  const openSheet = () => {
+    const options = [chatCopySharesOnPhone() ? 'Share or Copy' : 'Copy'];
+    if (retryable) {
+      options.push('Try Again');
+    }
+    options.push('Cancel');
+    const choose = (index: number) => {
+      if (index === 0) {
+        copy().catch(() => undefined);
+      } else if (retryable && index === 1) {
+        onRetry?.();
       }
-      accessibilityLiveRegion={streaming ? 'polite' : undefined}
-      accessibilityState={streaming ? {busy: true} : undefined}
-      accessible={waiting || message.generationOutcome === 'failed'}
-      style={[
-        styles.chatMessageRow,
-        human ? styles.chatMessageRowHuman : styles.chatMessageRowAi,
-        {opacity, transform: [{translateY}]},
-      ]}>
-      {!human && (
-        <OmiAvatar
-          tone={desktop || compact ? 'ink' : 'identity'}
-          size={compact && !desktop ? 28 : 40}
-          inkColor={desktop ? token.color.ink : mobileInk}
-          animate={streaming}
+    };
+    // Namespace access: react-native-web has no ActionSheetIOS export.
+    const sheet = (
+      ReactNative as {ActionSheetIOS?: typeof ReactNative.ActionSheetIOS}
+    ).ActionSheetIOS;
+    if (Platform.OS === 'ios' && sheet) {
+      sheet.showActionSheetWithOptions(
+        {options, cancelButtonIndex: options.length - 1},
+        choose,
+      );
+    } else {
+      Alert.alert(
+        'Response',
+        undefined,
+        options.map((label, index) => ({
+          text: label,
+          style: label === 'Cancel' ? 'cancel' : 'default',
+          onPress: () => choose(index),
+        })),
+      );
+    }
+  };
+  const body = (
+    <>
+      {waiting ? (
+        <ChatThinking reduceMotion={reduceMotion} desktop={!mobile} inline />
+      ) : failed ? (
+        <View style={styles.failure}>
+          <MaterialIcon
+            name="info"
+            size={theme.size.iconSmall}
+            color={theme.color.danger}
+          />
+          <Text selectable style={[textStyle, styles.failureText]}>
+            {message.generationRetryable === true
+              ? 'Response failed. Try again.'
+              : 'Response failed.'}
+          </Text>
+          {retryable ? (
+            <OmiButton label="Try Again" compact onPress={onRetry!} />
+          ) : null}
+        </View>
+      ) : (
+        <ChatMessageContent
+          text={message.text}
+          style={[textStyle, cancelled && styles.cancelledText]}
+          streaming={streaming}
           reduceMotion={reduceMotion}
         />
       )}
-      <View
-        style={[
-          styles.chatMessageColumn,
-          compact
-            ? styles.chatMessageColumnCompact
-            : styles.chatMessageColumnDesktop,
-          human && styles.chatMessageColumnHuman,
-          compact && !desktop && transcriptStyles.mobileColumn,
-          desktop && desktopStyles.column,
-        ]}>
-        <View
-          style={[
-            styles.chatBubble,
-            human
-              ? desktop
-                ? desktopStyles.human
-                : mobileBubbles.human
-              : desktop
-              ? styles.chatBubbleAi
-              : mobileBubbles.ai,
-            desktop && !human && desktopStyles.ai,
-            message.generationOutcome === 'cancelled' &&
-              styles.cancelledMessage,
-          ]}>
-          {message.generationOutcome === 'failed' ? (
-            <Text
-              selectable
-              style={[
-                styles.failedLabel,
-                desktop ? desktopStyles.text : mobileBubbles.text,
-              ]}>
-              {message.generationRetryable === true
-                ? 'Response failed. Try again.'
-                : 'Response failed.'}
-            </Text>
-          ) : human ? (
-            <Text
-              selectable
-              style={[
-                styles.message,
-                desktop ? desktopStyles.text : mobileBubbles.text,
-              ]}>
-              {message.text}
-            </Text>
-          ) : waiting ? (
-            <View accessible={false} style={transcriptStyles.skeleton}>
-              {[100, 86, 62].map(width => (
-                <View
-                  key={width}
-                  style={[
-                    transcriptStyles.line,
-                    desktop ? transcriptStyles.desktopLine : mobileBubbles.line,
-                    {width: `${width}%`},
-                  ]}
-                />
-              ))}
-            </View>
-          ) : (
-            <ChatMessageContent
-              text={message.text}
-              style={[
-                styles.message,
-                desktop ? desktopStyles.text : mobileBubbles.text,
-              ]}
-              streaming={streaming}
-              reduceMotion={reduceMotion}
-            />
-          )}
+      {streaming && !waiting ? (
+        <View style={styles.writing}>
+          <OmiAvatar
+            tone="ink"
+            size={14}
+            inkColor={theme.color.ink}
+            animate
+            reduceMotion={reduceMotion}
+          />
         </View>
-        {message.generationOutcome === 'cancelled' && (
-          <Text style={[styles.cancelledLabel, !desktop && mobileBubbles.time]}>
-            Response stopped
-          </Text>
-        )}
-        {message.generationOutcome === 'failed' &&
-          message.generationRetryable === true &&
-          onRetry !== undefined && (
-            <OmiButton
-              label="Try Again"
-              compact
-              onPress={onRetry}
-              style={transcriptStyles.action}
-            />
-          )}
-        {/* Copy is a quiet icon beside the time, not a button per reply:
-            long threads stay readable. The label carries the state. */}
+      ) : null}
+      {cancelled ? <Text style={styles.meta}>Response stopped</Text> : null}
+      {showActions && (!isPhone() || latest) ? (
         <View
-          style={[transcriptStyles.meta, human && transcriptStyles.metaHuman]}>
-          <Text
-            style={[
-              styles.chatTimestamp,
-              human && styles.chatTimestampHuman,
-              desktop ? desktopStyles.time : mobileBubbles.time,
-            ]}>
-            {formatChatTime(message.createdAt)}
-          </Text>
-          {!human && !waiting && message.text.trim() !== '' && (
-            <OmiIconButton
-              icon={
-                copyState === 'copied' || copyState === 'shared'
-                  ? 'check'
-                  : 'content_copy'
-              }
-              label={
-                copyState === 'copied'
-                  ? 'Copied'
-                  : copyState === 'shared'
-                  ? 'Shared'
-                  : copyState === 'failed'
-                  ? 'Copy unavailable'
-                  : Platform.OS === 'ios' || Platform.OS === 'android'
-                  ? 'Share or copy response'
-                  : 'Copy response'
-              }
-              size="small"
-              quiet
-              onPress={copy}
-            />
-          )}
+          style={[styles.bar, !barVisible && styles.barHidden]}
+          accessibilityLabel="Response actions">
+          <ChatActionButton
+            icon={
+              copyState === 'copied' || copyState === 'shared'
+                ? 'check'
+                : 'content_copy'
+            }
+            label={copyLabel(copyState)}
+            onPress={() => {
+              copy().catch(() => undefined);
+            }}
+            onFocusChange={setFocused}
+          />
         </View>
-      </View>
+      ) : null}
+    </>
+  );
+  const rowProps = {
+    accessibilityLabel: failed
+      ? 'Failed response'
+      : waiting
+      ? 'Waiting for response'
+      : undefined,
+    accessibilityLiveRegion: streaming ? ('polite' as const) : undefined,
+    accessibilityState: streaming ? {busy: true} : undefined,
+    accessible: waiting || failed ? true : undefined,
+  };
+  return (
+    <Animated.View
+      {...rowProps}
+      {...(waiting ? {} : timeHint)}
+      {...({
+        onMouseEnter: () => setHovered(true),
+        onMouseLeave: () => setHovered(false),
+      } as object)}
+      style={[styles.aiRow, {opacity, transform: [{translateY}]}]}>
+      {isPhone() && showActions && !latest ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Response"
+          accessibilityHint="Long press for Copy and Try Again"
+          delayLongPress={350}
+          onLongPress={openSheet}>
+          {body}
+        </Pressable>
+      ) : (
+        body
+      )}
     </Animated.View>
   );
 });
 
+/**
+ * Omi is thinking: the animated Omi mark with a quiet "Thinking…" label. The
+ * label pulses gently; both stop under Reduce Motion.
+ */
 function ChatThinking({
   reduceMotion,
   desktop = false,
+  inline = false,
 }: {
   reduceMotion: boolean;
   desktop?: boolean;
+  /** Rendered inside a pending reply row that already owns the live region. */
+  inline?: boolean;
 }) {
-  const {tokens: token} = useDesktopTheme();
-  const desktopStyles = useDesktopStyleSheets(createDesktopStyles);
-  const transcriptStyles = useDesktopStyleSheets(createTranscriptStyles);
-  const mobileBubbles = useOmiStyles(createMobileBubbleStyles);
-  const omiTheme = useOmiTheme();
-  const mobileInk =
-    omiTheme.scheme === 'light' ? omiTheme.color.ink : undefined;
+  const theme = useOmiTheme();
+  const styles = useOmiStyles(createStyles);
   const opacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (reduceMotion) {
@@ -305,93 +382,114 @@ function ChatThinking({
   }, [opacity, reduceMotion]);
   return (
     <View
-      accessible
-      accessibilityLabel="Waiting for response"
-      accessibilityLiveRegion="polite"
-      accessibilityState={{busy: true}}
-      style={[styles.chatMessageRow, styles.chatMessageRowAi]}>
+      {...(inline
+        ? {}
+        : {
+            accessible: true,
+            accessibilityLabel: 'Waiting for response',
+            accessibilityLiveRegion: 'polite' as const,
+            accessibilityState: {busy: true},
+          })}
+      style={[styles.thinking, !inline && styles.aiRow]}>
       <OmiAvatar
         tone="ink"
-        inkColor={desktop ? token.color.ink : mobileInk}
+        size={desktop ? 18 : 22}
+        inkColor={theme.color.ink}
         animate
         reduceMotion={reduceMotion}
       />
-      <Animated.View
-        accessible={false}
-        style={[
-          styles.chatBubble,
-          desktop ? styles.chatBubbleAi : mobileBubbles.ai,
-          desktop && desktopStyles.ai,
-          transcriptStyles.skeleton,
-          {opacity},
-        ]}>
-        {[100, 86, 62].map(width => (
-          <View
-            key={width}
-            style={[
-              transcriptStyles.line,
-              desktop ? transcriptStyles.desktopLine : mobileBubbles.line,
-              {width: `${width}%`},
-            ]}
-          />
-        ))}
+      <Animated.View accessible={false} style={{opacity}}>
+        <Text style={styles.thinkingText}>Thinking…</Text>
       </Animated.View>
     </View>
   );
 }
 
-export {ChatMessageRow, ChatThinking};
+/** Centered quiet day label ("Today", "Yesterday", "Wed, Sep 23"). */
+function ChatDaySeparator({label}: {label: string}) {
+  const styles = useOmiStyles(createStyles);
+  return (
+    <View accessibilityRole="header" style={styles.day}>
+      <Text style={styles.dayText}>{label}</Text>
+    </View>
+  );
+}
 
-const createDesktopStyles = (token: DesktopTokens) =>
-  StyleSheet.create({
-    column: {maxWidth: '82%'},
-    // Mirrors the shipped Omi app: your words sit in a quiet bubble on the
-    // right; Omi answers as flat text beside its avatar, with no bubble.
-    human: {
-      backgroundColor: token.color.glassStrong,
-      borderWidth: 0,
-      borderRadius: 18,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+export {ChatMessageRow, ChatThinking, ChatDaySeparator};
+
+const createStyles = (t: OmiTheme) => {
+  // Chat reads longer than a list row: body type with a looser leading.
+  const reading = {...t.type.body, lineHeight: t.type.body.lineHeight + 4};
+  return {
+    humanRow: {
+      alignSelf: 'stretch' as const,
+      alignItems: 'flex-end' as const,
     },
-    ai: {backgroundColor: 'transparent', borderWidth: 0},
-    text: {color: token.color.ink, fontSize: 15, lineHeight: 24},
-    time: {color: token.color.inkFaint, fontSize: 11},
-  });
-
-// Same convention as the shipped Omi apps on both platforms: your words sit
-// in a quiet bubble on the right; Omi answers as flat text with no bubble.
-const createMobileBubbleStyles = (t: OmiTheme) => ({
-  human: {
-    backgroundColor: t.color.surfaceRaised,
-    borderWidth: 0,
-    borderRadius: t.radius.sheet,
-    paddingHorizontal: t.space.lg - 2,
-    paddingVertical: t.space.sm + 2,
-  },
-  ai: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    paddingHorizontal: 0,
-    paddingVertical: t.space.xs,
-  },
-  // Mobile text reads the Omi theme so both appearances stay legible.
-  text: {color: t.color.ink},
-  time: {color: t.color.inkTertiary},
-  line: {backgroundColor: t.color.fillSelected},
-});
-
-const createTranscriptStyles = (token: DesktopTokens) =>
-  StyleSheet.create({
-    action: {alignSelf: 'flex-start', marginTop: 4},
-    meta: {flexDirection: 'row', alignItems: 'center', gap: 2},
-    metaHuman: {justifyContent: 'flex-end'},
-    mobileColumn: {flexShrink: 1, maxWidth: '85%'},
-    skeleton: {width: 260, maxWidth: '80%', gap: 10},
-    line: {
-      height: 10,
-      borderRadius: 5,
-      backgroundColor: 'rgba(255,255,255,0.18)',
+    bubble: {
+      maxWidth: '75%' as const,
+      borderRadius: t.radius.sheet,
+      paddingHorizontal: t.density === 'desktop' ? t.space.lg : t.space.lg - 2,
+      paddingVertical:
+        t.density === 'desktop' ? t.space.sm + 2 : t.space.sm + 2,
     },
-    desktopLine: {backgroundColor: token.color.glassSelected},
-  });
+    // Quiet ink fill on desktop glass; the raised grey on phones.
+    bubbleDesktop: {backgroundColor: t.color.fillSelected},
+    bubbleMobile: {backgroundColor: t.color.surfaceRaised},
+    text: {...reading, color: t.color.ink},
+    textMobile: {
+      ...t.type.body,
+      lineHeight: t.type.body.lineHeight + 3,
+      color: t.color.ink,
+    },
+    cancelledText: {color: t.color.inkSecondary},
+    aiRow: {alignSelf: 'stretch' as const},
+    failure: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      flexWrap: 'wrap' as const,
+      gap: t.space.sm,
+      alignSelf: 'flex-start' as const,
+      paddingVertical: t.space.xs,
+    },
+    failureText: {color: t.color.ink},
+    writing: {marginTop: t.space.sm, alignSelf: 'flex-start' as const},
+    meta: {
+      ...t.type.footnote,
+      color: t.color.inkSecondary,
+      marginTop: t.space.xs,
+    },
+    bar: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: t.space.xxs,
+      marginTop: t.space.xs,
+      marginLeft: -6,
+    },
+    barHidden: {opacity: 0},
+    action: {
+      width: t.density === 'desktop' ? 26 : 34,
+      height: t.density === 'desktop' ? 26 : 34,
+      borderRadius: t.radius.pill,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+    },
+    actionHovered: {backgroundColor: t.color.fill},
+    actionPressed: {backgroundColor: t.color.fillPressed},
+    thinking: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: t.space.sm + 2,
+      paddingVertical: t.space.xs,
+    },
+    thinkingText: {...t.type.subhead, color: t.color.inkSecondary},
+    day: {
+      alignSelf: 'center' as const,
+      paddingVertical: t.space.xs,
+    },
+    dayText: {
+      ...t.type.footnote,
+      fontWeight: '600' as const,
+      color: t.color.inkSecondary,
+    },
+  };
+};
