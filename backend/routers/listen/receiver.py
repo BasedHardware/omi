@@ -1365,6 +1365,17 @@ class ListenReceiver(ReplayFilterMixin):
                 modulate_callback=modulate_callback,
                 epoch=epoch,
             )
+        except ProviderChainUnavailable as error:
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+            hop.note_failure(None)
+            await terminate_live_stt_backoff(
+                self.host.request.websocket,
+                self.host.state,
+                reason='provider_unavailable',
+                retry_after=error.retry_after,
+            )
+            return False
         except Exception:
             if managed_chain_enabled(self.host):
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
