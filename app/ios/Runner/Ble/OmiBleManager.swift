@@ -55,6 +55,8 @@ final class OmiBleManager: NSObject {
     /// Deduplicate native setup for each physical connection; an explicit Dart
     /// manageDevice call may still replay readiness to the current Flutter engine.
     private var readyNotified: Set<String> = []
+    /// Monotonic start time for the current GATT discovery, cleared at ready or failure.
+    private var discoveryStartedAt: [String: TimeInterval] = [:]
 
     /// Suppresses duplicate recovery callbacks while CoreBluetooth tears down a
     /// link whose protected characteristic rejected the current bond.
@@ -210,7 +212,11 @@ final class OmiBleManager: NSObject {
             switch OmiBleConnectionPolicy.readyRecoveryAction(
                 peripheralState: peripheral.state,
                 nativeReady: readyNotified.contains(uuid),
-                hasCompleteServices: completedServices != nil
+                hasCompleteServices: completedServices != nil,
+                discoveryInFlight: OmiBleConnectionPolicy.discoveryIsActive(
+                    startedAt: discoveryStartedAt[uuid],
+                    now: ProcessInfo.processInfo.systemUptime
+                )
             ) {
             case .replayReady:
                 // A prior ready callback may have raced Dart startup or belonged
@@ -222,13 +228,20 @@ final class OmiBleManager: NSObject {
                 // Restored links may have no usable GATT snapshot yet. This is
                 // one request-bound discovery, with no polling or reconnect.
                 readyNotified.remove(uuid)
-                peripheral.delegate = self
-                peripheral.discoverServices(nil)
+                discoverServices(for: peripheral, uuid: uuid)
+            case .awaitDiscovery:
+                // Restoration or didConnect already started the GATT work.
+                break
             case .connect:
                 centralManager.connect(peripheral, options: nil)
             }
             return
         }
+    }
+
+    private func discoverServices(for peripheral: CBPeripheral, uuid: String) {
+        discoveryStartedAt[uuid] = ProcessInfo.processInfo.systemUptime
+        peripheral.discoverServices(nil)
     }
 
     private func completedBleServices(for peripheral: CBPeripheral) -> [BleService]? {
@@ -781,6 +794,7 @@ final class OmiBleManager: NSObject {
         }
         discoveredServices.removeValue(forKey: peripheralUuid)
         readyNotified.remove(peripheralUuid)
+        discoveryStartedAt.removeValue(forKey: peripheralUuid)
 
         // Clean up pending completions
         let completionKeys = readCompletions.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
@@ -840,7 +854,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
                 if peripheral.state != .connected, !pairingLostBlocked.contains(uuid) {
                     central.connect(peripheral, options: nil)
                 } else {
-                    peripheral.discoverServices(nil)
+                    discoverServices(for: peripheral, uuid: uuid)
                 }
             }
             flutterApi?.onStateRestored(peripheralUuids: uuids) { _ in }
@@ -880,6 +894,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         }
         everConnected.insert(uuid)
         readyNotified.remove(uuid)
+        discoveryStartedAt.removeValue(forKey: uuid)
         pairingRecoveryInFlight.remove(uuid)
         connectionStartTimes[uuid] = Int64(Date().timeIntervalSince1970 * 1000)
         lastRssi.removeValue(forKey: uuid)
@@ -895,7 +910,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         logBle(uuid: uuid, event: "connected", detail: "")
 
         peripheral.delegate = self
-        peripheral.discoverServices(nil)
+        discoverServices(for: peripheral, uuid: uuid)
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -987,7 +1002,11 @@ extension OmiBleManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         let uuid = peripheralUuidString(peripheral)
 
-        guard let services = peripheral.services else { return }
+        guard error == nil, let services = peripheral.services, !services.isEmpty else {
+            discoveryStartedAt.removeValue(forKey: uuid)
+            logBle(uuid: uuid, event: "service_discovery_failed", detail: error?.localizedDescription ?? "no_services")
+            return
+        }
         discoveredServices[uuid] = services
 
         // Discover characteristics for all services
@@ -999,9 +1018,17 @@ extension OmiBleManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         let uuid = peripheralUuidString(peripheral)
 
+        if let error {
+            discoveryStartedAt.removeValue(forKey: uuid)
+            logBle(uuid: uuid, event: "characteristic_discovery_failed", detail: error.localizedDescription)
+            return
+        }
+
         // Check if all services have had their characteristics discovered
         guard let services = peripheral.services else { return }
-        if let bleServices = completedBleServices(for: peripheral), readyNotified.insert(uuid).inserted {
+        if let bleServices = completedBleServices(for: peripheral) {
+            discoveryStartedAt.removeValue(forKey: uuid)
+            guard readyNotified.insert(uuid).inserted else { return }
             notifyFlutterDeviceReady(uuid: uuid, services: bleServices, source: "discovery")
             LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
             if let diagnostic = services.first(where: { $0.uuid == Self.diagnosticsServiceUuid })?

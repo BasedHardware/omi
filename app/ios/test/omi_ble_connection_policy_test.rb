@@ -22,23 +22,35 @@ class OmiBleConnectionPolicyTest < Minitest::Test
                 precondition(OmiBleConnectionPolicy.readyRecoveryAction(
                     peripheralState: .connected,
                     nativeReady: true,
-                    hasCompleteServices: true
+                    hasCompleteServices: true,
+                    discoveryInFlight: false
                 ) == .replayReady)
                 precondition(OmiBleConnectionPolicy.readyRecoveryAction(
                     peripheralState: .connected,
                     nativeReady: false,
-                    hasCompleteServices: true
+                    hasCompleteServices: true,
+                    discoveryInFlight: false
                 ) == .discoverServices)
                 precondition(OmiBleConnectionPolicy.readyRecoveryAction(
                     peripheralState: .connected,
                     nativeReady: true,
-                    hasCompleteServices: false
+                    hasCompleteServices: false,
+                    discoveryInFlight: false
                 ) == .discoverServices)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: false,
+                    hasCompleteServices: false,
+                    discoveryInFlight: true
+                ) == .awaitDiscovery)
                 precondition(OmiBleConnectionPolicy.readyRecoveryAction(
                     peripheralState: .disconnected,
                     nativeReady: true,
-                    hasCompleteServices: true
+                    hasCompleteServices: true,
+                    discoveryInFlight: true
                 ) == .connect)
+                precondition(OmiBleConnectionPolicy.discoveryIsActive(startedAt: 100, now: 114))
+                precondition(!OmiBleConnectionPolicy.discoveryIsActive(startedAt: 100, now: 115))
 
                 let recoveryCodes = [
                     CBATTError.insufficientAuthentication.rawValue,

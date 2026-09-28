@@ -6,7 +6,16 @@ enum OmiBleConnectionPolicy {
     enum ReadyRecoveryAction: Equatable {
         case connect
         case replayReady
+        case awaitDiscovery
         case discoverServices
+    }
+
+    /// A later explicit request may retry discovery if CoreBluetooth never calls back.
+    static let discoveryRetryAfter: TimeInterval = 15
+
+    static func discoveryIsActive(startedAt: TimeInterval?, now: TimeInterval) -> Bool {
+        guard let startedAt else { return false }
+        return now - startedAt < discoveryRetryAfter
     }
 
     /// A Dart connection request can arrive after CoreBluetooth restored a link.
@@ -15,10 +24,12 @@ enum OmiBleConnectionPolicy {
     static func readyRecoveryAction(
         peripheralState: CBPeripheralState,
         nativeReady: Bool,
-        hasCompleteServices: Bool
+        hasCompleteServices: Bool,
+        discoveryInFlight: Bool
     ) -> ReadyRecoveryAction {
         guard peripheralState == .connected else { return .connect }
-        return nativeReady && hasCompleteServices ? .replayReady : .discoverServices
+        if nativeReady && hasCompleteServices { return .replayReady }
+        return discoveryInFlight ? .awaitDiscovery : .discoverServices
     }
 
     static func requiresPairingRecovery(_ error: Error?) -> Bool {
