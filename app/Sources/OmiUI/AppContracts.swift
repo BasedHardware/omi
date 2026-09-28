@@ -103,85 +103,126 @@ public final class AppStore: ObservableObject {
 
     // MARK: Reads (conversations / memories / tasks)
 
-    @Published public private(set) var outcomes: DesktopReadOutcomes?
-    @Published public private(set) var readsLoading: Bool = false
-    @Published public private(set) var tasksRead: TaskRead?
-    @Published public private(set) var chatMessages: [ChatMessage] = []
-    @Published public private(set) var chatHistoryLoading: Bool = false
-    @Published public private(set) var chatGeneration: ChatGenerationUiState = .idle
+    @Published public internal(set) var outcomes: DesktopReadOutcomes?
+    @Published public internal(set) var readsLoading: Bool = false
+    @Published public internal(set) var tasksRead: TaskRead?
+    @Published public internal(set) var chatMessages: [ChatMessage] = []
+    @Published public internal(set) var chatHistoryLoading: Bool = false
+    @Published public internal(set) var chatGeneration: ChatGenerationUiState = .idle
     @Published public var composerText: String = ""
 
     // MARK: Session
 
-    @Published public private(set) var authState: AuthUiState = .signedOut
-    @Published public private(set) var signInErrorCopy: String?
+    @Published public internal(set) var authState: AuthUiState = .signedOut
+    @Published public internal(set) var signInErrorCopy: String?
 
     // MARK: Devices
 
-    @Published public private(set) var bluetoothState: BluetoothState = .unknown
-    @Published public private(set) var discoveredDevices: [DiscoveredDevice] = []
-    @Published public private(set) var scanning: Bool = false
-    @Published public private(set) var connectingDeviceId: String?
-    @Published public private(set) var connectedDeviceName: String?
-    @Published public private(set) var connectedDeviceInfo: BleDeviceInfo?
-    @Published public private(set) var batteryLevel: Int?
-    @Published public private(set) var captureStage: CaptureStage = .idle
-    @Published public private(set) var deviceErrorCopy: String?
+    @Published public internal(set) var bluetoothState: BluetoothState = .unknown
+    @Published public internal(set) var discoveredDevices: [DiscoveredDevice] = []
+    @Published public internal(set) var scanning: Bool = false
+    @Published public internal(set) var connectingDeviceId: String?
+    @Published public internal(set) var connectedDeviceName: String?
+    @Published public internal(set) var connectedDeviceInfo: BleDeviceInfo?
+    @Published public internal(set) var batteryLevel: Int?
+    @Published public internal(set) var captureStage: CaptureStage = .idle
+    @Published public internal(set) var deviceErrorCopy: String?
 
     // MARK: Rewind (desktop activity)
 
-    @Published public private(set) var rewindGroups: [RewindCaptureGroup] = []
+    @Published public internal(set) var rewindGroups: [RewindCaptureGroup] = []
 
     // MARK: Preferences + cloud
 
-    @Published public private(set) var preferences = DesktopPreferences()
-    @Published public private(set) var connectors: ConnectorsSnapshot?
-    @Published public private(set) var accountSettings: AccountSettingsSnapshot?
-    @Published public private(set) var cloudLoading: Bool = false
+    @Published public internal(set) var preferences = DesktopPreferences()
+    @Published public internal(set) var connectors: ConnectorsSnapshot?
+    @Published public internal(set) var accountSettings: AccountSettingsSnapshot?
+    @Published public internal(set) var cloudLoading: Bool = false
 
     // MARK: Intent surface (implemented in App/AppStore.swift)
 
-    public func navigate(_ route: AppRoute) {}
-    public func navigate(mobileRoute: MobileRoute) {}
+    // MARK: Reads phase + pagination (useDesktopReads.ts)
 
-    public func refreshReads() async {}
-    public func loadOlderConversations() async {}
-    public func loadOlderMemories() async {}
-    public func loadOlderTasks() async {}
+    @Published public internal(set) var readsPhase: ReadsPhase = .initialLoading
+    @Published public internal(set) var conversationsLoadingMore: Bool = false
+    @Published public internal(set) var tasksLoadingMore: Bool = false
+    @Published public internal(set) var conversationNotice: String?
+    @Published public internal(set) var taskNotice: String?
+    /// Conversations gained extra pages in this session (preserves loaded
+    /// pages across refresh until the surface leaves and reopens).
+    @Published public internal(set) var conversationsExtended: Bool = false
 
-    public func sendChat(_ text: String) async {}
-    public func cancelChatGeneration() async {}
-    public func loadOlderChatHistory() async {}
+    // MARK: Memories pagination (loadOlderMemories)
 
-    public func toggleTask(_ task: TaskProjection) async {}
-    public func renameTask(_ task: TaskProjection, title: String) async {}
-    public func addTask(title: String) async {}
+    @Published public internal(set) var memoriesLoadingMore: Bool = false
+    @Published public internal(set) var memoriesNotice: String?
 
-    public func startSignIn() async {}
-    public func cancelSignIn() {}
-    public func completeOnboarding() async {}
-    public func signOut() async {}
+    // MARK: Connectors page-level failure (refreshConnectors / toggles)
 
-    public func startScan() async {}
-    public func stopScan() {}
-    public func connect(_ device: DiscoveredDevice) async {}
-    public func disconnectDevice() async {}
+    @Published public internal(set) var connectorsErrorCopy: String?
 
-    public func refreshConnectors() async {}
-    public func enableConnector(appId: String) async {}
-    public func disableConnector(appId: String) async {}
-    public func setStoreRecordingPermission(_ value: Bool) async {}
-    public func setPrivateCloudSync(_ value: Bool) async {}
-    public func optInTrainingData() async {}
-    public func setPreference(_ key: String, _ value: PreferenceValue) async {}
-    public func requestPermission(_ kind: PermissionKind) async {}
+    // MARK: Chat streaming bookkeeping
+
+    @Published public internal(set) var chatBusy: Bool = false
+    @Published public internal(set) var chatErrorCopy: String?
+    @Published public internal(set) var hasOlderChat: Bool = false
+    @Published public internal(set) var olderChatCursor: String?
+    @Published public internal(set) var loadingOlderChat: Bool = false
+    @Published public internal(set) var activeGenerationId: String?
+    @Published public internal(set) var chatHistorySettled: Bool = false
+
+    // MARK: Onboarding / session (useOnboarding.ts)
+
+    /// nil = still probing; the shell must not claim either state yet.
+    @Published public internal(set) var onboardingRequired: Bool?
+    @Published public internal(set) var setupRequired: Bool = false
+    @Published public internal(set) var completingSetup: Bool = false
+    @Published public internal(set) var signingIn: Bool = false
+    @Published public internal(set) var returningUser: Bool = false
+    @Published public internal(set) var authErrorCopy: String?
+    @Published public internal(set) var desktopHandoff: DesktopHandoff?
+    @Published public internal(set) var postSetupHomeCue: PostSetupHomeCue?
+
+    // MARK: Devices (useNativeDevices.ts)
+
+    @Published public internal(set) var deviceBusy: Bool = false
+    @Published public internal(set) var deviceScanMessage: String?
+    @Published public internal(set) var rememberedDevice: DiscoveredDevice?
+
+    // MARK: Preferences + cloud
+
+    @Published public internal(set) var preferencesLoaded: Bool = false
+
+    // MARK: Task mutations (useTaskMutations.ts)
+
+    @Published public internal(set) var busyTaskId: String?
+    @Published public internal(set) var taskMutationErrorCopy: String?
+    @Published public internal(set) var canRetryTaskMutation: Bool = false
+
+    // MARK: Rewind capture (useRewindCapture.ts)
+
+    @Published public internal(set) var rewindCaptureState = RewindCaptureState()
+
+    // MARK: Composition surface
+
+    @Published public var homeChatOpen: Bool = false
+
+    /// Injected service facades. Hosts wire real implementations at
+    /// bootstrap; surfaces never touch transports directly.
+    public var services = AppServices()
+
+    /// Non-published orchestration internals (sequence fences, epochs,
+    /// in-flight handles). MainActor-confined with the store.
+    var runtime = AppRuntime()
 
     // MARK: Derived helpers (pure, used by both surfaces)
 
     /// The merged timeline feed (conversations + memories + tasks + capture
     /// groups), query-matched — the desktop Activity and mobile home lists.
     public func mergedTimeline(filter: TimelineFilter = .all) -> MergedTimeline {
-        mergeTimeline(outcomes, query: searchQuery, filter: filter)
+        mergeTimeline(
+            outcomes, query: searchQuery,
+            captures: captureSummaries(from: rewindGroups), filter: filter)
     }
 
     public static let quickPrompts: [QuickPrompt] = [
