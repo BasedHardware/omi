@@ -1,3 +1,5 @@
+import {PRIMARY_LANGUAGES} from './onboardingCopy';
+
 export const mobileSetupSteps = [
   'consent',
   'language',
@@ -10,17 +12,46 @@ export const mobileSetupSteps = [
 export type MobileSetupStep = (typeof mobileSetupSteps)[number];
 export type MobileOnboardingStep = 'welcome' | MobileSetupStep;
 
+// Script aliases from the desktop app's normalizer: locales whose language
+// root is not itself a supported code (zh has no bare entry).
+const DEVICE_LANGUAGE_ALIASES: Record<string, string> = {
+  zh: 'zh-CN',
+  'zh-hans': 'zh-CN',
+  'zh-hant': 'zh-TW',
+};
+
 /**
- * Maps an OS locale identifier ("en_US", "pt-BR", "de") onto the short code
- * the language endpoints accept ("en", "pt", "de"). Unknown input yields 'en'
- * so onboarding always starts from a valid selection.
+ * Maps an OS locale identifier ("en_US", "pt-BR", "zh-Hans-CN", "de") onto a
+ * supported language code. Like the main app's picker, the full locale wins
+ * when it exists ("pt-BR" → "pt-BR"), then the language root ("zh-Hans-CN" →
+ * "zh-CN"). Unknown input yields 'en' so onboarding always starts from a
+ * valid selection.
  */
-export function normalizeDeviceLanguage(raw: unknown): string {
+export function normalizeDeviceLanguage(
+  raw: unknown,
+  supported: readonly {code: string}[] = PRIMARY_LANGUAGES,
+): string {
   if (typeof raw !== 'string' || raw.trim().length === 0) {
     return 'en';
   }
-  const code = raw.trim().replace(/_/g, '-').split('-')[0].toLowerCase();
-  return /^[a-z]{2,3}$/.test(code) ? code : 'en';
+  const normalized = raw.trim().replace(/_/g, '-').toLowerCase();
+  const aliased = DEVICE_LANGUAGE_ALIASES[normalized];
+  if (aliased != null && supported.some(item => item.code === aliased)) {
+    return aliased;
+  }
+  const parts = normalized.split('-');
+  const language = parts[0];
+  if (!/^[a-z]{2,3}$/.test(language)) {
+    return 'en';
+  }
+  const region = parts.length > 1 ? parts[parts.length - 1].toUpperCase() : '';
+  if (region.length === 2 || region.length === 3) {
+    const regional = `${language}-${region}`;
+    if (supported.some(item => item.code === regional)) {
+      return regional;
+    }
+  }
+  return supported.some(item => item.code === language) ? language : 'en';
 }
 
 // Voice-print enrollment needs getUserMedia + AudioContext, which only exist
