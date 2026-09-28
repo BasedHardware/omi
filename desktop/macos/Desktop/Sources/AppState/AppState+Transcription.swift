@@ -272,7 +272,8 @@ extension AppState {
         launchContext: captureContext.rawValue,
         secondsSinceLaunch: CaptureLaunchContext.timeBucket(
           Date().timeIntervalSince(CaptureLaunchContext.launchedAt)),
-        updateAttemptID: captureContext == .updateRelaunch ? CaptureLaunchContext.updateAttemptID : nil)
+        updateAttemptID: captureContext == .updateRelaunch ? CaptureLaunchContext.updateAttemptID : nil,
+        armedEpisodeID: armedRetry ? armedMicrophoneRecovery.episodeID : nil)
       CaptureLaunchContext.hasStartedCapture = true
       AudioLevelMonitor.shared.reset()
       RecordingTimer.shared.start()

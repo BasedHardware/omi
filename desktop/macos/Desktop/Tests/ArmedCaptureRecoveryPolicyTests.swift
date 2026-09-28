@@ -5,6 +5,9 @@ import XCTest
 
 final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
   private let start = Date(timeIntervalSince1970: 1_000)
+  private let present = CapturePresence(
+    screenLocked: false, displaysAsleep: false,
+    consoleSessionActive: true, lidClosed: false, appActive: false)
 
   func testAutomaticExhaustionReleasesResourcesAndKeepsIntent() {
     var policy = ArmedCaptureRecoveryPolicy()
@@ -53,8 +56,10 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
     for (index, delay) in [30.0, 60, 120, 300, 600, 600].enumerated() {
       let now = start.addingTimeInterval(Double(index) * 1_000)
       XCTAssertEqual(policy.enter(now: now), .releaseAndWait(until: now.addingTimeInterval(delay)))
-      XCTAssertEqual(policy.signal(.backoff, now: now.addingTimeInterval(delay - 1)), .none)
-      XCTAssertEqual(policy.signal(.backoff, now: now.addingTimeInterval(delay)), .probe)
+      XCTAssertEqual(
+        policy.signal(.backoff, now: now.addingTimeInterval(delay - 1), presence: present, inputIsBuiltIn: nil), .none)
+      XCTAssertEqual(
+        policy.signal(.backoff, now: now.addingTimeInterval(delay), presence: present, inputIsBuiltIn: nil), .probe)
     }
   }
 
@@ -65,8 +70,10 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
     ] {
       var policy = ArmedCaptureRecoveryPolicy()
       _ = policy.enter(now: start)
-      XCTAssertEqual(policy.signal(signal, now: start.addingTimeInterval(1)), .probe)
-      XCTAssertEqual(policy.signal(signal, now: start.addingTimeInterval(2)), .none)
+      XCTAssertEqual(
+        policy.signal(signal, now: start.addingTimeInterval(1), presence: present, inputIsBuiltIn: nil), .probe)
+      XCTAssertEqual(
+        policy.signal(signal, now: start.addingTimeInterval(2), presence: present, inputIsBuiltIn: nil), .none)
       XCTAssertEqual(policy.state, .probing)
     }
   }
@@ -74,7 +81,8 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
   func testLiveProbeResumesAndNextAttemptGetsFreshIdentity() {
     var policy = ArmedCaptureRecoveryPolicy()
     _ = policy.enter(now: start)
-    XCTAssertEqual(policy.signal(.unlock, now: start.addingTimeInterval(5)), .probe)
+    XCTAssertEqual(
+      policy.signal(.unlock, now: start.addingTimeInterval(5), presence: present, inputIsBuiltIn: nil), .probe)
     XCTAssertEqual(policy.succeeded(now: start.addingTimeInterval(7)), 7)
     XCTAssertEqual(policy.state, .idle)
     let first = CaptureAttemptOutcomeState(mode: "always", intent: .auto)
@@ -98,6 +106,98 @@ final class ArmedCaptureRecoveryPolicyTests: XCTestCase {
     XCTAssertFalse(
       ArmedCaptureRecoveryPolicy.shouldWaitForUpdateRelaunch(
         isUpdateRelaunch: false, consoleActive: false, screenLocked: true, displaysAsleep: true))
+  }
+
+  func testAbsentPresenceSkipsBackoffAndBlocksAllRepairSignals() {
+    let absent: [(CapturePresence, Bool?, ArmedCaptureRecoveryPolicy.PresenceReason)] = [
+      (
+        CapturePresence(
+          screenLocked: false, displaysAsleep: false, consoleSessionActive: false, lidClosed: false, appActive: false),
+        nil, .consoleInactive
+      ),
+      (
+        CapturePresence(
+          screenLocked: true, displaysAsleep: false, consoleSessionActive: true, lidClosed: false, appActive: false),
+        nil, .screenLocked
+      ),
+      (
+        CapturePresence(
+          screenLocked: false, displaysAsleep: true, consoleSessionActive: true, lidClosed: false, appActive: false),
+        nil, .displaysAsleep
+      ),
+      (
+        CapturePresence(
+          screenLocked: false, displaysAsleep: false, consoleSessionActive: true, lidClosed: true, appActive: false),
+        true, .lidClosedBuiltIn
+      ),
+    ]
+    for (presence, builtIn, reason) in absent {
+      var policy = ArmedCaptureRecoveryPolicy()
+      _ = policy.enter(now: start)
+      XCTAssertEqual(
+        policy.signal(.backoff, now: start.addingTimeInterval(30), presence: presence, inputIsBuiltIn: builtIn),
+        .retrySkipped(reason: reason, until: start.addingTimeInterval(60)))
+      XCTAssertEqual(policy.state, .waiting)
+      XCTAssertEqual(policy.retryCount, 1)
+      for signal in [
+        ArmedCaptureRecoveryPolicy.Signal.unlock, .screenWake, .systemWake, .sessionActive,
+        .inputChanged, .displayChanged, .appActive,
+      ] {
+        XCTAssertEqual(
+          policy.signal(signal, now: start.addingTimeInterval(31), presence: presence, inputIsBuiltIn: builtIn), .none)
+      }
+      XCTAssertEqual(
+        policy.signal(.backoff, now: start.addingTimeInterval(60), presence: present, inputIsBuiltIn: nil), .probe)
+    }
+  }
+
+  func testSkippedBackoffsKeepIntervalUntilAnActualProbeFails() {
+    var policy = ArmedCaptureRecoveryPolicy()
+    let locked = CapturePresence(
+      screenLocked: true, displaysAsleep: true, consoleSessionActive: true,
+      lidClosed: false, appActive: false)
+    _ = policy.enter(now: start)
+    for second in [30.0, 60, 90] {
+      XCTAssertEqual(
+        policy.signal(.backoff, now: start.addingTimeInterval(second), presence: locked, inputIsBuiltIn: nil),
+        .retrySkipped(reason: .screenLocked, until: start.addingTimeInterval(second + 30)))
+      XCTAssertEqual(policy.retryCount, 1)
+    }
+    XCTAssertEqual(
+      policy.signal(.unlock, now: start.addingTimeInterval(91), presence: present, inputIsBuiltIn: nil), .probe)
+    XCTAssertEqual(
+      policy.enter(now: start.addingTimeInterval(100)), .releaseAndWait(until: start.addingTimeInterval(160)))
+    XCTAssertEqual(policy.retryCount, 2)
+    XCTAssertEqual(policy.enteredAt, start)
+  }
+
+  func testUnknownPresenceSkipsOnlyTimerAndExternalInputCanProbeWithClosedLid() {
+    let unknown = CapturePresence(
+      screenLocked: nil, displaysAsleep: false, consoleSessionActive: true,
+      lidClosed: nil, appActive: false)
+    var policy = ArmedCaptureRecoveryPolicy()
+    _ = policy.enter(now: start)
+    XCTAssertEqual(
+      policy.signal(.backoff, now: start.addingTimeInterval(30), presence: unknown, inputIsBuiltIn: nil),
+      .retrySkipped(reason: .unknown, until: start.addingTimeInterval(60)))
+    XCTAssertEqual(
+      policy.signal(.appActive, now: start.addingTimeInterval(31), presence: unknown, inputIsBuiltIn: nil), .probe)
+
+    let clamshell = CapturePresence(
+      screenLocked: false, displaysAsleep: false, consoleSessionActive: true,
+      lidClosed: true, appActive: false)
+    var external = ArmedCaptureRecoveryPolicy()
+    _ = external.enter(now: start)
+    XCTAssertEqual(
+      external.signal(.backoff, now: start.addingTimeInterval(30), presence: clamshell, inputIsBuiltIn: false), .probe)
+    var uncertain = ArmedCaptureRecoveryPolicy()
+    _ = uncertain.enter(now: start)
+    XCTAssertEqual(
+      uncertain.signal(.backoff, now: start.addingTimeInterval(30), presence: clamshell, inputIsBuiltIn: nil),
+      .retrySkipped(reason: .unknown, until: start.addingTimeInterval(60)))
+    XCTAssertEqual(
+      uncertain.signal(.inputChanged, now: start.addingTimeInterval(31), presence: clamshell, inputIsBuiltIn: nil),
+      .probe)
   }
 
   func testManualAndPermissionPoliciesRemainTerminal() {

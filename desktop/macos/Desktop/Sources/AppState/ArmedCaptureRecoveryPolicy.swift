@@ -11,6 +11,14 @@ struct ArmedCaptureRecoveryPolicy {
     case none
     case releaseAndWait(until: Date)
     case probe
+    case retrySkipped(reason: PresenceReason, until: Date)
+  }
+  enum PresenceReason: String {
+    case consoleInactive = "console_inactive"
+    case screenLocked = "screen_locked"
+    case displaysAsleep = "displays_asleep"
+    case lidClosedBuiltIn = "lid_closed_built_in"
+    case unknown
   }
 
   private(set) var state: State = .idle
@@ -35,6 +43,19 @@ struct ArmedCaptureRecoveryPolicy {
     return consoleActive != true || screenLocked != false || displaysAsleep != false
   }
 
+  static func unavailablePresenceReason(_ presence: CapturePresence, inputIsBuiltIn: Bool?) -> PresenceReason? {
+    if presence.consoleSessionActive == false { return .consoleInactive }
+    if presence.screenLocked == true { return .screenLocked }
+    if presence.displaysAsleep == true { return .displaysAsleep }
+    if presence.lidClosed == true, inputIsBuiltIn == true { return .lidClosedBuiltIn }
+    if presence.consoleSessionActive == nil || presence.screenLocked == nil || presence.displaysAsleep == nil
+      || (presence.lidClosed == true && inputIsBuiltIn == nil)
+    {
+      return .unknown
+    }
+    return nil
+  }
+
   mutating func enter(now: Date) -> Action {
     if enteredAt == nil { enteredAt = now }
     state = .waiting
@@ -45,9 +66,22 @@ struct ArmedCaptureRecoveryPolicy {
     return .releaseAndWait(until: deadline)
   }
 
-  mutating func signal(_ signal: Signal, now: Date) -> Action {
+  mutating func signal(_ signal: Signal, now: Date, presence: CapturePresence, inputIsBuiltIn: Bool?) -> Action {
     guard state == .waiting else { return .none }
     if signal == .backoff, let nextRetryAt, now < nextRetryAt { return .none }
+    if let reason = Self.unavailablePresenceReason(presence, inputIsBuiltIn: inputIsBuiltIn) {
+      if signal == .backoff {
+        // An absent or unknown user must not open the mic on a timer. Recheck at
+        // the same interval without consuming a probe or advancing retryCount.
+        // Non-timer signals may probe on unknown facts so a Mac whose presence
+        // APIs never answer still has a path to recovery.
+        let delay = Self.delays[min(max(retryCount - 1, 0), Self.delays.count - 1)]
+        let deadline = now.addingTimeInterval(delay)
+        nextRetryAt = deadline
+        return .retrySkipped(reason: reason, until: deadline)
+      }
+      if reason != .unknown { return .none }
+    }
     state = .probing
     nextRetryAt = nil
     return .probe

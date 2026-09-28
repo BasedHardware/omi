@@ -35,6 +35,8 @@ struct CaptureAttemptOutcomeState {
     case cancelled
     case idleWaitingMeeting = "idle_waiting_meeting"
     case error
+    case armedRetrySilent = "armed_retry_silent"
+    case armedRetryFailed = "armed_retry_failed"
     case pending
     case unknown
   }
@@ -56,6 +58,9 @@ struct CaptureAttemptOutcomeState {
   let launchContext: String
   let secondsSinceLaunch: String
   let updateAttemptID: String?
+  /// Present only for a retry probe; ordinary attempts retain their existing payload.
+  let armedEpisodeID: String?
+  var armedRetry: Bool { armedEpisodeID != nil }
 
   /// Mic permission was granted AND the meeting gate allowed capture to run at
   /// least once during the attempt.
@@ -81,7 +86,8 @@ struct CaptureAttemptOutcomeState {
 
   init(
     mode: String, intent: Intent, launchContext: String = "other",
-    secondsSinceLaunch: String = "unknown", updateAttemptID: String? = nil
+    secondsSinceLaunch: String = "unknown", updateAttemptID: String? = nil,
+    armedEpisodeID: String? = nil
   ) {
     attemptId = UUID().uuidString.lowercased()
     self.mode = mode
@@ -89,11 +95,13 @@ struct CaptureAttemptOutcomeState {
     self.launchContext = launchContext
     self.secondsSinceLaunch = secondsSinceLaunch
     self.updateAttemptID = updateAttemptID
+    self.armedEpisodeID = armedEpisodeID
   }
 
   init(
     attemptId: String, mode: String, intent: Intent, launchContext: String = "other",
-    secondsSinceLaunch: String = "unknown", updateAttemptID: String? = nil
+    secondsSinceLaunch: String = "unknown", updateAttemptID: String? = nil,
+    armedEpisodeID: String? = nil
   ) {
     self.attemptId = attemptId
     self.mode = mode
@@ -101,6 +109,7 @@ struct CaptureAttemptOutcomeState {
     self.launchContext = launchContext
     self.secondsSinceLaunch = secondsSinceLaunch
     self.updateAttemptID = updateAttemptID
+    self.armedEpisodeID = armedEpisodeID
   }
 
   mutating func noteCaptureEligible() { captureEligible = true }
@@ -125,10 +134,12 @@ struct CaptureAttemptOutcomeState {
     finalizationReason: TranscriptionFinalizationReason,
     mode: String,
     firstAudioFrame: Bool,
-    errorTerminal: Bool
+    errorTerminal: Bool,
+    armedRetry: Bool = false
   ) -> TerminalReason {
+    if armedRetry && finalizationReason == .silentMicExhausted { return .armedRetrySilent }
     if errorTerminal || finalizationReason.isForcedTermination {
-      return .error
+      return armedRetry ? .armedRetryFailed : .error
     }
     if mode == AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue, !firstAudioFrame {
       return .idleWaitingMeeting
@@ -151,7 +162,8 @@ struct CaptureAttemptOutcomeState {
       finalizationReason: finalizationReason,
       mode: mode,
       firstAudioFrame: firstAudioFrame,
-      errorTerminal: errorTerminal)
+      errorTerminal: errorTerminal,
+      armedRetry: armedRetry)
   }
 }
 
