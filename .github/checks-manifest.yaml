@@ -179,6 +179,11 @@ checks:
     triggers: ["backend/database/screen_activity.py", "backend/tests/unit/test_screen_activity_batch_resilience.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Deduplicate documents in screen activity batch commits to prevent Firestore 400 contention errors, enforce 499-op commit chunking, and validate uid inputs"
+  - id: folders-batch-resilience-tests
+    command: ["python3", "backend/tests/unit/test_folders_batch_resilience.py"]
+    triggers: ["backend/database/folders.py", "backend/tests/unit/test_folders_batch_resilience.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Deduplicate conversation IDs in bulk move and folder IDs in reorder to prevent Firestore 400 commit contention, chunk reorder batches to 450 items, guard self-targeting deletion tombstones, and validate uid inputs"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
