@@ -188,6 +188,18 @@ async def run_listen_finalization_job(
             _durable_attempt_cap_enabled()
             and failed_attempts >= get_listen_finalization_tasks_max_attempts_for_worker()
         ):
+            if job.get('fanout_status') == 'completed':
+                completed = await run_blocking(
+                    db_executor, jobs_db.mark_finalization_completed, job_id, dispatch_generation, claimed_lease_epoch
+                )
+                if not completed:
+                    return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+                record_capture_finalization_terminal('success', job.get('created_at'))
+                record_conversation_finalization_client_terminal('success', job)
+                logger.info(
+                    'listen finalization completed committed fanout job_hash=%s', finalization_diagnostic_id(job_id)
+                )
+                return JSONResponse(status_code=200, content={'status': 'done'})
             terminal = await run_blocking(
                 db_executor, final_attempt_failed, job_id, dispatch_generation, claimed_lease_epoch, failed_attempts
             )

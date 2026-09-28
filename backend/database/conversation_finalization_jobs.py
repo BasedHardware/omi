@@ -1139,6 +1139,10 @@ def _mark_finalization_dead_letter_txn(
     job = snapshot.to_dict() or {}
     if not _is_current_lease(job, dispatch_generation, lease_epoch):
         return False
+    if job.get('fanout_status') == 'completed':
+        # A committed fanout is successful work even if its worker died before
+        # closing the job. The caller must finish it with the same lease fence.
+        return False
     conversation_ref = None
     conversation = None
     uid = job.get('uid')

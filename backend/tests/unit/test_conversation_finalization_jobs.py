@@ -1103,6 +1103,73 @@ def test_worker_budget_survives_failed_write_and_crashed_lease_replay():
     assert api_row.discarded is False
 
 
+def test_committed_fanout_completes_after_crashed_claims_exhaust_budget():
+    now = _now()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 1,
+            'lease_epoch': 0,
+            'attempt_count': 0,
+            'worker_claim_count': 0,
+            'fanout_status': 'pending',
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 3,
+        },
+    )
+    conversation_ref = _completed_finalization_conversation(revision=3)
+
+    def apply(transaction):
+        for ref, patch in transaction.updates:
+            ref.data = ref.data | patch
+
+    first = _Transaction()
+    first_claim = jobs._claim_finalization_job_txn(first, job_ref, 1, False, 1500, now, count_worker_claim=True)
+    apply(first)
+    fanout = _Transaction()
+    assert (
+        jobs._claim_finalization_fanout_txn(
+            fanout, job_ref, 1, first_claim['lease_epoch'], now, lambda uid, conversation_id: conversation_ref
+        )['status']
+        == 'claimed'
+    )
+    apply(fanout)
+    fanout_done = _Transaction()
+    assert jobs._mark_finalization_fanout_completed_txn(fanout_done, job_ref, 1, first_claim['lease_epoch'], now)
+    apply(fanout_done)
+
+    # Each worker dies after claiming; the reconciler mints new tasks whose
+    # Cloud Tasks retry header starts at zero, but the claim count persists.
+    for generation in range(2, 7):
+        replay_at = now + timedelta(minutes=26 * (generation - 1))
+        replay = _Transaction()
+        assert (
+            jobs._claim_finalization_replay_txn(replay, job_ref, timedelta(minutes=5), replay_at)['dispatch_generation']
+            == generation
+        )
+        apply(replay)
+        claim_txn = _Transaction()
+        claim = jobs._claim_finalization_job_txn(
+            claim_txn, job_ref, generation, False, 1500, replay_at, count_worker_claim=True
+        )
+        apply(claim_txn)
+
+    assert claim['attempt_count'] == 5
+    assert job_ref.data['worker_claim_count'] == 6
+    refused_terminal = _Transaction()
+    assert not jobs._mark_finalization_dead_letter_txn(refused_terminal, job_ref, 6, claim['lease_epoch'], 5, now)
+    assert refused_terminal.updates == []
+    completion = _Transaction()
+    assert jobs._mark_finalization_completed_txn(completion, job_ref, 6, claim['lease_epoch'], now)
+    apply(completion)
+    assert job_ref.data['status'] == 'completed'
+    assert job_ref.data['terminal_outcome'] == 'success'
+    assert job_ref.data['fanout_status'] == 'completed'
+    assert conversation_ref.data['status'] == 'completed'
+
+
 def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregations():
     class Snapshot:
         def __init__(self, data):

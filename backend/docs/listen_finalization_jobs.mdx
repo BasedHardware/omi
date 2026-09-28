@@ -116,6 +116,8 @@ worker cap if this terminal policy must be rolled back; bounded failure
 diagnostics remain enabled. Accepted Cloud Tasks claims consume a durable
 worker slot, including a killed worker whose lease is later replayed. Duplicate
 deliveries and live pusher session handoffs do not consume worker slots.
+When an exhausted worker sees a committed fanout, it completes the fenced job
+without rerunning processing; the dead-letter transaction refuses that state.
 
 This first migration deliberately excludes `POST /v1/conversations` (the
 Redis current-conversation pointer), `reprocess`, and routes that create a
