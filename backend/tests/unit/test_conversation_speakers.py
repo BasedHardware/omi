@@ -129,7 +129,7 @@ def test_fragments_labeled_with_one_person_merge_into_one_voice():
     assert resolution.speaker_ids['s1'] == resolution.speaker_ids['s7']
 
 
-def test_owner_voiceprint_names_the_voice_and_joins_its_split_clusters():
+def test_shared_owner_voiceprint_does_not_merge_distinct_contended_clusters():
     # Two recording conditions (voices 0 and 1, orthogonal) split the owner into
     # two clusters too far apart to cluster or absorb; the voiceprint sits
     # between them and matches both. Voice 2 is someone else.
@@ -144,9 +144,9 @@ def test_owner_voiceprint_names_the_voice_and_joins_its_split_clusters():
     resolution = resolve_conversation_speakers(segments, embeddings, voiceprints={'user': owner_print})
 
     owner_ids = {resolution.speaker_ids[s['id']] for s, v in zip(segments, plan) if v in (0, 1)}
-    assert len(owner_ids) == 1
-    identity = resolution.voice_identities[next(iter(owner_ids))]
-    assert identity.is_user and identity.person_id is None
+    assert len(owner_ids) == 2
+    assert not resolution.voice_identities
+    assert all(resolution.voice_identity_statuses[sid] == 'ambiguous' for sid in owner_ids)
     other = resolution.speaker_ids['s2']
     assert other not in owner_ids and other not in resolution.voice_identities
 
@@ -251,3 +251,16 @@ def test_segments_not_yet_embedded_keep_capture_ids_and_lower_coverage():
 
     assert all(f's{index}' not in resolution.speaker_ids for index in range(10, 20))
     assert abs(resolution.coverage - 0.5) < 1e-9
+
+
+def test_manual_owner_reserves_identity_without_merging_another_voice():
+    segments, embeddings, voices = _fragmented([0, 1] * 10)
+    result = resolve_conversation_speakers(
+        segments,
+        embeddings,
+        manual_speakers={0: Identity(is_user=True, person_id=None)},
+        voiceprints={'user': voices[1]},
+    )
+    assert result.speaker_ids['s0'] != result.speaker_ids['s1']
+    assert not result.voice_identities
+    assert result.voice_identity_statuses[result.speaker_ids['s1']] == 'ambiguous'

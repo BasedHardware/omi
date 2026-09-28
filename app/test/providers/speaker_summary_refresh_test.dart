@@ -9,11 +9,12 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/speaker_summary_action.dart';
+import 'package:omi/providers/conversation_provider.dart';
 
 ServerConversation conversation(
-        {ConversationStatus status = ConversationStatus.completed, String overview = 'Summary'}) =>
+        {String id = 'c', ConversationStatus status = ConversationStatus.completed, String overview = 'Summary'}) =>
     ServerConversation(
-        id: 'c',
+        id: id,
         createdAt: DateTime(2026),
         structured: Structured('Title', overview),
         status: status,
@@ -137,5 +138,40 @@ void main() {
     expect(await assignment, isTrue);
     expect(provider.offerSpeakerSummaryRefresh, isTrue);
     provider.dispose();
+  });
+
+  test('a speaker save adopts the bridged survivor and removes the retired list row', () async {
+    const donorId = '00000000-0000-5000-8000-000000000001';
+    const survivorId = '3883d17e-0000-4000-8000-000000000000';
+    final donor = conversation(id: donorId);
+    final survivor = conversation(id: survivorId);
+    final list = ConversationProvider();
+    list.conversations.add(donor);
+    list.groupedConversations[conversationLocalDayKey(donor.createdAt)] = [donor];
+    final fetchedIds = <String>[];
+    final assignedIds = <String>[];
+    final provider = ConversationDetailProvider(
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) async {
+        assignedIds.add(id);
+        return true;
+      },
+      fetchConversation: (id) async {
+        fetchedIds.add(id);
+        return survivor;
+      },
+    );
+    provider.conversationProvider = list;
+    select(provider, donor);
+
+    expect(await provider.assignSpeaker(['s'], 'person'), isTrue);
+    expect(fetchedIds, [donorId]);
+    expect(provider.conversation.id, survivorId);
+    expect(list.conversations.map((conversation) => conversation.id), [survivorId]);
+    expect(
+        list.groupedConversations.values.expand((group) => group).map((conversation) => conversation.id), [survivorId]);
+    expect(await provider.assignSpeaker(['s'], 'other-person'), isTrue);
+    expect(assignedIds, [donorId, survivorId]);
+    provider.dispose();
+    list.dispose();
   });
 }

@@ -143,7 +143,9 @@ async def auto_sync_action_items_batch(uid: str, action_items: List[Dict[str, An
             try:
                 result = await _sync_to_cloud_service(uid, default_app, integration, item)
             except Exception as e:
-                logger.error('Auto-sync item failed for user %s (%s): %s', uid, default_app, type(e).__name__)
+                logger.error(
+                    'Auto-sync item %s failed for user %s (%s): %s', item.get('id'), uid, default_app, type(e).__name__
+                )
                 record_fallback(
                     component='other',
                     from_mode='task_sync_batch',

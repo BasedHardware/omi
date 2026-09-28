@@ -1250,16 +1250,24 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     docs = query.stream()
     batch = db.batch()
     count = 0
+    total = 0
 
     for doc in docs:
         batch.delete(doc.reference)
         count += 1
+        total += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
     if count > 0:
         batch.commit()
+
+    if total > 0:
         bump_action_items_list_version(uid)
 
-    return count
+    return total
 
 
 def retire_action_items_for_conversation(
@@ -1280,6 +1288,7 @@ def retire_action_items_for_conversation(
     )
     batch = db.batch()
     count = 0
+    total = 0
     now = datetime.now(timezone.utc)
     for doc in query.stream():
         if doc.id in active_id_set:
@@ -1297,10 +1306,16 @@ def retire_action_items_for_conversation(
             },
         )
         count += 1
-    if count:
+        total += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = db.batch()
+            count = 0
+    if count > 0:
         batch.commit()
+    if total > 0:
         bump_action_items_list_version(uid)
-    return count
+    return total
 
 
 # *****************************
@@ -1318,11 +1333,18 @@ def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
     now = datetime.now(timezone.utc)
 
     batch = db.batch()
+    count = 0
     for item_id in item_ids:
         doc_ref = action_items_ref.document(item_id)
         batch.update(doc_ref, {'sync_requested': True, 'updated_at': now})
+        count += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
-    batch.commit()
+    if count > 0:
+        batch.commit()
     bump_action_items_list_version(uid)
 
 

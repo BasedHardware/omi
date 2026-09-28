@@ -24,7 +24,10 @@ class PersonChip extends StatelessWidget {
         children: [
           if (isAddButton) const Icon(Icons.add, size: 16),
           if (isAddButton) const SizedBox(width: 4),
-          Text(personName, style: OmiType.caption, overflow: TextOverflow.ellipsis),
+          Tooltip(
+            message: personName,
+            child: Text(personName, style: OmiType.caption, overflow: TextOverflow.ellipsis),
+          ),
         ],
       ),
       selected: isSelected,
