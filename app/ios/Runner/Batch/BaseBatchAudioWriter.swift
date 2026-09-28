@@ -439,6 +439,6 @@ class BaseBatchAudioWriter {
     }
 
     private func setStorageFullFlag(_ full: Bool) {
-        UserDefaults.standard.set(full, forKey: "flutter.batchStorageFull")
+        try? SafeDefaults.store(.bool(full), forKey: "flutter.batchStorageFull")
     }
 }

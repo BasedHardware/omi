@@ -52,10 +52,10 @@ final class SiriSession {
         if let previous, previous.uid != config.uid {
             clear()
         }
-        defaults.set(try JSONEncoder().encode(config), forKey: configKey)
+        try SafeDefaults.store(.data(try JSONEncoder().encode(config)), forKey: configKey, in: defaults)
         SecItemDelete(keychainQuery() as CFDictionary)
         if let token = input.token, !token.isEmpty, let expiry = input.tokenExpiresAtMs,
-           expiry > Int64(Date().timeIntervalSince1970 * 1000) + 60_000 {
+           expiry > (CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0) + 60_000 {
             let bytes = Data(token.utf8)
             let item: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                        kSecAttrService as String: keychainService,
@@ -165,7 +165,7 @@ final class SiriSession {
             return fresh
         }
         guard let expiry = config.expiresAtMs,
-              expiry > Int64(Date().timeIntervalSince1970 * 1000) + 60_000 else {
+              expiry > (CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0) + 60_000 else {
             throw Failure.auth
         }
         var query = keychainQuery()
@@ -211,7 +211,7 @@ struct OmiNativeAPI {
         request.setValue(config.deviceIdHash, forHTTPHeaderField: "X-Device-Id-Hash")
         request.setValue(config.appVersion, forHTTPHeaderField: "X-App-Version")
         request.setValue(config.appBuild, forHTTPHeaderField: "X-App-Build")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.httpBody = try SafeJSON.data(withJSONObject: body)
         try SiriSession.shared.validateOwner(config)
         let data: Data
         let response: URLResponse

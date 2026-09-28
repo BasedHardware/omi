@@ -42,5 +42,6 @@ class NativeCrashSafetyCallSitesTest < Minitest::Test
     refute_match(/class_conformsToProtocol\(quickActionsClass!, sceneProtocol!\)/, probe)
     refute_match(/URL\(string: rawURL\)!/, probe)
     refute_match(/currentConfig\(\)!|currentUser!/, probe)
+    refute_match(/request\.url!|HTTPURLResponse\([^\n]*\)!/, probe)
   end
 end

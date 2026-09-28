@@ -1,4 +1,5 @@
 import CoreBluetooth
+import CoreFoundation
 import AVFoundation
 import Flutter
 import UIKit
@@ -120,7 +121,7 @@ final class OmiBleManager: NSObject {
         if defaults.bool(forKey: "ble_diagnostics_run_open") {
             appendLifecycleEvent("previous_run_unclean")
         }
-        try? SafeDefaults.set(.bool(true), forKey: "ble_diagnostics_run_open", in: defaults)
+        try? SafeDefaults.store(.bool(true), forKey: "ble_diagnostics_run_open", in: defaults)
         appendLifecycleEvent("app_launch")
         NotificationCenter.default.addObserver(self, selector: #selector(markCleanExit), name: UIApplication.willTerminateNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(powerModeChanged), name: .NSProcessInfoPowerStateDidChange, object: nil)
@@ -565,8 +566,46 @@ final class OmiBleManager: NSObject {
     private static func reconnectKey(_ uuid: String) -> String { "\(reconnectCountKeyPrefix)\(uuid)" }
     private static func failToConnectKey(_ uuid: String) -> String { "\(failToConnectCountKeyPrefix)\(uuid)" }
 
+    private func persistPropertyListRecords(_ records: [[String: Any]], forKey key: String, in defaults: UserDefaults) {
+        func value(_ object: Any) -> PlistValue? {
+            if let string = object as? String { return .string(string) }
+            if let date = object as? Date { return .date(date) }
+            if let data = object as? Data { return .data(data) }
+            if let number = object as? NSNumber {
+                if CFGetTypeID(number) == CFBooleanGetTypeID() { return .bool(number.boolValue) }
+                let type = String(cString: number.objCType)
+                if type == "f" || type == "d" { return .double(number.doubleValue) }
+                if ["q", "Q"].contains(type) { return .int64(number.int64Value) }
+                return .int(number.intValue)
+            }
+            if let array = object as? [Any] {
+                let values = array.compactMap(value)
+                return values.count == array.count ? .array(values) : nil
+            }
+            if let dictionary = object as? [String: Any] {
+                var values: [String: PlistValue] = [:]
+                for (key, element) in dictionary {
+                    guard let converted = value(element) else { return nil }
+                    values[key] = converted
+                }
+                return .dictionary(values)
+            }
+            return nil
+        }
+        let typed = records.compactMap { record -> [String: PlistValue]? in
+            var result: [String: PlistValue] = [:]
+            for (key, element) in record {
+                guard let converted = value(element) else { return nil }
+                result[key] = converted
+            }
+            return result
+        }
+        guard typed.count == records.count else { return }
+        try? SafeDefaults.setPlistRecords(typed, forKey: key, in: defaults)
+    }
+
     @objc private func markCleanExit() {
-        UserDefaults.standard.set(false, forKey: "ble_diagnostics_run_open")
+        try? SafeDefaults.store(.bool(false), forKey: "ble_diagnostics_run_open")
     }
 
     @objc private func powerModeChanged() {
@@ -580,7 +619,7 @@ final class OmiBleManager: NSObject {
         for (name, value) in [("mic", mic), ("bluetooth", bluetooth)] {
             let key = "ble_diagnostics_permission_\(name)"
             if defaults.string(forKey: key) != value {
-                defaults.set(value, forKey: key)
+                try? SafeDefaults.store(.string(value), forKey: key, in: defaults)
                 appendLifecycleEvent("\(name)_permission_\(value)")
             }
         }
@@ -589,20 +628,20 @@ final class OmiBleManager: NSObject {
     private func appendLifecycleEvent(_ name: String) {
         let defaults = UserDefaults.standard
         var events = defaults.array(forKey: "ble_diagnostics_lifecycle") as? [[String: Any]] ?? []
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
         events.append(["ts": now, "event": name])
         events.removeAll { ($0["ts"] as? Int64 ?? 0) < now - Self.disconnectRetentionMs }
-        defaults.set(Array(events.suffix(500)), forKey: "ble_diagnostics_lifecycle")
+        persistPropertyListRecords(Array(events.suffix(500)), forKey: "ble_diagnostics_lifecycle", in: defaults)
     }
 
     private func logBle(uuid: String, event: String, detail: String) {
         let defaults = UserDefaults.standard
         let key = "ble_diagnostics_log_\(uuid)"
         var entries = defaults.array(forKey: key) as? [[String: Any]] ?? []
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
         entries.append(["ts": now, "event": event, "detail": detail])
         entries.removeAll { ($0["ts"] as? Int64 ?? 0) < now - 24 * 3600 * 1000 }
-        defaults.set(Array(entries.suffix(500)), forKey: key)
+        persistPropertyListRecords(Array(entries.suffix(500)), forKey: key, in: defaults)
     }
 
     private func recordAudioPacket(uuid: String, value: Data) {
@@ -619,20 +658,20 @@ final class OmiBleManager: NSObject {
             let defaults = UserDefaults.standard
             var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
             if let i = history.lastIndex(where: { ($0["timestamp"] as? Int64) == marker }) {
-                history[i]["lostAudioSeconds"] = Double(max(0, Int64(Date().timeIntervalSince1970 * 1000) - marker)) / 1000
-                defaults.set(history, forKey: key)
+                history[i]["lostAudioSeconds"] = Double(max(0, (CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0) - marker)) / 1000
+                persistPropertyListRecords(history, forKey: key, in: defaults)
             }
         }
     }
 
     private func recordFirmwareDiagnostics(uuid: String, data: Data) {
-        guard let value = OmiBleFirmwareDiagnostics.parse(data, timestampMs: Int64(Date().timeIntervalSince1970 * 1000)) else { return }
+        guard let value = OmiBleFirmwareDiagnostics.parse(data, timestampMs: CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0) else { return }
         let defaults = UserDefaults.standard
         chargingState[uuid] = value["charging"] as? Bool
         let key = "ble_diagnostics_firmware_\(uuid)"
         var reads = defaults.array(forKey: key) as? [[String: Any]] ?? []
         reads.append(value)
-        defaults.set(Array(reads.suffix(20)), forKey: key)
+        persistPropertyListRecords(Array(reads.suffix(20)), forKey: key, in: defaults)
         logBle(uuid: uuid, event: "firmware_diagnostics_read", detail: "v\(data[0])")
     }
 
@@ -710,7 +749,7 @@ final class OmiBleManager: NSObject {
         let key = OmiBleManager.historyKey(uuid)
         var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
 
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
         let startedAt = connectionStartTimes[uuid] ?? 0
         let durationMs: Int64 = (eventType == "disconnect" && startedAt > 0) ? (now - startedAt) : 0
 
@@ -737,7 +776,7 @@ final class OmiBleManager: NSObject {
             history = Array(history.suffix(OmiBleManager.maxDisconnectHistory))
         }
 
-        defaults.set(history, forKey: key)
+        persistPropertyListRecords(history, forKey: key, in: defaults)
         logBle(uuid: uuid, event: eventType, detail: event["reason"] as? String ?? "unknown")
 
         // Remember this event's timestamp so the next successful didConnect can
@@ -757,13 +796,13 @@ final class OmiBleManager: NSObject {
         guard var history = defaults.array(forKey: key) as? [[String: Any]] else { return }
 
         // Walk backwards for the matching timestamp. History is small (≤20).
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
         for i in stride(from: history.count - 1, through: 0, by: -1) {
             if let ts = history[i]["timestamp"] as? Int64, ts == markerTs {
                 var event = history[i]
                 event["timeToReconnectMs"] = max(Int64(0), now - markerTs)
                 history[i] = event
-                defaults.set(history, forKey: key)
+                persistPropertyListRecords(history, forKey: key, in: defaults)
                 return
             }
         }
@@ -773,14 +812,14 @@ final class OmiBleManager: NSObject {
         let defaults = UserDefaults.standard
         let key = OmiBleManager.reconnectKey(uuid)
         let count = defaults.integer(forKey: key)
-        defaults.set(count + 1, forKey: key)
+        try? SafeDefaults.store(.int(count + 1), forKey: key, in: defaults)
     }
 
     private func incrementFailToConnectCount(uuid: String) {
         let defaults = UserDefaults.standard
         let key = OmiBleManager.failToConnectKey(uuid)
         let count = defaults.integer(forKey: key)
-        defaults.set(count + 1, forKey: key)
+        try? SafeDefaults.store(.int(count + 1), forKey: key, in: defaults)
     }
 
     func getDeviceDiagnostics(uuid: String) -> BleDeviceDiagnostics {
@@ -882,7 +921,7 @@ final class OmiBleManager: NSObject {
         let key = OmiBleManager.batteryHistoryKey(uuid)
         let history = defaults.array(forKey: key) as? [[String: Any]] ?? []
 
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
         let cutoff = now - OmiBleManager.batteryHistoryRetentionMs
 
         return history.compactMap { obj in
@@ -1010,7 +1049,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         readyNotified.remove(uuid)
         discoveryStartedAt.removeValue(forKey: uuid)
         pairingRecoveryInFlight.remove(uuid)
-        let connectionStartedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        let connectionStartedAt = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
         connectionStartTimes[uuid] = connectionStartedAt
         lastRssi.removeValue(forKey: uuid)
         rssiHistory.removeValue(forKey: uuid)
@@ -1019,7 +1058,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         audioReceived[uuid] = 0
         audioExpected[uuid] = 0
         if UserDefaults.standard.object(forKey: "ble_diagnostics_counters_since_\(uuid)") == nil {
-            UserDefaults.standard.set(connectionStartedAt, forKey: "ble_diagnostics_counters_since_\(uuid)")
+            try? SafeDefaults.store(.int64(connectionStartedAt), forKey: "ble_diagnostics_counters_since_\(uuid)")
         }
         startRssiDiagnosticsPolling(for: peripheral)
         logBle(uuid: uuid, event: "connected", detail: "")
@@ -1161,7 +1200,7 @@ extension OmiBleManager: CBPeripheralDelegate {
         lastRssi[uuid] = value
 
         // Append to the trajectory window used by rssiTrend classification.
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
         var samples = rssiHistory[uuid] ?? []
         samples.append((ts: now, rssi: value))
         if samples.count > OmiBleManager.rssiHistoryLimit {

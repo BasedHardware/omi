@@ -133,7 +133,7 @@ final class SiriSnapshotStore {
         !row.id.isEmpty && row.startedAtMs > now - Self.conversationAgeMs
     }
     private func eligible(_ row: Memory, now: Int64) -> Bool {
-        !row.id.isEmpty && (row.expiresAtMs == nil || row.expiresAtMs! > now)
+        !row.id.isEmpty && (row.expiresAtMs.map { $0 > now } ?? true)
     }
     private func eligible(_ row: Task, now: Int64) -> Bool {
         !row.id.isEmpty && (!row.completed || (row.completedAtMs ?? 0) > now - Self.completedTaskAgeMs)
@@ -190,7 +190,7 @@ final class SiriSnapshotStore {
             guard !id.isEmpty else { throw SiriSession.Failure.server }
             try mutateForOwner(owner.uid, generation: owner.generation ?? 0) {
                 snapshot.memories[id] = Memory(id: id, content: content,
-                    createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                    createdAtMs: CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0, expiresAtMs: nil)
             }
             if enabled {
                 do { try await applyIncremental(type: "memory", ids: [id], uid: owner.uid) }
@@ -205,7 +205,7 @@ final class SiriSnapshotStore {
         try await serialized {
             try SiriSession.shared.validateOwner(owner)
             guard !id.isEmpty else { throw SiriSession.Failure.server }
-            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
             try mutateForOwner(owner.uid, generation: owner.generation ?? 0) {
                 let existing = snapshot.tasks[id]
                 snapshot.tasks[id] = Task(id: id, title: title, completed: completed,
@@ -261,7 +261,7 @@ final class SiriSnapshotStore {
         expiryTask?.cancel()
         expiryTask = nil
         guard validOwnerLocked() else { return }
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
         guard let next = nextCutoffLocked() else { return }
         let delayMs = UInt64(min(max(next - now + 50, 50), 24 * 60 * 60 * 1000))
         expiryTask = _Concurrency.Task.detached { [weak self] in
@@ -312,7 +312,7 @@ final class SiriSnapshotStore {
             }
             snapshot.ownerUid = uid
             try persist()
-            defaults.set(uid, forKey: ownerKey)
+            try? SafeDefaults.store(.string(uid), forKey: ownerKey, in: defaults)
 
         }
     }
@@ -333,7 +333,7 @@ final class SiriSnapshotStore {
         return try await serialized {
             lock.lock()
             let next = (defaults.object(forKey: generationKey) as? Int64 ?? 0) + 1
-            defaults.set(next, forKey: generationKey)
+            try? SafeDefaults.store(.int64(next), forKey: generationKey, in: defaults)
             transitionGeneration = next
             lock.unlock()
             try await wipe(expectedGeneration: next)
@@ -351,7 +351,7 @@ final class SiriSnapshotStore {
         lock.lock()
         let owners = Set([owner, snapshot.ownerUid, SiriSession.shared.currentConfig()?.uid].compactMap { $0 })
             .union(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? [])
-        defaults.set(Array(owners), forKey: pendingWipeOwnersKey)
+        try? SafeDefaults.store(.array(Array(owners).map(PlistValue.string)), forKey: pendingWipeOwnersKey, in: defaults)
         #if OMI_SIRI_PROBE
         let markerPersisted: Bool
         if simulateMarkerFlushFailureOnce {
@@ -365,7 +365,7 @@ final class SiriSnapshotStore {
         #endif
         if !markerPersisted { NSLog("[SiriIndex] Sign-out pending-wipe marker flush failed") }
         let next = (defaults.object(forKey: generationKey) as? Int64 ?? 0) + 1
-        defaults.set(next, forKey: generationKey)
+        try? SafeDefaults.store(.int64(next), forKey: generationKey, in: defaults)
         transitionGeneration = next
         defaults.removeObject(forKey: routeKey)
         if !defaults.synchronize() { NSLog("[SiriIndex] Sign-out generation flush failed") }
@@ -409,7 +409,7 @@ final class SiriSnapshotStore {
     }
     func setEnabled(_ value: Bool) async throws {
         try await serialized {
-            defaults.set(value, forKey: enabledKey)
+            try? SafeDefaults.store(.bool(value), forKey: enabledKey, in: defaults)
             if !value {
                 cancelExpiryTask()
                 try await removeIndex()
@@ -428,7 +428,7 @@ final class SiriSnapshotStore {
             }
             let owners = Set([owner, snapshot.ownerUid, SiriSession.shared.currentConfig()?.uid].compactMap { $0 })
                 .union(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? [])
-            defaults.set(Array(owners), forKey: pendingWipeOwnersKey)
+            try? SafeDefaults.store(.array(Array(owners).map(PlistValue.string)), forKey: pendingWipeOwnersKey, in: defaults)
             snapshot = Snapshot()
             let persistence: Result<Void, Error>
             do { try persist(); persistence = .success(()) }
@@ -442,7 +442,7 @@ final class SiriSnapshotStore {
             lock.lock()
             let remaining = Set(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).subtracting(owners)
             if remaining.isEmpty { defaults.removeObject(forKey: pendingWipeOwnersKey) }
-            else { defaults.set(Array(remaining), forKey: pendingWipeOwnersKey) }
+            else { try? SafeDefaults.store(.array(Array(remaining).map(PlistValue.string)), forKey: pendingWipeOwnersKey, in: defaults) }
             if expectedGeneration == nil || transitionGeneration == expectedGeneration { transitionGeneration = nil }
             lock.unlock()
 
@@ -468,7 +468,7 @@ final class SiriSnapshotStore {
                 snapshot.conversations[value.id] = Conversation(id: value.id, title: value.title,
                     summary: value.summary, startedAtMs: value.startedAtMs, updatedAtMs: value.updatedAtMs)
             }
-            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
             let newest = snapshot.conversations.values.filter { eligible($0, now: now) }
                 .sorted { $0.startedAtMs > $1.startedAtMs }.prefix(2000)
             let keep = Set(newest.map(\.id))
@@ -505,7 +505,7 @@ final class SiriSnapshotStore {
             for value in values where !value.id.isEmpty {
                 snapshot.memories[value.id] = Memory(id: value.id, content: value.content, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs)
             }
-            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
             let newest = snapshot.memories.values.filter { eligible($0, now: now) }
                 .sorted { $0.createdAtMs > $1.createdAtMs }.prefix(5000)
             let keep = Set(newest.map(\.id))
@@ -581,7 +581,7 @@ final class SiriSnapshotStore {
         defaults.removeObject(forKey: routeKey)
         return route
     }
-    func setPendingRoute(_ route: String) { defaults.set(route, forKey: routeKey) }
+    func setPendingRoute(_ route: String) { try? SafeDefaults.store(.string(route), forKey: routeKey, in: defaults) }
     func clearPendingRoute(ifMatching route: String) {
         lock.lock(); defer { lock.unlock() }
         if defaults.string(forKey: routeKey) == route { defaults.removeObject(forKey: routeKey) }
@@ -602,7 +602,7 @@ final class SiriSnapshotStore {
         lock.lock(); defer { lock.unlock() }
         guard !id.isEmpty, accountOwnerLocked(), transitionGeneration == nil,
               (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty else { return false }
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
         switch type {
         case "conversation":
             return snapshot.conversations[id].map { eligible($0, now: now) } ?? false
@@ -621,9 +621,9 @@ final class SiriSnapshotStore {
         catch { return [] }
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
         let selected = snapshot.conversations.values.filter {
-            eligible($0, now: now) && (ids == nil || ids!.contains($0.id))
+            eligible($0, now: now) && (ids?.contains($0.id) ?? true)
         }
         return selected.map { ConversationEntity(id: $0.id, name: $0.title, content: $0.summary,
             creationDate: Date(timeIntervalSince1970: Double($0.startedAtMs) / 1000),
@@ -636,8 +636,8 @@ final class SiriSnapshotStore {
         catch { return [] }
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
-        return snapshot.memories.values.filter { (ids == nil || ids!.contains($0.id)) && eligible($0, now: now) }.map {
+        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        return snapshot.memories.values.filter { (ids?.contains($0.id) ?? true) && eligible($0, now: now) }.map {
             ConversationEntity(memoryId: $0.id, content: $0.content,
                 creationDate: Date(timeIntervalSince1970: Double($0.createdAtMs) / 1000))
         }
@@ -649,8 +649,8 @@ final class SiriSnapshotStore {
         catch { return [] }
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
-        return snapshot.memories.values.filter { (ids == nil || ids!.contains($0.id)) && eligible($0, now: now) }.map {
+        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        return snapshot.memories.values.filter { (ids?.contains($0.id) ?? true) && eligible($0, now: now) }.map {
             MemoryEntity(id: $0.id, content: $0.content,
                 creationDate: Date(timeIntervalSince1970: Double($0.createdAtMs) / 1000)) }
     }
@@ -661,9 +661,9 @@ final class SiriSnapshotStore {
         catch { return [] }
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
         return snapshot.tasks.values.filter {
-            (ids == nil || ids!.contains($0.id)) && eligible($0, now: now)
+            (ids?.contains($0.id) ?? true) && eligible($0, now: now)
         }.map {
             TaskEntity(id: $0.id, title: $0.title, isCompleted: $0.completed,
                 creationDate: Date(timeIntervalSince1970: Double($0.createdAtMs) / 1000),
@@ -747,7 +747,7 @@ final class SiriSnapshotStore {
             guard #available(iOS 27.0, *) else { return }
             try requireValidOwner()
             guard let uid = owner, let indexName else { throw SiriSession.Failure.auth }
-            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
             try mutateForOwner(uid) {
                 snapshot.conversations = snapshot.conversations.filter { eligible($0.value, now: now) }
                 let newest = snapshot.conversations.values.sorted { $0.startedAtMs > $1.startedAtMs }.prefix(2000)

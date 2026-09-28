@@ -305,7 +305,7 @@ final class LimitlessFlashDrainEngine {
     }
 
     private func nowMs() -> Int64 {
-        return Int64(Date().timeIntervalSince1970 * 1000)
+        return CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
     }
 
     private func write(_ peripheralUuid: String, _ data: Data) {
@@ -326,15 +326,15 @@ final class LimitlessFlashDrainEngine {
     private func publishStorageState(_ state: LimitlessProtocol.StorageState) {
         let pageCount = max(0, state.newestFlashPage - state.oldestFlashPage + 1)
         let d = UserDefaults.standard
-        d.set(pageCount, forKey: "flutter.pendantPagesStored")
+        try? SafeDefaults.store(.int(pageCount), forKey: "flutter.pendantPagesStored", in: d)
         if state.totalCapturePages > 0 {
             let almostFull = Double(state.freeCapturePages) < Double(state.totalCapturePages) * storageFullFraction
-            d.set(almostFull, forKey: "flutter.pendantStorageAlmostFull")
+            try? SafeDefaults.store(.bool(almostFull), forKey: "flutter.pendantStorageAlmostFull", in: d)
         }
     }
 
     private func setBoolPref(_ key: String, _ value: Bool) {
-        UserDefaults.standard.set(value, forKey: "flutter.\(key)")
+        try? SafeDefaults.store(.bool(value), forKey: "flutter.\(key)")
     }
 
     // MARK: - Config

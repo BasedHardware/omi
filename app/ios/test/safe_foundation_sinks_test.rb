@@ -24,6 +24,8 @@ class SafeFoundationSinksTest < Minitest::Test
         // A nil update removes the key; no Optional is ever bridged as Any.
         try SafeDefaults.set(.int(7), forKey: "scalar", in: defaults)
         precondition(defaults.integer(forKey: "scalar") == 7)
+        try SafeDefaults.store(.string("checked"), forKey: "stored", in: defaults)
+        precondition(defaults.string(forKey: "stored") == "checked")
         try SafeDefaults.set(nil, forKey: "scalar", in: defaults)
         precondition(defaults.object(forKey: "scalar") == nil)
         try SafeDefaults.set(.dictionary(["date": .date(Date(timeIntervalSince1970: 0))]),

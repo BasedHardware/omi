@@ -39,6 +39,12 @@ enum SafeFoundationError: Error {
 }
 
 enum SafeDefaults {
+    /// Named write entry point for call sites checked by the iOS raw-set lint.
+    /// Keep validation and nil-removal behavior centralized in `set`.
+    static func store(_ value: PlistValue?, forKey key: String, in defaults: UserDefaults = .standard) throws {
+        try set(value, forKey: key, in: defaults)
+    }
+
     /// Nil means remove the key. A failed validation leaves its old value intact.
     static func set(_ value: PlistValue?, forKey key: String, in defaults: UserDefaults = .standard) throws {
         guard let value else {
