@@ -1111,6 +1111,8 @@ def update_app(
             f.write(file.file.read())
         img_url = upload_app_logo(file_path, app_id)
         data['image'] = img_url
+    # Ownership was checked on the path id; a body `id` must not retarget the write to another app.
+    data['id'] = app_id
     data['updated_at'] = datetime.now(timezone.utc)
 
     # Backward compatibility: Set app_home_url from first auth step if not provided
@@ -1146,11 +1148,11 @@ def update_app(
 
     # payment link
     upsert_app_payment_link(
-        data.get('id'),
+        app_id,
         data.get('is_paid', False),
         data.get('price'),
         data.get('payment_plan'),
-        data.get('uid'),
+        uid,
         previous_price=app.get("price", 0),
     )
 
