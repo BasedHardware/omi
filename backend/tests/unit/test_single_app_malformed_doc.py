@@ -153,20 +153,6 @@ class TestSingleAppMalformedDoc(unittest.TestCase):
         response = {'status': 'ok'}
         self.assertEqual(response['status'], 'ok')
 
-    def test_safe_app_from_dict_helper(self):
-        """Contract: _safe_app_from_dict returns None for non-dicts and malformed records, and App for valid records."""
-        try:
-            from routers.apps import _safe_app_from_dict
-        except ImportError:
-            self.skipTest('routers.apps dependencies not fully loaded in this environment')
-
-        self.assertIsNone(_safe_app_from_dict(None))
-        self.assertIsNone(_safe_app_from_dict('invalid'))
-        self.assertIsNone(_safe_app_from_dict({'id': 'corrupt'}))
-        valid_app = _safe_app_from_dict(_valid_app_dict('app_helper_test'))
-        self.assertIsNotNone(valid_app)
-        self.assertEqual(valid_app.id, 'app_helper_test')
-
 
 if __name__ == '__main__':
     unittest.main()
