@@ -1357,7 +1357,7 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     folders = folders_db.get_folders(uid)
     valid_folders = []
     for folder in folders:
-        if not isinstance(folder, dict) or not folder.get('id'):
+        if not folder or not folder.get('id'):
             logger.warning('Skipping malformed folder in Developer API folder list')
             continue
         try:

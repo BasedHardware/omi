@@ -94,74 +94,75 @@ finally:
     _restore(_snap)
 
 
-def test_get_folders_skips_malformed_folder_doc():
-    """GET /v1/folders must skip malformed docs without raising 500."""
-    now = datetime.now(timezone.utc)
-    mock_data = [
-        {
-            "id": "f_valid_1",
-            "name": "Work",
-            "color": "#3B82F6",
-            "icon": "💼",
-            "created_at": now,
-            "updated_at": now,
-            "order": 0,
-        },
-        {
-            "id": "f_corrupt_2",
-            # missing required 'name', 'color', 'icon', 'created_at', 'updated_at'
-            "description": "Corrupt record",
-        },
-        {
-            # missing required 'id'
-            "name": "Missing ID",
-            "color": "#8B5CF6",
-            "icon": "👥",
-            "created_at": now,
-            "updated_at": now,
-        },
-        {
-            "id": "f_valid_3",
-            "name": "Personal",
-            "color": "#10B981",
-            "icon": "👤",
-            "created_at": now,
-            "updated_at": now,
-            "order": 1,
-        },
-    ]
-
-    with patch.object(folders_mod.folders_db, "get_folders", return_value=mock_data):
-        result = folders_mod.get_folders(uid="test_user")
-
-    folder_ids = [f.id for f in result]
-    assert folder_ids == ["f_valid_1", "f_valid_3"]
-    assert len(result) == 2
+import unittest
 
 
-def test_get_folders_empty_initializes_system():
-    """When no folders exist, initialize_system_folders is called and returned safely."""
-    now = datetime.now(timezone.utc)
-    system_folders = [
-        {
-            "id": "f_sys_1",
-            "name": "Work",
-            "color": "#3B82F6",
-            "icon": "💼",
-            "created_at": now,
-            "updated_at": now,
-            "order": 0,
-        }
-    ]
-    with patch.object(folders_mod.folders_db, "get_folders", return_value=[]), patch.object(
-        folders_mod.folders_db, "initialize_system_folders", return_value=system_folders
-    ):
-        result = folders_mod.get_folders(uid="test_new_user")
+class TestFoldersSafeDeserialization(unittest.TestCase):
+    def test_get_folders_skips_malformed_folder_doc(self):
+        """GET /v1/folders must skip malformed docs without raising 500."""
+        now = datetime.now(timezone.utc)
+        mock_data = [
+            {
+                "id": "f_valid_1",
+                "name": "Work",
+                "color": "#3B82F6",
+                "icon": "💼",
+                "created_at": now,
+                "updated_at": now,
+                "order": 0,
+            },
+            {
+                "id": "f_corrupt_2",
+                # missing required 'name', 'color', 'icon', 'created_at', 'updated_at'
+                "description": "Corrupt record",
+            },
+            {
+                # missing required 'id'
+                "name": "Missing ID",
+                "color": "#8B5CF6",
+                "icon": "👥",
+                "created_at": now,
+                "updated_at": now,
+            },
+            {
+                "id": "f_valid_3",
+                "name": "Personal",
+                "color": "#10B981",
+                "icon": "👤",
+                "created_at": now,
+                "updated_at": now,
+                "order": 1,
+            },
+        ]
 
-    assert [f.id for f in result] == ["f_sys_1"]
+        with patch.object(folders_mod.folders_db, "get_folders", return_value=mock_data):
+            result = folders_mod.get_folders(uid="test_user")
+
+        folder_ids = [f.id for f in result]
+        self.assertEqual(folder_ids, ["f_valid_1", "f_valid_3"])
+        self.assertEqual(len(result), 2)
+
+    def test_get_folders_empty_initializes_system(self):
+        """When no folders exist, initialize_system_folders is called and returned safely."""
+        now = datetime.now(timezone.utc)
+        system_folders = [
+            {
+                "id": "f_sys_1",
+                "name": "Work",
+                "color": "#3B82F6",
+                "icon": "💼",
+                "created_at": now,
+                "updated_at": now,
+                "order": 0,
+            }
+        ]
+        with patch.object(folders_mod.folders_db, "get_folders", return_value=[]), patch.object(
+            folders_mod.folders_db, "initialize_system_folders", return_value=system_folders
+        ):
+            result = folders_mod.get_folders(uid="test_new_user")
+
+        self.assertEqual([f.id for f in result], ["f_sys_1"])
 
 
 if __name__ == "__main__":
-    test_get_folders_skips_malformed_folder_doc()
-    test_get_folders_empty_initializes_system()
-    print("All folder safe deserialization tests passed!")
+    unittest.main()

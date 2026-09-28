@@ -37,7 +37,7 @@ def get_folders(uid: str = Depends(auth.get_current_user_uid)):
 
     valid_folders = []
     for f in folders:
-        if not isinstance(f, dict) or not f.get('id'):
+        if not f or not f.get('id'):
             continue
         try:
             valid_folders.append(Folder.model_validate(f))
