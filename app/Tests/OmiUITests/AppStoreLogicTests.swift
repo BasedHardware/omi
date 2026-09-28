@@ -162,6 +162,130 @@ final class AppStoreLogicTests: XCTestCase {
         XCTAssertTrue(store.rewindGroups.isEmpty)
         XCTAssertFalse(store.rewindTimelineHasMore)
     }
+
+    // MARK: Remote glance line (useRemoteGlanceLine)
+
+    /// A canonical worker 200 populates the glance line.
+    func testRefreshGlanceStoresWorkerLine() async {
+        let transport = GlanceTestTransport(
+            contract: .canonical,
+            response: .ok(body: "{\"title\":\"On deck\",\"copy\":\"Next up is the schema migration flag.\"}"))
+        let store = AppStore(services: AppServices(transport: transport))
+        await store.refreshGlance(context: GlanceTestTransport.context)
+        XCTAssertEqual(store.glanceLine?.title, "On deck")
+        XCTAssertEqual(
+            store.glanceLine?.copy, "Next up is the schema migration flag.")
+        // Exactly one probe, on the glance route with the clamped context.
+        XCTAssertEqual(transport.requests.count, 1)
+        XCTAssertEqual(transport.requests[0].path, "/v1/desktop/glance")
+    }
+
+    /// The 5-minute throttle: an immediate second refresh is a no-op.
+    func testRefreshGlanceThrottlesRepeatFetches() async {
+        let transport = GlanceTestTransport(
+            contract: .canonical,
+            response: .ok(body: "{\"title\":\"On deck\",\"copy\":\"Next up is the schema migration flag.\"}"))
+        let store = AppStore(services: AppServices(transport: transport))
+        await store.refreshGlance(context: GlanceTestTransport.context)
+        await store.refreshGlance(context: GlanceTestTransport.context)
+        XCTAssertEqual(transport.requests.count, 1)
+    }
+
+    /// Failures keep the line (and nil) in place — old planes are never
+    /// probed, non-200s and junk bodies leave the local fallback rendering.
+    func testRefreshGlanceKeepsLineOnFailure() async {
+        let cases: [GlanceTestTransport.Stub] = [
+            .init(contract: .omi, response: .ok(body: "{\"title\":\"x\",\"copy\":\"y\"}")),
+            .init(contract: .canonical, response: .status(503)),
+            .init(contract: .canonical, response: .ok(body: "not json")),
+            .init(contract: .canonical, response: .ok(body: "{\"title\":\"\",\"copy\":\"y\"}")),
+        ]
+        for stub in cases {
+            let transport = GlanceTestTransport(contract: stub.contract, response: stub.response)
+            let store = AppStore(services: AppServices(transport: transport))
+            await store.refreshGlance(context: GlanceTestTransport.context)
+            XCTAssertNil(store.glanceLine, "stub: \(stub)")
+        }
+    }
+
+    /// No transport → no probe and no line (hosts without a backend degrade
+    /// to the local line).
+    func testRefreshGlanceWithoutTransportStaysNil() async {
+        let store = AppStore(services: AppServices())
+        await store.refreshGlance(context: GlanceTestTransport.context)
+        XCTAssertNil(store.glanceLine)
+    }
+}
+
+/// Minimal glance-route transport for the store tests: records every request
+/// and answers with one canned response.
+private final class GlanceTestTransport: BackendTransport, @unchecked Sendable {
+    struct Stub: CustomStringConvertible {
+        let contract: APIContract
+        let response: Response
+        enum Response {
+            case ok(body: String)
+            case status(Int)
+        }
+        var description: String { "\(contract) \(response)" }
+    }
+
+    struct RecordedRequest: CustomStringConvertible {
+        let method: HTTPMethod
+        let path: String
+        var description: String { "\(method) \(path)" }
+    }
+
+    let contract: APIContract
+    let response: Stub.Response
+    private let lock = NSLock()
+    private var recorded: [RecordedRequest] = []
+
+    init(contract: APIContract, response: Stub.Response) {
+        self.contract = contract
+        self.response = response
+    }
+
+    var requests: [RecordedRequest] {
+        lock.lock(); defer { lock.unlock() }
+        return recorded
+    }
+
+    static let context = DesktopGlanceContext(
+        frontApp: "Xcode", windowTitle: "AppStore.swift",
+        conversations: 3, memories: 2, tasks: 4,
+        topics: ["Sprint sync"], localTimeIso: "2026-09-28T12:00:00.000Z")
+
+    func request(_ request: BackendRequest) async throws -> BackendResponse {
+        record(RecordedRequest(method: request.method, path: request.path))
+        switch response {
+        case .ok(let body):
+            return BackendResponse(id: request.id, status: 200, body: body)
+        case .status(let status):
+            return BackendResponse(id: request.id, status: status, body: nil)
+        }
+    }
+
+    private func record(_ request: RecordedRequest) {
+        lock.lock(); defer { lock.unlock() }
+        recorded.append(request)
+    }
+
+    func generationEvents(
+        generationId: String, lastEventId: String?,
+        onFrame: @escaping @Sendable (String) -> Void
+    ) async throws -> BackendResponse {
+        BackendResponse(id: generationId, status: 501, body: nil)
+    }
+
+    func cancelGenerationEvents(generationId: String) async {}
+
+    func createWriteId() async throws -> String { "test-write-id" }
+    func createRecordingId() async throws -> String { "test-recording-id" }
+    func apiContract() async -> APIContract? { contract }
+    func softwarePlane() async -> SoftwarePlane? { .old }
+    func setSoftwarePlane(_ plane: SoftwarePlane) async -> SoftwarePlane? { plane }
+    func stampedBackendOrigin() async -> String? { nil }
 }
 
 /// Optimistic authenticator with an explicit session-probe result.

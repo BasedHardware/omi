@@ -198,6 +198,36 @@ final class DemoState: @unchecked Sendable {
             accountEpoch: 7)
     }
 
+    // MARK: Glance
+
+    /// The demo worker's personalized glance line (`POST /v1/desktop/glance`),
+    /// composed from the demo day exactly like the real prompt: the nearest
+    /// open task plus the freshest conversation topic, ≤4-word title, one
+    /// warm specific sentence.
+    func glanceJson() -> String {
+        lock.lock(); defer { lock.unlock() }
+        let openTasks = tasks
+            .filter { !$0.completed }
+            .sorted { ($0.dueAt ?? 0) < ($1.dueAt ?? 0) }
+        let topic = conversations.first?.title ?? memories.first?.title ?? "your day"
+        let title: String
+        let copy: String
+        if let next = openTasks.first {
+            title = "On deck today"
+            let noun = openTasks.count == 1 ? "task" : "tasks"
+            copy = "\(openTasks.count) open \(noun) — next up: \(next.title.lowercased())."
+        } else {
+            title = "Clear run"
+            copy = "Your board is clear after \"\(topic)\"."
+        }
+        return JSON.serialize(
+            JSONValue.object([
+                ("title", JSONValue.string(title)),
+                ("copy", JSONValue.string(copy)),
+            ])
+        )
+    }
+
     static let completePage = ReadPageState(
         windowStatus: .complete, complete: true, hasMore: false, nextCursor: nil,
         completenessStatus: .complete, reasons: [])
@@ -591,6 +621,12 @@ final class DemoBackendTransport: BackendTransport, OmiChatStreaming, @unchecked
     }
 
     func request(_ request: BackendRequest) async throws -> BackendResponse {
+        // The demo worker's glance route — the store's personalized glance
+        // fetches here exactly as it would against the canonical plane.
+        if request.method == .POST, request.path == "/v1/desktop/glance" {
+            return BackendResponse(
+                id: request.id, status: 200, body: state.glanceJson())
+        }
         guard request.method == .POST, request.path == writeOpsPath("tasks"),
             let body = request.body,
             let envelope = JSON.parseOrNull(body)

@@ -26,7 +26,6 @@ public enum DesktopLayout {
     public static let trafficLightRowWidth: CGFloat = 74
     public static let glassCornerRadius: CGFloat = 22
     public static let stageMaxWidth: CGFloat = 992
-    public static let contentMaxWidth: CGFloat = 860
 }
 
 public let desktopSearchPlaceholder = "Search what you've seen and heard…"

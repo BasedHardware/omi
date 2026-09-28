@@ -143,33 +143,133 @@ struct GlanceCard: View {
     @EnvironmentObject var store: AppStore
 
     var body: some View {
-        PageHeading(title: line.title, subtitle: line.copy)
+        // `contextKey` mirrors the upstream effect dependency: the fetch
+        // loop restarts when the live context shifts, and the 15 s poll
+        // (`GLANCE_POLL_MS`) keeps the frame fresh while Home is mounted.
+        PageHeading(title: currentLine.title, subtitle: currentLine.copy)
             .accessibilityLabel("At a glance")
+            .task(id: contextKey) { await glanceLoop() }
     }
 
-    /// The newest fresh capture frame becomes "Now on your Mac"; otherwise
-    /// the deterministic fun-fact rotation fills the glance (the remote
-    /// glance worker line has no store surface yet — see report).
-    private var line: (title: String, copy: String) {
-        if let newest = newestCapture,
-            nowMilliseconds() - newest.capturedAtMs < glanceFrameFreshMs
+    /// Remote line wins; the local frame/fun-fact line fills everything else.
+    /// The remote fetch (`useRemoteGlanceLine`) also sends the newest frame
+    /// regardless of freshness — only the local "Now on your Mac" line keeps
+    /// the 5-minute freshness gate.
+    private var currentLine: (title: String, copy: String) {
+        if let remote = store.glanceLine {
+            return (remote.title, remote.copy)
+        }
+        return localLine(minuteOfDay: minuteOfDay())
+    }
+
+    private func localLine(minuteOfDay: Int) -> (title: String, copy: String) {
+        if let newest = store.rewindGroups.first,
+            nowMilliseconds() - newest.capturedAtMs < GlanceCard.glanceFrameFreshMs
         {
             let window = newest.windowTitle.trimmingCharacters(in: .whitespacesAndNewlines)
             let copy = window.isEmpty ? newest.appName : "\(newest.appName) — \(window)"
             return ("Now on your Mac", copy)
         }
-        let calendar = Calendar(identifier: Calendar.Identifier.gregorian)
-        let components = calendar.dateComponents([.hour, .minute], from: Date())
-        let minuteOfDay = (components.hour ?? 0) * 60 + (components.minute ?? 0)
         let index = (minuteOfDay / 30) % glanceFunLines.count
         return glanceFunLines[index]
     }
 
-    private var newestCapture: RewindCaptureGroup? {
-        store.rewindGroups.first
+    /// The live context sent to and polled against (`contextKey` upstream:
+    /// frame app + counts + topics joined with newlines).
+    private var contextKey: String {
+        [
+            glanceFrame?.appName ?? "",
+            String(glanceCounts.conversations),
+            String(glanceCounts.memories),
+            String(glanceCounts.tasks),
+            glanceTopics.joined(separator: "\n"),
+        ].joined(separator: "|")
     }
 
-    private let glanceFrameFreshMs: Int64 = 5 * 60 * 1000
+    private var glanceFrame: (appName: String, windowTitle: String)? {
+        store.rewindGroups.first.map { ($0.appName, $0.windowTitle) }
+    }
+
+    /// Item counts from the successful read outcomes only.
+    private var glanceCounts: (conversations: Int, memories: Int, tasks: Int) {
+        func count(_ items: Int?) -> Int { items ?? 0 }
+        let conversations: Int?
+        if case .success(let read) = store.outcomes?.conversations {
+            conversations = read.items.count
+        } else {
+            conversations = nil
+        }
+        let memories: Int?
+        if case .success(let read) = store.outcomes?.memories {
+            memories = read.items.count
+        } else {
+            memories = nil
+        }
+        let tasks: Int?
+        if case .success(let read) = store.outcomes?.tasks {
+            tasks = read.items.count
+        } else {
+            tasks = nil
+        }
+        return (count(conversations), count(memories), count(tasks))
+    }
+
+    /// Recent conversation titles, then memory titles: trimmed, deduplicated,
+    /// capped at six — what the worker tailors the glance to.
+    private var glanceTopics: [String] {
+        var titles: [String] = []
+        func push(_ title: String) {
+            let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty && !titles.contains(trimmed) {
+                titles.append(String(trimmed.prefix(80)))
+            }
+        }
+        if case .success(let read) = store.outcomes?.conversations {
+            for item in read.items { push(item.title) }
+        }
+        if case .success(let read) = store.outcomes?.memories {
+            for item in read.items { push(item.title) }
+        }
+        return Array(titles.prefix(6))
+    }
+
+    private func glanceContext() -> DesktopGlanceContext {
+        let frame = glanceFrame
+        return DesktopGlanceContext(
+            frontApp: frame?.appName ?? "",
+            windowTitle: frame?.windowTitle ?? "",
+            conversations: glanceCounts.conversations,
+            memories: glanceCounts.memories,
+            tasks: glanceCounts.tasks,
+            topics: glanceTopics,
+            localTimeIso: isoString(fromEpochMilliseconds: nowMilliseconds())
+        )
+    }
+
+    /// The Home glance poll: every 15 s re-read the capture timeline (frame
+    /// freshness + feed captures) and ask the store for a remote line (the
+    /// store throttles to one fetch per five minutes). Exits on cancellation,
+    /// i.e. when the card leaves Home or the context shifts.
+    private func glanceLoop() async {
+        while !Task.isCancelled {
+            await store.refreshRewindTimeline(query: "")
+            await store.refreshGlance(context: glanceContext())
+            do {
+                try await Task.sleep(nanoseconds: UInt64(GlanceCard.glancePollMs) * 1_000_000)
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func minuteOfDay() -> Int {
+        let calendar = Calendar(identifier: Calendar.Identifier.gregorian)
+        let components = calendar.dateComponents([.hour, .minute], from: Date())
+        return (components.hour ?? 0) * 60 + (components.minute ?? 0)
+    }
+
+    static let glanceFrameFreshMs: Int64 = 5 * 60 * 1000
+    static let glancePollMs: Int64 = 15_000
 }
 
 private let glanceFunLines: [(title: String, copy: String)] = [
@@ -235,8 +335,10 @@ struct DesktopUnifiedTimeline<Header: View>: View {
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 24)
-            .frame(maxWidth: DesktopLayout.contentMaxWidth)
-            .frame(maxWidth: .infinity)
+            // The stage shares the chrome's left edge: capped at the stage
+            // width and pinned leading at any window size — never centered.
+            .frame(maxWidth: DesktopLayout.stageMaxWidth, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityLabel("Unified timeline")
     }
@@ -268,7 +370,9 @@ struct DesktopUnifiedTimeline<Header: View>: View {
     @ViewBuilder
     private func timelineSection(_ section: TimelineSection) -> some View {
         let isCollapsed = collapsed.contains(section.key)
-        VStack(spacing: 0) {
+        // Leading: rows are size-to-content and must hug the section header's
+        // left edge, never center under it.
+        VStack(alignment: .leading, spacing: 0) {
             Button {
                 if isCollapsed {
                     collapsed.remove(section.key)

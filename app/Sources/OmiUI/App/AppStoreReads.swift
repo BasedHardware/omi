@@ -653,4 +653,26 @@ extension AppStore {
         if case .error = outcome { return true }
         return false
     }
+
+    // MARK: - Remote glance line (useRemoteGlanceLine.ts)
+
+    /// Asks the canonical worker for a composed glance line, throttled to one
+    /// fetch per `glanceRefreshMs` (upstream fetchedAtRef). Failures leave
+    /// the previous line — and nil — untouched, so the local line stays up.
+    public func refreshGlance(context: DesktopGlanceContext) async {
+        // Upstream returns before stamping when there is no backend at all;
+        // the throttle only gates real fetch attempts.
+        guard let transport = services.transport else { return }
+        let now = appNowMilliseconds()
+        guard now - runtime.glanceFetchedAtMs >= glanceRefreshMs else { return }
+        // Upstream stamps the ref before the request so a hang can't loop.
+        runtime.glanceFetchedAtMs = now
+        if let line = await loadDesktopGlance(transport, context: context) {
+            glanceLine = line
+        }
+    }
 }
+
+/// 5-minute remote-glance throttle (GLANCE_REFRESH_MS).
+public let glanceRefreshMs: Int64 = 5 * 60 * 1000
+

@@ -116,6 +116,9 @@ public final class AppStore: ObservableObject {
     @Published public internal(set) var chatHistoryLoading: Bool = false
     @Published public internal(set) var chatGeneration: ChatGenerationUiState = .idle
     @Published public var composerText: String = ""
+    /// Remote-composed At-a-glance line (`useRemoteGlanceLine`); nil keeps the
+    /// local frame/fun-fact line rendering.
+    @Published public internal(set) var glanceLine: DesktopGlanceLine?
 
     // MARK: Session
 

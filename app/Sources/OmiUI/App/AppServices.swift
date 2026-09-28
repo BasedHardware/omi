@@ -98,6 +98,9 @@ final class AppRuntime {
     var rewindReaderQuery: String?
     var rewindLoadMorePending = false
 
+    // Remote glance line (useRemoteGlanceLine.ts): fetchedAtRef mirror.
+    var glanceFetchedAtMs: Int64 = 0
+
     // Task mutations (useTaskMutations.ts)
     var pendingTaskPatch: PreparedTaskPatch?
     var taskMutationActive = false

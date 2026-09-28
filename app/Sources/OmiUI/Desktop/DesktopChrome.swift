@@ -123,7 +123,9 @@ struct DesktopOmnibarRow: View {
             maxWidth: DesktopLayout.stageMaxWidth,
             minHeight: DesktopLayout.omnibarHeight
         )
-        .frame(maxWidth: .infinity)
+        // Pinned leading: the omnibar glass shares the stage's left edge at
+        // every window size — never centered.
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14)
                 .fill(tokens.glassStrong)
