@@ -8,6 +8,9 @@ overlay:
   gke:
     backend-listen:
       env:
+        LISTEN_RECONNECT_BUDGET_PER_MIN:
+          value: '6'
+          category: reliability
         # 2026-09-26 incident: with the code-fixed order, a Modulate breaker opening sent
         # new sessions to Deepgram (402 since 09-14) and then streaming Parakeet (no ready
         # frame, 0 connects since 08-26), so they got no transcript. The configured order

@@ -46,6 +46,12 @@ class RejectedStream(RuntimeError):
         super().__init__(reason)
 
 
+class ProviderChainUnavailable(RuntimeError):
+    def __init__(self, retry_after: int):
+        self.retry_after = max(1, min(retry_after, 3600))
+        super().__init__('Configured STT chain exhausted: providers unavailable')
+
+
 async def connect_configured_chain(
     *,
     primary_service: STTService,
@@ -91,6 +97,20 @@ async def connect_configured_chain(
             if digest < 3:
                 logger.info('live_stt_routing_shadow configured=%s proposed=%s', configured, proposed)
     ROUTING_DECISION_LATENCY.observe(time.perf_counter() - decision_started)
+    # If every eligible provider is still benched, avoid constructing any
+    # provider socket. A cooled circuit remains eligible here so the normal
+    # allow_request path can claim its existing half-open recovery probe.
+    eligible = [service for service in candidates if callbacks.get(service) is not None]
+    if eligible:
+        circuits = [_circuit_for_primary(service) for service in eligible]
+        all_benched = all(
+            circuit.state == 'half_open' or (circuit.state == 'open' and not circuit.cooldown_elapsed())
+            for circuit in circuits
+        )
+        if all_benched:
+            waits = [circuit.account_cooldown_seconds_remaining for circuit in circuits if circuit.state == 'open']
+            retry_after = max(5, int(max(waits, default=0) + 0.999))
+            raise ProviderChainUnavailable(retry_after)
     origin = primary_service.value
     prior_reason = 'circuit_open'
     attempted = False

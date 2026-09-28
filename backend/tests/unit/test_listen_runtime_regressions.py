@@ -14,6 +14,8 @@ from routers.listen.runtime import ListenSessionRuntime
 from routers.listen.transcripts import TranscriptProcessor
 from utils.async_tasks import WebSocketTaskSupervisor
 from utils.listen_session_bootstrap import ListenConnectBase
+from utils.metrics import OMI_LISTEN_STT_UNAVAILABLE_TOTAL
+from utils.stt.live_failure import terminate_live_stt_backoff
 from utils.onboarding import ONBOARDING_QUESTIONS, OnboardingHandler
 from utils.stt.streaming import STTService
 from starlette.websockets import WebSocketState
@@ -379,6 +381,7 @@ async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding
     await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
 
     assert runtime.onboarding_admitted is True
+
     assert runtime.onboarding_session_id is None
     # OnboardingHandler still mints its own internal session id when none is
     # supplied (it needs one for its own question/answer bookkeeping) — this
@@ -391,6 +394,49 @@ async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding
     assert resolve_onboarding_provenance_marker(runtime) is None
     assert [event['type'] for event in sent_events] == ['onboarding_question']
     assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
+
+
+@pytest.mark.anyio
+async def test_reconnect_budget_returns_terminal_backoff_before_entitlement_work(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
+    websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    request = ListenRequest(websocket=websocket, uid='budget-user')
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.state = SimpleNamespace(active=True, stt_terminal_failure=False, close_code=1001)
+    monkeypatch.setattr(runtime_module.listen_reconnect_budget, 'admit', lambda _uid: (False, 17))
+    paywall = AsyncMock()
+    monkeypatch.setattr(runtime_module, 'run_blocking', paywall)
+    before = OMI_LISTEN_STT_UNAVAILABLE_TOTAL.labels(reason='reconnect_budget')._value.get()
+
+    assert not await runtime._admit()
+
+    payload = websocket.send_json.await_args.args[0]
+    assert payload['type'] == 'service_status'
+    assert payload['status'] == 'stt_failed'
+    assert payload['reason'] == 'reconnect_budget'
+    assert payload['retry_after'] == 17
+    assert websocket.close.await_args.kwargs['code'] == 1011
+    assert paywall.await_count == 0
+    assert OMI_LISTEN_STT_UNAVAILABLE_TOTAL.labels(reason='reconnect_budget')._value.get() == before + 1
+
+
+@pytest.mark.anyio
+async def test_provider_unavailable_uses_terminal_status_with_retry_hint():
+    websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    state = SimpleNamespace(active=True, stt_terminal_failure=False, close_code=1001)
+
+    assert await terminate_live_stt_backoff(websocket, state, reason='provider_unavailable', retry_after=45)
+
+    payload = websocket.send_json.await_args.args[0]
+    assert payload['status'] == 'stt_failed'
+    assert payload['retryable'] is True
+    assert payload['reason'] == 'provider_unavailable'
+    assert payload['retry_after'] == 45
+    assert state.active is False
+    assert state.close_code == 1011
+    assert websocket.close.await_args.kwargs['reason'] == 'transcription_service_unavailable'
 
 
 @pytest.mark.anyio

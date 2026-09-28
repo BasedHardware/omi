@@ -57,7 +57,9 @@ from utils.stt.live_failure import (
     note_typed_provider_death,
     send_live_stt_audio,
     terminate_live_stt_session,
+    terminate_live_stt_backoff,
 )
+from utils.stt.live_chain import ProviderChainUnavailable
 from config.stt_provider_policy import provider_for_service
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.live_metrics import RECONNECT
@@ -1215,6 +1217,15 @@ class ListenReceiver:
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
             self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
             return True
+        except ProviderChainUnavailable as error:
+            await self._drain_stt_sockets()
+            await terminate_live_stt_backoff(
+                request.websocket,
+                self.host.state,
+                reason='provider_unavailable',
+                retry_after=error.retry_after,
+            )
+            return False
         except Exception as error:
             await self._drain_stt_sockets()
             await terminate_live_stt_session(

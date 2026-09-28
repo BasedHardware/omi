@@ -19,6 +19,12 @@ from prometheus_client import (
 # series for every Counter and Histogram child, including idle zero children.
 disable_created_metrics()
 
+OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
+    'omi_listen_stt_unavailable_total',
+    'Listen sessions rejected before STT setup because providers or reconnect budget are unavailable',
+    ['reason'],
+)
+
 OMI_PRODUCT_EVENT_TOTAL = Counter(
     'omi_product_event_total',
     (
@@ -881,12 +887,12 @@ OMI_STT_PROVIDER_RETIRED = Gauge(
 )
 
 # /v4/listen funnel for sources the client cannot self-report (phone_call today):
-# accepted socket -> first decoded audio -> transcript delivery. Sources and outcomes
-# are closed enums; no user, call, or session identifiers appear as labels.
+# STT-admitted session -> first decoded audio -> transcript delivery. Provider-
+# unavailable and reconnect-budget rejections are excluded. Labels are bounded.
 OMI_LISTEN_ACCEPTED_TOTAL = Counter(
     'omi_listen_accepted_total',
     (
-        'Accepted /v4/listen sessions by bounded transcription source, client platform, and app build. '
+        'STT-admitted /v4/listen sessions by bounded transcription source, client platform, and app build. '
         'WebSocket accept paths omit app_build (unknown). Counters are per-pod; alert queries must '
         'sum() across job=backend-listen-metrics.'
     ),
