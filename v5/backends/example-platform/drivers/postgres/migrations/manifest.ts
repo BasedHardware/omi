@@ -282,7 +282,7 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigrationManifestEntry[] = Ob
   Object.freeze({ version: 48, name: "listen-audio-uploads", fileName: "0048-listen-audio-uploads.sql", sha256: "b7594b05c18a4f38567fd8f4e5c0a0be90f9745133b3e8cd9296bc01f1798451" }),
   Object.freeze({ version: 49, name: "listen-audio-transcription", fileName: "0049-listen-audio-transcription.sql", sha256: "7e8405bda545d8c13b4cac94054fbfc0fc7f726a6e89b0654a521f862eb145a5" }),
   Object.freeze({version:50,name:"listen-conversation-reads",fileName:"0050-listen-conversation-reads.sql",sha256:"0e95fc66c1169144e7374cd74cb89f3d14fa681418c9d9d62de1e77428605a21"}),
-  Object.freeze({version:51,name:"listen-capture-ownership",fileName:"0051-listen-capture-ownership.sql",sha256:"715f2787ac741316153113710548d6b30af0d5343e85db3c18df995375f1d692"}),
+  Object.freeze({version:51,name:"listen-capture-ownership",fileName:"0051-listen-capture-ownership.sql",sha256:"889eb1c0d25249b6bebcd9994b1961d3f00ee027a97fd1ea1e57ce987f1d6c88"}),
   Object.freeze({version:52,name:"listen-audio-batches",fileName:"0052-listen-audio-batches.sql",sha256:"8c26e0de79a446a2f3ffe097c30bed1422d3e760c7b0c28faeffee4b2cae2a08"}),
   Object.freeze({version:53,name:"listen-conversation-pagination",fileName:"0053-listen-conversation-pagination.sql",sha256:"e4be81ab2cc431e224616146189bcdcc603f09394e5d4c7013004aa464f467f1"}),
   Object.freeze({version:54,name:"listen-capture-time",fileName:"0054-listen-capture-time.sql",sha256:"41ea68570b2de03e25e0cfa82cc6685e4e7ab14fb2a2111880a46e6f4567978e"}),
