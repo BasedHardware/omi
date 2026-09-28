@@ -71,16 +71,19 @@ export type FieldProps = InputProps & {
   error?: string;
   hint?: string;
   label?: string;
+  labelStyle?: StyleProp<TextStyle>;
 };
 
 export const Field = forwardRef<TextInput, FieldProps>(function Field(
-  {error, hint, label, ...props},
+  {error, hint, label, labelStyle, ...props},
   ref,
 ) {
   const styles = useKitStyleSheets(createStyles);
   return (
     <View style={styles.field}>
-      {label === undefined ? null : <Text style={styles.label}>{label}</Text>}
+      {label === undefined ? null : (
+        <Text style={[styles.label, labelStyle]}>{label}</Text>
+      )}
       <Input {...props} invalid={error !== undefined} ref={ref} />
       {error === undefined && hint !== undefined ? (
         <Text style={styles.hint}>{hint}</Text>

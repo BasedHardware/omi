@@ -15,7 +15,9 @@ import {useReduceMotion} from '../app/useReduceMotion';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
 import {OmiAvatar} from '../ui/OmiAvatar';
 import {FocusPressable} from '../ui/Pressable';
-import {mobileColor as color} from './mobileTokens';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import {markInk} from './MobileTheme';
+import type {OmiTheme} from '../design/tokens';
 
 /** Presentation only. The orchestrator retains requests, history, and scroll-follow state. */
 export function MobileChat({
@@ -50,6 +52,8 @@ export function MobileChat({
   shouldAnimate: (id: string) => boolean;
 }) {
   const reduceMotion = useReduceMotion();
+  const theme = useOmiTheme();
+  const local = useOmiStyles(createStyles);
   useEffect(() => {
     if (error !== null) {
       scrollRef.current?.scrollToEnd({animated: !reduceMotion});
@@ -64,15 +68,26 @@ export function MobileChat({
           accessibilityRole="button"
           accessibilityLabel="Close chat"
           onPress={onClose}
-          style={local.back}>
-          <MaterialIcon name="chevron_left" color={color.text} size={22} />
+          style={({pressed}) => [local.back, pressed && local.pressed]}>
+          <MaterialIcon
+            name="chevron_left"
+            color={theme.color.ink}
+            size={theme.size.icon + 4}
+          />
         </FocusPressable>
-        <OmiAvatar
-          tone="ink"
-          size={36}
-          motion={busy ? 'breathe' : 'arrive'}
-          reduceMotion={reduceMotion}
-        />
+        <View style={local.title}>
+          <OmiAvatar
+            tone="ink"
+            size={22}
+            inkColor={markInk(theme)}
+            motion={busy ? 'breathe' : 'arrive'}
+            reduceMotion={reduceMotion}
+          />
+          <Text accessibilityRole="header" style={local.titleText}>
+            Ask Omi
+          </Text>
+        </View>
+        <View style={local.back} />
       </View>
       <ScrollView
         accessibilityLabel="Chat scroll region"
@@ -84,7 +99,7 @@ export function MobileChat({
         contentContainerStyle={local.content}>
         {loadingHistory && (
           <View style={local.notice} accessibilityLabel="Loading chat history">
-            <ActivityIndicator color={color.textMuted} />
+            <ActivityIndicator color={theme.color.inkSecondary} />
             <Text style={local.copy}>Loading your conversation…</Text>
           </View>
         )}
@@ -94,9 +109,9 @@ export function MobileChat({
             accessibilityLabel="Load older messages"
             disabled={loadingOlder}
             onPress={onLoadOlder}
-            style={local.older}>
-            <Text style={local.copy}>
-              {loadingOlder ? 'Loading older…' : 'Load older messages'}
+            style={({pressed}) => [local.older, pressed && local.pressed]}>
+            <Text style={local.olderText}>
+              {loadingOlder ? 'Loading Older…' : 'Load Older Messages'}
             </Text>
           </FocusPressable>
         )}
@@ -104,11 +119,12 @@ export function MobileChat({
           <View style={local.resting}>
             <OmiAvatar
               tone="ink"
-              size={72}
+              size={56}
+              inkColor={markInk(theme)}
               motion="arrive"
               reduceMotion={reduceMotion}
             />
-            <Text style={local.restingTitle}>Start with a thought.</Text>
+            <Text style={local.restingTitle}>Start With a Thought</Text>
             <Text style={local.restingCopy}>
               Ask about your day, untangle an idea, or find a next step.
             </Text>
@@ -119,8 +135,11 @@ export function MobileChat({
                   accessibilityRole="button"
                   accessibilityLabel={`Try: ${prompt}`}
                   onPress={() => onUsePrompt(prompt)}
-                  style={local.prompt}>
-                  <Text style={local.copy}>{prompt}</Text>
+                  style={({pressed}) => [
+                    local.prompt,
+                    pressed && local.promptPressed,
+                  ]}>
+                  <Text style={local.promptText}>{prompt}</Text>
                 </FocusPressable>
               ))}
             </View>
@@ -141,7 +160,12 @@ export function MobileChat({
         )}
         {error !== null && (
           <View style={local.error}>
-            <Text accessibilityRole="alert" style={local.copy}>
+            <MaterialIcon
+              name="info"
+              size={theme.size.iconSmall}
+              color={theme.color.danger}
+            />
+            <Text accessibilityRole="alert" style={local.errorText}>
               {error}
             </Text>
           </View>
@@ -151,70 +175,102 @@ export function MobileChat({
   );
 }
 
-const local = StyleSheet.create({
-  root: {flex: 1, backgroundColor: color.background},
+const createStyles = (t: OmiTheme) => ({
+  root: {flex: 1, backgroundColor: t.color.canvas},
   flex: {flex: 1},
+  pressed: {backgroundColor: t.color.fillPressed},
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    padding: 16,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: t.space.sm,
+    minHeight: 52,
+    paddingHorizontal: t.space.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.border,
+    borderBottomColor: t.color.separator,
   },
   back: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    backgroundColor: color.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: t.size.hitTarget,
+    height: t.size.hitTarget,
+    borderRadius: t.radius.pill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  content: {flexGrow: 1, padding: 16, gap: 24},
-  notice: {alignItems: 'center', gap: 12, padding: 24},
-  copy: {color: color.textMuted, fontSize: 14, lineHeight: 21},
+  title: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: t.space.sm,
+    flexShrink: 1,
+  },
+  titleText: {...t.type.headline, color: t.color.ink},
+  content: {
+    flexGrow: 1,
+    paddingHorizontal: t.layout.pageGutter.mobile,
+    paddingVertical: t.space.lg,
+    gap: t.space.xxl,
+  },
+  notice: {
+    alignItems: 'center' as const,
+    gap: t.space.md,
+    padding: t.space.xxl,
+  },
+  copy: {...t.type.subhead, color: t.color.inkSecondary},
   older: {
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: color.surface,
+    alignSelf: 'center' as const,
+    minHeight: t.size.hitTarget,
+    paddingHorizontal: t.space.lg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    borderRadius: t.radius.pill,
+  },
+  olderText: {
+    ...t.type.subhead,
+    fontWeight: '600' as const,
+    color: t.color.inkSecondary,
   },
   resting: {
     flexGrow: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-    paddingVertical: 24,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: t.space.md,
+    paddingVertical: t.space.xxl,
   },
   restingTitle: {
-    fontSize: 26,
-    lineHeight: 32,
-    letterSpacing: -0.6,
-    color: color.text,
+    ...t.type.title,
+    color: t.color.ink,
+    textAlign: 'center' as const,
   },
   restingCopy: {
-    fontSize: 15,
-    lineHeight: 23,
-    textAlign: 'center',
-    color: color.textMuted,
-    maxWidth: 280,
+    ...t.type.subhead,
+    textAlign: 'center' as const,
+    color: t.color.inkSecondary,
+    maxWidth: 300,
   },
-  prompts: {alignSelf: 'stretch', gap: 8, marginTop: 8},
+  prompts: {
+    alignSelf: 'stretch' as const,
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    justifyContent: 'center' as const,
+    gap: t.space.sm,
+    marginTop: t.space.sm,
+  },
   prompt: {
-    minHeight: 48,
-    padding: 14,
-    backgroundColor: color.surface,
-    borderRadius: 16,
-    borderColor: color.border,
+    minHeight: t.size.hitTarget,
+    justifyContent: 'center' as const,
+    paddingHorizontal: t.space.lg,
+    borderRadius: t.radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
+    borderColor: t.color.hairline,
   },
+  promptPressed: {backgroundColor: t.color.fillPressed},
+  promptText: {...t.type.subhead, color: t.color.ink},
   error: {
-    padding: 16,
-    backgroundColor: color.surface,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.border,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: t.space.sm,
+    padding: t.space.md,
+    borderRadius: t.radius.row,
+    backgroundColor: t.color.dangerSurface,
   },
+  errorText: {...t.type.subhead, color: t.color.ink, flex: 1},
 });

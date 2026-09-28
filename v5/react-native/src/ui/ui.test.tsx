@@ -324,7 +324,7 @@ describe('Onboarding chrome', () => {
     const press = async (label: string) => {
       await act(async () => {
         renderer.root
-          .find(node => node.props.accessibilityLabel === label)
+          .findAll(node => node.props.accessibilityLabel === label)[0]!
           .props.onPress();
       });
     };
@@ -333,8 +333,9 @@ describe('Onboarding chrome', () => {
     await press('TikTok');
     await press('Continue');
     await checkPermissions?.();
-    await press("I'll do these later");
-    await press('Skip for now');
+    // Permissions, then voice: both offer the Words-rule "Not Now".
+    await press('Not Now');
+    await press('Not Now');
   }
 
   test('browser setup continues without offering unavailable wearable capture', async () => {
@@ -353,19 +354,48 @@ describe('Onboarding chrome', () => {
         microphone: 'granted',
         notifications: 'unsupported',
       });
+      // Phone and browser setup list permissions as themed rows.
+      const rows = () => {
+        const seen = new Set<string>();
+        return renderer.root
+          .findAll(
+            node =>
+              typeof node.props.onPress === 'function' &&
+              /^(Notifications|Microphone)\. /.test(
+                String(node.props.accessibilityLabel),
+              ),
+          )
+          .filter(node => {
+            const label = String(node.props.accessibilityLabel);
+            if (seen.has(label)) {
+              return false;
+            }
+            seen.add(label);
+            return true;
+          });
+      };
+      expect(renderer.root.findAllByType(PermissionRow)).toHaveLength(0);
       await act(async () =>
-        renderer.root.findAllByType(PermissionRow)[0].props.onPress(),
+        renderer.root
+          .findAll(
+            node =>
+              typeof node.props.accessibilityLabel === 'string' &&
+              node.props.accessibilityLabel.startsWith('Notifications. ') &&
+              typeof node.props.onPress === 'function',
+          )[0]!
+          .props.onPress(),
       );
-      const rows = renderer.root.findAllByType(PermissionRow);
-      expect(rows.map(row => row.props.status)).toEqual([
-        'Unavailable',
-        'Granted',
+      expect(rows().map(row => row.props.accessibilityLabel)).toEqual([
+        'Notifications. Notify you when something needs you. Unavailable',
+        'Microphone. Hear what you talk about, so Omi can help. Granted',
       ]);
-      expect(rows.every(row => row.props.disabled)).toBe(true);
+      expect(rows().every(row => row.props.accessibilityState.disabled)).toBe(
+        true,
+      );
     });
     expect(
       renderer.root.findAll(
-        node => node.props.accessibilityLabel === 'Connect your Omi',
+        node => node.props.accessibilityLabel === 'Connect Your Omi',
       ),
     ).toHaveLength(0);
     const action = renderer.root.findAll(

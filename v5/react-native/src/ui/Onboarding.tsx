@@ -51,6 +51,11 @@ import {
 } from '../desktop/DesktopTheme';
 import type {OmiAuthDesktopHandoff} from '../omiNativeTypes';
 import {Button} from './Button';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import {markInk} from '../mobile/MobileTheme';
+import {OmiButton, OmiChip} from '../design/primitives';
+import type {OmiTheme} from '../design/tokens';
+import {MobileGroup, MobileRow} from '../mobile/MobileList';
 import {Field} from './Field';
 import {OmiAvatar} from './OmiAvatar';
 import {PermissionRow} from './PermissionRow';
@@ -127,6 +132,9 @@ export function Onboarding({
 }) {
   const styles = useDesktopStyleSheets(createStyles);
   const {tokens: desktopTokens} = useDesktopTheme();
+  // Phones and the browser read the Omi theme (System / Light / Dark).
+  const theme = useOmiTheme();
+  const themed = useOmiStyles(createThemedStyles);
   const reduceMotion = useReduceMotion();
   const desktop = Platform.OS === 'macos';
   const browser = Platform.OS === 'web';
@@ -221,8 +229,8 @@ export function Onboarding({
   const setupIndex = mobileSetupIndex(step, itinerary);
   const busy = completingSetup || saving;
   const displayError = localError ?? error ?? null;
-  const titleColor = desktop && styles.desktopTitle;
-  const copyColor = desktop && styles.desktopCopy;
+  const titleColor = desktop ? styles.desktopTitle : themed.title;
+  const copyColor = desktop ? styles.desktopCopy : themed.copy;
   const selectedLanguageName = useMemo(
     () => languages.find(item => item.code === language)?.name ?? language,
     [language, languages],
@@ -432,21 +440,39 @@ export function Onboarding({
     onPress: () => void,
     disabled = false,
     variant: 'primary' | 'ghost' = 'primary',
-  ) => (
-    <Button
-      accessibilityLabel={label}
-      disabled={disabled}
-      onPress={onPress}
-      size="large"
-      variant={variant}
-      labelStyle={desktop && styles.desktopButtonLabel}
-      style={[
-        nativePhone && styles.actionStretch,
-        desktop && variant === 'primary' ? styles.desktopButton : undefined,
-      ]}>
-      {label}
-    </Button>
-  );
+  ) =>
+    desktop ? (
+      <Button
+        accessibilityLabel={label}
+        disabled={disabled}
+        onPress={onPress}
+        size="large"
+        variant={variant}
+        labelStyle={styles.desktopButtonLabel}
+        style={variant === 'primary' ? styles.desktopButton : undefined}>
+        {label}
+      </Button>
+    ) : (
+      <OmiButton
+        label={label}
+        disabled={disabled}
+        onPress={onPress}
+        variant={variant === 'primary' ? 'primary' : 'plain'}
+        style={[
+          themed.action,
+          (nativePhone || variant === 'primary') && styles.actionStretch,
+        ]}
+      />
+    );
+
+  const fieldTheme = {
+    containerStyle: themed.field,
+    style: themed.fieldInput,
+    labelStyle: themed.fieldLabel,
+    placeholderTextColor: theme.color.inkTertiary,
+    selectionColor: theme.color.ink,
+    keyboardAppearance: theme.scheme,
+  };
 
   const permissionRow = (
     kind: PermissionKind,
@@ -464,6 +490,39 @@ export function Onboarding({
         : permissions[kind] === 'denied'
         ? 'Open Settings'
         : 'Allow';
+    if (!desktop) {
+      return (
+        <MobileRow
+          key={kind}
+          accessibilityLabel={[title, description, status]
+            .map(text => text.replace(/[.!?]$/, ''))
+            .join('. ')}
+          accessibilityState={{
+            disabled:
+              pendingPermission !== null ||
+              permissions[kind] === 'unsupported' ||
+              granted,
+            busy: status === 'Asking…',
+          }}
+          disabled={
+            pendingPermission !== null ||
+            permissions[kind] === 'unsupported' ||
+            granted
+          }
+          onPress={() => {
+            request(kind);
+          }}
+          leading={
+            <View style={[themed.permission, granted && themed.granted]}>
+              {granted ? <Text style={themed.grantedCheck}>✓</Text> : null}
+            </View>
+          }
+          title={title}
+          subtitle={description}
+          accessory={<Text style={themed.status}>{status}</Text>}
+        />
+      );
+    }
     return (
       <PermissionRow
         key={kind}
@@ -486,7 +545,8 @@ export function Onboarding({
   return (
     <ScrollView
       accessibilityLabel="First-run onboarding"
-      contentContainerStyle={styles.surface}
+      contentContainerStyle={[styles.surface, !desktop && themed.surface]}
+      style={!desktop && themed.canvas}
       keyboardShouldPersistTaps="handled">
       <View style={styles.column}>
         <Animated.View
@@ -498,11 +558,11 @@ export function Onboarding({
             reduceMotion={reduceMotion}
             size={DOTS_SIZE}
             tone="ink"
-            inkColor={desktop ? desktopTokens.color.ink : undefined}
+            inkColor={desktop ? desktopTokens.color.ink : markInk(theme)}
           />
         </Animated.View>
         {setupIndex >= 0 ? (
-          <Text style={[styles.meta, copyColor]}>
+          <Text style={[styles.meta, desktop ? copyColor : themed.meta]}>
             Step {setupIndex + 1} of {itinerary.length}
           </Text>
         ) : null}
@@ -512,14 +572,14 @@ export function Onboarding({
             : step === 'consent'
             ? 'Data & Privacy'
             : step === 'language'
-            ? 'Select your primary language'
+            ? 'Select Your Primary Language'
             : step === 'source'
-            ? 'How did you find us?'
+            ? 'How Did You Find Us?'
             : step === 'permissions'
-            ? 'Grant permissions'
+            ? 'Grant Permissions'
             : step === 'speech'
-            ? 'Teach Omi your voice'
-            : 'You are all set!'}
+            ? 'Teach Omi Your Voice'
+            : 'You’re All Set'}
         </Text>
         {step === 'welcome' ? (
           <>
@@ -537,17 +597,27 @@ export function Onboarding({
                   styles.error,
                   copyColor,
                   displayError === SESSION_UNREACHABLE_COPY &&
-                    (desktop ? styles.desktopUnreachable : styles.unreachable),
+                    (desktop ? styles.desktopUnreachable : themed.danger),
                 ]}>
                 {displayError}
               </Text>
             )}
-            {action(signingIn ? 'Signing in…' : 'Sign in', onSignIn, signingIn)}
+            {action(
+              desktop
+                ? signingIn
+                  ? 'Signing in…'
+                  : 'Sign in'
+                : signingIn
+                ? 'Signing In…'
+                : 'Sign In',
+              onSignIn,
+              signingIn,
+            )}
             {signingIn && onCancelSignIn ? (
               <Button
                 accessibilityLabel="Cancel sign in"
                 onPress={onCancelSignIn}
-                labelStyle={desktop && styles.desktopTitle}
+                labelStyle={desktop ? styles.desktopTitle : themed.link}
                 variant="ghost">
                 Cancel
               </Button>
@@ -571,12 +641,14 @@ export function Onboarding({
               <Button
                 variant="ghost"
                 accessibilityRole="link"
+                labelStyle={!desktop && themed.link}
                 onPress={() => openLink(PRIVACY_URL)}>
                 Privacy Policy
               </Button>
               <Button
                 variant="ghost"
                 accessibilityRole="link"
+                labelStyle={!desktop && themed.link}
                 onPress={() => openLink(TERMS_URL)}>
                 Terms of Service
               </Button>
@@ -594,22 +666,32 @@ export function Onboarding({
                 : `Continue in ${selectedLanguageName}, or pick another language.`}
             </Text>
             <View style={styles.chips}>
-              {(matchingLanguages ?? suggestedLanguages).map(item => (
-                <Button
-                  key={item.code}
-                  accessibilityLabel={item.name}
-                  accessibilityState={{selected: language === item.code}}
-                  onPress={() => setLanguage(item.code)}
-                  variant={language === item.code ? 'primary' : 'ghost'}>
-                  {item.name}
-                </Button>
-              ))}
+              {(matchingLanguages ?? suggestedLanguages).map(item =>
+                !desktop ? (
+                  <OmiChip
+                    key={item.code}
+                    label={item.name}
+                    selected={language === item.code}
+                    onPress={() => setLanguage(item.code)}
+                  />
+                ) : (
+                  <Button
+                    key={item.code}
+                    accessibilityLabel={item.name}
+                    accessibilityState={{selected: language === item.code}}
+                    onPress={() => setLanguage(item.code)}
+                    variant={language === item.code ? 'primary' : 'ghost'}>
+                    {item.name}
+                  </Button>
+                ),
+              )}
             </View>
             <Field
               accessibilityLabel="Search languages"
               autoCapitalize="none"
               autoCorrect={false}
               label="Search languages"
+              {...(desktop ? {} : fieldTheme)}
               onChangeText={setLanguageQuery}
               placeholder="Search languages"
               returnKeyType="search"
@@ -625,17 +707,26 @@ export function Onboarding({
         ) : null}
         {step === 'source' ? (
           <>
-            <View style={styles.choices}>
-              {ACQUISITION_SOURCES.map(item => (
-                <Button
-                  key={item}
-                  accessibilityLabel={item}
-                  accessibilityState={{selected: source === item}}
-                  onPress={() => setSource(item)}
-                  variant={source === item ? 'primary' : 'ghost'}>
-                  {item}
-                </Button>
-              ))}
+            <View style={desktop ? styles.choices : styles.chips}>
+              {ACQUISITION_SOURCES.map(item =>
+                !desktop ? (
+                  <OmiChip
+                    key={item}
+                    label={item}
+                    selected={source === item}
+                    onPress={() => setSource(item)}
+                  />
+                ) : (
+                  <Button
+                    key={item}
+                    accessibilityLabel={item}
+                    accessibilityState={{selected: source === item}}
+                    onPress={() => setSource(item)}
+                    variant={source === item ? 'primary' : 'ghost'}>
+                    {item}
+                  </Button>
+                ),
+              )}
             </View>
             {source === 'Other' ? (
               <Field
@@ -643,6 +734,7 @@ export function Onboarding({
                 autoCorrect={false}
                 enablesReturnKeyAutomatically
                 label="Please specify"
+                {...(desktop ? {} : fieldTheme)}
                 onChangeText={setOtherSource}
                 onSubmitEditing={() => {
                   if (otherSource.trim().length > 0) {
@@ -664,24 +756,26 @@ export function Onboarding({
                 ? 'Tap one when you’re ready. Nothing is asked until you do.'
                 : 'Click one when you’re ready. Nothing is asked until you do.'}
             </Text>
-            {permissionRow(
-              'notifications',
-              'Notifications',
-              'Notify you when something needs you.',
-            )}
-            {permissionRow(
-              'microphone',
-              'Microphone',
-              'Hear what you talk about, so Omi can help.',
-            )}
-            {nativePhone
-              ? permissionRow(
-                  'bluetooth',
-                  'Bluetooth',
-                  'Find your Omi, so it can record for you.',
-                )
-              : null}
-            {action("I'll do these later", () => {
+            <PermissionGroup grouped={!desktop}>
+              {permissionRow(
+                'notifications',
+                'Notifications',
+                'Notify you when something needs you.',
+              )}
+              {permissionRow(
+                'microphone',
+                'Microphone',
+                'Hear what you talk about, so Omi can help.',
+              )}
+              {nativePhone
+                ? permissionRow(
+                    'bluetooth',
+                    'Bluetooth',
+                    'Find your Omi, so it can record for you.',
+                  )
+                : null}
+            </PermissionGroup>
+            {action(desktop ? "I'll do these later" : 'Not Now', () => {
               void advanceFrom('permissions');
             })}
           </>
@@ -696,12 +790,12 @@ export function Onboarding({
               <Text style={[styles.copy, copyColor]}>Voice print saved.</Text>
             ) : null}
             {action(
-              recordingVoice ? 'Listening…' : 'Start voice recording',
+              recordingVoice ? 'Listening…' : 'Start Voice Recording',
               enrollVoice,
               recordingVoice,
             )}
             {action(
-              'Skip for now',
+              'Not Now',
               () => {
                 setStep('complete');
               },
@@ -722,14 +816,14 @@ export function Onboarding({
                 style={[
                   styles.error,
                   copyColor,
-                  desktop ? styles.desktopUnreachable : styles.unreachable,
+                  desktop ? styles.desktopUnreachable : themed.danger,
                 ]}>
                 {displayError}
               </Text>
             )}
             {!desktop && !browser
               ? action(
-                  busy && connectAfterComplete ? 'Saving…' : 'Connect your Omi',
+                  busy && connectAfterComplete ? 'Saving…' : 'Connect Your Omi',
                   () => finish(true),
                   busy,
                 )
@@ -739,7 +833,7 @@ export function Onboarding({
                 ? 'Saving…'
                 : desktop || browser
                 ? 'Start Using Omi'
-                : 'Continue without a device',
+                : 'Continue Without a Device',
               () => finish(false),
               busy,
               desktop || browser ? 'primary' : 'ghost',
@@ -762,7 +856,7 @@ export function Onboarding({
           ? action('Back', goBack, busy, 'ghost')
           : null}
         {setupRequired && onSignOut
-          ? action('Sign out', onSignOut, busy, 'ghost')
+          ? action(desktop ? 'Sign out' : 'Sign Out', onSignOut, busy, 'ghost')
           : null}
       </View>
     </ScrollView>
@@ -831,3 +925,61 @@ const createStyles = (desktopTokens: DesktopTokens) =>
     desktopButton: {backgroundColor: desktopTokens.color.dark},
     desktopButtonLabel: {color: desktopTokens.color.white},
   });
+
+function PermissionGroup({
+  grouped,
+  children,
+}: {
+  grouped: boolean;
+  children: React.ReactNode;
+}) {
+  return grouped ? (
+    <MobileGroup inset={52} style={groupStyles.stretch}>
+      {children}
+    </MobileGroup>
+  ) : (
+    <>{children}</>
+  );
+}
+
+const groupStyles = StyleSheet.create({stretch: {alignSelf: 'stretch'}});
+
+const createThemedStyles = (t: OmiTheme) => ({
+  canvas: {backgroundColor: t.color.canvas},
+  surface: {paddingHorizontal: t.layout.pageGutter.mobile + t.space.sm},
+  title: {...t.type.display, color: t.color.ink},
+  copy: {...t.type.subhead, color: t.color.inkSecondary},
+  meta: {...t.type.footnote, color: t.color.inkTertiary},
+  danger: {color: t.color.danger},
+  link: {color: t.color.inkSecondary},
+  action: {marginTop: t.space.xs},
+  field: {
+    backgroundColor: t.color.surface,
+    borderColor: t.color.hairline,
+    borderRadius: t.radius.pill,
+    minHeight: t.size.control,
+    paddingHorizontal: t.space.lg,
+  },
+  fieldInput: {...t.type.body, color: t.color.ink},
+  fieldLabel: {
+    ...t.type.footnote,
+    fontWeight: '600' as const,
+    color: t.color.inkSecondary,
+  },
+  permission: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: t.color.inkTertiary,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  granted: {backgroundColor: t.color.ink, borderColor: t.color.ink},
+  grantedCheck: {
+    color: t.color.onInk,
+    fontSize: 12,
+    fontWeight: '700' as const,
+  },
+  status: {...t.type.footnote, color: t.color.inkSecondary},
+});

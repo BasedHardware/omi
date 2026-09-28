@@ -13,7 +13,6 @@ import type {
   DesktopReadProjection,
   DomainReadOutcome,
 } from '../desktopReadClient';
-import {OmiAvatar} from '../ui/OmiAvatar';
 import {FocusPressable} from '../ui/Pressable';
 
 jest.mock('../omiNative', () => ({omiBackend: {}}));
@@ -78,7 +77,7 @@ test('conversation grant denial shows the typed error instead of an empty librar
   expect(textOf(renderer)).toContain(
     'This saved data is not available for this account.',
   );
-  expect(textOf(renderer)).not.toContain('No conversations yet.');
+  expect(textOf(renderer)).not.toContain('No Conversations Yet');
   expect(textOf(renderer)).not.toContain('Conversations could not be loaded.');
   act(() => renderer.unmount());
 });
@@ -137,32 +136,28 @@ test('mobile search and star filters compose; clearing search preserves stars, r
   act(() =>
     control('Search loaded conversations').props.onChangeText(' workspace '),
   );
-  act(() => control('Show starred conversations').props.onPress());
-  act(() => control('Show starred conversations').props.onPress());
+  act(() => control('Starred').props.onPress());
+  act(() => control('Starred').props.onPress());
   expect(rows()).toEqual(['Open conversation Quiet workspace']);
-  act(() => control('Show all conversations').props.onPress());
+  act(() => control('All').props.onPress());
   expect(rows()).toEqual([
     'Open conversation Quiet workspace',
     'Open conversation Shared workspace',
   ]);
-  act(() => control('Show starred conversations').props.onPress());
+  act(() => control('Starred').props.onPress());
   act(() => control('Clear conversation search').props.onPress());
   expect(rows()).toEqual([
     'Open conversation Quiet workspace',
     'Open conversation Afternoon walk',
   ]);
-  expect(
-    control('Show starred conversations').props.accessibilityState.selected,
-  ).toBe(true);
+  expect(control('Starred').props.accessibilityState.selected).toBe(true);
   act(() =>
     control('Search loaded conversations').props.onChangeText('not found'),
   );
   expect(rows()).toEqual([]);
-  act(() => control('Clear conversation filters').props.onPress());
+  act(() => control('Clear Filters').props.onPress());
   expect(control('Search loaded conversations').props.value).toBe('');
-  expect(
-    control('Show all conversations').props.accessibilityState.selected,
-  ).toBe(true);
+  expect(control('All').props.accessibilityState.selected).toBe(true);
   expect(rows()).toHaveLength(3);
   act(() => tree.unmount());
 });
@@ -259,7 +254,7 @@ test('folder chips appear only on the macOS desktop list', async () => {
   });
 });
 
-test('loading keeps the reduced-motion mark and failures retry automatically without a refresh button', () => {
+test('loading is one labelled progress state and failures retry automatically without a refresh button', () => {
   const refresh = jest.fn();
   let tree!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
@@ -268,8 +263,15 @@ test('loading keeps the reduced-motion mark and failures retry automatically wit
     );
   });
   expect(textOf(tree)).toContain('Loading conversations…');
-  expect(textOf(tree)).not.toContain('No conversations yet.');
-  expect(tree.root.findByType(OmiAvatar).props.reduceMotion).toBe(true);
+  expect(textOf(tree)).not.toContain('No Conversations Yet');
+  // Loading is announced as progress (OmiPageState), not an empty library.
+  expect(
+    tree.root.findAll(
+      node =>
+        node.props.accessibilityRole === 'progressbar' &&
+        node.props.accessibilityLabel === 'Loading conversations…',
+    ).length,
+  ).toBeGreaterThan(0);
   expect(
     tree.root.findAllByProps({accessibilityLabel: 'Refresh conversations'}),
   ).toHaveLength(0);
@@ -286,7 +288,7 @@ test('loading keeps the reduced-motion mark and failures retry automatically wit
     ),
   );
   expect(textOf(tree)).toContain('Connection interrupted');
-  expect(textOf(tree)).not.toContain('No conversations yet.');
+  expect(textOf(tree)).not.toContain('No Conversations Yet');
   act(() => jest.advanceTimersByTime(15000));
   expect(refresh).toHaveBeenCalledTimes(1);
   act(() => tree.unmount());
@@ -470,10 +472,50 @@ test('the shared bottom search owns the query without a second page input', () =
   );
   act(() =>
     tree.root
-      .findAllByProps({accessibilityLabel: 'Clear conversation filters'})[0]
+      .findAllByProps({accessibilityLabel: 'Clear Filters'})[0]
       .props.onPress(),
   );
   expect(onChange).toHaveBeenCalledWith('');
   expect(textOf(tree)).not.toContain('Quiet workspace');
+  act(() => tree.unmount());
+});
+
+test('mobile rows sit under Today / Yesterday day headers and show only the time', () => {
+  const now = new Date();
+  const at = (daysAgo: number) =>
+    new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - daysAgo,
+      9,
+      30,
+    ).toISOString();
+  const dated: DomainReadOutcome<DesktopReadProjection> = {
+    ...outcome,
+    value: {
+      ...outcome.value,
+      items: [
+        {...items[0], startedAt: at(0), createdAt: at(0)},
+        {...items[1], startedAt: at(1), createdAt: at(1)},
+      ],
+    },
+  } as DomainReadOutcome<DesktopReadProjection>;
+  let tree!: ReactTestRenderer.ReactTestRenderer;
+  act(() => {
+    tree = ReactTestRenderer.create(
+      <ConversationsPage embedded outcome={dated} loading={false} />,
+    );
+  });
+  const text = textOf(tree);
+  expect(text).toContain('Today');
+  expect(text).toContain('Yesterday');
+  const time = new Date(at(0)).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  expect(text).toContain(time);
+  // The day is carried by the header; rows never repeat the date.
+  const month = now.toLocaleDateString(undefined, {month: 'short'});
+  expect(text).not.toContain(`${month} ${now.getDate()},`);
   act(() => tree.unmount());
 });

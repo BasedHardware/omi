@@ -104,7 +104,10 @@ test.each(['affordance', 'compact', 'overview'] as const)(
         />,
       );
     });
-    expect(JSON.stringify(renderer.toJSON())).toContain('Please wait…');
+    // The phone panel uses Title Case button text; the kit variants keep theirs.
+    expect(JSON.stringify(renderer.toJSON())).toContain(
+      variant === 'compact' ? 'Please Wait…' : 'Please wait…',
+    );
     expect(JSON.stringify(renderer.toJSON())).not.toContain('Scanning…');
     expect(
       renderer.root.findAllByProps({

@@ -136,9 +136,11 @@ describe('MobileAppSurface', () => {
   test('renders the shipping mobile hierarchy from real projections', () => {
     const tree = JSON.stringify(render().toJSON());
     expect(tree).toContain('Listening');
-    expect(tree).toContain('Action items');
+    // The product term is Tasks, never "Action items".
+    expect(tree).toContain('"Tasks"');
+    expect(tree).not.toContain('Action items');
     expect(tree).toContain('Prepare product demo');
-    expect(tree).toContain('Recent conversations');
+    expect(tree).toContain('Recent Conversations');
     expect(tree).toContain('Omi gets simpler');
     expect(tree).toContain('Make room for the work that matters.');
     expect(tree).not.toContain('Mind Map');
@@ -199,7 +201,7 @@ describe('MobileAppSurface', () => {
   test.each([
     ['chat', 'Conversation content'],
     ['tasks', 'Prepare product demo'],
-    ['apps', 'No apps connected yet'],
+    ['apps', 'No Apps Yet'],
   ] as const)('renders the shipping %s destination', (route, copy) => {
     const tree = renderedText(
       render({
@@ -229,7 +231,7 @@ test('shows recording failures and keeps tasks read-only without a mutation hand
 
 test('missing conversation content reports unavailable instead of rendering noninteractive recap cards', () => {
   const renderer = render({activeRoute: 'chat'});
-  expect(renderedText(renderer)).toContain('Couldn’t load conversations');
+  expect(renderedText(renderer)).toContain('Couldn’t Load Conversations');
   expect(renderedText(renderer)).not.toContain('Omi gets simpler');
   expect(renderedText(renderer)).not.toContain('Your timeline is empty');
 });
@@ -447,9 +449,7 @@ test('Home shows open task metadata and opens all tasks with the Tasks tab selec
   ).toHaveLength(0);
   act(() =>
     tree.root
-      .findAll(
-        node => node.props.accessibilityLabel === 'See all action items',
-      )[0]
+      .findAll(node => node.props.accessibilityLabel === 'See all tasks')[0]
       .props.onPress(),
   );
   expect(props.onViewTasks).toHaveBeenCalledTimes(1);
@@ -470,4 +470,78 @@ test('Home shows open task metadata and opens all tasks with the Tasks tab selec
   );
   expect(props.onRouteChange).toHaveBeenCalledWith('home');
   act(() => tree.unmount());
+});
+
+test('the tab bar is four labelled icon destinations; Apps keeps Settings selected', () => {
+  const renderer = render({activeRoute: 'apps'});
+  const tabs = renderer.root.findAll(
+    node =>
+      node.props.accessibilityRole === 'tab' &&
+      String(node.type) === 'Pressable',
+  );
+  expect(tabs.map(tab => tab.props.accessibilityLabel)).toEqual([
+    'Home',
+    'Conversations',
+    'Tasks',
+    'Settings',
+  ]);
+  expect(tabs.map(tab => tab.props.accessibilityState.selected)).toEqual([
+    false,
+    false,
+    false,
+    true,
+  ]);
+  // Icon-only: the tab bar renders no visible label text beside the glyphs.
+  const tabBar = renderer.root.find(
+    node => node.props.accessibilityRole === 'tablist',
+  );
+  expect(renderedText({root: tabBar} as never)).not.toMatch(
+    /Home|Conversations|Tasks|Settings/,
+  );
+  act(() => renderer.unmount());
+});
+
+test('a failed Tasks read offers Try Again and never claims to be empty', () => {
+  const onRetryReads = jest.fn();
+  const renderer = render({
+    activeRoute: 'tasks',
+    taskStatus: 'error',
+    tasks: [],
+    onRetryReads,
+  });
+  const text = renderedText(renderer);
+  expect(text).toContain('Couldn’t Load Tasks');
+  expect(text).not.toContain("Nothing's waiting on you.");
+  act(() =>
+    renderer.root
+      .findAll(node => node.props.accessibilityLabel === 'Try Again')[0]!
+      .props.onPress(),
+  );
+  expect(onRetryReads).toHaveBeenCalledTimes(1);
+  act(() => renderer.unmount());
+});
+
+test('the Tasks tab groups open work before done work', () => {
+  const props = buildProps();
+  const renderer = render({
+    activeRoute: 'tasks',
+    tasks: [
+      {
+        ...props.tasks[0],
+        id: 'done',
+        title: 'Already finished',
+        completed: true,
+      },
+      props.tasks[0],
+    ],
+  });
+  const text = renderedText(renderer);
+  expect(text.indexOf('To Do')).toBeLessThan(
+    text.indexOf('Prepare product demo'),
+  );
+  expect(text.indexOf('Prepare product demo')).toBeLessThan(
+    text.indexOf('Done'),
+  );
+  expect(text.indexOf('Done')).toBeLessThan(text.indexOf('Already finished'));
+  act(() => renderer.unmount());
 });

@@ -82,19 +82,19 @@ test('a rejected session probe keeps apps retryable instead of loading forever',
   );
   const renderer = await renderPage(ConnectorsPage);
   const tree = textOf(renderer);
-  expect(tree).toContain('Apps unavailable');
+  expect(tree).toContain('Couldn’t Load Apps');
   expect(tree).toContain(
     'The selected Omi service is unavailable. Check the connection, then retry.',
   );
-  expect(tree).toContain('Retry');
+  expect(tree).toContain('Try Again');
   expect(tree).not.toContain('Loading apps…');
-  expect(tree).not.toContain('Signed out');
+  expect(tree).not.toContain('Signed Out');
   // Retry re-probes the session instead of stranding the loading spinner.
   mockAuth.hasCloudSession.mockResolvedValue(true);
   mockBackend.request.mockResolvedValue({id: 'apps', status: 200, body: '[]'});
   await act(async () => {
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Retry apps')
+      .find(node => node.props.accessibilityLabel === 'Try Again')
       .props.onPress();
   });
   expect(mockAuth.hasCloudSession).toHaveBeenCalledTimes(2);
@@ -111,7 +111,7 @@ test('a rejected session probe keeps settings retryable instead of loading forev
   expect(tree).toContain(
     'The selected Omi service is unavailable. Check the connection, then retry.',
   );
-  expect(labelsOf(renderer)).toContain('Retry settings');
+  expect(labelsOf(renderer)).toContain('Try Again');
   expect(tree).not.toContain('Loading account…');
 });
 
@@ -212,9 +212,9 @@ test('native Settings does not switch backends while chat is busy', async () => 
 test('a signed-out session still offers the native sign-in', async () => {
   mockAuth.hasCloudSession.mockResolvedValue(false);
   const connectors = await renderPage(ConnectorsPage);
-  expect(textOf(connectors)).toContain('Signed out');
+  expect(textOf(connectors)).toContain('Signed Out');
   expect(textOf(connectors)).toContain('Omi cloud needs a signed-in session.');
-  expect(labelsOf(connectors)).toContain('Sign in');
+  expect(labelsOf(connectors)).toContain('Sign In');
 });
 
 test('app gallery sections preserve catalog membership and failed install state', async () => {
@@ -242,18 +242,18 @@ test('app gallery sections preserve catalog membership and failed install state'
   const press = async (label: string) =>
     act(async () => {
       await renderer.root
-        .find(node => node.props.accessibilityLabel === label)
+        .findAll(node => node.props.accessibilityLabel === label)[0]!
         .props.onPress();
     });
   expect(textOf(renderer)).toContain('Notes');
   expect(textOf(renderer)).toContain('Calendar');
-  await press('Installed apps');
+  await press('Installed');
   expect(labelsOf(renderer)).toContain('Remove Notes');
   expect(textOf(renderer)).not.toContain('Calendar');
-  await press('My apps');
+  await press('My Apps');
   expect(textOf(renderer)).toContain('Calendar');
   expect(textOf(renderer)).not.toContain('Notes');
-  await press('Services apps');
+  await press('Services');
   expect(labelsOf(renderer)).toContain('Install Calendar');
   expect(textOf(renderer)).not.toContain('Notes');
   await press('Install Calendar');
@@ -291,7 +291,7 @@ test('web Settings loads real service usage without offering a fake sign-in', as
     });
     expect(textOf(renderer)).toContain('7 of 100 requests used');
     expect(textOf(renderer)).toContain('Local QA identity');
-    expect(labelsOf(renderer)).not.toContain('Sign in');
+    expect(labelsOf(renderer)).not.toContain('Sign In');
     expect(labelsOf(renderer)).not.toContain('Open app permissions');
   } finally {
     Object.defineProperty(Platform, 'OS', {
@@ -361,18 +361,16 @@ test('web Settings hides request details and offers a real retry after failure',
     });
   try {
     const renderer = await renderPage(SettingsPage);
-    expect(textOf(renderer)).toContain(
-      'Settings could not be loaded. Try again.',
-    );
+    expect(textOf(renderer)).toContain('Couldn’t Load Settings');
     expect(textOf(renderer)).not.toContain('service-settings-read');
     expect(textOf(renderer)).not.toContain('503');
     await act(async () =>
       renderer.root
-        .findAll(node => node.props.accessibilityLabel === 'Retry settings')[0]
+        .findAll(node => node.props.accessibilityLabel === 'Try Again')[0]
         .props.onPress(),
     );
     expect(textOf(renderer)).toContain('1 requests used');
-    expect(textOf(renderer)).not.toContain('Settings could not be loaded');
+    expect(textOf(renderer)).not.toContain('Couldn’t Load Settings');
   } finally {
     Object.defineProperty(Platform, 'OS', {
       configurable: true,
@@ -417,7 +415,7 @@ test.each([
     try {
       const renderer = await renderPage(SettingsPage);
       expect(textOf(renderer)).toContain(expected as string);
-      expect(textOf(renderer)).not.toContain('Settings could not be loaded');
+      expect(textOf(renderer)).not.toContain('Couldn’t Load Settings');
       expect(textOf(renderer)).not.toContain('requests used');
       expect(mockAuth.hasCloudSession).not.toHaveBeenCalled();
     } finally {
@@ -444,7 +442,7 @@ test.each([-1, 1.5])(
     });
     try {
       const renderer = await renderPage(SettingsPage);
-      expect(textOf(renderer)).toContain('Settings could not be loaded');
+      expect(textOf(renderer)).toContain('Couldn’t Load Settings');
       expect(textOf(renderer)).not.toContain('0 of 100');
     } finally {
       Object.defineProperty(Platform, 'OS', {
@@ -463,8 +461,8 @@ test('browser Apps does not offer an unusable native sign-in or installation ret
     expect(textOf(renderer)).toContain(
       'Apps are not available for this browser connection yet.',
     );
-    expect(labelsOf(renderer)).not.toContain('Sign in');
-    expect(labelsOf(renderer)).not.toContain('Retry apps');
+    expect(labelsOf(renderer)).not.toContain('Sign In');
+    expect(labelsOf(renderer)).not.toContain('Try Again');
     expect(mockAuth.hasCloudSession).not.toHaveBeenCalled();
     expect(mockBackend.request).not.toHaveBeenCalled();
   } finally {
@@ -481,7 +479,7 @@ test.each(['failure', 'signed-out'])(
     mockAuth.hasCloudSession.mockRejectedValueOnce(new Error('offline'));
     const renderer = await renderPage(SettingsPage);
     const retry = renderer.root.find(
-      node => node.props.accessibilityLabel === 'Retry settings',
+      node => node.props.accessibilityLabel === 'Try Again',
     ).props.onPress;
     let resolveOld!: (value: boolean) => void;
     let rejectOld!: (error: Error) => void;
@@ -503,7 +501,7 @@ test.each(['failure', 'signed-out'])(
       retry();
     });
     expect(textOf(renderer)).toContain('Loading account…');
-    expect(labelsOf(renderer)).not.toContain('Retry settings');
+    expect(labelsOf(renderer)).not.toContain('Try Again');
     await act(async () => {
       retry();
     });
@@ -516,7 +514,7 @@ test.each(['failure', 'signed-out'])(
       }
     });
     expect(textOf(renderer)).toContain('Current account');
-    expect(labelsOf(renderer)).not.toContain('Retry settings');
+    expect(labelsOf(renderer)).not.toContain('Try Again');
   },
 );
 
@@ -555,7 +553,7 @@ test('older browser Settings response cannot overwrite a newer response', async 
     mockBackend.request.mockRejectedValueOnce(new Error('offline'));
     const renderer = await renderPage(SettingsPage);
     const retry = renderer.root.find(
-      node => node.props.accessibilityLabel === 'Retry settings',
+      node => node.props.accessibilityLabel === 'Try Again',
     ).props.onPress;
     let resolveOld!: (value: unknown) => void;
     mockBackend.request
@@ -598,4 +596,51 @@ test('older browser Settings response cannot overwrite a newer response', async 
       value: originalPlatform,
     });
   }
+});
+
+test('mobile Settings offers System, Light and Dark appearance inside the mobile shell only', async () => {
+  const {MobileThemeRoot} = require('../mobile/MobileTheme');
+  const {useOmiTheme} = require('../design/OmiTheme');
+  mockAuth.hasCloudSession.mockResolvedValue(false);
+  const schemes: string[] = [];
+  function Probe() {
+    schemes.push(useOmiTheme().scheme);
+    return null;
+  }
+  function Shell() {
+    const [appearance, setAppearance] = React.useState('dark');
+    return (
+      <MobileThemeRoot
+        appearance={appearance}
+        onAppearanceChange={setAppearance}>
+        <Probe />
+        <SettingsPage />
+      </MobileThemeRoot>
+    );
+  }
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await act(async () => {
+    renderer = ReactTestRenderer.create(<Shell />);
+  });
+  renderers.push(renderer);
+  const option = (label: string) =>
+    renderer.root.findAll(
+      node =>
+        node.props.accessibilityLabel === label &&
+        node.props.accessibilityRole === 'tab',
+    )[0]!;
+  expect(textOf(renderer)).toContain('Appearance');
+  expect(option('Dark appearance').props.accessibilityState.selected).toBe(
+    true,
+  );
+  expect(schemes[schemes.length - 1]).toBe('dark');
+  await act(async () => option('Light appearance').props.onPress());
+  expect(option('Light appearance').props.accessibilityState.selected).toBe(
+    true,
+  );
+  expect(schemes[schemes.length - 1]).toBe('light');
+
+  // Outside the mobile shell (the wide layout) there is no appearance control.
+  const plain = await renderPage(SettingsPage);
+  expect(textOf(plain)).not.toContain('Appearance');
 });

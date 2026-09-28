@@ -3,10 +3,16 @@ import {StyleSheet, TextInput, View} from 'react-native';
 import {MaterialIcon} from '../ui/MaterialIcon';
 
 import {FocusPressable} from '../ui/Pressable';
-import {mobileColor as color} from './mobileTokens';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import type {OmiTheme} from '../design/tokens';
 
 export type MobileOmnibarMode = 'Ask' | 'Search';
 
+/**
+ * The shared Ask/Search composer: one capsule on a raised surface, mode
+ * icons inline on the left, and an ink send circle on the right (the same
+ * shape the chat transcript's composer rule describes).
+ */
 export function MobileOmnibar({
   mode,
   onModeChange,
@@ -28,6 +34,8 @@ export function MobileOmnibar({
   canStop: boolean;
   inputRef: React.RefObject<TextInput | null>;
 }) {
+  const theme = useOmiTheme();
+  const styles = useOmiStyles(createStyles);
   const stopping = canStop;
   const disabled =
     !stopping && (value.trim() === '' || (mode === 'Ask' && busy));
@@ -37,6 +45,7 @@ export function MobileOmnibar({
       else onSubmit();
     }
   };
+  const glyph = disabled ? theme.color.inkDisabled : theme.color.onInk;
   return (
     <View accessibilityLabel="Ask and search dock" style={styles.root}>
       <View style={styles.field}>
@@ -47,20 +56,16 @@ export function MobileOmnibar({
             accessibilityLabel={`${item} mode`}
             accessibilityState={{selected: mode === item}}
             onPress={() => onModeChange(item)}
-            style={[styles.mode, mode === item && styles.selected]}>
-            {item === 'Ask' ? (
-              <MaterialIcon
-                name="chat_bubble"
-                size={19}
-                color={mode === item ? color.text : color.textMuted}
-              />
-            ) : (
-              <MaterialIcon
-                name="search"
-                size={19}
-                color={mode === item ? color.text : color.textMuted}
-              />
-            )}
+            style={({pressed}) => [
+              styles.mode,
+              mode === item && styles.selected,
+              pressed && mode !== item && styles.pressed,
+            ]}>
+            <MaterialIcon
+              name={item === 'Ask' ? 'chat_bubble' : 'search'}
+              size={theme.size.iconSmall + 2}
+              color={mode === item ? theme.color.ink : theme.color.inkTertiary}
+            />
           </FocusPressable>
         ))}
         <TextInput
@@ -70,8 +75,10 @@ export function MobileOmnibar({
           onChangeText={onChange}
           onSubmitEditing={submit}
           returnKeyType={mode === 'Ask' ? 'send' : 'search'}
-          placeholder={mode === 'Ask' ? 'Ask anything…' : 'Search Omi…'}
-          placeholderTextColor={color.textSubtle}
+          placeholder={mode === 'Ask' ? 'Ask Omi…' : 'Search Omi…'}
+          placeholderTextColor={theme.color.inkTertiary}
+          keyboardAppearance={theme.scheme}
+          selectionColor={theme.color.ink}
           style={styles.input}
         />
         {mode === 'Search' && value.length > 0 && (
@@ -80,7 +87,11 @@ export function MobileOmnibar({
             accessibilityLabel="Clear search"
             onPress={() => onChange('')}
             style={styles.clear}>
-            <MaterialIcon name="close" size={18} color={color.textMuted} />
+            <MaterialIcon
+              name="close"
+              size={theme.size.iconSmall}
+              color={theme.color.inkSecondary}
+            />
           </FocusPressable>
         )}
         <FocusPressable
@@ -93,23 +104,19 @@ export function MobileOmnibar({
               : 'Search loaded data'
           }
           disabled={disabled}
+          hitSlop={4}
           onPress={submit}
-          style={[styles.submit, disabled && styles.disabled]}>
+          style={({pressed}) => [
+            styles.submit,
+            disabled && styles.submitDisabled,
+            pressed && !disabled && styles.submitPressed,
+          ]}>
           {stopping ? (
-            <MaterialIcon
-              name="stop"
-              size={14}
-              fill={color.background}
-              color={color.background}
-            />
+            <MaterialIcon name="stop" size={16} color={glyph} />
           ) : mode === 'Ask' ? (
-            <MaterialIcon
-              name="arrow_upward"
-              size={20}
-              color={color.background}
-            />
+            <MaterialIcon name="arrow_upward" size={20} color={glyph} />
           ) : (
-            <MaterialIcon name="search" size={18} color={color.background} />
+            <MaterialIcon name="search" size={18} color={glyph} />
           )}
         </FocusPressable>
       </View>
@@ -117,50 +124,57 @@ export function MobileOmnibar({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (t: OmiTheme) => ({
   root: {
-    marginHorizontal: 10,
-    marginVertical: 8,
+    paddingHorizontal: t.layout.pageGutter.mobile,
+    paddingTop: t.space.xs,
+    paddingBottom: t.space.sm,
     backgroundColor: 'transparent',
   },
   field: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 6,
-    borderRadius: 22,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    minHeight: t.size.control + 4,
+    paddingHorizontal: t.space.xs,
+    gap: 2,
+    borderRadius: t.radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.border,
-    backgroundColor: 'rgba(26, 26, 26, 0.88)',
+    borderColor: t.color.hairline,
+    backgroundColor: t.color.surface,
   },
   mode: {
-    width: 44,
-    minHeight: 44,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: t.size.hitTarget,
+    height: t.size.hitTarget,
+    borderRadius: t.radius.pill,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
-  selected: {backgroundColor: color.surfaceRaised},
+  selected: {backgroundColor: t.color.fillSelected},
+  pressed: {backgroundColor: t.color.fillPressed},
   input: {
+    ...t.type.body,
     flex: 1,
     minWidth: 0,
-    minHeight: 44,
-    paddingHorizontal: 8,
-    fontSize: 16,
-    color: color.text,
+    minHeight: t.size.hitTarget,
+    paddingHorizontal: t.space.sm,
+    paddingVertical: 0,
+    color: t.color.ink,
   },
   clear: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: t.size.hitTarget,
+    height: t.size.hitTarget,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
   },
   submit: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: color.text,
+    width: t.size.controlCompact + 2,
+    height: t.size.controlCompact + 2,
+    margin: 3,
+    borderRadius: t.radius.pill,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    backgroundColor: t.color.ink,
   },
-  disabled: {opacity: 0.35},
+  submitDisabled: {backgroundColor: t.color.fill},
+  submitPressed: {opacity: t.motion.pressedOpacity},
 });

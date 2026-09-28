@@ -1,12 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {
-  ActivityIndicator,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {Platform, ScrollView, Text, View} from 'react-native';
 import {
   disableCloudApp,
   enableCloudApp,
@@ -26,10 +19,11 @@ import {
   desktopReadErrorCopy,
 } from '../desktopReadClient';
 import {omiAuth, omiBackend} from '../omiNative';
-import {FocusPressable} from '../ui/Pressable';
-import {styles} from '../ui/styles';
-import {mobileColor} from '../mobile/mobileTokens';
 import {MaterialIcon} from '../ui/MaterialIcon';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import {OmiButton, OmiChip, OmiPageState} from '../design/primitives';
+import type {OmiTheme} from '../design/tokens';
+import {MobileGroup, MobileInlineState, MobileRow} from '../mobile/MobileList';
 
 const catalogTabs = ['Explore', 'Installed', 'My Apps', 'Services'] as const;
 
@@ -47,6 +41,8 @@ export function ConnectorsPage({
   const [snapshot, setSnapshot] = useState<ConnectorsSnapshot | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const theme = useOmiTheme();
+  const local = useOmiStyles(createStyles);
   const [catalogTab, setCatalogTab] =
     useState<(typeof catalogTabs)[number]>('Explore');
 
@@ -170,209 +166,155 @@ export function ConnectorsPage({
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={[styles.destinationPage, catalogStyles.page]}>
-      <View accessibilityRole="tablist" style={catalogStyles.tabs}>
+    <ScrollView contentContainerStyle={local.page}>
+      <ScrollView
+        horizontal
+        accessibilityLabel="App catalogue"
+        accessibilityRole="tablist"
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={local.chips}
+        style={local.chipRail}>
         {catalogTabs.map(tab => (
-          <FocusPressable
+          <OmiChip
             key={tab}
-            accessibilityRole="tab"
-            accessibilityLabel={tab === 'My Apps' ? 'My apps' : `${tab} apps`}
-            accessibilityState={{selected: catalogTab === tab}}
+            label={tab}
+            selected={catalogTab === tab}
             onPress={() => setCatalogTab(tab)}
-            style={[
-              catalogStyles.tab,
-              catalogTab === tab && catalogStyles.tabSelected,
-            ]}>
-            <Text
-              style={[
-                catalogStyles.tabText,
-                catalogTab === tab && catalogStyles.tabTextSelected,
-              ]}>
-              {tab}
-            </Text>
-          </FocusPressable>
+          />
         ))}
-      </View>
-      <View style={[styles.destinationSections, styles.cloudSections]}>
-        {phase === 'loading' && snapshot === null ? (
-          <View style={[styles.destinationSection, catalogStyles.state]}>
-            <ActivityIndicator color="#888888" />
-            <Text style={styles.projectionEmptyCopy}>Loading apps…</Text>
-          </View>
-        ) : phase === 'signed-out' || phase === 'error' ? (
-          <View style={[styles.destinationSection, catalogStyles.state]}>
-            <MaterialIcon
-              name="extension"
-              color={mobileColor.textMuted}
-              size={28}
+      </ScrollView>
+      {phase === 'loading' && snapshot === null ? (
+        <OmiPageState kind="loading" label="Loading apps…" />
+      ) : phase === 'signed-out' ? (
+        <View style={local.state}>
+          <OmiPageState
+            kind="empty"
+            icon="extension"
+            title="Signed Out"
+            message={error ?? desktopBackendUnauthorizedCopy}
+          />
+          {onSignIn !== undefined && (
+            <OmiButton
+              busy={signingIn}
+              label="Sign In"
+              variant="primary"
+              onPress={() => {
+                signIn().catch(() => undefined);
+              }}
             />
-            <Text style={styles.destinationSectionTitle}>
-              {phase === 'signed-out' ? 'Signed out' : 'Apps unavailable'}
-            </Text>
-            <Text style={styles.projectionEmptyCopy}>
-              {error ?? desktopBackendUnauthorizedCopy}
-            </Text>
-            {phase === 'signed-out' && onSignIn !== undefined && (
-              <FocusPressable
-                accessibilityLabel="Sign in"
-                accessibilityRole="button"
-                disabled={signingIn}
-                onPress={() => {
-                  signIn().catch(() => undefined);
-                }}
-                style={({pressed}) => [
-                  styles.cloudAction,
-                  catalogStyles.touchAction,
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={styles.cloudActionText}>
-                  {signingIn ? 'Signing in…' : 'Sign in'}
-                </Text>
-              </FocusPressable>
-            )}
-            {phase === 'error' &&
-              Platform.OS !== 'web' &&
-              error !== desktopBackendConfigurationCopy && (
-                <FocusPressable
-                  accessibilityLabel="Retry apps"
-                  accessibilityRole="button"
-                  onPress={() => {
+          )}
+        </View>
+      ) : phase === 'error' ? (
+        <View accessibilityRole="alert">
+          <OmiPageState
+            kind="error"
+            title={
+              Platform.OS === 'web' ? 'Apps Unavailable' : 'Couldn’t Load Apps'
+            }
+            message={error ?? undefined}
+            onRetry={
+              Platform.OS !== 'web' && error !== desktopBackendConfigurationCopy
+                ? () => {
                     reload().catch(() => undefined);
-                  }}
-                  style={({pressed}) => [
-                    styles.cloudAction,
-                    catalogStyles.touchAction,
-                    pressed && styles.pressed,
-                  ]}>
-                  <Text style={styles.cloudActionText}>Retry</Text>
-                </FocusPressable>
-              )}
-          </View>
-        ) : (
-          sections
-            .filter(section => section.key === catalogTab)
-            .map(section => (
-              <View key={section.key} style={catalogStyles.section}>
-                <Text style={styles.destinationSectionTitle}>
-                  {section.title}
-                </Text>
-                {section.items.length === 0 ? (
-                  <Text style={styles.projectionEmptyCopy}>
-                    {section.empty}
-                  </Text>
-                ) : (
-                  section.items.map(app => (
-                    <View
-                      key={`${section.key}-${app.id}`}
-                      style={catalogStyles.card}>
-                      <View style={catalogStyles.appIcon}>
+                  }
+                : undefined
+            }
+          />
+        </View>
+      ) : (
+        sections
+          .filter(section => section.key === catalogTab)
+          .map(section => (
+            <MobileGroup key={section.key} inset={68}>
+              {section.items.length === 0 ? (
+                <MobileInlineState label={section.empty} />
+              ) : (
+                section.items.map(app => (
+                  <MobileRow
+                    key={`${section.key}-${app.id}`}
+                    leading={
+                      <View style={local.appIcon}>
                         <MaterialIcon
                           name="extension"
-                          color={mobileColor.text}
-                          size={24}
+                          color={theme.color.inkSecondary}
+                          size={theme.size.iconSmall}
                         />
                       </View>
-                      <View style={styles.cloudRowBody}>
-                        <Text style={styles.cloudRowTitle}>{app.name}</Text>
-                        {app.description.length > 0 && (
-                          <Text numberOfLines={2} style={styles.cloudRowMeta}>
-                            {app.description}
-                          </Text>
-                        )}
-                        <Text style={styles.cloudRowMeta}>
-                          {[
-                            app.category.length > 0 ? app.category : null,
-                            app.author.length > 0 ? app.author : null,
-                            app.enabled ? 'Installed' : 'Not installed',
-                          ]
-                            .filter(item => item !== null)
-                            .join(' · ')}
-                        </Text>
+                    }
+                    title={app.name}
+                    subtitle={
+                      app.description.length > 0 ? app.description : null
+                    }
+                    meta={[
+                      app.category.length > 0 ? app.category : null,
+                      app.author.length > 0 ? app.author : null,
+                      app.enabled ? 'Installed' : 'Not installed',
+                    ]
+                      .filter(item => item !== null)
+                      .join(' · ')}
+                    trailing={
+                      <View style={local.rowAction}>
+                        <OmiButton
+                          accessibilityLabel={
+                            app.enabled
+                              ? `Remove ${app.name}`
+                              : `Install ${app.name}`
+                          }
+                          busy={pendingId === app.id}
+                          compact
+                          disabled={pendingId !== null}
+                          label={app.enabled ? 'Remove' : 'Install'}
+                          onPress={() => {
+                            setEnabled(app, !app.enabled).catch(
+                              () => undefined,
+                            );
+                          }}
+                        />
                       </View>
-                      <FocusPressable
-                        accessibilityLabel={
-                          app.enabled
-                            ? `Remove ${app.name}`
-                            : `Install ${app.name}`
-                        }
-                        accessibilityRole="button"
-                        disabled={pendingId !== null}
-                        onPress={() => {
-                          setEnabled(app, !app.enabled).catch(() => undefined);
-                        }}
-                        style={({pressed}) => [
-                          styles.cloudAction,
-                          catalogStyles.install,
-                          pressed && styles.pressed,
-                        ]}>
-                        <Text style={styles.cloudActionText}>
-                          {pendingId === app.id
-                            ? app.enabled
-                              ? 'Removing…'
-                              : 'Installing…'
-                            : app.enabled
-                            ? 'Remove'
-                            : 'Install'}
-                        </Text>
-                      </FocusPressable>
-                    </View>
-                  ))
-                )}
-              </View>
-            ))
-        )}
-        {actionError !== null && (
-          <Text accessibilityRole="alert" style={styles.cloudActionError}>
-            {actionError}
-          </Text>
-        )}
-      </View>
+                    }
+                  />
+                ))
+              )}
+            </MobileGroup>
+          ))
+      )}
+      {actionError !== null && (
+        <Text accessibilityRole="alert" style={local.actionError}>
+          {actionError}
+        </Text>
+      )}
     </ScrollView>
   );
 }
 
-const catalogStyles = StyleSheet.create({
-  page: {paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 20},
-  tabs: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
-  tab: {
-    flexBasis: '45%',
-    flexGrow: 1,
-    minHeight: 44,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: mobileColor.surface,
+const createStyles = (t: OmiTheme) => ({
+  page: {
+    gap: t.space.lg,
+    paddingHorizontal: t.layout.pageGutter.mobile,
+    paddingTop: t.space.xs,
+    paddingBottom: t.space.xxl,
   },
-  tabSelected: {backgroundColor: mobileColor.text},
-  tabText: {fontSize: 13, fontWeight: '600', color: mobileColor.textMuted},
-  tabTextSelected: {color: mobileColor.background},
-  section: {gap: 12},
-  state: {
-    borderRadius: 22,
-    padding: 24,
-    gap: 12,
-    alignItems: 'center',
-    backgroundColor: mobileColor.surface,
-    borderColor: mobileColor.border,
+  chipRail: {
+    flexGrow: 0,
+    marginHorizontal: -t.layout.pageGutter.mobile,
   },
-  card: {
-    backgroundColor: mobileColor.surface,
-    borderColor: mobileColor.border,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 22,
-    padding: 20,
-    gap: 12,
+  chips: {
+    gap: t.space.sm,
+    paddingHorizontal: t.layout.pageGutter.mobile,
   },
+  state: {alignItems: 'center' as const, gap: t.space.md},
   appIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: mobileColor.surfaceRaised,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: t.size.controlCompact,
+    height: t.size.controlCompact,
+    borderRadius: t.radius.row - 2,
+    backgroundColor: t.color.fill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  install: {minHeight: 44, alignSelf: 'stretch', marginTop: 0},
-  touchAction: {minHeight: 44},
+  rowAction: {paddingRight: t.space.sm},
+  actionError: {
+    ...t.type.subhead,
+    color: t.color.danger,
+    paddingHorizontal: t.space.xs,
+  },
 });

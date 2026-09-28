@@ -90,6 +90,8 @@ import {
   type MobileProjectionStatus,
   type MobileRoute,
 } from '../mobile/MobileAppSurface';
+import {MobileCanvas} from '../mobile/MobileCanvas';
+import {MobileThemeRoot, useMobileAppearance} from '../mobile/MobileTheme';
 
 export {omiDotColor};
 
@@ -175,6 +177,7 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
   );
   const [homeChatOpen, setHomeChatOpen] = useState(false);
   const [mobileMode, setMobileMode] = useState<MobileOmnibarMode>('Search');
+  const [mobileAppearance, setMobileAppearance] = useMobileAppearance();
   const beforeMobileChat = useRef<{route: Route; mode: MobileOmnibarMode}>({
     route: 'Home',
     mode: 'Search',
@@ -1205,6 +1208,22 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
   if (
     !macDesktop &&
     compact &&
+    (onboardingRequired === true || returningUser)
+  ) {
+    // Phone setup follows the mobile appearance on its own canvas, outside
+    // the legacy wide shell's dark frame.
+    return (
+      <MobileThemeRoot
+        appearance={mobileAppearance}
+        onAppearanceChange={setMobileAppearance}>
+        <MobileCanvas>{firstRunOnboarding}</MobileCanvas>
+      </MobileThemeRoot>
+    );
+  }
+
+  if (
+    !macDesktop &&
+    compact &&
     onboardingRequired === false &&
     !returningUser &&
     (route === 'Home' ||
@@ -1230,138 +1249,148 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
         : 'ready';
     const activeMobileRoute: MobileRoute = mobileRouteByRoute[route];
     return (
-      <MobileAppSurface
-        taskPagination={taskPagination}
-        {...taskMutations}
-        activeRoute={activeMobileRoute}
-        chatContent={mobileChat}
-        omnibar={
-          <MobileOmnibar
-            key="mobile-omnibar"
-            mode={mobileMode}
-            onModeChange={next => {
-              setMobileMode(next);
-              if (next === 'Search' && homeChatOpen) {
-                setHomeChatOpen(false);
-                setRoute(beforeMobileChat.current.route);
-              }
-            }}
-            value={draft}
-            onChange={setDraft}
-            inputRef={composerRef}
-            busy={chatBusy}
-            canStop={(activeGenerationId ?? activeOmiRequestId) !== null}
-            onStop={() => {
-              void stopGeneration();
-            }}
-            onSubmit={() => {
-              if (mobileMode === 'Search') {
-                setHomeChatOpen(false);
+      <MobileThemeRoot
+        appearance={mobileAppearance}
+        onAppearanceChange={setMobileAppearance}>
+        <MobileAppSurface
+          taskPagination={taskPagination}
+          {...taskMutations}
+          activeRoute={activeMobileRoute}
+          chatContent={mobileChat}
+          omnibar={
+            <MobileOmnibar
+              key="mobile-omnibar"
+              mode={mobileMode}
+              onModeChange={next => {
+                setMobileMode(next);
+                if (next === 'Search' && homeChatOpen) {
+                  setHomeChatOpen(false);
+                  setRoute(beforeMobileChat.current.route);
+                }
+              }}
+              value={draft}
+              onChange={setDraft}
+              inputRef={composerRef}
+              busy={chatBusy}
+              canStop={(activeGenerationId ?? activeOmiRequestId) !== null}
+              onStop={() => {
+                void stopGeneration();
+              }}
+              onSubmit={() => {
+                if (mobileMode === 'Search') {
+                  setHomeChatOpen(false);
+                  setRoute('Home');
+                  return;
+                }
+                if (!homeChatOpen)
+                  beforeMobileChat.current = {route, mode: mobileMode};
                 setRoute('Home');
-                return;
-              }
-              if (!homeChatOpen)
-                beforeMobileChat.current = {route, mode: mobileMode};
-              setRoute('Home');
-              shouldFollowChat.current = true;
-              setHomeChatOpen(true);
-              send().catch(() => undefined);
-            }}
-          />
-        }
-        searchContent={
-          mobileMode === 'Search' && draft.trim() !== '' ? (
-            <ProjectionList
-              accessibilityLabel="Search results"
-              items={[
-                ...reads,
-                ...(readOutcomes?.tasks.status === 'success'
-                  ? readOutcomes.tasks.value.items
-                  : []),
-              ].filter(item => matchesSearchQuery(item.searchableText, draft))}
+                shouldFollowChat.current = true;
+                setHomeChatOpen(true);
+                send().catch(() => undefined);
+              }}
+            />
+          }
+          searchContent={
+            mobileMode === 'Search' && draft.trim() !== '' ? (
+              <ProjectionList
+                accessibilityLabel="Search results"
+                items={[
+                  ...reads,
+                  ...(readOutcomes?.tasks.status === 'success'
+                    ? readOutcomes.tasks.value.items
+                    : []),
+                ].filter(item =>
+                  matchesSearchQuery(item.searchableText, draft),
+                )}
+                loading={
+                  readsPhase === 'initial-loading' ||
+                  readsPhase === 'refreshing'
+                }
+                error={
+                  readsPhase === 'unavailable' ||
+                  readsPhase === 'saved-but-refresh-failed'
+                    ? 'Some saved data could not be loaded.'
+                    : null
+                }
+                emptyTitle="No Matches"
+                emptyCopy="Search covers data already loaded on this device."
+              />
+            ) : undefined
+          }
+          conversationContent={
+            <ConversationsPage
+              search={{
+                value: mobileMode === 'Search' ? draft : '',
+                onChange: value => {
+                  if (mobileMode === 'Search') setDraft(value);
+                },
+              }}
+              onRefresh={() => {
+                void refreshReads(false);
+              }}
+              onLoadMore={() => {
+                void loadMoreConversations();
+              }}
+              loadingMore={conversationsLoadingMore}
+              preserveLoadedPages={conversationsExtended}
+              notice={conversationNotice}
+              outcome={readOutcomes?.conversations ?? null}
               loading={
                 readsPhase === 'initial-loading' || readsPhase === 'refreshing'
               }
-              error={
-                readsPhase === 'unavailable' ||
-                readsPhase === 'saved-but-refresh-failed'
-                  ? 'Some saved data could not be loaded.'
-                  : null
-              }
-              emptyTitle="No loaded results match"
-              emptyCopy="Search covers data already loaded on this device."
+              embedded
             />
-          ) : undefined
-        }
-        conversationContent={
-          <ConversationsPage
-            search={{
-              value: mobileMode === 'Search' ? draft : '',
-              onChange: value => {
-                if (mobileMode === 'Search') setDraft(value);
-              },
-            }}
-            onRefresh={() => {
-              void refreshReads(false);
-            }}
-            onLoadMore={() => {
-              void loadMoreConversations();
-            }}
-            loadingMore={conversationsLoadingMore}
-            preserveLoadedPages={conversationsExtended}
-            notice={conversationNotice}
-            outcome={readOutcomes?.conversations ?? null}
-            loading={
-              readsPhase === 'initial-loading' || readsPhase === 'refreshing'
-            }
-            embedded
-          />
-        }
-        settingsContent={
-          <SettingsPage
-            chatBusy={chatBusy}
-            onOpenApps={() => setRoute('Connectors')}
-            onSignIn={signInAndRefresh}
-            onSignOut={nativeSessionRequired ? signOutAndRefresh : undefined}
-            onWorkspaceReload={retireWorkspace}
-            signingIn={signingIn}
-          />
-        }
-        appsContent={
-          <ConnectorsPage onSignIn={signInAndRefresh} signingIn={signingIn} />
-        }
-        capture={{
-          active: nativeSnapshot?.capture === 'recording',
-          waitingForAudio: nativeSnapshot?.audioStatus === 'waiting',
-          transcript: '',
-        }}
-        device={{connected: connectedDevice !== null, label: homeStatus}}
-        deviceMessage={devicePanelOpen ? null : deviceScanMessage}
-        devicePanel={devicePanelOpen ? renderDeviceSession('compact') : null}
-        onOpenDevice={() => setDevicePanelOpen(open => !open)}
-        onRouteChange={destination => {
-          setHomeChatOpen(false);
-          setRoute(routeByMobileRoute[destination]);
-        }}
-        onViewConversations={() => setRoute('Conversations')}
-        onViewTasks={() => setRoute('Tasks')}
-        conversationStatus={
-          readOutcomes?.conversations.status === 'success'
-            ? 'ready'
-            : readOutcomes?.conversations.status === 'error'
-            ? 'error'
-            : projectionStatus
-        }
-        conversations={conversationItems}
-        tasks={taskItems}
-        taskStatus={
-          readOutcomes?.tasks.status === 'success'
-            ? 'ready'
-            : readOutcomes?.tasks.status === 'error'
-            ? 'error'
-            : projectionStatus
-        }
-      />
+          }
+          settingsContent={
+            <SettingsPage
+              chatBusy={chatBusy}
+              onOpenApps={() => setRoute('Connectors')}
+              onSignIn={signInAndRefresh}
+              onSignOut={nativeSessionRequired ? signOutAndRefresh : undefined}
+              onWorkspaceReload={retireWorkspace}
+              signingIn={signingIn}
+            />
+          }
+          appsContent={
+            <ConnectorsPage onSignIn={signInAndRefresh} signingIn={signingIn} />
+          }
+          capture={{
+            active: nativeSnapshot?.capture === 'recording',
+            waitingForAudio: nativeSnapshot?.audioStatus === 'waiting',
+            transcript: '',
+          }}
+          device={{connected: connectedDevice !== null, label: homeStatus}}
+          deviceMessage={devicePanelOpen ? null : deviceScanMessage}
+          devicePanel={devicePanelOpen ? renderDeviceSession('compact') : null}
+          onOpenDevice={() => setDevicePanelOpen(open => !open)}
+          onRouteChange={destination => {
+            setHomeChatOpen(false);
+            setRoute(routeByMobileRoute[destination]);
+          }}
+          onViewConversations={() => setRoute('Conversations')}
+          onViewTasks={() => setRoute('Tasks')}
+          onRetryReads={() => {
+            refreshReads(false).catch(() => undefined);
+          }}
+          conversationStatus={
+            readOutcomes?.conversations.status === 'success'
+              ? 'ready'
+              : readOutcomes?.conversations.status === 'error'
+              ? 'error'
+              : projectionStatus
+          }
+          conversations={conversationItems}
+          tasks={taskItems}
+          taskStatus={
+            readOutcomes?.tasks.status === 'success'
+              ? 'ready'
+              : readOutcomes?.tasks.status === 'error'
+              ? 'error'
+              : projectionStatus
+          }
+        />
+      </MobileThemeRoot>
     );
   }
 
