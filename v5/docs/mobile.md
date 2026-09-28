@@ -43,9 +43,7 @@ transport contract.
 - Mobile has no phone shortcut or Live voice button: `MobileOmnibar`
   contains Ask/Search only. Desktop voice is unchanged. Capture status
   appears only while a capture is active.
-- Ask and Search share one draft: Ask opens chat without remounting the
-  input; closing chat restores the previous page; Search submits to Home's
-  loaded-data results without sending a message. On Conversations, Search
+- Ask and Search share one draft on the parent page. Ask opens a pushed Chat page with a bottom Ask-only composer; Back restores the previous page and its mode while retaining conversation history. Search submits to Home's loaded-data results without sending a message. On Conversations, Search
   filters the loaded library in place — there is no duplicate top search
   field.
 
@@ -81,7 +79,7 @@ transport contract.
 - Conversation detail keeps its Back control outside scrolling content and
   preserves the active search and All/Starred filter when returning to the
   list. Clearing search preserves Starred; Clear filters resets both.
-- `MobileChat` keeps its Close control outside the message scroll region.
+- `MobileChat` keeps its Back control outside the message scroll region. The tab bar is hidden on the pushed Chat page; failed rows can retry, and long threads expose Jump to Latest. See [chat-ux.md](chat-ux.md).
   Device details expand without unmounting pending device controls.
 
 ## Recording upload

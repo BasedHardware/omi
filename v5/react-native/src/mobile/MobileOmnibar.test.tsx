@@ -51,3 +51,30 @@ test('stop is offered in every mode; Search submits when nothing can be stopped'
   );
   act(() => tree.unmount());
 });
+
+test('the pushed Chat page keeps one Ask composer without a Search switch', () => {
+  let tree!: Renderer.ReactTestRenderer;
+  act(() => {
+    tree = Renderer.create(
+      <MobileOmnibar
+        mode="Ask"
+        chatPage
+        value="Follow up"
+        onChange={jest.fn()}
+        onModeChange={jest.fn()}
+        onSubmit={jest.fn()}
+        onStop={jest.fn()}
+        busy={false}
+        canStop={false}
+        inputRef={{current: null}}
+      />,
+    );
+  });
+  expect(
+    tree.root.findAll(node => node.props.accessibilityLabel === 'Search mode'),
+  ).toHaveLength(0);
+  expect(tree.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Ask Omi',
+  );
+  act(() => tree.unmount());
+});

@@ -1,5 +1,5 @@
 import React, {useCallback, useLayoutEffect, useRef, useState} from 'react';
-import {Platform, ScrollView, Text, View} from 'react-native';
+import {Platform, ScrollView, Text, TextInput, View} from 'react-native';
 import {MaterialIcon} from '../ui/MaterialIcon';
 
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
@@ -9,6 +9,7 @@ import {OmiAvatar} from '../ui/OmiAvatar';
 import {ShippingPressable} from './ShippingPressable';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import {OmiButton} from '../design/primitives';
 import type {OmiTheme} from '../design/tokens';
 
 type Props = {
@@ -21,6 +22,13 @@ type Props = {
   loadingHistory?: boolean;
   onLoadOlder: () => void;
   onSuggest?: (prompt: string) => void;
+  draft?: string;
+  onDraftChange?: (text: string) => void;
+  onSend?: () => void;
+  onStop?: () => void;
+  canStop?: boolean;
+  onClose?: () => void;
+  onRetry?: (message: ChatMessage) => void;
 };
 export function DesktopChat({
   submission,
@@ -32,10 +40,18 @@ export function DesktopChat({
   loadingHistory = false,
   onLoadOlder,
   onSuggest,
+  draft = '',
+  onDraftChange,
+  onSend,
+  onStop,
+  canStop = false,
+  onClose,
+  onRetry,
 }: Props) {
   const styles = useOmiStyles(createStyles);
   const theme = useOmiTheme();
   const list = useRef<ScrollView>(null);
+  const composerInput = useRef<TextInput>(null);
   const follow = useRef(true);
   const userScrolling = useRef(false);
   const pointerScrolling = useRef(false);
@@ -49,6 +65,11 @@ export function DesktopChat({
   const stopFollowing = useCallback(() => {
     follow.current = false;
     setFollowing(false);
+  }, []);
+  const jumpToLatest = useCallback(() => {
+    follow.current = true;
+    setFollowing(true);
+    list.current?.scrollToEnd({animated: true});
   }, []);
   const beginUserScroll = useCallback(() => {
     userScrolling.current = true;
@@ -123,7 +144,16 @@ export function DesktopChat({
         <View style={styles.empty}>
           <Text style={styles.muted}>Loading conversation…</Text>
         </View>
-      ) : error ? null : (
+      ) : error ? (
+        <View style={styles.empty}>
+          <Text accessibilityRole="header" style={styles.title}>
+            Your message wasn’t sent
+          </Text>
+          <Text style={[styles.muted, styles.emptyCopy]}>
+            Your draft is ready below. Press Send to try again.
+          </Text>
+        </View>
+      ) : (
         <View style={styles.empty}>
           <OmiAvatar
             tone="ink"
@@ -149,7 +179,10 @@ export function DesktopChat({
                   key={prompt}
                   accessibilityRole="button"
                   accessibilityLabel={`Try: ${prompt}`}
-                  onPress={() => onSuggest(prompt)}
+                  onPress={() => {
+                    onSuggest(prompt);
+                    composerInput.current?.focus();
+                  }}
                   style={styles.suggestion}>
                   <Text style={styles.suggestionText}>{prompt}</Text>
                   <MaterialIcon
@@ -227,6 +260,7 @@ export function DesktopChat({
               desktop
               animate={false}
               reduceMotion={reduceMotion}
+              onRetry={onRetry ? () => onRetry(item) : undefined}
             />
           ))}
           {busy && !messages.some(isStreamingAssistant) ? (
@@ -234,17 +268,111 @@ export function DesktopChat({
           ) : null}
         </ScrollView>
       </View>
+      {!following && messages.length > 0 ? (
+        <OmiButton
+          label="Jump to Latest"
+          compact
+          onPress={jumpToLatest}
+          style={styles.jump}
+        />
+      ) : null}
       {error ? (
         <Text accessibilityRole="alert" style={styles.error}>
           {error}
         </Text>
       ) : null}
+      {onDraftChange && onSend && onStop ? (
+        <View style={styles.composerRow}>
+          {onClose ? (
+            <OmiButton
+              label="Activity"
+              compact
+              variant="plain"
+              onPress={onClose}
+            />
+          ) : null}
+          <View style={styles.composer}>
+            <TextInput
+              ref={composerInput}
+              accessibilityLabel="Message Omi"
+              placeholder="Ask Omi…"
+              placeholderTextColor={theme.color.inkSecondary}
+              value={draft}
+              onChangeText={onDraftChange}
+              onKeyPress={event => {
+                if (event.nativeEvent.key === 'Escape') {
+                  event.currentTarget.blur();
+                }
+              }}
+              onSubmitEditing={() => {
+                if (!busy && draft.trim()) {
+                  onSend();
+                }
+              }}
+              style={styles.input}
+            />
+            <OmiButton
+              label={canStop ? 'Stop' : 'Send'}
+              compact
+              variant="primary"
+              disabled={!canStop && (busy || !draft.trim())}
+              onPress={
+                canStop
+                  ? onStop
+                  : () => {
+                      if (!busy && draft.trim()) {
+                        onSend();
+                      }
+                    }
+              }
+            />
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
 const createStyles = (t: OmiTheme) => ({
-  root: {flex: 1, width: '100%' as const},
+  root: {
+    flex: 1,
+    width: '100%' as const,
+    maxWidth: 900,
+    alignSelf: 'center' as const,
+    backgroundColor: t.color.surface,
+    borderColor: t.color.separator,
+    borderWidth: 1,
+    borderRadius: t.radius.card,
+    overflow: 'hidden' as const,
+  },
   history: {flex: 1},
+  jump: {alignSelf: 'center' as const, marginBottom: t.space.sm},
+  composerRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: t.space.sm,
+    padding: t.space.md,
+    borderTopWidth: 1,
+    borderTopColor: t.color.separator,
+  },
+  composer: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: t.space.sm,
+    minHeight: t.size.control,
+    paddingHorizontal: t.space.md,
+    borderRadius: t.radius.pill,
+    borderWidth: 1,
+    borderColor: t.color.hairline,
+    backgroundColor: t.color.surfaceRaised,
+  },
+  input: {
+    ...t.type.body,
+    color: t.color.ink,
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: t.space.sm,
+  },
   messages: {
     padding: t.space.xl,
     gap: t.space.xl,

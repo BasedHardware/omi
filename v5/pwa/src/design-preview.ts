@@ -276,9 +276,14 @@ const exampleOutcomes: DesktopReadOutcomes = {
 function Preview() {
   const [signedIn, setSignedIn] = useState(false);
   const [complete, setComplete] = useState(false);
-  const [draft, setDraft] = useState(params.get("q") ?? "");
+  const [draft, setDraft] = useState(
+    params.get("q") ??
+      (chatState === "error" ? "Help me turn these ideas into a plan." : "")
+  );
   const [chatOpen, setChatOpen] = useState(chatState !== null);
-  const [chatBusy, setChatBusy] = useState(chatState === "waiting");
+  const [chatBusy, setChatBusy] = useState(
+    chatState === "waiting" || chatState === "streaming"
+  );
   const [chatError, setChatError] = useState<string | null>(
     chatState === "error"
       ? "Example error: your message could not be sent. Try again."
@@ -297,30 +302,90 @@ function Preview() {
   );
   const composerRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(
-    chatState === "ready" || chatState === "waiting"
-      ? [
-          {
-            id: "example-human",
-            sender: "human",
-            text: "Help me turn these ideas into a plan.",
-            createdAt: 1789641000,
-            generationOutcome: null,
-          },
-          {
-            id: "example-ai",
-            sender: "ai",
-            text:
-              chatState === "waiting"
-                ? ""
-                : "Start with one useful next step.\n\n1. Gather your notes.\n2. Pick the idea that matters most.\n3. Give it a little time today.",
-            createdAt: 1789641060,
-            generationOutcome: chatState === "waiting" ? null : "completed",
-            generationId: "example-generation",
-          },
-        ]
-      : []
-  );
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
+    if (!chatState || chatState === "empty" || chatState === "error") return [];
+    const base = 1789641000;
+    const human = (id: string, text: string, offset: number): ChatMessage => ({
+      id,
+      sender: "human",
+      text,
+      createdAt: base + offset,
+      generationOutcome: null,
+    });
+    const ai = (
+      id: string,
+      text: string,
+      offset: number,
+      outcome: ChatMessage["generationOutcome"] = "completed"
+    ): ChatMessage => ({
+      id,
+      sender: "ai",
+      text,
+      createdAt: base + offset,
+      generationOutcome: outcome,
+      generationId: id,
+      generationRetryable: outcome === "failed",
+    });
+    const opening = [
+      human("example-human", "Help me turn these ideas into a plan.", 0),
+      ai(
+        "example-ai",
+        "Start with one useful next step.\n\n1. Gather your notes.\n2. Pick the idea that matters most.\n3. Give it a little time today.",
+        60
+      ),
+    ];
+    if (chatState === "long") {
+      return [
+        ...Array.from({ length: 5 }, (_, index) => [
+          human(
+            `long-human-${index}`,
+            `What should I do after step ${index + 1}?`,
+            120 + index * 120
+          ),
+          ai(
+            `long-ai-${index}`,
+            "Keep the plan small and check the outcome before adding more work.\n\n- Write one action.\n- Assign an owner.\n- Review tomorrow.",
+            180 + index * 120
+          ),
+        ]).flat(),
+        human(
+          "markdown-human",
+          "Show me the checklist and an example command.",
+          800
+        ),
+        ai(
+          "markdown-ai",
+          "## Next steps\n\n1. Pick the **smallest** useful action.\n2. Record what changed.\n\n```sh\necho 'review the plan'\n```\n\nSee [the example](https://example.com/guide) for context.",
+          860
+        ),
+      ];
+    }
+    if (chatState === "waiting")
+      return [
+        ...opening,
+        human("pending-human", "What next?", 120),
+        ai("pending-ai", "", 180, null),
+      ];
+    if (chatState === "streaming")
+      return [
+        ...opening,
+        human("stream-human", "What next?", 120),
+        ai("stream-ai", "I’m putting the next steps together…", 180, null),
+      ];
+    if (chatState === "stopped")
+      return [
+        ...opening,
+        human("stopped-human", "What next?", 120),
+        ai("stopped-ai", "Start with the first task.", 180, "cancelled"),
+      ];
+    if (chatState === "failed")
+      return [
+        ...opening,
+        human("failed-human", "What next?", 120),
+        ai("failed-ai", "", 180, "failed"),
+      ];
+    return opening;
+  });
   const previewSend = () => {
     if (!chatOpen) beforeChat.current = route;
     setRoute("home");
@@ -444,7 +509,7 @@ function Preview() {
               outcomes,
               readsPhase: outcomes ? "ready" : "unavailable",
               ...taskActions,
-              activeGenerationId: null,
+              activeGenerationId: chatBusy ? "preview-generation" : null,
               authError: null,
               signingIn: false,
               draft,
@@ -461,6 +526,7 @@ function Preview() {
               onLoadOlderChat: noop,
               onSend: noop,
               onStop: noop,
+              onRetryChat: noop,
             })
           : surface === "mobile" || (surface === "mobile-setup" && complete)
           ? mobileRoot(
@@ -492,14 +558,30 @@ function Preview() {
                         setDraft(prompt);
                         composerRef.current?.focus();
                       },
+                      onRetry: () => {
+                        setChatBusy(true);
+                        setChatMessages((current) =>
+                          current.map((message) =>
+                            message.generationOutcome === "failed"
+                              ? {
+                                  ...message,
+                                  generationOutcome: null,
+                                  text: "",
+                                }
+                              : message
+                          )
+                        );
+                      },
                       shouldAnimate: () => false,
                       scrollRef,
                       onScroll: noop,
+                      onJumpLatest: noop,
                     })
                   : undefined,
                 omnibar: h(MobileOmnibar, {
                   key: "mobile-omnibar",
                   mode,
+                  chatPage: chatOpen,
                   onModeChange: (next) => {
                     setMode(next);
                     if (next === "Search" && chatOpen) {

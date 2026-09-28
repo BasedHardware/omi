@@ -415,7 +415,9 @@ test('a send still in flight when the session dies never seeds the next session'
   // A send starts while the session is still ready.
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(node => node.props.placeholder === 'Ask about your day…')!;
+    .find(node =>
+      ['Ask about your day…', 'Ask Omi…'].includes(node.props.placeholder),
+    )!;
   act(() => {
     omnibar.props.onChangeText('PRIVATE IN-FLIGHT MESSAGE');
   });
@@ -487,7 +489,9 @@ test('a send still in flight when the session dies never seeds the next session'
   // starts a new admission.
   const omnibarAgain = renderer.root
     .findAllByType(TextInput)
-    .find(node => node.props.placeholder === 'Ask about your day…')!;
+    .find(node =>
+      ['Ask about your day…', 'Ask Omi…'].includes(node.props.placeholder),
+    )!;
   act(() => {
     omnibarAgain.props.onChangeText('fresh account message');
   });
@@ -691,7 +695,9 @@ test('a stale older-history recovery cannot overwrite a newer desktop send', asy
 
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(node => node.props.placeholder === 'Ask about your day…')!;
+    .find(node =>
+      ['Ask about your day…', 'Ask Omi…'].includes(node.props.placeholder),
+    )!;
   act(() => {
     omnibar.props.onChangeText('fresh question');
   });
@@ -736,7 +742,9 @@ test.each(['', 'next question'])(
     const renderer = await renderApp();
     const omnibar = renderer.root
       .findAllByType(TextInput)
-      .find(node => node.props.placeholder === 'Ask about your day…')!;
+      .find(node =>
+        ['Ask about your day…', 'Ask Omi…'].includes(node.props.placeholder),
+      )!;
     act(() => {
       omnibar.props.onChangeText('unsent question');
     });
@@ -810,7 +818,9 @@ test('an admitted stream failure keeps its uncertain interruption visible', asyn
   });
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(node => node.props.placeholder === 'Ask about your day…')!;
+    .find(node =>
+      ['Ask about your day…', 'Ask Omi…'].includes(node.props.placeholder),
+    )!;
   act(() => {
     omnibar.props.onChangeText('interrupted question');
   });
@@ -897,7 +907,9 @@ test('a send during the initial history load still receives the transcript', asy
 
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(node => node.props.placeholder === 'Ask about your day…')!;
+    .find(node =>
+      ['Ask about your day…', 'Ask Omi…'].includes(node.props.placeholder),
+    )!;
   act(() => {
     omnibar.props.onChangeText('sent before history landed');
   });
@@ -1043,7 +1055,9 @@ test('a send during an older-history load still keeps the earlier page', async (
 
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(node => node.props.placeholder === 'Ask about your day…')!;
+    .find(node =>
+      ['Ask about your day…', 'Ask Omi…'].includes(node.props.placeholder),
+    )!;
   act(() => {
     omnibar.props.onChangeText('sent while older loading');
   });
@@ -1160,7 +1174,9 @@ test('a failed older-history page stays visible when a send happens mid-load', a
 
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(node => node.props.placeholder === 'Ask about your day…')!;
+    .find(node =>
+      ['Ask about your day…', 'Ask Omi…'].includes(node.props.placeholder),
+    )!;
   act(() => {
     omnibar.props.onChangeText('sent while older failing');
   });
@@ -1231,7 +1247,9 @@ test.each(['stop', 'unmount', 'signout'])(
     });
     const omnibar = renderer.root
       .findAllByType(TextInput)
-      .find(node => node.props.placeholder === 'Ask about your day…')!;
+      .find(node =>
+        ['Ask about your day…', 'Ask Omi…'].includes(node.props.placeholder),
+      )!;
     act(() => omnibar.props.onChangeText('my old request'));
     await act(async () => {
       renderer.root
@@ -1315,7 +1333,9 @@ test('old chat shows streamed tokens before the terminal frame arrives', async (
   });
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(node => node.props.placeholder === 'Ask about your day…')!;
+    .find(node =>
+      ['Ask about your day…', 'Ask Omi…'].includes(node.props.placeholder),
+    )!;
   act(() => omnibar.props.onChangeText('stream this'));
   await act(async () => {
     renderer.root
@@ -1403,7 +1423,9 @@ test('two same-tick submits admit exactly one message', async () => {
   });
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(node => node.props.placeholder === 'Ask about your day…')!;
+    .find(node =>
+      ['Ask about your day…', 'Ask Omi…'].includes(node.props.placeholder),
+    )!;
   act(() => {
     omnibar.props.onChangeText('only once');
   });
@@ -1475,7 +1497,9 @@ test('a failed history load reports even when a send bumped the session mutation
 
   const omnibar = renderer.root
     .findAllByType(TextInput)
-    .find(node => node.props.placeholder === 'Ask about your day…')!;
+    .find(node =>
+      ['Ask about your day…', 'Ask Omi…'].includes(node.props.placeholder),
+    )!;
   act(() => {
     omnibar.props.onChangeText('raced send');
   });

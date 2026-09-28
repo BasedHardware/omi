@@ -1,11 +1,20 @@
-import React, {memo, useEffect, useRef} from 'react';
-import {Animated, Easing, StyleSheet, Text, View} from 'react-native';
+import React, {memo, useEffect, useRef, useState} from 'react';
+import {
+  Animated,
+  Easing,
+  Platform,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
 import type {OmiTheme} from '../design/tokens';
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {OmiAvatar} from './OmiAvatar';
 import {ChatMessageContent} from './ChatMessageContent';
-import {FocusPressable} from './Pressable';
+import {OmiButton} from '../design/primitives';
+import {omiBackend} from '../omiNative';
 import {styles} from './styles';
 import {
   type DesktopTokens,
@@ -28,6 +37,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
   desktop = false,
   message,
   onRetry,
+  onCopy,
   reduceMotion,
 }: {
   animate: boolean;
@@ -35,6 +45,7 @@ const ChatMessageRow = memo(function ChatMessageRow({
   desktop?: boolean;
   message: ChatMessage;
   onRetry?: () => void;
+  onCopy?: (text: string) => Promise<void> | void;
   reduceMotion: boolean;
 }) {
   const {tokens: token} = useDesktopTheme();
@@ -75,6 +86,35 @@ const ChatMessageRow = memo(function ChatMessageRow({
   const human = message.sender === 'human';
   const streaming = isStreamingAssistant(message);
   const waiting = streaming && message.text === '';
+  const [copyState, setCopyState] = useState<
+    'ready' | 'copied' | 'shared' | 'failed'
+  >('ready');
+  const copy = async () => {
+    try {
+      if (onCopy) {
+        await onCopy(message.text);
+      } else if (omiBackend?.copyToClipboard) {
+        await omiBackend.copyToClipboard(message.text);
+      } else if (typeof navigator !== 'undefined' && 'clipboard' in navigator) {
+        await (
+          navigator as Navigator & {
+            clipboard: {writeText(text: string): Promise<void>};
+          }
+        ).clipboard.writeText(message.text);
+      } else if (Platform.OS === 'ios' || Platform.OS === 'android') {
+        const result = await Share.share({message: message.text});
+        if (result.action !== Share.dismissedAction) {
+          setCopyState('shared');
+        }
+        return;
+      } else {
+        throw new Error('Clipboard unavailable');
+      }
+      setCopyState('copied');
+    } catch {
+      setCopyState('failed');
+    }
+  };
   return (
     <Animated.View
       accessibilityLabel={
@@ -178,20 +218,37 @@ const ChatMessageRow = memo(function ChatMessageRow({
         {message.generationOutcome === 'failed' &&
           message.generationRetryable === true &&
           onRetry !== undefined && (
-            <FocusPressable
-              accessibilityRole="button"
-              accessibilityLabel="Try Again"
+            <OmiButton
+              label="Try Again"
+              compact
               onPress={onRetry}
-              style={[styles.retryButton, desktop && styles.macRetryButton]}>
-              <Text
-                style={[
-                  styles.retryButtonText,
-                  desktop && styles.macRetryButtonText,
-                ]}>
-                Try Again
-              </Text>
-            </FocusPressable>
+              style={transcriptStyles.action}
+            />
           )}
+        {!human && !waiting && message.text.trim() !== '' && (
+          <OmiButton
+            label={
+              copyState === 'copied'
+                ? 'Copied'
+                : copyState === 'shared'
+                ? 'Shared'
+                : copyState === 'failed'
+                ? 'Copy unavailable'
+                : Platform.OS === 'ios' || Platform.OS === 'android'
+                ? 'Share or Copy'
+                : 'Copy'
+            }
+            accessibilityLabel={
+              Platform.OS === 'ios' || Platform.OS === 'android'
+                ? 'Share or copy response'
+                : 'Copy response'
+            }
+            compact
+            variant="plain"
+            onPress={copy}
+            style={transcriptStyles.action}
+          />
+        )}
         <Text
           style={[
             styles.chatTimestamp,
@@ -322,6 +379,7 @@ const createMobileBubbleStyles = (t: OmiTheme) => ({
 
 const createTranscriptStyles = (token: DesktopTokens) =>
   StyleSheet.create({
+    action: {alignSelf: 'flex-start', marginTop: 4},
     mobileColumn: {flexShrink: 1, maxWidth: '85%'},
     skeleton: {width: 260, maxWidth: '80%', gap: 10},
     line: {

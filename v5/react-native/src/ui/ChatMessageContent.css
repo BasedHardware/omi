@@ -22,8 +22,9 @@
   overflow: auto;
   max-width: 100%;
   padding: 0.75em;
-  border: 1px solid currentColor;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
   border-radius: 8px;
+  background: color-mix(in srgb, currentColor 5%, transparent);
 }
 .omi-chat-markdown code {
   font-family: monospace;
@@ -33,7 +34,7 @@
 .omi-chat-markdown blockquote {
   margin: 0.75em 0;
   padding-left: 1em;
-  border-left: 2px solid currentColor;
+  border-left: 2px solid color-mix(in srgb, currentColor 24%, transparent);
 }
 .omi-chat-markdown table {
   display: block;
@@ -43,7 +44,7 @@
 }
 .omi-chat-markdown :is(th, td) {
   padding: 0.4em 0.7em;
-  border: 1px solid currentColor;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
   text-align: start;
 }
 .omi-chat-markdown a {

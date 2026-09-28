@@ -567,10 +567,12 @@ export function MobileAppSurface({
             </ContentEdges>
           </View>
           {omnibar}
-          <MobileTabBar
-            activeRoute={activeRoute}
-            onRouteChange={onRouteChange}
-          />
+          {!chatContent && (
+            <MobileTabBar
+              activeRoute={activeRoute}
+              onRouteChange={onRouteChange}
+            />
+          )}
         </KeyboardAvoidingView>
       </SafeAreaView>
     );

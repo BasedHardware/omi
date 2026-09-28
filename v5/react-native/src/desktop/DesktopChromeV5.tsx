@@ -514,65 +514,73 @@ export function DesktopChromeV5({
             );
           })}
         </View>
-        <TextInput
-          accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search Recall'}
-          blurOnSubmit={false}
-          onChangeText={onDraftChange}
-          onSubmitEditing={() => {
-            if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
-              onSend();
+        {route === 'Chat' ? (
+          <Text style={styles.omnibarInput}>Chat</Text>
+        ) : (
+          <TextInput
+            accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search Recall'}
+            blurOnSubmit={false}
+            onChangeText={onDraftChange}
+            onSubmitEditing={() => {
+              if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
+                onSend();
+              }
+            }}
+            placeholder={
+              mode === 'Search'
+                ? desktopSearchPlaceholder
+                : 'Ask about your day…'
             }
-          }}
-          placeholder={
-            mode === 'Search' ? desktopSearchPlaceholder : 'Ask about your day…'
-          }
-          placeholderTextColor={token.color.inkMuted}
-          ref={omnibarRef}
-          style={styles.omnibarInput}
-          value={draft}
-        />
+            placeholderTextColor={token.color.inkMuted}
+            ref={omnibarRef}
+            style={styles.omnibarInput}
+            value={draft}
+          />
+        )}
         {liveControl ? (
           <View style={styles.liveSlot}>{liveControl}</View>
         ) : null}
-        <FocusPressable
-          accessibilityLabel={
-            canStop
-              ? 'Stop'
-              : sending
-              ? 'Sending…'
-              : mode === 'Ask'
-              ? 'Send'
-              : 'Search'
-          }
-          accessibilityRole="button"
-          disabled={mode === 'Ask' && !canStop && (chatBusy || !draft.trim())}
-          onPress={() => {
-            if (canStop) {
-              onStop();
-            } else if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
-              onSend();
+        {route === 'Chat' ? null : (
+          <FocusPressable
+            accessibilityLabel={
+              canStop
+                ? 'Stop'
+                : sending
+                ? 'Sending…'
+                : mode === 'Ask'
+                ? 'Send'
+                : 'Search'
             }
-          }}
-          style={({pressed}) => [
-            styles.send,
-            mode === 'Ask' &&
-              !canStop &&
-              (chatBusy || !draft.trim()) &&
-              styles.sendDisabled,
-            pressed && styles.pressed,
-          ]}>
-          {canStop ? (
-            <MaterialIcon name="stop" size={14} color={token.color.dark} />
-          ) : mode === 'Ask' ? (
-            <MaterialIcon
-              name="arrow_upward"
-              size={18}
-              color={token.color.dark}
-            />
-          ) : (
-            <MaterialIcon name="search" size={17} color={token.color.dark} />
-          )}
-        </FocusPressable>
+            accessibilityRole="button"
+            disabled={mode === 'Ask' && !canStop && (chatBusy || !draft.trim())}
+            onPress={() => {
+              if (canStop) {
+                onStop();
+              } else if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
+                onSend();
+              }
+            }}
+            style={({pressed}) => [
+              styles.send,
+              mode === 'Ask' &&
+                !canStop &&
+                (chatBusy || !draft.trim()) &&
+                styles.sendDisabled,
+              pressed && styles.pressed,
+            ]}>
+            {canStop ? (
+              <MaterialIcon name="stop" size={14} color={token.color.dark} />
+            ) : mode === 'Ask' ? (
+              <MaterialIcon
+                name="arrow_upward"
+                size={18}
+                color={token.color.dark}
+              />
+            ) : (
+              <MaterialIcon name="search" size={17} color={token.color.dark} />
+            )}
+          </FocusPressable>
+        )}
       </View>
       {chatNotice === null ? null : (
         <Text

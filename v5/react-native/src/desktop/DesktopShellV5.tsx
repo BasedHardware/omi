@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {StyleSheet, TextInput, View} from 'react-native';
+import {Platform, StyleSheet, TextInput, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 import type {DesktopReadOutcomes} from '../desktopReadClient';
@@ -54,6 +54,7 @@ type ShellProps = TaskMutationProps & {
   onSignIn: () => void;
   onSignOut: () => void;
   onStop: () => void;
+  onRetryChat?: (message: ChatMessage) => void;
   onUiVersionChange?: (version: 'v5' | 'v5.1') => void;
   onWorkspaceReload?: () => void;
   outcomes: DesktopReadOutcomes | null;
@@ -100,6 +101,7 @@ export function DesktopShellV5({
   onSignIn,
   onSignOut,
   onStop,
+  onRetryChat,
   onUiVersionChange,
   onWorkspaceReload,
   outcomes,
@@ -183,6 +185,45 @@ export function DesktopShellV5({
     }
   };
   const omnibarRef = useRef<TextInput>(null);
+  const searchFocusPending = useRef(false);
+  useEffect(() => {
+    if (route !== 'Chat' && searchFocusPending.current) {
+      searchFocusPending.current = false;
+      omnibarRef.current?.focus();
+    }
+  }, [route]);
+  useEffect(() => {
+    const browserDocument = (
+      globalThis as unknown as {
+        document?: {
+          activeElement?: {blur?: () => void};
+          addEventListener: (
+            type: string,
+            handler: (event: {key: string}) => void,
+          ) => void;
+          removeEventListener: (
+            type: string,
+            handler: (event: {key: string}) => void,
+          ) => void;
+        };
+      }
+    ).document;
+    if (Platform.OS !== 'web' || !browserDocument) {
+      return;
+    }
+    const onEscape = (event: {key: string}) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      if (route === 'Chat') {
+        browserDocument.activeElement?.blur?.();
+      } else if (route !== 'Home') {
+        openChat();
+      }
+    };
+    browserDocument.addEventListener('keydown', onEscape);
+    return () => browserDocument.removeEventListener('keydown', onEscape);
+  }, [route]);
   useEffect(() => {
     if (session !== 'ready') {
       setRoute('Home');
@@ -192,10 +233,14 @@ export function DesktopShellV5({
     const subscription = subscribeDesktopSearchCommand(() => {
       setMode('Search');
       setRoute('Home');
-      omnibarRef.current?.focus();
+      if (route === 'Chat') {
+        searchFocusPending.current = true;
+      } else {
+        omnibarRef.current?.focus();
+      }
     });
     return () => subscription.remove();
-  }, []);
+  }, [route]);
   const chatNotice =
     route === 'Chat' ? visibleChatError(session, chatError) : null;
   return (
@@ -237,7 +282,9 @@ export function DesktopShellV5({
         onSend={() => {
           if (mode === 'Ask') {
             setChatSubmission(value => value + 1);
-            openChat();
+            if (route !== 'Chat') {
+              openChat();
+            }
             onSend();
           } else {
             setRecallQuery(draft.trim().slice(0, 200));
@@ -268,10 +315,19 @@ export function DesktopShellV5({
             submission={chatSubmission}
             messages={messages}
             busy={chatBusy || activeGenerationId !== null}
+            draft={draft}
+            onDraftChange={onDraftChange}
+            onSend={() => {
+              setChatSubmission(value => value + 1);
+              onSend();
+            }}
+            onStop={onStop}
+            canStop={activeGenerationId !== null}
+            onClose={() => navigate('Home')}
+            onRetry={onRetryChat}
             onSuggest={prompt => {
               setMode('Ask');
               onDraftChange(prompt);
-              omnibarRef.current?.focus();
             }}
             error={chatNotice}
             hasOlder={hasOlderChat}
