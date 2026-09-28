@@ -707,9 +707,9 @@ async def get_calendar_events_tool(
                             search_query=search_query,
                         )
                     except Exception as retry_error:
-                        logger.error(f"❌ Error after token refresh: {retry_error}")
+                        logger.error(f"❌ Error after token refresh: {retry_error}", exc_info=True)
                         emit_sync_failed(telemetry_context, retry_error)
-                        return f"Error fetching calendar events: {retry_error}"
+                        return "Error fetching calendar events. Please try again."
                 else:
                     logger.error(f"❌ Token refresh failed")
                     emit_sync_failed(telemetry_context, e)
@@ -727,9 +727,9 @@ async def get_calendar_events_tool(
             emit_sync_failed(telemetry_context, e)
             return "Unable to reach Google Calendar right now. Please try again in a moment."
         except Exception as e:
-            logger.error(f"❌ Unexpected error fetching calendar events: {e}")
+            logger.error(f"❌ Unexpected error fetching calendar events: {e}", exc_info=True)
             emit_sync_failed(telemetry_context, e)
-            return f"Error fetching calendar events: {e}"
+            return "Error fetching calendar events. Please try again."
 
         if not events:
             date_info = ""
@@ -968,8 +968,8 @@ async def create_calendar_event_tool(
 
                         return result.strip()
                     except Exception as retry_error:
-                        logger.error(f"❌ Error after token refresh: {retry_error}")
-                        return f"Error creating calendar event: {retry_error}"
+                        logger.error(f"❌ Error after token refresh: {retry_error}", exc_info=True)
+                        return "Error creating calendar event. Please try again."
                 else:
                     logger.error(f"❌ Token refresh failed")
                     return (
@@ -1062,7 +1062,8 @@ async def delete_calendar_event_tool(
                             await delete_google_calendar_event(new_token, event_id)
                             return f"✅ Successfully deleted calendar event (ID: {event_id})"
                         except Exception as retry_error:
-                            return f"Error deleting calendar event: {retry_error}"
+                            logger.error(f"❌ Error after token refresh deleting event: {retry_error}", exc_info=True)
+                            return "Error deleting calendar event. Please try again."
                     else:
                         return "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
                 elif e.is_permission_error:
@@ -1073,8 +1074,8 @@ async def delete_calendar_event_tool(
                 logger.error(f"❌ Network error deleting event by ID: {e}")
                 return "Unable to reach Google Calendar right now. Please try again in a moment."
             except Exception as e:
-                logger.error(f"❌ Unexpected error deleting event by ID: {e}")
-                return f"Error deleting calendar event: {e}"
+                logger.error(f"❌ Unexpected error deleting event by ID: {e}", exc_info=True)
+                return "Error deleting calendar event. Please try again."
 
         # Otherwise, search for events matching criteria
         if not event_title and not start_date:
@@ -1211,7 +1212,8 @@ async def delete_calendar_event_tool(
 
                         return format_deleted_calendar_events(mutation_result)
                     except Exception as retry_error:
-                        return f"Error deleting calendar events: {retry_error}"
+                        logger.error(f"❌ Error after token refresh deleting events: {retry_error}", exc_info=True)
+                        return "Error deleting calendar events. Please try again."
                 else:
                     return (
                         "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
@@ -1370,7 +1372,8 @@ async def update_calendar_event_tool(
                         current_event = await get_google_calendar_event(new_token, target_event_id)
                         access_token = new_token
                     except Exception as retry_error:
-                        return f"Error getting calendar event: {retry_error}"
+                        logger.error(f"❌ Error after token refresh getting event: {retry_error}", exc_info=True)
+                        return "Error getting calendar event. Please try again."
                 else:
                     return (
                         "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
@@ -1383,8 +1386,8 @@ async def update_calendar_event_tool(
             logger.error(f"❌ Network error getting event: {e}")
             return "Unable to reach Google Calendar right now. Please try again in a moment."
         except Exception as e:
-            logger.error(f"❌ Unexpected error getting event: {e}")
-            return f"Error getting calendar event: {e}"
+            logger.error(f"❌ Unexpected error getting event: {e}", exc_info=True)
+            return "Error getting calendar event. Please try again."
 
         # Prepare update fields
         update_summary = title if title is not None else None
@@ -1494,7 +1497,8 @@ async def update_calendar_event_tool(
                             result += f"   Attendees: {', '.join(update_attendees)}\n"
                         return result.strip()
                     except Exception as retry_error:
-                        return f"Error updating calendar event: {retry_error}"
+                        logger.error(f"❌ Error after token refresh updating event: {retry_error}", exc_info=True)
+                        return "Error updating calendar event. Please try again."
                 else:
                     return (
                         "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."

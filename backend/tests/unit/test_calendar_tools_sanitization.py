@@ -40,7 +40,19 @@ def _mod(name):
 
 
 # Stub httpx
-_mod("httpx")
+_httpx = _mod("httpx")
+
+
+class TimeoutException(Exception):
+    pass
+
+
+class ConnectError(Exception):
+    pass
+
+
+_httpx.TimeoutException = TimeoutException
+_httpx.ConnectError = ConnectError
 
 # Stub langchain_core
 _pkg("langchain_core")
@@ -119,11 +131,12 @@ _google_utils_mod.google_api_request = AsyncMock()
 
 
 class GoogleAPIError(Exception):
-    def __init__(self, message, is_auth_error=False, is_permission_error=False):
+    def __init__(self, message, is_auth_error=False, is_permission_error=False, status_code=400):
         super().__init__(message)
         self.message = message
         self.is_auth_error = is_auth_error
         self.is_permission_error = is_permission_error
+        self.status_code = status_code
 
 
 _google_utils_mod.GoogleAPIError = GoogleAPIError
@@ -131,7 +144,7 @@ _google_utils_mod.refresh_google_token = MagicMock()
 
 _integration_base_mod = _mod("utils.retrieval.tools.integration_base")
 _integration_base_mod.ensure_capped = lambda val, cap, msg: min(val, cap)
-_integration_base_mod.parse_iso_with_tz = MagicMock()
+_integration_base_mod.parse_iso_with_tz = MagicMock(return_value=(None, None))
 _integration_base_mod.prepare_access = MagicMock()
 
 def _load(module_name, rel_path):
@@ -242,6 +255,71 @@ class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
         ):
             result = await ct.get_calendar_events_tool.func()
             self.assertEqual("Google Calendar access token not found.", result)
+
+    async def test_inner_unexpected_exception_in_get_calendar_events_tool_is_sanitized(self):
+        with patch.object(
+            ct,
+            "prepare_access",
+            return_value=("uid_123", {"access_token": "token"}, "token", None),
+        ), patch.object(
+            ct,
+            "get_google_calendar_events",
+            side_effect=RuntimeError(f"API parse crash: {self.SENSITIVE}"),
+        ):
+            result = await ct.get_calendar_events_tool.func()
+            self.assertNotIn(self.SENSITIVE, result)
+            self.assertNotIn("RuntimeError", result)
+            self.assertEqual("Error fetching calendar events. Please try again.", result)
+
+    async def test_retry_error_in_get_calendar_events_tool_is_sanitized(self):
+        auth_err = GoogleAPIError("Token expired", is_auth_error=True)
+        with patch.object(
+            ct,
+            "prepare_access",
+            return_value=("uid_123", {"access_token": "token"}, "token", None),
+        ), patch.object(
+            ct,
+            "get_google_calendar_events",
+            side_effect=[auth_err, RuntimeError(f"Retry crash: {self.SENSITIVE}")],
+        ), patch.object(
+            ct,
+            "refresh_google_token",
+            new=AsyncMock(return_value="new_token"),
+        ):
+            result = await ct.get_calendar_events_tool.func()
+            self.assertNotIn(self.SENSITIVE, result)
+            self.assertNotIn("RuntimeError", result)
+            self.assertEqual("Error fetching calendar events. Please try again.", result)
+
+    async def test_inner_unexpected_exception_in_delete_calendar_event_tool_is_sanitized(self):
+        with patch.object(
+            ct,
+            "prepare_access",
+            return_value=("uid_123", {"access_token": "token"}, "token", None),
+        ), patch.object(
+            ct,
+            "delete_google_calendar_event",
+            side_effect=RuntimeError(f"Delete event crash: {self.SENSITIVE}"),
+        ):
+            result = await ct.delete_calendar_event_tool.func(event_id="evt_123")
+            self.assertNotIn(self.SENSITIVE, result)
+            self.assertNotIn("RuntimeError", result)
+            self.assertEqual("Error deleting calendar event. Please try again.", result)
+
+    async def test_inner_unexpected_exception_in_update_calendar_event_tool_is_sanitized(self):
+        with patch.object(
+            ct,
+            "prepare_access",
+            return_value=("uid_123", {"access_token": "token"}, "token", None),
+        ), patch.object(
+            ct,
+            "get_google_calendar_event",
+            side_effect=RuntimeError(f"Get event crash: {self.SENSITIVE}"),
+        ):
+            result = await ct.update_calendar_event_tool.func(event_id="evt_123")
+            self.assertNotIn(self.SENSITIVE, result)
+            self.assertNotIn("RuntimeError", result)
+            self.assertEqual("Error getting calendar event. Please try again.", result)
 
 
 if __name__ == "__main__":
