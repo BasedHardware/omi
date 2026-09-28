@@ -3593,5 +3593,17 @@
     "usageYear": "今年",
     "usageAll": "全部时间",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "外观",
+    "appearanceSystem": "系统",
+    "appearanceLight": "浅色",
+    "appearanceDark": "深色",
+    "chatDiscardRecording": "放弃",
+    "voiceQuestionNoSpeech": "没听清楚 — 请再试一次",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.",
+    "sendToSupport": "Send to support",
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again."
 }

@@ -11153,5 +11153,17 @@
     "usageYear": "या वर्षी",
     "usageAll": "सर्व काळ",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "दृश्य",
+    "appearanceSystem": "सिस्टम",
+    "appearanceLight": "हलका",
+    "appearanceDark": "गडद",
+    "chatDiscardRecording": "टाकून द्या",
+    "voiceQuestionNoSpeech": "ऐकू आले नाही — पुन्हा प्रयत्न करा",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.",
+    "sendToSupport": "Send to support",
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again."
 }

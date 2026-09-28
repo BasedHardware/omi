@@ -16,7 +16,7 @@ from utils.stt.live_failure import PendingLiveFailover, fallback_reason_for_type
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS
 from utils.stt.provider_resilience import EXPECTED_REJECTIONS, close_rejected_socket, fallback_socket_is_serving
 from utils.stt.socket import STTSocket
-from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
+from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_RATE_LIMITED
 
 Connect = Callable[[], Awaitable[STTSocket | None]]
 
@@ -30,6 +30,8 @@ def failure_reason(error: BaseException) -> str:
         return error.reason
     if isinstance(error, TimeoutError):
         return 'timeout'
+    if getattr(error, 'reason', None) == 'provider_rate_limited':
+        return 'provider_429'
     return 'provider_5xx'
 
 
@@ -81,7 +83,11 @@ async def connect_configured_chain(
                 # labels error_class=budget, not auth; 'auth' stays reserved
                 # for actual authentication refusals.
                 death_reason = getattr(socket, 'typed_death_reason', None)
-                raise RejectedStream(death_reason if death_reason in ACCOUNT_REJECTION_REASONS else 'provider_5xx')
+                if death_reason in ACCOUNT_REJECTION_REASONS:
+                    raise RejectedStream(death_reason)
+                if death_reason == PROVIDER_RATE_LIMITED:
+                    raise RejectedStream('provider_429')
+                raise RejectedStream('provider_5xx')
         except BaseException as error:
             if socket is not None:
                 close_rejected_socket(socket)

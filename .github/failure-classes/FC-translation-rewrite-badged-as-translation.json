@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-translation-rewrite-badged-as-translation",
+  "violated_contract": "Changed provider output is not sufficient evidence of a translation: a short target-language utterance misdetected as foreign can be rewritten in the same language, cached and persisted with a translated badge. An echoed source code is not independent language evidence.",
+  "canonical_prevention": "Use the spoken-language profile or substantial conversation evidence as a reversible admission prior; short Latin-script guesses without a profile defer. Require raw and filler-cleaned detection agreement for expected foreign speech. Apply one conservative edit-aware output check to fresh results, cache replay and persistence, and independently verify target language before shared negative-cache writes. Keep synthetic English, genuine foreign, code-switched and high-overlap controls on the real coordinator and NLLB adapter path; expose bounded admission and rejection reasons without transcript content.",
+  "canonical_prevention_artifact": [
+    "backend/utils/translation_core/quality.py",
+    "backend/tests/unit/test_translation_truthfulness.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/translation*", "backend/utils/translation_core/", "backend/tests/unit/test_translation_*.py"],
+  "status": "open"
+}

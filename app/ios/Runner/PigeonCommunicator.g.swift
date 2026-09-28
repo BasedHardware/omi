@@ -227,7 +227,7 @@ struct BleDisconnectEvent: Hashable {
   /// RSSI trajectory over the ~15s before this event. One of:
   ///   "fading"  — signal declined ≥10 dB before the drop (walk-away)
   ///   "sudden"  — signal stable then link died (interference/stall/device off)
-  ///   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+  ///   "gap"     — no recent RSSI samples (radio read unavailable)
   ///   "unknown" — insufficient samples to classify
   /// Empty string on legacy records written before this field existed.
   var rssiTrend: String
@@ -908,6 +908,8 @@ protocol BleHostApi {
   func startRssiStreaming(uuid: String) throws
   func stopRssiStreaming(uuid: String) throws
   func getDeviceDiagnostics(uuid: String, completion: @escaping (Result<BleDeviceDiagnostics, Error>) -> Void)
+  /// Bounded native BLE-only diagnostics as JSON. No audio or transcript payloads.
+  func getExtendedDeviceDiagnostics(uuid: String, completion: @escaping (Result<String, Error>) -> Void)
   func getBatteryHistory(uuid: String, completion: @escaping (Result<[BleBatteryPoint], Error>) -> Void)
   /// (Android only) Check if any CompanionDeviceManager association exists.
   func hasCompanionDeviceAssociation() throws -> Bool
@@ -1162,6 +1164,24 @@ class BleHostApiSetup {
       }
     } else {
       getDeviceDiagnosticsChannel.setMessageHandler(nil)
+    }
+    /// Bounded native BLE-only diagnostics as JSON. No audio or transcript payloads.
+    let getExtendedDeviceDiagnosticsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.getExtendedDeviceDiagnostics\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getExtendedDeviceDiagnosticsChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uuidArg = args[0] as! String
+        api.getExtendedDeviceDiagnostics(uuid: uuidArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      getExtendedDeviceDiagnosticsChannel.setMessageHandler(nil)
     }
     let getBatteryHistoryChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.getBatteryHistory\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

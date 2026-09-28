@@ -144,6 +144,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
   var discarded: Bool
   var deleted: Bool
   var isLocked: Bool
+  var visibility: String?
   var starred: Bool
   var folderId: String?
 
@@ -195,6 +196,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     discarded: Bool = false,
     deleted: Bool = false,
     isLocked: Bool = false,
+    visibility: String? = "private",
     starred: Bool = false,
     folderId: String? = nil
   ) {
@@ -241,6 +243,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     self.discarded = discarded
     self.deleted = deleted
     self.isLocked = isLocked
+    self.visibility = visibility
     self.starred = starred
     self.folderId = folderId
   }
@@ -483,6 +486,7 @@ extension TranscriptionSessionRecord {
       discarded: conversation.discarded,
       deleted: conversation.deleted,
       isLocked: conversation.isLocked,
+      visibility: conversation.visibility,
       starred: conversation.starred,
       folderId: conversation.folderId
     )
@@ -527,6 +531,7 @@ extension TranscriptionSessionRecord {
     self.discarded = conversation.discarded
     self.deleted = conversation.deleted
     self.isLocked = conversation.isLocked
+    self.visibility = conversation.visibility
     self.starred = conversation.starred
     self.folderId = conversation.folderId
 
@@ -773,6 +778,7 @@ extension TranscriptionSessionRecord {
       discarded: discarded,
       deleted: deleted,
       isLocked: isLocked,
+      visibility: visibility ?? "private",
       starred: starred,
       folderId: folderId,
       inputDeviceName: inputDeviceName,

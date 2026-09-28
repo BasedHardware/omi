@@ -113,6 +113,49 @@ class TestActionItemsToSqlite(unittest.TestCase):
         with self.assertRaises(ValueError):
             load(str(self.db_path), [str(bad_file)])
 
+    def test_empty_wrappers_load_zero_rows(self):
+        # Regression: an empty list is falsy, so the old `or` chain
+        # treated a recognised empty wrapper as an absent key and
+        # failed with "action item is missing an id". Empty wrappers
+        # must import zero rows instead.
+        for key in ("action_items", "items", "data"):
+            source = self.dir_path / f"empty_{key}.json"
+            source.write_text(json.dumps({key: []}), encoding="utf-8")
+            loaded, added, total = load(str(self.db_path), [str(source)])
+            self.assertEqual((loaded, added, total), (0, 0, 0), key)
+
+    def test_mixed_batch_with_empty_wrapper(self):
+        empty = self.dir_path / "empty.json"
+        empty.write_text(json.dumps({"action_items": []}), encoding="utf-8")
+        valid = self.dir_path / "valid.json"
+        valid.write_text(json.dumps([
+            {"id": "task_1", "description": "First"},
+            {"id": "task_2", "description": "Second"},
+        ]), encoding="utf-8")
+
+        loaded, added, total = load(str(self.db_path), [str(empty), str(valid)])
+        self.assertEqual((loaded, added, total), (2, 2, 2))
+
+    def test_malformed_input_leaves_database_unchanged(self):
+        seed = self.dir_path / "seed.json"
+        seed.write_text(json.dumps([
+            {"id": "task_1", "description": "Keep me", "completed": False},
+        ]), encoding="utf-8")
+        load(str(self.db_path), [str(seed)])
+
+        malformed = self.dir_path / "malformed.json"
+        malformed.write_text(json.dumps({"action_items": "not-a-list"}), encoding="utf-8")
+
+        with self.assertRaises(ValueError):
+            load(str(self.db_path), [str(malformed)])
+
+        conn = sqlite3.connect(str(self.db_path))
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, description FROM action_items")
+        rows = cursor.fetchall()
+        conn.close()
+        self.assertEqual(rows, [("task_1", "Keep me")])
+
 
 if __name__ == "__main__":
     unittest.main()

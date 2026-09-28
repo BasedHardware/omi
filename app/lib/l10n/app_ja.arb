@@ -3593,5 +3593,17 @@
     "usageYear": "今年",
     "usageAll": "全期間",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "外観",
+    "appearanceSystem": "システム",
+    "appearanceLight": "ライト",
+    "appearanceDark": "ダーク",
+    "chatDiscardRecording": "破棄",
+    "voiceQuestionNoSpeech": "聞き取れませんでした — もう一度お試しください",
+    "siriIndexSetting": "SiriとApple IntelligenceでOmiを使用",
+    "siriIndexSettingDescription": "Siriがこのデバイス上の会話、メモリー、タスクを検索できるようにします。オフにするとAppleの検索から削除されます。",
+    "sendToSupport": "Send to support",
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again."
 }

@@ -24,9 +24,19 @@ extension AppState {
   func startTranscription(
     source: AudioSource? = nil,
     conversationRole: MeetingConversationBoundaryPolicy.Role = .ambient,
-    userInitiated: Bool = true
+    userInitiated: Bool = true,
+    armedRetry: Bool = false,
+    launchContext: CaptureLaunchContext.Kind? = nil
   ) {
     guard !isTranscribing else { return }
+    if ArmedCaptureRecoveryPolicy.shouldDeferStart(
+      transitionInFlight: armedMicrophoneTransitionInFlight, userInitiated: userInitiated)
+    {
+      return
+    }
+    if armedMicrophoneRecovery.isWaitingOrProbing && !armedRetry {
+      if userInitiated { armedMicrophoneRecovery.cancel() } else { return }
+    }
     guard AssistantSettings.shared.audioRecordingMode != .off else {
       log("Transcription: start ignored because Audio Recording is Off")
       return
@@ -71,9 +81,26 @@ extension AppState {
           log(
             "Transcription: automatic start abandoned — microphone permission not granted; automatic paths never prompt"
           )
+          if armedRetry {
+            recordSilentMicDiagnostic(detection: nil, phase: "armed_retry", result: "permission_abandoned")
+            armedMicrophoneRecovery.cancel()
+          }
         } else {
           requestMicrophonePermission()
         }
+        return
+      }
+    }
+
+    if effectiveSource == .microphone && !userInitiated && !armedRetry {
+      let presence = CapturePresence.current()
+      if ArmedCaptureRecoveryPolicy.shouldWaitForUpdateRelaunch(
+        isUpdateRelaunch: CaptureLaunchContext.kindForStart() == .updateRelaunch,
+        consoleActive: presence.consoleSessionActive,
+        screenLocked: presence.screenLocked,
+        displaysAsleep: presence.displaysAsleep)
+      {
+        armedMicrophoneRecovery.enter(appState: self)
         return
       }
     }
@@ -235,9 +262,19 @@ extension AppState {
       // One attempt identity spans this arming through every conversation
       // rotation to the session's terminalization; sessions created during the
       // attempt persist it so `Memory Created` can join the attempt.
+      let captureContext =
+        armedRetry
+        ? armedMicrophoneRecovery.episodeContext
+        : CaptureLaunchContext.kindForStart(override: launchContext)
       captureAttempt = CaptureAttemptOutcomeState(
         mode: AssistantSettings.shared.audioRecordingMode.rawValue,
-        intent: userInitiated ? .userStart : .auto)
+        intent: userInitiated ? .userStart : .auto,
+        launchContext: captureContext.rawValue,
+        secondsSinceLaunch: CaptureLaunchContext.timeBucket(
+          Date().timeIntervalSince(CaptureLaunchContext.launchedAt)),
+        updateAttemptID: captureContext == .updateRelaunch ? CaptureLaunchContext.updateAttemptID : nil,
+        armedEpisodeID: armedRetry ? armedMicrophoneRecovery.episodeID : nil)
+      CaptureLaunchContext.hasStartedCapture = true
       AudioLevelMonitor.shared.reset()
       RecordingTimer.shared.start()
 
@@ -405,81 +442,6 @@ extension AppState {
     }
   }
 
-  /// Arm microphone + system audio capture for the session. Actual capture is managed by
-  /// `reconcileCapture()` according to the System Audio mode + meeting state:
-  ///  - Always / Never: the microphone runs for the whole session (system audio per mode).
-  ///  - Only during meetings: nothing is captured until a call is detected, then mic + system
-  ///    start, and both pause when the call ends — so the mic (and its indicator) stays off
-  ///    outside meetings.
-  /// Captured audio is mixed into one mono stream (cloud) or fed to separate Parakeet instances
-  /// (local) so calls/videos/music end up in the transcript alongside the user's voice.
-  /// Silent-mic watchdog: CoreAudio can report a healthy IOProc while a Bluetooth, USB, or
-  /// built-in input returns only zeros. Listen/manual/Quick Note all flow through here, so
-  /// they must opt into all-transport detection just as PTT does. Shared by the session-arm
-  /// path and the preferred-microphone swap in startMicCaptureIfNeeded().
-  private func configureSharedCaptureWatchdog(_ service: AudioCaptureService) {
-    SharedCaptureSilentMicRecoveryPolicy.configure(service)
-    service.onSilentMicDetected = { [weak self, weak service] detection in
-      Task { @MainActor in
-        // A swapped-out capture service (preferred-mic reapply, silent-mic
-        // fallback) can still deliver a queued detection — it must not rebuild
-        // the replacement service's stack.
-        guard let self, self.audioCaptureService === service else { return }
-        switch detection.suggestedAction {
-        case .fallbackToBuiltIn:
-          self.handleSilentMicFallback()
-        case .rebuildCoreAudioStack:
-          await self.handleSharedCaptureSilentMicDetection(reason: detection.reason)
-        }
-      }
-    }
-  }
-
-  func startMicrophoneAudioCapture(userInitiated: Bool = false) async {
-    guard let audioCaptureService = audioCaptureService else { return }
-
-    // Authorization first, capture second. CoreAudio HAL capture never triggers the
-    // system microphone prompt on its own: with a notDetermined or revoked TCC entry it
-    // "succeeds" and delivers zero samples forever. The silent-mic watchdog then reads
-    // those zeros as a dead device and loops the user through rebuilds into a
-    // "Microphone Isn't Capturing Audio" alert every ~90s — a permission problem wearing
-    // a hardware costume. startTranscription() has its own guard, but resume, the meeting
-    // gate, and the watchdog's own rebuild all arm capture through here without passing it.
-    var gateAction = MicrophoneCaptureAuthorizationPolicy.action(
-      for: AudioCaptureService.authorizationStatus(), userInitiated: userInitiated)
-    if gateAction == .requestPermission {
-      log("Transcription: microphone permission undetermined — requesting before capture")
-      gateAction = MicrophoneCaptureAuthorizationPolicy.action(
-        afterRequestGranted: await AudioCaptureService.requestPermission())
-    }
-    guard gateAction == .proceed else {
-      if gateAction == .surfacePermissionAlert {
-        surfaceMicrophonePermissionAlert()
-      } else {
-        log("Transcription: automatic capture abandoned after microphone authorization changed")
-      }
-      captureAttempt?.noteErrorTerminal()
-      stopTranscription(finalizationReason: .microphoneUnavailable)
-      return
-    }
-
-    configureSharedCaptureWatchdog(audioCaptureService)
-
-    // Cloud mode: the mixer sums mic + system into one mono stream for the WebSocket.
-    // Local mode: bypass the mixer — mic and system are transcribed by SEPARATE Parakeet
-    // instances so transcripts are diarized by source (mic = you, system = another speaker).
-    if !sttSession.useLocalSTT {
-      audioMixer?.start { [weak self] monoMixed in
-        self?.transcriptionService?.sendAudio(monoMixed)
-      }
-    }
-
-    // Start (or gate) microphone + system capture according to the System Audio mode + meeting state.
-    await reconcileCapture()
-
-    log("Transcription: Audio capture armed (mic + system managed by meeting gate)")
-  }
-
   /// Start microphone capture and wire its chunks/level to the active sink (the mixer in cloud mode,
   /// the mic Parakeet instance in local mode).
   /// - Returns: true if the mic is capturing after the call (already capturing or started OK);
@@ -546,17 +508,38 @@ extension AppState {
       let useLocalSTT = sttSession.useLocalSTT
       let localService = localMicService
       let mixer = audioMixer
+      let probeAudioGate = armedMicrophoneRecovery.outboundAudioGate
       // A dictation app holding the mic replaces the chunk with silence (`DictationMicSuppression`).
       let dictationGate = ensureDictationMicSuppressionMonitor().gate
       let firstAudioFrame = CaptureAttemptFirstAudioFrameLatch()
+      let firstLiveMicFrame = CaptureAttemptFirstAudioFrameLatch()
+      let captureGeneration = recordingGeneration
+      let captureIdentity = ObjectIdentifier(mic)
       try await mic.startCapture(
         onAudioChunk: { [weak self] rawAudioData in
           firstAudioFrame.noteFirstAudioFrame { [weak self] in
-            self?.captureAttempt?.noteFirstAudioFrame()
+            guard let self, self.recordingGeneration == captureGeneration,
+              let current = self.audioCaptureService, ObjectIdentifier(current) == captureIdentity
+            else { return }
+            self.captureAttempt?.noteFirstAudioFrame()
           }
           let audioData = dictationGate.gated(rawAudioData)
+          if AudioCaptureService.containsLivePCM(audioData) {
+            firstLiveMicFrame.noteFirstAudioFrame { [weak self] in
+              guard let self, self.recordingGeneration == captureGeneration,
+                let current = self.audioCaptureService, ObjectIdentifier(current) == captureIdentity
+              else { return }
+              if self.silentMicRecoveryAttempts > 0 {
+                self.recordSilentMicDiagnostic(
+                  detection: nil, phase: "rebuild", result: "live_signal")
+              }
+              self.armedMicrophoneRecovery.recovered()
+            }
+          }
           if useLocalSTT {
-            localService?.appendAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              localService?.appendAudio(chunk)
+            }
           } else {
             mixer?.setMicAudio(audioData)
           }
@@ -603,6 +586,7 @@ extension AppState {
       let useLocalSTT = sttSession.useLocalSTT
       let localSystem = localSystemService
       let mixer = audioMixer
+      let probeAudioGate = armedMicrophoneRecovery.outboundAudioGate
       let firstAudioFrame = CaptureAttemptFirstAudioFrameLatch()
       try await systemService.startCapture(
         onAudioChunk: { [weak self] audioData in
@@ -610,7 +594,9 @@ extension AppState {
             self?.captureAttempt?.noteFirstAudioFrame()
           }
           if useLocalSTT {
-            localSystem?.appendAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              localSystem?.appendAudio(chunk)
+            }
           } else {
             mixer?.setSystemAudio(audioData)
           }
@@ -692,6 +678,13 @@ extension AppState {
     isAwaitingMeeting = mode == .onlyMeetings && !meetingActive
     if isAwaitingMeeting {
       captureAttempt?.noteIdleMeetingWait()
+      // Only Meetings intentionally has no microphone to prove until a call.
+      // Return to its ordinary gated state instead of leaving an armed retry
+      // stuck in "probing" with no first mic frame to complete it.
+      if armedMicrophoneRecovery.isProbing {
+        recordSilentMicDiagnostic(detection: nil, phase: "armed_retry", result: "idle_meeting")
+        armedMicrophoneRecovery.cancel()
+      }
     }
 
     guard meetingStateReady else {
@@ -911,6 +904,11 @@ extension AppState {
   func stopTranscription(
     finalizationReason: TranscriptionFinalizationReason = .userStop
   ) -> Task<Void, Never>? {
+    if finalizationReason == .userStop || finalizationReason == .recordingDisabled
+      || finalizationReason == .settingsChange
+    {
+      armedMicrophoneRecovery.cancel()
+    }
     // Even a redundant stop must invalidate in-flight rotations and the
     // settings restart — both abort on a `recordingGeneration` change.
     recordingGeneration &+= 1

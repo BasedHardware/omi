@@ -39,6 +39,10 @@ overlay:
           value: parakeet-window,soniox
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
+        STT_RESILIENT_RECONNECT:
+          value: 'false'
+        STT_LEARNED_LANGUAGE_PROFILE:
+          value: 'true'
         STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
           value: '100'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
@@ -90,6 +94,15 @@ overlay:
           category: rollout
         MEMORY_OWNER_JEV_FLIP_ENABLED:
           value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        CAPTURE_JEV_SHADOW_PERCENT:
+          value: '0'
           category: rollout
     pusher:
       env:
@@ -156,6 +169,15 @@ overlay:
           category: rollout
         MEMORY_OWNER_JEV_FLIP_ENABLED:
           value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
+        CAPTURE_JEV_SHADOW_PERCENT:
+          value: '0'
           category: rollout
         GITHUB_TOKEN:
           secret:
@@ -422,6 +444,15 @@ overlay:
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-sync:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
@@ -519,6 +550,15 @@ overlay:
           MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
       backend-sync-backfill:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
@@ -586,6 +626,15 @@ overlay:
             category: rollout
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
+            category: rollout
+          CAPTURE_JEV_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          CAPTURE_JEV_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          CAPTURE_JEV_SHADOW_PERCENT:
+            value: '0'
             category: rollout
       backend-integration:
         forbidden_env:

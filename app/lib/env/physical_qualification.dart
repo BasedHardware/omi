@@ -6,6 +6,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
 import 'package:omi/flavors.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:omi/startup/boot_journal.dart';
 
 /// Explicit capture-only physical build. The shipping capture/WAL composition
 /// stays intact; external product SDKs are disabled for this isolated lane.
@@ -45,10 +46,10 @@ class PhysicalQualification {
     return _runtimeWrites;
   }
 
-  /// Ordinary builds return the original future without diagnostic awaits.
+  /// Ordinary builds journal each stage without making diagnostic I/O fatal.
   /// Qualification builds durably record the exact pending startup operation.
   static Future<T> startupStage<T>(String stage, Future<T> Function() operation) {
-    if (!enabled) return operation();
+    if (!enabled) return BootJournal.instance.stage(stage, operation);
     return _recordStartupStage(stage, operation);
   }
 

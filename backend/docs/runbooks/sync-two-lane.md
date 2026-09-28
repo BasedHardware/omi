@@ -9,7 +9,7 @@ Capture timestamps are client assertions, so a well-formed device header alone n
 
 A signed fresh manifest covers at most 20 files. Mobile detects a conversation with more than 20 pending fresh WALs before requesting a manifest and routes the whole conversation through backfill in three-file batches. It never claims one immutable fresh content set and strands the remainder behind a conflicting manifest.
 
-Historical recovery defaults are a 30-day lookback and thirty globally concurrent Cloud Tasks dispatches capped at thirty per second. The processed-speech daily accounting caps remain available, but `SYNC_BACKFILL_ADMISSION_LIMITS=false` leaves them unenforced at upload admission. `SYNC_BACKFILL_INFLIGHT_LIMIT=false` is retired for v2: no Redis per-UID admission slot is acquired even if that setting changes. `SYNC_BACKFILL_UID_SEQUENCER=off` in dev/prod is the phase-one rollout setting: eligible uploads still receive 202 and newly accepted jobs dispatch directly through Cloud Tasks as after #19352. The new admission path writes a bounded per-UID direct-job marker before enqueue, and the new worker refreshes it when direct work starts. A later config PR turns the sequencer on after the phase-one drain gate. On mode persists each accepted job in Firestore and dispatches at most one worker job per UID. Queue concurrency is controlled by the shared `.github/actions/sync-backfill-lifecycle` composite.
+Historical recovery defaults are a 30-day lookback and thirty globally concurrent Cloud Tasks dispatches capped at thirty per second. The processed-speech daily accounting caps remain available, but `SYNC_BACKFILL_ADMISSION_LIMITS=false` leaves them unenforced at upload admission. `SYNC_BACKFILL_INFLIGHT_LIMIT=false` is retired for v2: no Redis per-UID admission slot is acquired even if that setting changes. `SYNC_BACKFILL_UID_SEQUENCER=on` in dev/prod is the phase-two setting (2026-09-28); `off` is the kill switch, under which eligible uploads still receive 202 and newly accepted jobs dispatch directly through Cloud Tasks as after #19352. The new admission path writes a bounded per-UID direct-job marker before enqueue, and the new worker refreshes it when direct work starts. A later config PR turns the sequencer on after the phase-one drain gate. On mode persists each accepted job in Firestore and dispatches at most one worker job per UID. Queue concurrency is controlled by the shared `.github/actions/sync-backfill-lifecycle` composite.
 
 Production deploys require `SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS` as a comma-separated list of Cloud Monitoring notification-channel resource names. The workflow provisions log-based metrics and routed alert policies at 70% and 90%, then verifies each policy has a notification channel before traffic shifts.
 
@@ -187,7 +187,13 @@ after retirement—WAL and Cloud Tasks are the recovery boundary.
 
 Each job records its dispatch owner. Cloud Tasks jobs use the run lease for
 delivery serialization and can be stale-finalized by a polling read only after
-that reader acquires the lease and rechecks the job. Inline jobs renew the same
+that reader acquires the lease and rechecks the job. `get_sync_job` is read-only:
+an old progress timestamp cannot authorize a Redis failure write, dead-letter
+record, or cleanup. The authenticated status route performs recovery through
+the existing finalizer after acquiring ownership. HTTP coverage in
+`tests/unit/test_sync_status_read_ownership.py` exercises the real reader,
+run-lease operations, and finalizer together so a mocked lookup cannot hide a
+second transition owner. Inline jobs renew the same
 lease while their coordinator is alive, but a poller never stale-finalizes an
 inline job: a cancelled coordinator can have an executor leaf still writing,
 and a lease renewal alone is not a terminal-write fence. Renewal errors or
