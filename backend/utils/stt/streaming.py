@@ -240,6 +240,8 @@ def is_stt_available() -> bool:
 
 def _fallback_failure_reason(error: BaseException) -> str:
     """Classify why a fallback provider could not serve, for the next leg's telemetry."""
+    if getattr(error, 'reason', None) == 'provider_rate_limited':
+        return 'provider_429'
     if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
         return 'timeout'
     detail = str(error).lower()

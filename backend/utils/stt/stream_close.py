@@ -14,12 +14,14 @@ from utils.metrics import OMI_STT_PROVIDER_RETIRED, OMI_STT_STREAM_CLOSE_TOTAL
 
 PROVIDER_BUDGET_EXHAUSTED = 'provider_budget_exhausted'
 PROVIDER_AUTH_REJECTED = 'provider_auth_rejected'
+PROVIDER_RATE_LIMITED = 'provider_rate_limited'
 ACCOUNT_REJECTION_REASONS = frozenset({PROVIDER_BUDGET_EXHAUSTED, PROVIDER_AUTH_REJECTED})
 
 STT_STREAM_CLOSE_PROVIDERS = frozenset({'soniox', 'modulate', 'deepgram', 'parakeet'})
 STT_STREAM_CLOSE_REASONS = frozenset(
     {
         *ACCOUNT_REJECTION_REASONS,
+        PROVIDER_RATE_LIMITED,
         'soniox_idle_timeout',
         'soniox_rotation',
         'soniox_invalid_hint',

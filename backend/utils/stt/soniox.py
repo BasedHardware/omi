@@ -9,7 +9,9 @@ import asyncio
 import json
 import logging
 import os
+import random
 import threading
+import time
 from typing import Any, Callable, Dict, Final, List, Optional
 
 import websockets
@@ -19,7 +21,12 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
 from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
-from utils.stt.stream_close import PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED, record_stt_stream_close
+from utils.stt.stream_close import (
+    PROVIDER_AUTH_REJECTED,
+    PROVIDER_BUDGET_EXHAUSTED,
+    PROVIDER_RATE_LIMITED,
+    record_stt_stream_close,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +37,12 @@ SONIOX_MODEL: Final = os.getenv('SONIOX_MODEL', 'stt-rt-v5')
 # VAD gating routinely holds audio back for longer than that, so idle sockets die
 # as 408 request_timeout unless we fill the gap ourselves.
 SONIOX_KEEPALIVE_SECONDS: Final = 10.0
+SONIOX_CONNECT_RETRY_DEADLINE_SECONDS: Final = 5.0
+SONIOX_CONNECT_RETRY_DELAYS: Final = (0.35, 0.8, 1.6)
+SONIOX_RATE_LIMIT_ERROR_LOG_SECONDS: Final = 300.0
+_last_rate_limit_error_log = 0.0
+_rate_limit_events: list[float] = []
+_rate_limit_log_lock = threading.Lock()
 
 # Typed in-stream rejection reasons, mapped off the provider's own error frame
 # (``error_code`` + ``error_type``). Prod 2026-08-30/31 (backend-listen):
@@ -60,12 +73,14 @@ def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = N
     from utils.stt.live_rollout import configured_chain_enabled
 
     error = str(error_type or '').strip().lower()
-    if error in _SONIOX_BUDGET_ERROR_TYPES:
-        return PROVIDER_BUDGET_EXHAUSTED
     try:
         code = int(error_code)
     except (TypeError, ValueError):
         code = None
+    if code == 429 or error in {'limit_exceeded', 'rate_limit_exceeded'}:
+        return PROVIDER_RATE_LIMITED
+    if error in _SONIOX_BUDGET_ERROR_TYPES:
+        return PROVIDER_BUDGET_EXHAUSTED
     if code == 402:
         # HTTP 402 is payment/quota regardless of error_type wording. Monthly
         # budget used to fall through here as connection_lost (WARNING), so a
@@ -92,6 +107,43 @@ def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = N
         # Documented rotation: open a new WebSocket. The failover path does.
         return SONIOX_DEATH_ROTATION
     return 'connection_lost'
+
+
+class SonioxRateLimitError(RuntimeError):
+    """Connect-time 429 after the bounded retry window has been spent."""
+
+    reason = PROVIDER_RATE_LIMITED
+
+
+def _rate_limit_persistent_error(message: str, *, force: bool = False) -> None:
+    """Escalate a continuing organization-wide limit once per pod per window."""
+    global _last_rate_limit_error_log
+    now = time.monotonic()
+    with _rate_limit_log_lock:
+        _rate_limit_events[:] = [
+            event for event in _rate_limit_events if now - event <= SONIOX_RATE_LIMIT_ERROR_LOG_SECONDS
+        ]
+        _rate_limit_events.append(now)
+        if len(_rate_limit_events) > 3:
+            del _rate_limit_events[:-3]
+        if not force and len(_rate_limit_events) < 3:
+            return
+        if now - _last_rate_limit_error_log < SONIOX_RATE_LIMIT_ERROR_LOG_SECONDS:
+            return
+        _last_rate_limit_error_log = now
+    logger.error('Soniox real-time rate limiting persists: %s', message)
+
+
+def _websocket_status(error: BaseException) -> Optional[int]:
+    status = getattr(error, 'status_code', None)
+    response = getattr(error, 'response', None)
+    status = status or getattr(response, 'status_code', None) or getattr(response, 'status', None)
+    if status is None:
+        return None
+    try:
+        return int(status)
+    except (TypeError, ValueError):
+        return None
 
 
 class SafeSonioxSocket(STTSocket):
@@ -299,6 +351,8 @@ class SafeSonioxSocket(STTSocket):
                         # provider fault; failing to discriminate kept this the
                         # top backend-listen error signature with no signal.
                         logger.warning('Soniox stream closed: %s', err)
+                        if typed == PROVIDER_RATE_LIMITED:
+                            _rate_limit_persistent_error(err)
                     self._done_event.set()
                     self._mark_dead(f'soniox error: {err}', typed_reason=typed)
                     break
@@ -453,8 +507,44 @@ async def process_audio_soniox(
         )
 
     logger.info(f'Connecting to Soniox streaming sample_rate={sample_rate} language={language}')
-    ws = await websockets.connect(SONIOX_WS_URL, ping_timeout=15, ping_interval=15)
-    await ws.send(json.dumps(config))
+    deadline = time.monotonic() + SONIOX_CONNECT_RETRY_DEADLINE_SECONDS
+    ws = None
+    last_rate_limit: BaseException | None = None
+    for attempt in range(len(SONIOX_CONNECT_RETRY_DELAYS) + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            ws = await asyncio.wait_for(
+                websockets.connect(SONIOX_WS_URL, ping_timeout=15, ping_interval=15, open_timeout=remaining),
+                timeout=remaining,
+            )
+            break
+        except Exception as error:
+            if _websocket_status(error) != 429:
+                raise
+            last_rate_limit = error
+            record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason=PROVIDER_RATE_LIMITED)
+            logger.warning(
+                'Soniox real-time connect rate limited (attempt %d/%d)',
+                attempt + 1,
+                len(SONIOX_CONNECT_RETRY_DELAYS) + 1,
+            )
+            if attempt >= len(SONIOX_CONNECT_RETRY_DELAYS):
+                break
+            delay = SONIOX_CONNECT_RETRY_DELAYS[attempt] * random.uniform(0.75, 1.25)
+            await asyncio.sleep(min(delay, max(0.0, deadline - time.monotonic())))
+    if ws is None:
+        _rate_limit_persistent_error('429 responses continued through the bounded connect retry window', force=True)
+        raise SonioxRateLimitError('Soniox real-time connect rate limited after bounded retries') from last_rate_limit
+    try:
+        await ws.send(json.dumps(config))
+    except BaseException:
+        try:
+            await ws.close()
+        except Exception:
+            logger.warning('Failed to close Soniox socket after config send failure')
+        raise
     loop = asyncio.get_running_loop()
     sock = SafeSonioxSocket(ws, stream_transcript, loop, preseconds=preseconds)
     logger.info('Soniox streaming connection established')

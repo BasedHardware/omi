@@ -61,6 +61,7 @@ from config.stt_provider_policy import provider_for_service
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
+from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
 from utils.stt.streaming import (
     STTService,
     connect_stt_socket_with_fallback,
@@ -1012,6 +1013,7 @@ class ListenReceiver:
         for socket in sockets:
             target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
             if target is None:
+                release_live_stt_socket(socket)
                 continue
             try:
                 drain = getattr(target, 'drain_and_close', None)
@@ -1025,6 +1027,8 @@ class ListenReceiver:
                     target.finish()
                 except Exception:
                     pass
+            finally:
+                release_live_stt_socket(socket)
         self.stt_socket = None
         self.stt_sockets_multi = [None] * len(self.channel_configs)
 
@@ -1033,13 +1037,15 @@ class ListenReceiver:
         if getattr(raw, 'manages_vad', False):
             return raw
         if self.vad_gate is None:
-            return _RecordingSTTSocket(raw, epoch) if epoch is not None else raw
-        return GatedSTTSocket(
-            raw,
-            gate=self.vad_gate,
-            passthrough_audio=self.host.stt_service == STTService.modulate,
-            send_tracker=epoch,
-        )
+            wrapped = _RecordingSTTSocket(raw, epoch) if epoch is not None else raw
+        else:
+            wrapped = GatedSTTSocket(
+                raw,
+                gate=self.vad_gate,
+                passthrough_audio=self.host.stt_service == STTService.modulate,
+                send_tracker=epoch,
+            )
+        return track_live_stt_socket(wrapped, self.host.stt_service.value)
 
     def _record_selected_epoch(self, epoch: Optional[ProviderEpochTranslator], socket: Any) -> None:
         if epoch is None:
@@ -1093,7 +1099,7 @@ class ListenReceiver:
                             platform=self.host.client_device_context.platform,
                         )
                         return False
-                    self.stt_sockets_multi[index] = socket
+                    self.stt_sockets_multi[index] = track_live_stt_socket(socket, self.host.stt_service.value)
                     record_live_connection(self.host, self._serving_provider())
                 return True
             if not managed_chain_enabled(self.host) and should_initialize_vad_gate(
@@ -1233,6 +1239,8 @@ class ListenReceiver:
                 previous.finish()
             except Exception:
                 logger.warning('Failed to close the STT socket that died before failover')
+            finally:
+                release_live_stt_socket(previous)
         return True
 
     async def _monitor_stt_death(self) -> None:
@@ -1709,7 +1717,12 @@ class ListenReceiver:
     def finish(self) -> None:
         for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
             if socket:
-                socket.finish()
+                try:
+                    socket.finish()
+                except Exception:
+                    logger.warning('Failed to close a live STT socket during receiver shutdown')
+                finally:
+                    release_live_stt_socket(socket)
 
     def clear(self) -> None:
         self.image_chunks.clear()

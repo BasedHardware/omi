@@ -884,6 +884,12 @@ OMI_STT_PROVIDER_CONNECT_TOTAL = Counter(
     ['provider', 'outcome', 'error_class'],
 )
 
+OMI_LIVE_STT_OPEN_STREAMS = Gauge(
+    'omi_live_stt_open_streams',
+    'Currently open provider sockets serving live STT, by bounded provider',
+    ['provider'],
+)
+
 # Deployment-marked retired providers (intentionally unfunded legs). Budget and
 # leg-error alerts subtract these so a provider that is dead on purpose cannot
 # page forever. Populated from STT_RETIRED_PROVIDERS (utils/stt/stream_close.py).

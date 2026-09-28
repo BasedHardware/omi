@@ -55,6 +55,7 @@ from utils.stt.soniox import (
     soniox_death_reason,
 )
 from utils.stt.stream_close import PROVIDER_BUDGET_EXHAUSTED
+from utils.stt.stream_close import PROVIDER_RATE_LIMITED
 from utils.stt.streaming import STTService, _fallback_failure_reason
 from utils.stt.vad_gate import GatedSTTSocket
 
@@ -116,6 +117,14 @@ def test_a_400_no_audio_frame_classifies_as_idle_timeout():
 
 def test_a_413_max_duration_frame_classifies_as_documented_rotation():
     assert soniox_death_reason(413, 'max_duration_reached') == SONIOX_DEATH_ROTATION
+
+
+def test_a_429_frame_classifies_as_transient_provider_rate_limit():
+    assert soniox_death_reason(429, 'limit_exceeded') == PROVIDER_RATE_LIMITED
+    assert soniox_death_reason(None, 'limit_exceeded') == PROVIDER_RATE_LIMITED
+    socket = _drive_socket([_frame(429, 'limit_exceeded', 'Requests per minute exceeded')])
+    assert socket.is_connection_dead
+    assert socket.typed_death_reason == PROVIDER_RATE_LIMITED
 
 
 def test_unknown_shapes_degrade_to_connection_lost():
