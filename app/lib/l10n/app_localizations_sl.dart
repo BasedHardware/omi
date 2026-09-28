@@ -11255,7 +11255,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get openCall => 'Odpri klic';
 
   @override
-  String get captureRecoveryBanner => 'Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo';
+  String get captureRecoveryBanner => 'Omi ne pošilja zvoka — tapnite za ponovno povezavo';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Pred snemanjem s telefonom ustavite Transcribe Later na obesku.';

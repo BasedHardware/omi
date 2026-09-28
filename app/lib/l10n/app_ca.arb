@@ -3543,7 +3543,7 @@
     "recordWith": "Grava amb",
     "moreWaysToRecord": "Més maneres de gravar",
     "openCall": "Obre la trucada",
-    "captureRecoveryBanner": "L'àudio del penjoll no arriba a l'aplicació — toca'l per reparar",
+    "captureRecoveryBanner": "Omi no envia àudio — toca per tornar a connectar",
     "phoneRecordingBlockedByPendantBatch": "Atura Transcribe Later al penjoll abans d'enregistrar amb el telèfon.",
     "captureNotTranscribing": "Sense transcripció",
     "captureAudioSavedTranscribesLater": "Àudio desat, es transcriurà més tard",

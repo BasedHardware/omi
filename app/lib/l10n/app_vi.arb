@@ -3543,7 +3543,7 @@
     "recordWith": "Ghi âm bằng",
     "moreWaysToRecord": "Thêm cách ghi âm",
     "openCall": "Mở cuộc gọi",
-    "captureRecoveryBanner": "Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa",
+    "captureRecoveryBanner": "Omi không gửi âm thanh — chạm để kết nối lại",
     "phoneRecordingBlockedByPendantBatch": "Dừng Transcribe Later trên mặt dây trước khi ghi âm bằng điện thoại.",
     "captureNotTranscribing": "Không phiên âm",
     "captureAudioSavedTranscribesLater": "Đã lưu âm thanh, phiên âm sau",

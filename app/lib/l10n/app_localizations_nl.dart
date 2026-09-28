@@ -11257,7 +11257,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get openCall => 'Gesprek openen';
 
   @override
-  String get captureRecoveryBanner => 'De audio van de hanger komt niet aan in de app — tik om te repareren';
+  String get captureRecoveryBanner => 'Omi verzendt geen audio — tik om opnieuw verbinding te maken';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

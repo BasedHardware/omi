@@ -11287,7 +11287,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get openCall => 'Obre la trucada';
 
   @override
-  String get captureRecoveryBanner => 'L\'àudio del penjoll no arriba a l\'aplicació — toca\'l per reparar';
+  String get captureRecoveryBanner => 'Omi no envia àudio — toca per tornar a connectar';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

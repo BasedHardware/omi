@@ -11038,7 +11038,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get openCall => '通話を開く';
 
   @override
-  String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';
+  String get captureRecoveryBanner => 'Omiが音声を送信していません — タップして再接続';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '携帯で録音する前に、ペンダントの Transcribe Later を停止してください。';

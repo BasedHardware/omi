@@ -11159,7 +11159,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get openCall => 'เปิดการโทร';
 
   @override
-  String get captureRecoveryBanner => 'เสียงจากจี้ไม่ถึงแอป — แตะเพื่อซ่อมแซม';
+  String get captureRecoveryBanner => 'Omi ไม่ส่งเสียง — แตะเพื่อเชื่อมต่อใหม่';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'หยุด Transcribe Later บนจี้ของคุณก่อนบันทึกด้วยโทรศัพท์';

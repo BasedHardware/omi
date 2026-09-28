@@ -3578,7 +3578,7 @@
     "recordWith": "Записать через",
     "moreWaysToRecord": "Другие способы записи",
     "openCall": "Открыть звонок",
-    "captureRecoveryBanner": "Звук кулона не доходит до приложения — нажмите, чтобы исправить",
+    "captureRecoveryBanner": "Omi не передаёт звук — нажмите, чтобы подключиться снова",
     "phoneRecordingBlockedByPendantBatch": "Остановите Transcribe Later на подвеске, прежде чем записывать с телефона.",
     "captureNotTranscribing": "Нет текста",
     "captureAudioSavedTranscribesLater": "Аудио сохранено, расшифруется позже",

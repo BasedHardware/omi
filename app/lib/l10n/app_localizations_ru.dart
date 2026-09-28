@@ -11260,7 +11260,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get openCall => 'Открыть звонок';
 
   @override
-  String get captureRecoveryBanner => 'Звук кулона не доходит до приложения — нажмите, чтобы исправить';
+  String get captureRecoveryBanner => 'Omi не передаёт звук — нажмите, чтобы подключиться снова';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

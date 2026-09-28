@@ -11250,7 +11250,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get openCall => 'Atvērt zvanu';
 
   @override
-  String get captureRecoveryBanner => 'Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu';
+  String get captureRecoveryBanner => 'Omi nesūta audio — pieskarieties, lai atkārtoti izveidotu savienojumu';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Pirms ierakstīšanas ar tālruni apturiet Transcribe Later piekari.';

@@ -11265,7 +11265,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get openCall => 'Отвори обаждането';
 
   @override
-  String get captureRecoveryBanner => 'Звукът от висулката не достига до приложението — докоснете, за да поправите';
+  String get captureRecoveryBanner => 'Omi не изпраща аудио — докоснете, за да се свържете отново';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

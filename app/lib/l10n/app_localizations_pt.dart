@@ -11238,7 +11238,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get openCall => 'Abrir chamada';
 
   @override
-  String get captureRecoveryBanner => 'O áudio do pingente não chega à aplicação — toque para reparar';
+  String get captureRecoveryBanner => 'Omi não está enviando áudio — toque para reconectar';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
