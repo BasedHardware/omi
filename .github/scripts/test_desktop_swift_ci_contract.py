@@ -510,11 +510,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             package = root / "Desktop"
             bundle = root / "Omi.app"
             (bundle / "Contents/Resources").mkdir(parents=True)
-            const_values = (
-                package / ".build/out/Release/Omi_Computer.build/Objects-normal/arm64/Omi.swiftconstvalues"
-            )
-            const_values.parent.mkdir(parents=True)
-            const_values.touch()
+            (package / ".build").mkdir(parents=True)
             fake_bin = root / "bin"
             fake_bin.mkdir()
             marker = root / "processor-called"

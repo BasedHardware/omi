@@ -23,22 +23,10 @@ build_root="$package_dir/.build"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 
-# Xcode's SwiftPM backend emits supplementary constant values only for sources
-# compiled with -Xswiftc -emit-const-values. Filter to this executable and arch:
-# dependency metadata must not be mistaken for Omi's own actions.
-find "$build_root" -type f -name '*.swiftconstvalues' \
-  -path "*/${configuration}/*/Objects-normal/${architecture}/*" \
-  | grep -E '/(Omi Computer|Omi_Computer)(-p)?\.build/Objects-normal/' \
-  | sort > "$work_dir/const-values.list"
-[[ -s "$work_dir/const-values.list" ]] || {
-  echo "Omi Computer constant-value files missing; build with -Xswiftc -emit-const-values" >&2
-  exit 1
-}
-
 if [[ "$mode" = --expect-absent ]]; then
-  # The hosted Xcode 26.6 metadata processor exited 1 without diagnostics for
-  # this Siri-free target. Prove the boundary from SwiftPM's compiled source
-  # graph and the assembled bundle instead.
+  # Stable CI omits the App Intents declarations, so prove their absence from
+  # SwiftPM's compiled source graph and the assembled bundle. This check does
+  # not need the supplementary constant-value files used by Siri releases.
   xcrun swift package --package-path "$package_dir" describe --type json > "$work_dir/package-description.json"
   python3 - "$work_dir/package-description.json" <<'PY'
 import json
@@ -57,6 +45,18 @@ PY
   echo "Xcode 26.6 bundle has no Metadata.appintents"
   exit 0
 fi
+
+# Xcode's SwiftPM backend emits supplementary constant values only for sources
+# compiled with -Xswiftc -emit-const-values. Filter to this executable and arch:
+# dependency metadata must not be mistaken for Omi's own actions.
+find "$build_root" -type f -name '*.swiftconstvalues' \
+  -path "*/${configuration}/*/Objects-normal/${architecture}/*" \
+  | { grep -E '/(Omi Computer|Omi_Computer)(-p)?\.build/Objects-normal/' || true; } \
+  | sort > "$work_dir/const-values.list"
+[[ -s "$work_dir/const-values.list" ]] || {
+  echo "Omi Computer constant-value files missing; build with -Xswiftc -emit-const-values" >&2
+  exit 1
+}
 
 find "$package_dir/Sources" \
   \( -path "$package_dir/Sources/Theme" -o -path "$package_dir/Sources/OmiSupport" \
