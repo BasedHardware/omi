@@ -68,6 +68,60 @@ RCT_EXPORT_VIEW_PROPERTY(presentation, NSString)
 
 @end
 
+static BOOL OmiClassOwnsInstanceMethod(Class cls, SEL selector, Method *methodOut)
+{
+  unsigned int methodCount = 0;
+  Method *methods = class_copyMethodList(cls, &methodCount);
+  Method ownMethod = NULL;
+  for (unsigned int index = 0; index < methodCount; index++) {
+    if (method_getName(methods[index]) == selector) {
+      ownMethod = methods[index];
+      break;
+    }
+  }
+  free(methods);
+  if (methodOut != NULL) {
+    *methodOut = ownMethod;
+  }
+  return ownMethod != NULL;
+}
+
+static BOOL OmiInstallClassLocalHitTestOverride(Class cls, IMP replacement, IMP *originalOut)
+{
+  SEL selector = @selector(hitTest:);
+  Method method = class_getInstanceMethod(cls, selector);
+  if (method == NULL) {
+    return NO;
+  }
+
+  // If cls inherits hitTest:, method_setImplementation on this Method mutates
+  // its superclass and changes hit testing for every view using that class.
+  // Capture the inherited implementation before adding a class-local override.
+  IMP original = method_getImplementation(method);
+  const char *typeEncoding = method_getTypeEncoding(method);
+  if (original == NULL || typeEncoding == NULL) {
+    return NO;
+  }
+  if (originalOut != NULL) {
+    *originalOut = original;
+  }
+  if (class_addMethod(cls, selector, replacement, typeEncoding)) {
+    return YES;
+  }
+
+  // class_addMethod fails for a class-owned method; only then is it safe to
+  // replace that method's implementation directly.
+  Method ownMethod = NULL;
+  if (!OmiClassOwnsInstanceMethod(cls, selector, &ownMethod)) {
+    return NO;
+  }
+  if (originalOut != NULL) {
+    *originalOut = method_getImplementation(ownMethod);
+  }
+  method_setImplementation(ownMethod, replacement);
+  return YES;
+}
+
 static void OmiSwizzleContentHitTest(NSView *contentView)
 {
   static NSMutableSet<NSString *> *swizzled;
@@ -85,12 +139,7 @@ static void OmiSwizzleContentHitTest(NSView *contentView)
   }
   [swizzled addObject:name];
   SEL selector = @selector(hitTest:);
-  Method method = class_getInstanceMethod(cls, selector);
-  if (method == NULL) {
-    return;
-  }
-  NSView *(*original)(id, SEL, NSPoint) =
-      (NSView * (*)(id, SEL, NSPoint)) method_getImplementation(method);
+  __block IMP original = NULL;
   // Dev-mode bundle reloads can transiently leave the view graph cyclic; a
   // cyclic hitTest walk overflows the stack and takes down the whole app.
   // A depth far above any legitimate React hierarchy bails out instead.
@@ -112,11 +161,13 @@ static void OmiSwizzleContentHitTest(NSView *contentView)
       return nil;
     }
     omiHitTestDepth += 1;
-    NSView *hit = original(self, selector, point);
+    NSView *hit = ((NSView *(*)(id, SEL, NSPoint))original)(self, selector, point);
     omiHitTestDepth -= 1;
     return hit;
   });
-  method_setImplementation(method, replacement);
+  if (!OmiInstallClassLocalHitTestOverride(cls, replacement, &original)) {
+    [swizzled removeObject:name];
+  }
 }
 
 static void OmiSwizzleTitlebarHitTest(Class cls)
@@ -135,14 +186,9 @@ static void OmiSwizzleTitlebarHitTest(Class cls)
   }
   [swizzled addObject:name];
   SEL selector = @selector(hitTest:);
-  Method method = class_getInstanceMethod(cls, selector);
-  if (method == NULL) {
-    return;
-  }
-  NSView *(*original)(id, SEL, NSPoint) =
-      (NSView * (*)(id, SEL, NSPoint)) method_getImplementation(method);
+  __block IMP original = NULL;
   IMP replacement = imp_implementationWithBlock(^NSView *(NSView *self, NSPoint point) {
-    NSView *hit = original(self, selector, point);
+    NSView *hit = ((NSView *(*)(id, SEL, NSPoint))original)(self, selector, point);
     if (hit == nil) {
       return nil;
     }
@@ -156,7 +202,9 @@ static void OmiSwizzleTitlebarHitTest(Class cls)
     }
     return nil;
   });
-  method_setImplementation(method, replacement);
+  if (!OmiInstallClassLocalHitTestOverride(cls, replacement, &original)) {
+    [swizzled removeObject:name];
+  }
 }
 
 @implementation AppDelegate
