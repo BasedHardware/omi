@@ -75,7 +75,10 @@ prometheus:
         memory: 2G
       limits:
         cpu: "2"
-        memory: 4Gi
+        # 2026-09-28: Prometheus restored 2.56M head series from 24 WAL segments,
+        # then OOM-killed shortly after replay completed at the 4Gi limit. The
+        # request stays 2G because the monitoring node's requests are ~94% committed.
+        memory: 8Gi
     storageSpec:
     # Using PersistentVolumeClaim
       volumeClaimTemplate:
@@ -84,7 +87,8 @@ prometheus:
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
-              storage: 50Gi
+              # Match the already-expanded production PVC and StatefulSet claim.
+              storage: 100Gi
     additionalScrapeConfigs:
       # Additional scrape configs for Deepgram Engine metrics
       - job_name: "dg_engine_metrics"
@@ -149,6 +153,15 @@ prometheus:
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
+        metric_relabel_configs:
+          # The client-journey metric contract is bounded by journey, client kind,
+          # and issue class. These counters accidentally include app_build in the
+          # running backend image; collapse that extra dimension before ingest.
+          - source_labels: [__name__]
+            regex: "omi_client_journey_(accepted|terminal|issues)_(total|created)"
+            target_label: app_build
+            replacement: ""
+            action: replace
       - job_name: pusher-metrics
         scrape_interval: 15s
         metrics_path: /metrics

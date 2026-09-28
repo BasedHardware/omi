@@ -365,7 +365,7 @@ extension PostHogManager {
     _ attempt: CaptureAttemptOutcomeState,
     finalizationReason: TranscriptionFinalizationReason
   ) -> [String: Any] {
-    [
+    var properties: [String: Any] = [
       "platform": "macos",
       "attempt_id": attempt.attemptId,
       "mode": attempt.mode,
@@ -380,6 +380,11 @@ extension PostHogManager {
       "finalization_reason": finalizationReason.rawValue,
       "conversation_accepted": attempt.conversationAccepted,
     ]
+    if let episodeID = attempt.armedEpisodeID {
+      properties["armed_retry"] = true
+      properties["armed_episode_id"] = episodeID
+    }
+    return properties
   }
 
   /// Minimal outcome payload for an attempt whose process died mid-flight:

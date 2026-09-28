@@ -46,6 +46,13 @@ final class SilentMicDiagnosticTelemetryTests: XCTestCase {
         "platform", "attempt_id", "phase", "trigger",
         "launch_context", "update_attempt_id", "armed_duration",
       ])
+    let skipped = SilentMicDiagnosticTelemetry.armedProperties(
+      attemptID: "episode", phase: "retry_skipped", trigger: "backoff",
+      launchContext: "update_relaunch", updateAttemptID: "update-opaque", duration: "5_60m",
+      presenceReason: "screen_locked")
+    XCTAssertEqual(skipped["phase"] as? String, "retry_skipped")
+    XCTAssertEqual(skipped["presence_reason"] as? String, "screen_locked")
+    XCTAssertEqual(Set(skipped.keys), Set(armed.keys).union(["presence_reason"]))
   }
 
   func testDiagnosticRateCapPerAttemptAndPerHour() {
