@@ -1508,9 +1508,12 @@ existing IDs but cannot restore retired IDs or replace speech text/timestamps.
 Both lifecycle processor writers reapply the current receipt before committing.
 The processor also reads and applies that receipt to its in-memory transcript
 before building the summary prompt, including when audio-based speaker resolution
-is unavailable. The mobile detail page regenerates an existing summary once
-after acknowledged speaker edits drain, and keeps its retry action if that call
-fails. Processor content freshness for non-sync rows remains a separate limitation.
+is unavailable. The mobile detail page regenerates an existing summary after
+four seconds without a newly acknowledged speaker edit, or when the detail page
+closes with an acknowledged edit pending. The reprocess response
+carries `X-Omi-Speaker-Receipt-Summary: 1` only on the receipt-aware backend;
+without it, the detail page keeps the explicit retry action. Processor content
+freshness for non-sync rows remains a separate limitation.
 Protection migration re-encodes the receipt and transcript in one per-document
 transaction; the stored level outranks a live caller's cached hint.
 

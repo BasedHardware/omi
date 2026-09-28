@@ -4,7 +4,7 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 
 import routers.conversations as conv_router
 from utils.conversations.process_conversation import AppUsageAttribution
@@ -100,6 +100,20 @@ def test_plain_regenerate_still_succeeds_without_app_validation():
     assert process.call_args.kwargs['app_id'] is None
     assert process.call_args.kwargs['explicit_app'] is None
     assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.NON_USER_REPROCESS
+
+
+def test_reprocess_response_acknowledges_receipt_aware_summary_only_after_success():
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app=None,
+        available_app=None,
+        enabled=False,
+    )
+    response = Response()
+    with p1, p2, p3, p4, p5, p6, process_patch:
+        result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1', response=response)
+
+    assert result is model
+    assert response.headers['x-omi-speaker-receipt-summary'] == '1'
 
 
 def test_valid_explicit_selection_reaches_processing_with_explicit_attribution():

@@ -744,6 +744,7 @@ def reprocess_conversation(
     language_code: Optional[str] = None,
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
+    response: Response = None,  # type: ignore[assignment]
 ):
     """
     Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
@@ -779,6 +780,13 @@ def reprocess_conversation(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
     )
+
+    # The mobile speaker-label refresh must distinguish this processor from an
+    # older backend that accepted reprocess but built its prompt before applying
+    # the current manual speaker receipt. A header keeps released JSON decoders
+    # compatible and is emitted only after processing returns successfully.
+    if response is not None:
+        response.headers['X-Omi-Speaker-Receipt-Summary'] = '1'
 
     # Reprocessing a hidden conversation is an explicit recovery: persist it as
     # the user's choice (``restore_discarded``) so no later reassessment hides it

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:clock/clock.dart';
@@ -30,11 +32,16 @@ typedef SpeakerAssignmentCall = Future<bool> Function(
   String? personId,
   int? speakerId,
 });
-typedef ConversationReprocessCall = Future<ServerConversation?> Function(String, {String? appId});
+typedef ConversationReprocessCall = Future<ServerConversation?> Function(
+  String, {
+  String? appId,
+  bool requireSpeakerReceipt,
+});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   static final RegExp _syncConversationId = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-');
+  static const Duration _speakerSummaryQuietPeriod = Duration(seconds: 4);
   ConversationDetailProvider({
     SpeakerAssignmentCall? assignSpeaker,
     ConversationReprocessCall? reprocess,
@@ -49,6 +56,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   int _speakerEditGeneration = 0;
   int _pendingSpeakerSaves = 0;
   String? _speakerRefreshId;
+  Timer? _speakerSummaryRefreshTimer;
+  bool _automaticSpeakerSummaryRefreshPending = false;
   bool get _savingSpeaker => _pendingSpeakerSaves > 0;
   Future<void> _speakerSaveTail = Future.value();
 
@@ -92,6 +101,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         )
         .toList();
     if (selected.isEmpty) return null;
+    // A new edit extends the labeling session even if its save is still in
+    // flight. Keep a previously acknowledged change pending if this one fails.
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = null;
     final self = personId == 'user';
     final person = self ? null : personId;
     final before = {
@@ -209,6 +222,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         if (changed) {
           if (target.status == ConversationStatus.completed && target.structured.overview.trim().isNotEmpty) {
             _speakerSummaryConversationId = target.id;
+            _automaticSpeakerSummaryRefreshPending = true;
           }
         }
         notifyListeners();
@@ -220,11 +234,40 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         final refreshId = _speakerRefreshId;
         _speakerRefreshId = null;
         if (refreshId != null && refreshId == conversationOrNull?.id) await refreshConversation();
-        // A completed conversation's summary may predate this manual label.
-        // Wait for all queued edits (and any bridge redirect), then regenerate
-        // once from the saved labels. A failure keeps the retry action visible.
-        if (!_isDisposed && offerSpeakerSummaryRefresh) await reprocessConversation();
+        _scheduleAutomaticSpeakerSummaryRefresh();
       }
+    }
+  }
+
+  void _scheduleAutomaticSpeakerSummaryRefresh() {
+    if (_isDisposed || !_automaticSpeakerSummaryRefreshPending || !offerSpeakerSummaryRefresh) return;
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = Timer(_speakerSummaryQuietPeriod, () {
+      _speakerSummaryRefreshTimer = null;
+      if (_isDisposed || _savingSpeaker || !offerSpeakerSummaryRefresh) return;
+      // A failed or unverified regeneration remains an explicit retry only.
+      _automaticSpeakerSummaryRefreshPending = false;
+      unawaited(reprocessConversation());
+    });
+  }
+
+  void _finishSpeakerLabelingSession() {
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = null;
+    if (!_automaticSpeakerSummaryRefreshPending || _savingSpeaker || !offerSpeakerSummaryRefresh) return;
+    _automaticSpeakerSummaryRefreshPending = false;
+    final conversationId = _speakerSummaryConversationId!;
+    // Leaving the detail page before the quiet period should still make one
+    // best-effort request. The response belongs to the retired view, so it
+    // must never overwrite the next conversation's cached detail.
+    unawaited(_regenerateSpeakerSummaryAfterExit(conversationId));
+  }
+
+  Future<void> _regenerateSpeakerSummaryAfterExit(String conversationId) async {
+    try {
+      await _reprocess(conversationId, requireSpeakerReceipt: true);
+    } catch (error) {
+      Logger.debug('Speaker summary refresh after detail exit failed: ${error.runtimeType}');
     }
   }
 
@@ -653,13 +696,21 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   Future<bool> reprocessConversation({String? appId}) async {
     if (loadingReprocessConversation || _savingSpeaker) return false;
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = null;
+    _automaticSpeakerSummaryRefreshPending = false;
     final target = conversation;
     final generation = _speakerEditGeneration;
+    final requireSpeakerReceipt = offerSpeakerSummaryRefresh;
     Logger.debug('_reProcessConversation with appId: $appId');
     updateReprocessConversationLoadingState(true);
     updateReprocessConversationId(conversation.id);
     try {
-      var updatedConversation = await _reprocess(target.id, appId: appId);
+      var updatedConversation = await _reprocess(
+        target.id,
+        appId: appId,
+        requireSpeakerReceipt: requireSpeakerReceipt,
+      );
       if (_isDisposed) return false;
       PlatformManager.instance.analytics.reProcessConversation(conversation);
       updateReprocessConversationLoadingState(false);
@@ -887,6 +938,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   void setCachedConversation(ServerConversation conversation) {
+    if (_cachedConversation?.id != conversation.id) {
+      _finishSpeakerLabelingSession();
+      _automaticSpeakerSummaryRefreshPending = false;
+    }
     _cachedConversation = conversation;
     _cachedConversationId = conversation.id;
     notifyListeners();
@@ -1075,6 +1130,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   @override
   void dispose() {
+    _finishSpeakerLabelingSession();
     _isDisposed = true;
     super.dispose();
   }
