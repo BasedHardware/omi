@@ -85,6 +85,7 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
     assert "agent-vm-reconciler-5m" not in dev_jobs
     for env_jobs, project in ((dev_jobs, "based-hardware-dev"), (prod_jobs, "based-hardware")):
         job = env_jobs["frame-request-retention-hourly"]
+        assert job["lifecycle"] == "planned"
         assert job["schedule"] == "0 * * * *"
         assert job["time_zone"] == "Etc/UTC"
         assert job["state"] == "ENABLED"
@@ -95,6 +96,96 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         assert job["target"]["oauth"]["service_account"] == (
             f"frame-retention-scheduler@{project}.iam.gserviceaccount.com"
         )
+
+
+def _planned_frame_retention_manifest():
+    manifest = copy.deepcopy(reconcile.load_manifest())
+    for environment in manifest["environments"].values():
+        environment["jobs"] = [job for job in environment["jobs"] if job["name"] == "frame-request-retention-hourly"]
+    return manifest
+
+
+def test_check_reports_missing_planned_job_without_counting_a_difference():
+    manifest = _planned_frame_retention_manifest()
+    session = FakeSession()
+
+    differences, messages = reconcile.reconcile(
+        session,
+        manifest,
+        "dev",
+        "based-hardware-dev",
+        apply=False,
+        include_unlisted=False,
+    )
+
+    assert differences == []
+    assert messages == [
+        "PLANNED projects/based-hardware-dev/locations/us-central1/jobs/frame-request-retention-hourly: not deployed"
+    ]
+
+
+def test_full_apply_skips_planned_job_unless_it_is_explicitly_selected():
+    manifest = _planned_frame_retention_manifest()
+    session = FakeSession()
+
+    differences, messages = reconcile.reconcile(
+        session,
+        manifest,
+        "dev",
+        "based-hardware-dev",
+        apply=True,
+        include_unlisted=False,
+    )
+
+    assert differences == []
+    assert messages == [
+        "PLANNED projects/based-hardware-dev/locations/us-central1/jobs/frame-request-retention-hourly: "
+        "skipped; select it explicitly with --jobs to deploy"
+    ]
+    assert session.calls == []
+
+
+def test_explicitly_selected_planned_job_can_be_created():
+    manifest = _planned_frame_retention_manifest()
+    session = FakeSession()
+    resource = "projects/based-hardware-dev/locations/us-central1/jobs/frame-request-retention-hourly"
+
+    differences, messages = reconcile.reconcile(
+        session,
+        manifest,
+        "dev",
+        "based-hardware-dev",
+        apply=True,
+        selected_jobs={"frame-request-retention-hourly"},
+        include_unlisted=False,
+    )
+
+    assert differences == [resource]
+    assert messages == [f"APPLIED {resource}: missing, state"]
+    assert [
+        (method, kwargs.get("params", {}).get("jobId")) for method, _, kwargs in session.calls if method == "post"
+    ] == [("post", "frame-request-retention-hourly")]
+
+
+def test_check_validates_a_planned_job_after_it_exists():
+    manifest = _planned_frame_retention_manifest()
+    project = "based-hardware-dev"
+    job = manifest["environments"]["dev"]["jobs"][0]
+    resource = f"projects/{project}/locations/us-central1/jobs/frame-request-retention-hourly"
+    current = reconcile.desired_resource(FakeSession(), project, job)
+    current.update({"name": resource, "state": "ENABLED"})
+
+    differences, messages = reconcile.reconcile(
+        FakeSession(current),
+        manifest,
+        "dev",
+        project,
+        apply=False,
+        include_unlisted=False,
+    )
+
+    assert differences == []
+    assert messages == [f"MATCH {resource}"]
 
 
 def test_project_is_pinned_and_apply_only_updates_declared_jobs():
