@@ -57,18 +57,18 @@ class OmiBleConnectionPolicyTest < Minitest::Test
                 ) == .connect)
                 precondition(OmiBleConnectionPolicy.discoveryIsActive(startedAt: 100, now: 114))
                 precondition(!OmiBleConnectionPolicy.discoveryIsActive(startedAt: 100, now: 115))
-                precondition(OmiBleConnectionPolicy.shouldRetryDiscovery(
+                precondition(OmiBleConnectionPolicy.discoveryFailureAction(
                     peripheralState: .connected, nativeReady: false, requestPending: true, retries: 0
-                ))
-                precondition(!OmiBleConnectionPolicy.shouldRetryDiscovery(
+                ) == .retry)
+                precondition(OmiBleConnectionPolicy.discoveryFailureAction(
                     peripheralState: .connected, nativeReady: false, requestPending: true, retries: 1
-                ))
-                precondition(!OmiBleConnectionPolicy.shouldRetryDiscovery(
+                ) == .fail)
+                precondition(OmiBleConnectionPolicy.discoveryFailureAction(
                     peripheralState: .connected, nativeReady: false, requestPending: false, retries: 0
-                ))
-                precondition(!OmiBleConnectionPolicy.shouldRetryDiscovery(
+                ) == .ignore)
+                precondition(OmiBleConnectionPolicy.discoveryFailureAction(
                     peripheralState: .disconnected, nativeReady: false, requestPending: true, retries: 0
-                ))
+                ) == .ignore)
 
                 let recoveryCodes = [
                     CBATTError.insufficientAuthentication.rawValue,

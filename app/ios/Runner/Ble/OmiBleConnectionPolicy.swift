@@ -11,6 +11,12 @@ enum OmiBleConnectionPolicy {
         case discoverServices
     }
 
+    enum DiscoveryFailureAction: Equatable {
+        case ignore
+        case retry
+        case fail
+    }
+
     /// A later explicit request may retry discovery if CoreBluetooth never calls back.
     static let discoveryRetryAfter: TimeInterval = 15
 
@@ -33,13 +39,14 @@ enum OmiBleConnectionPolicy {
         return discoveryInFlight ? .awaitDiscovery : .discoverServices
     }
 
-    static func shouldRetryDiscovery(
+    static func discoveryFailureAction(
         peripheralState: CBPeripheralState,
         nativeReady: Bool,
         requestPending: Bool,
         retries: Int
-    ) -> Bool {
-        peripheralState == .connected && !nativeReady && requestPending && retries == 0
+    ) -> DiscoveryFailureAction {
+        guard peripheralState == .connected, !nativeReady, requestPending else { return .ignore }
+        return retries == 0 ? .retry : .fail
     }
 
     static func requiresPairingRecovery(_ error: Error?) -> Bool {

@@ -60,6 +60,7 @@ final class OmiBleManager: NSObject {
     private var discoveryStartedAt: [String: TimeInterval] = [:]
     /// One retry is allowed per explicit Flutter connection request.
     private var readyRequests: Set<String> = []
+    private var failedReadyRequests: Set<String> = []
     private var discoveryRetries: [String: Int] = [:]
     private var discoveryRetryTasks: [String: DispatchWorkItem] = [:]
 
@@ -213,6 +214,7 @@ final class OmiBleManager: NSObject {
         if let peripheral {
             peripheral.delegate = self
             peripherals[uuid] = peripheral
+            failedReadyRequests.remove(uuid)
             readyRequests.insert(uuid)
             discoveryRetries[uuid] = 0
             let completedServices = completedBleServices(for: peripheral)
@@ -258,12 +260,12 @@ final class OmiBleManager: NSObject {
     }
 
     private func scheduleDiscoveryRetry(for peripheral: CBPeripheral, uuid: String) {
-        guard OmiBleConnectionPolicy.shouldRetryDiscovery(
+        guard OmiBleConnectionPolicy.discoveryFailureAction(
             peripheralState: peripheral.state,
             nativeReady: readyNotified.contains(uuid),
             requestPending: readyRequests.contains(uuid),
             retries: discoveryRetries[uuid] ?? 0
-        ), let startedAt = discoveryStartedAt[uuid] else { return }
+        ) != .ignore, let startedAt = discoveryStartedAt[uuid] else { return }
         discoveryRetryTasks.removeValue(forKey: uuid)?.cancel()
         let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
         let delay = max(0, OmiBleConnectionPolicy.discoveryRetryAfter - elapsed)
@@ -278,20 +280,37 @@ final class OmiBleManager: NSObject {
     }
 
     private func retryDiscoveryIfNeeded(for peripheral: CBPeripheral, uuid: String, reason: String) {
-        guard OmiBleConnectionPolicy.shouldRetryDiscovery(
+        let action = OmiBleConnectionPolicy.discoveryFailureAction(
             peripheralState: peripheral.state,
             nativeReady: readyNotified.contains(uuid),
             requestPending: readyRequests.contains(uuid),
             retries: discoveryRetries[uuid] ?? 0
-        ) else { return }
+        )
+        guard action != .ignore else { return }
         if let bleServices = completedBleServices(for: peripheral) {
             completeDeviceReady(peripheral, uuid: uuid, bleServices: bleServices, source: "restored_cache")
+            return
+        }
+        guard action == .retry else {
+            reportDiscoveryFailure(uuid: uuid, reason: reason)
             return
         }
         discoveryRetries[uuid] = 1
         discoveryRetryTasks.removeValue(forKey: uuid)?.cancel()
         logBle(uuid: uuid, event: "discovery_retry", detail: reason)
         discoverServices(for: peripheral, uuid: uuid)
+    }
+
+    private func reportDiscoveryFailure(uuid: String, reason: String) {
+        guard failedReadyRequests.insert(uuid).inserted else { return }
+        finishReadyRequest(uuid: uuid)
+        discoveryStartedAt.removeValue(forKey: uuid)
+        logBle(uuid: uuid, event: "discovery_failed", detail: reason)
+        flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: "gatt_discovery_failed") { [weak self] result in
+            if case .failure(let error) = result {
+                self?.logBle(uuid: uuid, event: "ready_delivery_failed", detail: "terminal:\(error.code)")
+            }
+        }
     }
 
     private func finishReadyRequest(uuid: String) {
@@ -312,7 +331,7 @@ final class OmiBleManager: NSObject {
     }
 
     private func completeDeviceReady(_ peripheral: CBPeripheral, uuid: String, bleServices: [BleService], source: String) {
-        guard peripheral.state == .connected, let services = peripheral.services,
+        guard peripheral.state == .connected, !failedReadyRequests.contains(uuid), let services = peripheral.services,
               readyNotified.insert(uuid).inserted else { return }
         discoveredServices[uuid] = services
         discoveryStartedAt.removeValue(forKey: uuid)
@@ -867,6 +886,7 @@ final class OmiBleManager: NSObject {
         }
         discoveredServices.removeValue(forKey: peripheralUuid)
         readyNotified.remove(peripheralUuid)
+        failedReadyRequests.remove(peripheralUuid)
         discoveryStartedAt.removeValue(forKey: peripheralUuid)
         finishReadyRequest(uuid: peripheralUuid)
 
@@ -1080,7 +1100,7 @@ extension OmiBleManager: CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         let uuid = peripheralUuidString(peripheral)
-        guard !readyNotified.contains(uuid) else { return }
+        guard !readyNotified.contains(uuid), !failedReadyRequests.contains(uuid) else { return }
 
         guard error == nil, let services = peripheral.services, !services.isEmpty else {
             logBle(uuid: uuid, event: "service_discovery_failed", detail: error?.localizedDescription ?? "no_services")
@@ -1102,7 +1122,7 @@ extension OmiBleManager: CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         let uuid = peripheralUuidString(peripheral)
-        guard !readyNotified.contains(uuid) else { return }
+        guard !readyNotified.contains(uuid), !failedReadyRequests.contains(uuid) else { return }
 
         if let error {
             logBle(uuid: uuid, event: "characteristic_discovery_failed", detail: error.localizedDescription)
