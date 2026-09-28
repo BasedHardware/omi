@@ -130,3 +130,37 @@ def test_patch_does_not_poison_stored_app_model(monkeypatch):
     assert app.category == 'productivity'
     assert app.author == 'Original Author'
     assert app.description == 'Original Description'
+
+
+def test_update_app_in_db_drops_explicit_null_required_fields(monkeypatch):
+    """database.apps:update_app_in_db must drop explicit-null required fields before writing to Firestore."""
+    from unittest.mock import MagicMock
+    from database import apps as apps_db
+
+    written = {}
+    mock_doc = MagicMock()
+    mock_doc.update.side_effect = lambda data: written.update(data)
+    mock_collection = MagicMock()
+    mock_collection.document.return_value = mock_doc
+    mock_db = MagicMock()
+    mock_db.collection.return_value = mock_collection
+
+    monkeypatch.setattr(apps_db, 'db', mock_db)
+
+    payload = {
+        'id': 'app-1',
+        'name': None,
+        'category': None,
+        'author': None,
+        'description': None,
+        'image': None,
+        'capabilities': None,
+        'memory_prompt': None,
+    }
+    apps_db.update_app_in_db(payload)
+
+    for field in ('name', 'category', 'author', 'description', 'image', 'capabilities'):
+        assert field not in written
+    assert 'memory_prompt' in written
+    assert written['memory_prompt'] is None
+
