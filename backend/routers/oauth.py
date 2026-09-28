@@ -58,11 +58,10 @@ def oauth_authorize(
     app_id: str,
     state: Optional[str] = None,
 ):
-    app_data = get_app_by_id_db(app_id)
-    if not app_data:
+    # A malformed stored app cannot be authorized; treat it as missing rather than a 500.
+    app = AppModel.deserialize_safe(get_app_by_id_db(app_id))
+    if not app:
         raise HTTPException(status_code=404, detail="App not found")
-
-    app = AppModel(**app_data)
 
     if not app.external_integration:
         raise HTTPException(status_code=400, detail="App does not support external integration")
@@ -195,11 +194,9 @@ async def oauth_token(
         raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
     await run_blocking(db_executor, enforce_account_deletion_http_access, uid)
 
-    app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
-    if not app_data:
+    app = AppModel.deserialize_safe(await run_blocking(db_executor, get_app_by_id_db, app_id))
+    if not app:
         raise HTTPException(status_code=404, detail="App not found")
-
-    app = AppModel(**app_data)
 
     if not app.external_integration or not app.external_integration.app_home_url:
         raise HTTPException(status_code=400, detail="App not configured for OAuth or app home URL not set")
