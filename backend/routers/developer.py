@@ -1361,7 +1361,8 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
             logger.warning('Skipping malformed folder in Developer API folder list')
             continue
         try:
-            valid_folders.append(DeveloperFolder.model_validate(folder))
+            DeveloperFolder.model_validate(folder)
+            valid_folders.append(folder)
         except ValidationError as e:
             invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
             logger.warning(

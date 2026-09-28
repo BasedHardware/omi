@@ -40,7 +40,8 @@ def get_folders(uid: str = Depends(auth.get_current_user_uid)):
         if not f or not f.get('id'):
             continue
         try:
-            valid_folders.append(Folder.model_validate(f))
+            Folder.model_validate(f)
+            valid_folders.append(f)
         except ValidationError as e:
             invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
             logger.warning(

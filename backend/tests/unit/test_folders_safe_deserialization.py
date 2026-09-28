@@ -138,7 +138,7 @@ class TestFoldersSafeDeserialization(unittest.TestCase):
         with patch.object(folders_mod.folders_db, "get_folders", return_value=mock_data):
             result = folders_mod.get_folders(uid="test_user")
 
-        folder_ids = [f.id for f in result]
+        folder_ids = [f.id if hasattr(f, "id") else f["id"] for f in result]
         self.assertEqual(folder_ids, ["f_valid_1", "f_valid_3"])
         self.assertEqual(len(result), 2)
 
@@ -161,7 +161,7 @@ class TestFoldersSafeDeserialization(unittest.TestCase):
         ):
             result = folders_mod.get_folders(uid="test_new_user")
 
-        self.assertEqual([f.id for f in result], ["f_sys_1"])
+        self.assertEqual([f.id if hasattr(f, "id") else f["id"] for f in result], ["f_sys_1"])
 
 
 if __name__ == "__main__":
