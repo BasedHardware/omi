@@ -184,6 +184,23 @@ class PrePushCiPredictionTests(unittest.TestCase):
         self.assertTrue(plan.includes("app-journeys-hermetic"))
         self.assertEqual(github_outputs(plan)["has_app_journeys"], "true")
 
+    def test_generic_dart_keeps_fast_pr_lanes_off_but_full_main_selection_on(self) -> None:
+        plan = self.plan(["app/lib/utils/date_formats.dart"])
+        outputs = github_outputs(plan)
+        self.assertEqual(outputs["has_app_android_pr"], "false")
+        self.assertEqual(outputs["has_app_journeys_pr"], "false")
+        self.assertEqual(outputs["has_app_compile_smoke"], "true")
+        self.assertEqual(outputs["has_app_journeys"], "true")
+
+    def test_native_and_journey_owner_inputs_keep_pr_coverage(self) -> None:
+        for path in ("app/android/app/build.gradle", "app/lib/pigeon_interfaces.dart", "app/pubspec.lock"):
+            with self.subTest(path=path):
+                self.assertEqual(github_outputs(self.plan([path]))["has_app_android_pr"], "true")
+        for path in ("app/integration_test/journeys/j2_chat_send_assistant_reply_test.dart",
+                     "app/lib/services/capture/capture_service.dart"):
+            with self.subTest(path=path):
+                self.assertEqual(github_outputs(self.plan([path]))["has_app_journeys_pr"], "true")
+
     def test_generated_dart_and_l10n_do_not_wake_journeys(self) -> None:
         plan = self.plan(["app/lib/models/task.g.dart", "app/lib/l10n/app_fr.arb"])
         self.assertFalse(plan.includes("app-journeys-hermetic"))

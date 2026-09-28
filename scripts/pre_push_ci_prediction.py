@@ -32,7 +32,9 @@ PHASE_ORDER = (
     *LOCAL_CHECK_ORDER,
     "app-analysis-tests",
     "app-journeys-hermetic",
+    "app-journeys-pr",
     "app-compile-smoke",
+    "app-android-pr",
     "app-ios-compile",
     "desktop-agent-runtime",
     "desktop-swift-tests",
@@ -268,6 +270,28 @@ def _is_app_compile_smoke_input(path: str) -> bool:
     }
 
 
+def _is_app_android_pr_input(path: str) -> bool:
+    """Inputs that can change Android's build graph or native interface on a PR."""
+    return path.startswith(("app/android/", "app/setup/prebuilt/", "app/setup/scripts/")) or path in {
+        "app/lib/pigeon_interfaces.dart", "app/lib/phone_mic_interface.dart",
+        "app/pubspec.yaml", "app/pubspec.lock", "app/build.yaml",
+        ".github/workflows/mobile-app-checks.yml",
+    }
+
+
+def _is_app_journeys_pr_input(path: str) -> bool:
+    """Journey definitions, their harness, and direct capture/dev-control inputs."""
+    return path.startswith((
+        "app/integration_test/journeys/", "app/test/support/capture/",
+        "app/lib/services/dev_controls/", "app/lib/services/capture/",
+    )) or path in {
+        "contracts/session/session-evidence-v1.schema.json",
+        "scripts/dev-harness/mobile-verify.sh",
+        "scripts/dev-harness/dev_harness/mobile_verify.py",
+        ".github/workflows/mobile-app-checks.yml",
+    }
+
+
 IOS_PIGEON_DEFINITIONS = {
     "app/lib/pigeon_interfaces.dart",
     "app/lib/phone_mic_interface.dart",
@@ -400,6 +424,10 @@ def resolve_impact(
     )
 
     for path in normalized_paths:
+        if _is_app_android_pr_input(path):
+            selected.add("app-android-pr")
+        if _is_app_journeys_pr_input(path):
+            selected.add("app-journeys-pr")
         # The hermetic journey lane owns inputs beyond app/ (the evidence
         # contract and the verify entrypoint), so it is resolved per path
         # before the component blocks.
@@ -454,7 +482,9 @@ def resolve_impact(
                 "app-ci-only",
                 "app-analysis-tests",
                 "app-journeys-hermetic",
+                "app-journeys-pr",
                 "app-compile-smoke",
+                "app-android-pr",
                 "app-ios-compile",
                 "desktop-ci-only",
                 "desktop-flow-lint",
@@ -512,9 +542,11 @@ def github_outputs(plan: ImpactPlan) -> dict[str, str]:
         "has_app_l10n": str(plan.includes("flutter-l10n")).lower(),
         "has_flutter_generated": str(plan.includes("flutter-codegen") or plan.includes("flutter-l10n")).lower(),
         "has_app_compile_smoke": str(plan.includes("app-compile-smoke")).lower(),
+        "has_app_android_pr": str(plan.includes("app-android-pr")).lower(),
         "has_app_ios_compile": str(plan.includes("app-ios-compile")).lower(),
         "has_app_dart": str(plan.includes("app-analysis-tests")).lower(),
         "has_app_journeys": str(plan.includes("app-journeys-hermetic")).lower(),
+        "has_app_journeys_pr": str(plan.includes("app-journeys-pr")).lower(),
         "has_desktop_agent_runtime": str(plan.includes("desktop-agent-runtime")).lower(),
         "should_run": str(plan.includes("desktop-ci-only")).lower(),
         "should_run_tests": str(plan.includes("desktop-swift-tests")).lower(),

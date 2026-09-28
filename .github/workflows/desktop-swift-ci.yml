@@ -5,6 +5,7 @@ on:
     branches: main
   pull_request:
     branches: main
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   # A later backend/docs commit must not make the last path-selected Desktop
   # Swift verdict look current. Run against default-branch HEAD every day at an
   # off-round UTC minute; the selector treats this as a full health event.
@@ -31,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       diff_base: ${{ steps.changed.outputs.diff_base }}
+      full_ci: ${{ steps.tier.outputs.full_ci }}
       should_run: ${{ steps.changed.outputs.should_run }}
       should_run_static: ${{ steps.changed.outputs.should_run_static }}
       should_run_tests: ${{ steps.changed.outputs.should_run_tests }}
@@ -44,6 +46,12 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Decide whether full CI is authorized
+        id: tier
+        env:
+          FULL_CI: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+        run: echo "full_ci=$FULL_CI" >> "$GITHUB_OUTPUT"
 
       - name: Detect changed paths
         id: changed
@@ -135,7 +143,7 @@ jobs:
   desktop-swift-verify:
     name: Desktop Swift Static & Test Contracts
     needs: changes
-    if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
+    if: ${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}
     runs-on: macos-26
     # Bounds manifest checks, launcher coverage, and the debug suite — a
     # wedge-guard, not a lane budget: the ceiling must admit one legitimate
@@ -299,6 +307,9 @@ jobs:
           # re-baseline rule so the lane and the budget below always agree.
           OMI_SWIFT_TEST_LANE: ${{ needs.changes.outputs.swift_test_effective_lane }}
           OMI_SWIFT_TEST_CHANGED_FILES: ${{ needs.changes.outputs.desktop_swift_changed_files }}
+          OMI_SWIFT_TEST_SELECTION_MODE: shadow
+          OMI_SWIFT_TEST_SELECTION_RECORD: ${{ runner.temp }}/swift-suite-selection.json
+          OMI_SWIFT_TEST_SELECTION_BASE: ${{ needs.changes.outputs.diff_base }}
           # The PR lane also defers the serial and solo clusters: their
           # isolation contract costs one ~30s invocation per member for
           # sub-second tests, sequentially, after every worker exits
@@ -346,6 +357,14 @@ jobs:
             echo "FAIL: the Desktop Swift suite step took ${elapsed}s, over its ${OMI_SWIFT_TEST_STEP_BUDGET_SECONDS}s regression budget. Fix the regression (the per-invocation and slowest-suite lines above name the cost centers), or raise the budget in desktop-swift-ci.yml with measured evidence." >&2
             exit 1
           fi
+
+      - name: Upload Swift suite shadow selection
+        if: ${{ always() && needs.changes.outputs.should_run_tests == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: swift-suite-selection-${{ github.sha }}
+          path: ${{ runner.temp }}/swift-suite-selection.json
+          if-no-files-found: warn
 
       - name: Desktop launcher script tests
         if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
@@ -457,12 +476,17 @@ jobs:
     steps:
       - name: Require static contracts and Swift tests
         env:
+          FULL_CI: ${{ needs.changes.outputs.full_ci }}
           VERIFY_RESULT: ${{ needs.desktop-swift-verify.result }}
           RELEASE_RESULT: ${{ needs.desktop-swift-release-compile.result }}
           STATIC_REQUIRED: ${{ needs.changes.outputs.should_run_static }}
           TESTS_REQUIRED: ${{ needs.changes.outputs.should_run_tests }}
           RELEASE_REQUIRED: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_release_test_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
         run: |
+          if [ "$FULL_CI" != true ]; then
+            echo 'deferred: needs ci:full' | tee -a "$GITHUB_STEP_SUMMARY" >&2
+            exit 1
+          fi
           if [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ]; then
             test "$VERIFY_RESULT" = success
           else
@@ -495,7 +519,7 @@ jobs:
     # regression's runner.
     # Source/test/package changes also compile every release test target
     # (#13123/#13467); reuse one combined app/test build (#13481).
-    if: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_release_test_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
+    if: ${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_release_test_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true') }}
     runs-on: macos-26
     # Ceiling must admit a whole-module release compile of a branch that grew
     # the Desktop package: attempts 1-3 of the local-embeddings hybrid PR were
@@ -586,7 +610,7 @@ jobs:
   desktop-siri-xcode27-advisory:
     name: Desktop Siri Xcode 27 Advisory
     needs: changes
-    if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
+    if: ${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}
     runs-on: xcode-27
     continue-on-error: true
     timeout-minutes: 60

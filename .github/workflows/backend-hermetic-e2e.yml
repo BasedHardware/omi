@@ -3,6 +3,11 @@ name: Backend Hermetic E2E
 on:
   pull_request:
     branches: main
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: main
+  schedule:
+    - cron: '53 4 * * *'
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
@@ -11,8 +16,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: backend-hermetic-e2e-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   scope:
@@ -29,6 +34,9 @@ jobs:
     timeout-minutes: 10
     outputs:
       applies: ${{ steps.scope.outputs.applies }}
+      full_ci: ${{ steps.scope.outputs.full_ci }}
+      run_listen: ${{ steps.scope.outputs.run_listen }}
+      run_sync: ${{ steps.scope.outputs.run_sync }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -41,19 +49,25 @@ jobs:
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
+          FULL_CI: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
           # Resolve the PR base live against the checkout (matching
           # detect-changes) rather than the event-payload base.sha, which can be
           # stale for a queued run (FC-stale-event-payload-diff-base, #10785).
           PR_BASE_REF: origin/${{ github.base_ref }}
+          PUSH_BEFORE: ${{ github.event.before }}
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
         run: |
           set -euo pipefail
+          echo "full_ci=$FULL_CI" >> "$GITHUB_OUTPUT"
 
           case "$EVENT_NAME" in
             pull_request) base_sha="$PR_BASE_REF" ;;
             merge_group) base_sha="$MERGE_GROUP_BASE_SHA" ;;
-            workflow_dispatch)
+            push) base_sha="${PUSH_BEFORE:-HEAD^}" ;;
+            schedule|workflow_dispatch)
               echo "applies=true" >> "$GITHUB_OUTPUT"
+              echo "run_listen=true" >> "$GITHUB_OUTPUT"
+              echo "run_sync=true" >> "$GITHUB_OUTPUT"
               exit 0
               ;;
             *)
@@ -80,13 +94,25 @@ jobs:
           else
             echo "applies=false" >> "$GITHUB_OUTPUT"
           fi
+          # Integration owners and their shared runner/dependencies wake the
+          # respective gauntlet on PRs. Unknown backend paths retain E2E.
+          if [[ "$EVENT_NAME" == 'merge_group' || "$EVENT_NAME" == 'push' ]] || grep -Eq '^(backend/(utils/.*(listen|pusher)|routers/(listen/|pusher\.py)|database/listen_|pusher/|charts/(pusher|backend-listen)/|testing/e2e/|scripts/.*(listen|pusher|transcription)|pylock)|package(-lock)?\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
+            echo "run_listen=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_listen=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "$EVENT_NAME" == 'merge_group' || "$EVENT_NAME" == 'push' ]] || grep -Eq '^(backend/(utils/cloud_tasks|routers/.*(task|sync)|testing/e2e/|scripts/.*(cloud_tasks|sync)|pylock)|package(-lock)?\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
+            echo "run_sync=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_sync=false" >> "$GITHUB_OUTPUT"
+          fi
 
   hermetic-e2e:
     name: Hermetic Backend E2E
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: scope
-    if: needs.scope.outputs.applies == 'true'
+    if: needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true'
 
     steps:
       - name: Checkout code
@@ -134,7 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: scope
-    if: needs.scope.outputs.applies == 'true'
+    if: needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true' && needs.scope.outputs.run_listen == 'true'
 
     steps:
       - name: Checkout code
@@ -225,7 +251,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: scope
-    if: needs.scope.outputs.applies == 'true'
+    if: needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true' && needs.scope.outputs.run_sync == 'true'
 
     steps:
       - name: Checkout code
@@ -306,7 +332,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: scope
-    if: needs.scope.outputs.applies == 'true'
+    if: needs.scope.outputs.applies == 'true' && (github.event_name == 'push' || github.event_name == 'schedule')
 
     steps:
       - name: Checkout code
@@ -400,6 +426,9 @@ jobs:
         env:
           SCOPE_RESULT: ${{ needs.scope.result }}
           SCOPE_APPLIES: ${{ needs.scope.outputs.applies }}
+          FULL_CI: ${{ needs.scope.outputs.full_ci }}
+          RUN_LISTEN: ${{ needs.scope.outputs.run_listen }}
+          RUN_SYNC: ${{ needs.scope.outputs.run_sync }}
           HERMETIC_E2E_RESULT: ${{ needs.hermetic-e2e.result }}
           LISTEN_PUSHER_RESULT: ${{ needs.listen-pusher-stack-gauntlet.result }}
           SYNC_CLOUD_TASKS_RESULT: ${{ needs.sync-cloud-tasks-stack-gauntlet.result }}
@@ -428,12 +457,69 @@ jobs:
               ;;
           esac
 
+          if [[ "$SCOPE_APPLIES" == 'true' && "$FULL_CI" != 'true' ]]; then
+            echo 'deferred: needs ci:full' | tee -a "$GITHUB_STEP_SUMMARY" >&2
+            exit 1
+          fi
+
           failed=0
-          for result_name in HERMETIC_E2E_RESULT LISTEN_PUSHER_RESULT SYNC_CLOUD_TASKS_RESULT; do
-            result="${!result_name}"
-            if [[ "$result" != "$required_result" ]]; then
-              echo "$result_name must be $required_result, got ${result:-<empty>}" >&2
-              failed=1
+          [[ "$HERMETIC_E2E_RESULT" == "$required_result" ]] || failed=1
+          if [[ "$SCOPE_APPLIES" == 'true' && "$RUN_LISTEN" == 'false' ]]; then
+            listen_required=skipped
+          else
+            listen_required="$required_result"
+          fi
+          if [[ "$SCOPE_APPLIES" == 'true' && "$RUN_SYNC" == 'false' ]]; then
+            sync_required=skipped
+          else
+            sync_required="$required_result"
+          fi
+          [[ "$LISTEN_PUSHER_RESULT" == "$listen_required" ]] || failed=1
+          [[ "$SYNC_CLOUD_TASKS_RESULT" == "$sync_required" ]] || failed=1
+          if [[ "$failed" != 0 ]]; then
+            printf 'Hermetic E2E=%s (want %s), Listen=%s (want %s), Sync=%s (want %s)\n' \
+              "$HERMETIC_E2E_RESULT" "$required_result" "$LISTEN_PUSHER_RESULT" "$listen_required" \
+              "$SYNC_CLOUD_TASKS_RESULT" "$sync_required" >&2
+          fi
+          exit "$failed"
+
+  post-merge-failure-issues:
+    name: Post-merge hermetic failure issues
+    needs: [scope, hermetic-e2e, listen-pusher-stack-gauntlet, sync-cloud-tasks-stack-gauntlet, replay-harness-phase0a-gauntlet]
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update one issue per failed suite
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          E2E: ${{ needs.hermetic-e2e.result }}
+          LISTEN: ${{ needs.listen-pusher-stack-gauntlet.result }}
+          SYNC: ${{ needs.sync-cloud-tasks-stack-gauntlet.result }}
+          REPLAY: ${{ needs.replay-harness-phase0a-gauntlet.result }}
+          SCOPE: ${{ needs.scope.result }}
+          APPLIES: ${{ needs.scope.outputs.applies }}
+        run: |
+          set -euo pipefail
+          [[ "$SCOPE" == success && "$APPLIES" == false ]] && exit 0
+          failed=0
+          for spec in "Hermetic scope detection:$SCOPE" "Hermetic Backend E2E:$E2E" "Listen Pusher Stack Gauntlet:$LISTEN" "Sync Cloud Tasks Stack Gauntlet:$SYNC" "Replay Harness Phase 0A Feasibility:$REPLAY"; do
+            suite="${spec%%:*}"
+            result="${spec#*:}"
+            [[ "$SCOPE" != success && "$result" == skipped ]] && continue
+            [[ "$result" == success ]] && continue
+            failed=1
+            title="CI post-merge failure: $suite"
+            issue_number="$(gh issue list --repo "$REPO" --state open --search "\"$title\" in:title" --limit 100 --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+            printf 'The %s suite was %s on a main or nightly run.\n\nEvidence: %s\n' "$suite" "$result" "$RUN_URL" > /tmp/ci-suite-issue.md
+            if [[ -n "$issue_number" ]]; then
+              gh issue edit "$issue_number" --repo "$REPO" --body-file /tmp/ci-suite-issue.md
+            else
+              gh issue create --repo "$REPO" --title "$title" --body-file /tmp/ci-suite-issue.md
             fi
           done
           exit "$failed"

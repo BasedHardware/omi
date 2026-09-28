@@ -51,6 +51,7 @@ on:
       - 'scripts/dev-harness/dev_harness/jit_vertex_gateway.py'
       - 'scripts/voice-provider-probe.sh'
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - '.gitignore'
       - 'backend/**'
@@ -188,11 +189,12 @@ jobs:
   # `run-unit-ci.sh` runs `not integration and not slow`, which is correct
   # for PR latency but meant every `slow`-marked codebase guardrail in the
   # repository executed nowhere. This job runs exactly those, unselected
-  # and unconditional: a guardrail whose job is to notice a change nobody
-  # anticipated cannot be gated on the change set that triggered the run.
+  # on internal PRs and main. Forks defer it until a maintainer marks ci:full;
+  # a guardrail cannot be gated on the changed-file set alone.
   backend-unit-guardrails:
     name: Backend unit guardrails
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
     timeout-minutes: 10
     steps:
       - name: Checkout code
@@ -237,14 +239,20 @@ jobs:
           # verdict this gate exists to publish.
           SHARD_RESULT: ${{ needs.backend-unit-shard.result }}
           GUARDRAILS_RESULT: ${{ needs.backend-unit-guardrails.result }}
+          FULL_CI: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
         run: |
           failed=0
           if [ "$SHARD_RESULT" != "success" ]; then
             echo "FAIL: backend unit shards result was '$SHARD_RESULT'" >&2
             failed=1
           fi
-          if [ "$GUARDRAILS_RESULT" != "success" ]; then
-            echo "FAIL: backend unit guardrails result was '$GUARDRAILS_RESULT'" >&2
+          guardrails_required=success
+          if [ "$FULL_CI" != true ]; then
+            guardrails_required=skipped
+            echo 'Backend slow guardrails deferred: needs ci:full' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$GUARDRAILS_RESULT" != "$guardrails_required" ]; then
+            echo "FAIL: backend unit guardrails result was '$GUARDRAILS_RESULT' (expected $guardrails_required)" >&2
             failed=1
           fi
           exit "$failed"
