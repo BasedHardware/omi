@@ -702,7 +702,7 @@ final class OmiBleManager: NSObject {
         let cutoff = now - OmiBleManager.batteryHistoryRetentionMs
         history.removeAll { ($0["ts"] as? Int64 ?? 0) < cutoff }
 
-        history.append(["ts": now, "level": level, "charging": charging as Any? ?? NSNull()])
+        history.append(OmiBleEnergyPolicy.batteryHistoryEntry(timestampMs: now, level: level, charging: charging))
 
         if history.count > OmiBleManager.maxBatteryHistoryEntries {
             history = Array(history.suffix(OmiBleManager.maxBatteryHistoryEntries))
@@ -838,7 +838,8 @@ extension OmiBleManager: CBCentralManagerDelegate {
         everConnected.insert(uuid)
         readyNotified.remove(uuid)
         pairingRecoveryInFlight.remove(uuid)
-        connectionStartTimes[uuid] = Int64(Date().timeIntervalSince1970 * 1000)
+        let connectionStartedAt = Int64(Date().timeIntervalSince1970 * 1000)
+        connectionStartTimes[uuid] = connectionStartedAt
         lastRssi.removeValue(forKey: uuid)
         rssiHistory.removeValue(forKey: uuid)
         chargingState.removeValue(forKey: uuid)
@@ -846,7 +847,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         audioReceived[uuid] = 0
         audioExpected[uuid] = 0
         if UserDefaults.standard.object(forKey: "ble_diagnostics_counters_since_\(uuid)") == nil {
-            UserDefaults.standard.set(connectionStartTimes[uuid], forKey: "ble_diagnostics_counters_since_\(uuid)")
+            UserDefaults.standard.set(connectionStartedAt, forKey: "ble_diagnostics_counters_since_\(uuid)")
         }
         startRssiDiagnosticsPolling(for: peripheral)
         logBle(uuid: uuid, event: "connected", detail: "")

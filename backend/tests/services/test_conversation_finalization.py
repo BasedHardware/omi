@@ -93,7 +93,7 @@ def test_reconcile_listen_finalization_jobs_claim_not_queued(mock_dependencies):
 
 def test_reconcile_listen_finalization_jobs_enqueue_fails(mock_dependencies):
     mock_dependencies["get_candidates"].return_value = [{"job_id": "job1"}]
-    mock_dependencies["claim_replay"].return_value = {"status": "queued", "dispatch_generation": 1}
+    mock_dependencies["claim_replay"].return_value = {"status": "queued", "dispatch_generation": 1, "created": True}
     mock_dependencies["enqueue_job"].side_effect = Exception("Enqueue error")
 
     result = reconcile_listen_finalization_jobs()
@@ -106,7 +106,7 @@ def test_reconcile_listen_finalization_jobs_enqueue_fails(mock_dependencies):
 
 def test_reconcile_listen_finalization_jobs_success(mock_dependencies):
     mock_dependencies["get_candidates"].return_value = [{"job_id": "job1"}]
-    mock_dependencies["claim_replay"].return_value = {"status": "queued", "dispatch_generation": 1}
+    mock_dependencies["claim_replay"].return_value = {"status": "queued", "dispatch_generation": 1, "created": True}
 
     result = reconcile_listen_finalization_jobs()
 
@@ -116,6 +116,20 @@ def test_reconcile_listen_finalization_jobs_success(mock_dependencies):
     mock_dependencies["record_reconciliation"].assert_called_once_with('requeued')
     mock_dependencies["inc_retries"].assert_called_once()
     mock_dependencies["publish_metrics"].assert_called_once()
+
+
+def test_reconcile_skips_generation_already_dispatched_by_another_tick(mock_dependencies):
+    mock_dependencies['get_candidates'].return_value = [{'job_id': 'job1'}]
+    mock_dependencies['claim_replay'].return_value = {
+        'status': 'queued',
+        'dispatch_generation': 4,
+        'created': False,
+    }
+
+    result = reconcile_listen_finalization_jobs()
+
+    assert result == {'requeued': 0, 'skipped': 1, 'enqueue_failed': 0}
+    mock_dependencies['enqueue_job'].assert_not_called()
 
 
 def _stub_meeting_backfill(monkeypatch, candidates=None):

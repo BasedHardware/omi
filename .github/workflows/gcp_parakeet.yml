@@ -96,7 +96,13 @@ jobs:
 
       - name: Verify rollout
         run: |
-          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-${{ env.SERVICE }} --timeout=600s; then
+          rollout_timeout=600s
+          kubectl_context=()
+          if [[ "${{ github.event.inputs.environment }}" == "development" ]]; then
+            rollout_timeout=2100s
+            kubectl_context=(--context gke_based-hardware-dev_us-central1_dev-omi-gke)
+          fi
+          if ! kubectl "${kubectl_context[@]}" -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-${{ env.SERVICE }} --timeout="$rollout_timeout"; then
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service ${{ env.SERVICE }} || true
             exit 1
           fi
