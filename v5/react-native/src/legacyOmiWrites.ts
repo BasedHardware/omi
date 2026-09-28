@@ -194,14 +194,43 @@ export type LegacyFolder = {
   icon?: string;
 };
 
-export function listFolders(
+export async function listFolders(
   backend: OmiBackend,
 ): Promise<LegacyWriteResult<LegacyFolder[]>> {
-  return send(backend, {
+  const result = await send<unknown>(backend, {
     id: 'omi-folders-list',
     method: 'GET',
     path: '/v1/folders',
   });
+  if (!result.ok) return result;
+  if (
+    !Array.isArray(result.value) ||
+    !result.value.every(
+      folder =>
+        folder !== null &&
+        typeof folder === 'object' &&
+        typeof folder.id === 'string' &&
+        typeof folder.name === 'string',
+    )
+  ) {
+    return {
+      ok: false,
+      failure: {
+        kind: 'retryable',
+        unclassified: true,
+        detail: 'The folder list could not be read; refresh to try again',
+      },
+    };
+  }
+  return {
+    ok: true,
+    value: result.value.map(folder => ({
+      id: folder.id as string,
+      name: folder.name as string,
+      ...(typeof folder.color === 'string' ? {color: folder.color} : {}),
+      ...(typeof folder.icon === 'string' ? {icon: folder.icon} : {}),
+    })),
+  };
 }
 
 export function moveConversationToFolder(

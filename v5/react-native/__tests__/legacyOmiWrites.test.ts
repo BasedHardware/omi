@@ -84,8 +84,11 @@ test('starred state uses a query parameter and no body', async () => {
 });
 
 test('folder list and folder move use the legacy route and body contracts', async () => {
-  const {value, requests} = backend();
-  await listFolders(value);
+  const {value, requests} = backend(200, '[{"id":"work","name":"Work"}]');
+  expect(await listFolders(value)).toEqual({
+    ok: true,
+    value: [{id: 'work', name: 'Work'}],
+  });
   await moveConversationToFolder(value, 'id', null);
   expect(
     requests.map(({method, path, body}) => ({method, path, body})),
@@ -97,6 +100,13 @@ test('folder list and folder move use the legacy route and body contracts', asyn
       body: '{"folder_id":null}',
     },
   ]);
+});
+
+test('malformed folder list is retryable unknown', async () => {
+  const {value} = backend(200, '{"folders":[]}');
+  const result = await listFolders(value);
+  expect(result.ok).toBe(false);
+  if (!result.ok) expect(result.failure.kind).toBe('retryable');
 });
 
 test.each([
