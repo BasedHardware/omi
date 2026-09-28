@@ -38,6 +38,12 @@ class ConversationPhoto(BaseModel):
             raise ValueError('content_type must be an image media type')
         return value
 
+    @classmethod
+    def from_storage(cls, data: dict) -> 'ConversationPhoto':
+        """Read a stored photo doc. A legacy doc without ``base64`` has no inline pixels, which this
+        model spells ``''`` (as frame evidence does), rather than failing validation."""
+        return cls.model_validate({**data, 'base64': data.get('base64') or ''})
+
     @staticmethod
     def photos_as_string(photos: List['ConversationPhoto'], include_timestamps: bool = False) -> str:
         if not photos:
