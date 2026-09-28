@@ -232,4 +232,4 @@ Provide:
 
     except Exception as e:
         logger.error(f'Error assigning conversation to folder: {e}')
-        return category_folder_id or default_folder_id, 0.0, f"Error: {str(e)}"
+        return category_folder_id or default_folder_id, 0.0, "Assignment failed"

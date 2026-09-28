@@ -207,3 +207,54 @@ class TestAssignConversationToFolder:
     def test_confident_assignment_is_not_overridden_by_category(self):
         folder_id, _, _ = _run_assign('s', 0.95, category_folder_id='w')
         assert folder_id == 's'
+
+    def test_assignment_exception_sanitized_and_uses_category_fallback(self):
+        mock_chain = MagicMock()
+        mock_chain.invoke.side_effect = RuntimeError(
+            "OpenAI API rate limit / auth failure: sk-secret-12345 at https://api.openai.com/v1"
+        )
+        mock_chain.__or__ = MagicMock(return_value=mock_chain)
+        mock_llm = MagicMock()
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
+        with patch.object(conv_folder, "get_llm", return_value=mock_llm), patch.object(
+            conv_folder, "ChatPromptTemplate"
+        ) as mock_prompt_cls, patch.object(conv_folder, "PydanticOutputParser", return_value=MagicMock()):
+            mock_prompt = MagicMock()
+            mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+            mock_prompt_cls.from_messages.return_value = mock_prompt
+            folder_id, confidence, reasoning = conv_folder.assign_conversation_to_folder(
+                'Quarterly budget',
+                'Talked through next quarter spend',
+                'finance',
+                SYSTEM,
+                category_folder_id='w',
+            )
+            assert folder_id == 'w'
+            assert confidence == 0.0
+            assert reasoning == "Assignment failed"
+            assert "sk-secret" not in reasoning
+            assert "openai.com" not in reasoning
+
+    def test_assignment_exception_sanitized_uses_default_when_no_category(self):
+        mock_chain = MagicMock()
+        mock_chain.invoke.side_effect = RuntimeError("Database timeout connection error to 10.0.0.5:5432")
+        mock_chain.__or__ = MagicMock(return_value=mock_chain)
+        mock_llm = MagicMock()
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
+        with patch.object(conv_folder, "get_llm", return_value=mock_llm), patch.object(
+            conv_folder, "ChatPromptTemplate"
+        ) as mock_prompt_cls, patch.object(conv_folder, "PydanticOutputParser", return_value=MagicMock()):
+            mock_prompt = MagicMock()
+            mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+            mock_prompt_cls.from_messages.return_value = mock_prompt
+            folder_id, confidence, reasoning = conv_folder.assign_conversation_to_folder(
+                'Random conversation',
+                'General talk',
+                'other',
+                SYSTEM,
+                category_folder_id=None,
+            )
+            assert folder_id == 'def'
+            assert confidence == 0.0
+            assert reasoning == "Assignment failed"
+            assert "10.0.0.5" not in reasoning
