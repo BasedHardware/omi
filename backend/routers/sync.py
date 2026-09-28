@@ -1751,7 +1751,6 @@ async def _maintain_uid_sequencer_lease(
             return
 
 
-# response_model omitted: the OIDC worker/sweeper are not app API surfaces.
 @router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
 async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
@@ -1786,10 +1785,13 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     except Exception:
         return await _run_sync_job_body(request, task_retry_count)
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
+    if epoch is not None and not uid_sequencer.production_stage():
+        return JSONResponse(status_code=200, content={'status': 'foreign_stage'})
     if epoch is None:
         if (
             isinstance(payload, dict)
             and payload.get('lane') == SyncLane.BACKFILL.value
+            and uid_sequencer.production_stage()
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
@@ -1823,8 +1825,6 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                         backfill_cutover.uid_hash(payload['uid']),
                     )
             if legacy_job and legacy_job.get('status') == 'queued' and (sequencer_on or owner or pending):
-                # Polling's direct-task stale detector must stop once the
-                # durable UID registry owns a waiting legacy task.
                 marked = await run_blocking(
                     db_executor, update_sync_job, payload['job_id'], {'dispatch_mode': 'sequenced'}
                 )

@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 BACKFILL_SLOT_TTL_SECONDS = 2 * 24 * 60 * 60
 
 
+def _key(key: str) -> str:
+    # Preserve production counters/leases across deployment. Dev and local
+    # processes may share its Redis host but must never share these keys.
+    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
+    return key if stage == 'prod' else f'{stage or "local"}:{key}'
+
+
 def _admission_limits_enabled() -> bool:
     # Disabled by default. Cloud Tasks queue concurrency is the sole pacer for
     # historical recovery, so the app-level per-user in-flight slot and daily
@@ -51,7 +58,7 @@ def try_acquire_backfill_slot(uid: str, job_id: str) -> bool:
     """Claim the per-uid in-flight slot; ``True`` when acquired or already held by ``job_id``."""
     if not (_inflight_limit_enabled() or _admission_limits_enabled()):
         return True
-    key = f'sync_backfill:inflight:{uid}'
+    key = _key(f'sync_backfill:inflight:{uid}')
     acquired = redis_client.set(key, job_id, nx=True, ex=BACKFILL_SLOT_TTL_SECONDS)
     if acquired:
         return True
@@ -70,7 +77,7 @@ return 0
 
 
 def release_backfill_slot(uid: str, job_id: str) -> None:
-    redis_client.eval(_RELEASE_SLOT_SCRIPT, 1, f'sync_backfill:inflight:{uid}', job_id)
+    redis_client.eval(_RELEASE_SLOT_SCRIPT, 1, _key(f'sync_backfill:inflight:{uid}'), job_id)
 
 
 @dataclass(frozen=True)
@@ -117,9 +124,9 @@ def reserve_backfill_speech(uid: str, job_id: str, speech_ms: int) -> BackfillRe
     raw_result = redis_client.eval(
         _RESERVE_SCRIPT,
         3,
-        f'sync_backfill:daily:{uid}:{suffix}',
-        f'sync_backfill:daily:global:{suffix}',
-        f'sync_backfill:reservation:{job_id}',
+        _key(f'sync_backfill:daily:{uid}:{suffix}'),
+        _key(f'sync_backfill:daily:global:{suffix}'),
+        _key(f'sync_backfill:reservation:{job_id}'),
         speech_ms,
         per_user_daily_limit_ms(),
         global_daily_limit_ms(),
@@ -141,7 +148,7 @@ def reserve_backfill_speech(uid: str, job_id: str, speech_ms: int) -> BackfillRe
         for threshold in (70, 90):
             if global_used_ms * 100 < global_limit * threshold:
                 continue
-            alert_key = f'sync_backfill:budget_alert:{suffix}:{threshold}'
+            alert_key = _key(f'sync_backfill:budget_alert:{suffix}:{threshold}')
             if redis_client.set(alert_key, '1', nx=True, ex=retry_after + 3600):
                 logger.warning(
                     'sync_backfill_budget_threshold threshold=%s used_ms=%s limit_ms=%s',

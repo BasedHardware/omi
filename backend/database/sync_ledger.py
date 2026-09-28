@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+import os
 from typing import Any, Dict, Optional, cast
 
 from google.cloud import firestore
@@ -91,7 +92,9 @@ class SyncContentRunBinding:
 
 
 def _ledger_ref(client: Any, uid: str, content_id: str) -> Any:
-    return client.collection('users').document(uid).collection('sync_content_ledger').document(content_id)
+    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
+    collection = 'sync_content_ledger' if stage == 'prod' else f'sync_content_ledger_{stage or "local"}'
+    return client.collection('users').document(uid).collection(collection).document(content_id)
 
 
 def _ledger_owner_matches(

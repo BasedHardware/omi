@@ -32,6 +32,12 @@ import pytest
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
 
 
+@pytest.fixture(autouse=True)
+def legacy_production_keys(monkeypatch):
+    # This suite asserts the existing production Redis key contract.
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+
+
 async def _passthrough_async_resolve_geolocation(geolocation):
     """Identity stub for utils.conversations.location: the real resolver returns its input on a miss."""
     return geolocation
@@ -452,6 +458,7 @@ class TestFencedJobMutations:
             'completed_at': 200.0,
             'error': 'upstream unavailable',
             'reason_code': 'upstream_error',
+            'failure_stage': 'prod',
             'retry_after': 30,
             'updated_at': 200.0,
         }

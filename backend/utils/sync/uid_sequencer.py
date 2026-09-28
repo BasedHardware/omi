@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -13,6 +14,11 @@ from utils.cloud_tasks import enqueue_sync_job
 from utils.sync import backfill_cutover
 
 logger = logging.getLogger(__name__)
+
+
+def production_stage() -> bool:
+    """Pure runtime identity check for async route guards."""
+    return os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'prod'
 
 
 def enabled() -> bool:
@@ -37,6 +43,8 @@ def _enqueue_wake(uid: str, uid_hash: str, deadline: int) -> None:
 
 def kick(uid: str) -> bool:
     """Select one pending job and enqueue it; a persisted reservation survives uncertainty."""
+    if not registry.production_stage():
+        return False
     remaining, direct_job_id = (
         backfill_cutover.quiet_remaining(uid) if enabled() else backfill_cutover.direct_remaining_for_uid(uid)
     )
@@ -76,6 +84,8 @@ def kick(uid: str) -> bool:
 
 
 def reconcile_uid(uid: str, owner: dict[str, Any], *, now: datetime | None = None) -> str:
+    if not registry.production_stage():
+        return 'disabled'
     current = now or datetime.now(timezone.utc)
     sample = registry.waiting_sample(uid, now=current)
     waiting, oldest_age = sample['depth'], sample['age_seconds']
@@ -152,6 +162,8 @@ def reconcile_uid(uid: str, owner: dict[str, Any], *, now: datetime | None = Non
 
 def sweep(*, limit: int = 100) -> dict[str, int]:
     """One bounded Scheduler tick; each UID is independent and transaction-fenced."""
+    if not registry.production_stage():
+        return {'disabled': 1}
     now = datetime.now(timezone.utc)
     outcomes: dict[str, int] = {}
     owners = registry.due_owners(limit=limit, now=now)
