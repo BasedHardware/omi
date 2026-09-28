@@ -53,6 +53,9 @@ struct CaptureAttemptOutcomeState {
 
   /// How this attempt was armed.
   let intent: Intent
+  let launchContext: String
+  let secondsSinceLaunch: String
+  let updateAttemptID: String?
 
   /// Mic permission was granted AND the meeting gate allowed capture to run at
   /// least once during the attempt.
@@ -76,16 +79,28 @@ struct CaptureAttemptOutcomeState {
   /// closed (no meeting detected yet).
   private(set) var idleMeetingWait = false
 
-  init(mode: String, intent: Intent) {
+  init(
+    mode: String, intent: Intent, launchContext: String = "other",
+    secondsSinceLaunch: String = "unknown", updateAttemptID: String? = nil
+  ) {
     attemptId = UUID().uuidString.lowercased()
     self.mode = mode
     self.intent = intent
+    self.launchContext = launchContext
+    self.secondsSinceLaunch = secondsSinceLaunch
+    self.updateAttemptID = updateAttemptID
   }
 
-  init(attemptId: String, mode: String, intent: Intent) {
+  init(
+    attemptId: String, mode: String, intent: Intent, launchContext: String = "other",
+    secondsSinceLaunch: String = "unknown", updateAttemptID: String? = nil
+  ) {
     self.attemptId = attemptId
     self.mode = mode
     self.intent = intent
+    self.launchContext = launchContext
+    self.secondsSinceLaunch = secondsSinceLaunch
+    self.updateAttemptID = updateAttemptID
   }
 
   mutating func noteCaptureEligible() { captureEligible = true }

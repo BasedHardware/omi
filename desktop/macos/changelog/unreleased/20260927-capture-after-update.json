@@ -1,0 +1,3 @@
+{
+  "change": "Recording now waits for the microphone after an app update and resumes on its own when the input becomes available"
+}
