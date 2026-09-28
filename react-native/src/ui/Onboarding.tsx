@@ -227,29 +227,27 @@ export function Onboarding({
     () => languages.find(item => item.code === language)?.name ?? language,
     [language, languages],
   );
-  // Compact defaults: the device language first, then the primary set —
-  // never the whole catalog. Searching swaps in filtered matches.
-  const suggestedLanguages = useMemo(() => {
+  // The full catalog as a chip cloud — the same list the desktop app offers —
+  // with the device language hoisted to the front. Searching filters it.
+  const languageChips = useMemo(() => {
     const base: AvailableLanguage[] =
       languages.length > 0
         ? languages
         : PRIMARY_LANGUAGES.map(item => ({code: item.code, name: item.name}));
-    const rest = base.filter(item => item.code !== language);
-    return [{code: language, name: selectedLanguageName}, ...rest].slice(0, 6);
-  }, [language, languages, selectedLanguageName]);
-  const matchingLanguages = useMemo(() => {
     const query = languageQuery.trim().toLowerCase();
-    if (query.length === 0) {
-      return null;
-    }
-    return languages
-      .filter(
-        item =>
-          item.name.toLowerCase().includes(query) ||
-          item.code.toLowerCase().includes(query),
-      )
-      .slice(0, 8);
-  }, [languageQuery, languages]);
+    const matches = query.length
+      ? base.filter(
+          item =>
+            item.name.toLowerCase().includes(query) ||
+            item.code.toLowerCase().includes(query),
+        )
+      : base;
+    const selected = matches.find(item => item.code === language);
+    const rest = matches.filter(item => item.code !== language);
+    return selected
+      ? [{code: language, name: selectedLanguageName}, ...rest]
+      : rest;
+  }, [language, languageQuery, languages, selectedLanguageName]);
 
   function goBack() {
     if (step === 'welcome' || signingIn) {
@@ -590,21 +588,9 @@ export function Onboarding({
           <>
             <Text style={[styles.copy, copyColor]}>
               {language === initialLanguage
-                ? `We set ${selectedLanguageName} from your device language. Continue, or search if that is not right.`
+                ? `We set ${selectedLanguageName} from your device language. Continue, or pick another.`
                 : `Continue in ${selectedLanguageName}, or pick another language.`}
             </Text>
-            <View style={styles.chips}>
-              {(matchingLanguages ?? suggestedLanguages).map(item => (
-                <Button
-                  key={item.code}
-                  accessibilityLabel={item.name}
-                  accessibilityState={{selected: language === item.code}}
-                  onPress={() => setLanguage(item.code)}
-                  variant={language === item.code ? 'primary' : 'ghost'}>
-                  {item.name}
-                </Button>
-              ))}
-            </View>
             <Field
               accessibilityLabel="Search languages"
               autoCapitalize="none"
@@ -615,7 +601,19 @@ export function Onboarding({
               returnKeyType="search"
               value={languageQuery}
             />
-            {matchingLanguages != null && matchingLanguages.length === 0 ? (
+            <View style={styles.chips}>
+              {languageChips.map(item => (
+                <Button
+                  key={item.code}
+                  accessibilityLabel={item.name}
+                  accessibilityState={{selected: language === item.code}}
+                  onPress={() => setLanguage(item.code)}
+                  variant={language === item.code ? 'primary' : 'ghost'}>
+                  {item.name}
+                </Button>
+              ))}
+            </View>
+            {languageChips.length === 0 ? (
               <Text style={[styles.copy, copyColor]}>
                 No language matches “{languageQuery.trim()}”.
               </Text>
