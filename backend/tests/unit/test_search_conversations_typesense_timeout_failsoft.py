@@ -36,5 +36,7 @@ def test_search_conversations_typesense_service_unavailable_failsoft():
 def test_search_conversations_non_transient_error_still_raises():
     with patch('utils.conversations.search.client') as mock_client:
         mock_client.collections['conversations'].documents.search.side_effect = ValueError('bad query shape')
-        with pytest.raises(Exception, match='Failed to search conversations'):
+        with pytest.raises(Exception, match='^Failed to search conversations$') as exc_info:
             search_conversations(uid='uid-1', query='meeting notes')
+        assert str(exc_info.value) == 'Failed to search conversations'
+        assert 'bad query shape' not in str(exc_info.value)

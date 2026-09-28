@@ -329,7 +329,13 @@ def search_conversations(
                 e,
             )
             raise ConversationSearchUnavailableError('Typesense search temporarily unavailable') from e
-        raise Exception(f"Failed to search conversations: {str(e)}") from e
+        logger.error(
+            "search_conversations unexpected error uid=%s query_len=%s: %s",
+            uid,
+            len(query or ''),
+            e,
+        )
+        raise Exception("Failed to search conversations") from e
 
 
 def keyword_search_conversation_ids(
