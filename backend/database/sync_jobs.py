@@ -33,6 +33,7 @@ from typing import Any, Dict, Optional, Set, cast
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class, bounded_sync_phase
 from database import sync_dead_letters
 from database.redis_db import r
+from utils.sync import stage as sync_stage
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +85,7 @@ ONCE_KEY_PREFIX = 'sync_job_once:'
 
 def _key(key: str) -> str:
     """Keep prod's existing job and run-lease keys; isolate shared Redis in dev."""
-    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
-    return key if stage == 'prod' else f'{stage or "local"}:{key}'
+    return sync_stage.redis_key(key)
 
 
 class FencedSyncJobMutationOutcome(str, Enum):
@@ -168,7 +168,7 @@ def create_sync_job(
     now = time.time()
     job: Dict[str, Any] = {
         'job_id': job_id,
-        'created_stage': os.getenv('OMI_ENV_STAGE', '').strip().lower() or 'unknown',
+        'created_stage': sync_stage.current_stage(),
         'uid': uid,
         'status': 'queued',
         'created_at': now,
@@ -842,7 +842,7 @@ def mark_job_failed(
             'completed_at': time.time(),
             'error': error,
             'reason_code': reason_code,
-            'failure_stage': os.getenv('OMI_ENV_STAGE', '').strip().lower() or 'unknown',
+            'failure_stage': sync_stage.current_stage(),
             'retry_after': retry_after,
         },
     )
@@ -871,7 +871,7 @@ def fenced_mark_job_failed(
             'completed_at': completed_at,
             'error': error,
             'reason_code': reason_code,
-            'failure_stage': os.getenv('OMI_ENV_STAGE', '').strip().lower() or 'unknown',
+            'failure_stage': sync_stage.current_stage(),
             'retry_after': retry_after,
         },
         now=completed_at,

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -17,14 +16,14 @@ from database.sync_jobs import (
     sync_job_run_lock_present,
 )
 from utils.cloud_tasks import enqueue_sync_job
-from utils.sync import backfill_cutover
+from utils.sync import backfill_cutover, stage as sync_stage
 
 logger = logging.getLogger(__name__)
 
 
 def production_stage() -> bool:
     """Pure runtime identity check for async route guards."""
-    return os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'prod'
+    return sync_stage.production_stage()
 
 
 def production_fence_mode() -> SyncLedgerFenceMode | None:
@@ -35,7 +34,7 @@ def production_fence_mode() -> SyncLedgerFenceMode | None:
 def foreign_delivery(payload: Any) -> bool:
     """ACK non-prod sequenced and legacy backfill tasks before shared state access."""
     return (
-        not production_stage()
+        sync_stage.nonproduction_stage()
         and isinstance(payload, dict)
         and (payload.get('sequencer_epoch') is not None or payload.get('lane') == 'backfill')
     )

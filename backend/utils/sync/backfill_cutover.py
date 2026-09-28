@@ -8,6 +8,7 @@ import os
 import time
 
 from database.redis_db import r
+from utils.sync import stage as sync_stage
 
 # Cloud Tasks' 25-minute request deadline is below the 30-minute run-lock TTL.
 # Direct jobs reserve only their own UID. A global missing/evicted mode key
@@ -21,8 +22,7 @@ WAKE_KEY_PREFIX = 'sync_backfill:uid_sequencer:wake:'
 
 def _key(key: str) -> str:
     # Prod retains its live Redis keys through the mixed-revision deployment.
-    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
-    return key if stage == 'prod' else f'{stage or "local"}:{key}'
+    return sync_stage.redis_key(key)
 
 
 def uid_hash(uid: str) -> str:
@@ -47,7 +47,7 @@ def quiet_remaining(uid: str) -> tuple[int, str]:
     now = int(time.time())
     # Honor an already-written prod quiet deadline once. Never manufacture or
     # extend one because the old global mode key is absent or was evicted.
-    deadline = r.get(LEGACY_QUIET_KEY) if os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'prod' else None
+    deadline = r.get(LEGACY_QUIET_KEY) if sync_stage.production_stage() else None
     remaining = max(0, int(deadline or 0) - now)
     direct_remaining, direct_id = direct_remaining_for_uid(uid)
     return max(remaining, direct_remaining), direct_id

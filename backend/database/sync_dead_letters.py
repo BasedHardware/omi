@@ -19,7 +19,6 @@ double client-visible status.
 from __future__ import annotations
 
 import json
-import os
 import sys
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -27,6 +26,7 @@ from typing import Any, Optional
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from utils.sync import stage as sync_stage
 
 DEAD_LETTERS_COLLECTION = 'sync_dead_letters'
 DEAD_LETTER_LANE = 'backfill'
@@ -58,8 +58,7 @@ def _client(firestore_client: Any = None) -> Any:
 
 
 def _doc_ref(client: Any, job_id: str) -> Any:
-    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
-    collection = DEAD_LETTERS_COLLECTION if stage == 'prod' else f'{DEAD_LETTERS_COLLECTION}_{stage or "local"}'
+    collection = sync_stage.collection_name(DEAD_LETTERS_COLLECTION)
     return client.collection(collection).document(job_id)
 
 
@@ -109,7 +108,7 @@ def record_dead_letter_pending(
             'lane': DEAD_LETTER_LANE,
             'status': existing.get('status') if existing.get('status') == STATUS_DEAD_LETTER else STATUS_PENDING,
             'failure_code': failure_code if failure_code in FAILURE_CODES else 'unknown',
-            'failure_stage': os.getenv('OMI_ENV_STAGE', '').strip().lower() or 'unknown',
+            'failure_stage': sync_stage.current_stage(),
             'attempt_count': int(existing.get('attempt_count') or 0) + 1,
             'created_at': existing.get('created_at') or now,
         }

@@ -16,6 +16,7 @@ from google.cloud import firestore
 from google.api_core.exceptions import NotFound
 
 from database._client import get_firestore_client
+from utils.sync import stage as sync_stage
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def production_stage() -> bool:
     The customer Firestore project is also mounted in dev, so the Firestore
     project ID cannot identify the sequencer owner.
     """
-    return os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'prod'
+    return sync_stage.production_stage()
 
 
 def _require_production() -> None:

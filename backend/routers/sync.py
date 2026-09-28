@@ -159,8 +159,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import SyncLane, classify_sync_lane
-from utils.sync import uid_sequencer
-from utils.sync import backfill_cutover
+from utils.sync import backfill_cutover, stage as sync_stage, uid_sequencer
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 logger = logging.getLogger(__name__)
@@ -170,7 +169,7 @@ AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
-router = APIRouter(route_class=MultipartMaxPartSizeRoute)
+router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(sync_stage.require_http_stage)])
 
 
 class SyncLocalFilesResultResponse(BaseModel):

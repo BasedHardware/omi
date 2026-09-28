@@ -5,13 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-import os
 from typing import Any, Dict, Optional, cast
 
 from google.cloud import firestore
 
 from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
 from database._client import get_firestore_client
+from utils.sync import stage as sync_stage
 
 LEDGER_RETENTION_DAYS = 45
 CLAIM_STALE_SECONDS = 2 * 24 * 60 * 60
@@ -92,8 +92,7 @@ class SyncContentRunBinding:
 
 
 def _ledger_ref(client: Any, uid: str, content_id: str) -> Any:
-    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
-    collection = 'sync_content_ledger' if stage == 'prod' else f'sync_content_ledger_{stage or "local"}'
+    collection = sync_stage.collection_name('sync_content_ledger')
     return client.collection('users').document(uid).collection(collection).document(content_id)
 
 

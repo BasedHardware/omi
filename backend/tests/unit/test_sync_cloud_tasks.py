@@ -3186,6 +3186,7 @@ async def test_dev_sync_job_route_acks_before_shared_state_access(payload):
     redis_client = sys.modules['database.redis_db'].r
     redis_client.reset_mock()
     try:
+        assert any(dep.dependency is module.sync_stage.require_http_stage for dep in module.router.dependencies)
         route = next(route for route in module.router.routes if route.path == '/v2/sync-jobs/run')
         response = await route.endpoint(request, task_retry_count=0)
         assert response.status_code == 200

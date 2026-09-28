@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from database.redis_db import r as redis_client
+from utils.sync import stage as sync_stage
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +19,7 @@ BACKFILL_SLOT_TTL_SECONDS = 2 * 24 * 60 * 60
 def _key(key: str) -> str:
     # Preserve production counters/leases across deployment. Dev and local
     # processes may share its Redis host but must never share these keys.
-    stage = os.getenv('OMI_ENV_STAGE', '').strip().lower()
-    return key if stage == 'prod' else f'{stage or "local"}:{key}'
+    return sync_stage.redis_key(key)
 
 
 def _admission_limits_enabled() -> bool:

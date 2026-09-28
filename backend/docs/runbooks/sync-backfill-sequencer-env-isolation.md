@@ -2,6 +2,8 @@
 
 The legacy `sync_backfill_sequencer` and `sync_backfill_pending` collections are production-only. `OMI_ENV_STAGE=prod` plus the rollout flag enables the sequencer. Every registry read and write rejects a non-production stage, including owner leases, pending scans, claim, begin, renew, finish, defer, and redrive. Sweep and wake are inert in dev. A sequenced or legacy backfill Cloud Task delivered to dev is ACKed as `foreign_stage` before reading the sync fence, a job, a run lock, or the registry. Dev admission still uses direct dispatch, but the non-prod backfill handler ACKs those deliveries; do not resume the dev queues until the rollout checks below are complete.
 
+Sync routes require an explicit `OMI_ENV_STAGE` of `prod`, `dev`, `local`, or `offline`. A missing or unknown value logs `event=sync_runtime_stage outcome=invalid_config` and returns HTTP 503 before admission, worker delivery, sweep, or wake runs. Cloud Tasks retains the delivery for retry while configuration is corrected. The same strict check runs before any sync Redis key or Firestore collection name is chosen. This route-level gate keeps the rest of the shared backend available during a sync-stage configuration error.
+
 Prod retains the existing Firestore collections and Redis names for jobs, run locks, epochs, backfill slots, direct reservations, and the existing quiet deadline. Non-prod sync Redis keys receive a stage prefix. Non-prod sync content ledgers and dead letters use stage-suffixed collections; prod keeps its current paths. This keeps live prod state readable during the prod mixed-revision window.
 
 Rollout order:
