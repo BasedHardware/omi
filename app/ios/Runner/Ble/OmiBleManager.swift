@@ -58,6 +58,10 @@ final class OmiBleManager: NSObject {
     /// Monotonic start time of the latest GATT discovery. Retain it on errors so
     /// a late callback cannot clear the retry bound for a newer attempt.
     private var discoveryStartedAt: [String: TimeInterval] = [:]
+    /// One retry is allowed per explicit Flutter connection request.
+    private var readyRequests: Set<String> = []
+    private var discoveryRetries: [String: Int] = [:]
+    private var discoveryRetryTasks: [String: DispatchWorkItem] = [:]
 
     /// Suppresses duplicate recovery callbacks while CoreBluetooth tears down a
     /// link whose protected characteristic rejected the current bond.
@@ -209,6 +213,8 @@ final class OmiBleManager: NSObject {
         if let peripheral {
             peripheral.delegate = self
             peripherals[uuid] = peripheral
+            readyRequests.insert(uuid)
+            discoveryRetries[uuid] = 0
             let completedServices = completedBleServices(for: peripheral)
             switch OmiBleConnectionPolicy.readyRecoveryAction(
                 peripheralState: peripheral.state,
@@ -225,6 +231,11 @@ final class OmiBleManager: NSObject {
                 if let completedServices {
                     notifyFlutterDeviceReady(uuid: uuid, services: completedServices, source: "replay")
                 }
+                finishReadyRequest(uuid: uuid)
+            case .hydrateReady:
+                if let completedServices {
+                    completeDeviceReady(peripheral, uuid: uuid, bleServices: completedServices, source: "restored_cache")
+                }
             case .discoverServices:
                 // Restored links may have no usable GATT snapshot yet. This is
                 // one request-bound discovery, with no polling or reconnect.
@@ -232,7 +243,7 @@ final class OmiBleManager: NSObject {
                 discoverServices(for: peripheral, uuid: uuid)
             case .awaitDiscovery:
                 // Restoration or didConnect already started the GATT work.
-                break
+                scheduleDiscoveryRetry(for: peripheral, uuid: uuid)
             case .connect:
                 centralManager.connect(peripheral, options: nil)
             }
@@ -243,6 +254,50 @@ final class OmiBleManager: NSObject {
     private func discoverServices(for peripheral: CBPeripheral, uuid: String) {
         discoveryStartedAt[uuid] = ProcessInfo.processInfo.systemUptime
         peripheral.discoverServices(nil)
+        scheduleDiscoveryRetry(for: peripheral, uuid: uuid)
+    }
+
+    private func scheduleDiscoveryRetry(for peripheral: CBPeripheral, uuid: String) {
+        guard OmiBleConnectionPolicy.shouldRetryDiscovery(
+            peripheralState: peripheral.state,
+            nativeReady: readyNotified.contains(uuid),
+            requestPending: readyRequests.contains(uuid),
+            retries: discoveryRetries[uuid] ?? 0
+        ), let startedAt = discoveryStartedAt[uuid] else { return }
+        discoveryRetryTasks.removeValue(forKey: uuid)?.cancel()
+        let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
+        let delay = max(0, OmiBleConnectionPolicy.discoveryRetryAfter - elapsed)
+        let task = DispatchWorkItem { [weak self, weak peripheral] in
+            guard let self, let peripheral else { return }
+            guard self.discoveryStartedAt[uuid] == startedAt else { return }
+            self.discoveryRetryTasks.removeValue(forKey: uuid)
+            self.retryDiscoveryIfNeeded(for: peripheral, uuid: uuid, reason: "timeout")
+        }
+        discoveryRetryTasks[uuid] = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: task)
+    }
+
+    private func retryDiscoveryIfNeeded(for peripheral: CBPeripheral, uuid: String, reason: String) {
+        guard OmiBleConnectionPolicy.shouldRetryDiscovery(
+            peripheralState: peripheral.state,
+            nativeReady: readyNotified.contains(uuid),
+            requestPending: readyRequests.contains(uuid),
+            retries: discoveryRetries[uuid] ?? 0
+        ) else { return }
+        if let bleServices = completedBleServices(for: peripheral) {
+            completeDeviceReady(peripheral, uuid: uuid, bleServices: bleServices, source: "restored_cache")
+            return
+        }
+        discoveryRetries[uuid] = 1
+        discoveryRetryTasks.removeValue(forKey: uuid)?.cancel()
+        logBle(uuid: uuid, event: "discovery_retry", detail: reason)
+        discoverServices(for: peripheral, uuid: uuid)
+    }
+
+    private func finishReadyRequest(uuid: String) {
+        readyRequests.remove(uuid)
+        discoveryRetries.removeValue(forKey: uuid)
+        discoveryRetryTasks.removeValue(forKey: uuid)?.cancel()
     }
 
     private func completedBleServices(for peripheral: CBPeripheral) -> [BleService]? {
@@ -254,6 +309,21 @@ final class OmiBleManager: NSObject {
                 characteristicUuids: service.characteristics?.map { fullUuidString($0.uuid) } ?? []
             )
         }
+    }
+
+    private func completeDeviceReady(_ peripheral: CBPeripheral, uuid: String, bleServices: [BleService], source: String) {
+        guard peripheral.state == .connected, let services = peripheral.services,
+              readyNotified.insert(uuid).inserted else { return }
+        discoveredServices[uuid] = services
+        discoveryStartedAt.removeValue(forKey: uuid)
+        finishReadyRequest(uuid: uuid)
+        notifyFlutterDeviceReady(uuid: uuid, services: bleServices, source: source)
+        LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
+        if let diagnostic = services.first(where: { $0.uuid == Self.diagnosticsServiceUuid })?
+            .characteristics?.first(where: { $0.uuid == Self.diagnosticsCharUuid }) {
+            peripheral.readValue(for: diagnostic)
+        }
+        if source == "restored_cache" { logBle(uuid: uuid, event: "ready_from_restored_cache", detail: "") }
     }
 
     private func notifyFlutterDeviceReady(uuid: String, services: [BleService], source: String) {
@@ -272,6 +342,7 @@ final class OmiBleManager: NSObject {
     func disconnectPeripheral(uuid: String) {
         manuallyDisconnected.insert(uuid)
         pairingLostBlocked.remove(uuid)
+        finishReadyRequest(uuid: uuid)
         persistDisconnectEvent(uuid: uuid, reason: "manual", reasonCode: 0, isManual: true, eventType: "disconnect")
         guard let peripheral = peripherals[uuid] else { return }
         centralManager.cancelPeripheralConnection(peripheral)
@@ -280,6 +351,7 @@ final class OmiBleManager: NSObject {
     func disconnectAllPeripherals() {
         for (uuid, peripheral) in peripherals {
             manuallyDisconnected.insert(uuid)
+            finishReadyRequest(uuid: uuid)
             centralManager.cancelPeripheralConnection(peripheral)
         }
     }
@@ -796,6 +868,7 @@ final class OmiBleManager: NSObject {
         discoveredServices.removeValue(forKey: peripheralUuid)
         readyNotified.remove(peripheralUuid)
         discoveryStartedAt.removeValue(forKey: peripheralUuid)
+        finishReadyRequest(uuid: peripheralUuid)
 
         // Clean up pending completions
         let completionKeys = readCompletions.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
@@ -851,11 +924,16 @@ extension OmiBleManager: CBCentralManagerDelegate {
                 everConnected.insert(uuid)
                 uuids.append(uuid)
 
-                // Re-establish connection if not already connected
-                if peripheral.state != .connected, !pairingLostBlocked.contains(uuid) {
+                // Re-establish connection if not already connected. CoreBluetooth
+                // may restore a complete GATT snapshot, so use it immediately.
+                if peripheral.state == .connected {
+                    if let bleServices = completedBleServices(for: peripheral) {
+                        completeDeviceReady(peripheral, uuid: uuid, bleServices: bleServices, source: "restored_cache")
+                    } else {
+                        discoverServices(for: peripheral, uuid: uuid)
+                    }
+                } else if !pairingLostBlocked.contains(uuid) {
                     central.connect(peripheral, options: nil)
-                } else {
-                    discoverServices(for: peripheral, uuid: uuid)
                 }
             }
             flutterApi?.onStateRestored(peripheralUuids: uuids) { _ in }
@@ -1002,38 +1080,39 @@ extension OmiBleManager: CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         let uuid = peripheralUuidString(peripheral)
+        guard !readyNotified.contains(uuid) else { return }
 
         guard error == nil, let services = peripheral.services, !services.isEmpty else {
             logBle(uuid: uuid, event: "service_discovery_failed", detail: error?.localizedDescription ?? "no_services")
+            retryDiscoveryIfNeeded(for: peripheral, uuid: uuid, reason: "services_error")
             return
         }
         discoveredServices[uuid] = services
 
-        // Discover characteristics for all services
-        for service in services {
+        if let bleServices = completedBleServices(for: peripheral) {
+            completeDeviceReady(peripheral, uuid: uuid, bleServices: bleServices, source: "discovery")
+            return
+        }
+
+        // CoreBluetooth may have restored characteristics for some services.
+        for service in services where service.characteristics == nil {
             peripheral.discoverCharacteristics(nil, for: service)
         }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         let uuid = peripheralUuidString(peripheral)
+        guard !readyNotified.contains(uuid) else { return }
 
         if let error {
             logBle(uuid: uuid, event: "characteristic_discovery_failed", detail: error.localizedDescription)
+            retryDiscoveryIfNeeded(for: peripheral, uuid: uuid, reason: "characteristics_error")
             return
         }
 
-        // Check if all services have had their characteristics discovered
-        guard let services = peripheral.services else { return }
+        // Check if all services have had their characteristics discovered.
         if let bleServices = completedBleServices(for: peripheral) {
-            discoveryStartedAt.removeValue(forKey: uuid)
-            guard readyNotified.insert(uuid).inserted else { return }
-            notifyFlutterDeviceReady(uuid: uuid, services: bleServices, source: "discovery")
-            LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
-            if let diagnostic = services.first(where: { $0.uuid == Self.diagnosticsServiceUuid })?
-                .characteristics?.first(where: { $0.uuid == Self.diagnosticsCharUuid }) {
-                peripheral.readValue(for: diagnostic)
-            }
+            completeDeviceReady(peripheral, uuid: uuid, bleServices: bleServices, source: "discovery")
         }
     }
 

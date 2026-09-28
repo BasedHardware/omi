@@ -6,6 +6,7 @@ enum OmiBleConnectionPolicy {
     enum ReadyRecoveryAction: Equatable {
         case connect
         case replayReady
+        case hydrateReady
         case awaitDiscovery
         case discoverServices
     }
@@ -28,8 +29,17 @@ enum OmiBleConnectionPolicy {
         discoveryInFlight: Bool
     ) -> ReadyRecoveryAction {
         guard peripheralState == .connected else { return .connect }
-        if nativeReady && hasCompleteServices { return .replayReady }
+        if hasCompleteServices { return nativeReady ? .replayReady : .hydrateReady }
         return discoveryInFlight ? .awaitDiscovery : .discoverServices
+    }
+
+    static func shouldRetryDiscovery(
+        peripheralState: CBPeripheralState,
+        nativeReady: Bool,
+        requestPending: Bool,
+        retries: Int
+    ) -> Bool {
+        peripheralState == .connected && !nativeReady && requestPending && retries == 0
     }
 
     static func requiresPairingRecovery(_ error: Error?) -> Bool {
