@@ -43,6 +43,6 @@ custom_rules:
     regex: '\buniqueKeysWithValues\s*:'
     message: 'Use a duplicate-tolerant dictionary initializer'
   omi_main_sync:
-    regex: 'DispatchQueue\.main\.sync\s*\{'
+    regex: 'DispatchQueue\.main\.sync\s*(?:\{|\()'
     message: 'Avoid synchronous dispatch to the main queue'
 baseline: .swiftlint-baseline.json
