@@ -9,7 +9,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 from database import sync_backfill_sequencer as registry
-from database.sync_jobs import TERMINAL_STATUSES, get_raw_sync_job, sync_job_run_lock_present
+from database.sync_jobs import (
+    TERMINAL_STATUSES,
+    SyncLedgerFenceMode,
+    get_raw_sync_job,
+    get_sync_ledger_fence_mode,
+    sync_job_run_lock_present,
+)
 from utils.cloud_tasks import enqueue_sync_job
 from utils.sync import backfill_cutover
 
@@ -19,6 +25,20 @@ logger = logging.getLogger(__name__)
 def production_stage() -> bool:
     """Pure runtime identity check for async route guards."""
     return os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'prod'
+
+
+def production_fence_mode() -> SyncLedgerFenceMode | None:
+    """Read the sync fence only for the production delivery path."""
+    return get_sync_ledger_fence_mode() if production_stage() else None
+
+
+def foreign_delivery(payload: Any) -> bool:
+    """ACK non-prod sequenced and legacy backfill tasks before shared state access."""
+    return (
+        not production_stage()
+        and isinstance(payload, dict)
+        and (payload.get('sequencer_epoch') is not None or payload.get('lane') == 'backfill')
+    )
 
 
 def enabled() -> bool:

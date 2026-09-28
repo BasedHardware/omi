@@ -1778,23 +1778,15 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Persisted sequencer epochs survive the kill switch; old tasks keep their legacy path."""
-    prod_stage = uid_sequencer.production_stage()
-    if prod_stage and await run_blocking(db_executor, get_sync_ledger_fence_mode) is SyncLedgerFenceMode.STANDBY:
+    if await run_blocking(db_executor, uid_sequencer.production_fence_mode) is SyncLedgerFenceMode.STANDBY:
         return JSONResponse(status_code=503, content={'status': 'cutover_standby'})
     try:
         payload = await request.json()
     except Exception:
         return await _run_sync_job_body(request, task_retry_count)
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
-    # Dev shares the customer Firestore project and Redis host. An old task
-    # delivered there must be ACKed before even reading a sync Redis key. This
-    # includes legacy backfill tasks with no sequencer epoch.
-    if not prod_stage and (
-        epoch is not None or (isinstance(payload, dict) and payload.get('lane') == SyncLane.BACKFILL.value)
-    ):
+    if uid_sequencer.foreign_delivery(payload):
         return JSONResponse(status_code=200, content={'status': 'foreign_stage'})
-    if not prod_stage and await run_blocking(db_executor, get_sync_ledger_fence_mode) is SyncLedgerFenceMode.STANDBY:
-        return JSONResponse(status_code=503, content={'status': 'cutover_standby'})
     if epoch is None:
         if (
             isinstance(payload, dict)

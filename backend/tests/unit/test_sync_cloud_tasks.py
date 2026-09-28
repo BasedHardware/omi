@@ -1378,6 +1378,14 @@ def _load_sync_router_for_fast_path():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     module.uid_sequencer.enabled = MagicMock(return_value=False)
+    module.uid_sequencer.production_fence_mode = MagicMock(
+        side_effect=lambda: module.get_sync_ledger_fence_mode() if module.uid_sequencer.production_stage() else None
+    )
+    module.uid_sequencer.foreign_delivery = MagicMock(
+        side_effect=lambda payload: not module.uid_sequencer.production_stage()
+        and isinstance(payload, dict)
+        and (payload.get('sequencer_epoch') is not None or payload.get('lane') == 'backfill')
+    )
 
     async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
         return fn(*args, **kwargs)

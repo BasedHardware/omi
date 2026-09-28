@@ -134,6 +134,19 @@ def db(monkeypatch):
     return client
 
 
+def test_nonprod_delivery_guard_is_pure_before_any_redis_read(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(
+        uid_sequencer, 'get_sync_ledger_fence_mode', MagicMock(side_effect=AssertionError('Redis read'))
+    )
+    assert uid_sequencer.production_fence_mode() is None
+    assert uid_sequencer.foreign_delivery({'lane': 'backfill', 'job_id': 'legacy'})
+    assert uid_sequencer.foreign_delivery({'lane': 'fresh', 'sequencer_epoch': 3})
+    assert not uid_sequencer.foreign_delivery({'lane': 'fresh'})
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    assert not uid_sequencer.foreign_delivery({'lane': 'backfill', 'sequencer_epoch': 3})
+
+
 def test_dev_cannot_read_or_claim_production_registry(db, monkeypatch):
     _register('shared-user', 'prod-job', 0, db=db)
     before = copy.deepcopy(db.docs)
