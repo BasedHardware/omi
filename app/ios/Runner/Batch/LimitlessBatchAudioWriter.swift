@@ -61,7 +61,7 @@ final class LimitlessBatchAudioWriter: BaseBatchAudioWriter {
     // MARK: - Writing (on `queue`)
 
     private func appendLocked(_ frames: [Data], pageTimestampMs: Int64) -> Bool {
-        let nowMs = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let nowMs = CheckedIntegerConversion.epochMs()
         // Pendant clock sanity: pages recorded before the first msg6 time-sync carry
         // a bogus epoch. Inside an open session inherit the last valid timestamp so a
         // bogus page can't fake a session gap; otherwise fall back to drain wall-clock.

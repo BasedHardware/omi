@@ -190,7 +190,7 @@ final class SiriSnapshotStore {
             guard !id.isEmpty else { throw SiriSession.Failure.server }
             try mutateForOwner(owner.uid, generation: owner.generation ?? 0) {
                 snapshot.memories[id] = Memory(id: id, content: content,
-                    createdAtMs: CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0, expiresAtMs: nil)
+                    createdAtMs: CheckedIntegerConversion.epochMs(), expiresAtMs: nil)
             }
             if enabled {
                 do { try await applyIncremental(type: "memory", ids: [id], uid: owner.uid) }
@@ -205,7 +205,7 @@ final class SiriSnapshotStore {
         try await serialized {
             try SiriSession.shared.validateOwner(owner)
             guard !id.isEmpty else { throw SiriSession.Failure.server }
-            let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+            let now = CheckedIntegerConversion.epochMs()
             try mutateForOwner(owner.uid, generation: owner.generation ?? 0) {
                 let existing = snapshot.tasks[id]
                 snapshot.tasks[id] = Task(id: id, title: title, completed: completed,
@@ -261,7 +261,7 @@ final class SiriSnapshotStore {
         expiryTask?.cancel()
         expiryTask = nil
         guard validOwnerLocked() else { return }
-        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let now = CheckedIntegerConversion.epochMs()
         guard let next = nextCutoffLocked() else { return }
         let delayMs = UInt64(min(max(next - now + 50, 50), 24 * 60 * 60 * 1000))
         expiryTask = _Concurrency.Task.detached { [weak self] in
@@ -468,7 +468,7 @@ final class SiriSnapshotStore {
                 snapshot.conversations[value.id] = Conversation(id: value.id, title: value.title,
                     summary: value.summary, startedAtMs: value.startedAtMs, updatedAtMs: value.updatedAtMs)
             }
-            let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+            let now = CheckedIntegerConversion.epochMs()
             let newest = snapshot.conversations.values.filter { eligible($0, now: now) }
                 .sorted { $0.startedAtMs > $1.startedAtMs }.prefix(2000)
             let keep = Set(newest.map(\.id))
@@ -505,7 +505,7 @@ final class SiriSnapshotStore {
             for value in values where !value.id.isEmpty {
                 snapshot.memories[value.id] = Memory(id: value.id, content: value.content, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs)
             }
-            let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+            let now = CheckedIntegerConversion.epochMs()
             let newest = snapshot.memories.values.filter { eligible($0, now: now) }
                 .sorted { $0.createdAtMs > $1.createdAtMs }.prefix(5000)
             let keep = Set(newest.map(\.id))
@@ -602,7 +602,7 @@ final class SiriSnapshotStore {
         lock.lock(); defer { lock.unlock() }
         guard !id.isEmpty, accountOwnerLocked(), transitionGeneration == nil,
               (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty else { return false }
-        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let now = CheckedIntegerConversion.epochMs()
         switch type {
         case "conversation":
             return snapshot.conversations[id].map { eligible($0, now: now) } ?? false
@@ -621,7 +621,7 @@ final class SiriSnapshotStore {
         catch { return [] }
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
-        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let now = CheckedIntegerConversion.epochMs()
         let selected = snapshot.conversations.values.filter {
             eligible($0, now: now) && (ids?.contains($0.id) ?? true)
         }
@@ -636,7 +636,7 @@ final class SiriSnapshotStore {
         catch { return [] }
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
-        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let now = CheckedIntegerConversion.epochMs()
         return snapshot.memories.values.filter { (ids?.contains($0.id) ?? true) && eligible($0, now: now) }.map {
             ConversationEntity(memoryId: $0.id, content: $0.content,
                 creationDate: Date(timeIntervalSince1970: Double($0.createdAtMs) / 1000))
@@ -649,7 +649,7 @@ final class SiriSnapshotStore {
         catch { return [] }
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
-        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let now = CheckedIntegerConversion.epochMs()
         return snapshot.memories.values.filter { (ids?.contains($0.id) ?? true) && eligible($0, now: now) }.map {
             MemoryEntity(id: $0.id, content: $0.content,
                 creationDate: Date(timeIntervalSince1970: Double($0.createdAtMs) / 1000)) }
@@ -661,7 +661,7 @@ final class SiriSnapshotStore {
         catch { return [] }
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
-        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let now = CheckedIntegerConversion.epochMs()
         return snapshot.tasks.values.filter {
             (ids?.contains($0.id) ?? true) && eligible($0, now: now)
         }.map {
@@ -747,7 +747,7 @@ final class SiriSnapshotStore {
             guard #available(iOS 27.0, *) else { return }
             try requireValidOwner()
             guard let uid = owner, let indexName else { throw SiriSession.Failure.auth }
-            let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+            let now = CheckedIntegerConversion.epochMs()
             try mutateForOwner(uid) {
                 snapshot.conversations = snapshot.conversations.filter { eligible($0.value, now: now) }
                 let newest = snapshot.conversations.values.sorted { $0.startedAtMs > $1.startedAtMs }.prefix(2000)

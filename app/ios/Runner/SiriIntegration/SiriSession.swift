@@ -55,7 +55,7 @@ final class SiriSession {
         try SafeDefaults.store(.data(try JSONEncoder().encode(config)), forKey: configKey, in: defaults)
         SecItemDelete(keychainQuery() as CFDictionary)
         if let token = input.token, !token.isEmpty, let expiry = input.tokenExpiresAtMs,
-           expiry > (CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0) + 60_000 {
+           expiry > (CheckedIntegerConversion.epochMs()) + 60_000 {
             let bytes = Data(token.utf8)
             let item: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                        kSecAttrService as String: keychainService,
@@ -165,7 +165,7 @@ final class SiriSession {
             return fresh
         }
         guard let expiry = config.expiresAtMs,
-              expiry > (CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0) + 60_000 else {
+              expiry > (CheckedIntegerConversion.epochMs()) + 60_000 else {
             throw Failure.auth
         }
         var query = keychainQuery()

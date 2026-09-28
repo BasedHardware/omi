@@ -109,6 +109,12 @@ enum SafeJSON {
 }
 
 enum CheckedIntegerConversion {
+    /// Converts an epoch-based date to milliseconds, using the same finite,
+    /// range-checked conversion and zero fallback as existing call sites.
+    static func epochMs(_ date: Date = Date()) -> Int64 {
+        int64(date.timeIntervalSince1970 * 1000) ?? 0
+    }
+
     /// Truncates finite values toward zero, matching Swift's numeric conversion.
     static func int64(_ value: Double) -> Int64? {
         guard value.isFinite, value >= -9_223_372_036_854_775_808.0,

@@ -63,6 +63,11 @@ class SafeFoundationSinksTest < Minitest::Test
         precondition(CheckedIntegerConversion.int64(.infinity) == nil)
         precondition(CheckedIntegerConversion.int64(Double(Int64.max)) == nil)
         precondition(CheckedIntegerConversion.int(Double.infinity) == nil)
+        precondition(CheckedIntegerConversion.epochMs(Date(timeIntervalSince1970: 1.2349)) == 1234)
+        let beforeDefaultEpoch = Date()
+        let defaultEpochMs = CheckedIntegerConversion.epochMs()
+        let afterDefaultEpoch = Date()
+        precondition((CheckedIntegerConversion.epochMs(beforeDefaultEpoch)...CheckedIntegerConversion.epochMs(afterDefaultEpoch)).contains(defaultEpochMs))
       SWIFT
       stdout, stderr, compile = Open3.capture3('swiftc', SOURCE, harness, '-o', binary)
       assert compile.success?, "swiftc failed:\n#{stdout}\n#{stderr}"

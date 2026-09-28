@@ -628,7 +628,7 @@ final class OmiBleManager: NSObject {
     private func appendLifecycleEvent(_ name: String) {
         let defaults = UserDefaults.standard
         var events = defaults.array(forKey: "ble_diagnostics_lifecycle") as? [[String: Any]] ?? []
-        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let now = CheckedIntegerConversion.epochMs()
         events.append(["ts": now, "event": name])
         events.removeAll { ($0["ts"] as? Int64 ?? 0) < now - Self.disconnectRetentionMs }
         persistPropertyListRecords(Array(events.suffix(500)), forKey: "ble_diagnostics_lifecycle", in: defaults)
@@ -638,7 +638,7 @@ final class OmiBleManager: NSObject {
         let defaults = UserDefaults.standard
         let key = "ble_diagnostics_log_\(uuid)"
         var entries = defaults.array(forKey: key) as? [[String: Any]] ?? []
-        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let now = CheckedIntegerConversion.epochMs()
         entries.append(["ts": now, "event": event, "detail": detail])
         entries.removeAll { ($0["ts"] as? Int64 ?? 0) < now - 24 * 3600 * 1000 }
         persistPropertyListRecords(Array(entries.suffix(500)), forKey: key, in: defaults)
@@ -658,14 +658,14 @@ final class OmiBleManager: NSObject {
             let defaults = UserDefaults.standard
             var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
             if let i = history.lastIndex(where: { ($0["timestamp"] as? Int64) == marker }) {
-                history[i]["lostAudioSeconds"] = Double(max(0, (CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0) - marker)) / 1000
+                history[i]["lostAudioSeconds"] = Double(max(0, (CheckedIntegerConversion.epochMs()) - marker)) / 1000
                 persistPropertyListRecords(history, forKey: key, in: defaults)
             }
         }
     }
 
     private func recordFirmwareDiagnostics(uuid: String, data: Data) {
-        guard let value = OmiBleFirmwareDiagnostics.parse(data, timestampMs: CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0) else { return }
+        guard let value = OmiBleFirmwareDiagnostics.parse(data, timestampMs: CheckedIntegerConversion.epochMs()) else { return }
         let defaults = UserDefaults.standard
         chargingState[uuid] = value["charging"] as? Bool
         let key = "ble_diagnostics_firmware_\(uuid)"
@@ -749,7 +749,7 @@ final class OmiBleManager: NSObject {
         let key = OmiBleManager.historyKey(uuid)
         var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
 
-        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let now = CheckedIntegerConversion.epochMs()
         let startedAt = connectionStartTimes[uuid] ?? 0
         let durationMs: Int64 = (eventType == "disconnect" && startedAt > 0) ? (now - startedAt) : 0
 
@@ -796,7 +796,7 @@ final class OmiBleManager: NSObject {
         guard var history = defaults.array(forKey: key) as? [[String: Any]] else { return }
 
         // Walk backwards for the matching timestamp. History is small (≤20).
-        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let now = CheckedIntegerConversion.epochMs()
         for i in stride(from: history.count - 1, through: 0, by: -1) {
             if let ts = history[i]["timestamp"] as? Int64, ts == markerTs {
                 var event = history[i]
@@ -921,7 +921,7 @@ final class OmiBleManager: NSObject {
         let key = OmiBleManager.batteryHistoryKey(uuid)
         let history = defaults.array(forKey: key) as? [[String: Any]] ?? []
 
-        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let now = CheckedIntegerConversion.epochMs()
         let cutoff = now - OmiBleManager.batteryHistoryRetentionMs
 
         return history.compactMap { obj in
@@ -1049,7 +1049,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         readyNotified.remove(uuid)
         discoveryStartedAt.removeValue(forKey: uuid)
         pairingRecoveryInFlight.remove(uuid)
-        let connectionStartedAt = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let connectionStartedAt = CheckedIntegerConversion.epochMs()
         connectionStartTimes[uuid] = connectionStartedAt
         lastRssi.removeValue(forKey: uuid)
         rssiHistory.removeValue(forKey: uuid)
@@ -1200,7 +1200,7 @@ extension OmiBleManager: CBPeripheralDelegate {
         lastRssi[uuid] = value
 
         // Append to the trajectory window used by rssiTrend classification.
-        let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        let now = CheckedIntegerConversion.epochMs()
         var samples = rssiHistory[uuid] ?? []
         samples.append((ts: now, rssi: value))
         if samples.count > OmiBleManager.rssiHistoryLimit {

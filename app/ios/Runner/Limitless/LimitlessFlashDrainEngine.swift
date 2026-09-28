@@ -305,7 +305,7 @@ final class LimitlessFlashDrainEngine {
     }
 
     private func nowMs() -> Int64 {
-        return CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) ?? 0
+        return CheckedIntegerConversion.epochMs()
     }
 
     private func write(_ peripheralUuid: String, _ data: Data) {
