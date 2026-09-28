@@ -45,6 +45,7 @@ struct ChatConversationReferencePill: View {
           .foregroundColor(Ink.primary)
           .lineLimit(1)
           .truncationMode(.middle)
+          .help(reference.displayTitle)
         Text(reference.displaySubtitle)
           .scaledFont(size: OmiType.micro)
           .foregroundColor(Ink.secondary)

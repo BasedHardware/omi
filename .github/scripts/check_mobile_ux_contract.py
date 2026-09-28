@@ -8,6 +8,8 @@ doing that job by hand. For every changed Dart file under app/lib/, no rule's co
 above the file's count at the merge base; a new file starts at zero. Existing debt may remain
 and is expected to shrink as files are touched.
 
+OmiColors resolves light and dark palettes at runtime; the literal guard applies to both.
+
 Escape hatch: end the offending line with
     // omi-ux-allow: <rule-id> -- <reason>
 (several ids may be comma-separated). The reason is required; an allow without one is ignored.

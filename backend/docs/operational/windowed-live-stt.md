@@ -10,9 +10,11 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 
 | Environment variable | Code default | Dev listen | Prod listen |
 |---|---|---|---|
-| `STT_CONNECT_ORDER_FROM_CONFIG` | `false` | `true` | `false` |
-| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `100` | `0` |
+| `STT_CONNECT_ORDER_FROM_CONFIG` | `false` | `true` | `true` |
+| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `1` |
 | `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `1` |
+| `PARAKEET_BATCH_PRESSURE_POOL_HOST` | empty (stand down) | `dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local` | `prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local` |
+| `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` | `2` | `1` | `2` |
 | `PARAKEET_WINDOW_POST_TIMEOUT_SECONDS` | `8` | `8` | `8` |
 | `PARAKEET_WINDOW_DIARIZATION` | `false` | `false` | `false` |
 | `PARAKEET_WINDOW_PACE_SECONDS` | `6` | `6` | `6` |
@@ -25,9 +27,12 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 The first flag gates all new routing/breaker behavior, including account cooldown,
 last-resort primary admission and Soniox's own circuit configuration. With it off,
 the existing fixed order, fallback breaker behavior, and Modulate-named Soniox
-circuit env lookup remain unchanged. Production retains
-`modulate-velma-2,soniox,dg-nova-3,parakeet`. Only bounded telemetry vocabulary is
-corrected unconditionally. Dev explicitly sets `STT_SERVICE_MODELS=parakeet-window,soniox`.
+circuit env lookup remain unchanged. Dev and prod declare the same
+`parakeet-window,modulate-velma-2,soniox,dg-nova-3` order. The first token uses
+windowed TDT only for the allocated UID bucket; everyone else retains the
+Modulate → Soniox → Deepgram order. Streaming RNNT is outside this chain. Dev configuration parity
+is a prerequisite, but a live dev read must confirm the running order before
+any prod rollout.
 Runtime env source is `_base.yaml` plus overlays; regenerate the composed manifest.
 With the flag enabled, the deployment validator accepts configured listen orders
 whose tokens are all enabled by the streaming policy. With it off, canonical
@@ -46,6 +51,73 @@ multi-channel, custom STT and BYOK do not enter the new session path. Those
 excluded listen shapes drop only the `parakeet-window` token from the configured
 list; they keep the rest of `STT_SERVICE_MODELS` (they are not rewritten onto
 code-default Modulate).
+
+## Production canary: 1%, then 2%, or 0% rollback
+
+Before deploying the 1% chart, read the running dev listen configuration and
+confirm `STT_CONNECT_ORDER_FROM_CONFIG=true`,
+`STT_SERVICE_MODELS=parakeet-window,modulate-velma-2,soniox,dg-nova-3`,
+`PARAKEET_WINDOW_ALLOCATION_PERCENT=1`, and `PARAKEET_WINDOW_MAX_SESSIONS=1`.
+Exercise eligible and ineligible languages and an overflow on dev. The chart
+and runtime manifest alone do not prove that the running deployment uses them.
+
+The stable UID bucket is the canary arm. The window is first for eligible
+allocated sessions; an unsupported language or full local slot sends traffic
+to the existing vendor chain. The
+per-process `PARAKEET_WINDOW_MAX_SESSIONS=1` is the admission safety limit;
+overflow proceeds to the next eligible leg. Keep it at 1 until the mixed live
+and sync-batch capacity curve gives a reason to change it.
+
+The Parakeet chart creates a headless Service selecting the same ready pods as
+the ordinary Service. Listen resolves its pod IPs in a background task every
+five seconds and polls each `/batch/metrics` with a one-second deadline. It
+sums pending requests and takes the longest queue wait. Four pending requests
+across the pool or a one-second wait on any replica sends an allocated session
+to the next vendor leg. Admission only reads the cache; it never waits on DNS
+or HTTP. If fewer than the expected replicas answer, any response is invalid,
+or the sample is over 15 seconds old, every listen process stands down. This
+fleet-wide fallback prevents the local session cap multiplying across listen
+replicas during an outage. Deploy the Parakeet chart's headless Service before
+enabling listen canary admission; no manual Service creation is needed. An
+active TDT window that fails on timeout, 5xx, or capacity pressure replays its
+untranscribed capture audio on the replacement leg. If replay itself fails,
+the remaining tail and newly received audio follow the next vendor leg without
+resending the accepted prefix.
+
+During the 1% bake, compare `omi_stt_window_canary_transcript_outcome_total`
+`arm=window` with `arm=control`: the rate of `transcribed / (transcribed +
+no_transcript)` must not drop for the allocated arm. The 95% fleet SLO is shown
+on the Backend-listen dashboard; a separate page fires below 90% with its
+volume guard. Inspect `omi_stt_window_session_outcome_total{outcome="no_text"}`
+over sessions with VAD speech, and the `capacity_full` ratio from
+`omi_stt_window_admissions_total{outcome="overflow"}`. Require no sustained
+capacity overflow or no-text increase relative to the control SLI. First-text
+p50 and p95 come from `omi_stt_window_first_text_seconds_bucket`; p95 must
+remain below 30 seconds and p50 must not drift upward through the bake.
+Compare `omi_stt_window_sessions_active` with the summed process caps, TDT
+POST p50/p95 from `omi_stt_window_post_seconds_bucket`, and
+`DCGM_FI_DEV_GPU_UTIL`/free GPU memory on the Parakeet pool. The same GPUs
+serve sync backfill, so require visible headroom and no sync-batch queue or
+latency regression before ramping. Use the Parakeet GPU dashboard for the
+batch queue and memory panels. Read each metric by time and load, not a single
+snapshot.
+
+The Telegram batch pages fire at four pending requests for two minutes, batch
+queue p95 at one second with five observations for two minutes, and prerecorded
+Parakeet error rate at 2% with ten requests for two minutes. Prerecorded traffic
+includes sync backfill and excludes live-window POSTs by their request header,
+so read these alongside the sync job queue before ramping. All three batch
+rules treat missing telemetry as Alerting and use the existing Telegram route.
+The page action is **Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0**
+in the prod chart and runtime overlay, then recompose the runtime environment.
+
+If the 1% bake meets those criteria, change only
+`PARAKEET_WINDOW_ALLOCATION_PERCENT` from `1` to `2` in the prod listen chart
+and runtime overlay, recompose runtime env, then repeat the same checks. To
+roll back, set it to `0` in both places and recompose; the config-only switch
+does not alter the vendor order. The Telegram capacity alert names this lever.
+Neither this document nor a merged configuration change changes live traffic;
+deployment and verification belong to the coordinator.
 
 ## Why windows are sentence-anchored
 
@@ -241,10 +313,50 @@ only when the whole chain cannot serve. That is what #15189's
 accepted sockets, 35% warn / 60% page). Per-leg degraded events do not move
 those ratios.
 
-Grafana split `alerts/live-stt.json` and the combined export cover terminal chain
-exhaustion, per-leg error ratios, authentication deaths, overflow ratio,
-sustained cap occupancy and batch POST error ratio. Traffic floors suppress
-ratio noise; saturation uses a dwell gauge. Existing #15189 fallback alerts and
+Grafana split `alerts/live-stt.json` and the combined export cover per-leg
+error ratios, authentication deaths, overflow ratio, sustained cap occupancy
+and batch POST error ratio. Traffic floors suppress ratio noise; saturation
+uses a dwell gauge. The former `omi-stt-chain-terminal` rule was deleted
+(2026-09-26): it read `omi_stt_chain_exhausted_total`, which the legacy
+connect path never emits, so it sat unfirable through the whole 2026-09-26
+prod incident; chain exhaustion is covered by #15189's
+`omi-stt-chain-exhausted-warn` / `-page` on `omi_fallback_total` plus the
+headline session-outcome page below.
+
+2026-09-26 additions (live-transcription health):
+
+- `omi_live_session_transcript_outcome_total{outcome}` — the headline SLI,
+  emitted exactly once per backend-STT listen session at teardown
+  (`routers/listen/runtime.py::_record_session_transcript_outcome`).
+  `transcribed` = at least one nonempty transcript batch was delivered;
+  `no_transcript` = session ended without one (including STT-terminal
+  failures, which never get the short-session excuse); `too_short` = under
+  ~10 s of audio or zero VAD speech on a clean teardown — excluded from the
+  success ratio so quiet sessions cannot page. Custom-STT sessions are not
+  counted. Unit = one accepted WebSocket: a client reconnect counts once per
+  socket (the runtime cannot see the prior socket's transcripts without
+  cross-connection state).
+- `omi-live-transcription-success-low` — **PAGE**.
+  `transcribed / (transcribed + no_transcript) < 0.90` for 5 m with a
+  `>= 50 counted sessions / 5 m` volume guard. This is the alert the
+  2026-09-26 incident did not have.
+- `omi_stt_provider_connect_total{provider,outcome,error_class}` — recorded
+  on every connect path (legacy order and configured chain) with bounded
+  error classes `budget|auth|server_error|timeout|capability|other`.
+  `omi-stt-leg-error-rate` now reads it instead of the configured-chain-only
+  `omi_stt_leg_attempts_total`.
+- `omi_stt_provider_circuit_open{provider,kind=selection|account}` — per-pod
+  mirror of the process-local breakers; sum across the listen job for "pods
+  with this provider benched".
+- `omi_stt_provider_retired{provider}` — deployment config
+  (`STT_RETIRED_PROVIDERS`, default `deepgram` per the 2026-09 cost ruling:
+  hosted Deepgram is intentionally unfunded). The per-provider budget page
+  and the leg-error rule subtract retired providers so an unfunded leg
+  cannot fire forever.
+
+The Backend-listen dashboard has a "Live transcription health" row: headline
+%, sessions by outcome, per-provider sessions served and connect success %,
+breaker-open pods, and connect failures by error class. Existing #15189 fallback alerts and
 #15218 budget/quota page remain; the auth rule excludes budget refusals to avoid
 duplicate pages. An initialization-terminal rule on
 `omi_live_stt_terminal_failures_total{phase="initialization"}` is **not**

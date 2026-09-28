@@ -15,6 +15,9 @@ class _Blob:
     def delete(self):
         self.bucket.names.remove(self.name)
 
+    def exists(self):
+        return self.name in self.bucket.names
+
 
 class _Bucket:
     def __init__(self, names):
@@ -64,6 +67,25 @@ def test_owner_prefix_purge_removes_private_and_non_private_uid_objects(monkeypa
     assert buckets['private'].names == {'chunks/other/keep.opus'}
     assert buckets['sync'].names == {'syncing/other/job/input.bin'}
     assert buckets['chat'].names == {'other/chat.txt'}
+
+
+def test_owner_prefix_purge_removes_diagnostic_ticket_lookup(monkeypatch):
+    ticket = 'ABCDEF123456'
+    bucket = _Bucket(
+        {
+            f'diagnostics/uid1/{ticket}.json',
+            f'diagnostics/tickets/{ticket}.json',
+            'diagnostics/other/keep.json',
+        }
+    )
+    monkeypatch.setattr(storage_mod, 'speech_profiles_bucket', None)
+    monkeypatch.setattr(storage_mod, 'private_cloud_sync_bucket', 'private')
+    monkeypatch.setattr(storage_mod, 'syncing_local_bucket', None)
+    monkeypatch.setattr(storage_mod, 'chat_files_bucket', None)
+    monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client({'private': bucket}))
+
+    assert storage_mod.delete_all_user_storage_objects('uid1') == 2
+    assert bucket.names == {'diagnostics/other/keep.json'}
 
 
 def test_frame_prefix_purge_covers_both_tiers(monkeypatch):

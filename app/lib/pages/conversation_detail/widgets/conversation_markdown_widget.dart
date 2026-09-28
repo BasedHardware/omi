@@ -25,13 +25,13 @@ MarkdownStyleSheet _conversationMarkdownStyle(BuildContext context) {
     h4Padding: conversationMarkdownHeaderPadding,
     h5Padding: conversationMarkdownHeaderPadding,
     h6Padding: conversationMarkdownHeaderPadding,
-    blockquote: style.copyWith(backgroundColor: Colors.transparent, color: Colors.white),
+    blockquote: style.copyWith(backgroundColor: Colors.transparent, color: OmiColors.textPrimary),
     blockquoteDecoration:
-        const BoxDecoration(color: OmiColors.surface3, borderRadius: BorderRadius.all(Radius.circular(4))),
+        BoxDecoration(color: OmiColors.surface3, borderRadius: const BorderRadius.all(Radius.circular(4))),
     code: style.copyWith(
       backgroundColor: Colors.transparent,
       decoration: TextDecoration.none,
-      color: Colors.white,
+      color: OmiColors.textPrimary,
       fontWeight: FontWeight.w500,
     ),
     strong: style.copyWith(fontWeight: FontWeight.bold),
@@ -528,7 +528,7 @@ class _SearchHighlightBuilder extends MarkdownElementBuilder {
         text: element.textContent,
         style: (preferredStyle ?? const TextStyle()).copyWith(
           backgroundColor: isCurrent ? OmiColors.warning : OmiColors.textTertiary,
-          color: Colors.white,
+          color: OmiColors.textPrimary,
         ),
       ),
     );

@@ -2493,12 +2493,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Pesan diagnostik terperinci';
 
   @override
-  String get autoCreateSpeakers => 'Buat Pembicara Otomatis';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Buat otomatis saat nama terdeteksi';
-
-  @override
   String get followUpQuestions => 'Pertanyaan Lanjutan';
 
   @override
@@ -11182,9 +11176,6 @@ class AppLocalizationsId extends AppLocalizations {
       'Transkripsi tidak tersedia, perekaman berlanjut di perangkat dan akan diproses nanti';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkripsi tidak tersedia · disimpan di perangkat';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transkripsi tertunda $pending/$total';
   }
@@ -11243,4 +11234,225 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Hentikan Transcribe Later di pendant Anda sebelum merekam dengan ponsel.';
+
+  @override
+  String get captureNotTranscribing => 'Tidak mentranskripsi';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio disimpan, ditranskripsi nanti';
+
+  @override
+  String get captureStillRecording => 'Masih merekam';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon dipakai aplikasi lain';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Panggilan atau aplikasi lain sedang memakai mikrofon, jadi Omi tidak bisa mendengar sekarang. Omi akan lanjut sendiri saat mikrofon sudah bebas. Semua yang direkam sebelumnya aman.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Layanan ucapan-ke-teks kustom Anda tidak dapat dijangkau. Omi menyimpan audio di ponsel ini dan mengirimnya saat layanan kembali. Tidak ada yang hilang.';
+
+  @override
+  String get captureStarting => 'Memulai…';
+
+  @override
+  String get capturePhoneStorageFull => 'Penyimpanan ponsel penuh';
+
+  @override
+  String get captureStorageAlmostFull => 'Penyimpanan hampir penuh';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name dan lainnya';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Dengarkan jawaban Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Baik. Rapat Anda berikutnya dimulai dua puluh menit lagi.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Semua Sudah Siap';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Ketuk baris untuk meninjau atau mengubahnya.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Saat Anda bertanya dengan tombol tersebut, Omi dapat membacakan jawabannya dengan lantang.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Dengarkan jawaban terakhir Anda';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Memutar jawaban terakhir Anda...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Melalui $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Melalui speaker telepon';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Melalui output audio saat ini';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Jawaban tetap ada di layar. Tidak ada yang diucapkan.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Pribadi. Berbicara hanya melalui AirPods, Bluetooth atau headphone berkabel.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Menggunakan speaker telepon saat tidak ada headphone yang tersambung.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi akan tetap diam. Jawaban masih muncul di aplikasi.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device terhubung. Omi akan berbicara di sini.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Tidak ada headphone yang terhubung. Omi tetap diam sampai Anda menghubungkan beberapa.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Memutar hingga $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Dimainkan dengan suara keras melalui speaker telepon.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Anda dapat mengubahnya kapan saja di $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Putar ulang tur ini kapan saja di $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Headphone';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'menit';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tugas';
+
+  @override
+  String get usageMonth => 'Bulan Ini';
+
+  @override
+  String get usageYear => 'Tahun Ini';
+
+  @override
+  String get usageAll => 'Sepanjang Waktu';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Tampilan';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Terang';
+
+  @override
+  String get appearanceDark => 'Gelap';
+
+  @override
+  String get chatDiscardRecording => 'Buang';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Tidak terdengar — coba lagi';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get searchPeople => 'Cari orang';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Tambahkan \"$query\" sebagai orang baru';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Tampilkan semua $count orang';
+  }
 }

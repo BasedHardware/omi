@@ -95,7 +95,7 @@ def get_popular_apps_db() -> List[Dict[str, Any]]:
 
 def set_app_popular_db(app_id: str, popular: bool) -> None:
     app_ref = db.collection(apps_collection).document(app_id)
-    app_ref.update({'is_popular': popular})
+    app_ref.set({'is_popular': popular}, merge=True)
 
 
 def search_apps_db(
@@ -223,17 +223,26 @@ def get_apps_for_tester_db(uid: str) -> List[Dict[str, Any]]:
 
 
 def add_app_to_db(app_data: Dict[str, Any]) -> None:
+    app_id = app_data.get('id')
+    if not app_id:
+        raise ValueError("app_data must include 'id'")
     app_ref = db.collection(apps_collection)
-    app_ref.add(app_data, app_data['id'])
+    app_ref.add(app_data, app_id)
 
 
 def upsert_app_to_db(app_data: Dict[str, Any]) -> None:
-    app_ref = db.collection(apps_collection).document(app_data['id'])
-    app_ref.set(app_data)
+    app_id = app_data.get('id')
+    if not app_id:
+        raise ValueError("app_data must include 'id'")
+    app_ref = db.collection(apps_collection).document(app_id)
+    app_ref.set(app_data, merge=True)
 
 
 def update_app_in_db(app_data: Dict[str, Any]) -> None:
-    app_ref = db.collection(apps_collection).document(app_data['id'])
+    app_id = app_data.get('id')
+    if not app_id:
+        raise ValueError("app_data must include 'id'")
+    app_ref = db.collection(apps_collection).document(app_id)
     app_ref.update(app_data)
 
 
@@ -324,12 +333,12 @@ def add_tester_db(data: Dict[str, Any]) -> None:
 
 def add_app_access_for_tester_db(app_id: str, uid: str) -> None:
     app_ref = db.collection(testers_collection).document(uid)
-    app_ref.update({'apps': ArrayUnion([app_id])})
+    app_ref.set({'apps': ArrayUnion([app_id])}, merge=True)
 
 
 def remove_app_access_for_tester_db(app_id: str, uid: str) -> None:
     app_ref = db.collection(testers_collection).document(uid)
-    app_ref.update({'apps': ArrayRemove([app_id])})
+    app_ref.set({'apps': ArrayRemove([app_id])}, merge=True)
 
 
 def remove_tester_db(uid: str) -> None:
@@ -499,8 +508,11 @@ def get_omi_persona_apps_by_uid_db(uid: str) -> List[Dict[str, Any]]:
 
 
 def update_persona_in_db(persona_data: Dict[str, Any]) -> None:
-    persona_ref = db.collection(apps_collection).document(persona_data['id'])
-    persona_ref.update(persona_data)
+    persona_id = persona_data.get('id')
+    if not persona_id:
+        raise ValueError("persona_data must include 'id'")
+    persona_ref = db.collection(apps_collection).document(persona_id)
+    persona_ref.set(persona_data, merge=True)
 
 
 def migrate_app_owner_id_db(new_id: str, old_id: str) -> None:

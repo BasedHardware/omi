@@ -54,7 +54,7 @@ Future<List<ServerConversation>> getConversations({
   int limit = 50,
   int offset = 0,
   List<ConversationStatus> statuses = const [],
-  bool includeDiscarded = true,
+  bool includeDiscarded = false,
   DateTime? startDate,
   DateTime? endDate,
   String? folderId,
@@ -81,7 +81,7 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   int limit = 50,
   int offset = 0,
   List<ConversationStatus> statuses = const [],
-  bool includeDiscarded = true,
+  bool includeDiscarded = false,
   DateTime? startDate,
   DateTime? endDate,
   String? folderId,
@@ -114,7 +114,13 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   return (items: <ServerConversation>[], ok: false, truncated: false);
 }
 
-Future<ServerConversation?> reProcessConversationServer(String conversationId, {String? appId}) async {
+bool hasSpeakerReceiptSummaryCapability(Map<String, String> headers) => headers['x-omi-speaker-receipt-summary'] == '1';
+
+Future<ServerConversation?> reProcessConversationServer(
+  String conversationId, {
+  String? appId,
+  bool requireSpeakerReceipt = false,
+}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess${appId != null ? '?app_id=$appId' : ''}',
     headers: {},
@@ -124,6 +130,10 @@ Future<ServerConversation?> reProcessConversationServer(String conversationId, {
   if (response == null) return null;
   Logger.debug('reProcessConversationServer: ${response.body}');
   if (response.statusCode == 200) {
+    // A pre-fix backend can return 200 with a summary made from stale speaker
+    // labels. Keep the detail page's retry action until the receipt-aware
+    // processor explicitly acknowledges its summary path.
+    if (requireSpeakerReceipt && !hasSpeakerReceiptSummaryCapability(response.headers)) return null;
     return ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
   return null;
@@ -288,7 +298,7 @@ String conversationCollectionUrl(
   int limit = 50,
   int offset = 0,
   List<ConversationStatus> statuses = const [],
-  bool includeDiscarded = true,
+  bool includeDiscarded = false,
   DateTime? startDate,
   DateTime? endDate,
   String? folderId,
@@ -326,7 +336,7 @@ class ConversationApi {
     int limit = 50,
     int offset = 0,
     List<ConversationStatus> statuses = const [],
-    bool includeDiscarded = true,
+    bool includeDiscarded = false,
     DateTime? startDate,
     DateTime? endDate,
     String? folderId,
@@ -352,11 +362,15 @@ class ConversationApi {
     );
     return switch (sent) {
       ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data) => decodeApiRows<ServerConversation>(
+      ApiSuccess(:final data, :final truncated) => switch (decodeApiRows<ServerConversation>(
           data,
           ServerConversation.fromJson,
           fallback: recordFallback,
-        ),
+        )) {
+          ApiSuccess(:final data, :final rejectedRows) =>
+            ApiSuccess(data, rejectedRows: rejectedRows, truncated: truncated),
+          ApiFailure(:final problem) => ApiFailure(problem),
+        },
     };
   }
 
@@ -665,13 +679,15 @@ Future<String?> _createSyncCaptureManifest(List<File> files, String conversation
 
 /// Thrown when a sync upload is rate-limited (HTTP 429).
 /// [retryAfterSeconds] is the server's Retry-After when provided.
+/// [reasonCode] is the bounded `X-Omi-Rate-Limit-Reason` header when present.
 class SyncRateLimitedException implements Exception {
   final SyncRateLimitKind kind;
   final int? retryAfterSeconds;
-  SyncRateLimitedException({required this.kind, this.retryAfterSeconds});
+  final String? reasonCode;
+  SyncRateLimitedException({required this.kind, this.retryAfterSeconds, this.reasonCode});
 
   @override
-  String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds)';
+  String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds, reason=$reasonCode)';
 }
 
 /// Thrown when the server permanently refuses a recording because its capture
@@ -736,8 +752,40 @@ int? _parseRetryAfterSeconds(http.Response response) {
 /// The application-generated restriction response carries this bounded header.
 /// Everything else remains a generic backend-capacity limit.
 SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
-  final reason = response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase();
+  final reason = syncRateLimitReasonCode(response);
   return reason == 'fair_use' ? SyncRateLimitKind.fairUse : SyncRateLimitKind.backendCapacity;
+}
+
+/// Bounded `X-Omi-Rate-Limit-Reason` value, or null when the header is absent.
+String? syncRateLimitReasonCode(http.Response response) {
+  final reason = response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase();
+  if (reason == null || reason.isEmpty) return null;
+  return reason;
+}
+
+/// Historical-recovery pacing the backend asks the client to wait out.
+///
+/// One predicate for the upload response and the job reconciler. `backfill_paced`
+/// and `backfill_capacity` stay pending and retry on Retry-After; they are not
+/// a second failure taxonomy.
+bool isPacedBackfillReasonCode(String? reasonCode) {
+  switch (reasonCode?.trim().toLowerCase()) {
+    case 'backfill_paced':
+    case 'backfill_capacity':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/// Upload responses that are admission throttles rather than processing failures.
+///
+/// Every 429 is a throttle. A 503 is a throttle only when the backend scopes it
+/// with `backfill_capacity`. An unscoped 503, including job-status finalization
+/// retry and `sync_dispatch_unavailable`, is not this predicate.
+bool isSyncUploadRateLimitResponse(http.Response response) {
+  if (response.statusCode == 429) return true;
+  return response.statusCode == 503 && syncRateLimitReasonCode(response) == 'backfill_capacity';
 }
 
 /// Upload-only: POST files and return as soon as the server acknowledges
@@ -750,6 +798,10 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
+  String? captureEvidence,
+  String? recordingSessionId,
+  double? audioStartSeconds,
+  double? audioEndSeconds,
   bool claimLiveCapture = false,
   Geolocation? geolocation,
 }) async {
@@ -759,14 +811,21 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     captureManifest = await _createSyncCaptureManifest(files, conversationId!);
   }
   var url = '${Env.apiBaseUrl}v2/sync-local-files';
-  if (conversationId != null) {
-    url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
+  final query = <String, String>{
+    if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
+    if (recordingSessionId != null && recordingSessionId.isNotEmpty) 'recording_session_id': recordingSessionId,
+    if (audioStartSeconds != null) 'audio_start_seconds': audioStartSeconds.toString(),
+    if (audioEndSeconds != null) 'audio_end_seconds': audioEndSeconds.toString(),
+  };
+  if (query.isNotEmpty) {
+    url += '?${query.entries.map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}').join('&')}';
   }
   var response = await makeMultipartApiCall(
     url: url,
     files: files,
     headers: {
       if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
+      if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
       if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
     },
     onUploadProgress: onUploadProgress,
@@ -796,12 +855,11 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
   } else if (response.statusCode == 413) {
     throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload');
-  } else if (response.statusCode == 429 ||
-      (response.statusCode == 503 &&
-          response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'backfill_capacity')) {
+  } else if (isSyncUploadRateLimitResponse(response)) {
     throw SyncRateLimitedException(
       kind: syncRateLimitKindForResponse(response),
       retryAfterSeconds: _parseRetryAfterSeconds(response),
+      reasonCode: syncRateLimitReasonCode(response),
     );
   } else if (isSyncRecoveryWindowExceededResponse(response)) {
     throw const SyncRecoveryWindowExceededException();
@@ -815,7 +873,23 @@ Future<UploadFilesResult> uploadLocalFilesV2(
 /// - [notFound]  : 404/403 — job expired, unknown, or not ours. Unrecoverable
 ///                 for this job_id; the caller must fall back to re-upload.
 /// - [transient] : network/5xx/null — retry later, job may still be alive.
+///                 Includes the 503 returned while backfill finalization is
+///                 still retrying: the WAL stays `uploaded`, and this poll is
+///                 not an upload failure.
 enum SyncJobFetchOutcome { ok, notFound, transient }
+
+/// Maps a job-status HTTP code before the body is parsed.
+///
+/// 503 while a failed backfill job is still finalizing is [SyncJobFetchOutcome.transient]:
+/// keep the local recording pending and poll again. It is not a missing job
+/// and not a terminal failure. Unscoped 5xx on this GET stay transient too;
+/// user-visible upload failures are minted only for admitted upload attempts.
+@visibleForTesting
+SyncJobFetchOutcome syncJobFetchOutcomeForStatusCode(int statusCode) {
+  if (statusCode == 404 || statusCode == 403) return SyncJobFetchOutcome.notFound;
+  if (statusCode != 200) return SyncJobFetchOutcome.transient;
+  return SyncJobFetchOutcome.ok;
+}
 
 class SyncJobFetch {
   final SyncJobFetchOutcome outcome;
@@ -836,7 +910,8 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
     DebugLogManager.logEvent('fetch_sync_job_status', {'jobId': jobId, 'httpStatus': null, 'outcome': 'transient'});
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
-  if (response.statusCode == 404 || response.statusCode == 403) {
+  final outcome = syncJobFetchOutcomeForStatusCode(response.statusCode);
+  if (outcome == SyncJobFetchOutcome.notFound) {
     DebugLogManager.logEvent('fetch_sync_job_status', {
       'jobId': jobId,
       'httpStatus': response.statusCode,
@@ -844,7 +919,7 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
     });
     return const SyncJobFetch(SyncJobFetchOutcome.notFound);
   }
-  if (response.statusCode != 200) {
+  if (outcome == SyncJobFetchOutcome.transient) {
     DebugLogManager.logEvent('fetch_sync_job_status', {
       'jobId': jobId,
       'httpStatus': response.statusCode,

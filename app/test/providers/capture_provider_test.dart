@@ -216,6 +216,7 @@ class _HangingConversationLocationCapture extends ConversationLocationCapture {
 
 class _FakeBatchMicRecorder implements IMicRecorderService {
   int startBatchCalls = 0;
+  bool emitRecordingOnStart = false;
 
   @override
   Future<void> start({
@@ -225,7 +226,9 @@ class _FakeBatchMicRecorder implements IMicRecorderService {
     Function()? onInitializing,
     Function()? onStalled,
     Function(bool began)? onInterruption,
-  }) async {}
+  }) async {
+    if (emitRecordingOnStart) onRecording?.call();
+  }
 
   @override
   Future<void> startBatch({
@@ -1130,19 +1133,37 @@ void main() {
       provider.dispose();
     });
 
-    test('onConnected restores record from interrupted', () {
-      final provider = CaptureProvider();
+    test('onConnected restores record from interrupted', () async {
+      final mic = _FakeBatchMicRecorder()..emitRecordingOnStart = true;
+      final provider = CaptureProvider(
+        phoneMicRecorder: mic,
+        microphonePermissionRequester: () async => true,
+        openSocket: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async =>
+            null,
+      );
+      addTearDown(provider.dispose);
       provider.onConnectionStateChanged(true);
-      provider.updateRecordingState(RecordingState.record);
+      await provider.streamRecording();
+      expect(provider.liveCaptureSource, 'phone');
+      expect(provider.recordingState, RecordingState.record);
 
       provider.onClosed();
+      await provider.pendingSourceSwitch;
       expect(provider.recordingState, RecordingState.interrupted);
 
       provider.onConnected();
-
+      await provider.pendingSourceSwitch;
       expect(provider.recordingState, RecordingState.record);
-      provider.updateRecordingState(RecordingState.stop);
-      provider.dispose();
+      await provider.stopStreamRecording();
     });
 
     test('onConnected does not alter stop state', () {

@@ -112,7 +112,7 @@ class OmiPermissionRow extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.check_circle, color: OmiColors.success, size: 20),
+                Icon(Icons.check_circle, color: OmiColors.success, size: 20),
                 const SizedBox(width: OmiSpacing.xxs),
                 Text(l10n.permissionAllowed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
               ],
@@ -146,7 +146,7 @@ class OmiPermissionRow extends StatelessWidget {
           if (leading != null || icon != null) ...[
             ExcludeSemantics(
               child: IconTheme.merge(
-                data: const IconThemeData(color: OmiColors.textSecondary, size: 22),
+                data: IconThemeData(color: OmiColors.textSecondary, size: 22),
                 child: SizedBox(width: 24, child: Center(child: leading ?? Icon(icon))),
               ),
             ),

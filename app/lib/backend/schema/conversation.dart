@@ -7,12 +7,14 @@ import 'package:collection/collection.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/schema/capture_group.dart';
+import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// Grep-style transcript hit from conversation search (seek-to-moment).
 class TranscriptMatchSnippet {
@@ -442,12 +444,19 @@ class ServerConversation {
   String? folderId;
   ConversationVisibility visibility;
 
+  /// The app keeps its historical private fallback for unknown wire values;
+  /// Siri excludes that row instead of inferring the owner's visibility.
+  final bool siriVisibilityValid;
+
   /// Search-only transcript evidence for find-and-play.
   final List<TranscriptMatchSnippet> matchSnippets;
 
   /// The event this recording belongs to when other devices recorded it too;
   /// null for a conversation captured by one surface.
   final CaptureGroup? captureGroup;
+
+  /// Whether and which speaker ids are people; null on conversations processed before it existed.
+  final ConversationSpeakers? speakerResolution;
 
   // local label
   bool isNew = false;
@@ -476,8 +485,10 @@ class ServerConversation {
     this.starred = false,
     this.folderId,
     this.visibility = ConversationVisibility.private_,
+    this.siriVisibilityValid = true,
     this.matchSnippets = const [],
     this.captureGroup,
+    this.speakerResolution,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -510,6 +521,8 @@ class ServerConversation {
       structured: structured,
       geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
+      siriVisibilityValid: json['siri_visibility_valid'] != false &&
+          (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
     );
   }
@@ -519,6 +532,7 @@ class ServerConversation {
     Structured? structured,
     Geolocation? geolocation,
     bool deleted = false,
+    bool siriVisibilityValid = true,
     List<TranscriptMatchSnippet>? matchSnippets,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
@@ -555,8 +569,11 @@ class ServerConversation {
       starred: generated.starred,
       folderId: generated.folderId,
       visibility: ConversationVisibility.fromString(generated.visibility),
+      siriVisibilityValid: siriVisibilityValid,
       matchSnippets: snippets,
       captureGroup: generated.captureGroup == null ? null : CaptureGroup.fromGenerated(generated.captureGroup!),
+      speakerResolution:
+          generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
     );
   }
 
@@ -588,7 +605,9 @@ class ServerConversation {
       'starred': starred,
       'folder_id': folderId,
       'visibility': visibility.value,
+      if (!siriVisibilityValid) 'siri_visibility_valid': false,
       'capture_group': captureGroup?.toJson(),
+      'speaker_resolution': speakerResolution?.toJson(),
     };
   }
 
@@ -619,6 +638,7 @@ class ServerConversation {
       folderId: folderId,
       visibility: visibility.value,
       captureGroup: captureGroup?.toGenerated(),
+      speakerResolution: speakerResolution?.toGenerated(),
     );
   }
 
@@ -655,12 +675,12 @@ class ServerConversation {
 
   Color getTagTextColor() {
     if (source == ConversationSource.screenpipe) return Colors.deepPurple;
-    return Colors.white;
+    return OmiColors.textPrimary;
   }
 
   Color getTagColor() {
     if (source == ConversationSource.screenpipe) return Colors.white;
-    return const Color(0xFF35343B);
+    return OmiColors.categorySurface;
   }
 
   VoidCallback? onTagPressed(BuildContext context) {

@@ -55,9 +55,10 @@ def test_parakeet_probes_remove_and_recycle_fatal_gpu_workers(environment):
     }
     assert values['startupProbe'] == {
         'httpGet': {'path': '/health', 'port': 8080},
-        'failureThreshold': 60,
+        'failureThreshold': 180 if environment == 'dev' else 60,
         'periodSeconds': 10,
     }
+    assert values.get('progressDeadlineSeconds') == (2100 if environment == 'dev' else None)
 
 
 def test_rendered_prod_deployment_contains_stream_admission_settings():
@@ -84,11 +85,38 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
     assert 'name: PARAKEET_STREAM_CAPACITY\n              value: "25"' in rendered
     assert 'name: PARAKEET_STREAM_ALLOCATION_PERCENT\n              value: "100"' in rendered
     deployment = next(document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'Deployment')
+    assert 'progressDeadlineSeconds' not in deployment['spec']
     container = deployment['spec']['template']['spec']['containers'][0]
     assert container['readinessProbe']['httpGet']['path'] == '/health'
     assert container['readinessProbe']['failureThreshold'] == 1
     assert container['livenessProbe']['httpGet']['path'] == '/health'
     assert container['livenessProbe']['failureThreshold'] == 3
+
+
+def test_rendered_dev_deployment_allows_cold_model_startup():
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm is not installed')
+
+    rendered = subprocess.run(
+        [
+            helm,
+            'template',
+            'dev-omi-parakeet',
+            str(CHART),
+            '-f',
+            str(CHART / 'dev_omi_parakeet_values.yaml'),
+            '--set-string',
+            'image.tag=abc1234',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    deployment = next(document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'Deployment')
+    assert deployment['spec']['progressDeadlineSeconds'] == 2100
+    container = deployment['spec']['template']['spec']['containers'][0]
+    assert container['startupProbe']['failureThreshold'] == 180
 
 
 def test_parakeet_deploy_workflow_selects_environment_owned_values_file():
@@ -103,3 +131,34 @@ def test_parakeet_pod_runs_one_uvicorn_process_for_its_gpu(dockerfile_name):
 
     command = next(line for line in dockerfile.splitlines() if line.startswith('CMD ["uvicorn"'))
     assert '--workers' not in command
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_headless_batch_pressure_service_selects_each_ready_gpu_pod(environment):
+    helm = shutil.which('helm')
+    if helm is None:
+        pytest.skip('helm is not installed')
+    rendered = subprocess.run(
+        [
+            helm,
+            'template',
+            f'{environment}-omi-parakeet',
+            str(CHART),
+            '-f',
+            str(CHART / f'{environment}_omi_parakeet_values.yaml'),
+            '--set-string',
+            'image.tag=abc1234',
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    services = {
+        document['metadata']['name']: document
+        for document in yaml.safe_load_all(rendered)
+        if document and document.get('kind') == 'Service'
+    }
+    name = f'{environment}-omi-parakeet'
+    assert services[f'{name}-headless']['spec']['clusterIP'] == 'None'
+    assert services[f'{name}-headless']['spec']['selector'] == services[name]['spec']['selector']
+    assert services[f'{name}-headless']['spec']['ports'][0]['port'] == 8080
