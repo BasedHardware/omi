@@ -1840,7 +1840,7 @@ def get_shared_conversation_by_id(conversation_id: str):
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, person_ids)
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     # Public unauthenticated surface: return only the explicit allowlist.
     # SharedConversationResponse does not inherit Conversation and ignores extras,

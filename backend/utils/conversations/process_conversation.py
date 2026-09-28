@@ -1602,7 +1602,7 @@ def _extract_memories_canonical(
         if _conversation_notes_v2_enabled() and conversation.started_at:
             person_ids = conversation.get_person_ids()
             people_records = users_db.get_people_by_ids(uid, list(set(person_ids))) if person_ids else []
-            prompt_people = [Person(**record) for record in people_records]
+            prompt_people = Person.deserialize_many_safe(people_records)
             calendar_context = _stored_meeting_context(conversation)
             prompt_transcript, prompt_speaker_map = conversation_transcript_and_speaker_map(
                 uid, conversation, prompt_people
@@ -2887,7 +2887,7 @@ def process_conversation(
     people: List[Person] = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     decisions: list[RelevanceDecision] = []
