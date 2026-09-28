@@ -24,7 +24,7 @@ from pathlib import Path
 import sys
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-# TSV 导出的核心字段契约
+# Core schema contract for exported TSV columns
 FIELDS: Tuple[str, ...] = (
     "id",
     "started_at",
@@ -37,14 +37,14 @@ FIELDS: Tuple[str, ...] = (
 
 
 def escape_tsv_field(value: Any) -> str:
-    """将字段值安全转义为符合 TSV 单行约束的纯文本。
+    """Safely escape field value into plain text conforming to the TSV single-line constraint.
 
-    规则：
-    1. None 返回空字符串；
-    2. 非字符串对象进行 JSON 或字符串化；
-    3. 将换行符 (\\r\\n, \\r, \\n) 安全转义为字面量 '\\n'；
-    4. 将制表符 (\\t) 安全转义为字面量 '\\t'；
-    5. 杜绝控制字符破坏 TSV 记录的单行完整性。
+    Rules:
+    1. None returns an empty string;
+    2. Non-string objects are JSON-encoded or converted to strings;
+    3. Newlines (\\r\\n, \\r, \\n) are normalized and escaped to literal '\\n';
+    4. Tabs (\\t) are escaped to literal '\\t';
+    5. Neutralizes control characters to preserve single-line TSV record integrity.
     """
     if value is None:
         return ""
@@ -56,7 +56,7 @@ def escape_tsv_field(value: Any) -> str:
     else:
         text = value
 
-    # 标准化并转义换行符与制表符，保证单行性
+    # Normalize CRLF and tabs to guarantee single-line record format
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = text.replace("\t", "\\t")
     text = text.replace("\n", "\\n")
@@ -64,12 +64,12 @@ def escape_tsv_field(value: Any) -> str:
 
 
 def extract_transcript(item: Dict[str, Any]) -> str:
-    """从对话对象中提取转录文本，兼容顶层 transcript 字符串或 segments/transcripts 数组。"""
+    """Extract transcript text from conversation item, handling top-level strings or segments arrays."""
     transcript_val = item.get("transcript")
     if isinstance(transcript_val, str) and transcript_val.strip():
         return transcript_val
 
-    # 兼容分段转录列表
+    # Support segment/transcripts arrays
     segments = item.get("segments") or item.get("transcripts")
     if isinstance(segments, list):
         parts: List[str] = []
@@ -91,7 +91,7 @@ def extract_transcript(item: Dict[str, Any]) -> str:
 
 
 def unwrap_conversations(data: Any, source_name: str = "input") -> List[Dict[str, Any]]:
-    """解包并验证 JSON 数据，支持纯列表或多种外层包装信封对象。"""
+    """Unwrap and validate JSON data, supporting bare lists or enveloped dictionaries."""
     if isinstance(data, dict):
         for envelope_key in ("conversations", "items", "data", "results"):
             candidate = data.get(envelope_key)
@@ -114,7 +114,7 @@ def unwrap_conversations(data: Any, source_name: str = "input") -> List[Dict[str
 
 
 def validate_destination_path(destination: str, force: bool = False) -> Path:
-    """验证目标文件路径安全性，防御路径遍历攻击与意外覆盖。"""
+    """Validate destination path safety, defending against path traversal and accidental overwrite."""
     path = Path(destination)
     if ".." in path.parts:
         raise ValueError(f"Output path {destination!r} contains '..'; refusing to write outside intended directory.")
@@ -126,9 +126,9 @@ def validate_destination_path(destination: str, force: bool = False) -> Path:
 
 
 def conversations_to_tsv_string(conversations: Iterable[Dict[str, Any]]) -> str:
-    """将对话列表格式化为符合严格单行契约的 TSV 字符串。"""
+    """Format an iterable of conversation dicts into a strict single-line TSV string."""
     output = io.StringIO()
-    # 写入首行表头
+    # Write TSV header row
     output.write("\t".join(FIELDS) + "\n")
 
     for item in conversations:
@@ -159,8 +159,11 @@ def conversations_to_tsv_string(conversations: Iterable[Dict[str, Any]]) -> str:
 
 
 def convert(source: str, destination: Optional[str] = None, force: bool = False) -> str:
-    """执行转换流程。若 destination 为 None 或 '-'，直接返回 TSV 字符串并可流式输出。"""
-    # 1. 读取数据
+    """Execute TSV conversion pipeline.
+
+    If destination is None or '-', returns the TSV string directly for streaming stdout.
+    """
+    # 1. Read input data
     if source == "-":
         raw_text = sys.stdin.read()
         source_name = "<stdin>"
@@ -171,34 +174,34 @@ def convert(source: str, destination: Optional[str] = None, force: bool = False)
         raw_text = source_path.read_text(encoding="utf-8").lstrip("\ufeff")
         source_name = str(source_path)
 
-    # 2. 解析 JSON
+    # 2. Parse JSON
     try:
         data = json.loads(raw_text)
     except json.JSONDecodeError as exc:
         raise ValueError(f"Malformed JSON in {source_name}: {exc}") from exc
 
-    # 3. 解包数据
+    # 3. Unwrap conversations array
     conversations = unwrap_conversations(data, source_name=source_name)
 
-    # 4. 生成 TSV
+    # 4. Generate TSV representation
     tsv_content = conversations_to_tsv_string(conversations)
 
-    # 5. 输出
+    # 5. Output handling
     if destination is None or destination == "-":
         return tsv_content
 
     dest_path = validate_destination_path(destination, force=force)
-    # 创建父目录（若不存在）
+    # Create parent directories if needed
     if dest_path.parent and not dest_path.parent.exists():
         dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 写入文件
+    # Write output file
     dest_path.write_text(tsv_content, encoding="utf-8")
     return tsv_content
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    """CLI 入口点。"""
+    """CLI entrypoint."""
     parser = argparse.ArgumentParser(
         description="Convert Omi conversation JSON exports into Tab-Separated Values (TSV) format."
     )
