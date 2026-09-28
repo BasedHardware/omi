@@ -860,7 +860,17 @@ def get_messages(
         # The greeting belongs to the session that was read, not to whatever
         # session `acquire_chat_session` would pick for the app.
         return [] if offset > 0 else [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
-    return messages
+    # FastAPI validates the response against Message, so one malformed/legacy stored row would
+    # 500 the whole page; skip bad rows the same way the send path does.
+    return Message.deserialize_many_safe(
+        messages,
+        on_error=lambda record, exc: logger.warning(
+            'Skipping malformed chat message %s for uid=%s: %s',
+            record.get('id') if isinstance(record, dict) else None,
+            uid,
+            type(exc).__name__,
+        ),
+    )
 
 
 @router.post(
