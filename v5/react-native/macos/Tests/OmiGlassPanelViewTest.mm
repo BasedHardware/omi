@@ -7,6 +7,12 @@
 NSString *const OmiDesktopAppearanceDidChangeNotification =
     @"OmiDesktopAppearanceDidChangeNotification";
 
+// The panel resolves System / Light / Dark through this helper; like the
+// notification above, the app target defines it in
+// OmiDesktopCommandsModule.mm, which this standalone TU does not link.
+static NSString *testPreferredAppearance = NSAppearanceNameDarkAqua;
+NSAppearanceName OmiPreferredDesktopAppearance(void) { return testPreferredAppearance; }
+
 @implementation RCTView
 @end
 @implementation RCTViewManager
@@ -65,6 +71,14 @@ int main(void) {
       reducedTransparency = NO;
       [panel applyAccessibilityAppearance];
       assert(!panel.material.hidden && panel.fallback.hidden && !panel.sheen.hidden);
+      // System / Light / Dark: the preferred appearance drives both the panel
+      // dressing (light material + dark ink) and the fallback base color.
+      testPreferredAppearance = NSAppearanceNameAqua;
+      [panel applyAccessibilityAppearance];
+      assert(panel.material.material == NSVisualEffectMaterialUnderWindowBackground);
+      testPreferredAppearance = NSAppearanceNameDarkAqua;
+      [panel applyAccessibilityAppearance];
+      assert(panel.material.material == NSVisualEffectMaterialHUDWindow);
       puts("Window backdrop: no empty floating glass; bounds, remount, and accessibility tests passed");
     } @finally {
       method_setImplementation(preference, original);
