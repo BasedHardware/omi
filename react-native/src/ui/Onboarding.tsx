@@ -62,17 +62,6 @@ import {color as uiColor, tokens} from './tokens';
 // Header logo: small top-left mark; the step content is the visual hero.
 const DOTS_SIZE = 40;
 
-/** Short progress captions shown under the segmented step line. */
-const STEP_TITLES: Record<MobileOnboardingStep, string> = {
-  welcome: 'Welcome',
-  consent: 'Privacy',
-  language: 'Language',
-  source: 'About you',
-  permissions: 'Permissions',
-  speech: 'Voice',
-  complete: 'Done',
-};
-
 /** Collects the OS locale string on each platform; '' when unavailable. */
 function deviceLocaleSource(): string {
   try {
@@ -649,21 +638,10 @@ export function Onboarding({
       <View style={styles.column}>
         <View accessibilityLabel="Onboarding header" style={styles.topBlock}>
           <View
-            style={styles.progressTrack}
+            style={styles.logoTrack}
             onLayout={event => {
               setTrackWidth(event.nativeEvent.layout.width);
             }}>
-            <View style={styles.progressRow}>
-              {itinerary.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.progressSegment,
-                    index <= setupIndex && styles.progressSegmentFill,
-                  ]}
-                />
-              ))}
-            </View>
             <Animated.View
               accessibilityLabel="Omi"
               style={[
@@ -682,27 +660,19 @@ export function Onboarding({
               />
             </Animated.View>
           </View>
-          <View
-            style={[
-              styles.captionRow,
-              !(setupRequired && onSignOut) && styles.captionRowCenter,
-            ]}>
-            <Text
-              accessibilityLabel={
-                setupIndex >= 0
-                  ? `Step ${setupIndex + 1} of ${itinerary.length}`
-                  : undefined
-              }
-              accessibilityLiveRegion="polite"
-              numberOfLines={1}
-              style={[styles.progressCaption, copyColor]}>
-              {setupIndex >= 0
-                ? `${STEP_TITLES[step]} · Step ${setupIndex + 1} of ${
-                    itinerary.length
-                  }`
-                : STEP_TITLES[step]}
-            </Text>
-            {setupRequired && onSignOut ? (
+          <View style={styles.progressRow}>
+            {itinerary.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.progressSegment,
+                  index <= setupIndex && styles.progressSegmentFill,
+                ]}
+              />
+            ))}
+          </View>
+          {setupRequired && onSignOut ? (
+            <View style={styles.captionRow}>
               <Button
                 accessibilityLabel="Sign out"
                 disabled={busy}
@@ -712,12 +682,12 @@ export function Onboarding({
                 variant="ghost">
                 Sign out
               </Button>
-            ) : null}
-          </View>
+            </View>
+          ) : null}
         </View>
         <Animated.View
           style={[
-            styles.titleAnim,
+            styles.stepAnim,
             {opacity: stepOpacity, transform: [{translateY: stepShift}]},
           ]}>
           <Text accessibilityRole="header" style={[styles.title, titleColor]}>
@@ -735,12 +705,6 @@ export function Onboarding({
               ? 'Teach Omi your voice'
               : 'You are all set!'}
           </Text>
-        </Animated.View>
-        <Animated.View
-          style={[
-            styles.stepAnim,
-            {opacity: stepOpacity, transform: [{translateY: stepShift}]},
-          ]}>
           {step === 'welcome' ? (
             <>
               <Text style={[styles.copy, copyColor]}>
@@ -807,13 +771,6 @@ export function Onboarding({
           ) : null}
           {step === 'language' ? (
             <>
-              <Text
-                accessibilityLiveRegion="polite"
-                style={[styles.copy, copyColor]}>
-                {language === initialLanguage
-                  ? `Using ${selectedLanguageName} from your device. Search to change it.`
-                  : `Using ${selectedLanguageName}. Search to change it.`}
-              </Text>
               <View style={styles.stretch}>
                 <Field
                   accessibilityLabel="Search languages"
@@ -1049,27 +1006,21 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       alignSelf: 'stretch',
       gap: tokens.space.xs,
     },
-    progressTrack: {
+    logoTrack: {
       alignSelf: 'stretch',
       height: DOTS_SIZE,
-      justifyContent: 'center',
     },
     captionRow: {
       alignItems: 'center',
       alignSelf: 'stretch',
       flexDirection: 'row',
       gap: tokens.space.sm,
-      justifyContent: 'space-between',
+      justifyContent: 'flex-end',
     },
-    captionRowCenter: {justifyContent: 'center'},
     dots: {
+      bottom: 0,
       left: 0,
       position: 'absolute',
-      top: 0,
-    },
-    titleAnim: {
-      alignItems: 'center',
-      alignSelf: 'stretch',
     },
     stepAnim: {
       alignItems: 'center',
@@ -1083,12 +1034,6 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       flexDirection: 'row',
       gap: tokens.space.xs,
       height: tokens.space.xs,
-    },
-    progressCaption: {
-      color: tokens.color.menuText,
-      fontSize: 13,
-      letterSpacing: 0.2,
-      lineHeight: 16,
     },
     progressSegment: {
       backgroundColor: tokens.color.lineStrong,
