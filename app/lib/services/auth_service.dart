@@ -745,8 +745,7 @@ class AuthService {
     }
 
     final credential = await FirebaseAuth.instance.signInWithCustomToken(customToken);
-    await _updateUserPreferences(credential, 'local_dev', restoreOnboardingFromServer: false);
-    unawaited(_restoreOnboardingState());
+    await _updateUserPreferences(credential, 'local_dev');
     Logger.debug('Local development sign-in successful');
     return credential;
   }
@@ -779,11 +778,7 @@ class AuthService {
     }
   }
 
-  Future<void> _updateUserPreferences(
-    UserCredential result,
-    String provider, {
-    bool restoreOnboardingFromServer = true,
-  }) async {
+  Future<void> _updateUserPreferences(UserCredential result, String provider) async {
     try {
       final user = result.user;
       if (user == null) return;
@@ -850,7 +845,7 @@ class AuthService {
       Logger.debug('UID: ${SharedPreferencesUtil().uid}');
 
       // Restore onboarding state from server
-      if (restoreOnboardingFromServer) await _restoreOnboardingState();
+      await _restoreOnboardingState();
     } catch (e) {
       Logger.debug('Error updating user preferences: $e');
     }
