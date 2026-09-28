@@ -91,6 +91,7 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
     return TextField(
       keyboardType: TextInputType.text,
       textInputAction: TextInputAction.done,
+      minLines: 1,
       maxLines: 2,
       focusNode: widget.focusNode,
       controller: widget.controller,
@@ -100,6 +101,7 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
         contentPadding: EdgeInsets.zero,
         isDense: true,
         hintText: context.l10n.untitledConversation,
+        hintMaxLines: 1,
         hintStyle: widget.style.copyWith(color: OmiColors.textTertiary),
       ),
       style: widget.style,
@@ -286,17 +288,17 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
             child: content.isEmpty
                 ? _buildNoSummaryForApp(context)
                 : _isEditing
-                    ? _buildEditor(context)
-                    : GestureDetector(
-                        onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
-                            ? null
-                            : () => _startEditing(content),
-                        child: ConversationMarkdownWidget(
-                          content: content,
-                          searchQuery: widget.searchQuery,
-                          currentResultIndex: widget.currentResultIndex,
-                        ),
-                      ),
+                ? _buildEditor(context)
+                : GestureDetector(
+                    onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
+                        ? null
+                        : () => _startEditing(content),
+                    child: ConversationMarkdownWidget(
+                      content: content,
+                      searchQuery: widget.searchQuery,
+                      currentResultIndex: widget.currentResultIndex,
+                    ),
+                  ),
           ),
           if (content.isNotEmpty && !_isEditing) _buildAppAttribution(context, selection),
         ],
@@ -595,10 +597,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                   ],
                 ),
               ),
-              SizedBox(
-                width: 42,
-                child: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 20),
-              ),
+              SizedBox(width: 42, child: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 20)),
             ],
           ),
         ),
