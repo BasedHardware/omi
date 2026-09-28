@@ -48,6 +48,7 @@ SyncUploadGate _hermeticGate() {
     uploader: (files,
             {onUploadProgress,
             conversationId,
+            captureEvidence,
             recordingSessionId,
             audioStartSeconds,
             audioEndSeconds,

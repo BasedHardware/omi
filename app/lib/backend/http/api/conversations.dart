@@ -784,6 +784,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
+  String? captureEvidence,
   String? recordingSessionId,
   double? audioStartSeconds,
   double? audioEndSeconds,
@@ -810,6 +811,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     files: files,
     headers: {
       if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
+      if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
       if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
     },
     onUploadProgress: onUploadProgress,
