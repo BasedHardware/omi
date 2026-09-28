@@ -85,6 +85,9 @@ final class QuickActionsIconPatcher: NSObject {
   private var methodChannel: FlutterMethodChannel?
   private var capturePolicyChannel: FlutterMethodChannel?
   private var syncTransferChannel: FlutterMethodChannel?
+  private var ttsMp3DecoderChannel: FlutterMethodChannel?
+  private var ttsPcmPlayerChannel: FlutterMethodChannel?
+  private let ttsPcmPlayer = TtsPcmPlayer()
   private var syncTransferBackgroundTask: UIBackgroundTaskIdentifier = .invalid
   private lazy var syncTransferLease = SyncTransferBackgroundLease(
       begin: { [weak self] expirationHandler in
@@ -143,6 +146,64 @@ final class QuickActionsIconPatcher: NSObject {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
     SiriBridge.shared.attach(messenger: messenger)
+
+    ttsMp3DecoderChannel = FlutterMethodChannel(
+      name: "com.omi/tts_mp3_decoder",
+      binaryMessenger: messenger
+    )
+    ttsMp3DecoderChannel?.setMethodCallHandler { call, result in
+      guard call.method == "decode",
+            let args = call.arguments as? [String: Any],
+            let typedData = args["bytes"] as? FlutterStandardTypedData else {
+        result(FlutterError(code: "invalid_mp3", message: "decode requires MP3 bytes", details: nil))
+        return
+      }
+      DispatchQueue.global(qos: .userInitiated).async {
+        var channels: Int32 = 0
+        var sampleRate: Int32 = 0
+        var samplesPerChannel: Int32 = 0
+        var pcm: UnsafeMutablePointer<Int16>?
+        let status = typedData.data.withUnsafeBytes { rawBuffer -> Int32 in
+          guard let base = rawBuffer.bindMemory(to: UInt8.self).baseAddress else { return 1 }
+          return omi_decode_mp3(
+            base,
+            Int32(typedData.data.count),
+            &channels,
+            &sampleRate,
+            &samplesPerChannel,
+            &pcm
+          )
+        }
+        guard status == 0, let pcm else {
+          DispatchQueue.main.async {
+            result(FlutterError(
+              code: "decode_failed",
+              message: "MP3 prefix has no complete audio frame",
+              details: nil
+            ))
+          }
+          return
+        }
+        let byteCount = Int(samplesPerChannel * channels) * MemoryLayout<Int16>.size
+        let output = Data(bytes: pcm, count: byteCount)
+        omi_free_decoded_audio(pcm)
+        DispatchQueue.main.async {
+          result([
+            "channels": channels,
+            "sample_rate": sampleRate,
+            "pcm": FlutterStandardTypedData(bytes: output)
+          ])
+        }
+      }
+    }
+    ttsPcmPlayerChannel = FlutterMethodChannel(
+      name: "com.omi/tts_pcm_player",
+      binaryMessenger: messenger
+    )
+    ttsPcmPlayerChannel?.setMethodCallHandler { [weak self] call, result in
+      self?.ttsPcmPlayer.handle(call, result: result)
+    }
+
     // Read-only admission evidence for the separately signed capture lane.
     // Missing flags stay nil so Dart fails closed before app-owned networking.
     FlutterMethodChannel(name: "omi/physical_qualification", binaryMessenger: messenger)

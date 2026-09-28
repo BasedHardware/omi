@@ -41,25 +41,6 @@ environments:
           min_backoff: 5s
         attempt_deadline: 180s
         owner: .github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml
-      - name: agent-vm-reconciler-5m
-        region: us-central1
-        schedule: "*/5 * * * *"
-        time_zone: Etc/UTC
-        state: PAUSED
-        target:
-          type: http
-          uri: https://run.googleapis.com/v2/projects/based-hardware-dev/locations/us-central1/jobs/agent-vm-reconciler:run
-          method: POST
-          oauth:
-            service_account: agent-vm-reconciler-scheduler@based-hardware-dev.iam.gserviceaccount.com
-            scope: https://www.googleapis.com/auth/cloud-platform
-        retry:
-          max_backoff: 3600s
-          max_doublings: 5
-          max_retry: 0s
-          min_backoff: 5s
-        attempt_deadline: 180s
-        owner: unassigned; David decision required before resume
       - name: sync-backfill-uid-sequencer
         region: us-central1
         schedule: "*/2 * * * *"
@@ -117,6 +98,25 @@ environments:
           min_backoff: 5s
         attempt_deadline: 180s
         owner: .github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml
+      - name: frame-request-retention-hourly
+        region: us-central1
+        schedule: "0 * * * *"
+        time_zone: Etc/UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://run.googleapis.com/v2/projects/based-hardware-dev/locations/us-central1/jobs/frame-request-retention-job:run
+          method: POST
+          oauth:
+            service_account: frame-retention-scheduler@based-hardware-dev.iam.gserviceaccount.com
+            scope: https://www.googleapis.com/auth/cloud-platform
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: .github/workflows/gcp_frame_request_retention_job.yml
   prod:
     project: based-hardware
     jobs:
@@ -232,3 +232,22 @@ environments:
           min_backoff: 5s
         attempt_deadline: 180s
         owner: unassigned; manually created; David decision required
+      - name: frame-request-retention-hourly
+        region: us-central1
+        schedule: "0 * * * *"
+        time_zone: Etc/UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://run.googleapis.com/v2/projects/based-hardware/locations/us-central1/jobs/frame-request-retention-job:run
+          method: POST
+          oauth:
+            service_account: frame-retention-scheduler@based-hardware.iam.gserviceaccount.com
+            scope: https://www.googleapis.com/auth/cloud-platform
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: .github/workflows/gcp_frame_request_retention_job.yml

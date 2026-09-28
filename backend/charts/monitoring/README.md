@@ -864,8 +864,10 @@ helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install pro
 
 The production values file is the source for the Prometheus CR: 10d retention,
 1 CPU / 2Gi memory requests, 2 CPU / 8Gi memory limits, and a 100Gi
-`standard-rwo` claim. Keep the `app_build` metric relabel in that file while
-the client-journey series are being bounded in backend code.
+`standard-rwo` claim. It preserves the scrape configuration from deployed
+revision 14 and does not drop `app_build`; the backend now emits the fixed
+`unknown` value, so that extra label does not help bound cardinality and dropping
+it would blank the fixed value.
 
 Before an upgrade, render the pinned chart with the same API capabilities as
 the cluster, then diff the normal (non-hook) resources. The EndpointSlice API
@@ -891,6 +893,15 @@ helm template "$PROD_RELEASE" prometheus-community/kube-prometheus-stack \
   | kubectl diff --context "$PROD_CONTEXT" -f -
 ```
 
+This is a read-only preflight: `helm template` renders locally and
+`kubectl diff` compares the rendered objects without applying them. Against the
+current production release (revision 14, chart 75.15.1), the values file renders
+to no object changes: `kubectl diff` exits 0 with empty output. Re-run this
+preflight against live state before every release; if it prints any diff, inspect
+it before deciding whether an upgrade is intended. An empty diff means there is
+no Kubernetes manifest change to apply; do not create a Helm revision just to
+sync these already-matching values.
+
 `--skip-crds` is required for upgrades. The chart's ten Prometheus Operator
 CRDs are not updated by Helm during an upgrade; review a CRD migration as a
 separate operation. `--no-hooks` excludes the admission create/patch Jobs and
@@ -898,38 +909,13 @@ their hook-only RBAC objects from `kubectl diff`. Helm runs those Jobs as
 pre/post-upgrade hooks and removes successful Jobs per their hook delete
 policy. Do not apply rendered CRDs or manage those Jobs with `kubectl apply`.
 
-The expected production diff is the `additional-scrape-configs` Secret for the
-`app_build` relabel; generated labels or annotations may also differ. Prometheus
-resource values should match the live CR and must not trigger a StatefulSet
-restart. If another object changes, inspect its live object, stored release
-manifest, and chart template before applying; do not widen values to preserve
-unexplained RBAC or other out-of-band changes.
-
-Helm rollback creates a new revision. Before the relabel rollout, first create
-a deployed baseline revision that records the live 8Gi / 100Gi values while
-retaining the prior scrape configuration. This one-time bridge uses the
-currently deployed release values and changes only the two resource settings:
+Helm rollback creates a new revision. Revision 14 is the current known-good
+baseline with the live 8Gi / 100Gi values. Revision 13 records 4Gi / 50Gi and
+must not be used as the rollback target. Before a future rollback, inspect
+`helm history` and choose the appropriate deployed baseline:
 
 ```bash
-helm upgrade "$PROD_RELEASE" prometheus-community/kube-prometheus-stack \
-  --version 75.15.1 \
-  --namespace "$PROD_NAMESPACE" \
-  --kube-context "$PROD_CONTEXT" \
-  --reuse-values --skip-crds \
-  --set prometheus.prometheusSpec.resources.limits.memory=8Gi \
-  --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=100Gi \
-  --wait --timeout 10m
-
-helm history "$PROD_RELEASE" --namespace "$PROD_NAMESPACE" --kube-context "$PROD_CONTEXT"
-```
-
-Then apply the repo values. If the relabel rollout needs rollback, target the
-new bridge revision, not revision 13 (which records 4Gi / 50Gi). Record the
-bridge revision number from `helm history` and prepare the rollback command
-before applying:
-
-```bash
-helm rollback "$PROD_RELEASE" <baseline-revision> \
+helm rollback "$PROD_RELEASE" 14 \
   --namespace "$PROD_NAMESPACE" \
   --kube-context "$PROD_CONTEXT" \
   --wait --timeout 10m

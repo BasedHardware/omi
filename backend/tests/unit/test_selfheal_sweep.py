@@ -379,6 +379,53 @@ def test_pending_verification_tolerates_benign_growth(capsys):
     assert counters['verified'] == 1
 
 
+def test_pending_verification_accepts_explicit_recovery_discard_with_preserved_content(capsys):
+    state, kwargs = _harness([], mode='detect')
+    _pending_completed_job(state, audio_ids=['a1'])
+    state['conversations']['c1'] = _completed_conversation(
+        structured={'title': ''},
+        discarded=True,
+        relevance_decision={'trigger': 'server_recovery', 'verdict': 'discard'},
+        audio_files=[{'id': 'a1'}],
+    )
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['verified'] == 1
+    assert counters['refused'] == 0
+
+
+@pytest.mark.parametrize(
+    'overrides',
+    [
+        {'discarded': False},
+        {'relevance_decision': {'trigger': 'capture_end', 'verdict': 'discard'}},
+        {'relevance_decision': {'trigger': 'server_recovery', 'verdict': 'keep'}},
+        {'transcript_segments': ''},
+        {'audio_files': []},
+    ],
+)
+def test_pending_verification_refuses_unproven_or_shrunk_recovery_discard(overrides):
+    state, kwargs = _harness([], mode='detect')
+    _pending_completed_job(state, audio_ids=['a1'])
+    state['conversations']['c1'] = _completed_conversation(
+        **(
+            {
+                'structured': {'title': ''},
+                'discarded': True,
+                'relevance_decision': {'trigger': 'server_recovery', 'verdict': 'discard'},
+                'audio_files': [{'id': 'a1'}],
+            }
+            | overrides
+        )
+    )
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['verified'] == 0
+    assert counters['refused'] == 1
+
+
 def test_pending_verification_compressed_raw_bytes_compare_equal(capsys):
     """The raw snapshot must not decompress: a stored blob compares byte-for-byte."""
     blob = b'\x1f\x8b compressed-encrypted-payload \x00\x01'
