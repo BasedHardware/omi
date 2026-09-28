@@ -170,10 +170,11 @@ def test_finalize_from_worker_thread_uses_provider_loop():
     async def run():
         ws = Socket([])
         sock = SafeSonioxSocket(ws, lambda _: None, asyncio.get_running_loop())
+        assert sock.send(b'\x01\x02')
         await asyncio.to_thread(sock.finalize)
         sock._send_queue.put_nowait(b'')
         await asyncio.gather(sock._send_task, sock._recv_task)
-        assert ws.sent == ['{"type": "finalize"}', '']
+        assert ws.sent == [b'\x01\x02', '{"type": "finalize"}', '']
 
     asyncio.run(run())
 

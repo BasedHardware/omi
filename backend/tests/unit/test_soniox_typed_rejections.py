@@ -65,12 +65,13 @@ class FakeWebSocket:
     def __init__(self, inbound):
         self._inbound = list(inbound)
         self.sent = []
+        self.closed = False
 
     async def send(self, data):
         self.sent.append(data)
 
     async def close(self):
-        pass
+        self.closed = True
 
     def __aiter__(self):
         async def gen():
@@ -176,6 +177,7 @@ def test_zero_audio_finish_closes_without_end_frame_or_socket_death():
             terminate.assert_not_awaited()
             await sock.drain_and_close()
         assert ws.sent == []
+        assert ws.closed
 
     asyncio.run(run())
 
@@ -206,6 +208,18 @@ def test_audio_finish_still_sends_end_frame_and_drains_finished():
         await sock.drain_and_close()
         assert ws.sent == [b'\x01\x02', '']
         assert not sock.is_connection_dead
+
+    asyncio.run(run())
+
+
+def test_finalize_control_without_audio_does_not_send_end_frame_or_wait_for_finished():
+    async def run():
+        ws = FakeWebSocket([])
+        sock = SafeSonioxSocket(ws, lambda _segments: None, asyncio.get_running_loop())
+        sock.finalize()
+        await sock.drain_and_close()
+        assert ws.sent == [json.dumps({'type': 'finalize'})]
+        assert ws.closed
 
     asyncio.run(run())
 

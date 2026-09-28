@@ -268,7 +268,8 @@ class SafeSonioxSocket(STTSocket):
                         await self._ws.send('')
                     break
                 await self._ws.send(data)
-                self._audio_sent = True
+                if isinstance(data, bytes):
+                    self._audio_sent = True
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws send closed: {e}')
         except Exception as e:
