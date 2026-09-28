@@ -89,6 +89,24 @@ const PROGRESS_SAMPLES = Array.from(
   (_, index) => index / (PATH_SAMPLES - 1),
 );
 
+/**
+ * The physics loop emits one sample per simulated frame, so paths have
+ * variable lengths — Animated.interpolate requires input and output ranges
+ * of equal length. Linearly resample onto the fixed sample count.
+ */
+function resamplePathValues(values: number[]): number[] {
+  if (values.length <= 1) {
+    return PROGRESS_SAMPLES.map(() => values[0] ?? 0);
+  }
+  return PROGRESS_SAMPLES.map(sample => {
+    const position = sample * (values.length - 1);
+    const index = Math.floor(position);
+    const next = Math.min(index + 1, values.length - 1);
+    const fraction = position - index;
+    return values[index] + (values[next] - values[index]) * fraction;
+  });
+}
+
 function ConfettiPieceView({
   left,
   piece,
@@ -110,8 +128,8 @@ function ConfettiPieceView({
     animation.start();
     return () => animation.stop();
   }, [progress, piece.duration]);
-  const xs = piece.path.map(point => point.x);
-  const ys = piece.path.map(point => point.y);
+  const xs = resamplePathValues(piece.path.map(point => point.x));
+  const ys = resamplePathValues(piece.path.map(point => point.y));
   // Paper flip: the piece rotates about its long axis, so its projected
   // height oscillates — the effect that makes canvas confetti read as paper.
   const flips = PROGRESS_SAMPLES.map(
@@ -128,13 +146,13 @@ function ConfettiPieceView({
   });
   return (
     <Animated.View
-      pointerEvents="none"
       style={{
         backgroundColor: piece.color,
         borderRadius: 1.5,
         height: piece.height,
         left,
         opacity,
+        pointerEvents: 'none',
         position: 'absolute',
         top,
         transform: [

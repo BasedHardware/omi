@@ -134,6 +134,7 @@ test("service worker installs the built application shell for an offline first r
     [
       "/manifest.webmanifest",
       "/omi-mark.svg",
+      "/MaterialSymbolsRounded.woff2",
       "/assets/index-abc.css",
       "/assets/index-def.js",
     ],

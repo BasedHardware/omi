@@ -1,5 +1,10 @@
-const cacheName = "omi-v5-pwa-v1";
-const shell = ["/", "/manifest.webmanifest", "/omi-mark.svg"];
+const cacheName = "omi-v5-pwa-v2";
+const shell = [
+  "/",
+  "/manifest.webmanifest",
+  "/omi-mark.svg",
+  "/MaterialSymbolsRounded.woff2",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

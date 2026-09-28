@@ -71,7 +71,7 @@ async function finishMobileSetup(
   await press('Continue');
   await press('TikTok');
   await press('Continue');
-  await press('Not Now');
+  await press("I'll Do These Later");
 }
 
 afterEach(() => {
