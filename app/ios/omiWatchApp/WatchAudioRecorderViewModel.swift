@@ -97,8 +97,8 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
         
         // Check if we've buffered for target duration
         let currentTime = Date()
-        guard let bufferStartTime else { return }
-        let elapsedTime = currentTime.timeIntervalSince(bufferStartTime)
+        guard let startTime = bufferStartTime else { return }
+        let elapsedTime = currentTime.timeIntervalSince(startTime)
         
         if elapsedTime >= bufferDuration {
             // Send the accumulated buffer
