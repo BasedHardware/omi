@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Platform, StyleSheet, Text, View} from 'react-native';
+import {Platform, Text, View} from 'react-native';
 import {
   isBluetoothScanAvailable,
   type PlatformNativeSnapshot,
@@ -11,7 +11,10 @@ import {bluetoothStatusLabel} from './bluetooth';
 import {DeviceControls} from './DeviceControls';
 import {MaterialIcon} from '../ui/MaterialIcon';
 
-import {mobileColor as color} from '../mobile/mobileTokens';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import {OmiButton} from '../design/primitives';
+import type {OmiTheme} from '../design/tokens';
+import {MobileGroup, MobileInlineState, MobileRow} from '../mobile/MobileList';
 
 export type DeviceSessionVariant = 'affordance' | 'compact' | 'overview';
 
@@ -113,11 +116,8 @@ export function DeviceSession({
 
   const remembered =
     rememberedDevice && onForgetRemembered ? (
-      <View
-        accessibilityLabel="Remembered Omi device"
-        style={[styles.deviceRow, mobile && local.remembered]}>
-        <View
-          style={[styles.homeDeviceRowLead, mobile && local.rememberedName]}>
+      <View accessibilityLabel="Remembered Omi device" style={styles.deviceRow}>
+        <View style={styles.homeDeviceRowLead}>
           <Text numberOfLines={1} style={[styles.deviceName, {flexShrink: 1}]}>
             {rememberedDevice.name}
           </Text>
@@ -128,7 +128,7 @@ export function DeviceSession({
             accessibilityLabel={`Reconnect ${rememberedDevice.name}`}
             disabled={deviceBusy || rememberedBusy}
             onPress={() => onToggle(rememberedDevice.id, false)}
-            style={[styles.scanButton, mobile && local.action]}>
+            style={styles.scanButton}>
             <Text style={styles.scanButtonText}>Reconnect</Text>
           </FocusPressable>
         )}
@@ -137,11 +137,36 @@ export function DeviceSession({
           accessibilityLabel={`Forget ${rememberedDevice.name}`}
           disabled={deviceBusy || rememberedBusy}
           onPress={onForgetRemembered}
-          style={[styles.scanButton, mobile && local.action]}>
+          style={styles.scanButton}>
           <Text style={styles.scanButtonText}>Forget</Text>
         </FocusPressable>
       </View>
     ) : null;
+
+  if (mobile) {
+    return (
+      <MobileDevicePanel
+        connected={devices.find(
+          device => device.connected && !device.connecting,
+        )}
+        connectedLabel={connectedLabel}
+        deviceBusy={deviceBusy}
+        devices={devices}
+        detailsId={detailsId}
+        hint={hint}
+        nativeSnapshot={nativeSnapshot}
+        onForgetRemembered={onForgetRemembered}
+        onScan={onScan}
+        onToggle={onToggle}
+        onToggleDetails={id =>
+          setDetailsId(current => (current === id ? null : id))
+        }
+        rememberedBusy={rememberedBusy}
+        rememberedDevice={rememberedDevice}
+        scanDisabled={scanDisabled}
+      />
+    );
+  }
 
   if (variant === 'affordance') {
     return (
@@ -210,7 +235,7 @@ export function DeviceSession({
   }
 
   const header = (
-    <View style={[styles.deviceHeader, mobile && local.header]}>
+    <View style={styles.deviceHeader}>
       {variant === 'compact' ? (
         <View style={styles.homeDeviceHeading}>
           <View
@@ -219,7 +244,7 @@ export function DeviceSession({
               {backgroundColor: bluetoothStatusColor},
             ]}
           />
-          <View style={mobile && local.lead}>
+          <View>
             <Text style={[styles.sectionLabel, styles.homeSectionLabel]}>
               Devices
             </Text>
@@ -248,7 +273,6 @@ export function DeviceSession({
         style={({pressed}) => [
           styles.scanButton,
           variant === 'compact' && styles.homeScanButton,
-          mobile && local.action,
           pressed && styles.pressed,
         ]}>
         <Text
@@ -278,7 +302,6 @@ export function DeviceSession({
       style={({pressed}) => [
         styles.deviceRow,
         variant === 'compact' && styles.homeDeviceRow,
-        mobile && local.device,
         pressed && styles.pressed,
       ]}>
       {variant === 'compact' ? (
@@ -289,17 +312,13 @@ export function DeviceSession({
               device.connected && styles.homeDeviceRowDotConnected,
             ]}
           />
-          <View style={mobile && local.lead}>
+          <View>
             <Text style={styles.deviceName}>{device.name}</Text>
             <Text style={styles.deviceMeta}>
               {device.connecting
-                ? mobile && !deviceBusy
-                  ? 'Connecting… · Tap to cancel'
-                  : 'Connecting…'
+                ? 'Connecting…'
                 : device.connected
-                ? mobile && !deviceBusy
-                  ? `${connectedLabel} · Tap to disconnect`
-                  : connectedLabel
+                ? connectedLabel
                 : device.rssi === undefined
                 ? 'Signal unavailable'
                 : `${device.rssi} dBm`}
@@ -330,13 +349,7 @@ export function DeviceSession({
     device => device.connected && !device.connecting,
   );
   const information = connected ? (
-    <View
-      accessibilityLabel="Device information"
-      accessibilityElementsHidden={mobile && detailsId !== connected.id}
-      importantForAccessibility={
-        mobile && detailsId !== connected.id ? 'no-hide-descendants' : 'auto'
-      }
-      style={mobile && detailsId !== connected.id ? local.hidden : undefined}>
+    <View accessibilityLabel="Device information">
       <DeviceControls key={connected.id} device={connected} busy={deviceBusy} />
       {(
         [
@@ -362,32 +375,10 @@ export function DeviceSession({
       <View
         accessibilityLabel="Home devices"
         style={[styles.homeSection, styles.homeDevicesSection]}>
-        <View style={[styles.homeDeviceCard, mobile && local.card]}>
+        <View style={styles.homeDeviceCard}>
           {header}
           {remembered}
           {rows}
-          {mobile && connected && (
-            <FocusPressable
-              accessibilityRole="button"
-              accessibilityLabel="Device details"
-              accessibilityState={{expanded: detailsId === connected.id}}
-              onPress={() =>
-                setDetailsId(current =>
-                  current === connected.id ? null : connected.id,
-                )
-              }
-              style={local.disclosure}>
-              <Text style={local.disclosureText}>
-                Device details & controls
-              </Text>
-              <MaterialIcon
-                name="expand_more"
-                color={color.textMuted}
-                size={18}
-                style={detailsId === connected.id ? local.expanded : undefined}
-              />
-            </FocusPressable>
-          )}
           {information}
           {hintRow}
         </View>
@@ -406,33 +397,239 @@ export function DeviceSession({
   );
 }
 
-const local = StyleSheet.create({
-  card: {
-    backgroundColor: color.surface,
-    borderColor: color.border,
-    borderRadius: 22,
-    padding: 16,
-    gap: 12,
+type PanelDevice = Device & {connecting: boolean};
+
+/** The phone's device panel: one grouped surface in the Omi theme. */
+function MobileDevicePanel({
+  connected,
+  connectedLabel,
+  deviceBusy,
+  devices,
+  detailsId,
+  hint,
+  nativeSnapshot,
+  onForgetRemembered,
+  onScan,
+  onToggle,
+  onToggleDetails,
+  rememberedBusy,
+  rememberedDevice,
+  scanDisabled,
+}: {
+  connected: PanelDevice | undefined;
+  connectedLabel: string;
+  deviceBusy: boolean;
+  devices: PanelDevice[];
+  detailsId: string | null;
+  hint: string | null;
+  nativeSnapshot: PlatformNativeSnapshot | null;
+  onForgetRemembered?: () => void;
+  onScan: () => void;
+  onToggle: (id: string, connected: boolean) => void;
+  onToggleDetails: (id: string) => void;
+  rememberedBusy: boolean;
+  rememberedDevice: {id: string; name: string} | null;
+  scanDisabled: boolean;
+}) {
+  const theme = useOmiTheme();
+  const panel = useOmiStyles(createPanelStyles);
+  const expanded = connected !== undefined && detailsId === connected.id;
+  return (
+    <View accessibilityLabel="Home devices">
+      <MobileGroup inset={52}>
+        <MobileRow
+          leading={
+            <MaterialIcon
+              name="bluetooth"
+              color={theme.color.inkSecondary}
+              size={theme.size.icon}
+            />
+          }
+          title="Devices"
+          subtitle={
+            nativeSnapshot === null
+              ? 'Checking Bluetooth…'
+              : bluetoothStatusLabel(nativeSnapshot.bluetooth)
+          }
+          trailing={
+            <View style={panel.action}>
+              <OmiButton
+                accessibilityLabel="Scan for Omi devices"
+                compact
+                disabled={scanDisabled}
+                label={deviceBusy ? 'Please Wait…' : 'Scan'}
+                onPress={onScan}
+              />
+            </View>
+          }
+        />
+        {rememberedDevice && onForgetRemembered ? (
+          <View accessibilityLabel="Remembered Omi device">
+            <MobileRow
+              leading={<View style={panel.dot} />}
+              title={rememberedDevice.name}
+              subtitle="Remembered device"
+            />
+            <View style={panel.actions}>
+              {!devices.some(
+                device => device.connected || device.connecting,
+              ) && (
+                <OmiButton
+                  accessibilityLabel={`Reconnect ${rememberedDevice.name}`}
+                  compact
+                  disabled={deviceBusy || rememberedBusy}
+                  label="Reconnect"
+                  onPress={() => onToggle(rememberedDevice.id, false)}
+                />
+              )}
+              <OmiButton
+                accessibilityLabel={`Forget ${rememberedDevice.name}`}
+                compact
+                disabled={deviceBusy || rememberedBusy}
+                label="Forget"
+                onPress={onForgetRemembered}
+              />
+            </View>
+          </View>
+        ) : null}
+        {devices.map(device => (
+          <MobileRow
+            key={device.id}
+            accessibilityLabel={`${
+              device.connecting
+                ? 'Cancel connection to'
+                : device.connected
+                ? 'Disconnect'
+                : 'Connect'
+            } ${device.name}`}
+            disabled={deviceBusy}
+            onPress={() =>
+              onToggle(device.id, device.connected || device.connecting)
+            }
+            leading={
+              <View
+                style={[
+                  panel.dot,
+                  device.connected && panel.dotLive,
+                  device.connecting && panel.dotWaiting,
+                ]}
+              />
+            }
+            title={device.name}
+            trailingText={
+              device.battery !== undefined ? `${device.battery}%` : null
+            }
+            subtitle={
+              device.connecting
+                ? deviceBusy
+                  ? 'Connecting…'
+                  : 'Connecting… · Tap to cancel'
+                : device.connected
+                ? deviceBusy
+                  ? connectedLabel
+                  : `${connectedLabel} · Tap to disconnect`
+                : device.rssi === undefined
+                ? 'Signal unavailable'
+                : `${device.rssi} dBm`
+            }
+          />
+        ))}
+        {connected ? (
+          <View>
+            <FocusPressable
+              accessibilityRole="button"
+              accessibilityLabel="Device details"
+              accessibilityState={{expanded}}
+              onPress={() => onToggleDetails(connected.id)}
+              style={({pressed}) => [
+                panel.disclosure,
+                pressed && panel.pressed,
+              ]}>
+              <Text style={panel.disclosureText}>
+                Device Details & Controls
+              </Text>
+              <MaterialIcon
+                name="expand_more"
+                color={theme.color.inkTertiary}
+                size={theme.size.icon}
+                style={expanded ? panel.expanded : undefined}
+              />
+            </FocusPressable>
+            <View
+              accessibilityLabel="Device information"
+              accessibilityElementsHidden={!expanded}
+              importantForAccessibility={
+                expanded ? 'auto' : 'no-hide-descendants'
+              }
+              style={expanded ? undefined : panel.hidden}>
+              <DeviceControls
+                key={connected.id}
+                device={connected}
+                busy={deviceBusy}
+                mobile
+              />
+              <View style={panel.information}>
+                {(
+                  [
+                    ['model', 'Model'],
+                    ['firmware', 'Firmware'],
+                    ['hardware', 'Hardware'],
+                    ['manufacturer', 'Manufacturer'],
+                    ['serial', 'Serial number'],
+                  ] as const
+                ).map(([field, label]) => (
+                  <Text key={field} selectable style={panel.meta}>
+                    {label}: {connected.information?.[field] ?? 'Unknown'}
+                  </Text>
+                ))}
+              </View>
+            </View>
+          </View>
+        ) : null}
+        {hint !== null ? <MobileInlineState label={hint} /> : null}
+      </MobileGroup>
+    </View>
+  );
+}
+
+const createPanelStyles = (t: OmiTheme) => ({
+  action: {paddingRight: t.space.sm},
+  actions: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: t.space.sm,
+    paddingLeft: 52,
+    paddingRight: t.space.lg,
+    paddingBottom: t.space.md,
   },
-  header: {gap: 12},
-  lead: {flex: 1},
-  action: {minHeight: 44, alignItems: 'center'},
-  device: {
-    backgroundColor: color.surfaceQuiet,
-    borderColor: color.border,
-    paddingVertical: 14,
-    gap: 8,
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: t.color.inkTertiary,
   },
-  remembered: {flexWrap: 'wrap', gap: 8, paddingVertical: 12},
-  rememberedName: {flexBasis: '100%'},
+  dotLive: {backgroundColor: t.color.live},
+  dotWaiting: {backgroundColor: t.color.warning},
   disclosure: {
     minHeight: 48,
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    gap: t.space.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: t.space.lg,
   },
-  disclosureText: {color: color.textMuted, fontSize: 14, flexShrink: 1},
+  pressed: {backgroundColor: t.color.fillPressed},
+  disclosureText: {
+    ...t.type.subhead,
+    color: t.color.inkSecondary,
+    flexShrink: 1,
+  },
   expanded: {transform: [{rotate: '180deg'}]},
-  hidden: {display: 'none'},
+  hidden: {display: 'none' as const},
+  information: {
+    gap: t.space.xs,
+    paddingHorizontal: t.space.lg,
+    paddingBottom: t.space.md,
+  },
+  meta: {...t.type.footnote, color: t.color.inkSecondary},
 });

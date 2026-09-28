@@ -4,6 +4,9 @@ import {omiNative} from '../omiNative';
 import type {Device, DeviceStorageStatus} from '../omiNativeTypes';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
+import {useOmiStyles} from '../design/OmiTheme';
+import {OmiButton} from '../design/primitives';
+import type {OmiTheme} from '../design/tokens';
 
 type Setting = 'ledBrightness' | 'microphoneGain';
 const controls = [
@@ -28,10 +31,44 @@ const controls = [
 export function DeviceControls({
   device,
   busy,
+  mobile = false,
 }: {
   device: Device;
   busy: boolean;
+  /** Phone styling from the Omi theme (the desktop keeps the kit styles). */
+  mobile?: boolean;
 }) {
+  const themed = useOmiStyles(createMobileStyles);
+  const meta = mobile ? themed.meta : styles.deviceMeta;
+  const action = ({
+    label,
+    text,
+    disabled,
+    onPress,
+  }: {
+    label: string;
+    text: string;
+    disabled: boolean;
+    onPress: () => void;
+  }) =>
+    mobile ? (
+      <OmiButton
+        accessibilityLabel={label}
+        compact
+        disabled={disabled}
+        label={text}
+        onPress={onPress}
+      />
+    ) : (
+      <FocusPressable
+        accessibilityLabel={label}
+        accessibilityRole="button"
+        disabled={disabled}
+        onPress={onPress}
+        style={[styles.scanButton, local.action]}>
+        <Text style={styles.scanButtonText}>{text}</Text>
+      </FocusPressable>
+    );
   const [pending, setPending] = useState<
     Setting | 'findDevice' | 'storage' | null
   >(null);
@@ -145,13 +182,15 @@ export function DeviceControls({
   };
 
   return (
-    <View accessibilityLabel="Device controls" style={local.container}>
+    <View
+      accessibilityLabel="Device controls"
+      style={[local.container, mobile && themed.container]}>
       {device.connected && device.buttonSupported ? (
-        <Text style={styles.deviceMeta}>
+        <Text style={meta}>
           Double-press to save this conversation and keep recording.
         </Text>
       ) : null}
-      <Text style={styles.deviceMeta}>
+      <Text style={meta}>
         Charging:{' '}
         {device.charging === undefined
           ? 'Unknown'
@@ -162,44 +201,44 @@ export function DeviceControls({
       {device.connected &&
       device.findDeviceSupported &&
       omiNative?.findDevice ? (
-        <FocusPressable
-          accessibilityLabel="Find device"
-          accessibilityRole="button"
-          disabled={busy || pending !== null}
-          onPress={find}
-          style={[styles.scanButton, local.action]}>
-          <Text style={styles.scanButtonText}>Find device</Text>
-        </FocusPressable>
+        action({
+          label: 'Find device',
+          text: mobile ? 'Find Device' : 'Find device',
+          disabled: busy || pending !== null,
+          onPress: () => {
+            find().catch(() => undefined);
+          },
+        })
       ) : (
-        <Text style={styles.deviceMeta}>Find device unavailable</Text>
+        <Text style={meta}>Find device unavailable</Text>
       )}
       {device.connected &&
       device.storageStatusSupported &&
       omiNative?.readStorageStatus ? (
-        <FocusPressable
-          accessibilityLabel="Read storage status"
-          accessibilityRole="button"
-          disabled={busy || pending !== null}
-          onPress={readStorage}
-          style={[styles.scanButton, local.action]}>
-          <Text style={styles.scanButtonText}>Read storage status</Text>
-        </FocusPressable>
+        action({
+          label: 'Read storage status',
+          text: mobile ? 'Read Storage Status' : 'Read storage status',
+          disabled: busy || pending !== null,
+          onPress: () => {
+            readStorage().catch(() => undefined);
+          },
+        })
       ) : (
-        <Text style={styles.deviceMeta}>Storage status unavailable</Text>
+        <Text style={meta}>Storage status unavailable</Text>
       )}
       {storage !== null && device.connected && (
         <View accessibilityLabel="Last reported storage status">
-          <Text style={styles.deviceMeta}>Last reported storage</Text>
-          <Text style={styles.deviceMeta}>
+          <Text style={meta}>Last reported storage</Text>
+          <Text style={meta}>
             Stored audio: {storage.usedBytes.toLocaleString()} bytes
           </Text>
-          <Text style={styles.deviceMeta}>
+          <Text style={meta}>
             Unread packets: {storage.unreadPackets.toLocaleString()}
           </Text>
-          <Text style={styles.deviceMeta}>
+          <Text style={meta}>
             Free space: {storage.freeBytes.toLocaleString()} bytes
           </Text>
-          <Text style={styles.deviceMeta}>
+          <Text style={meta}>
             Device clock: {storage.clockValid ? 'Set' : 'Not set'}
           </Text>
         </View>
@@ -220,52 +259,46 @@ export function DeviceControls({
           value <= control.maximum;
         return (
           <View key={control.setting} style={local.row}>
-            <Text style={[styles.deviceMeta, local.label]}>
+            <Text style={[meta, local.label]}>
               {control.label}:{' '}
               {available ? `${value}${control.unit}` : 'Unavailable'}
             </Text>
             {available && (
               <>
-                <FocusPressable
-                  accessibilityLabel={`Decrease ${control.label.toLowerCase()}`}
-                  accessibilityRole="button"
-                  disabled={
+                {action({
+                  label: `Decrease ${control.label.toLowerCase()}`,
+                  text: '−',
+                  disabled:
                     busy ||
                     pending !== null ||
                     !omiNative?.setDeviceSetting ||
-                    value === 0
-                  }
-                  onPress={() => {
+                    value === 0,
+                  onPress: () => {
                     write(control.setting, Math.max(0, value! - control.step));
-                  }}
-                  style={[styles.scanButton, local.action]}>
-                  <Text style={styles.scanButtonText}>−</Text>
-                </FocusPressable>
-                <FocusPressable
-                  accessibilityLabel={`Increase ${control.label.toLowerCase()}`}
-                  accessibilityRole="button"
-                  disabled={
+                  },
+                })}
+                {action({
+                  label: `Increase ${control.label.toLowerCase()}`,
+                  text: '+',
+                  disabled:
                     busy ||
                     pending !== null ||
                     !omiNative?.setDeviceSetting ||
-                    value === control.maximum
-                  }
-                  onPress={() => {
+                    value === control.maximum,
+                  onPress: () => {
                     write(
                       control.setting,
                       Math.min(control.maximum, value! + control.step),
                     );
-                  }}
-                  style={[styles.scanButton, local.action]}>
-                  <Text style={styles.scanButtonText}>+</Text>
-                </FocusPressable>
+                  },
+                })}
               </>
             )}
           </View>
         );
       })}
       {pending !== null && (
-        <Text accessibilityRole="alert" style={styles.deviceMeta}>
+        <Text accessibilityRole="alert" style={meta}>
           {pending === 'storage'
             ? 'Reading storage status…'
             : pending === 'findDevice'
@@ -274,13 +307,18 @@ export function DeviceControls({
         </Text>
       )}
       {message !== null && (
-        <Text accessibilityRole="alert" style={styles.deviceMeta}>
+        <Text accessibilityRole="alert" style={meta}>
           {message}
         </Text>
       )}
     </View>
   );
 }
+
+const createMobileStyles = (t: OmiTheme) => ({
+  container: {paddingHorizontal: t.space.lg, paddingVertical: t.space.md},
+  meta: {...t.type.footnote, color: t.color.inkSecondary},
+});
 
 const local = StyleSheet.create({
   container: {gap: 8, paddingVertical: 12},
