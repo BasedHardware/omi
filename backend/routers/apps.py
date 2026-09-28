@@ -1109,6 +1109,10 @@ def update_app(
         backfill_app_home_url_from_auth_steps(data['external_integration'])
         _set_instructions_url_flag(data['external_integration'])
 
+    for field in ('name', 'category', 'author', 'description', 'image', 'capabilities'):
+        if field in data and data[field] is None:
+            del data[field]
+
     try:
         update_app = AppUpdate.model_validate(data)
     except ValidationError as e:
