@@ -32,6 +32,10 @@ import {
   MobileAppSurface,
   type MobileRoute,
 } from "../../react-native/src/mobile/MobileAppSurface";
+import {
+  MobileThemeRoot,
+  type MobileAppearance,
+} from "../../react-native/src/mobile/MobileTheme";
 import "./root.css";
 import "./preview-fonts.css";
 
@@ -51,6 +55,9 @@ const appearance = params.get("appearance") === "light" ? "light" : "dark";
 const initialRouteParam = params.get("route");
 const initialFilterParam = params.get("filter");
 const showNotice = params.get("notice") !== "off";
+// Mobile only: pin the phone frame to the audited width (see
+// design-preview.html) instead of centring a 430 px frame.
+const phoneFrame = Number(params.get("frame"));
 const desktopRoutes = ["Home", "Rewind", "Settings", "Chat"] as const;
 const desktopFilters = ["all", "conversations", "recall", "tasks"] as const;
 const mobileRoutes = ["home", "chat", "tasks", "apps", "settings"] as const;
@@ -243,7 +250,7 @@ const exampleOutcomes: DesktopReadOutcomes = {
 function Preview() {
   const [signedIn, setSignedIn] = useState(false);
   const [complete, setComplete] = useState(false);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(params.get("q") ?? "");
   const [chatOpen, setChatOpen] = useState(chatState !== null);
   const [chatBusy, setChatBusy] = useState(chatState === "waiting");
   const [chatError, setChatError] = useState<string | null>(
@@ -257,6 +264,8 @@ function Preview() {
       ? "Example connection error. Check Bluetooth and try again."
       : null
   );
+  const [mobileAppearance, setMobileAppearance] =
+    useState<MobileAppearance>(appearance);
   const [mode, setMode] = useState<MobileOmnibarMode>(
     chatState ? "Ask" : "Search"
   );
@@ -328,14 +337,42 @@ function Preview() {
   };
   const desktop =
     surface === "desktop" || (complete && !surface.startsWith("mobile"));
+  const mobileRoot = (child: React.ReactElement) =>
+    h(
+      MobileThemeRoot,
+      {
+        appearance: mobileAppearance,
+        onAppearanceChange: setMobileAppearance,
+      },
+      child
+    );
+  const onboardingProps = {
+    onSignIn: () => setSignedIn(true),
+    signingIn: false,
+    setupRequired: signedIn,
+    onCompleteSetup: () => setComplete(true),
+    onSignOut: () => setSignedIn(false),
+  };
   useEffect(() => {
-    document.body.dataset.appearance = appearance;
+    document.body.dataset.appearance = surface.startsWith("mobile")
+      ? mobileAppearance === "light"
+        ? "light"
+        : "dark"
+      : appearance;
+    if (surface.startsWith("mobile") && phoneFrame > 0) {
+      document.body.style.setProperty(
+        "--preview-phone-width",
+        `${phoneFrame}px`
+      );
+      document.body.style.setProperty("--preview-phone-align", "flex-start");
+      document.body.style.setProperty("--preview-phone-margin", "0");
+    }
     document.body.dataset.preview = surface.startsWith("mobile")
       ? "mobile"
       : desktop
       ? "app"
       : "setup";
-  }, [desktop]);
+  }, [desktop, mobileAppearance]);
   return h(
     SafeAreaProvider,
     null,
@@ -397,172 +434,172 @@ function Preview() {
               onStop: noop,
             })
           : surface === "mobile" || (surface === "mobile-setup" && complete)
-          ? h(MobileAppSurface, {
-              ...taskActions,
-              activeRoute: route,
-              onRouteChange: (next) => {
-                setChatOpen(false);
-                setRoute(next);
-              },
-              chatContent: chatOpen
-                ? h(MobileChat, {
-                    messages: chatMessages,
-                    busy: chatBusy,
-                    error: chatError,
-                    loadingHistory: chatState === "loading",
-                    hasOlder: false,
-                    loadingOlder: false,
-                    onLoadOlder: noop,
-                    onClose: () => {
-                      setChatOpen(false);
-                      setRoute(beforeChat.current);
-                    },
-                    prompts: [
-                      "What should I remember?",
-                      "Help me find a next step",
-                    ],
-                    onUsePrompt: (prompt) => {
-                      setDraft(prompt);
-                      composerRef.current?.focus();
-                    },
-                    shouldAnimate: () => false,
-                    scrollRef,
-                    onScroll: noop,
-                  })
-                : undefined,
-              omnibar: h(MobileOmnibar, {
-                key: "mobile-omnibar",
-                mode,
-                onModeChange: (next) => {
-                  setMode(next);
-                  if (next === "Search" && chatOpen) {
-                    setChatOpen(false);
-                    setRoute("home");
-                  }
+          ? mobileRoot(
+              h(MobileAppSurface, {
+                ...taskActions,
+                activeRoute: route,
+                onRouteChange: (next) => {
+                  setChatOpen(false);
+                  setRoute(next);
                 },
-                value: draft,
-                onChange: setDraft,
-                inputRef: composerRef,
-                busy: chatBusy,
-                canStop: chatBusy,
-                onSubmit: () => {
-                  if (mode === "Ask") previewSend();
-                  else {
-                    setChatOpen(false);
-                    setRoute("home");
-                  }
-                },
-                onStop: () => {
-                  setChatBusy(false);
-                  setChatMessages((current) =>
-                    current.map((message) =>
-                      message.sender === "ai"
-                        ? { ...message, generationOutcome: "cancelled" }
-                        : message
-                    )
-                  );
-                },
-              }),
-              searchContent:
-                mode === "Search" && draft.trim() !== ""
-                  ? h(ProjectionList, {
-                      items: Object.values(outcomes ?? {})
-                        .flatMap<DesktopReadProjection>((outcome) =>
-                          outcome.status === "success"
-                            ? outcome.value.items
-                            : []
-                        )
-                        .filter((item) =>
-                          item.searchableText
-                            .toLowerCase()
-                            .includes(draft.trim().toLowerCase())
-                        ),
-                      loading: false,
-                      error: outcomes
-                        ? null
-                        : "Saved data unavailable in this preview.",
-                      emptyTitle: "No loaded results match",
-                      emptyCopy:
-                        "Search covers data already loaded on this device.",
+                chatContent: chatOpen
+                  ? h(MobileChat, {
+                      messages: chatMessages,
+                      busy: chatBusy,
+                      error: chatError,
+                      loadingHistory: chatState === "loading",
+                      hasOlder: false,
+                      loadingOlder: false,
+                      onLoadOlder: noop,
+                      onClose: () => {
+                        setChatOpen(false);
+                        setRoute(beforeChat.current);
+                      },
+                      prompts: [
+                        "What should I remember?",
+                        "Help me find a next step",
+                      ],
+                      onUsePrompt: (prompt) => {
+                        setDraft(prompt);
+                        composerRef.current?.focus();
+                      },
+                      shouldAnimate: () => false,
+                      scrollRef,
+                      onScroll: noop,
                     })
                   : undefined,
-              capture: {
-                active:
-                  deviceState !== null && previewDevice.capture === "recording",
-                waitingForAudio: deviceState === "waiting",
-                transcript: "",
-              },
-              device: {
-                connected:
-                  deviceState !== null && previewDevice.phase === "connected",
-                label: deviceState
-                  ? homeConnectionStatus(previewDevice).label
-                  : "Connect Omi",
-              },
-              devicePanel: deviceOpen
-                ? h(DeviceSession, {
-                    variant: "compact",
-                    nativeSnapshot: deviceState ? previewDevice : null,
-                    deviceBusy: deviceState === "connecting",
-                    deviceScanMessage: deviceNote,
-                    onScan: () =>
-                      setDeviceNote(
-                        "Preview only — Bluetooth scanning is not started."
-                      ),
-                    onToggle: () =>
-                      setDeviceNote(
-                        "Preview only — no device connection is changed."
-                      ),
-                  })
-                : undefined,
-              tasks:
-                outcomes?.tasks.status === "success"
-                  ? outcomes.tasks.value.items
-                  : [],
-              taskStatus: outcomes ? "ready" : "offline",
-              conversations:
-                outcomes?.conversations.status === "success"
-                  ? outcomes.conversations.value.items
-                  : [],
-              conversationStatus: outcomes ? "ready" : "offline",
-              conversationContent: h(ConversationsPage, {
-                embedded: true,
-                search: {
-                  value: mode === "Search" ? draft : "",
-                  onChange: (value) => {
-                    if (mode === "Search") setDraft(value);
+                omnibar: h(MobileOmnibar, {
+                  key: "mobile-omnibar",
+                  mode,
+                  onModeChange: (next) => {
+                    setMode(next);
+                    if (next === "Search" && chatOpen) {
+                      setChatOpen(false);
+                      setRoute("home");
+                    }
                   },
+                  value: draft,
+                  onChange: setDraft,
+                  inputRef: composerRef,
+                  busy: chatBusy,
+                  canStop: chatBusy,
+                  onSubmit: () => {
+                    if (mode === "Ask") previewSend();
+                    else {
+                      setChatOpen(false);
+                      setRoute("home");
+                    }
+                  },
+                  onStop: () => {
+                    setChatBusy(false);
+                    setChatMessages((current) =>
+                      current.map((message) =>
+                        message.sender === "ai"
+                          ? { ...message, generationOutcome: "cancelled" }
+                          : message
+                      )
+                    );
+                  },
+                }),
+                searchContent:
+                  mode === "Search" && draft.trim() !== ""
+                    ? h(ProjectionList, {
+                        items: Object.values(outcomes ?? {})
+                          .flatMap<DesktopReadProjection>((outcome) =>
+                            outcome.status === "success"
+                              ? outcome.value.items
+                              : []
+                          )
+                          .filter((item) =>
+                            item.searchableText
+                              .toLowerCase()
+                              .includes(draft.trim().toLowerCase())
+                          ),
+                        loading: false,
+                        error: outcomes
+                          ? null
+                          : "Saved data unavailable in this preview.",
+                        emptyTitle: "No Matches",
+                        emptyCopy:
+                          "Search covers data already loaded on this device.",
+                      })
+                    : undefined,
+                capture: {
+                  active:
+                    deviceState !== null &&
+                    previewDevice.capture === "recording",
+                  waitingForAudio: deviceState === "waiting",
+                  transcript: "",
                 },
-                loading: conversationState === "loading",
-                outcome:
-                  conversationState === "loading"
-                    ? null
-                    : conversationState === "error"
-                    ? {
-                        status: "error",
-                        error:
-                          "Example connection error. Your saved conversations could not be loaded.",
-                      }
-                    : outcomes?.conversations ?? {
-                        status: "error",
-                        error: "Conversations unavailable in this preview.",
-                      },
-              }),
-              settingsContent: h(SettingsPage, {
-                onOpenApps: () => setRoute("apps"),
-              }),
-              appsContent: h(ConnectorsPage),
-              onOpenDevice: () => setDeviceOpen((open) => !open),
-              onViewTasks: () => setRoute("tasks"),
-              onViewConversations: () => setRoute("chat"),
-            })
-          : h(surface === "mobile-setup" ? Onboarding : DesktopOnboarding, {
-              onSignIn: () => setSignedIn(true),
-              signingIn: false,
-              setupRequired: signedIn,
-              onCompleteSetup: () => setComplete(true),
-              onSignOut: () => setSignedIn(false),
-            })
+                device: {
+                  connected:
+                    deviceState !== null && previewDevice.phase === "connected",
+                  label: deviceState
+                    ? homeConnectionStatus(previewDevice).label
+                    : "Connect Omi",
+                },
+                devicePanel: deviceOpen
+                  ? h(DeviceSession, {
+                      variant: "compact",
+                      nativeSnapshot: deviceState ? previewDevice : null,
+                      deviceBusy: deviceState === "connecting",
+                      deviceScanMessage: deviceNote,
+                      onScan: () =>
+                        setDeviceNote(
+                          "Preview only — Bluetooth scanning is not started."
+                        ),
+                      onToggle: () =>
+                        setDeviceNote(
+                          "Preview only — no device connection is changed."
+                        ),
+                    })
+                  : undefined,
+                tasks:
+                  outcomes?.tasks.status === "success"
+                    ? outcomes.tasks.value.items
+                    : [],
+                taskStatus: outcomes ? "ready" : "offline",
+                conversations:
+                  outcomes?.conversations.status === "success"
+                    ? outcomes.conversations.value.items
+                    : [],
+                conversationStatus: outcomes ? "ready" : "offline",
+                conversationContent: h(ConversationsPage, {
+                  embedded: true,
+                  initialSelectedId: params.get("conversation"),
+                  search: {
+                    value: mode === "Search" ? draft : "",
+                    onChange: (value) => {
+                      if (mode === "Search") setDraft(value);
+                    },
+                  },
+                  loading: conversationState === "loading",
+                  outcome:
+                    conversationState === "loading"
+                      ? null
+                      : conversationState === "error"
+                      ? {
+                          status: "error",
+                          error:
+                            "Example connection error. Your saved conversations could not be loaded.",
+                        }
+                      : outcomes?.conversations ?? {
+                          status: "error",
+                          error: "Conversations unavailable in this preview.",
+                        },
+                }),
+                settingsContent: h(SettingsPage, {
+                  onOpenApps: () => setRoute("apps"),
+                }),
+                appsContent: h(ConnectorsPage),
+                onOpenDevice: () => setDeviceOpen((open) => !open),
+                onViewTasks: () => setRoute("tasks"),
+                onViewConversations: () => setRoute("chat"),
+              })
+            )
+          : surface === "mobile-setup"
+          ? mobileRoot(h(Onboarding, onboardingProps))
+          : h(DesktopOnboarding, onboardingProps)
       )
     )
   );

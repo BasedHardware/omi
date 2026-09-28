@@ -10,15 +10,16 @@ export type AuditScenario = {
   /** design-preview.html query string, without appearance/notice. */
   query: string;
   viewport: Viewport;
-  /** Appearances to capture. Mobile has no light theme yet. */
+  /** Appearances to capture. */
   appearances: readonly ("dark" | "light")[];
 };
 
 const desktop: Viewport = { width: 1280, height: 900 };
 const desktopCompact: Viewport = { width: 900, height: 700 };
 const phone: Viewport = { width: 390, height: 844 };
+const phoneSmall: Viewport = { width: 375, height: 812 };
+const phoneLarge: Viewport = { width: 430, height: 932 };
 const both = ["light", "dark"] as const;
-const darkOnly = ["dark"] as const;
 
 export const scenarios: AuditScenario[] = [
   // macOS desktop
@@ -106,89 +107,78 @@ export const scenarios: AuditScenario[] = [
     viewport: desktop,
     appearances: both,
   },
-  // Mobile
-  {
-    id: "mobile-home",
-    title: "Home",
-    query: "surface=mobile&data=example",
-    viewport: phone,
-    appearances: darkOnly,
-  },
-  {
-    id: "mobile-conversations",
-    title: "Conversations tab",
-    query: "surface=mobile&data=example&route=chat",
-    viewport: phone,
-    appearances: darkOnly,
-  },
-  {
-    id: "mobile-conversations-loading",
-    title: "Conversations loading",
-    query: "surface=mobile&data=example&conversations=loading",
-    viewport: phone,
-    appearances: darkOnly,
-  },
-  {
-    id: "mobile-conversations-error",
-    title: "Conversations failed to load",
-    query: "surface=mobile&data=example&conversations=error",
-    viewport: phone,
-    appearances: darkOnly,
-  },
-  {
-    id: "mobile-tasks",
-    title: "Tasks tab",
-    query: "surface=mobile&data=example&route=tasks",
-    viewport: phone,
-    appearances: darkOnly,
-  },
-  {
-    id: "mobile-settings",
-    title: "Settings tab",
-    query: "surface=mobile&data=example&route=settings",
-    viewport: phone,
-    appearances: darkOnly,
-  },
-  {
-    id: "mobile-apps",
-    title: "Apps",
-    query: "surface=mobile&data=example&route=apps",
-    viewport: phone,
-    appearances: darkOnly,
-  },
-  {
-    id: "mobile-ask",
-    title: "Ask Omi with an answer",
-    query: "surface=mobile&data=example&chat=ready",
-    viewport: phone,
-    appearances: darkOnly,
-  },
-  {
-    id: "mobile-ask-waiting",
-    title: "Ask Omi while Omi answers",
-    query: "surface=mobile&data=example&chat=waiting",
-    viewport: phone,
-    appearances: darkOnly,
-  },
-  {
-    id: "mobile-device-listening",
-    title: "Device panel, listening",
-    query: "surface=mobile&data=example&device=listening",
-    viewport: phone,
-    appearances: darkOnly,
-  },
-  {
-    id: "mobile-empty",
-    title: "Home with no data",
-    query: "surface=mobile&data=empty",
-    viewport: phone,
-    appearances: darkOnly,
-  },
+  // Mobile. Every phone query pins the preview's phone frame to the viewport
+  // width (frame=…): headless Chrome lays out at least 500 px wide, so an
+  // unpinned frame would be centred and clipped by the screenshot.
+  ...[
+    ["mobile-home", "Home", "data=example"],
+    ["mobile-conversations", "Conversations tab", "data=example&route=chat"],
+    [
+      "mobile-conversations-loading",
+      "Conversations loading",
+      "data=example&conversations=loading",
+    ],
+    [
+      "mobile-conversations-error",
+      "Conversations failed to load",
+      "data=example&conversations=error",
+    ],
+    [
+      "mobile-conversation-detail",
+      "Conversation detail (detail reads are stubbed)",
+      "data=example&route=chat&conversation=preview-conversation-0",
+    ],
+    ["mobile-tasks", "Tasks tab", "data=example&route=tasks"],
+    ["mobile-tasks-empty", "Tasks tab with no tasks", "data=empty&route=tasks"],
+    ["mobile-settings", "Settings tab", "data=example&route=settings"],
+    ["mobile-apps", "Apps", "data=example&route=apps"],
+    ["mobile-ask", "Ask Omi with an answer", "data=example&chat=ready"],
+    [
+      "mobile-ask-waiting",
+      "Ask Omi while Omi answers",
+      "data=example&chat=waiting",
+    ],
+    [
+      "mobile-ask-empty",
+      "Ask Omi before the first message",
+      "data=example&chat=empty",
+    ],
+    [
+      "mobile-ask-error",
+      "Ask Omi with a send error",
+      "data=example&chat=error",
+    ],
+    [
+      "mobile-device-listening",
+      "Device panel, listening",
+      "data=example&device=listening",
+    ],
+    ["mobile-search", "Search results on Home", "data=example&q=review"],
+    ["mobile-empty", "Home with no data", "data=empty"],
+    ["mobile-unavailable", "Home when reads are unavailable", ""],
+  ].map(
+    ([id, title, query]): AuditScenario => ({
+      id,
+      title,
+      query: `surface=mobile&frame=${phone.width}${query ? `&${query}` : ""}`,
+      viewport: phone,
+      appearances: both,
+    })
+  ),
+  ...[phoneSmall, phoneLarge].map(
+    (viewport): AuditScenario => ({
+      id: `mobile-home-${viewport.width}`,
+      title: `Home at ${viewport.width} pt`,
+      query: `surface=mobile&frame=${viewport.width}&data=example`,
+      viewport,
+      appearances: both,
+    })
+  ),
   {
     id: "mobile-setup",
     title: "Mobile onboarding, first step",
-    query: "surface=mobile-setup",
+    query: `surface=mobile-setup&frame=${phone.width}`,
     viewport: phone,
-    appearances: darkOnly,
+    appearances: both,
   },
 ];

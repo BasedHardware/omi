@@ -5,11 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Omi · component preview</title>
     <style>
+      /* The phone frame. The visual audit pins it to the scenario width
+         (?frame=390) and to the left edge: headless Chrome never lays out
+         narrower than 500 px, so a centred 430 px frame would be clipped by
+         a 390 px screenshot. */
+      body[data-preview="mobile"] {
+        --omi-web-canvas: #000000;
+      }
+      body[data-preview="mobile"][data-appearance="light"] {
+        --omi-web-canvas: #f2f2f4;
+        --omi-web-text: #161715;
+        color-scheme: light;
+      }
       body[data-preview="mobile"] #preview-desktop {
-        width: 100%;
-        max-width: 430px;
-        align-self: center;
-        margin-inline: auto;
+        width: var(--preview-phone-width, 100%);
+        max-width: var(--preview-phone-width, 430px);
+        align-self: var(--preview-phone-align, center);
+        margin-inline: var(--preview-phone-margin, auto);
       }
       body:not([data-preview="mobile"]) {
         background: linear-gradient(
