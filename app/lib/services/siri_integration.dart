@@ -38,16 +38,10 @@ typedef SiriListeningCapture = ({
   bool Function() phonePaused,
 });
 
-typedef SiriMemoryPageFetcher = Future<GetMemoriesResult> Function({
-  required int limit,
-  required int offset,
-  String? cursor,
-});
-typedef SiriTaskPageFetcher = Future<ApiResult<ActionItemsResponse>> Function({
-  required int limit,
-  required int offset,
-  required bool completed,
-});
+typedef SiriMemoryPageFetcher = Future<GetMemoriesResult> Function(
+    {required int limit, required int offset, String? cursor});
+typedef SiriTaskPageFetcher = Future<ApiResult<ActionItemsResponse>> Function(
+    {required int limit, required int offset, required bool completed});
 typedef SiriConversationPageFetcher = Future<ApiResult<List<ServerConversation>>> Function({
   required int limit,
   required int offset,
@@ -99,19 +93,23 @@ class SiriIntegration extends SiriEventsApi {
         _testTaskPageFetcher = null,
         _testConversationPageFetcher = null,
         _prepareTimeout = const Duration(milliseconds: 1500),
+        _nativeTimeout = const Duration(seconds: 12),
         _delay = Future<void>.delayed;
 
   /// Inject a Pigeon host for hermetic projection and account fencing tests.
-  SiriIntegration.forTest(SiriIndexApi host, String uid,
-      {SiriSessionConfig Function(User, IdTokenResult, int)? sessionConfig,
-      SiriListeningCapture? listeningCapture,
-      SiriMemoryPageFetcher? memoryPageFetcher,
-      SiriTaskPageFetcher? taskPageFetcher,
-      SiriConversationPageFetcher? conversationPageFetcher,
-      Duration prepareTimeout = const Duration(milliseconds: 1500),
-      Future<void> Function(Duration)? delay,
-      bool coldStart = false})
-      : _host = host,
+  SiriIntegration.forTest(
+    SiriIndexApi host,
+    String uid, {
+    SiriSessionConfig Function(User, IdTokenResult, int)? sessionConfig,
+    SiriListeningCapture? listeningCapture,
+    SiriMemoryPageFetcher? memoryPageFetcher,
+    SiriTaskPageFetcher? taskPageFetcher,
+    SiriConversationPageFetcher? conversationPageFetcher,
+    Duration prepareTimeout = const Duration(milliseconds: 1500),
+    Duration nativeTimeout = const Duration(seconds: 12),
+    Future<void> Function(Duration)? delay,
+    bool coldStart = false,
+  })  : _host = host,
         _isIOS = true,
         _testSessionConfig = sessionConfig,
         _testListeningCapture = listeningCapture,
@@ -119,6 +117,7 @@ class SiriIntegration extends SiriEventsApi {
         _testTaskPageFetcher = taskPageFetcher,
         _testConversationPageFetcher = conversationPageFetcher,
         _prepareTimeout = prepareTimeout,
+        _nativeTimeout = nativeTimeout,
         _delay = delay ?? Future<void>.delayed,
         _uid = coldStart ? null : uid,
         _nativeGeneration = coldStart ? null : 0;
@@ -134,6 +133,7 @@ class SiriIntegration extends SiriEventsApi {
   final SiriTaskPageFetcher? _testTaskPageFetcher;
   final SiriConversationPageFetcher? _testConversationPageFetcher;
   final Duration _prepareTimeout;
+  final Duration _nativeTimeout;
   final Future<void> Function(Duration) _delay;
   void installEvents() {
     if (_isIOS) SiriEventsApi.setUp(this);
@@ -143,15 +143,91 @@ class SiriIntegration extends SiriEventsApi {
   int? _nativeGeneration;
   Future<void> _nativeTail = Future<void>.value();
   Future<void> _queuedIndexTail = Future<void>.value();
+  DateTime? _indexSuspendedUntil;
+  final Map<String, Set<String>> _suppressedIds = {
+    'memory': <String>{},
+    'conversation': <String>{},
+    'task': <String>{},
+  };
   String? _uid;
   String? _ownerWideRefreshUid;
   DateTime? _ownerWideRefreshAt;
 
-  Future<T> _nativeOperation<T>(Future<T> Function() operation) {
-    final result = _nativeTail.then((_) => operation());
+  Future<T> _nativeOperation<T>(Future<T> Function() operation, {bool indexWork = false}) {
+    final result = _nativeTail.then((_) async {
+      if (indexWork && (_indexSuspendedUntil?.isAfter(DateTime.now()) ?? false)) {
+        throw TimeoutException('Siri index is cooling down after a native timeout');
+      }
+      try {
+        return await operation().timeout(_nativeTimeout);
+      } on TimeoutException {
+        if (indexWork) _indexSuspendedUntil = DateTime.now().add(const Duration(seconds: 30));
+        rethrow;
+      }
+    });
     _nativeTail = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
     return result;
   }
+
+  /// Submit projections in UI order without making the UI wait for Spotlight.
+  /// The owner is captured at submission, so an old account's queued rows can
+  /// never be projected into a newly bound account.
+  void queueIndex(Future<void> Function(SiriIntegration) work) {
+    if (!_isIOS || _uid == null) return;
+    final uid = _uid;
+    final generation = _accountGeneration;
+    _queuedIndexTail = _queuedIndexTail.then((_) async {
+      if (_uid != uid || _accountGeneration != generation) return;
+      await work(this);
+    }).catchError((Object error) {
+      Logger.debug('Siri background index failed: $error');
+    });
+  }
+
+  void queueUpsertMemories(List<Memory> rows, {bool restoreDeleted = false}) {
+    final frozen = List<Memory>.of(rows);
+    if (restoreDeleted) _suppressedIds['memory']!.removeAll(frozen.map((row) => row.id));
+    queueIndex((siri) => siri.upsertMemories(frozen));
+  }
+
+  void queueReconcileMemories(List<Memory> rows) {
+    final frozen = List<Memory>.of(rows);
+    queueIndex((siri) => siri.reconcileMemories(frozen));
+  }
+
+  void queueUpsertTasks(List<ActionItemWithMetadata> rows, {bool restoreDeleted = false}) {
+    final frozen = List<ActionItemWithMetadata>.of(rows);
+    if (restoreDeleted) _suppressedIds['task']!.removeAll(frozen.map((row) => row.id));
+    queueIndex((siri) => siri.upsertTasks(frozen));
+  }
+
+  void queueReconcileTasks(List<ActionItemWithMetadata> rows, {required bool includeCompleted}) {
+    final frozen = List<ActionItemWithMetadata>.of(rows);
+    queueIndex((siri) => siri.reconcileTasks(frozen, includeCompleted: includeCompleted));
+  }
+
+  void queueReconcileConversations(List<ServerConversation> rows, {DateTime? coveredAfter}) {
+    final frozen = List<ServerConversation>.of(rows);
+    queueIndex((siri) => siri.reconcileConversations(frozen, coveredAfter: coveredAfter));
+  }
+
+  void queueDelete(String type, String id) {
+    _suppressedIds[type]?.add(id);
+    queueIndex((siri) => siri.delete(type, id));
+  }
+
+  void queueDeleteMany(String type, List<String> ids, {String? expectedUid}) {
+    if (expectedUid != null && expectedUid != _uid) return;
+    final frozen = List<String>.of(ids);
+    _suppressedIds[type]?.addAll(frozen);
+    queueIndex((siri) => siri.deleteMany(type, frozen, expectedUid: expectedUid));
+  }
+
+  void queueRefreshAuthoritativeTasks({String? expectedUid}) =>
+      queueIndex((siri) => siri.refreshAuthoritativeTasks(expectedUid: expectedUid));
+
+  @visibleForTesting
+  Future<void> drainIndexForTest() => _queuedIndexTail;
 
   /// This privacy fence bypasses the index queue: a stuck Spotlight operation
   /// must not delay Firebase sign-out or leave engine-free Siri authorized.
@@ -160,26 +236,31 @@ class SiriIntegration extends SiriEventsApi {
     ++_accountGeneration;
     _uid = null;
     _nativeGeneration = null;
+    for (final ids in _suppressedIds.values) {
+      ids.clear();
+    }
     await _host.prepareForSignOut().timeout(_prepareTimeout);
   }
 
   /// Synchronous provider callbacks keep their immediate UI update. Their
   /// index work is owned by this ordered Future chain and each native call is
   /// awaited before the next callback's projection starts.
-  void queueUpsertConversations(List<ServerConversation> rows) {
-    final uid = _uid;
-    final generation = _accountGeneration;
+  void queueUpsertConversations(List<ServerConversation> rows, {String? expectedUid, bool restoreDeleted = false}) {
+    if (expectedUid != null && expectedUid != _uid) return;
     final frozenRows = List<ServerConversation>.of(rows);
-    _queuedIndexTail = _queuedIndexTail.then((_) async {
-      if (uid == null || _uid != uid || generation != _accountGeneration) return;
-      await upsertConversations(frozenRows, expectedUid: uid);
-    });
+    if (restoreDeleted) _suppressedIds['conversation']!.removeAll(frozenRows.map((row) => row.id));
+    queueIndex((siri) => siri.upsertConversations(frozenRows, expectedUid: expectedUid));
   }
 
   Future<void> accountChanged(User? user) async {
     if (!_isIOS) return;
     final generation = ++_accountGeneration;
     final uid = user?.uid;
+    if (uid != _uid) {
+      for (final ids in _suppressedIds.values) {
+        ids.clear();
+      }
+    }
     if (uid != null && _nativeGeneration == null) {
       try {
         final savedGeneration = await _nativeOperation(() => _host.generationForOwner(uid));
@@ -222,7 +303,7 @@ class SiriIntegration extends SiriEventsApi {
     Timer(const Duration(seconds: 2), () async {
       try {
         if (_uid != uid || _accountGeneration != generation || !await isEnabled()) return;
-        await refreshOwnerWideIndex();
+        queueIndex((siri) => siri.refreshOwnerWideIndex());
       } catch (error) {
         Logger.debug('Siri deferred owner-wide refresh failed: $error');
       }
@@ -261,8 +342,10 @@ class SiriIntegration extends SiriEventsApi {
         ApiResult<ActionItemsResponse> result;
         try {
           result = await (_testTaskPageFetcher?.call(limit: limit, offset: page * limit, completed: completed) ??
-              ActionItemsApi(baseUrl: Env.apiBaseUrl ?? '')
-                  .list(limit: limit, offset: page * limit, completed: completed));
+                  ActionItemsApi(
+                    baseUrl: Env.apiBaseUrl ?? '',
+                  ).list(limit: limit, offset: page * limit, completed: completed))
+              .timeout(const Duration(seconds: 10));
         } catch (error) {
           Logger.debug('Siri task traversal failed: $error');
           break;
@@ -300,12 +383,16 @@ class SiriIntegration extends SiriEventsApi {
         Future<ApiResult<List<ServerConversation>>> fetch() =>
             _testConversationPageFetcher?.call(limit: limit, offset: page * limit, startDate: cutoff) ??
             ConversationApi(baseUrl: Env.apiBaseUrl ?? '').list(
-                limit: limit, offset: page * limit, statuses: const [ConversationStatus.completed], startDate: cutoff);
-        result = await fetch();
+              limit: limit,
+              offset: page * limit,
+              statuses: const [ConversationStatus.completed],
+              startDate: cutoff,
+            );
+        result = await fetch().timeout(const Duration(seconds: 10));
         if (result is ApiFailure<List<ServerConversation>> && result.problem.kind == ApiProblemKind.rateLimited) {
           await _delay(result.problem.retryAfter ?? const Duration(seconds: 2));
           if (_uid != uid || generation != _accountGeneration) return;
-          result = await fetch();
+          result = await fetch().timeout(const Duration(seconds: 10));
         }
       } catch (error) {
         Logger.debug('Siri conversation traversal failed: $error');
@@ -380,7 +467,7 @@ class SiriIntegration extends SiriEventsApi {
         if (_uid != uid || _accountGeneration != generation) return;
         if (removed.isNotEmpty) await _host.deleteEntities(uid, 'conversation', removed.toList());
         if (projected.isNotEmpty) await _host.upsertConversations(uid, projected);
-      });
+      }, indexWork: true);
     } catch (error) {
       Logger.debug('Siri conversation index failed: $error');
     }
@@ -397,7 +484,7 @@ class SiriIntegration extends SiriEventsApi {
       await _nativeOperation(() async {
         if (_uid != uid || _accountGeneration != generation) return;
         await _host.reconcileConversations(uid, projected, coveredAfter?.millisecondsSinceEpoch);
-      });
+      }, indexWork: true);
     } catch (error) {
       Logger.debug('Siri conversation reconciliation failed: $error');
     }
@@ -408,15 +495,17 @@ class SiriIntegration extends SiriEventsApi {
     final newest = List<ServerConversation>.of(rows)
       ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     return newest
-        .where((row) => siriConversationIsIndexable(row, now))
+        .where((row) => siriConversationIsIndexable(row, now) && !_suppressedIds['conversation']!.contains(row.id))
         .take(2000)
-        .map((row) => SiriConversation(
-              id: row.id,
-              title: row.structured.title,
-              summary: row.structured.overview,
-              startedAtMs: (row.startedAt ?? row.createdAt).millisecondsSinceEpoch,
-              updatedAtMs: (row.finishedAt ?? row.createdAt).millisecondsSinceEpoch,
-            ))
+        .map(
+          (row) => SiriConversation(
+            id: row.id,
+            title: row.structured.title,
+            summary: row.structured.overview,
+            startedAtMs: (row.startedAt ?? row.createdAt).millisecondsSinceEpoch,
+            updatedAtMs: (row.finishedAt ?? row.createdAt).millisecondsSinceEpoch,
+          ),
+        )
         .toList();
   }
 
@@ -435,7 +524,7 @@ class SiriIntegration extends SiriEventsApi {
         if (_uid != uid || _accountGeneration != generation) return;
         if (removed.isNotEmpty) await _host.deleteEntities(uid, 'memory', removed.toList());
         if (projected.isNotEmpty) await _host.upsertMemories(uid, projected);
-      });
+      }, indexWork: true);
     } catch (error) {
       Logger.debug('Siri memory index failed: $error');
     }
@@ -451,7 +540,7 @@ class SiriIntegration extends SiriEventsApi {
       await _nativeOperation(() async {
         if (_uid != uid || _accountGeneration != generation) return;
         await _host.reconcileMemories(uid, projected);
-      });
+      }, indexWork: true);
     } catch (error) {
       Logger.debug('Siri memory reconciliation failed: $error');
     }
@@ -461,14 +550,16 @@ class SiriIntegration extends SiriEventsApi {
     final now = DateTime.now();
     final newest = List<Memory>.of(rows)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return newest
-        .where((row) => siriMemoryIsIndexable(row, now, owner: uid))
+        .where((row) => siriMemoryIsIndexable(row, now, owner: uid) && !_suppressedIds['memory']!.contains(row.id))
         .take(5000)
-        .map((row) => SiriMemory(
-              id: row.id,
-              content: row.content,
-              createdAtMs: row.createdAt.millisecondsSinceEpoch,
-              expiresAtMs: row.siriExpiryAt?.millisecondsSinceEpoch,
-            ))
+        .map(
+          (row) => SiriMemory(
+            id: row.id,
+            content: row.content,
+            createdAtMs: row.createdAt.millisecondsSinceEpoch,
+            expiresAtMs: row.siriExpiryAt?.millisecondsSinceEpoch,
+          ),
+        )
         .toList();
   }
 
@@ -490,13 +581,14 @@ class SiriIntegration extends SiriEventsApi {
       for (var page = 0; page < maxPages; page++) {
         final result =
             await (_testMemoryPageFetcher?.call(limit: limit, offset: cursor == null ? offset : 0, cursor: cursor) ??
-                getMemoriesResult(
-                  limit: limit,
-                  offset: cursor == null ? offset : 0,
-                  cursor: cursor,
-                  view: MemoryReadView.all,
-                  forceView: true,
-                ));
+                    getMemoriesResult(
+                      limit: limit,
+                      offset: cursor == null ? offset : 0,
+                      cursor: cursor,
+                      view: MemoryReadView.all,
+                      forceView: true,
+                    ))
+                .timeout(const Duration(seconds: 10));
         if (_uid != uid || _accountGeneration != generation) return;
         if (!result.ok || result.truncated) break;
         rows.addAll(result.memories.where((row) => seen.add(row.id)));
@@ -536,7 +628,7 @@ class SiriIntegration extends SiriEventsApi {
         if (_uid != uid || _accountGeneration != generation) return;
         if (removed.isNotEmpty) await _host.deleteEntities(uid, 'task', removed.toList());
         if (projected.isNotEmpty) await _host.upsertTasks(uid, projected);
-      });
+      }, indexWork: true);
     } catch (error) {
       Logger.debug('Siri task index failed: $error');
     }
@@ -553,7 +645,7 @@ class SiriIntegration extends SiriEventsApi {
       await _nativeOperation(() async {
         if (_uid != uid || _accountGeneration != generation) return;
         await _host.reconcileTasks(uid, projected, includeCompleted);
-      });
+      }, indexWork: true);
     } catch (error) {
       Logger.debug('Siri task reconciliation failed: $error');
     }
@@ -562,15 +654,17 @@ class SiriIntegration extends SiriEventsApi {
   List<SiriTask> _taskProjection(List<ActionItemWithMetadata> rows) {
     final now = DateTime.now();
     return rows
-        .where((row) => siriTaskIsIndexable(row, now))
-        .map((row) => SiriTask(
-              id: row.id,
-              title: row.description,
-              completed: row.completed,
-              createdAtMs: (row.createdAt ?? DateTime.now()).millisecondsSinceEpoch,
-              dueAtMs: row.dueAt?.millisecondsSinceEpoch,
-              completedAtMs: row.completedAt?.millisecondsSinceEpoch,
-            ))
+        .where((row) => siriTaskIsIndexable(row, now) && !_suppressedIds['task']!.contains(row.id))
+        .map(
+          (row) => SiriTask(
+            id: row.id,
+            title: row.description,
+            completed: row.completed,
+            createdAtMs: (row.createdAt ?? DateTime.now()).millisecondsSinceEpoch,
+            dueAtMs: row.dueAt?.millisecondsSinceEpoch,
+            completedAtMs: row.completedAt?.millisecondsSinceEpoch,
+          ),
+        )
         .toList();
   }
 
@@ -582,7 +676,7 @@ class SiriIntegration extends SiriEventsApi {
       await _nativeOperation(() async {
         if (_uid != uid || _accountGeneration != generation) return;
         await _host.deleteEntities(uid, type, [id]);
-      });
+      }, indexWork: true);
     } catch (error) {
       Logger.debug('Siri index delete failed: $error');
     }
@@ -596,7 +690,7 @@ class SiriIntegration extends SiriEventsApi {
       await _nativeOperation(() async {
         if (_uid != uid || _accountGeneration != generation) return;
         await _host.deleteEntities(uid, type, ids);
-      });
+      }, indexWork: true);
     } catch (error) {
       Logger.debug('Siri index batch delete failed: $error');
     }
@@ -658,7 +752,9 @@ class SiriIntegration extends SiriEventsApi {
       if (capture.deviceConnected() &&
           (capture.deviceBatchRecording() || (capture.source() != null && capture.source() != 'phone'))) {
         throw PlatformException(
-            code: 'device_already_listening', message: 'Omi is already listening from your device.');
+          code: 'device_already_listening',
+          message: 'Omi is already listening from your device.',
+        );
       }
       if ((capture.source() == 'phone' || capture.phoneBatchRecording()) && capture.phonePaused()) {
         throw PlatformException(code: 'capture_paused', message: 'Omi is paused. Open Omi to resume.');
@@ -704,21 +800,25 @@ class SiriIntegration extends SiriEventsApi {
         final intents = siri_events.SiriIntentPerformedIntent.values.where((value) => value.name == row.intent);
         if (intents.isEmpty) continue;
         final outcomes = siri_events.SiriIntentPerformedOutcome.values.where((value) => value.name == row.outcome);
-        const TypedEvents().emit(siri_events.SiriIntentPerformed(
-          intent: intents.first,
-          platform: siri_events.SiriIntentPerformedPlatform.ios,
-          outcome: outcomes.isEmpty ? siri_events.SiriIntentPerformedOutcome.server : outcomes.first,
-          latencyMs: row.latencyMs,
-          invokedVia: siri_events.SiriIntentPerformedInvokedVia.unknown,
-        ));
+        const TypedEvents().emit(
+          siri_events.SiriIntentPerformed(
+            intent: intents.first,
+            platform: siri_events.SiriIntentPerformedPlatform.ios,
+            outcome: outcomes.isEmpty ? siri_events.SiriIntentPerformedOutcome.server : outcomes.first,
+            latencyMs: row.latencyMs,
+            invokedVia: siri_events.SiriIntentPerformedInvokedVia.unknown,
+          ),
+        );
       } else if (row.kind == 'index') {
         final outcomes = siri_events.SiriIndexRebuiltOutcome.values.where((value) => value.name == row.outcome);
-        const TypedEvents().emit(siri_events.SiriIndexRebuilt(
-          platform: siri_events.SiriIndexRebuiltPlatform.ios,
-          entityCounts: row.entityCounts,
-          durationMs: row.latencyMs,
-          outcome: outcomes.isEmpty ? siri_events.SiriIndexRebuiltOutcome.server : outcomes.first,
-        ));
+        const TypedEvents().emit(
+          siri_events.SiriIndexRebuilt(
+            platform: siri_events.SiriIndexRebuiltPlatform.ios,
+            entityCounts: row.entityCounts,
+            durationMs: row.latencyMs,
+            outcome: outcomes.isEmpty ? siri_events.SiriIndexRebuiltOutcome.server : outcomes.first,
+          ),
+        );
       }
     }
   }

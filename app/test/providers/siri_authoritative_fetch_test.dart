@@ -113,7 +113,7 @@ void main() {
     addTearDown(provider.dispose);
 
     expect(await provider.fetchConversations(), isTrue);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.conversations, isEmpty);
   });
 
@@ -148,7 +148,7 @@ void main() {
     addTearDown(provider.dispose);
 
     expect(await provider.fetchConversations(), isTrue);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.conversations.containsKey('remote-deleted-new'), isFalse);
     expect(host.conversations.containsKey('outside-page'), isTrue);
   });
@@ -168,10 +168,10 @@ void main() {
     );
     addTearDown(provider.dispose);
     await provider.addConversation(row('source'));
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.conversations.containsKey('source'), isTrue);
     await provider.onMergeCompleted('merged', ['source']);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.conversations.containsKey('source'), isFalse);
     expect(host.conversations.containsKey('merged'), isTrue);
   });
@@ -196,6 +196,7 @@ void main() {
     provider.mergingConversationIds.add('source-outside-page');
 
     await provider.onMergeCompleted(row.id, ['source-outside-page']);
+    await SiriIntegration.current.drainIndexForTest();
 
     expect(provider.mergingConversationIds, isNot(contains('source-outside-page')));
     expect(fetches, 1);
@@ -222,6 +223,7 @@ void main() {
     expect(provider.conversations.map((item) => item.id), contains(row.id));
     host.pendingConversationDelete!.complete();
     await merge;
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.conversations, contains(row.id));
   });
 
@@ -236,7 +238,8 @@ void main() {
     addTearDown(provider.dispose);
 
     await provider.loadMemories();
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories, isEmpty);
   });
 
@@ -267,6 +270,7 @@ void main() {
     );
     addTearDown(provider.dispose);
     await provider.loadMemories();
+    await SiriIntegration.current.drainIndexForTest();
     expect(requestedViews, contains(MemoryReadView.usefulNow));
     expect(host.memories.keys, contains('outside-useful-now'));
   });
@@ -288,10 +292,11 @@ void main() {
     );
     addTearDown(provider.dispose);
     await provider.loadMemories();
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories.containsKey(row.id), isTrue);
     expect(await provider.reviewMemory(row, false), isTrue);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories.containsKey(row.id), isFalse);
   });
 
@@ -312,8 +317,9 @@ void main() {
     );
     addTearDown(provider.dispose);
     await provider.loadMemories();
+    await SiriIntegration.current.drainIndexForTest();
     expect(await provider.editMemory(row, 'new'), isTrue);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories[row.id]?.content, 'new');
   });
 
@@ -333,7 +339,7 @@ void main() {
     );
     addTearDown(provider.dispose);
     expect(await provider.editMemory(row, 'new'), isTrue);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories[row.id]?.content, 'new');
   });
 
@@ -354,10 +360,11 @@ void main() {
     );
     addTearDown(provider.dispose);
     await provider.loadMemories();
+    await SiriIntegration.current.drainIndexForTest();
     host.tasks['retained-task'] = SiriTask(
         id: 'retained-task', title: 'task', completed: false, createdAtMs: DateTime.now().millisecondsSinceEpoch);
     expect(await provider.deleteAllMemories(), isTrue);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories, isEmpty);
     expect(host.tasks.containsKey('retained-task'), isTrue);
   });
@@ -379,11 +386,12 @@ void main() {
     );
     addTearDown(provider.dispose);
     await provider.loadMemories();
+    await SiriIntegration.current.drainIndexForTest();
     expect(await provider.deleteAllMemories(), isFalse);
     expect(host.memories.containsKey(row.id), isTrue);
   });
 
-  test('undo waits for the pending native memory delete before restoring', () async {
+  test('memory undo completes while native delete is pending, then restores in order', () async {
     final host = hostForTest();
     final row = Memory(
       id: 'undo-race',
@@ -400,7 +408,7 @@ void main() {
     );
     addTearDown(provider.dispose);
     await provider.loadMemories();
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories, contains(row.id));
 
     host.pendingMemoryDelete = Completer<void>();
@@ -409,9 +417,10 @@ void main() {
     var completed = false;
     restored.then((_) => completed = true);
     await Future<void>.delayed(Duration.zero);
-    expect(completed, isFalse);
+    expect(completed, isTrue);
     host.pendingMemoryDelete!.complete();
     expect(await restored, isTrue);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories, contains(row.id));
   });
 
@@ -431,10 +440,10 @@ void main() {
     );
     addTearDown(provider.dispose);
     expect(await provider.createMemory('remembered'), isTrue);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories['created-server-id']?.content, 'remembered');
     expect(await provider.updateMemoryVisibility(provider.memories.single, MemoryVisibility.public), isTrue);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories['created-server-id'], isNotNull);
   });
 
@@ -455,9 +464,10 @@ void main() {
     );
     addTearDown(provider.dispose);
     await provider.loadMemories();
+    await SiriIntegration.current.drainIndexForTest();
     host.memories.remove(row.id);
     expect(await provider.updateMemoryVisibility(row, MemoryVisibility.public), isTrue);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories.containsKey(row.id), isTrue);
   });
 
@@ -480,9 +490,10 @@ void main() {
     );
     addTearDown(provider.dispose);
     await provider.loadMemories();
+    await SiriIntegration.current.drainIndexForTest();
     host.memories.clear();
     expect(await provider.updateAllMemoriesVisibility(true), isTrue);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories.keys.toSet(), {'bulk-a', 'bulk-b'});
   });
 
@@ -505,7 +516,7 @@ void main() {
     expect(await provider.createMemory('offline fact'), isTrue);
     expect(host.memories, isEmpty);
     await provider.syncPendingMemories();
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.memories.containsKey('uploaded'), isTrue);
   });
 
@@ -532,6 +543,35 @@ void main() {
     expect(host.memories.containsKey('outside-page'), isTrue);
   });
 
+  test('stale owner-wide refresh cannot reindex a deleted memory before undo', () async {
+    final host = _SnapshotHost();
+    final row = Memory(
+      id: 'pending-delete',
+      uid: 'siri-fetch-owner',
+      content: 'private fact',
+      category: MemoryCategory.manual,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      visibility: MemoryVisibility.private,
+    );
+    final siri = SiriIntegration.forTest(host, 'siri-fetch-owner',
+        memoryPageFetcher: ({required limit, required offset, cursor}) async => GetMemoriesResult([row], true));
+    SiriIntegration.testInstance = siri;
+    addTearDown(() => SiriIntegration.testInstance = null);
+
+    await siri.upsertMemories([row]);
+    siri.queueDelete('memory', row.id);
+    await siri.drainIndexForTest();
+    expect(host.memories.containsKey(row.id), isFalse);
+
+    await siri.refreshAuthoritativeMemories();
+    expect(host.memories.containsKey(row.id), isFalse);
+
+    siri.queueUpsertMemories([row], restoreDeleted: true);
+    await siri.drainIndexForTest();
+    expect(host.memories.containsKey(row.id), isTrue);
+  });
+
   test('complete active task fetch removes absent active ids but preserves completed ids', () async {
     final host = hostForTest();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -551,12 +591,13 @@ void main() {
     addTearDown(provider.dispose);
 
     await provider.ensureLoaded();
+    await SiriIntegration.current.drainIndexForTest();
     host.tasks['remote-deleted'] = SiriTask(id: 'remote-deleted', title: 'private', completed: false, createdAtMs: now);
     host.tasks['completed-outside-filter'] =
         SiriTask(id: 'completed-outside-filter', title: 'done', completed: true, createdAtMs: now, completedAtMs: now);
     provider.toggleCompletedActionItems();
     expect(await provider.fetchActionItems(), isTrue);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.tasks.containsKey('remote-deleted'), isFalse);
     expect(host.tasks.containsKey('completed-outside-filter'), isTrue);
   });
@@ -581,7 +622,7 @@ void main() {
     addTearDown(provider.dispose);
 
     expect(await provider.fetchActionItems(), isTrue);
-    await Future<void>.delayed(Duration.zero);
+    await SiriIntegration.current.drainIndexForTest();
     expect(host.tasks.containsKey('outside-page'), isTrue);
   });
 

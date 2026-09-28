@@ -134,7 +134,30 @@ class _ColdOwnerHost extends SiriIndexApi {
   Future<List<SiriTelemetryRecord>> takeTelemetry() async => [];
 }
 
+class _HungIndexHost extends SiriIndexApi {
+  final release = Completer<void>();
+  int calls = 0;
+
+  @override
+  Future<void> deleteEntities(String uid, String type, List<String> ids) async {
+    calls++;
+    await release.future;
+  }
+}
+
 void main() {
+  test('a hung native index call releases the Dart queue and starts a cooldown', () async {
+    final host = _HungIndexHost();
+    addTearDown(() => host.release.complete());
+    final siri = SiriIntegration.forTest(host, 'owner-a', nativeTimeout: const Duration(milliseconds: 20));
+
+    siri.queueDelete('memory', 'first');
+    await siri.drainIndexForTest().timeout(const Duration(seconds: 1));
+    siri.queueDelete('memory', 'second');
+    await siri.drainIndexForTest().timeout(const Duration(seconds: 1));
+    expect(host.calls, 1, reason: 'cooldown must not pile up calls behind a wedged native operation');
+  });
+
   test('iOS reindex callbacks do not bypass the owner-fenced Spotlight queue', () {
     final source = File('ios/Runner/SiriIntegration/SiriEntities.swift').readAsStringSync();
     for (final name in ['ConversationQuery', 'MemoryQuery', 'TaskQuery']) {

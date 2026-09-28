@@ -30,6 +30,14 @@ enum SiriStorageLocation {
     }
 }
 
+/// IDs whose persisted projection changed or disappeared. A complete server
+/// traversal updates only these Spotlight entries; unchanged entries stay put.
+enum SiriSnapshotDelta {
+    static func changedIDs<Value: Equatable>(from before: [String: Value], to after: [String: Value]) -> [String] {
+        Set(before.keys).union(after.keys).filter { before[$0] != after[$0] }.sorted()
+    }
+}
+
 /// Only the fields approved for Apple's on-device index are kept here.
 #if compiler(>=6.4)
 final class SiriSnapshotStore {
@@ -54,12 +62,12 @@ final class SiriSnapshotStore {
         var memories: [String: Memory] = [:]
         var tasks: [String: Task] = [:]
     }
-    private struct Conversation: Codable {
+    private struct Conversation: Codable, Equatable {
         let id: String; let title: String; let summary: String
         let startedAtMs: Int64; let updatedAtMs: Int64
     }
-    private struct Memory: Codable { let id: String; let content: String; let createdAtMs: Int64; let expiresAtMs: Int64? }
-    private struct Task: Codable {
+    private struct Memory: Codable, Equatable { let id: String; let content: String; let createdAtMs: Int64; let expiresAtMs: Int64? }
+    private struct Task: Codable, Equatable {
         let id: String; let title: String; let completed: Bool
         let createdAtMs: Int64; let dueAtMs: Int64?; let completedAtMs: Int64?
     }
@@ -81,6 +89,18 @@ final class SiriSnapshotStore {
                 try await operation()
             }
         }
+    }
+    private func spotlight(for uid: String? = nil, _ operation: @escaping () async throws -> Void) async throws {
+        let repairUid = uid ?? owner
+        try await SiriSpotlightDeadline.run(operation, onLateCompletion: { [weak self] in
+            guard let self else { return }
+            // A timed-out write can finish after a delete or account wipe.
+            // Remove its owner index before rebuilding the current snapshot.
+            if let repairUid { try? await self.removeIndex(owners: [repairUid]) }
+            if let current = self.owner, self.generationForOwner(current) != nil {
+                try? await self.rebuildIndex()
+            }
+        })
     }
     private init() {
         try? FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
@@ -456,7 +476,7 @@ final class SiriSnapshotStore {
             if simulateIndexDeleteFailure { throw SiriSession.Failure.server }
             #endif
             for uid in owners {
-                try await CSSearchableIndex(name: indexName(for: uid)).deleteAllSearchableItems()
+                try await spotlight(for: uid) { try await CSSearchableIndex(name: self.indexName(for: uid)).deleteAllSearchableItems() }
             }
         }
     }
@@ -484,6 +504,7 @@ final class SiriSnapshotStore {
     /// timestamp ties at the page boundary cannot delete unseen records.
     func reconcile(_ values: [SiriConversation], uid: String, coveredAfterMs: Int64?) async throws {
         try await serialized {
+            lock.lock(); let before = snapshot.conversations; lock.unlock()
             try mutateForOwner(uid) {
                 let keep = Set(values.map(\.id))
                 snapshot.conversations = snapshot.conversations.filter { id, row in
@@ -494,7 +515,8 @@ final class SiriSnapshotStore {
                         summary: value.summary, startedAtMs: value.startedAtMs, updatedAtMs: value.updatedAtMs)
                 }
             }
-            if enabled { try await rebuildIndex() }
+            lock.lock(); let after = snapshot.conversations; lock.unlock()
+            try await applyIncremental(type: "conversation", ids: SiriSnapshotDelta.changedIDs(from: before, to: after), uid: uid)
 
         }
     }
@@ -519,6 +541,7 @@ final class SiriSnapshotStore {
     /// Called only after the entire unfiltered memory traversal succeeds.
     func reconcile(_ values: [SiriMemory], uid: String) async throws {
         try await serialized {
+            lock.lock(); let before = snapshot.memories; lock.unlock()
             try mutateForOwner(uid) {
                 let keep = Set(values.map(\.id))
                 snapshot.memories = snapshot.memories.filter { keep.contains($0.key) }
@@ -527,7 +550,8 @@ final class SiriSnapshotStore {
                         createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs)
                 }
             }
-            if enabled { try await rebuildIndex() }
+            lock.lock(); let after = snapshot.memories; lock.unlock()
+            try await applyIncremental(type: "memory", ids: SiriSnapshotDelta.changedIDs(from: before, to: after), uid: uid)
 
         }
     }
@@ -546,6 +570,7 @@ final class SiriSnapshotStore {
     /// A complete active-only task list cannot speak for completed rows.
     func reconcile(_ values: [SiriTask], uid: String, includeCompleted: Bool) async throws {
         try await serialized {
+            lock.lock(); let before = snapshot.tasks; lock.unlock()
             try mutateForOwner(uid) {
                 let keep = Set(values.map(\.id))
                 snapshot.tasks = snapshot.tasks.filter { id, row in
@@ -556,7 +581,8 @@ final class SiriSnapshotStore {
                         createdAtMs: value.createdAtMs, dueAtMs: value.dueAtMs, completedAtMs: value.completedAtMs)
                 }
             }
-            if enabled { try await rebuildIndex() }
+            lock.lock(); let after = snapshot.tasks; lock.unlock()
+            try await applyIncremental(type: "task", ids: SiriSnapshotDelta.changedIDs(from: before, to: after), uid: uid)
 
         }
     }
@@ -686,8 +712,8 @@ final class SiriSnapshotStore {
     @available(iOS 27.0, *)
     private func deleteMemoryRepresentations(ids: [String], from index: CSSearchableIndex) async throws {
         guard !ids.isEmpty else { return }
-        try await index.deleteAppEntities(identifiedBy: ids, ofType: MemoryEntity.self)
-        try await index.deleteAppEntities(identifiedBy: ids, ofType: ConversationEntity.self)
+        try await spotlight { try await index.deleteAppEntities(identifiedBy: ids, ofType: MemoryEntity.self) }
+        try await spotlight { try await index.deleteAppEntities(identifiedBy: ids, ofType: ConversationEntity.self) }
     }
 
     private func applyIncremental(type: String, ids: [String], uid: String) async throws {
@@ -703,32 +729,32 @@ final class SiriSnapshotStore {
                 let present = Set(entities.map(\.id))
                 let removed = ids.filter { !present.contains($0) }
                 if !removed.isEmpty {
-                    try await index.deleteAppEntities(identifiedBy: removed, ofType: ConversationEntity.self)
+                    try await spotlight { try await index.deleteAppEntities(identifiedBy: removed, ofType: ConversationEntity.self) }
                 }
                 try requireValidOwner(uid)
-                if !entities.isEmpty { try await index.indexAppEntities(entities, priority: 0) }
+                if !entities.isEmpty { try await spotlight { try await index.indexAppEntities(entities, priority: 0) } }
             case "memory":
                 let entities = memories(ids: ids)
                 let present = Set(entities.map(\.id))
                 let removed = ids.filter { !present.contains($0) }
                 try await deleteMemoryRepresentations(ids: removed, from: index)
                 try requireValidOwner(uid)
-                if !entities.isEmpty { try await index.indexAppEntities(entities, priority: 0) }
+                if !entities.isEmpty { try await spotlight { try await index.indexAppEntities(entities, priority: 0) } }
                 // A memory can also be represented as a Notes schema entity.
                 // Reindex may create that entry, so every memory mutation must
                 // update or remove it under the same owner gate.
                 let notes = conversations(ids: ids) + memoryNotes(ids: ids)
                 try requireValidOwner(uid)
-                if !notes.isEmpty { try await index.indexAppEntities(notes, priority: 0) }
+                if !notes.isEmpty { try await spotlight { try await index.indexAppEntities(notes, priority: 0) } }
             case "task":
                 let entities = tasks(ids: ids)
                 let present = Set(entities.map(\.id))
                 let removed = ids.filter { !present.contains($0) }
                 if !removed.isEmpty {
-                    try await index.deleteAppEntities(identifiedBy: removed, ofType: TaskEntity.self)
+                    try await spotlight { try await index.deleteAppEntities(identifiedBy: removed, ofType: TaskEntity.self) }
                 }
                 try requireValidOwner(uid)
-                if !entities.isEmpty { try await index.indexAppEntities(entities, priority: 0) }
+                if !entities.isEmpty { try await spotlight { try await index.indexAppEntities(entities, priority: 0) } }
             default: return
             }
             try requireValidOwner(uid)
@@ -769,19 +795,19 @@ final class SiriSnapshotStore {
             try await serialized {
                 try requireValidOwner(uid)
                 let index = CSSearchableIndex(name: indexName)
-                try await index.deleteAllSearchableItems()
+                try await spotlight { try await index.deleteAllSearchableItems() }
                 try requireValidOwner(uid)
-                try await index.indexAppEntities([OmiFolderEntity.conversations, OmiFolderEntity.memories], priority: 0)
+                try await spotlight { try await index.indexAppEntities([OmiFolderEntity.conversations, OmiFolderEntity.memories], priority: 0) }
                 try requireValidOwner(uid)
-                try await index.indexAppEntities([OmiListEntity.omi], priority: 0)
+                try await spotlight { try await index.indexAppEntities([OmiListEntity.omi], priority: 0) }
                 try requireValidOwner(uid)
-                try await index.indexAppEntities(conversationEntities, priority: 0)
+                try await spotlight { try await index.indexAppEntities(conversationEntities, priority: 0) }
                 try requireValidOwner(uid)
-                try await index.indexAppEntities(memoryEntities, priority: 0)
+                try await spotlight { try await index.indexAppEntities(memoryEntities, priority: 0) }
                 try requireValidOwner(uid)
-                try await index.indexAppEntities(memoryNoteEntities, priority: 0)
+                try await spotlight { try await index.indexAppEntities(memoryNoteEntities, priority: 0) }
                 try requireValidOwner(uid)
-                try await index.indexAppEntities(taskEntities, priority: 0)
+                try await spotlight { try await index.indexAppEntities(taskEntities, priority: 0) }
                 try requireValidOwner(uid)
             }
             scheduleNextExpiry()
@@ -816,6 +842,51 @@ private actor SiriSpotlightGate {
             else { waiters.removeFirst().resume() }
         }
         return try await operation()
+    }
+}
+
+/// CoreSpotlight occasionally never calls back. Release the store gate after
+/// a deadline, then repair from the persisted snapshot if the old call later
+/// completes. The Dart side also cools down instead of piling up submissions.
+private actor SiriSpotlightDeadline {
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var expired = false
+    private let onLateCompletion: () async -> Void
+    private init(_ continuation: CheckedContinuation<Void, Error>, onLateCompletion: @escaping () async -> Void) {
+        self.continuation = continuation
+        self.onLateCompletion = onLateCompletion
+    }
+
+    static func run(_ operation: @escaping () async throws -> Void,
+                    onLateCompletion: @escaping () async -> Void) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            let state = SiriSpotlightDeadline(continuation, onLateCompletion: onLateCompletion)
+            Task {
+                let result: Result<Void, Error>
+                do { try await operation(); result = .success(()) }
+                catch { result = .failure(error) }
+                await state.finish(result)
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: 12_000_000_000)
+                await state.expire()
+            }
+        }
+    }
+
+    private func finish(_ result: Result<Void, Error>) {
+        if let continuation {
+            self.continuation = nil
+            continuation.resume(with: result)
+        } else if expired {
+            Task { await onLateCompletion() }
+        }
+    }
+    private func expire() {
+        guard let continuation else { return }
+        self.continuation = nil
+        expired = true
+        continuation.resume(throwing: SiriSession.Failure.server)
     }
 }
 #endif
