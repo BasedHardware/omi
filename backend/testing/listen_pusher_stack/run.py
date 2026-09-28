@@ -1398,7 +1398,7 @@ async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
     if (
         dead_letter.get('status') != 'dead_letter'
         or dead_letter.get('terminal_outcome') != 'failure'
-        or dead_letter.get('attempt_count') != 1
+        or dead_letter.get('attempt_count') != 2
         or dead_letter.get('task_retry_count') != 2
     ):
         raise StackFailure('exhausted worker delivery did not record its terminal durable state')
