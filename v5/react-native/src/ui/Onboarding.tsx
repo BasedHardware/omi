@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   I18nManager,
+  Keyboard,
   Linking,
   NativeModules,
   Platform,
@@ -49,19 +50,22 @@ import {
   useDesktopTheme,
   useDesktopStyleSheets,
 } from '../desktop/DesktopTheme';
+import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
+import {OmiButton, OmiChip, OmiIconButton} from '../design/primitives';
+import type {OmiTheme} from '../design/tokens';
+import {markInk} from '../mobile/MobileTheme';
+import {MobileGroup, MobileRow} from '../mobile/MobileList';
+import {PostSetupConfetti} from '../desktop/PostSetupOverlay';
 import type {OmiAuthDesktopHandoff} from '../omiNativeTypes';
 import {Button} from './Button';
-import {useOmiStyles, useOmiTheme} from '../design/OmiTheme';
-import {markInk} from '../mobile/MobileTheme';
-import {OmiButton, OmiChip} from '../design/primitives';
-import type {OmiTheme} from '../design/tokens';
-import {MobileGroup, MobileRow} from '../mobile/MobileList';
 import {Field} from './Field';
+import {MaterialIcon} from './MaterialIcon';
 import {OmiAvatar} from './OmiAvatar';
 import {PermissionRow} from './PermissionRow';
-import {color as uiColor, tokens} from './tokens';
+import {tokens} from './tokens';
 
-const DOTS_SIZE = 104;
+// Header logo: small top-left mark; the step content is the visual hero.
+const DOTS_SIZE = 40;
 
 /** Collects the OS locale string on each platform; '' when unavailable. */
 function deviceLocaleSource(): string {
@@ -132,7 +136,6 @@ export function Onboarding({
 }) {
   const styles = useDesktopStyleSheets(createStyles);
   const {tokens: desktopTokens} = useDesktopTheme();
-  // Phones and the browser read the Omi theme (System / Light / Dark).
   const theme = useOmiTheme();
   const themed = useOmiStyles(createThemedStyles);
   const reduceMotion = useReduceMotion();
@@ -141,6 +144,14 @@ export function Onboarding({
   const nativePhone = Platform.OS === 'ios' || Platform.OS === 'android';
   const opacity = useRef(new Animated.Value(1)).current;
   const scale = useRef(new Animated.Value(1)).current;
+  // Step change: the new step's title + body rise in with a short fade.
+  const stepOpacity = useRef(new Animated.Value(1)).current;
+  const stepShift = useRef(new Animated.Value(0)).current;
+  const stepAnimatedOnce = useRef(false);
+  // The logo rides the progress line: it slides to the step's position.
+  const logoX = useRef(new Animated.Value(0)).current;
+  const [trackWidth, setTrackWidth] = useState(0);
+  const logoPlaced = useRef(false);
   const [step, setStep] = useState<MobileOnboardingStep>(
     setupRequired ? 'consent' : 'welcome',
   );
@@ -200,6 +211,37 @@ export function Onboarding({
   }, [opacity, reduceMotion, scale]);
 
   useEffect(() => {
+    // Skip the very first paint — the dots intro already covers it.
+    if (!stepAnimatedOnce.current) {
+      stepAnimatedOnce.current = true;
+      return;
+    }
+    if (reduceMotion) {
+      stepOpacity.setValue(1);
+      stepShift.setValue(0);
+      return;
+    }
+    stepOpacity.setValue(0);
+    stepShift.setValue(16);
+    const transition = Animated.parallel([
+      Animated.timing(stepOpacity, {
+        duration: 320,
+        easing: Easing.out(Easing.cubic),
+        toValue: 1,
+        useNativeDriver: false,
+      }),
+      Animated.timing(stepShift, {
+        duration: 320,
+        easing: Easing.out(Easing.cubic),
+        toValue: 0,
+        useNativeDriver: false,
+      }),
+    ]);
+    transition.start();
+    return () => transition.stop();
+  }, [reduceMotion, step, stepOpacity, stepShift]);
+
+  useEffect(() => {
     if (signedIn.current && !setupRequired) {
       operation.current += 1;
       setStep('welcome');
@@ -235,29 +277,59 @@ export function Onboarding({
     () => languages.find(item => item.code === language)?.name ?? language,
     [language, languages],
   );
-  // Compact defaults: the device language first, then the primary set —
-  // never the whole catalog. Searching swaps in filtered matches.
-  const suggestedLanguages = useMemo(() => {
-    const base: AvailableLanguage[] =
-      languages.length > 0
-        ? languages
-        : PRIMARY_LANGUAGES.map(item => ({code: item.code, name: item.name}));
-    const rest = base.filter(item => item.code !== language);
-    return [{code: language, name: selectedLanguageName}, ...rest].slice(0, 6);
-  }, [language, languages, selectedLanguageName]);
-  const matchingLanguages = useMemo(() => {
+  // Mobile search starts empty and shows a few ranked matches. Desktop keeps
+  // its full language catalog visible as a chip cloud, filtered when searched.
+  const languageMatches = useMemo(() => {
     const query = languageQuery.trim().toLowerCase();
     if (query.length === 0) {
-      return null;
+      return desktop ? languages : [];
     }
-    return languages
-      .filter(
-        item =>
-          item.name.toLowerCase().includes(query) ||
-          item.code.toLowerCase().includes(query),
-      )
-      .slice(0, 8);
-  }, [languageQuery, languages]);
+    const rank = (item: AvailableLanguage) => {
+      const name = item.name.toLowerCase();
+      const code = item.code.toLowerCase();
+      if (name === query || code === query) {
+        return 0;
+      }
+      if (name.startsWith(query) || code.startsWith(query)) {
+        return 1;
+      }
+      return name.includes(query) || code.includes(query) ? 2 : 3;
+    };
+    const matches = languages
+      .map(item => ({item, rank: rank(item)}))
+      .filter(entry => entry.rank < 3)
+      .sort((a, b) => a.rank - b.rank)
+      .map(entry => entry.item);
+    return desktop ? matches : matches.slice(0, 5);
+  }, [desktop, languageQuery, languages]);
+
+  // The logo slides along the progress line to the current step's slot.
+  useEffect(() => {
+    if (trackWidth <= DOTS_SIZE) {
+      return;
+    }
+    const slots = itinerary.length;
+    const fraction =
+      setupIndex >= 0 ? (setupIndex + 0.5) / slots : 1 / (2 * slots);
+    const target = Math.max(
+      0,
+      Math.min(fraction * trackWidth - DOTS_SIZE / 2, trackWidth - DOTS_SIZE),
+    );
+    if (reduceMotion || !logoPlaced.current) {
+      // First placement and reduced motion snap; step changes travel.
+      logoX.setValue(target);
+      logoPlaced.current = true;
+      return;
+    }
+    const travel = Animated.spring(logoX, {
+      toValue: target,
+      speed: 18,
+      bounciness: 6,
+      useNativeDriver: false,
+    });
+    travel.start();
+    return () => travel.stop();
+  }, [itinerary.length, logoX, reduceMotion, setupIndex, trackWidth]);
 
   function goBack() {
     if (step === 'welcome' || signingIn) {
@@ -280,6 +352,14 @@ export function Onboarding({
     }
     setLocalError(null);
     setStep(next);
+  }
+
+  // Choosing a pill is a commit: take the language, clear the query, and
+  // collapse the results back to the resting search-only state.
+  function pickLanguage(code: string) {
+    setLanguage(code);
+    setLanguageQuery('');
+    Keyboard.dismiss();
   }
 
   async function persistLanguage() {
@@ -435,44 +515,100 @@ export function Onboarding({
     }
   }
 
-  const action = (
-    label: string,
-    onPress: () => void,
-    disabled = false,
-    variant: 'primary' | 'ghost' = 'primary',
-  ) =>
+  const ghost = (label: string, onPress: () => void, disabled = false) =>
     desktop ? (
       <Button
         accessibilityLabel={label}
         disabled={disabled}
+        labelStyle={styles.desktopTitle}
         onPress={onPress}
-        size="large"
-        variant={variant}
-        labelStyle={styles.desktopButtonLabel}
-        style={variant === 'primary' ? styles.desktopButton : undefined}>
+        variant="ghost">
         {label}
       </Button>
     ) : (
       <OmiButton
+        accessibilityLabel={label}
         label={label}
         disabled={disabled}
         onPress={onPress}
-        variant={variant === 'primary' ? 'primary' : 'plain'}
-        style={[
-          themed.action,
-          (nativePhone || variant === 'primary') && styles.actionStretch,
-        ]}
+        variant="plain"
       />
     );
 
-  const fieldTheme = {
-    containerStyle: themed.field,
-    style: themed.fieldInput,
-    labelStyle: themed.fieldLabel,
-    placeholderTextColor: theme.color.inkTertiary,
-    selectionColor: theme.color.ink,
-    keyboardAppearance: theme.scheme,
-  };
+  // The anchored bottom bar carries each step's primary action (Continue and
+  // friends); secondary choices stay in the step body as ghost buttons.
+  const primary = (() => {
+    switch (step) {
+      case 'welcome':
+        return {
+          label: signingIn ? 'Signing In…' : 'Sign In',
+          onPress: onSignIn,
+          disabled: signingIn,
+        };
+      case 'consent':
+        return {
+          label: 'Agree & Continue',
+          onPress: () => {
+            void advanceFrom('consent');
+          },
+          disabled: false,
+        };
+      case 'language':
+        return {
+          label: saving ? 'Saving…' : 'Continue',
+          onPress: () => {
+            void persistLanguage();
+          },
+          disabled: saving,
+        };
+      case 'source':
+        return {
+          label: saving ? 'Saving…' : 'Continue',
+          onPress: () => {
+            void persistSource();
+          },
+          disabled: saving,
+        };
+      case 'permissions':
+        return {
+          label: "I'll Do These Later",
+          onPress: () => {
+            void advanceFrom('permissions');
+          },
+          disabled: false,
+        };
+      case 'speech':
+        return {
+          label: recordingVoice ? 'Listening…' : 'Start Voice Recording',
+          onPress: () => {
+            void enrollVoice();
+          },
+          disabled: recordingVoice,
+        };
+      default:
+        return nativePhone
+          ? {
+              label:
+                busy && connectAfterComplete ? 'Saving…' : 'Connect Your Omi',
+              onPress: () => {
+                finish(true);
+              },
+              disabled: busy,
+            }
+          : {
+              label: busy ? 'Saving…' : 'Start Using Omi',
+              onPress: () => {
+                finish(false);
+              },
+              disabled: busy,
+            };
+    }
+  })();
+  const canGoBack =
+    step !== 'welcome' &&
+    step !== 'consent' &&
+    step !== 'complete' &&
+    !signingIn;
 
   const permissionRow = (
     kind: PermissionKind,
@@ -490,6 +626,10 @@ export function Onboarding({
         : permissions[kind] === 'denied'
         ? 'Open Settings'
         : 'Allow';
+    const disabled =
+      pendingPermission !== null ||
+      permissions[kind] === 'unsupported' ||
+      granted;
     if (!desktop) {
       return (
         <MobileRow
@@ -497,21 +637,9 @@ export function Onboarding({
           accessibilityLabel={[title, description, status]
             .map(text => text.replace(/[.!?]$/, ''))
             .join('. ')}
-          accessibilityState={{
-            disabled:
-              pendingPermission !== null ||
-              permissions[kind] === 'unsupported' ||
-              granted,
-            busy: status === 'Asking…',
-          }}
-          disabled={
-            pendingPermission !== null ||
-            permissions[kind] === 'unsupported' ||
-            granted
-          }
-          onPress={() => {
-            request(kind);
-          }}
+          accessibilityState={{disabled, busy: status === 'Asking…'}}
+          disabled={disabled}
+          onPress={() => request(kind)}
           leading={
             <View style={[themed.permission, granted && themed.granted]}>
               {granted ? <Text style={themed.grantedCheck}>✓</Text> : null}
@@ -526,11 +654,7 @@ export function Onboarding({
     return (
       <PermissionRow
         key={kind}
-        disabled={
-          pendingPermission !== null ||
-          permissions[kind] === 'unsupported' ||
-          granted
-        }
+        disabled={disabled}
         granted={granted}
         onPress={() => {
           request(kind);
@@ -549,297 +673,332 @@ export function Onboarding({
       style={!desktop && themed.canvas}
       keyboardShouldPersistTaps="handled">
       <View style={styles.column}>
-        <Animated.View
-          accessibilityLabel="Omi"
-          style={[styles.dots, {opacity, transform: [{scale}]}]}>
-          <OmiAvatar
-            animate={!reduceMotion}
-            identity="omi"
-            reduceMotion={reduceMotion}
-            size={DOTS_SIZE}
-            tone="ink"
-            inkColor={desktop ? desktopTokens.color.ink : markInk(theme)}
-          />
-        </Animated.View>
-        {setupIndex >= 0 ? (
-          <Text style={[styles.meta, desktop ? copyColor : themed.meta]}>
-            Step {setupIndex + 1} of {itinerary.length}
-          </Text>
-        ) : null}
-        <Text accessibilityRole="header" style={[styles.title, titleColor]}>
-          {step === 'welcome'
-            ? 'Welcome to Omi'
-            : step === 'consent'
-            ? 'Data & Privacy'
-            : step === 'language'
-            ? 'Select Your Primary Language'
-            : step === 'source'
-            ? 'How Did You Find Us?'
-            : step === 'permissions'
-            ? 'Grant Permissions'
-            : step === 'speech'
-            ? 'Teach Omi Your Voice'
-            : 'You’re All Set'}
-        </Text>
-        {step === 'welcome' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              Sign in to access your conversations and memories.
-            </Text>
-            {displayError == null ? null : (
-              <Text
-                accessibilityLabel={
-                  displayError === SESSION_UNREACHABLE_COPY
-                    ? 'Session unreachable'
-                    : 'Sign-in error'
+        <View accessibilityLabel="Onboarding header" style={styles.topBlock}>
+          <View
+            style={styles.logoTrack}
+            onLayout={event => {
+              setTrackWidth(event.nativeEvent.layout.width);
+            }}>
+            <Animated.View
+              accessibilityLabel="Omi"
+              style={[
+                styles.dots,
+                {opacity, transform: [{scale}, {translateX: logoX}]},
+              ]}>
+              <OmiAvatar
+                animate={
+                  !reduceMotion && (step === 'welcome' || step === 'complete')
                 }
-                style={[
-                  styles.error,
-                  copyColor,
-                  displayError === SESSION_UNREACHABLE_COPY &&
-                    (desktop ? styles.desktopUnreachable : themed.danger),
-                ]}>
-                {displayError}
-              </Text>
-            )}
-            {action(
-              desktop
-                ? signingIn
-                  ? 'Signing in…'
-                  : 'Sign in'
-                : signingIn
-                ? 'Signing In…'
-                : 'Sign In',
-              onSignIn,
-              signingIn,
-            )}
-            {signingIn && onCancelSignIn ? (
-              <Button
-                accessibilityLabel="Cancel sign in"
-                onPress={onCancelSignIn}
-                labelStyle={desktop ? styles.desktopTitle : themed.link}
-                variant="ghost">
-                Cancel
-              </Button>
-            ) : null}
-          </>
-        ) : null}
-        {step === 'consent' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              By continuing, your conversations, recordings, and personal
-              information will be securely stored on our servers. Your audio
-              recordings and transcripts are processed by third-party AI
-              services — Deepgram for transcription and OpenAI for analysis — to
-              provide you with AI-powered insights and enable all app features.
-            </Text>
-            <Text style={[styles.copy, copyColor]}>
-              Your data is protected and governed by our Privacy Policy and
-              Terms of Service.
-            </Text>
-            <View style={styles.links}>
-              <Button
-                variant="ghost"
-                accessibilityRole="link"
-                labelStyle={!desktop && themed.link}
-                onPress={() => openLink(PRIVACY_URL)}>
-                Privacy Policy
-              </Button>
-              <Button
-                variant="ghost"
-                accessibilityRole="link"
-                labelStyle={!desktop && themed.link}
-                onPress={() => openLink(TERMS_URL)}>
-                Terms of Service
-              </Button>
-            </View>
-            {action('Agree & Continue', () => {
-              void advanceFrom('consent');
-            })}
-          </>
-        ) : null}
-        {step === 'language' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              {language === initialLanguage
-                ? `We set ${selectedLanguageName} from your device language. Continue, or search if that is not right.`
-                : `Continue in ${selectedLanguageName}, or pick another language.`}
-            </Text>
-            <View style={styles.chips}>
-              {(matchingLanguages ?? suggestedLanguages).map(item =>
-                !desktop ? (
-                  <OmiChip
-                    key={item.code}
-                    label={item.name}
-                    selected={language === item.code}
-                    onPress={() => setLanguage(item.code)}
-                  />
-                ) : (
-                  <Button
-                    key={item.code}
-                    accessibilityLabel={item.name}
-                    accessibilityState={{selected: language === item.code}}
-                    onPress={() => setLanguage(item.code)}
-                    variant={language === item.code ? 'primary' : 'ghost'}>
-                    {item.name}
-                  </Button>
-                ),
-              )}
-            </View>
-            <Field
-              accessibilityLabel="Search languages"
-              autoCapitalize="none"
-              autoCorrect={false}
-              label="Search languages"
-              {...(desktop ? {} : fieldTheme)}
-              onChangeText={setLanguageQuery}
-              placeholder="Search languages"
-              returnKeyType="search"
-              value={languageQuery}
-            />
-            {matchingLanguages != null && matchingLanguages.length === 0 ? (
-              <Text style={[styles.copy, copyColor]}>
-                No language matches “{languageQuery.trim()}”.
-              </Text>
-            ) : null}
-            {action(saving ? 'Saving…' : 'Continue', persistLanguage, saving)}
-          </>
-        ) : null}
-        {step === 'source' ? (
-          <>
-            <View style={desktop ? styles.choices : styles.chips}>
-              {ACQUISITION_SOURCES.map(item =>
-                !desktop ? (
-                  <OmiChip
-                    key={item}
-                    label={item}
-                    selected={source === item}
-                    onPress={() => setSource(item)}
-                  />
-                ) : (
-                  <Button
-                    key={item}
-                    accessibilityLabel={item}
-                    accessibilityState={{selected: source === item}}
-                    onPress={() => setSource(item)}
-                    variant={source === item ? 'primary' : 'ghost'}>
-                    {item}
-                  </Button>
-                ),
-              )}
-            </View>
-            {source === 'Other' ? (
-              <Field
-                accessibilityLabel="Please specify"
-                autoCorrect={false}
-                enablesReturnKeyAutomatically
-                label="Please specify"
-                {...(desktop ? {} : fieldTheme)}
-                onChangeText={setOtherSource}
-                onSubmitEditing={() => {
-                  if (otherSource.trim().length > 0) {
-                    void persistSource();
-                  }
-                }}
-                placeholder="Where did you hear about us?"
-                returnKeyType="done"
-                value={otherSource}
+                identity="omi"
+                reduceMotion={reduceMotion}
+                size={DOTS_SIZE}
+                tone="ink"
+                inkColor={desktop ? desktopTokens.color.ink : markInk(theme)}
               />
-            ) : null}
-            {action(saving ? 'Saving…' : 'Continue', persistSource, saving)}
-          </>
-        ) : null}
-        {step === 'permissions' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              {nativePhone
-                ? 'Tap one when you’re ready. Nothing is asked until you do.'
-                : 'Click one when you’re ready. Nothing is asked until you do.'}
-            </Text>
-            <PermissionGroup grouped={!desktop}>
-              {permissionRow(
-                'notifications',
-                'Notifications',
-                'Notify you when something needs you.',
+            </Animated.View>
+          </View>
+          <View style={styles.progressRow}>
+            {itinerary.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.progressSegment,
+                  !desktop && themed.progressEmpty,
+                  index <= setupIndex && styles.progressSegmentFill,
+                  index <= setupIndex && !desktop && themed.progressFill,
+                ]}
+              />
+            ))}
+          </View>
+          {setupRequired && onSignOut ? (
+            <View style={styles.captionRow}>
+              {ghost('Sign Out', onSignOut, busy)}
+            </View>
+          ) : null}
+        </View>
+        <Animated.View
+          style={[
+            styles.titleAnim,
+            {opacity: stepOpacity, transform: [{translateY: stepShift}]},
+          ]}>
+          <Text accessibilityRole="header" style={[styles.title, titleColor]}>
+            {step === 'welcome'
+              ? 'Welcome to Omi'
+              : step === 'consent'
+              ? 'Data & Privacy'
+              : step === 'language'
+              ? 'Select Your Primary Language'
+              : step === 'source'
+              ? 'How Did You Find Us?'
+              : step === 'permissions'
+              ? 'Grant Permissions'
+              : step === 'speech'
+              ? 'Teach Omi Your Voice'
+              : 'You’re All Set'}
+          </Text>
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.stepAnim,
+            {opacity: stepOpacity, transform: [{translateY: stepShift}]},
+          ]}>
+          {step === 'welcome' ? (
+            <>
+              <Text style={[styles.copy, copyColor]}>
+                Sign in to access your conversations and memories.
+              </Text>
+              {displayError == null ? null : (
+                <Text
+                  accessibilityLabel={
+                    displayError === SESSION_UNREACHABLE_COPY
+                      ? 'Session unreachable'
+                      : 'Sign-in error'
+                  }
+                  style={[
+                    styles.error,
+                    copyColor,
+                    displayError === SESSION_UNREACHABLE_COPY &&
+                      (desktop ? styles.desktopUnreachable : themed.danger),
+                  ]}>
+                  {displayError}
+                </Text>
               )}
-              {permissionRow(
-                'microphone',
-                'Microphone',
-                'Hear what you talk about, so Omi can help.',
+              {signingIn && onCancelSignIn
+                ? ghost('Cancel', onCancelSignIn)
+                : null}
+            </>
+          ) : null}
+          {step === 'consent' ? (
+            <>
+              <Text style={[styles.copy, copyColor]}>
+                By continuing, your conversations, recordings, and personal
+                information will be securely stored on our servers. Your audio
+                recordings and transcripts are processed by third-party AI
+                services — Deepgram for transcription and OpenAI for analysis —
+                to provide you with AI-powered insights and enable all app
+                features.
+              </Text>
+              <Text style={[styles.copy, copyColor]}>
+                Your data is protected and governed by our Privacy Policy and
+                Terms of Service.
+              </Text>
+              <View style={styles.links}>
+                {ghost('Privacy Policy', () => openLink(PRIVACY_URL))}
+                {ghost('Terms of Service', () => openLink(TERMS_URL))}
+              </View>
+            </>
+          ) : null}
+          {step === 'language' ? (
+            <>
+              <View style={styles.stretch}>
+                <Field
+                  accessibilityLabel="Search languages"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  containerStyle={[styles.bigField, !desktop && themed.field]}
+                  onChangeText={setLanguageQuery}
+                  onSubmitEditing={() => {
+                    const first = languageMatches[0];
+                    if (first != null) {
+                      pickLanguage(first.code);
+                    }
+                  }}
+                  placeholder="Type a language or code"
+                  placeholderTextColor={
+                    desktop ? tokens.color.textMuted : theme.color.inkTertiary
+                  }
+                  returnKeyType="search"
+                  style={[styles.bigInput, !desktop && themed.fieldInput]}
+                  selectionColor={!desktop ? theme.color.ink : undefined}
+                  keyboardAppearance={!desktop ? theme.scheme : undefined}
+                  value={languageQuery}
+                />
+              </View>
+              <View style={styles.chips}>
+                {languageMatches.map(item =>
+                  desktop ? (
+                    <Button
+                      key={item.code}
+                      accessibilityLabel={item.name}
+                      accessibilityState={{selected: language === item.code}}
+                      hitSlop={{bottom: 4, top: 4}}
+                      onPress={() => pickLanguage(item.code)}
+                      style={styles.pill}
+                      variant={
+                        language === item.code ? 'primary' : 'secondary'
+                      }>
+                      {item.name}
+                    </Button>
+                  ) : (
+                    <OmiChip
+                      key={item.code}
+                      label={item.name}
+                      selected={language === item.code}
+                      onPress={() => pickLanguage(item.code)}
+                    />
+                  ),
+                )}
+              </View>
+              {languageQuery.trim().length > 0 &&
+              languageMatches.length === 0 ? (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={[styles.copy, copyColor]}>
+                  No language matches “{languageQuery.trim()}”.
+                </Text>
+              ) : null}
+              <View style={styles.selectedRow}>
+                <Text style={[styles.selectedCaption, copyColor]}>
+                  Selected
+                </Text>
+                <View
+                  accessibilityLabel="Selected language"
+                  style={[
+                    styles.selectedChip,
+                    desktop ? styles.desktopChip : themed.selectedChip,
+                  ]}>
+                  <Text
+                    style={[
+                      styles.selectedChipLabel,
+                      desktop
+                        ? styles.desktopChipLabel
+                        : themed.selectedChipLabel,
+                    ]}>
+                    {selectedLanguageName}
+                  </Text>
+                </View>
+              </View>
+            </>
+          ) : null}
+          {step === 'source' ? (
+            <>
+              <View style={styles.chips}>
+                {ACQUISITION_SOURCES.map(item =>
+                  desktop ? (
+                    <Button
+                      key={item}
+                      accessibilityLabel={item}
+                      accessibilityState={{selected: source === item}}
+                      hitSlop={{bottom: 4, top: 4}}
+                      onPress={() => setSource(item)}
+                      style={styles.pill}
+                      variant={source === item ? 'primary' : 'secondary'}>
+                      {item}
+                    </Button>
+                  ) : (
+                    <OmiChip
+                      key={item}
+                      label={item}
+                      selected={source === item}
+                      onPress={() => setSource(item)}
+                    />
+                  ),
+                )}
+              </View>
+              {source === 'Other' ? (
+                <View style={styles.stretch}>
+                  <Field
+                    accessibilityLabel="Please specify"
+                    autoCorrect={false}
+                    containerStyle={[styles.bigField, !desktop && themed.field]}
+                    enablesReturnKeyAutomatically
+                    onChangeText={setOtherSource}
+                    onSubmitEditing={() => {
+                      if (otherSource.trim().length > 0) {
+                        void persistSource();
+                      }
+                    }}
+                    placeholder="Where did you hear about us?"
+                    returnKeyType="done"
+                    style={[styles.bigInput, !desktop && themed.fieldInput]}
+                    placeholderTextColor={
+                      !desktop ? theme.color.inkTertiary : undefined
+                    }
+                    selectionColor={!desktop ? theme.color.ink : undefined}
+                    keyboardAppearance={!desktop ? theme.scheme : undefined}
+                    value={otherSource}
+                  />
+                </View>
+              ) : null}
+            </>
+          ) : null}
+          {step === 'permissions' ? (
+            <>
+              <Text style={[styles.copy, copyColor]}>
+                {nativePhone
+                  ? 'Tap one when you’re ready. Nothing is asked until you do.'
+                  : 'Click one when you’re ready. Nothing is asked until you do.'}
+              </Text>
+              <PermissionGroup grouped={!desktop}>
+                {permissionRow(
+                  'notifications',
+                  'Notifications',
+                  'Notify you when something needs you.',
+                )}
+                {permissionRow(
+                  'microphone',
+                  'Microphone',
+                  'Hear what you talk about, so Omi can help.',
+                )}
+                {nativePhone
+                  ? permissionRow(
+                      'bluetooth',
+                      'Bluetooth',
+                      'Find your Omi, so it can record for you.',
+                    )
+                  : null}
+              </PermissionGroup>
+            </>
+          ) : null}
+          {step === 'speech' ? (
+            <>
+              <Text style={[styles.copy, copyColor]}>
+                So Omi knows which voice is yours — talk for about 5 seconds
+                about anything. A successful upload, not this screen, is
+                enrollment.
+              </Text>
+              {voiceSaved ? (
+                <Text style={[styles.copy, copyColor]}>Voice print saved.</Text>
+              ) : null}
+              {ghost(
+                'Skip For Now',
+                () => {
+                  setStep('complete');
+                },
+                recordingVoice,
               )}
-              {nativePhone
-                ? permissionRow(
-                    'bluetooth',
-                    'Bluetooth',
-                    'Find your Omi, so it can record for you.',
+            </>
+          ) : null}
+          {step === 'complete' ? (
+            <>
+              <PostSetupConfetti onDone={() => undefined} />
+              <Text style={[styles.copy, copyColor]}>
+                Just use Omi in the background for 2 days and you'll start
+                getting useful feedback after.
+              </Text>
+              {displayError == null || !setupRequired ? null : (
+                <Text
+                  accessibilityLabel="Setup error"
+                  style={[
+                    styles.error,
+                    copyColor,
+                    desktop ? styles.desktopUnreachable : themed.danger,
+                  ]}>
+                  {displayError}
+                </Text>
+              )}
+              {!desktop && !browser
+                ? ghost(
+                    busy ? 'Saving…' : 'Continue Without a Device',
+                    () => {
+                      finish(false);
+                    },
+                    busy,
                   )
                 : null}
-            </PermissionGroup>
-            {action(desktop ? "I'll do these later" : 'Not Now', () => {
-              void advanceFrom('permissions');
-            })}
-          </>
-        ) : null}
-        {step === 'speech' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              So Omi knows which voice is yours — talk for about 5 seconds about
-              anything. A successful upload, not this screen, is enrollment.
-            </Text>
-            {voiceSaved ? (
-              <Text style={[styles.copy, copyColor]}>Voice print saved.</Text>
-            ) : null}
-            {action(
-              recordingVoice ? 'Listening…' : 'Start Voice Recording',
-              enrollVoice,
-              recordingVoice,
-            )}
-            {action(
-              'Not Now',
-              () => {
-                setStep('complete');
-              },
-              recordingVoice,
-              'ghost',
-            )}
-          </>
-        ) : null}
-        {step === 'complete' ? (
-          <>
-            <Text style={[styles.copy, copyColor]}>
-              Just use Omi in the background for 2 days and you'll start getting
-              useful feedback after.
-            </Text>
-            {displayError == null || !setupRequired ? null : (
-              <Text
-                accessibilityLabel="Setup error"
-                style={[
-                  styles.error,
-                  copyColor,
-                  desktop ? styles.desktopUnreachable : themed.danger,
-                ]}>
-                {displayError}
-              </Text>
-            )}
-            {!desktop && !browser
-              ? action(
-                  busy && connectAfterComplete ? 'Saving…' : 'Connect Your Omi',
-                  () => finish(true),
-                  busy,
-                )
-              : null}
-            {action(
-              busy && !connectAfterComplete
-                ? 'Saving…'
-                : desktop || browser
-                ? 'Start Using Omi'
-                : 'Continue Without a Device',
-              () => finish(false),
-              busy,
-              desktop || browser ? 'primary' : 'ghost',
-            )}
-          </>
-        ) : null}
+            </>
+          ) : null}
+        </Animated.View>
         {displayError == null ||
         step === 'welcome' ||
         step === 'complete' ? null : (
@@ -849,15 +1008,52 @@ export function Onboarding({
             {displayError}
           </Text>
         )}
-        {step !== 'welcome' &&
-        step !== 'consent' &&
-        step !== 'complete' &&
-        !signingIn
-          ? action('Back', goBack, busy, 'ghost')
-          : null}
-        {setupRequired && onSignOut
-          ? action(desktop ? 'Sign out' : 'Sign Out', onSignOut, busy, 'ghost')
-          : null}
+        <View style={styles.bar}>
+          {canGoBack && desktop ? (
+            <Button
+              accessibilityLabel="Back"
+              disabled={busy}
+              onPress={goBack}
+              size="icon"
+              variant="secondary"
+              style={styles.backCircle}>
+              <MaterialIcon
+                name="arrow_back"
+                size={20}
+                color={desktop ? desktopTokens.color.ink : tokens.color.text}
+              />
+            </Button>
+          ) : null}
+          {canGoBack && !desktop ? (
+            <OmiIconButton
+              icon="arrow_back"
+              label="Back"
+              onPress={goBack}
+              disabled={busy}
+            />
+          ) : null}
+          {desktop ? (
+            <Button
+              accessibilityLabel={primary.label}
+              disabled={primary.disabled}
+              labelStyle={desktop && styles.desktopButtonLabel}
+              onPress={primary.onPress}
+              size="large"
+              style={[styles.barPrimary, desktop && styles.desktopButton]}>
+              {primary.label}
+            </Button>
+          ) : (
+            <OmiButton
+              accessibilityLabel={primary.label}
+              label={primary.label}
+              disabled={primary.disabled}
+              busy={saving}
+              onPress={primary.onPress}
+              variant="primary"
+              style={[styles.barPrimary, themed.primary]}
+            />
+          )}
+        </View>
       </View>
     </ScrollView>
   );
@@ -869,19 +1065,87 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       alignItems: 'center',
       alignSelf: 'stretch',
       flexGrow: 1,
-      justifyContent: 'center',
+      justifyContent: 'flex-start',
       paddingHorizontal: tokens.space.xxl,
       paddingVertical: tokens.space.xl,
     },
     links: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center'},
     column: {
       alignItems: 'center',
+      flexGrow: 1,
       gap: tokens.space.sm,
       maxWidth: tokens.size.content,
       width: '100%',
     },
+    topBlock: {
+      alignSelf: 'stretch',
+      gap: tokens.space.xs,
+    },
+    logoTrack: {
+      alignSelf: 'stretch',
+      height: DOTS_SIZE,
+    },
+    captionRow: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      gap: tokens.space.sm,
+      justifyContent: 'flex-end',
+    },
     dots: {
-      marginBottom: tokens.space.none,
+      bottom: 0,
+      left: 0,
+      position: 'absolute',
+    },
+    stepAnim: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      flex: tokens.layout.grow,
+      gap: tokens.space.sm,
+      justifyContent: 'center',
+    },
+    progressRow: {
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      gap: tokens.space.xs,
+      height: tokens.space.xs,
+    },
+    progressSegment: {
+      backgroundColor: tokens.color.lineStrong,
+      borderRadius: tokens.radius.pill,
+      flex: tokens.layout.grow,
+    },
+    progressSegmentFill: {backgroundColor: tokens.color.text},
+    bar: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      gap: tokens.space.md,
+    },
+    barPrimary: {flex: tokens.layout.grow},
+    backCircle: {borderRadius: tokens.radius.pill},
+    selectedRow: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: tokens.space.sm,
+      justifyContent: 'center',
+    },
+    selectedCaption: {
+      color: tokens.color.menuText,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    selectedChip: {
+      backgroundColor: tokens.color.primary,
+      borderRadius: tokens.radius.pill,
+      paddingHorizontal: tokens.space.lg,
+      paddingVertical: tokens.space.xs,
+    },
+    selectedChipLabel: {
+      color: tokens.color.textInverse,
+      ...tokens.type.label,
     },
     title: {
       color: tokens.color.text,
@@ -889,9 +1153,10 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       fontWeight: '700',
       letterSpacing: -1,
       lineHeight: 38,
+      marginBottom: tokens.space.xs,
       textAlign: 'center',
     },
-    actionStretch: {alignSelf: 'stretch'},
+    stretch: {alignSelf: 'stretch'},
     copy: {
       color: tokens.color.menuText,
       fontSize: 15,
@@ -904,26 +1169,37 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       lineHeight: 18,
       textAlign: 'center',
     },
-    unreachable: {
-      color: uiColor.danger,
-    },
-    meta: {color: tokens.color.textMuted, fontSize: 12, textAlign: 'center'},
-    choices: {
-      alignSelf: 'stretch',
-      gap: tokens.space.xs,
-    },
     chips: {
       alignSelf: 'stretch',
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: tokens.space.xs,
+      gap: tokens.space.sm,
       justifyContent: 'center',
+    },
+    titleAnim: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      marginTop: 96,
+    },
+    bigField: {
+      minHeight: 52,
+      paddingVertical: tokens.space.md,
+    },
+    bigInput: {
+      fontSize: 18,
+      lineHeight: 24,
+    },
+    pill: {
+      borderRadius: tokens.radius.pill,
+      paddingHorizontal: tokens.space.lg,
     },
     desktopTitle: {color: desktopTokens.color.ink},
     desktopCopy: {color: desktopTokens.color.inkMuted},
     desktopUnreachable: {color: desktopTokens.color.red},
     desktopButton: {backgroundColor: desktopTokens.color.dark},
     desktopButtonLabel: {color: desktopTokens.color.white},
+    desktopChip: {backgroundColor: desktopTokens.color.dark},
+    desktopChipLabel: {color: desktopTokens.color.white},
   });
 
 function PermissionGroup({
@@ -934,7 +1210,7 @@ function PermissionGroup({
   children: React.ReactNode;
 }) {
   return grouped ? (
-    <MobileGroup inset={52} style={groupStyles.stretch}>
+    <MobileGroup inset={52} style={{alignSelf: 'stretch'}}>
       {children}
     </MobileGroup>
   ) : (
@@ -942,17 +1218,14 @@ function PermissionGroup({
   );
 }
 
-const groupStyles = StyleSheet.create({stretch: {alignSelf: 'stretch'}});
-
 const createThemedStyles = (t: OmiTheme) => ({
   canvas: {backgroundColor: t.color.canvas},
   surface: {paddingHorizontal: t.layout.pageGutter.mobile + t.space.sm},
   title: {...t.type.display, color: t.color.ink},
   copy: {...t.type.subhead, color: t.color.inkSecondary},
-  meta: {...t.type.footnote, color: t.color.inkTertiary},
   danger: {color: t.color.danger},
-  link: {color: t.color.inkSecondary},
-  action: {marginTop: t.space.xs},
+  progressEmpty: {backgroundColor: t.color.separator},
+  progressFill: {backgroundColor: t.color.ink},
   field: {
     backgroundColor: t.color.surface,
     borderColor: t.color.hairline,
@@ -961,11 +1234,9 @@ const createThemedStyles = (t: OmiTheme) => ({
     paddingHorizontal: t.space.lg,
   },
   fieldInput: {...t.type.body, color: t.color.ink},
-  fieldLabel: {
-    ...t.type.footnote,
-    fontWeight: '600' as const,
-    color: t.color.inkSecondary,
-  },
+  selectedChip: {backgroundColor: t.color.fillSelected},
+  selectedChipLabel: {color: t.color.ink, ...t.type.headline},
+  primary: {minHeight: Math.max(44, t.size.control)},
   permission: {
     width: 22,
     height: 22,

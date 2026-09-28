@@ -10,6 +10,7 @@ gate chain and per-area test coverage are documented in
 | Script | Invoked by | Purpose |
 |---|---|---|
 | `check-boundaries.ts` | `bun run boundaries` (first `check` step) | Fails on tracked legacy-tree files (`app|backend|desktop|spikes|web/`), any `*.swift`, generated dirs (node_modules, Pods, DerivedData, dist), foreign lockfiles (`tools/OmiSimulator` exempt), and forbidden legacy imports in sources |
+| `make-material-symbols-webfont.sh` | `bun run icons:webfont` (ad hoc) | Regenerates `pwa/public/MaterialSymbolsRounded.woff2` (subset of the bundled ttf) from `MaterialIcon.tsx`'s GLYPHS; run after adding glyphs (needs `fonttools`) |
 | `setup` | `bun run setup` | `bun install --frozen-lockfile`; monorepo `make setup` owns hooks |
 | `start-metro.ts` | `react-native` `bun start`, PWA metro test, ad hoc | Programmatic Metro dev server for `react-native/` (options-object `listen` — Bun 1.3.14/1.4 never fire the four-argument callback form); `--port` when run directly |
 | `test-metro-startup.ts` | `pwa` `bun run test` | Boots Metro, asserts `/status` and that each platform bundle (macos/ios/android) runs its runtime initializer first |

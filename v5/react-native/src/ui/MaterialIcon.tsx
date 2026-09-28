@@ -11,6 +11,7 @@ import {
 // (macOS: Resources/, iOS: UIAppFonts). Glyphs are addressed by codepoint
 // from the official codepoints table, so names below match Google's names.
 const GLYPHS = {
+  arrow_back: 0xe5c4,
   arrow_outward: 0xf8ce,
   arrow_selector_tool: 0xf82f,
   arrow_upward: 0xe5d8,

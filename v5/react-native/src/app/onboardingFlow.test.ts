@@ -74,10 +74,14 @@ test('desktop itinerary matches Context for Claude and drops sign-in after resto
 });
 
 test('normalizeDeviceLanguage maps OS locales onto language codes', () => {
-  expect(normalizeDeviceLanguage('en_US')).toBe('en');
-  expect(normalizeDeviceLanguage('pt-BR')).toBe('pt');
+  expect(normalizeDeviceLanguage('en_US')).toBe('en-US');
+  expect(normalizeDeviceLanguage('en-GB')).toBe('en-GB');
+  expect(normalizeDeviceLanguage('pt-BR')).toBe('pt-BR');
   expect(normalizeDeviceLanguage(' de ')).toBe('de');
-  expect(normalizeDeviceLanguage('zh-Hans-CN')).toBe('zh');
+  expect(normalizeDeviceLanguage('zh-Hans-CN')).toBe('zh-CN');
+  expect(normalizeDeviceLanguage('zh_TW')).toBe('zh-TW');
+  expect(normalizeDeviceLanguage('zh')).toBe('zh-CN');
+  expect(normalizeDeviceLanguage('es-419')).toBe('es-419');
   expect(normalizeDeviceLanguage('')).toBe('en');
   expect(normalizeDeviceLanguage(null)).toBe('en');
   expect(normalizeDeviceLanguage(42)).toBe('en');
