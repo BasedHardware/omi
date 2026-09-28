@@ -184,15 +184,121 @@ async def test_redis_blackhole_bounds_background_outcome_writes(monkeypatch):
     assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get() - dropped == 992
     for _ in range(100):
         health.quarantine('soniox', 'account', 60)
-    assert health._writes_in_flight['bench'] == live_health.WRITE_IN_FLIGHT_LIMITS['bench']
-    assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='bench')._value.get() - bench_dropped == 96
-    # Outcome burst cannot starve the reserved account-quarantine slots.
+    assert health._writes_in_flight['bench'] == 1
+    assert len(health._pending_benches) == 1
+    assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='bench')._value.get() == bench_dropped
+    # Outcome burst cannot starve the account-quarantine writer.
     await asyncio.sleep(0.01)
     assert redis.maximum <= live_health.WRITE_IN_FLIGHT_LIMITS['result']
     deadline = asyncio.get_running_loop().time() + 1.0
     while any(health._writes_in_flight.values()) and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.01)
     assert health._writes_in_flight == {'result': 0, 'bench': 0}
+    assert ('soniox', 'account') in health._pending_benches  # Redis timed out; deadline is retained.
+    assert live_health.FLEET_HEALTH_WRITE_DROPPED.labels(kind='result')._value.get() - dropped == 1000
+
+
+@pytest.mark.asyncio
+async def test_full_bench_slots_flush_longer_pending_deadline(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    gate = asyncio.Event()
+
+    class SlotRedis:
+        def __init__(self):
+            self.writes = []
+
+        async def set(self, key, value, **_kwargs):
+            self.writes.append((key, value))
+            if len(self.writes) <= live_health.WRITE_IN_FLIGHT_LIMITS['bench']:
+                await gate.wait()
+            return True
+
+    redis = SlotRedis()
+    health = live_health.FleetHealth(redis_client=redis)
+    for provider in sorted(live_health.PROVIDERS):
+        health.quarantine(provider, 'account', 30)
+    assert health._writes_in_flight['bench'] == live_health.WRITE_IN_FLIGHT_LIMITS['bench']
+    health.quarantine('soniox', 'account', 60)
+    assert len(health._pending_benches) == len(live_health.PROVIDERS)
+    gate.set()
+    deadline = asyncio.get_running_loop().time() + 1.0
+    while (
+        health._pending_benches or health._writes_in_flight['bench']
+    ) and asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(0.01)
+    assert health._pending_benches == {}
+    assert health._writes_in_flight['bench'] == 0
+    soniox_writes = [value for key, value in redis.writes if key.endswith(':state:soniox')]
+    assert len(soniox_writes) == 2
+    assert float(soniox_writes[-1].split(':', 1)[1]) > float(soniox_writes[0].split(':', 1)[1])
+
+
+@pytest.mark.asyncio
+async def test_bench_write_retries_after_redis_backoff(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    monkeypatch.setattr(live_health, 'CACHE_REFRESH_SECONDS', 0.01)
+
+    class RecoveringRedis:
+        def __init__(self):
+            self.writes = 0
+
+        async def set(self, *_args, **_kwargs):
+            self.writes += 1
+            if self.writes == 1:
+                raise ConnectionError('Redis unavailable')
+            return True
+
+        async def mget(self, keys):
+            return [None] * len(keys)
+
+    redis = RecoveringRedis()
+    health = live_health.FleetHealth(redis_client=redis)
+    health.quarantine('soniox', 'account', 60)
+    deadline = asyncio.get_running_loop().time() + 1.0
+    while health._writes_in_flight['bench'] and asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(0.01)
+    assert redis.writes == 1
+    assert ('soniox', 'account') in health._pending_benches
+    assert health._redis_retry_at > time.time()
+    health._redis_retry_at = time.time() + 0.03  # Shorten the production backoff for the test.
+    refresh = asyncio.create_task(health.refresh_forever())
+    try:
+        deadline = asyncio.get_running_loop().time() + 1.0
+        while health._pending_benches and asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(0.01)
+    finally:
+        refresh.cancel()
+        with suppress(asyncio.CancelledError):
+            await refresh
+    assert redis.writes == 2
+    assert health._pending_benches == {}
+
+
+@pytest.mark.asyncio
+async def test_expired_pending_bench_is_not_written(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'on')
+    now = [time.time()]
+
+    class SpyRedis:
+        def __init__(self):
+            self.writes = 0
+
+        async def set(self, *_args, **_kwargs):
+            self.writes += 1
+            return True
+
+        async def mget(self, keys):
+            return [None] * len(keys)
+
+    redis = SpyRedis()
+    health = live_health.FleetHealth(clock=lambda: now[0], redis_client=redis)
+    health._redis_retry_at = now[0] + 10
+    health.quarantine('soniox', 'account', 1)
+    assert ('soniox', 'account') in health._pending_benches
+    now[0] += 11
+    await health.refresh_once()
+    assert health._pending_benches == {}
+    assert redis.writes == 0
 
 
 @pytest.mark.asyncio

@@ -87,6 +87,9 @@ class FleetHealth:
         self._probe_pending: set[str] = set()
         self._local_probe_next: dict[str, float] = {}
         self._writes_in_flight = {'result': 0, 'bench': 0}
+        # At most one deadline for each provider/kind, even during a Redis outage.
+        self._pending_benches: dict[tuple[str, str], float] = {}
+        self._bench_providers_in_flight: set[str] = set()
         seed = f'{os.getpid()}:{time.monotonic_ns()}'.encode()
         self._probe_jitter = probe_jitter or (
             lambda provider: int.from_bytes(hashlib.sha256(seed + provider.encode()).digest()[:4], 'big') / 2**32 * 5.0
@@ -138,10 +141,11 @@ class FleetHealth:
             events.append((self._clock(), outcome == 'text'))
             while len(events) > LOCAL_EVENTS_CAP:
                 events.popleft()
-        self.schedule(self._write_result(provider, lang, outcome), kind='result')
+        self.schedule(self._write_result(provider, lang, outcome))
 
     async def _write_result(self, provider: str, language: str, outcome: str) -> None:
         if self._clock() < self._redis_retry_at:
+            FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
             return
         bucket = int(self._clock() // SCORE_BUCKET_SECONDS)
         text_key, no_text_key = self._score_keys(provider, language, bucket)
@@ -163,9 +167,11 @@ class FleetHealth:
             await self._bounded(pipe.execute())
         except Exception:
             self._redis_retry_at = self._clock() + 10.0
+            FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
             logger.debug('STT fleet health write fell back to local state', exc_info=True)
 
-    def schedule(self, coroutine: Any, *, kind: str) -> None:
+    def schedule(self, coroutine: Any) -> None:
+        """Best-effort result write; account/selection benches use the retry map."""
         if mode() == 'off':
             coroutine.close()
             return
@@ -178,26 +184,26 @@ class FleetHealth:
             loop = self._loop
             if loop is None or loop.is_closed():
                 coroutine.close()
-                FLEET_HEALTH_WRITE_DROPPED.labels(kind=kind).inc()
+                FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
                 return
         with self._lock:
-            if self._writes_in_flight[kind] >= WRITE_IN_FLIGHT_LIMITS[kind]:
+            if self._writes_in_flight['result'] >= WRITE_IN_FLIGHT_LIMITS['result']:
                 coroutine.close()
-                FLEET_HEALTH_WRITE_DROPPED.labels(kind=kind).inc()
+                FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
                 return
-            self._writes_in_flight[kind] += 1
+            self._writes_in_flight['result'] += 1
 
         def release() -> None:
             with self._lock:
-                self._writes_in_flight[kind] -= 1
+                self._writes_in_flight['result'] -= 1
 
         def launch() -> None:
             try:
-                task = start_background_task(coroutine, name=f'live_stt_fleet_{kind}_write')
+                task = start_background_task(coroutine, name='live_stt_fleet_result_write')
             except RuntimeError:
                 coroutine.close()
                 release()
-                FLEET_HEALTH_WRITE_DROPPED.labels(kind=kind).inc()
+                FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
             else:
                 task.add_done_callback(lambda _task: release())
 
@@ -209,19 +215,23 @@ class FleetHealth:
             except RuntimeError:
                 coroutine.close()
                 release()
-                FLEET_HEALTH_WRITE_DROPPED.labels(kind=kind).inc()
+                FLEET_HEALTH_WRITE_DROPPED.labels(kind='result').inc()
 
     def quarantine(self, provider: str, kind: str, seconds: float) -> None:
         if provider not in PROVIDERS or kind not in {'account', 'selection'} or mode() == 'off':
             return
         until = self._clock() + max(1.0, seconds)
         with self._lock:
-            self._benches[provider] = kind, until
-        self.schedule(self._write_bench(provider, kind, until), kind='bench')
+            previous_kind, previous_until = self._benches.get(provider, ('', 0.0))
+            if kind == 'account' or previous_until <= self._clock() or previous_kind != 'account':
+                self._benches[provider] = kind, max(until, previous_until) if kind == previous_kind else until
+            key = provider, kind
+            self._pending_benches[key] = max(until, self._pending_benches.get(key, 0.0))
+        self._drain_pending_benches()
 
-    async def _write_bench(self, provider: str, kind: str, until: float) -> None:
-        if self._clock() < self._redis_retry_at:
-            return
+    async def _write_bench(self, provider: str, kind: str, until: float) -> bool:
+        if until <= self._clock() or self._clock() < self._redis_retry_at:
+            return False
         try:
             await self._bounded(
                 self._redis().set(
@@ -230,9 +240,100 @@ class FleetHealth:
                     ex=max(1, int(until - self._clock()) + 300),
                 )
             )
+            return True
         except Exception:
             self._redis_retry_at = self._clock() + 10.0
             logger.debug('STT fleet bench write fell back to local state', exc_info=True)
+            return False
+
+    def _account_bench_until(self, provider: str) -> float:
+        """Keep a selection write from replacing an active account quarantine."""
+        local_kind, local_until = self._benches.get(provider, ('', 0.0))
+        cached_kind, cached_until = self._cached_benches.get(provider, ('', 0.0))
+        return max(
+            local_until if local_kind == 'account' else 0.0,
+            cached_until if cached_kind == 'account' else 0.0,
+            self._pending_benches.get((provider, 'account'), 0.0),
+        )
+
+    def _bench_write_done(self, provider: str, kind: str, until: float, task: asyncio.Task[bool]) -> None:
+        success = False
+        if not task.cancelled():
+            try:
+                success = task.result()
+            except Exception:
+                self._redis_retry_at = self._clock() + 10.0
+                logger.debug('STT fleet bench write will retry', exc_info=True)
+        with self._lock:
+            self._bench_providers_in_flight.discard(provider)
+            self._writes_in_flight['bench'] -= 1
+            key = provider, kind
+            if success and self._pending_benches.get(key, 0.0) <= until:
+                self._pending_benches.pop(key, None)
+        if not task.cancelled():
+            self._drain_pending_benches()
+
+    def _drain_pending_benches(self) -> None:
+        """Start bounded Redis attempts without waiting on the connection path."""
+        if mode() == 'off':
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            self._loop = loop
+            on_loop = True
+        except RuntimeError:
+            loop = self._loop
+            on_loop = False
+            if loop is None or loop.is_closed():
+                return  # A later refresh will flush the retained deadlines.
+        now = self._clock()
+        attempts: list[tuple[str, str, float]] = []
+        with self._lock:
+            for key, until in tuple(self._pending_benches.items()):
+                if until <= now:
+                    self._pending_benches.pop(key, None)
+            if now < self._redis_retry_at:
+                return
+            for (provider, kind), until in sorted(self._pending_benches.items()):
+                if len(self._bench_providers_in_flight) >= WRITE_IN_FLIGHT_LIMITS['bench']:
+                    break
+                if provider in self._bench_providers_in_flight:
+                    continue
+                if kind == 'selection' and self._account_bench_until(provider) > now:
+                    continue
+                self._bench_providers_in_flight.add(provider)
+                self._writes_in_flight['bench'] += 1
+                attempts.append((provider, kind, until))
+
+        for provider, kind, until in attempts:
+
+            def launch(provider: str = provider, kind: str = kind, until: float = until) -> None:
+                coroutine = self._write_bench(provider, kind, until)
+                try:
+                    task = start_background_task(coroutine, name='live_stt_fleet_bench_write')
+                except RuntimeError:
+                    coroutine.close()
+                    self._redis_retry_at = self._clock() + 10.0
+                    with self._lock:
+                        self._bench_providers_in_flight.discard(provider)
+                        self._writes_in_flight['bench'] -= 1
+                else:
+                    task.add_done_callback(
+                        lambda task, provider=provider, kind=kind, until=until: self._bench_write_done(
+                            provider, kind, until, task
+                        )
+                    )
+
+            if on_loop:
+                launch()
+            else:
+                try:
+                    loop.call_soon_threadsafe(launch)
+                except RuntimeError:
+                    self._redis_retry_at = self._clock() + 10.0
+                    with self._lock:
+                        self._bench_providers_in_flight.discard(provider)
+                        self._writes_in_flight['bench'] -= 1
 
     def cached_snapshot(self, providers: list[str], language: str | None) -> dict[str, ProviderState]:
         """Read only pod memory on connect; keep known benches when scores go stale."""
@@ -269,9 +370,12 @@ class FleetHealth:
 
     async def refresh_once(self) -> None:
         """One bounded Redis batch off the connection path, including probe leases."""
-        if mode() == 'off' or self._clock() < self._redis_retry_at:
+        if mode() == 'off':
             return
         self._loop = asyncio.get_running_loop()
+        self._drain_pending_benches()
+        if self._clock() < self._redis_retry_at:
+            return
         now = self._clock()
         with self._lock:
             self._interests = {

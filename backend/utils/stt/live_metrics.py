@@ -54,7 +54,7 @@ LEG_TRANSCRIPT_OUTCOME = Counter(
 ROUTING_DECISION = Counter('omi_stt_routing_decisions_total', 'Health-weighted routing decisions', ['outcome'])
 FLEET_HEALTH_WRITE_DROPPED = Counter(
     'omi_stt_fleet_health_write_dropped_total',
-    'Fleet health Redis writes dropped when the bounded background slots are full or unavailable',
+    'Fleet outcome Redis writes dropped when the bounded background slots are full or unavailable',
     ['kind'],
 )
 ROUTING_DECISION_LATENCY = Histogram(

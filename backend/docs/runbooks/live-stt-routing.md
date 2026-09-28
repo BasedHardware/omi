@@ -51,10 +51,13 @@ sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metri
 
 Fleet scores fall back to pod-local evidence after 15 seconds without a
 refresh. A known account or selection bench remains in force through its
-recorded cooldown even while scores are stale. Redis health writes are limited
-to eight result writes and four reserved bench writes per pod; dropped writes
-increment `omi_stt_fleet_health_write_dropped_total{kind="result|bench"}`.
-Local scores and benches continue to update when this counter rises.
+recorded cooldown even while scores are stale. Redis outcome writes use eight
+slots per pod; excess outcomes increment
+`omi_stt_fleet_health_write_dropped_total{kind="result"}`. Bench writes use
+four slots and a pending map with at most one longest deadline per provider
+and kind. A full set of slots or Redis backoff delays their fleet write until a
+slot frees or the next background refresh, with retries until success or the
+deadline expires. Local scores and benches continue to update throughout.
 
 The `omi-modulate-failing-soniox` Telegram rule names the active spend lever.
 The existing `Omi - Services Alerting (Telegram)` Grafana contact point must
