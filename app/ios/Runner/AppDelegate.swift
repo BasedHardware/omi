@@ -801,7 +801,7 @@ extension AppDelegate: WCSessionDelegate {
             case "batteryUpdate":
                 if let batteryLevel = message["batteryLevel"] as? Double,
                    let batteryState = message["batteryState"] as? Int {
-                    try? SafeDefaults.store(.int(batteryLevel), forKey: "watch_battery_level")
+                    try? SafeDefaults.store(.double(batteryLevel), forKey: "watch_battery_level")
                     try? SafeDefaults.store(.int(batteryState), forKey: "watch_battery_state")
                     try? SafeDefaults.store(.date(Date()), forKey: "watch_battery_last_updated")
                     
@@ -870,7 +870,7 @@ extension AppDelegate: WCSessionDelegate {
             case "batteryUpdate":
                 if let batteryLevel = userInfo["batteryLevel"] as? Double,
                    let batteryState = userInfo["batteryState"] as? Int {
-                    try? SafeDefaults.store(.int(batteryLevel), forKey: "watch_battery_level")
+                    try? SafeDefaults.store(.double(batteryLevel), forKey: "watch_battery_level")
                     try? SafeDefaults.store(.int(batteryState), forKey: "watch_battery_state")
                     try? SafeDefaults.store(.date(Date()), forKey: "watch_battery_last_updated")
                     
