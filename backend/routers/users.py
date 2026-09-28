@@ -622,7 +622,12 @@ def get_single_person(
     person = get_person(uid, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
-    person = Person(**person)
+    # A malformed/legacy doc (e.g. missing the required name) must read as not-found, not 500:
+    # the list endpoint already skips these via Person.deserialize_many_safe (#8264).
+    people = Person.deserialize_many_safe([person])
+    if not people:
+        raise HTTPException(status_code=404, detail="Person not found")
+    person = people[0]
     if include_speech_samples:
         # Convert stored GCS paths to signed URLs
         stored_paths = person.speech_samples
