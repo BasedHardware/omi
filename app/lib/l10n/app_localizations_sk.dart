@@ -11422,4 +11422,17 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get searchPeople => 'Hľadať osoby';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Pridať „$query“ ako novú osobu';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Zobraziť všetky osoby ($count)';
+  }
 }

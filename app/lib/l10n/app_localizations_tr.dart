@@ -11443,4 +11443,17 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get searchPeople => 'Kişi ara';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" adlı yeni bir kişi ekle';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Tüm $count kişiyi göster';
+  }
 }

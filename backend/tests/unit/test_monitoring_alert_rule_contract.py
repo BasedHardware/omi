@@ -1217,6 +1217,23 @@ def test_windowed_live_stt_rules_cover_admission_and_pre_audio_failures():
             assert (REPO / rule['annotations']['runbook']).is_file()
 
 
+def test_window_canary_batch_protection_pages_telegram_before_sync_degrades():
+    expected = {
+        'omi-stt-batch-queue-depth': 'parakeet_batch_pending_requests',
+        'omi-stt-batch-queue-latency': 'parakeet_queue_duration_seconds_bucket',
+        'omi-stt-sync-prerecorded-errors': 'parakeet_prerecorded_requests_total',
+    }
+    for rules in _all_rule_exports().values():
+        for uid, metric in expected.items():
+            rule = rules[uid]
+            assert metric in ' '.join(d['model'].get('expr', '') for d in rule['data'])
+            assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
+            assert rule['noDataState'] == 'Alerting'
+            assert rule['isPaused'] is False
+            assert 'Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0' in rule['annotations']['summary']
+            assert rule['for'] == '2m'
+
+
 LISTEN_DASHBOARD = MONITORING / "dashboards/gke/backend-listen.json"
 
 

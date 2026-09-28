@@ -11417,4 +11417,17 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get searchPeople => 'Søg efter personer';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Tilføj \"$query\" som en ny person';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Vis alle $count personer';
+  }
 }

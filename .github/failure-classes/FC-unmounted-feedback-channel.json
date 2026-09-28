@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-unmounted-feedback-channel",
+  "violated_contract": "A failed mutation must tell the operator why it failed through a channel that is actually rendered. web/admin shipped the whole toast stack (hooks/use-toast.ts, components/ui/toast.tsx, @radix-ui/react-toast) and eight useToast() call sites across team, organizations, distributors and popular-apps, but no component ever rendered ToastProvider/ToastViewport, so every toast(...) in the dashboard queued into state nothing subscribed to. Adding a person on /dashboard/team returned 404 four times in five seconds and the owner saw no error, no success and no change: the feature looked dead rather than refused.",
+  "canonical_prevention": "The component that renders a queued-notification hook is mounted once at the root layout, beside the providers the hook depends on, so a call site cannot be wired to a hook whose renderer is absent; a route that a dialog surfaces is covered by tests asserting the status and response shape the dialog renders, so the message the operator sees is pinned to the outcome the server chose.",
+  "canonical_prevention_artifact": [
+    "web/admin/components/ui/toaster.tsx",
+    "web/admin/app/layout.tsx",
+    "web/admin/app/api/omi/team-members/__tests__/route.test.ts"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "web/admin/app/layout.tsx",
+    "web/admin/components/ui/**",
+    "web/admin/hooks/use-toast.ts"
+  ],
+  "status": "open"
+}
