@@ -220,6 +220,7 @@ async def test_receiver_drain_releases_gauge_when_close_raises():
     receiver.channel_configs = []
     receiver.stt_socket = socket
     receiver.stt_sockets_multi = []
+    receiver._resilient_audio = None
     track_live_stt_socket(socket, 'soniox')
     assert gauge._value.get() == before + 1
     await receiver._drain_stt_sockets()

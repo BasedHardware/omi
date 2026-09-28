@@ -20,6 +20,7 @@ from config.stt_provider_policy import normalized_stt_language, soniox_accepts_l
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
+from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
 from utils.stt.stream_close import (
     PROVIDER_AUTH_REJECTED,
@@ -106,6 +107,8 @@ def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = N
     if code == 413:
         # Documented rotation: open a new WebSocket. The failover path does.
         return SONIOX_DEATH_ROTATION
+    if resilient_reconnect_enabled() and code is not None and 500 <= code <= 599:
+        return 'provider_5xx'
     return 'connection_lost'
 
 
@@ -323,9 +326,13 @@ class SafeSonioxSocket(STTSocket):
                 if isinstance(data, bytes):
                     self._audio_sent = True
         except websockets.exceptions.ConnectionClosed as e:
-            self._mark_dead(f'ws send closed: {e}')
+            self._mark_dead(
+                f'ws send closed: {e}', typed_reason='connection_lost' if resilient_reconnect_enabled() else None
+            )
         except Exception as e:
-            self._mark_dead(f'ws send error: {e}')
+            self._mark_dead(
+                f'ws send error: {e}', typed_reason='connection_lost' if resilient_reconnect_enabled() else None
+            )
 
     async def _recv_loop(self) -> None:
         try:
@@ -377,11 +384,15 @@ class SafeSonioxSocket(STTSocket):
                     self._done_event.set()
                     break
         except websockets.exceptions.ConnectionClosed as e:
-            self._mark_dead(f'ws recv closed: {e}')
+            self._mark_dead(
+                f'ws recv closed: {e}', typed_reason='connection_lost' if resilient_reconnect_enabled() else None
+            )
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            self._mark_dead(f'ws recv error: {e}')
+            self._mark_dead(
+                f'ws recv error: {e}', typed_reason='connection_lost' if resilient_reconnect_enabled() else None
+            )
         finally:
             try:
                 self._flush_pending()
