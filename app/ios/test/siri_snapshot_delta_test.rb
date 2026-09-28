@@ -92,6 +92,73 @@ class SiriSnapshotDeltaTest < Minitest::Test
     end
   end
 
+  def test_owner_repair_clears_snapshot_with_marker_and_retains_marker_if_delete_fails
+    swift = File.read(SOURCE)
+    helper = swift[/enum SiriLateRepairLedger \{.*?\n\}/m]
+    repair = swift[/func repairOwnerIndex\(uid: String\).*?\n    \}/m]
+    refute_nil helper
+    refute_nil repair
+    assert_includes repair, 'requireValidOwner(uid, allowPendingLateRepair: true)'
+    assert_includes repair, 'mutateForOwner(uid, allowPendingLateRepair: true)'
+    assert_includes repair, 'SiriLateRepairLedger.repair(uid'
+    harness = <<~SWIFT
+      import Foundation
+      enum PlistValue { case string(String); case array([PlistValue]) }
+      enum SafeDefaults {
+          static func store(_ value: PlistValue, forKey key: String, in defaults: UserDefaults) throws {
+              guard case .array(let values) = value else { fatalError("array expected") }
+              defaults.set(values.map { value in
+                  guard case .string(let text) = value else { fatalError("string expected") }
+                  return text
+              }, forKey: key)
+          }
+      }
+      #{helper}
+      enum TestFailure: Error { case unavailable }
+      @main struct Harness {
+          static func main() async throws {
+              let suite = "siri-owner-repair-\\(UUID().uuidString)"
+              let defaults = UserDefaults(suiteName: suite)!
+              defer { defaults.removePersistentDomain(forName: suite) }
+              let key = "pending-owner-index-delete"
+              var snapshot = ["old-row"]
+              var searchable = ["old-row"]
+              var boundOwner = "owner-a"
+              try SiriLateRepairLedger.mark(boundOwner, defaults: defaults, key: key)
+              func clearSnapshot() throws {
+                  precondition(defaults.stringArray(forKey: key) == ["owner-a"])
+                  precondition(boundOwner == "owner-a")
+                  snapshot.removeAll()
+              }
+              do {
+                  try await SiriLateRepairLedger.repair("owner-a", defaults: defaults, key: key,
+                      clearSnapshot: clearSnapshot, delete: { _ in throw TestFailure.unavailable })
+                  fatalError("delete should fail")
+              } catch TestFailure.unavailable {}
+              precondition(snapshot.isEmpty)
+              precondition(searchable == ["old-row"])
+              precondition(defaults.stringArray(forKey: key) == ["owner-a"])
+              try await SiriLateRepairLedger.repair("owner-a", defaults: defaults, key: key,
+                  clearSnapshot: clearSnapshot, delete: { uid in
+                      precondition(uid == boundOwner)
+                      precondition(defaults.stringArray(forKey: key) == [uid])
+                      searchable.removeAll()
+                  })
+              precondition(searchable.isEmpty)
+              precondition(defaults.stringArray(forKey: key) == nil)
+          }
+      }
+    SWIFT
+    Dir.mktmpdir('siri-owner-repair') do |dir|
+      path = File.join(dir, 'main.swift')
+      File.write(path, harness)
+      stdout, stderr, status = Open3.capture3('swiftc', '-parse-as-library', path, '-o', File.join(dir, 'repair'))
+      assert status.success?, "swiftc failed:\n#{stdout}\n#{stderr}"
+      stdout, stderr, status = Open3.capture3(File.join(dir, 'repair'))
+      assert status.success?, "repair failed:\n#{stdout}\n#{stderr}"
+    end
+  end
+
   def test_late_spotlight_completion_starts_a_new_serialized_turn
     swift = File.read(SOURCE)
     context = swift[/private enum SiriSnapshotQueueContext \{.*?\n\}/m]

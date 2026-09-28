@@ -87,6 +87,12 @@ bool siriTaskIsIndexable(ActionItemWithMetadata row, DateTime now) =>
     (row.supersededBy == null || row.supersededBy!.isEmpty) &&
     (!row.completed || (row.completedAt?.isAfter(now.subtract(const Duration(days: 30))) ?? false));
 
+/// Retry indefinitely at a capped interval: native repair persists the owner
+/// cleanup marker, and this single timer gives a still-running app a way to
+/// finish the delete without waiting for another launch.
+Duration siriRemovalRetryDelay(Duration base, int attempt) =>
+    Duration(milliseconds: (base.inMilliseconds * (1 << attempt.clamp(0, 8))).clamp(1, 300000));
+
 /// The native index receives projections only after Dart's authoritative state
 /// has accepted a fetch or mutation. All methods are inert on Android.
 class SiriIntegration extends SiriEventsApi {
@@ -283,7 +289,9 @@ class SiriIntegration extends SiriEventsApi {
   void _scheduleRemovalRetry(String uid, int generation) {
     if (_removalRetry != null || _uid != uid || _accountGeneration != generation) return;
     final remaining = _indexSuspendedUntil?.difference(DateTime.now()) ?? Duration.zero;
-    final backoff = Duration(milliseconds: (_retryBase.inMilliseconds * (1 << _retryAttempt)).clamp(1, 300000));
+    // A failed attempt owns one timer; its callback clears the slot before
+    // queueing the next attempt, so prolonged outages cannot stack retries.
+    final backoff = siriRemovalRetryDelay(_retryBase, _retryAttempt);
     _removalRetry = Timer(remaining > backoff ? remaining : backoff, () {
       _removalRetry = null;
       if (_uid == uid && _accountGeneration == generation) {

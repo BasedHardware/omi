@@ -206,6 +206,14 @@ class _CooldownHost extends RecordingSiriHost {
 }
 
 void main() {
+  test('removal repair retries keep a capped interval without a terminal attempt', () {
+    const base = Duration(seconds: 1);
+    expect(siriRemovalRetryDelay(base, 0), const Duration(seconds: 1));
+    expect(siriRemovalRetryDelay(base, 8), const Duration(seconds: 256));
+    expect(siriRemovalRetryDelay(base, 9), const Duration(seconds: 256));
+    expect(siriRemovalRetryDelay(const Duration(seconds: 2), 100), const Duration(minutes: 5));
+  });
+
   test('a hung native index call releases the Dart queue and starts a cooldown', () async {
     final host = _HungIndexHost();
     addTearDown(() => host.release.complete());

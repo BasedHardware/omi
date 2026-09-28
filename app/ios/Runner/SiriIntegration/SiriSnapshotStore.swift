@@ -54,16 +54,30 @@ enum SiriLateRepairLedger {
         guard defaults.synchronize() else { throw Failure.flush }
     }
 
+    static func clear(_ uid: String, defaults: UserDefaults, key: String) throws {
+        var pending = Set(defaults.stringArray(forKey: key) ?? [])
+        pending.remove(uid)
+        if pending.isEmpty { defaults.removeObject(forKey: key) }
+        else { try SafeDefaults.store(.array(pending.sorted().map(PlistValue.string)), forKey: key, in: defaults) }
+        guard defaults.synchronize() else { throw Failure.flush }
+    }
+
+    static func repair(_ uid: String, defaults: UserDefaults, key: String,
+                       clearSnapshot: () throws -> Void,
+                       delete: (String) async throws -> Void) async throws {
+        try mark(uid, defaults: defaults, key: key)
+        try clearSnapshot()
+        try await delete(uid)
+        try clear(uid, defaults: defaults, key: key)
+    }
+
     static func drain(defaults: UserDefaults, key: String,
                       delete: (String) async throws -> Void) async throws -> Bool {
-        var pending = Set(defaults.stringArray(forKey: key) ?? [])
+        let pending = Set(defaults.stringArray(forKey: key) ?? [])
         let hadPending = !pending.isEmpty
         for uid in pending.sorted() {
             try await delete(uid)
-            pending.remove(uid)
-            if pending.isEmpty { defaults.removeObject(forKey: key) }
-            else { try SafeDefaults.store(.array(pending.sorted().map(PlistValue.string)), forKey: key, in: defaults) }
-            guard defaults.synchronize() else { throw Failure.flush }
+            try clear(uid, defaults: defaults, key: key)
         }
         return hadPending
     }
@@ -161,13 +175,13 @@ final class SiriSnapshotStore {
     private func indexName(for uid: String) -> String {
         namespace.indexName(for: uid)
     }
-    private func accountOwnerLocked() -> Bool {
+    private func accountOwnerLocked(allowPendingLateRepair: Bool = false) -> Bool {
         guard let uid = snapshot.ownerUid, !uid.isEmpty else { return false }
         return owner == uid && SiriSession.shared.currentConfig()?.uid == uid &&
             SiriSession.shared.hasMirroredToken() && SiriSession.shared.hasCurrentFirebaseOwner(uid) &&
             transitionGeneration == nil && !authResolutionPending &&
             (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty &&
-            !(defaults.stringArray(forKey: pendingLateRepairOwnersKey) ?? []).contains(uid)
+            (allowPendingLateRepair || !(defaults.stringArray(forKey: pendingLateRepairOwnersKey) ?? []).contains(uid))
     }
     /// While Firebase waits for protected Keychain data, deny Siri reads and
     /// writes without deleting a possibly valid account's persisted index.
@@ -175,7 +189,9 @@ final class SiriSnapshotStore {
         lock.lock(); defer { lock.unlock() }
         authResolutionPending = pending
     }
-    private func validOwnerLocked() -> Bool { enabled && accountOwnerLocked() }
+    private func validOwnerLocked(allowPendingLateRepair: Bool = false) -> Bool {
+        enabled && accountOwnerLocked(allowPendingLateRepair: allowPendingLateRepair)
+    }
     private static let conversationAgeMs: Int64 = 180 * 86_400_000
     private static let completedTaskAgeMs: Int64 = 30 * 86_400_000
     private func eligible(_ row: Conversation, now: Int64) -> Bool {
@@ -196,11 +212,12 @@ final class SiriSnapshotStore {
     private func generationMatchesLocked(_ generation: Int64) -> Bool {
         (defaults.object(forKey: generationKey) as? Int64 ?? 0) == generation
     }
-    private func requireValidOwner(_ expectedUid: String? = nil) throws {
+    private func requireValidOwner(_ expectedUid: String? = nil, allowPendingLateRepair: Bool = false) throws {
         guard let uid = expectedUid ?? owner else { throw SiriSession.Failure.auth }
         _ = try SiriSession.shared.requireFirebaseOwner(uid)
         lock.lock(); defer { lock.unlock() }
-        guard validOwnerLocked(), expectedUid == nil || snapshot.ownerUid == expectedUid else {
+        guard validOwnerLocked(allowPendingLateRepair: allowPendingLateRepair),
+              expectedUid == nil || snapshot.ownerUid == expectedUid else {
             throw SiriSession.Failure.auth
         }
     }
@@ -219,9 +236,10 @@ final class SiriSnapshotStore {
         update()
         try persist()
     }
-    private func mutateForOwner(_ uid: String, generation: Int64? = nil, _ update: () -> Void) throws {
+    private func mutateForOwner(_ uid: String, generation: Int64? = nil,
+                                allowPendingLateRepair: Bool = false, _ update: () -> Void) throws {
         lock.lock(); defer { lock.unlock() }
-        guard accountOwnerLocked(), snapshot.ownerUid == uid,
+        guard accountOwnerLocked(allowPendingLateRepair: allowPendingLateRepair), snapshot.ownerUid == uid,
               generation.map(generationMatchesLocked) ?? true,
               transitionGeneration == nil,
               (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty else {
@@ -452,14 +470,19 @@ final class SiriSnapshotStore {
     /// across launches, and the caller refills only from a fresh owner traversal.
     func repairOwnerIndex(uid: String) async throws {
         try await serialized {
-            try requireValidOwner(uid)
-            try SiriLateRepairLedger.mark(uid, defaults: defaults, key: pendingLateRepairOwnersKey)
-            try mutateForOwner(uid) {
-                snapshot.conversations.removeAll()
-                snapshot.memories.removeAll()
-                snapshot.tasks.removeAll()
-            }
-            _ = try await retryPendingLateRepairs()
+            try requireValidOwner(uid, allowPendingLateRepair: true)
+            try await SiriLateRepairLedger.repair(uid, defaults: defaults, key: pendingLateRepairOwnersKey,
+                                                  clearSnapshot: {
+                // Only this owner may bypass its own marker. All other account,
+                // generation, and sign-out fences remain in force under the lock.
+                try mutateForOwner(uid, allowPendingLateRepair: true) {
+                    snapshot.conversations.removeAll()
+                    snapshot.memories.removeAll()
+                    snapshot.tasks.removeAll()
+                }
+            }, delete: { markedUid in
+                try await removeIndex(owners: [markedUid])
+            })
         }
     }
     private func repairAfterLateSpotlightCall(uid: String) async {
