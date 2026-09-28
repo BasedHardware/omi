@@ -464,6 +464,13 @@ through `terminate_live_stt_session`, preserving their bounded failure phase;
 other attempts that end before delivery are classified during teardown as
 `failure` or `cancelled`.
 
+Inbound codec decode failures drop that WebSocket frame and leave the session
+open. `omi_listen_audio_decode_failures_total{codec,client_platform}` counts
+each dropped frame with bounded labels. The receiver writes the first failure
+with payload byte count, declared codec, sample rate, bounded source and platform, then one
+`listen_audio_decode_streak_exceeded` event after 50 consecutive failures;
+neither log includes audio bytes or transcript text.
+
 These metrics use only the closed `provider`, client `platform`, deployment
 environment, outcome, and phase labels. They do not include transcript content,
 user IDs, model revisions, or other high-cardinality request data. Custom-STT

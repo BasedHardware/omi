@@ -39,6 +39,7 @@ else:
 
 from fastapi.websockets import WebSocketDisconnect
 
+from models.conversation_enums import ConversationSource
 from models.conversation_photo import ConversationPhoto
 from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent
 from models.transcript_segment import SpeakerIdentityStatus
@@ -106,6 +107,7 @@ from utils.metrics import (
     OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL,
     OMI_AUDIO_TIMELINE_REJECTS_TOTAL,
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
+    OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL,
     audio_timeline_provider_label,
     audio_timeline_past_send_bucket,
     audio_timeline_send_path_label,
@@ -208,6 +210,7 @@ class ListenReceiver:
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
         self.decode_failure_streak = 0
+        self.decode_failure_logged = False
         self.decode_stream_reported = False
         self._unknown_prefix_streak = 0
         self.speaker_provider_epoch = SpeakerProviderEpoch()
@@ -688,25 +691,51 @@ class ListenReceiver:
         """Report an undecodable audio frame with enough detail to act on it.
 
         Dropping the frame keeps the socket alive, so an undecodable stream is a fail-open
-        branch: the user records a whole session and gets no transcript, no ring buffer, and
-        no mixed audio, while the only trace is one `type=OpusError` line per frame. That name
-        cannot tell a corrupt client stream from a decoder the receiver sized wrong (#10701),
-        so carry the codec's own message and the payload size, and once the streak proves the
-        entire stream is failing, report it as the silent mic it is.
+        branch. Count every rejected frame, but log only the first failure and one event when
+        the streak proves the whole stream is failing.
         """
         self.decode_failure_streak += 1
-        logger.warning(
-            'Listen audio frame decode failed codec=%s channel=%s type=%s bytes=%s streak=%s detail=%s',
-            codec,
-            channel,
-            type(error).__name__,
-            payload_len,
-            self.decode_failure_streak,
-            sanitize(error)[:120],
+        declared_codec = getattr(self.host, 'declared_codec', codec)
+        codec_label = declared_codec if declared_codec in {'opus', 'opus_fs320', 'aac', 'lc3', 'pcm8'} else 'other'
+        platform = (self._telemetry_platform() or '').strip().lower()
+        platform_label = (
+            platform
+            if platform in {'android', 'desktop', 'ios', 'linux', 'macos', 'mobile', 'web', 'windows'}
+            else 'unknown'
         )
+        source = getattr(self.host.request, 'source', None)
+        try:
+            source_label = ConversationSource(source).value if source else 'unknown'
+        except ValueError:
+            source_label = 'unknown'
+        OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL.labels(codec=codec_label, client_platform=platform_label).inc()
+        if not self.decode_failure_logged:
+            self.decode_failure_logged = True
+            logger.warning(
+                'Listen audio frame decode failed event=listen_audio_decode_failed codec=%s '
+                'transcription_source=%s client_platform=%s sample_rate=%s channel=%s '
+                'type=%s bytes=%s streak=%s detail=%s',
+                codec_label,
+                source_label,
+                platform_label,
+                getattr(self.host.request, 'sample_rate', 'unknown'),
+                channel,
+                type(error).__name__,
+                payload_len,
+                self.decode_failure_streak,
+                sanitize(error)[:120],
+            )
         if self.decode_stream_reported or self.decode_failure_streak < DECODE_FAILURE_STREAK_ALERT:
             return
         self.decode_stream_reported = True
+        logger.warning(
+            'Listen audio decode streak exceeded event=listen_audio_decode_streak_exceeded '
+            'codec=%s transcription_source=%s client_platform=%s failures=%s',
+            codec_label,
+            source_label,
+            platform_label,
+            self.decode_failure_streak,
+        )
         record_fallback(
             component='silent_mic',
             from_mode=codec,
