@@ -537,12 +537,11 @@ def send_notification_via_integration(
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
-    # Verify if the app exists
+    # Verify if the app exists; a malformed stored app is treated as missing, not a 500.
     app_data = cast(Optional[Dict[str, Any]], apps_utils.get_available_app_by_id(app_id, uid))  # type: ignore[reportUnknownMemberType]  # utils.apps.get_available_app_by_id returns bare dict
-    if not app_data:
+    app = App.deserialize_safe(app_data)
+    if not app:
         raise HTTPException(status_code=404, detail='App not found')
-
-    app = App(**app_data)
 
     # Check if user has app installed
     user_enabled = set(get_enabled_apps(uid))
