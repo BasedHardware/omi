@@ -59,6 +59,12 @@ flowchart TD
     Stream --> |with citations| Q
 ```
 
+## Desktop message persistence
+
+`POST /v2/desktop/messages` persists completed desktop chat messages; it does not generate or stream replies. For a new message, `database/chat.py::save_message` commits the message and the existing session's `message_count`, `preview` (first 100 characters), and `updated_at` together in one Firestore transaction. A missing session is not recreated. Explicit transaction contention is retried with a bounded budget and fresh transactions; unrelated or ambiguous provider errors remain errors.
+
+Clients should keep the same `client_message_id` when retrying. A matching replay returns the stored message without incrementing the session again; changed payloads conflict, while higher journal revisions retain their existing enrichment behavior. Without a client ID, a retry after a lost acknowledgment can still create a second message. This boundary prevents new partial saves; it does not repair historical session counts or make session acquisition and quota recording part of the message transaction.
+
 ## The Three Routing Paths
 
 <Tabs>
