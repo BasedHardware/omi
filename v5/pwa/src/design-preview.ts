@@ -5,6 +5,7 @@ import { AppRegistry, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { DesktopOnboarding } from "../../react-native/src/desktop/DesktopOnboarding";
 import { DesktopApp } from "../../react-native/src/desktop/DesktopApp";
+import { DesktopThemeProvider } from "../../react-native/src/desktop/DesktopTheme";
 import { Onboarding } from "../../react-native/src/ui/Onboarding";
 import { ConversationsPage } from "../../react-native/src/pages/Conversations";
 import { SettingsPage } from "../../react-native/src/pages/Settings";
@@ -326,6 +327,13 @@ function Preview() {
     onTaskEdit: (id: string, title: string) =>
       updateTask(id, (task) => ({ ...task, title, searchableText: title })),
   };
+  const onboardingProps = {
+    onSignIn: () => setSignedIn(true),
+    signingIn: false,
+    setupRequired: signedIn,
+    onCompleteSetup: () => setComplete(true),
+    onSignOut: () => setSignedIn(false),
+  };
   const desktop =
     surface === "desktop" || (complete && !surface.startsWith("mobile"));
   useEffect(() => {
@@ -556,12 +564,14 @@ function Preview() {
               onViewTasks: () => setRoute("tasks"),
               onViewConversations: () => setRoute("chat"),
             })
-          : h(surface === "mobile-setup" ? Onboarding : DesktopOnboarding, {
-              onSignIn: () => setSignedIn(true),
-              signingIn: false,
-              setupRequired: signedIn,
-              onCompleteSetup: () => setComplete(true),
-              onSignOut: () => setSignedIn(false),
+          : surface === "mobile-setup"
+          ? h(Onboarding, onboardingProps)
+          : // The app mounts desktop onboarding inside DesktopThemeProvider
+            // (AppOrchestrator and DesktopApp's signed-out gate), so the
+            // preview does too: light glass gets dark ink.
+            h(DesktopThemeProvider, {
+              initialName: appearance,
+              children: h(DesktopOnboarding, onboardingProps),
             })
       )
     )

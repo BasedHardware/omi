@@ -54,6 +54,8 @@ import {useDesktopTheme, useDesktopStyleSheets} from './DesktopTheme';
 import type {DesktopTokens} from './tokens';
 import {FocusPressable} from '../ui/Pressable';
 import {MaterialIcon} from '../ui/MaterialIcon';
+import {useOmiStyles} from '../design/OmiTheme';
+import type {OmiTheme} from '../design/tokens';
 
 export type {DesktopSession};
 
@@ -370,7 +372,6 @@ export function DesktopApp({
   // empty window (traffic-light spacer only) and a signed-out Mac sees the
   // same Welcome as every other surface — never nav pills, an omnibar, Home
   // cards, Settings, or empty-state lists.
-  const overlayStyles = useDesktopStyleSheets(createOverlayStyles);
   if (hostMode && session !== 'ready') {
     return null;
   }
@@ -571,33 +572,23 @@ export function DesktopApp({
             )}
           </ShippingStage>
           {chatOpen ? (
-            <View
-              accessibilityLabel="Chat overlay"
-              style={overlayStyles.chatOverlay}>
-              <FocusPressable
-                accessibilityLabel="Close chat"
-                accessibilityRole="button"
-                onPress={closeChat}
-                style={overlayStyles.chatScrim}
+            <ChatOverlay onClose={closeChat}>
+              <DesktopChat
+                submission={chatSubmission}
+                messages={messages}
+                busy={chatBusy || activeGenerationId !== null}
+                onSuggest={prompt => {
+                  setMode('Ask');
+                  onDraftChange(prompt);
+                  omnibarRef.current?.focus();
+                }}
+                error={chatNotice}
+                hasOlder={hasOlderChat}
+                loadingOlder={loadingOlderChat}
+                loadingHistory={loadingHistory}
+                onLoadOlder={onLoadOlderChat}
               />
-              <View style={overlayStyles.chatPanel}>
-                <DesktopChat
-                  submission={chatSubmission}
-                  messages={messages}
-                  busy={chatBusy || activeGenerationId !== null}
-                  onSuggest={prompt => {
-                    setMode('Ask');
-                    onDraftChange(prompt);
-                    omnibarRef.current?.focus();
-                  }}
-                  error={chatNotice}
-                  hasOlder={hasOlderChat}
-                  loadingOlder={loadingOlderChat}
-                  loadingHistory={loadingHistory}
-                  onLoadOlder={onLoadOlderChat}
-                />
-              </View>
-            </View>
+            </ChatOverlay>
           ) : null}
         </View>
         {postSetupHomeCue === 'proven' &&
@@ -783,30 +774,50 @@ const styles = StyleSheet.create({
   stage: {flex: 1},
 });
 
-const createOverlayStyles = (token: DesktopTokens) =>
-  StyleSheet.create({
-    chatOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      zIndex: 20,
-    },
-    chatScrim: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor:
-        token.color.ink === '#F2F4EF'
-          ? 'rgba(0, 0, 0, 0.35)'
-          : 'rgba(29, 31, 27, 0.24)',
-    },
-    chatPanel: {
-      alignSelf: 'center',
-      backgroundColor: token.color.dark,
-      borderColor: token.color.lineStrong,
-      borderRadius: 18,
-      borderWidth: 1,
-      flex: 1,
-      marginVertical: 4,
-      maxHeight: 720,
-      maxWidth: 780,
-      overflow: 'hidden',
-      width: '100%',
-    },
-  });
+// The chat overlay renders inside DesktopThemeProvider (DesktopApp itself
+// mounts the provider), so its surface and scrim follow the appearance: a
+// light surface with dark ink in light, the dark surface in dark.
+function ChatOverlay({
+  children,
+  onClose,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  const overlayStyles = useOmiStyles(createOverlayStyles);
+  return (
+    <View accessibilityLabel="Chat overlay" style={overlayStyles.chatOverlay}>
+      <FocusPressable
+        accessibilityLabel="Close chat"
+        accessibilityRole="button"
+        onPress={onClose}
+        style={overlayStyles.chatScrim}
+      />
+      <View style={overlayStyles.chatPanel}>{children}</View>
+    </View>
+  );
+}
+
+const createOverlayStyles = (t: OmiTheme) => ({
+  chatOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+  },
+  chatScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: t.color.scrim,
+  },
+  chatPanel: {
+    alignSelf: 'center' as const,
+    backgroundColor: t.color.surface,
+    borderColor: t.color.separator,
+    borderRadius: t.radius.card,
+    borderWidth: 1,
+    flex: 1,
+    marginVertical: t.space.xs,
+    maxHeight: 720,
+    maxWidth: t.layout.chatColumn + 2 * t.space.page,
+    overflow: 'hidden' as const,
+    width: '100%' as const,
+  },
+});
