@@ -445,27 +445,49 @@ export function UnifiedTimeline({
   };
   const renderEntry = (entry: TimelineEntry): React.ReactNode => {
     const meta = kindMeta[entry.kind].icon;
-    const body = (
-      <View style={styles.row}>
-        <View style={styles.rowIcon}>
-          <MaterialIcon name={meta} size={16} color={token.color.inkMuted} />
-        </View>
-        <View style={styles.rowBody}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
-            {entry.title}
-          </Text>
-          {entry.detail.trim() !== '' ? (
-            <Text style={styles.rowDetail} numberOfLines={2}>
-              {entry.detail}
+    // Memories are single-voice like the mobile app's memory cards: the
+    // sentence is the row (title and summary carry the same text from both
+    // backends), so no boxed icon and no duplicated second text line.
+    const body =
+      entry.kind === 'memory' ? (
+        <View style={styles.memoryRow}>
+          <MaterialIcon
+            name={meta}
+            size={13}
+            color={token.color.inkMuted}
+            style={styles.memoryLeadingIcon}
+          />
+          <View style={styles.rowBody}>
+            <Text style={styles.memoryText} numberOfLines={3}>
+              {entry.title.trim() !== '' ? entry.title : 'Memory'}
             </Text>
-          ) : null}
-          <Text style={styles.rowMeta}>
-            {kindMeta[entry.kind].label}
-            {entry.atMs === 0 ? '' : ` · ${timeLabel(entry.atMs)}`}
-          </Text>
+            <Text style={styles.rowMeta}>
+              {kindMeta[entry.kind].label}
+              {entry.atMs === 0 ? '' : ` · ${timeLabel(entry.atMs)}`}
+            </Text>
+          </View>
         </View>
-      </View>
-    );
+      ) : (
+        <View style={styles.row}>
+          <View style={styles.rowIcon}>
+            <MaterialIcon name={meta} size={16} color={token.color.inkMuted} />
+          </View>
+          <View style={styles.rowBody}>
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              {entry.title}
+            </Text>
+            {entry.detail.trim() !== '' ? (
+              <Text style={styles.rowDetail} numberOfLines={2}>
+                {entry.detail}
+              </Text>
+            ) : null}
+            <Text style={styles.rowMeta}>
+              {kindMeta[entry.kind].label}
+              {entry.atMs === 0 ? '' : ` · ${timeLabel(entry.atMs)}`}
+            </Text>
+          </View>
+        </View>
+      );
     return (
       <View key={entry.id}>
         {onOpenEntry ? (
@@ -606,6 +628,20 @@ const createStyles = (token: DesktopTokens) =>
       backgroundColor: token.color.glassQuiet,
     },
     rowBody: {flex: 1, minWidth: 0},
+    memoryRow: {
+      alignItems: 'flex-start',
+      flexDirection: 'row',
+      gap: 8,
+      paddingVertical: 10,
+    },
+    memoryLeadingIcon: {marginTop: 3},
+    memoryText: {
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: 14,
+      fontWeight: '400',
+      lineHeight: 20,
+    },
     rowTitle: {
       color: token.color.ink,
       fontFamily: token.font,
