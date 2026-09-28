@@ -25,6 +25,7 @@ STT_STREAM_CLOSE_REASONS = frozenset(
         'soniox_invalid_hint',
         'modulate_serve_error',
         'connection_lost',
+        'provider_5xx',
     }
 )
 

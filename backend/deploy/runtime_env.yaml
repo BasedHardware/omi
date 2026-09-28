@@ -85,6 +85,9 @@ environments:
           STT_CONNECT_ORDER_FROM_CONFIG:
             value: 'true'
             category: rollout
+          STT_RESILIENT_RECONNECT:
+            value: 'false'
+            category: rollout
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
             category: rollout
@@ -1772,6 +1775,9 @@ environments:
             category: runtime_identity
           STT_CONNECT_ORDER_FROM_CONFIG:
             value: 'true'
+            category: rollout
+          STT_RESILIENT_RECONNECT:
+            value: 'false'
             category: rollout
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'

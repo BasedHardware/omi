@@ -52,7 +52,9 @@ class LiveChainSession:
     def to_json_log(self) -> dict[str, Any]:
         return {'event': 'managed_live_vad_metrics', **self.get_metrics()}
 
-    async def connect(self, sample_rate: int, epoch: Any = None) -> STTSocket:
+    async def connect(
+        self, sample_rate: int, epoch: Any = None, *, same_provider: bool = False, replay_start_sample: int = 0
+    ) -> STTSocket:
         host = self.receiver.host
         language = host.stt_language
         uid = host.request.uid
@@ -93,7 +95,7 @@ class LiveChainSession:
                 outcome='degraded',
             )
         generation = self.generation + 1
-        offset = self.audio_seconds
+        offset = replay_start_sample / sample_rate if same_provider else self.audio_seconds
 
         def build_gate(is_window: bool) -> VADStreamingGate | None:
             if is_window:
@@ -250,22 +252,28 @@ class LiveChainSession:
             st.STTService.deepgram: (lambda: build(st.STTService.deepgram)) if dg_model else None,
         }
         primary = callbacks.get(host.stt_service)
-        if primary is None:
+        primary_missing = primary is None
+        if primary_missing:
 
             async def unavailable() -> STTSocket:
                 raise st.ParakeetConnectionError('config_incomplete')
 
             primary = unavailable
-        socket, actual = await st.connect_stt_socket_with_fallback(
-            primary_service=host.stt_service,
-            connect_primary=primary,
-            connect_parakeet=callbacks[st.STTService.parakeet],
-            connect_soniox=callbacks[st.STTService.soniox],
-            connect_modulate=callbacks[st.STTService.modulate],
-            connect_deepgram=callbacks[st.STTService.deepgram],
-            failed=self.receiver._stt_failed_providers,
-            use_config=True,
-        )
+        if same_provider:
+            if primary_missing:
+                raise st.ParakeetConnectionError('config_incomplete')
+            socket, actual = await primary(), host.stt_service
+        else:
+            socket, actual = await st.connect_stt_socket_with_fallback(
+                primary_service=host.stt_service,
+                connect_primary=primary,
+                connect_parakeet=callbacks[st.STTService.parakeet],
+                connect_soniox=callbacks[st.STTService.soniox],
+                connect_modulate=callbacks[st.STTService.modulate],
+                connect_deepgram=callbacks[st.STTService.deepgram],
+                failed=self.receiver._stt_failed_providers,
+                use_config=True,
+            )
         host.stt_service = actual
         host.stt_model = {
             st.STTService.parakeet: 'parakeet-window' if window else 'parakeet',
@@ -299,6 +307,7 @@ class LiveLegSocket(STTSocket):
         self._send_tracker = send_tracker
         self._dead = False
         self._seconds = 0.0
+        self._replaying = False
         self._pending_selection: PendingLiveFailover | None = None
         self._ingest_gain: SessionPcmGain | None = None
         if window:
@@ -402,17 +411,25 @@ class LiveLegSocket(STTSocket):
             self._send_tracker.note_accepted_spans(sent_spans)
         duration = len(data) / (self.sample_rate * 2)
         self._seconds += duration
-        self.session.audio_seconds += duration
         speech_ms = self.gate.consume_speech_ms_delta() if self.gate is not None else 0
-        self.session.speech_ms += speech_ms
-        self.session.total_speech_ms += speech_ms
-        if speech_ms:
+        if not self._replaying:
+            self.session.audio_seconds += duration
+            self.session.speech_ms += speech_ms
+            self.session.total_speech_ms += speech_ms
+        if speech_ms and not self._replaying:
             record_live_stt_audio_seconds(
                 provider=self.service.value,
                 platform=self.session.receiver._telemetry_platform(),
                 seconds=speech_ms / 1000,
             )
         return True
+
+    def replay_send(self, data: bytes, start_sample: int) -> bool:
+        self._replaying = True
+        try:
+            return self.send(data, start_sample=start_sample)
+        finally:
+            self._replaying = False
 
     def finalize(self) -> None:
         self.raw.finalize()
