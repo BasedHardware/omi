@@ -79,7 +79,7 @@ export const scenarios: AuditScenario[] = [
     viewport: desktop,
     appearances: both,
   },
-  ...["long", "streaming", "stopped", "failed"].map(
+  ...["long", "streaming", "stopped", "failed", "history-error"].map(
     (state): AuditScenario => ({
       id: `desktop-chat-${state}`,
       title: `Chat destination, ${state}`,
@@ -241,11 +241,13 @@ export const scenarios: AuditScenario[] = [
       "Ask Omi with a send error",
       "data=example&chat=error",
     ],
-    ...["long", "streaming", "stopped", "failed"].map((state) => [
-      `mobile-ask-${state}`,
-      `Ask Omi, ${state}`,
-      `data=example&chat=${state}`,
-    ]),
+    ...["long", "streaming", "stopped", "failed", "history-error"].map(
+      (state) => [
+        `mobile-ask-${state}`,
+        `Ask Omi, ${state}`,
+        `data=example&chat=${state}`,
+      ]
+    ),
     [
       "mobile-device-listening",
       "Device panel, listening",
