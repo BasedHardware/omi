@@ -3632,5 +3632,11 @@
     "appearance": "Aparência",
     "appearanceSystem": "Sistema",
     "appearanceLight": "Claro",
-    "appearanceDark": "Escuro"
+    "appearanceDark": "Escuro",
+    "chatDiscardRecording": "Descartar",
+    "voiceQuestionNoSpeech": "Não entendi — tente novamente",
+    "sendToSupport": "Enviar ao suporte",
+    "deviceDiagnosticsUploadDescription": "Revise o JSON de diagnóstico abaixo. Ele inclui o identificador do dispositivo, histórico de conexão, bateria, firmware e eventos Bluetooth. Não inclui áudio nem transcrições.",
+    "deviceDiagnosticsTicket": "Código do chamado",
+    "deviceDiagnosticsUploadFailed": "Não foi possível enviar o diagnóstico. Tente novamente."
 }

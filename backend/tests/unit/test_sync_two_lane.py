@@ -223,7 +223,9 @@ def test_deploy_contract_routes_both_backfill_budget_alerts():
     )
     assert 'provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}' in composite
     assert 'for THRESHOLD in 70 90' in action
-    assert 'gcloud monitoring policies create' in action
+    assert '.github/scripts/ensure_monitoring_metric_alert_policy.py' in action
+    assert 'reconcile_sync_backfill_alert_policy.py' in action
+    assert 'verify_sync_backfill_alert_policy.py' in action
     assert '--notification-channels="$ALERT_CHANNELS"' in action
     assert 'METRIC="sync_backfill_dispatch_abort"' in action
     assert 'The request was aborted because there was no available instance' in action
@@ -236,7 +238,7 @@ def test_sync_backfill_lifecycle_alerts_on_scheduler_failure_and_missing_sweep()
     assert 'AttemptFinished' in action
     assert 'action=sweep_summary outcome=done' in action
     assert "CONDITION='absent'" in action
-    assert "DURATION='10min'" in action
+    assert "DURATION='600s'" in action
 
 
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():

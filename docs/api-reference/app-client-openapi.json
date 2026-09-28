@@ -6106,6 +6106,243 @@
         "title": "CanonicalKnowledgeGraphResponse",
         "type": "object"
       },
+      "CaptureEvidenceLineage": {
+        "properties": {
+          "capability": {
+            "const": "stable_artifact",
+            "title": "Capability",
+            "type": "string"
+          },
+          "capture_root": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Capture Root",
+            "type": "string"
+          },
+          "clock_domain": {
+            "const": "desktop_session_ms",
+            "title": "Clock Domain",
+            "type": "string"
+          },
+          "lineage": {
+            "enum": [
+              "complete",
+              "incomplete"
+            ],
+            "title": "Lineage",
+            "type": "string"
+          },
+          "units": {
+            "items": {
+              "$ref": "#/components/schemas/CaptureEvidenceLineageUnit"
+            },
+            "maxItems": 64,
+            "title": "Units",
+            "type": "array"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "capability",
+          "capture_root",
+          "clock_domain",
+          "lineage",
+          "units"
+        ],
+        "title": "CaptureEvidenceLineage",
+        "type": "object"
+      },
+      "CaptureEvidenceLineageUnit": {
+        "properties": {
+          "end_ms": {
+            "exclusiveMinimum": 0.0,
+            "title": "End Ms",
+            "type": "integer"
+          },
+          "id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "start_ms": {
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "start_ms",
+          "end_ms"
+        ],
+        "title": "CaptureEvidenceLineageUnit",
+        "type": "object"
+      },
+      "CaptureEvidenceMetadata": {
+        "description": "Internal S1 receipt. Missing source positions are explicitly unknown.",
+        "properties": {
+          "capability": {
+            "enum": [
+              "source_position",
+              "stable_artifact",
+              "unknown"
+            ],
+            "title": "Capability",
+            "type": "string"
+          },
+          "capture_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Root"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "clock_epoch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clock Epoch"
+          },
+          "conflicts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflicts"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unknown",
+                  "incomplete",
+                  "mapped"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "receipts": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipts"
+          },
+          "runs": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runs"
+          },
+          "source_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source End"
+          },
+          "source_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Start"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "capability"
+        ],
+        "title": "CaptureEvidenceMetadata",
+        "type": "object"
+      },
       "CaptureGroup": {
         "description": "Conversations from different capture surfaces that recorded one event.\n\nServer-authored by ``database.capture_groups`` only after the captures are\nshown to share speech. ``id`` is the event identity and never changes when\n``primary_id`` (the longest capture) does. Clients present the group as one\nrow and keep every member reachable.",
         "properties": {
@@ -8403,6 +8640,17 @@
             "title": "Revision",
             "type": "integer"
           },
+          "selection_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Fingerprint"
+          },
           "strip": {
             "items": {
               "$ref": "#/components/schemas/ConversationScreenFrame"
@@ -9379,6 +9627,16 @@
       },
       "CreateConversationFromTranscriptRequest": {
         "properties": {
+          "capture_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaptureEvidenceLineage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "client_device_id": {
             "anyOf": [
               {
@@ -12262,6 +12520,33 @@
           "end"
         ],
         "title": "DeveloperTranscriptSegment",
+        "type": "object"
+      },
+      "DiagnosticsReceipt": {
+        "properties": {
+          "ticket": {
+            "title": "Ticket",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket"
+        ],
+        "title": "DiagnosticsReceipt",
+        "type": "object"
+      },
+      "DiagnosticsUpload": {
+        "properties": {
+          "bundle_base64": {
+            "maxLength": 5600000,
+            "title": "Bundle Base64",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_base64"
+        ],
+        "title": "DiagnosticsUpload",
         "type": "object"
       },
       "DismissAnnouncementRequest": {
@@ -41294,6 +41579,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BulkAssignSegmentsRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Data"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -54338,6 +54640,93 @@
         "summary": "Extract Memory Log",
         "tags": [
           "memories"
+        ]
+      }
+    },
+    "/v1/mobile/device-diagnostics": {
+      "post": {
+        "operationId": "upload_device_diagnostics_v1_mobile_device_diagnostics_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticsUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticsReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Upload Device Diagnostics",
+        "tags": [
+          "device-diagnostics"
         ]
       }
     },
@@ -69146,6 +69535,56 @@
               "description": "Target conversation ID to attach audio to (auto-sync from live capture)",
               "title": "Conversation Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Client recording session id. When conversation_id is omitted and one conversation for this user, source, and device already carries this id, attach the audio to that conversation.",
+            "in": "query",
+            "name": "recording_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client recording session id. When conversation_id is omitted and one conversation for this user, source, and device already carries this id, attach the audio to that conversation.",
+              "title": "Recording Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audio_start_seconds",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Audio Start Seconds"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audio_end_seconds",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Audio End Seconds"
             }
           },
           {

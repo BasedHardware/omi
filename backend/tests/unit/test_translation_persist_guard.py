@@ -72,3 +72,11 @@ async def test_successful_persist_still_writes_the_translation():
     persisted_segments = host.persistence.updates[0][2]
     assert persisted_segments[0]['translations'][0]['text'] == 'hola'
     assert persisted_segments[0]['translations'][0]['lang'] == 'es'
+
+
+def test_processor_forwards_existing_spoken_language_profile():
+    host = _host(_conversation(), fail_update=False)
+    host.language_profile = SimpleNamespace(expected=('pt', 'en'))
+    processor = TranscriptProcessor(host)
+    assert processor.translation_coordinator.expected_languages == ('pt', 'en')
+    assert processor.translation_coordinator.target_language == 'es'

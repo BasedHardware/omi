@@ -134,10 +134,16 @@ async def auto_sync_action_items_batch(uid: str, action_items: List[Dict[str, An
             result = await _sync_to_apple_reminders(uid, action_items)
             return [result] * len(action_items)
 
-        # Cloud services: sync individually
+        # Cloud services: sync individually. Each item's outcome is isolated so a
+        # transient failure on one item (e.g. an OAuth preflight error) does not
+        # erase earlier successful exports or skip the remaining items.
         results: List[Dict[str, Any]] = []
         for item in action_items:
-            result = await _sync_to_cloud_service(uid, default_app, integration, item)
+            try:
+                result = await _sync_to_cloud_service(uid, default_app, integration, item)
+            except Exception as e:
+                logger.error(f"Auto-sync failed for item {item.get('id')} for user {uid}: {e}")
+                result = {"synced": False, "platform": default_app, "error": str(e)}
             results.append(result)
         return results
 

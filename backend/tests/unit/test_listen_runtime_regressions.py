@@ -887,6 +887,19 @@ async def test_teardown_with_empty_profiles_and_no_tasks_does_not_wait_on_speake
     assert not host.state.speaker_id_done.is_set()
 
 
+def test_phone_call_processor_preserves_realtime_interpreter_admission():
+    host = SimpleNamespace(
+        limits=SimpleNamespace(max_segment_buffer_size=8, max_photo_buffer_size=8),
+        translation_language='en',
+        language_profile=SimpleNamespace(expected=('en',)),
+        request=SimpleNamespace(source='phone_call'),
+    )
+    coordinator = TranscriptProcessor(host).translation_coordinator
+    assert coordinator is not None
+    assert coordinator.expected_languages == ('en',)
+    assert coordinator.realtime_interpreter
+
+
 class _ProductTelemetryClient:
     def __init__(self):
         self.events = []

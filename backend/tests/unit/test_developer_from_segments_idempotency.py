@@ -214,7 +214,7 @@ def _eligible_meeting_request(**overrides):
                 'speaker': 'SPEAKER_00',
                 'is_user': True,
                 'start': 0.0,
-                'end': 60.0,
+                'end': 300.0,
             }
         ],
         'started_at': NOW,
@@ -467,7 +467,10 @@ def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
                 'discarded': False,
                 'started_at': NOW,
                 'finished_at': NOW + timedelta(minutes=5),
-                'transcript_segments': [{'text': 'substantive meeting discussion', 'start': 0.0, 'end': 60.0}],
+                'transcript_segments': [
+                    {'text': 'opening discussion', 'start': 0.0, 'end': 30.0},
+                    {'text': 'closing discussion', 'start': 270.0, 'end': 300.0},
+                ],
                 'structured': {'title': 'Design review'},
                 'external_data': {'conversation_role': 'meeting'},
             }
@@ -854,3 +857,50 @@ def test_failed_creation_does_not_record_product_metric(monkeypatch):
     with pytest.raises(RuntimeError, match='processing failed'):
         developer._create_conversation_from_segments('uid1', _request())
     record.assert_not_called()
+
+
+def test_s1_lineage_piggybacks_on_existing_from_segments_claim_and_flag_off_is_identical(monkeypatch):
+    claim = MagicMock(return_value=True)
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+
+    def _process(_uid, _language, conversation):
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    monkeypatch.setattr(developer, 'process_conversation', _process)
+    lineage = {
+        'version': 1,
+        'capability': 'stable_artifact',
+        'capture_root': 'local-session-1',
+        'clock_domain': 'desktop_session_ms',
+        'lineage': 'complete',
+        'units': [{'id': '42', 'start_ms': 0, 'end_ms': 1500}],
+    }
+    request = _request(client_session_id='local-session-1', capture_evidence=lineage)
+    monkeypatch.delenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', raising=False)
+    developer._create_conversation_from_segments('uid1', request)
+    assert 'capture_evidence' not in claim.call_args.args[1]['external_data']
+
+    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', '1')
+    developer._create_conversation_from_segments('uid1', request)
+    assert claim.call_args.args[1]['external_data']['capture_evidence'] == lineage
+    assert claim.call_count == 2  # no new Firestore claim/write operation
+
+    mismatched = _request(client_session_id='local-session-1', capture_evidence={**lineage, 'capture_root': 'foreign'})
+    developer._create_conversation_from_segments('uid1', mismatched)
+    assert claim.call_args.args[1]['external_data']['capture_evidence']['capability'] == 'unknown'
+    assert claim.call_args.args[1]['external_data']['capture_evidence']['reason'] == 'ineligible'
+
+    oversized = _request(
+        client_session_id='local-session-1',
+        capture_evidence={
+            **lineage,
+            'units': [
+                {'id': f'{index:02d}-' + 'x' * 50, 'start_ms': index, 'end_ms': index + 1} for index in range(64)
+            ],
+        },
+    )
+    developer._create_conversation_from_segments('uid1', oversized)
+    assert claim.call_args.args[1]['external_data']['capture_evidence']['reason'] == 'overflow'

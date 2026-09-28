@@ -11413,4 +11413,23 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get appearanceDark => 'गडद';
+
+  @override
+  String get chatDiscardRecording => 'टाकून द्या';
+
+  @override
+  String get voiceQuestionNoSpeech => 'ऐकू आले नाही — पुन्हा प्रयत्न करा';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
 }
