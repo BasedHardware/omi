@@ -115,6 +115,12 @@ environments:
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
             value: '24'
             category: rollout
+          PARAKEET_BATCH_PRESSURE_POOL_HOST:
+            value: dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local
+            category: service_discovery
+          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+            value: '1'
+            category: rollout
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
             value: '1800'
             category: rollout
@@ -1808,6 +1814,12 @@ environments:
             category: rollout
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
             value: '24'
+            category: rollout
+          PARAKEET_BATCH_PRESSURE_POOL_HOST:
+            value: prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local
+            category: service_discovery
+          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+            value: '2'
             category: rollout
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
             value: '1800'

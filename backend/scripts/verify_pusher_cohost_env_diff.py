@@ -56,6 +56,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
+            "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             "PARAKEET_WINDOW_MAX_SESSIONS",
@@ -139,6 +141,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "prod": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
+            "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             "PARAKEET_WINDOW_MAX_SESSIONS",

@@ -1214,6 +1214,7 @@ def test_window_canary_batch_protection_pages_telegram_before_sync_degrades():
             rule = rules[uid]
             assert metric in ' '.join(d['model'].get('expr', '') for d in rule['data'])
             assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
+            assert rule['noDataState'] == 'Alerting'
             assert rule['isPaused'] is False
             assert 'Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0' in rule['annotations']['summary']
             assert rule['for'] == '2m'

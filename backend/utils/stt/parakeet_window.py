@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import math
 import os
+import socket
 import threading
 import time
 from collections import deque
@@ -235,30 +236,51 @@ class BatchPressure:
         self._observed_at = 0.0
         self._busy = False
 
-    def allows(self, base_url: str) -> bool:
+    def allows(self, pool_host: str, min_replicas: int) -> bool:
+        if not pool_host or min_replicas < 1:
+            return False
         now = time.monotonic()
         if now >= self._next_refresh and (self._task is None or self._task.done()):
             self._next_refresh = now + self.REFRESH_SECONDS
-            self._task = asyncio.get_running_loop().create_task(self._refresh(base_url))
-        # Missing or stale telemetry keeps the existing per-process cap as the
-        # upper bound. A fresh pressure sample stands live window admission down.
-        return not (now - self._observed_at <= self.STALE_SECONDS and self._busy)
+            self._task = asyncio.get_running_loop().create_task(self._refresh(pool_host, min_replicas))
+        # Every listen process stands down when pool telemetry is missing/stale.
+        return self._observed_at > 0 and now - self._observed_at <= self.STALE_SECONDS and not self._busy
 
-    async def _refresh(self, base_url: str) -> None:
+    async def _refresh(self, pool_host: str, min_replicas: int) -> None:
         try:
-            async with httpx.AsyncClient(timeout=1.0) as client:
-                response = await client.get(base_url.rstrip('/') + '/batch/metrics')
-            response.raise_for_status()
-            metrics = response.json()
-            pending = metrics['pending_requests']
-            oldest = metrics['oldest_pending_seconds']
-            if not isinstance(pending, (int, float)) or not isinstance(oldest, (int, float)):
-                return
-            self._busy = pending >= self.MAX_PENDING or oldest >= self.MAX_OLDEST_SECONDS
+            if not pool_host or min_replicas < 1:
+                raise ValueError('Parakeet batch pool discovery is not configured')
+            addresses = await asyncio.wait_for(
+                asyncio.get_running_loop().getaddrinfo(pool_host, 8080, family=socket.AF_INET, type=socket.SOCK_STREAM),
+                timeout=1.0,
+            )
+            ips = {address[4][0] for address in addresses}
+            if len(ips) < min_replicas:
+                raise ValueError('Parakeet batch pool has fewer ready replicas than expected')
+            async with httpx.AsyncClient(timeout=1.0, trust_env=False) as client:
+                responses = await asyncio.gather(*(client.get(f'http://{ip}:8080/batch/metrics') for ip in ips))
+            pending_total = 0.0
+            oldest_max = 0.0
+            for response in responses:
+                response.raise_for_status()
+                metrics = response.json()
+                pending = metrics['pending_requests']
+                oldest = metrics['oldest_pending_seconds']
+                if any(
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(value)
+                    or value < 0
+                    for value in (pending, oldest)
+                ):
+                    raise ValueError('Invalid Parakeet batch pressure sample')
+                pending_total += pending
+                oldest_max = max(oldest_max, oldest)
+            self._busy = pending_total >= self.MAX_PENDING or oldest_max >= self.MAX_OLDEST_SECONDS
             self._observed_at = time.monotonic()
         except Exception:
-            # No exception may escape into socket admission.
-            return
+            # A failed replica query invalidates the fleet sample; admission stays local and nonblocking.
+            self._observed_at = 0.0
 
 
 batch_pressure = BatchPressure()
@@ -865,7 +887,14 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
 
 def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate: int) -> WindowedParakeetSocket:
-    if not batch_pressure.allows(os.environ['HOSTED_PARAKEET_API_URL']):
+    try:
+        min_replicas = int(os.getenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2'))
+    except ValueError:
+        min_replicas = 0
+    if not batch_pressure.allows(
+        os.getenv('PARAKEET_BATCH_PRESSURE_POOL_HOST', ''),
+        min_replicas,
+    ):
         WINDOW_ADMISSION.labels(outcome='batch_pressure').inc()
         raise ParakeetConnectionError('capacity_full')
     release = admission.acquire()

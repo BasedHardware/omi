@@ -29,6 +29,8 @@ def runtime(monkeypatch):
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '1')
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://tdt.invalid')
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_POOL_HOST', 'tdt-headless.invalid')
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2')
     # The scheduling tests below are written in 6 s steps (one 6 s send = one POST).
     # Pin that unit here so they test mechanics, not the shipped default, which
     # test_default_pace_waits_for_fifteen_seconds_of_speech pins on its own.
@@ -38,6 +40,7 @@ def runtime(monkeypatch):
     monkeypatch.setenv('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://embedding.invalid')
     monkeypatch.setattr(window, 'admission', window.WindowAdmission())
     monkeypatch.setattr(window, 'batch_pressure', window.BatchPressure())
+    window.batch_pressure._observed_at = window.time.monotonic()
     monkeypatch.setattr(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0)
     for provider in ('parakeet', 'modulate', 'deepgram', 'soniox'):
         monkeypatch.setattr(
@@ -87,26 +90,37 @@ async def test_batch_pressure_cache_never_waits_at_admission_and_stands_down(mon
     began = asyncio.Event()
     release = asyncio.Event()
 
-    async def refresh(_url):
+    async def refresh(_host, _replicas):
         began.set()
         await release.wait()
         pressure._busy = True
         pressure._observed_at = window.time.monotonic()
 
     monkeypatch.setattr(pressure, '_refresh', refresh)
-    assert pressure.allows('http://tdt.invalid')  # schedules a poll without waiting
+    assert not pressure.allows('tdt-headless.invalid', 2)  # schedules a poll without waiting
     await began.wait()
-    assert pressure.allows('http://tdt.invalid')  # pending poll retains the local cap
+    assert not pressure.allows('tdt-headless.invalid', 2)
     release.set()
     await pressure._task
-    assert not pressure.allows('http://tdt.invalid')
+    assert not pressure.allows('tdt-headless.invalid', 2)
     pressure._observed_at -= pressure.STALE_SECONDS + 1
-    assert pressure.allows('http://tdt.invalid')  # unavailable signal: local cap remains
+    assert not pressure.allows('tdt-headless.invalid', 2)  # stale signal: fleet stands down
 
 
 @pytest.mark.asyncio
 async def test_batch_pressure_endpoint_thresholds_and_unavailable_signal(monkeypatch):
     pressure = window.BatchPressure()
+    loop = asyncio.get_running_loop()
+    ips = ['10.0.0.1', '10.0.0.2']
+    monkeypatch.setattr(
+        loop,
+        'getaddrinfo',
+        AsyncMock(side_effect=lambda *_args, **_kwargs: [(None, None, None, None, (ip, 8080)) for ip in ips]),
+    )
+    payloads = {
+        '10.0.0.1': {'pending_requests': 2, 'oldest_pending_seconds': 0},
+        '10.0.0.2': {'pending_requests': 2, 'oldest_pending_seconds': 0},
+    }
 
     class Response:
         def __init__(self, payload):
@@ -128,14 +142,24 @@ async def test_batch_pressure_endpoint_thresholds_and_unavailable_signal(monkeyp
         async def __aexit__(self, *args):
             return None
 
-        async def get(self, _url):
-            return Response({'pending_requests': 4, 'oldest_pending_seconds': 0})
+        async def get(self, url):
+            return Response(payloads[url.split('/')[2].split(':')[0]])
 
     monkeypatch.setattr(window.httpx, 'AsyncClient', ClientContext)
-    await pressure._refresh('http://tdt.invalid')
-    assert not pressure.allows('http://tdt.invalid')
+    await pressure._refresh('tdt-headless.invalid', 2)
+    assert not pressure.allows('tdt-headless.invalid', 2)  # 2 + 2 trips pool cutoff
+    payloads['10.0.0.2']['pending_requests'] = 0
+    await pressure._refresh('tdt-headless.invalid', 2)
+    assert pressure.allows('tdt-headless.invalid', 2)
+    payloads['10.0.0.2']['oldest_pending_seconds'] = 1
+    await pressure._refresh('tdt-headless.invalid', 2)
+    assert not pressure.allows('tdt-headless.invalid', 2)
+    payloads['10.0.0.2']['oldest_pending_seconds'] = 0
+    ips.pop()
+    await pressure._refresh('tdt-headless.invalid', 2)
+    assert not pressure.allows('tdt-headless.invalid', 2)  # incomplete DNS set
     pressure._observed_at -= pressure.STALE_SECONDS + 1
-    assert pressure.allows('http://tdt.invalid')
+    assert not pressure.allows('tdt-headless.invalid', 2)
     await pressure._task
 
 
@@ -707,6 +731,7 @@ async def _release_after_audio(sock, client: HoldClient, during_seconds: int) ->
 @pytest.mark.asyncio
 async def test_repeated_slow_posts_stay_up(monkeypatch):
     monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    monkeypatch.setattr(window.batch_pressure, 'allows', lambda *_: True)
     for _ in range(5):
         client = HoldClient()
         monkeypatch.setattr(window, 'get_stt_client', lambda current=client: current)

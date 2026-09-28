@@ -13891,7 +13891,7 @@
       }
     ],
     "updated": "2026-09-21T00:00:00Z",
-    "noDataState": "OK",
+    "noDataState": "Alerting",
     "execErrState": "Error",
     "for": "2m",
     "keep_firing_for": "0s",
@@ -14031,7 +14031,7 @@
       }
     ],
     "updated": "2026-09-21T00:00:00Z",
-    "noDataState": "OK",
+    "noDataState": "Alerting",
     "execErrState": "Error",
     "for": "2m",
     "keep_firing_for": "0s",
@@ -14171,7 +14171,7 @@
       }
     ],
     "updated": "2026-09-21T00:00:00Z",
-    "noDataState": "OK",
+    "noDataState": "Alerting",
     "execErrState": "Error",
     "for": "2m",
     "keep_firing_for": "0s",

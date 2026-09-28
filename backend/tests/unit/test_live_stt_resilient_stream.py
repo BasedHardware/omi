@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from config.stt_provider_policy import provider_for_service
 from routers.listen.receiver import ListenReceiver
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.stt.resilient_stream import ResilientAudio
@@ -148,6 +149,81 @@ async def test_failed_window_replays_only_untranscribed_audio_once(monkeypatch, 
     assert ring.snapshot() == ()
     assert old.finished
     assert listener.host.stt_service == st.STTService.soniox
+
+
+@pytest.mark.asyncio
+async def test_two_partial_replay_failures_preserve_tail_and_new_audio(monkeypatch):
+    listener = receiver(monkeypatch, enabled=False)
+    listener.host.stt_service = STTService.parakeet
+    listener.host.stt_model = 'parakeet-window'
+    listener.host.language = listener.host.stt_language = 'en'
+    listener.host.language_profile = None
+    listener.host.multi_lang_enabled = False
+    listener.host.request.uid = 'user'
+    listener.host.client_device_context.platform = 'ios'
+    ring = listener._window_replay_audio
+    assert ring is not None
+    for index, letter in enumerate('ABCD'):
+        data = (letter.encode() + b'\x00') * 2
+        listener.capture_timeline.accept(data, arrival_wall=10 + index, arrival_monotonic=1 + index)
+        ring.append(data, index * 2)
+    ring.finalize_through(2)  # A has already produced text.
+    old = Socket(dead=True, reason='provider_5xx')
+    listener.stt_socket = old
+    epochs = []
+
+    def rebuild():
+        epoch = ProviderEpochTranslator(listener.capture_timeline, 2, project_times=False)
+        epochs.append(epoch)
+        return lambda _: None, lambda _: None, epoch
+
+    listener._stt_rebuild = (rebuild, 2)
+    listener._wrap_legacy_stt_socket = lambda raw, epoch: raw
+    listener._record_selected_epoch = lambda epoch, socket: None
+    monkeypatch.setattr('routers.listen.receiver.managed_chain_enabled', lambda host: True)
+    providers = (STTService.modulate, STTService.soniox, STTService.deepgram)
+    monkeypatch.setattr(
+        'routers.listen.receiver.get_stt_service_for_language',
+        lambda *args, **kwargs: next(
+            (service, 'en', service.value)
+            for service in providers
+            if provider_for_service(service) not in kwargs['exclude']
+        ),
+    )
+    sockets = []
+
+    async def create(*args, epoch, **kwargs):
+        rejected = (4, 6, None)[len(sockets)]
+
+        class ReplaySocket(Socket):
+            def replay_send(self, data, start):
+                if start == rejected:
+                    if len(sockets) == 1:
+                        new_audio = b'E\x00' * 2
+                        listener.capture_timeline.accept(new_audio, arrival_wall=14, arrival_monotonic=5)
+                        ring.append(new_audio, 8)  # Arrives after the first replay snapshot.
+                    return False
+                epoch.note_accepted(start, len(data) // 2)
+                return self.send(data, start_sample=start)
+
+        raw = ReplaySocket()
+        sockets.append(raw)
+        return raw
+
+    listener._create_stt_socket = create
+    with patch('routers.listen.receiver.fallback_socket_is_serving', new=AsyncMock(return_value=True)):
+        assert await listener._failover_stt_socket()
+    assert [socket.sent for socket in sockets] == [
+        [(2, b'B\x00' * 2)],
+        [(4, b'C\x00' * 2)],
+        [(6, b'D\x00' * 2), (8, b'E\x00' * 2)],
+    ]
+    assert sockets[0].finished and sockets[1].finished and old.finished
+    translated = epochs[-1].translate([{'text': 'D', 'start': 0.0, 'end': 1.0}])
+    epochs[-1].stitch_replayed_timestamps(translated)
+    assert [(s['_capture_start_sample'], s['_capture_end_sample']) for s in translated] == [(6, 8)]
+    assert [(s['start'], s['end']) for s in translated] == [(3.0, 4.0)]
+    assert ring.snapshot() == ()
 
 
 def test_replay_epoch_maps_new_socket_time_to_original_capture_position():

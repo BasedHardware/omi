@@ -1328,7 +1328,6 @@ class ListenReceiver(ReplayFilterMixin):
             return False
         # Feed account/serve deaths even when failover prevents a terminal event.
         note_typed_provider_death(self.stt_socket, dead_provider)
-
         service, language, model = get_stt_service_for_language(
             self.host.language,
             multi_lang_enabled=self.host.multi_lang_enabled,
@@ -1338,7 +1337,6 @@ class ListenReceiver(ReplayFilterMixin):
         )
         if service is None:
             return False
-
         parakeet_callback, modulate_callback, epoch = rebuild[0]()
         sample_rate = rebuild[1]
         previous = self.stt_socket
@@ -1378,19 +1376,21 @@ class ListenReceiver(ReplayFilterMixin):
             if managed_chain_enabled(self.host):
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             return False
-
         # Replay capture positions after the last emitted segment.
-        if window_ring is not None and not replay_chunks(
+        rejected_sample = replay_chunks(
             raw,
             replay,
             source=window_ring,
             provider=dead_provider or 'parakeet',
             soniox=self._resilient_audio if self.host.stt_service == STTService.soniox else None,
-        ):
+        )
+        if rejected_sample is not None and window_ring is not None:
+            window_ring.finalize_through(rejected_sample)
             close_rejected_socket(raw)
             hop.note_failure('connection_lost')
-            return False
-
+            self._stt_failed_providers.add(provider_for_service(service) or service.value)
+            self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+            return await self._rebuild_stt_socket_locked()
         self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
         if window_ring is not None:
             window_ring.close()

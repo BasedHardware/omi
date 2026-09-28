@@ -13,6 +13,8 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | `STT_CONNECT_ORDER_FROM_CONFIG` | `false` | `true` | `true` |
 | `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `1` |
 | `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `1` |
+| `PARAKEET_BATCH_PRESSURE_POOL_HOST` | empty (stand down) | `dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local` | `prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local` |
+| `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` | `2` | `1` | `2` |
 | `PARAKEET_WINDOW_POST_TIMEOUT_SECONDS` | `8` | `8` | `8` |
 | `PARAKEET_WINDOW_DIARIZATION` | `false` | `false` | `false` |
 | `PARAKEET_WINDOW_PACE_SECONDS` | `6` | `6` | `6` |
@@ -66,16 +68,21 @@ per-process `PARAKEET_WINDOW_MAX_SESSIONS=1` is the admission safety limit;
 overflow proceeds to the next eligible leg. Keep it at 1 until the mixed live
 and sync-batch capacity curve gives a reason to change it.
 
-Listen refreshes `/batch/metrics` in a background task at most every five
-seconds with a one-second HTTP deadline. Admission reads only the cached value:
-four pending batch requests or a one-second oldest pending wait sends an
-allocated window session to the next vendor leg. The poll never holds session
-start. If the endpoint is missing, invalid, or the reading is over 15 seconds
-old, the process still admits at most its existing one window session. This
-keeps the canary available through telemetry outages while bounding its GPU
-load. An active TDT window that fails on timeout, 5xx, or capacity pressure
-replays its untranscribed capture audio on the replacement leg; already emitted
-audio is trimmed at the capture sample boundary.
+The Parakeet chart creates a headless Service selecting the same ready pods as
+the ordinary Service. Listen resolves its pod IPs in a background task every
+five seconds and polls each `/batch/metrics` with a one-second deadline. It
+sums pending requests and takes the longest queue wait. Four pending requests
+across the pool or a one-second wait on any replica sends an allocated session
+to the next vendor leg. Admission only reads the cache; it never waits on DNS
+or HTTP. If fewer than the expected replicas answer, any response is invalid,
+or the sample is over 15 seconds old, every listen process stands down. This
+fleet-wide fallback prevents the local session cap multiplying across listen
+replicas during an outage. Deploy the Parakeet chart's headless Service before
+enabling listen canary admission; no manual Service creation is needed. An
+active TDT window that fails on timeout, 5xx, or capacity pressure replays its
+untranscribed capture audio on the replacement leg. If replay itself fails,
+the remaining tail and newly received audio follow the next vendor leg without
+resending the accepted prefix.
 
 During the 1% bake, compare `omi_stt_window_canary_transcript_outcome_total`
 `arm=window` with `arm=control`: the rate of `transcribed / (transcribed +
@@ -99,7 +106,8 @@ The Telegram batch pages fire at four pending requests for two minutes, batch
 queue p95 at one second with five observations for two minutes, and prerecorded
 Parakeet error rate at 2% with ten requests for two minutes. Prerecorded traffic
 includes sync backfill and excludes live-window POSTs by their request header,
-so read these alongside the sync job queue before ramping.
+so read these alongside the sync job queue before ramping. All three batch
+rules treat missing telemetry as Alerting and use the existing Telegram route.
 The page action is **Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0**
 in the prod chart and runtime overlay, then recompose the runtime environment.
 

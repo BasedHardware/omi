@@ -157,16 +157,22 @@ def replay_chunks(
     socket: Any,
     chunks: tuple[tuple[int, bytes], ...],
     *,
-    source: ResilientAudio,
+    source: ResilientAudio | None,
     provider: str,
     soniox: ResilientAudio | None,
-) -> bool:
+) -> int | None:
+    """Return the first rejected sample, or None when the snapshot was accepted."""
+    if source is None:
+        return None
+    accepted_chunks: list[tuple[int, bytes]] = []
     for start, data in chunks:
         replay_send = getattr(socket, 'replay_send', None)
         accepted = replay_send(data, start) if callable(replay_send) else socket.send(data, start_sample=start)
         if not accepted:
-            return False
-        if soniox is not None:
-            soniox.append(data, start)
+            return start
+        accepted_chunks.append((start, data))
         source.record_replay(provider, len(data) // 2)
-    return True
+    if soniox is not None:
+        for start, data in accepted_chunks:
+            soniox.append(data, start)
+    return None
