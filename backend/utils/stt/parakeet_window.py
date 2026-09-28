@@ -25,9 +25,11 @@ from utils.stt.live_metrics import (
     WINDOW_DECODER_LOOPS,
     WINDOW_EMISSION_DROPS,
     WINDOW_FORCED_CUTS,
+    WINDOW_FIRST_TEXT,
     WINDOW_HEAD_RECOVERIES,
     WINDOW_LATENCY,
     WINDOW_POSTS,
+    WINDOW_SESSION_OUTCOME,
 )
 from utils.stt.streaming import ParakeetConnectionError, ParakeetStreamingSocket, _pcm16_to_wav_bytes  # type: ignore[reportPrivateUsage]  # shared WAV encoder
 from utils.stt.window_anchor import (
@@ -239,6 +241,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._release = release
         self._health_success: Callable[[], None] = lambda: None
         self._health_close: Callable[[], None] = lambda: None
+        self._first_speech_at: float | None = None
+        self._first_text_recorded = False
         self._wake = asyncio.Event()
         self._pause_requested = False
         self._idle_flushed = False
@@ -281,6 +285,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._dead = True
             self._dead_reason = 'cancelled' if task.cancelled() else 'connection_lost'
         self._health_close()
+        if self._first_speech_at is not None:
+            WINDOW_SESSION_OUTCOME.labels(outcome='text' if self._first_text_recorded else 'no_text').inc()
         self._release()
 
     def mark_speech(self) -> None:
@@ -300,6 +306,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._shed_capacity()
             return False
         if self._next_send_speech and data:
+            if self._first_speech_at is None:
+                self._first_speech_at = time.monotonic()
             end = self._received_bytes + len(data)
             if self._speech_spans and self._speech_spans[-1][1] == self._received_bytes:
                 start, _ = self._speech_spans.pop()
@@ -463,6 +471,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             WINDOW_FORCED_CUTS.inc()
         emitted, beyond_window = await self._materialize(decision.emit, job.pcm, job.start, job.duration)
         if emitted and not self._dead:
+            if not self._first_text_recorded and any(str(item.get('text', '')).strip() for item in emitted):
+                self._first_text_recorded = True
+                if self._first_speech_at is not None:
+                    WINDOW_FIRST_TEXT.observe(max(0.0, time.monotonic() - self._first_speech_at))
             # Snapshot the emission boundary in this socket's stream seconds
             # BEFORE the callback: downstream rewrites start/end in place onto
             # other clocks (the epoch translator projects wall-epoch seconds,

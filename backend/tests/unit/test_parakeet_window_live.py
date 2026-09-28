@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from utils.stt import parakeet_window as window, provider_resilience, streaming as st, vad_gate
-from utils.stt.live_metrics import WINDOW_FORCED_CUTS, WINDOW_POSTS
+from utils.stt.live_metrics import WINDOW_FIRST_TEXT, WINDOW_FORCED_CUTS, WINDOW_POSTS, WINDOW_SESSION_OUTCOME
 from utils.stt.live_session import (
     WINDOW_VAD_CONTINUE_THRESHOLD,
     WINDOW_VAD_HANGOVER_MS,
@@ -128,6 +128,8 @@ def receiver():
 
 @pytest.mark.asyncio
 async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypatch):
+    before_text = WINDOW_SESSION_OUTCOME.labels(outcome='text')._value.get()
+    before_first = WINDOW_FIRST_TEXT._sum.get()
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     from utils.stt import live_session
@@ -157,6 +159,18 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert session.consume_speech_ms_delta() == 1000
     assert session.consume_speech_ms_delta() == 0
     assert window.admission.active == 0
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='text')._value.get() == before_text + 1
+    assert WINDOW_FIRST_TEXT._sum.get() > before_first
+
+
+@pytest.mark.asyncio
+async def test_speech_with_empty_tdt_output_counts_no_text(monkeypatch):
+    monkeypatch.setattr(window, 'get_stt_client', lambda: Client(data={'text': ''}))
+    before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get()
+    sock = await LiveChainSession(receiver()).connect(16000)
+    assert sock.send(b'\x01\x00' * 16000)
+    await sock.drain_and_close()
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get() == before + 1
 
 
 @pytest.mark.asyncio

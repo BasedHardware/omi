@@ -12564,7 +12564,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Live STT",
-    "title": "Live TDT - admission overflow",
+    "title": "Parakeet canary capacity_full — roll allocation back if sustained",
     "condition": "D",
     "data": [
       {
@@ -12620,7 +12620,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 10 && $B > 0.20",
+          "expression": "$A >= 3 && $B > 0.10",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -12673,18 +12673,18 @@
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "10m",
+    "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
-      "summary": "Live TDT - admission overflow",
+      "summary": "Parakeet canary capacity_full: set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0 if sustained.",
       "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
-      "safe_next_action": "Inspect provider health and account state. Roll back allocation before increasing capacity; measure GPU queueing first.",
+      "safe_next_action": "Set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0; inspect batch GPU headroom and window POST latency before ramping.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
-      "threshold": "$A >= 10 && $B > 0.20",
-      "evaluated_bad": "Synthetic contract: traffic 100 with failure ratio 0.5; saturation ratio 1.0.",
-      "evaluated_good": "Synthetic contract: traffic 100 with failure ratio 0; saturation ratio 0.5."
+      "threshold": "$A >= 3 && $B > 0.10",
+      "evaluated_bad": "Three or more admissions in 5m and overflow rate above 10%.",
+      "evaluated_good": "No overflow with three or more admissions in 5m."
     },
     "labels": {
       "alert_identity": "omi-stt-window-overflow",
@@ -13491,6 +13491,286 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-window-no-text",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Parakeet canary no_text above 10%",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_window_session_outcome_total{job=\"backend-listen-metrics\"}[10m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(omi_stt_window_session_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_text\"}[10m])) or vector(0)) / clamp_min(sum(increase(omi_stt_window_session_outcome_total{job=\"backend-listen-metrics\"}[10m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 5 && $B > 0.10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Parakeet canary no_text: roll window allocation back to 0 if sustained.",
+      "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
+      "scope": "backend-listen-metrics, windowed TDT only; no user identifier labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0; inspect window sessions, POST latency and GPU utilization.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A >= 5 && $B > 0.10",
+      "evaluated_bad": "Synthetic threshold: volume guard met and canary metric exceeds threshold.",
+      "evaluated_good": "Synthetic threshold: volume guard met and canary metric stays below threshold."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-window-no-text",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-window-first-text",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Parakeet canary first-text p95 over 30 seconds",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_window_first_text_seconds_count{job=\"backend-listen-metrics\"}[10m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(omi_stt_window_first_text_seconds_bucket{job=\"backend-listen-metrics\"}[10m])))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 5 && $B >= 30",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Parakeet canary first-text p95 exceeds the 30 s budget; roll allocation back to 0.",
+      "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
+      "scope": "backend-listen-metrics, windowed TDT only; no user identifier labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0; inspect window sessions, POST latency and GPU utilization.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A >= 5 && $B >= 30",
+      "evaluated_bad": "Synthetic threshold: volume guard met and canary metric exceeds threshold.",
+      "evaluated_good": "Synthetic threshold: volume guard met and canary metric stays below threshold."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-window-first-text",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
       "instatus_component": "live-transcription"
     },
     "isPaused": false,

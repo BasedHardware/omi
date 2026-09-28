@@ -381,7 +381,7 @@ env:
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
     value: "25"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
-    value: "0"
+    value: "1"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
     value: "1"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
@@ -401,7 +401,7 @@ env:
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
+    value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS

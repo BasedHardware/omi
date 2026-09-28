@@ -72,6 +72,15 @@ def test_allocation_is_stable_bounded_and_default_dark(monkeypatch):
     assert not window_allocation('user')
 
 
+def test_one_percent_canary_leads_without_reordering_vendor_control(monkeypatch):
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '1')
+    monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    allocated = next(str(i) for i in range(10000) if window_allocation(str(i)))
+    control = next(str(i) for i in range(10000) if not window_allocation(str(i)))
+    assert st.get_stt_service_for_language('en', window_uid=allocated)[0] == st.STTService.parakeet
+    assert st.get_stt_service_for_language('en', window_uid=control)[0] == st.STTService.modulate
+
+
 @pytest.mark.parametrize('primary', list(st.STTService))
 @pytest.mark.asyncio
 async def test_every_primary_walks_config_order_and_feeds_each_leg(monkeypatch, primary):
