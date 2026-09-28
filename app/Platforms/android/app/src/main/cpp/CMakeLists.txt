@@ -15,6 +15,7 @@ set(OMI_NATIVE_SOURCES
     ${OMI_NATIVE_CORE_DIR}/src/omi_backend_policy.cpp
     ${OMI_NATIVE_CORE_DIR}/src/omi_backend_http.cpp
     ${OMI_NATIVE_CORE_DIR}/src/omi_backend_recording.cpp
+    ${OMI_NATIVE_CORE_DIR}/src/omi_device.cpp
 )
 
 add_library(omi_native_core_jni SHARED

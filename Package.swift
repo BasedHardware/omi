@@ -38,6 +38,7 @@ let package = Package(
                 "src/omi_backend_policy.cpp",
                 "src/omi_backend_http.cpp",
                 "src/omi_backend_recording.cpp",
+                "src/omi_device.cpp",
             ],
             publicHeadersPath: "include"
         ),

@@ -79,34 +79,20 @@ public struct BleDeviceInfo: Sendable, Hashable {
     }
 }
 
-/// Pure parsers for Device Information characteristic values. Byte-level
-/// and Skip-safe (no Character/UnicodeScalar classification); these run
-/// identically on Apple, Android (transpiled), and in host tests.
+/// Pure parser delegating to the shared C++ middleware (`omi_device`
+/// characteristic validation: ASCII-whitespace trim, control-byte and UTF-8
+/// rejection). Absent or invalid reads parse to `nil`; the display layer
+/// maps `nil` to "Unknown" (same contract as
+/// `connected.information?.[field] ?? 'Unknown'` in the React Native tree).
+/// These run identically on Apple, Android (via the JNI bridge), and in host
+/// tests.
 public enum BleDeviceInfoParsing {
     /// Parses a Device Information characteristic read into a display
     /// value, or nil when the value is absent or invalid. Invalid means:
     /// empty after trimming ASCII whitespace, containing control bytes, or
     /// not valid UTF-8.
     public static func characteristicText(_ bytes: [UInt8]?) -> String? {
-        guard var bytes else { return nil }
-        // Trim ASCII whitespace from both ends (byte-level).
-        while let first = bytes.first, isAsciiWhitespace(first) {
-            bytes.removeFirst()
-        }
-        while let last = bytes.last, isAsciiWhitespace(last) {
-            bytes.removeLast()
-        }
-        guard !bytes.isEmpty else { return nil }
-        // Control bytes (including NUL padding) make the value invalid —
-        // firmware bugs otherwise leak as garbage identity rows.
-        for byte in bytes where byte < 0x20 || byte == 0x7F {
-            return nil
-        }
-        // UTF-8 round-trip: decoding invalid sequences yields replacement
-        // characters whose re-encoding differs from the source bytes.
-        let text = String(decoding: bytes, as: UTF8.self)
-        guard Array(text.utf8) == bytes else { return nil }
-        return text
+        Policy.deviceCharacteristicText(bytes)
     }
 
     /// Parses one field from its characteristic bytes.
@@ -133,9 +119,5 @@ public enum BleDeviceInfoParsing {
             }
         }
         return info
-    }
-
-    private static func isAsciiWhitespace(_ byte: UInt8) -> Bool {
-        byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D
     }
 }

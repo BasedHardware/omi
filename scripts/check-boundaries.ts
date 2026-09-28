@@ -24,6 +24,10 @@ const forbidden = files.filter((file) => {
     return false;
   if (/\.swift$/.test(file)) {
     if (file === "Package.swift") return false;
+    // Per-platform host bootstrap lives in app/Platforms/<platform>/ and is
+    // built by that platform's host project (xcodegen / Gradle / WinRT),
+    // not the Swift package; everything else must sit in a package target.
+    if (file.startsWith("app/Platforms/")) return false;
     return !targetPaths.some(
       (targetPath) => file === targetPath || file.startsWith(targetPath + "/"),
     );

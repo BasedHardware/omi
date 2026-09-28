@@ -118,8 +118,8 @@ public protocol DeviceTransport: Sendable {
 /// Mirrors the upstream discoverer's `name.contains("notepin")` /
 /// Omi-name matching without touching platform types.
 public enum OmiDiscoveryFilter {
+    /// Delegates to the shared C++ middleware (`omi_device_is_omi_like`).
     public static func isOmiLike(_ name: String) -> Bool {
-        let lowered = name.lowercased()
-        return lowered.contains("omi") || lowered.contains("notepin")
+        Policy.deviceIsOmiLike(name)
     }
 }

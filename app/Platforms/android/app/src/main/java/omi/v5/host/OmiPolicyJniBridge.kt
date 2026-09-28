@@ -30,6 +30,13 @@ import skip.lib.Tuple2
  *   packetChecksum           → omi_calculate_packet_checksum
  *   normalizePacket          → omi_normalize_packet
  *   nativeCapabilities       → omi_get_native_capabilities
+ *   deviceDiscoveredName     → omi_device_discovered_name
+ *   deviceIsNotePinAdvertisement → omi_device_is_note_pin_advertisement
+ *   deviceIsOmiLike          → omi_device_is_omi_like
+ *   deviceShouldPersistBatteryReading → omi_device_should_persist_battery_reading
+ *   deviceCharacteristicText → omi_device_characteristic_text
+ *   deviceAssembler*         → omi_device_assembler_* (opaque jlong handles)
+ *   deviceCapture*           → omi_device_capture_* (opaque jlong handles)
  */
 class OmiPolicyJniBridge : NativePolicyBridge {
 
@@ -100,8 +107,11 @@ class OmiPolicyJniBridge : NativePolicyBridge {
 
     override fun normalizePacket(raw: UByteArray): Tuple2<Int, UByteArray> {
         val payload = ByteArray(raw.size)
-        val status = nativeNormalizePacket(raw.toByteArray(), payload)
-        val actual = if (status == 0) payload else byteArrayOf()
+        val meta = IntArray(1)
+        val status = nativeNormalizePacket(raw.toByteArray(), payload, meta)
+        val actual =
+            if (status == 0) payload.copyOfRange(0, meta[0].coerceIn(0, payload.size))
+            else byteArrayOf()
         return Tuple2(status, actual.toUByteArray())
     }
 
@@ -110,6 +120,119 @@ class OmiPolicyJniBridge : NativePolicyBridge {
         val written = nativeGetNativeCapabilities(out)
         return if (written > 0) String(out, 0, written) else null
     }
+
+    // MARK: omi_device — portable BLE device logic (same C ABI as Apple).
+
+    override fun deviceDiscoveredName(
+        advertisedLocalName: String?,
+        cachedName: String?,
+        manufacturerData: UByteArray?,
+    ): String = nativeDeviceDiscoveredName(
+        advertisedLocalName,
+        cachedName,
+        manufacturerData?.toByteArray(),
+    )
+
+    override fun deviceIsNotePinAdvertisement(manufacturerData: UByteArray?): Boolean =
+        nativeDeviceIsNotePinAdvertisement(manufacturerData?.toByteArray()) != 0
+
+    override fun deviceIsOmiLike(name: String): Boolean =
+        nativeDeviceIsOmiLike(name) != 0
+
+    override fun deviceShouldPersistBatteryReading(
+        previousLevel: Int?,
+        previousTimestampMs: Long?,
+        level: Int,
+        nowMs: Long,
+    ): Boolean = nativeDeviceShouldPersistBatteryReading(
+        previousLevel ?: 0,
+        previousLevel != null,
+        previousTimestampMs ?: 0,
+        previousTimestampMs != null,
+        level,
+        nowMs,
+    ) != 0
+
+    override fun deviceCharacteristicText(bytes: UByteArray?): String? =
+        nativeDeviceCharacteristicText(bytes?.toByteArray())
+
+    override fun deviceAssemblerCreate(): Long = nativeDeviceAssemblerCreate()
+
+    override fun deviceAssemblerDestroy(handle: Long) =
+        nativeDeviceAssemblerDestroy(handle)
+
+    override fun deviceAssemblerReset(handle: Long) = nativeDeviceAssemblerReset(handle)
+
+    override fun deviceAssemblerClassify(handle: Long, raw: UByteArray): DevicePacketDecision {
+        val payload = ByteArray(raw.size)
+        val meta = nativeDeviceAssemblerClassify(handle, raw.toByteArray(), payload)
+            ?: return DevicePacketDecision(3, 0.toUShort(), UByteArray(0), -1)
+        val kind = meta[0]
+        val index = meta[1].toUShort()
+        val codecStatus = meta[3]
+        val actual =
+            if (kind == 0) payload.copyOfRange(0, meta[2].coerceIn(0, payload.size))
+            else byteArrayOf()
+        return DevicePacketDecision(kind, index, actual.toUByteArray(), codecStatus)
+    }
+
+    override fun deviceCaptureCreate(): Long = nativeDeviceCaptureCreate()
+
+    override fun deviceCaptureDestroy(handle: Long) = nativeDeviceCaptureDestroy(handle)
+
+    override fun deviceCaptureStage(handle: Long): Int = nativeDeviceCaptureStage(handle)
+
+    override fun deviceCaptureIsCapturing(handle: Long): Boolean =
+        nativeDeviceCaptureIsCapturing(handle) != 0
+
+    override fun deviceCaptureOpen(
+        handle: Long,
+        deviceId: String,
+        deviceName: String?,
+        codec: Int,
+        nowMs: Long,
+    ): Boolean = nativeDeviceCaptureOpen(handle, deviceId, deviceName, codec, nowMs)
+
+    override fun deviceCaptureIngest(handle: Long, raw: UByteArray, receivedAtMs: Long): Long =
+        nativeDeviceCaptureIngest(handle, raw.toByteArray(), receivedAtMs)
+
+    override fun deviceCaptureFail(handle: Long) = nativeDeviceCaptureFail(handle)
+
+    override fun deviceCaptureHandoff(handle: Long, nowMs: Long): DeviceCaptureHandoff? {
+        val outs = LongArray(3)
+        if (!nativeDeviceCaptureHandoff(handle, nowMs, outs)) return null
+        val count = nativeDeviceCapturePacketCount(handle)
+        val packets = ArrayList<DeviceCaptureHandoff.Packet>(count)
+        for (position in 0 until count) {
+            val payload = ByteArray(1024)
+            val received = LongArray(1)
+            val meta = nativeDeviceCapturePacketAt(handle, position, payload, received)
+                ?: continue
+            if (meta[0] != 0) continue
+            val bytes = payload.copyOfRange(0, meta[2].coerceIn(0, payload.size))
+            packets.add(
+                DeviceCaptureHandoff.Packet(meta[1].toUShort(), bytes.toUByteArray(), received[0]),
+            )
+        }
+        return DeviceCaptureHandoff(outs[0], outs[1], outs[2].toInt(), packets)
+    }
+
+    override fun deviceCaptureBatchCount(handle: Long): Int =
+        nativeDeviceCaptureBatchCount(handle)
+
+    override fun deviceCaptureBatchByteCount(handle: Long): Int =
+        nativeDeviceCaptureBatchByteCount(handle)
+
+    override fun deviceCaptureStartedAtMs(handle: Long): Long =
+        nativeDeviceCaptureStartedAtMs(handle)
+
+    override fun deviceCaptureDeviceId(handle: Long): String =
+        nativeDeviceCaptureDeviceId(handle) ?: ""
+
+    override fun deviceCaptureDeviceName(handle: Long): String? =
+        nativeDeviceCaptureDeviceName(handle)
+
+    override fun deviceCaptureCodec(handle: Long): Int = nativeDeviceCaptureCodec(handle)
 
     // Implemented in src/main/cpp/omi_jni.c against the native-core C ABI.
     private external fun nativeRouteStrip(path: String, out: ByteArray): Int
@@ -126,6 +249,39 @@ class OmiPolicyJniBridge : NativePolicyBridge {
     private external fun nativeRecordingReceiptValid(receipt: String): Int
     private external fun nativeRecordingUUIDValid(value: String): Int
     private external fun nativePacketChecksum(data: ByteArray): Long
-    private external fun nativeNormalizePacket(raw: ByteArray, payloadOut: ByteArray): Int
+    private external fun nativeNormalizePacket(raw: ByteArray, payloadOut: ByteArray, metaOut: IntArray): Int
     private external fun nativeGetNativeCapabilities(out: ByteArray): Int
+
+    private external fun nativeDeviceDiscoveredName(advertised: String?, cached: String?, manufacturer: ByteArray?): String
+    private external fun nativeDeviceIsNotePinAdvertisement(manufacturer: ByteArray?): Int
+    private external fun nativeDeviceIsOmiLike(name: String): Int
+    private external fun nativeDeviceShouldPersistBatteryReading(
+        previousLevel: Int,
+        hasPreviousLevel: Boolean,
+        previousTimestampMs: Long,
+        hasPreviousTimestampMs: Boolean,
+        level: Int,
+        nowMs: Long,
+    ): Int
+    private external fun nativeDeviceCharacteristicText(bytes: ByteArray?): String?
+    private external fun nativeDeviceAssemblerCreate(): Long
+    private external fun nativeDeviceAssemblerDestroy(handle: Long)
+    private external fun nativeDeviceAssemblerReset(handle: Long)
+    private external fun nativeDeviceAssemblerClassify(handle: Long, raw: ByteArray, payloadOut: ByteArray): IntArray?
+    private external fun nativeDeviceCaptureCreate(): Long
+    private external fun nativeDeviceCaptureDestroy(handle: Long)
+    private external fun nativeDeviceCaptureStage(handle: Long): Int
+    private external fun nativeDeviceCaptureIsCapturing(handle: Long): Int
+    private external fun nativeDeviceCaptureOpen(handle: Long, deviceId: String, deviceName: String?, codec: Int, nowMs: Long): Boolean
+    private external fun nativeDeviceCaptureIngest(handle: Long, raw: ByteArray, receivedAtMs: Long): Long
+    private external fun nativeDeviceCaptureFail(handle: Long)
+    private external fun nativeDeviceCaptureHandoff(handle: Long, nowMs: Long, outs: LongArray): Boolean
+    private external fun nativeDeviceCapturePacketCount(handle: Long): Int
+    private external fun nativeDeviceCaptureBatchCount(handle: Long): Int
+    private external fun nativeDeviceCaptureBatchByteCount(handle: Long): Int
+    private external fun nativeDeviceCaptureStartedAtMs(handle: Long): Long
+    private external fun nativeDeviceCapturePacketAt(handle: Long, position: Int, payloadOut: ByteArray, outs: LongArray): IntArray?
+    private external fun nativeDeviceCaptureDeviceId(handle: Long): String?
+    private external fun nativeDeviceCaptureDeviceName(handle: Long): String?
+    private external fun nativeDeviceCaptureCodec(handle: Long): Int
 }
