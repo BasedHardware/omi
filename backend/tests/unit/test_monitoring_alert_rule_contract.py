@@ -814,6 +814,8 @@ def test_live_transcription_success_alert_measures_the_user_felt_outcome():
     paged, because every existing rule watched provider plumbing instead of
     the session outcome. too_short sessions stay out of the denominator so
     quiet nights cannot page, and the >= 50 volume guard keeps no-data healthy.
+    Failed reconnect sockets are counted as no_transcript, so a reconnect storm
+    grows the denominator and cannot hide a near-zero success ratio.
     """
     for export_name, rules in _all_rule_exports().items():
         rule = rules[LIVE_TRANSCRIPTION_SUCCESS_RULE]
@@ -832,6 +834,25 @@ def test_live_transcription_success_alert_measures_the_user_felt_outcome():
         assert math_nodes == ["$A >= 50 && $B < 0.90"], export_name
         assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
         assert (REPO / rule["annotations"]["runbook"]).is_file(), export_name
+
+
+def test_soniox_budget_exhaustion_alert_pages_from_a_close_in_five_minutes():
+    uid = "omi-soniox-budget-exhausted"
+    expected_expr = (
+        'sum(increase(omi_stt_stream_close_total{job="backend-listen-metrics",provider="soniox",'
+        'reason="provider_budget_exhausted"}[5m]))'
+    )
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[uid]
+        assert rule["title"] == "Soniox balance exhausted — top up now", export_name
+        assert rule["annotations"]["summary"] == "Soniox balance exhausted — top up now", export_name
+        assert rule["labels"]["alert_identity"] == uid, export_name
+        assert rule["labels"]["severity"] == "critical", export_name
+        assert rule["for"] == "0s", export_name
+        exprs = [node["model"]["expr"] for node in rule["data"] if node["model"].get("expr")]
+        assert exprs == [expected_expr], export_name
+        math_nodes = [node["model"]["expression"] for node in rule["data"] if node["model"].get("type") == "math"]
+        assert math_nodes == ["$A > 0"], export_name
 
 
 def test_soniox_runway_and_modulate_fallback_alerts_name_the_operator_lever():
