@@ -102,6 +102,22 @@ jobs:
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service ${{ env.SERVICE }}
 
+      - name: Canary deployed dev Parakeet batch transcription
+        if: github.event.inputs.environment == 'development'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ vars.GCP_PROJECT_ID }}" != "based-hardware-dev" || "${{ vars.ENV }}" != "dev" || "${{ vars.GKE_CLUSTER }}" != "dev-omi-gke" ]]; then
+            echo "::error::Refusing Parakeet canary outside the dev project and cluster"
+            exit 1
+          fi
+          kubectl --context gke_based-hardware-dev_us-central1_dev-omi-gke \
+            -n dev-omi-backend port-forward svc/dev-omi-parakeet 18080:8080 \
+            > /tmp/parakeet-canary-port-forward.log 2>&1 &
+          forward_pid=$!
+          trap 'kill "$forward_pid" 2>/dev/null || true' EXIT
+          python3 backend/scripts/parakeet_dev_canary.py
+
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'
         uses: ./.github/actions/deployment-summary
