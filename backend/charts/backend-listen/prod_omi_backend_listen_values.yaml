@@ -376,6 +376,8 @@ env:
     value: "false"
   - name: STT_MULTI_LANGUAGE_HINTS
     value: "true"
+  - name: STT_LEARNED_LANGUAGE_PROFILE
+    value: "false"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
     value: "25"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT

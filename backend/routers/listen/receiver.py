@@ -65,6 +65,7 @@ from utils.stt.resilient_stream import ResilientAudio
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
+from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
 from utils.stt.streaming import (
     STTService,
     connect_stt_socket_with_fallback,
@@ -1084,6 +1085,7 @@ class ListenReceiver:
         for socket in sockets:
             target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
             if target is None:
+                release_live_stt_socket(socket)
                 continue
             try:
                 drain = getattr(target, 'drain_and_close', None)
@@ -1097,6 +1099,8 @@ class ListenReceiver:
                     target.finish()
                 except Exception:
                     pass
+            finally:
+                release_live_stt_socket(socket)
         self.stt_socket = None
         self.stt_sockets_multi = [None] * len(self.channel_configs)
 
@@ -1105,13 +1109,15 @@ class ListenReceiver:
         if getattr(raw, 'manages_vad', False):
             return raw
         if self.vad_gate is None:
-            return _RecordingSTTSocket(raw, epoch) if epoch is not None else raw
-        return GatedSTTSocket(
-            raw,
-            gate=self.vad_gate,
-            passthrough_audio=self.host.stt_service == STTService.modulate,
-            send_tracker=epoch,
-        )
+            wrapped = _RecordingSTTSocket(raw, epoch) if epoch is not None else raw
+        else:
+            wrapped = GatedSTTSocket(
+                raw,
+                gate=self.vad_gate,
+                passthrough_audio=self.host.stt_service == STTService.modulate,
+                send_tracker=epoch,
+            )
+        return track_live_stt_socket(wrapped, self.host.stt_service.value)
 
     def _record_selected_epoch(self, epoch: Optional[ProviderEpochTranslator], socket: Any) -> None:
         if epoch is None:
@@ -1165,7 +1171,7 @@ class ListenReceiver:
                             platform=self.host.client_device_context.platform,
                         )
                         return False
-                    self.stt_sockets_multi[index] = socket
+                    self.stt_sockets_multi[index] = track_live_stt_socket(socket, self.host.stt_service.value)
                     record_live_connection(self.host, self._serving_provider())
                 return True
             if not managed_chain_enabled(self.host) and should_initialize_vad_gate(
@@ -1223,11 +1229,31 @@ class ListenReceiver:
     async def _failover_stt_socket(self) -> bool:
         """Serialize monitor/send-path failover so only one replacement is adopted."""
         async with self._stt_failover_lock:
+            # Soniox drain_and_close() sets this before its final flush.  Treat a
+            # finishing socket as receiver teardown even if its dead latch was
+            # already set; opening a replacement here races the zero-audio close.
+            if self._stt_socket_is_finishing(self.stt_socket):
+                return False
             if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
                 return True
             if await self._reconnect_stt_socket_locked():
                 return True
             return await self._rebuild_stt_socket_locked()
+
+    @staticmethod
+    def _stt_socket_is_finishing(socket: Any) -> bool:
+        """Read the Soniox teardown latch through legacy socket wrappers."""
+        seen: set[int] = set()
+        current = socket
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            try:
+                if getattr(current, '_finishing', False):
+                    return True
+                current = getattr(current, '_conn', None)
+            except Exception:
+                return False
+        return False
 
     async def _reconnect_stt_socket_locked(self) -> bool:
         ring = self._resilient_audio
@@ -1242,6 +1268,7 @@ class ListenReceiver:
             or self.host.state.stt_terminal_failure
             or self._stt_rebuild is None
             or getattr(self, '_resilient_closing', False)
+            or self._stt_socket_is_finishing(socket)
         ):
             return False
         reason = getattr(socket, 'typed_death_reason', None)
@@ -1257,6 +1284,10 @@ class ListenReceiver:
             socket.finish()
         except Exception:
             pass
+        finally:
+            # Direct sockets carry a lease here; managed sockets release their
+            # own gauge in finish(), and release_live_stt_socket is idempotent.
+            release_live_stt_socket(socket)
         await asyncio.sleep(0)  # deliver the dead socket's last finalized callback
         if not self.host.state.active or self.host.state.stt_terminal_failure:
             RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
@@ -1382,6 +1413,8 @@ class ListenReceiver:
                 previous.finish()
             except Exception:
                 logger.warning('Failed to close the STT socket that died before failover')
+            finally:
+                release_live_stt_socket(previous)
         return True
 
     async def _monitor_stt_death(self) -> None:
@@ -1864,7 +1897,12 @@ class ListenReceiver:
             self._resilient_audio.close()
         for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
             if socket:
-                socket.finish()
+                try:
+                    socket.finish()
+                except Exception:
+                    logger.warning('Failed to close a live STT socket during receiver shutdown')
+                finally:
+                    release_live_stt_socket(socket)
 
     def clear(self) -> None:
         self.image_chunks.clear()

@@ -32,6 +32,8 @@ def reconcile_policy_channels(
     filter_text: str,
     duration_seconds: int,
     channels: list[str],
+    threshold_value: float | None = None,
+    alignment_period: str | None = None,
     runner: Runner = subprocess.run,
 ) -> bool:
     """Align channels when all other policy contract fields already match.
@@ -67,6 +69,8 @@ def reconcile_policy_channels(
         filter_text=filter_text,
         duration_seconds=duration_seconds,
         channels=channels,
+        threshold_value=threshold_value,
+        alignment_period=alignment_period,
     )
     non_channel_errors = [error for error in errors if error != "notification channels differ"]
     if non_channel_errors:
@@ -98,6 +102,8 @@ def reconcile_policy_channels(
         filter_text=filter_text,
         duration_seconds=duration_seconds,
         channels=channels,
+        threshold_value=threshold_value,
+        alignment_period=alignment_period,
     )
     if remaining:
         raise RuntimeError("Monitoring policy remains out of contract: " + "; ".join(remaining))
@@ -113,6 +119,8 @@ def main() -> int:
     parser.add_argument("--filter", required=True)
     parser.add_argument("--duration-seconds", type=int, required=True)
     parser.add_argument("--channels", required=True)
+    parser.add_argument("--threshold-value", type=float)
+    parser.add_argument("--alignment-period")
     args = parser.parse_args()
     channels = [item.strip() for item in args.channels.split(",") if item.strip()]
     if not channels or len(channels) != len(set(channels)):
@@ -126,6 +134,8 @@ def main() -> int:
             filter_text=args.filter,
             duration_seconds=args.duration_seconds,
             channels=channels,
+            threshold_value=args.threshold_value,
+            alignment_period=args.alignment_period,
         )
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)

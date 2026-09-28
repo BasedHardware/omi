@@ -12,10 +12,11 @@ from utils.stt.streaming import STTService
 
 
 class Socket:
-    def __init__(self, *, dead=False, reason=None, callback=None):
+    def __init__(self, *, dead=False, reason=None, callback=None, finishing=False):
         self.is_connection_dead = dead
         self.typed_death_reason = reason
         self.death_reason = 'soniox error: 413 max_duration_reached' if dead else None
+        self._finishing = finishing
         self.callback = callback
         self.sent = []
         self.finished = False
@@ -160,6 +161,52 @@ async def test_teardown_does_not_reconnect(monkeypatch):
     assert listener._resilient_audio.buffered_bytes == 0
     assert not await listener._reconnect_stt_socket_locked()
     listener._create_stt_socket.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_soniox_finishing_socket_does_not_start_reconnect_or_fallback(monkeypatch):
+    listener = receiver(monkeypatch)
+    listener.stt_socket = Socket(dead=True, reason='soniox_rotation', finishing=True)
+    listener._stt_rebuild = (lambda: (None, None, None), 2)
+    listener._create_stt_socket = AsyncMock()
+    listener._rebuild_stt_socket_locked = AsyncMock(return_value=True)
+
+    assert not await listener._failover_stt_socket()
+
+    listener._create_stt_socket.assert_not_awaited()
+    listener._rebuild_stt_socket_locked.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_provider_rate_limit_uses_backoff_instead_of_same_provider_reconnect(monkeypatch):
+    listener = receiver(monkeypatch)
+    listener.stt_socket = Socket(dead=True, reason='provider_rate_limited')
+    listener._stt_rebuild = (lambda: (None, None, None), 2)
+    listener._create_stt_socket = AsyncMock()
+
+    assert not await listener._reconnect_stt_socket_locked()
+
+    listener._create_stt_socket.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_same_provider_reconnect_releases_old_open_stream_gauge_lease(monkeypatch):
+    from utils.metrics import OMI_LIVE_STT_OPEN_STREAMS
+
+    listener = receiver(monkeypatch)
+    gauge = OMI_LIVE_STT_OPEN_STREAMS.labels(provider='soniox')
+    before = gauge._value.get()
+    old = listener._wrap_legacy_stt_socket(Socket(dead=True, reason='soniox_rotation'), None)
+    listener.stt_socket = old
+    listener._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 2)
+    listener._create_stt_socket = AsyncMock(return_value=Socket())
+
+    with patch('routers.listen.receiver.fallback_socket_is_serving', new=AsyncMock(return_value=True)):
+        assert await listener._failover_stt_socket()
+
+    assert gauge._value.get() == before + 1
+    listener.finish()
+    assert gauge._value.get() == before
 
 
 def test_5xx_is_reconnectable_only_with_flag(monkeypatch):

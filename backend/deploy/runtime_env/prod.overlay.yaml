@@ -16,6 +16,8 @@ overlay:
           value: 'true'
         STT_RESILIENT_RECONNECT:
           value: 'false'
+        STT_LEARNED_LANGUAGE_PROFILE:
+          value: 'false'
         # 2026-09-27: first prod ramp of the Soniox-first arm for non-English multi-language
         # users (live STT language constraint, omi#19343). Compare arm=hintable vs control on
         # omi_stt_output_language_segments_total before ramping further.

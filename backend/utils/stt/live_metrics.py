@@ -44,5 +44,5 @@ LANGUAGE_CONSTRAINT = Counter(
 OUTPUT_LANGUAGE_SEGMENTS = Counter(
     'omi_stt_output_language_segments_total',
     'Finalized live STT segment language conformance',
-    ['provider', 'primary_group', 'arm', 'conformance'],
+    ['provider', 'primary_group', 'arm', 'conformance', 'profile_source'],
 )

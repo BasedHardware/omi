@@ -51,6 +51,17 @@ an explicit client Parakeet preference retains its existing priority.
 request. Soniox always keeps language identification enabled. Other providers
 retain their existing language parameters and order.
 
+When `STT_LEARNED_LANGUAGE_PROFILE=true`, a 20-session rolling projection on
+`users/{uid}` supplies a spoken-language prior after three classified sessions.
+The declared non-English primary keeps priority; languages with at least 20%
+of classified segments and English with at least 10% enter a three-language
+Soniox-validated set. An English-primary account can then enter the same
+non-English Soniox-first UID arm. A failed or slow profile read uses the declared
+prior. Session close schedules one bounded transaction off the listen loop;
+the projection contains normalized language codes and counts only. Single
+language, multichannel, custom STT and BYOK sessions do not read or write it.
+The flag defaults off and is enabled only in development.
+
 Soniox documents a `language` code on every token when identification is on;
 its adapter uses final tokens only and passes a code only when all tokens in
 one segment agree. Velma's live adapter reads an optional `language` on final
