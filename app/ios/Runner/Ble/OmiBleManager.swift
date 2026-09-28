@@ -120,7 +120,7 @@ final class OmiBleManager: NSObject {
         if defaults.bool(forKey: "ble_diagnostics_run_open") {
             appendLifecycleEvent("previous_run_unclean")
         }
-        defaults.set(true, forKey: "ble_diagnostics_run_open")
+        try? SafeDefaults.set(.bool(true), forKey: "ble_diagnostics_run_open", in: defaults)
         appendLifecycleEvent("app_launch")
         NotificationCenter.default.addObserver(self, selector: #selector(markCleanExit), name: UIApplication.willTerminateNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(powerModeChanged), name: .NSProcessInfoPowerStateDidChange, object: nil)
@@ -650,7 +650,7 @@ final class OmiBleManager: NSObject {
             "ble_log": defaults.array(forKey: "ble_diagnostics_log_\(uuid)") ?? [],
             "counters_since": defaults.object(forKey: "ble_diagnostics_counters_since_\(uuid)") ?? NSNull(),
         ]
-        guard let encoded = try? JSONSerialization.data(withJSONObject: data),
+        guard let encoded = try? SafeJSON.data(withJSONObject: data),
               let result = String(data: encoded, encoding: .utf8) else { return "{}" }
         return result
     }
@@ -837,7 +837,7 @@ final class OmiBleManager: NSObject {
     }
 
     private func persistBatteryReading(uuid: String, level: Int) {
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        guard let now = CheckedIntegerConversion.int64(Date().timeIntervalSince1970 * 1000) else { return }
         rehydrateBatteryBaselineIfNeeded(uuid: uuid)
         let charging = chargingState[uuid]
         guard lastPersistedBatteryCharging[uuid] != charging || OmiBleEnergyPolicy.shouldPersistBatteryReading(
@@ -860,7 +860,18 @@ final class OmiBleManager: NSObject {
             history = Array(history.suffix(OmiBleManager.maxBatteryHistoryEntries))
         }
 
-        defaults.set(history, forKey: key)
+        let records: [[String: PlistValue]] = history.compactMap { entry in
+            guard let timestamp = entry["ts"] as? Int64,
+                  let batteryLevel = entry["level"] as? Int else { return nil }
+            var record: [String: PlistValue] = ["ts": .int64(timestamp), "level": .int(batteryLevel)]
+            if let charging = entry["charging"] as? Bool { record["charging"] = .bool(charging) }
+            return record
+        }
+        do {
+            try SafeDefaults.setPlistRecords(records, forKey: key, in: defaults)
+        } catch {
+            return
+        }
         lastPersistedBatteryLevel[uuid] = level
         lastPersistedBatteryTimestampMs[uuid] = now
         lastPersistedBatteryCharging[uuid] = charging
