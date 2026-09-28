@@ -1789,17 +1789,23 @@ def send_conversation_share_email(
         # resolves would block the address until its TTL expires. Quota stands
         # and the link stays published. The caller still gets 504 — we do not
         # know that it arrived, and only the ledger pretends otherwise.
+        logger.warning('share email: ambiguous delivery: %s', e)
         try:
             conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
         except Exception:
             logger.exception('share email: failed to record ambiguous dispatch')
-        raise HTTPException(status_code=504, detail=str(e))
+        raise HTTPException(
+            status_code=504,
+            detail="Email delivery timed out or is pending confirmation. Please check back shortly.",
+        )
     except ValueError as e:
+        logger.warning('share email: invalid recipient or configuration: %s', e)
         _release_reservation_and_quota()
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail="Invalid email recipient or configuration.")
     except RuntimeError as e:
+        logger.warning('share email: delivery service temporarily unavailable: %s', e)
         _release_reservation_and_quota()
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Email delivery service temporarily unavailable.")
     except HTTPException:
         raise
     except Exception:
