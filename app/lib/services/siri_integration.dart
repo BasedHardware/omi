@@ -94,6 +94,7 @@ class SiriIntegration extends SiriEventsApi {
         _testConversationPageFetcher = null,
         _prepareTimeout = const Duration(milliseconds: 1500),
         _nativeTimeout = const Duration(seconds: 12),
+        _indexCooldown = const Duration(seconds: 30),
         _delay = Future<void>.delayed;
 
   /// Inject a Pigeon host for hermetic projection and account fencing tests.
@@ -107,6 +108,7 @@ class SiriIntegration extends SiriEventsApi {
     SiriConversationPageFetcher? conversationPageFetcher,
     Duration prepareTimeout = const Duration(milliseconds: 1500),
     Duration nativeTimeout = const Duration(seconds: 12),
+    Duration indexCooldown = const Duration(seconds: 30),
     Future<void> Function(Duration)? delay,
     bool coldStart = false,
   })  : _host = host,
@@ -118,6 +120,7 @@ class SiriIntegration extends SiriEventsApi {
         _testConversationPageFetcher = conversationPageFetcher,
         _prepareTimeout = prepareTimeout,
         _nativeTimeout = nativeTimeout,
+        _indexCooldown = indexCooldown,
         _delay = delay ?? Future<void>.delayed,
         _uid = coldStart ? null : uid,
         _nativeGeneration = coldStart ? null : 0;
@@ -134,6 +137,7 @@ class SiriIntegration extends SiriEventsApi {
   final SiriConversationPageFetcher? _testConversationPageFetcher;
   final Duration _prepareTimeout;
   final Duration _nativeTimeout;
+  final Duration _indexCooldown;
   final Future<void> Function(Duration) _delay;
   void installEvents() {
     if (_isIOS) SiriEventsApi.setUp(this);
@@ -144,6 +148,12 @@ class SiriIntegration extends SiriEventsApi {
   Future<void> _nativeTail = Future<void>.value();
   Future<void> _queuedIndexTail = Future<void>.value();
   DateTime? _indexSuspendedUntil;
+  Timer? _removalRetry;
+  final Map<String, Set<String>> _pendingRemovals = {
+    'memory': <String>{},
+    'conversation': <String>{},
+    'task': <String>{},
+  };
   final Map<String, Set<String>> _suppressedIds = {
     'memory': <String>{},
     'conversation': <String>{},
@@ -161,7 +171,7 @@ class SiriIntegration extends SiriEventsApi {
       try {
         return await operation().timeout(_nativeTimeout);
       } on TimeoutException {
-        if (indexWork) _indexSuspendedUntil = DateTime.now().add(const Duration(seconds: 30));
+        if (indexWork) _indexSuspendedUntil = DateTime.now().add(_indexCooldown);
         rethrow;
       }
     });
@@ -172,8 +182,8 @@ class SiriIntegration extends SiriEventsApi {
   /// Submit projections in UI order without making the UI wait for Spotlight.
   /// The owner is captured at submission, so an old account's queued rows can
   /// never be projected into a newly bound account.
-  void queueIndex(Future<void> Function(SiriIntegration) work) {
-    if (!_isIOS || _uid == null) return;
+  Future<void> _enqueueIndex(Future<void> Function(SiriIntegration) work) {
+    if (!_isIOS || _uid == null) return Future<void>.value();
     final uid = _uid;
     final generation = _accountGeneration;
     _queuedIndexTail = _queuedIndexTail.then((_) async {
@@ -182,12 +192,65 @@ class SiriIntegration extends SiriEventsApi {
     }).catchError((Object error) {
       Logger.debug('Siri background index failed: $error');
     });
+    return _queuedIndexTail;
+  }
+
+  void queueIndex(Future<void> Function(SiriIntegration) work) {
+    unawaited(_enqueueIndex(work));
+  }
+
+  void _clearPendingRemovals() {
+    _removalRetry?.cancel();
+    _removalRetry = null;
+    for (final ids in _pendingRemovals.values) {
+      ids.clear();
+    }
+  }
+
+  void _scheduleRemovalRetry(String uid, int generation) {
+    if (_removalRetry != null || _uid != uid || _accountGeneration != generation) return;
+    final remaining = _indexSuspendedUntil?.difference(DateTime.now()) ?? Duration.zero;
+    _removalRetry = Timer(remaining > Duration.zero ? remaining : const Duration(seconds: 1), () {
+      _removalRetry = null;
+      if (_uid == uid && _accountGeneration == generation) {
+        queueIndex((siri) => siri._flushPendingRemovals(uid, generation));
+      }
+    });
+  }
+
+  Future<void> _flushPendingRemovals(String uid, int generation) async {
+    if (_uid != uid || _accountGeneration != generation) return;
+    for (final entry in _pendingRemovals.entries) {
+      if (entry.value.isEmpty) continue;
+      try {
+        await _nativeOperation(() async {
+          if (_uid != uid || _accountGeneration != generation) return;
+          final ids = entry.value.toList();
+          if (ids.isEmpty) return;
+          await _host.deleteEntities(uid, entry.key, ids);
+          if (_uid == uid && _accountGeneration == generation) entry.value.removeAll(ids);
+        }, indexWork: true);
+      } catch (error) {
+        Logger.debug('Siri required removal failed: $error');
+        _scheduleRemovalRetry(uid, generation);
+        return;
+      }
+    }
+  }
+
+  Future<void> _removeRequired(String uid, int generation, String type, Iterable<String> ids) async {
+    if (_uid != uid || _accountGeneration != generation) return;
+    _pendingRemovals[type]!.addAll(ids.where((id) => id.isNotEmpty));
+    await _flushPendingRemovals(uid, generation);
   }
 
   void queueUpsertMemories(List<Memory> rows, {bool restoreDeleted = false}) {
     final frozen = List<Memory>.of(rows);
     if (restoreDeleted) _suppressedIds['memory']!.removeAll(frozen.map((row) => row.id));
-    queueIndex((siri) => siri.upsertMemories(frozen));
+    queueIndex((siri) async {
+      if (restoreDeleted) siri._pendingRemovals['memory']!.removeAll(frozen.map((row) => row.id));
+      await siri.upsertMemories(frozen);
+    });
   }
 
   void queueReconcileMemories(List<Memory> rows) {
@@ -198,7 +261,10 @@ class SiriIntegration extends SiriEventsApi {
   void queueUpsertTasks(List<ActionItemWithMetadata> rows, {bool restoreDeleted = false}) {
     final frozen = List<ActionItemWithMetadata>.of(rows);
     if (restoreDeleted) _suppressedIds['task']!.removeAll(frozen.map((row) => row.id));
-    queueIndex((siri) => siri.upsertTasks(frozen));
+    queueIndex((siri) async {
+      if (restoreDeleted) siri._pendingRemovals['task']!.removeAll(frozen.map((row) => row.id));
+      await siri.upsertTasks(frozen);
+    });
   }
 
   void queueReconcileTasks(List<ActionItemWithMetadata> rows, {required bool includeCompleted}) {
@@ -223,8 +289,11 @@ class SiriIntegration extends SiriEventsApi {
     queueIndex((siri) => siri.deleteMany(type, frozen, expectedUid: expectedUid));
   }
 
-  void queueRefreshAuthoritativeTasks({String? expectedUid}) =>
-      queueIndex((siri) => siri.refreshAuthoritativeTasks(expectedUid: expectedUid));
+  void queueRefreshAuthoritativeTasks({String? expectedUid}) {
+    unawaited(refreshAuthoritativeTasks(expectedUid: expectedUid).catchError((Object error) {
+      Logger.debug('Siri task refresh failed: $error');
+    }));
+  }
 
   @visibleForTesting
   Future<void> drainIndexForTest() => _queuedIndexTail;
@@ -239,6 +308,7 @@ class SiriIntegration extends SiriEventsApi {
     for (final ids in _suppressedIds.values) {
       ids.clear();
     }
+    _clearPendingRemovals();
     await _host.prepareForSignOut().timeout(_prepareTimeout);
   }
 
@@ -249,7 +319,10 @@ class SiriIntegration extends SiriEventsApi {
     if (expectedUid != null && expectedUid != _uid) return;
     final frozenRows = List<ServerConversation>.of(rows);
     if (restoreDeleted) _suppressedIds['conversation']!.removeAll(frozenRows.map((row) => row.id));
-    queueIndex((siri) => siri.upsertConversations(frozenRows, expectedUid: expectedUid));
+    queueIndex((siri) async {
+      if (restoreDeleted) siri._pendingRemovals['conversation']!.removeAll(frozenRows.map((row) => row.id));
+      await siri.upsertConversations(frozenRows, expectedUid: expectedUid);
+    });
   }
 
   Future<void> accountChanged(User? user) async {
@@ -257,8 +330,15 @@ class SiriIntegration extends SiriEventsApi {
     final generation = ++_accountGeneration;
     final uid = user?.uid;
     if (uid != _uid) {
+      _clearPendingRemovals();
       for (final ids in _suppressedIds.values) {
         ids.clear();
+      }
+    } else {
+      _removalRetry?.cancel();
+      _removalRetry = null;
+      if (uid != null && _pendingRemovals.values.any((ids) => ids.isNotEmpty)) {
+        _scheduleRemovalRetry(uid, generation);
       }
     }
     if (uid != null && _nativeGeneration == null) {
@@ -303,7 +383,7 @@ class SiriIntegration extends SiriEventsApi {
     Timer(const Duration(seconds: 2), () async {
       try {
         if (_uid != uid || _accountGeneration != generation || !await isEnabled()) return;
-        queueIndex((siri) => siri.refreshOwnerWideIndex());
+        await refreshOwnerWideIndex();
       } catch (error) {
         Logger.debug('Siri deferred owner-wide refresh failed: $error');
       }
@@ -364,9 +444,9 @@ class SiriIntegration extends SiriEventsApi {
     }
     if (_uid != uid || generation != _accountGeneration) return;
     if (complete) {
-      await reconcileTasks(rows, includeCompleted: true);
+      await _enqueueIndex((siri) => siri.reconcileTasks(rows, includeCompleted: true));
     } else if (rows.isNotEmpty) {
-      await upsertTasks(rows);
+      await _enqueueIndex((siri) => siri.upsertTasks(rows));
     }
   }
 
@@ -410,9 +490,9 @@ class SiriIntegration extends SiriEventsApi {
     }
     if (_uid != uid || generation != _accountGeneration) return;
     if (complete) {
-      await reconcileConversations(rows, coveredAfter: cutoff);
+      await _enqueueIndex((siri) => siri.reconcileConversations(rows, coveredAfter: cutoff));
     } else if (rows.isNotEmpty) {
-      await upsertConversations(rows);
+      await _enqueueIndex((siri) => siri.upsertConversations(rows));
     }
   }
 
@@ -462,10 +542,10 @@ class SiriIntegration extends SiriEventsApi {
       final now = DateTime.now();
       final removed =
           rows.where((row) => row.id.isNotEmpty && !siriConversationIsIndexable(row, now)).map((row) => row.id).toSet();
+      if (removed.isNotEmpty) await _removeRequired(uid, generation, 'conversation', removed);
       final projected = _conversationProjection(rows);
       await _nativeOperation(() async {
         if (_uid != uid || _accountGeneration != generation) return;
-        if (removed.isNotEmpty) await _host.deleteEntities(uid, 'conversation', removed.toList());
         if (projected.isNotEmpty) await _host.upsertConversations(uid, projected);
       }, indexWork: true);
     } catch (error) {
@@ -520,9 +600,9 @@ class SiriIntegration extends SiriEventsApi {
           .where((row) => row.uid == uid && row.id.isNotEmpty && !siriMemoryIsIndexable(row, now, owner: uid))
           .map((row) => row.id)
           .toSet();
+      if (removed.isNotEmpty) await _removeRequired(uid, generation, 'memory', removed);
       await _nativeOperation(() async {
         if (_uid != uid || _accountGeneration != generation) return;
-        if (removed.isNotEmpty) await _host.deleteEntities(uid, 'memory', removed.toList());
         if (projected.isNotEmpty) await _host.upsertMemories(uid, projected);
       }, indexWork: true);
     } catch (error) {
@@ -609,9 +689,9 @@ class SiriIntegration extends SiriEventsApi {
     }
     if (_uid != uid || _accountGeneration != generation) return;
     if (complete) {
-      await reconcileMemories(rows);
+      await _enqueueIndex((siri) => siri.reconcileMemories(rows));
     } else if (rows.isNotEmpty) {
-      await upsertMemories(rows);
+      await _enqueueIndex((siri) => siri.upsertMemories(rows));
     }
   }
 
@@ -623,10 +703,10 @@ class SiriIntegration extends SiriEventsApi {
       final now = DateTime.now();
       final removed =
           rows.where((row) => row.id.isNotEmpty && !siriTaskIsIndexable(row, now)).map((row) => row.id).toSet();
+      if (removed.isNotEmpty) await _removeRequired(uid, generation, 'task', removed);
       final projected = _taskProjection(rows);
       await _nativeOperation(() async {
         if (_uid != uid || _accountGeneration != generation) return;
-        if (removed.isNotEmpty) await _host.deleteEntities(uid, 'task', removed.toList());
         if (projected.isNotEmpty) await _host.upsertTasks(uid, projected);
       }, indexWork: true);
     } catch (error) {
@@ -672,28 +752,14 @@ class SiriIntegration extends SiriEventsApi {
     final uid = _uid;
     final generation = _accountGeneration;
     if (!_isIOS || uid == null) return;
-    try {
-      await _nativeOperation(() async {
-        if (_uid != uid || _accountGeneration != generation) return;
-        await _host.deleteEntities(uid, type, [id]);
-      }, indexWork: true);
-    } catch (error) {
-      Logger.debug('Siri index delete failed: $error');
-    }
+    await _removeRequired(uid, generation, type, [id]);
   }
 
   Future<void> deleteMany(String type, List<String> ids, {String? expectedUid}) async {
     final uid = _uid;
     final generation = _accountGeneration;
     if (!_isIOS || uid == null || ids.isEmpty || (expectedUid != null && uid != expectedUid)) return;
-    try {
-      await _nativeOperation(() async {
-        if (_uid != uid || _accountGeneration != generation) return;
-        await _host.deleteEntities(uid, type, ids);
-      }, indexWork: true);
-    } catch (error) {
-      Logger.debug('Siri index batch delete failed: $error');
-    }
+    await _removeRequired(uid, generation, type, ids);
   }
 
   Future<bool> isEnabled() async {

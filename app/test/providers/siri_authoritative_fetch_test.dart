@@ -748,6 +748,44 @@ void main() {
     expect(host.tasks.keys, contains('unseen'));
   });
 
+  test('delete reaches Spotlight while an owner-wide fetch is pending', () async {
+    final host = _SnapshotHost();
+    final fetchStarted = Completer<void>();
+    final releaseFetch = Completer<ApiResult<ActionItemsResponse>>();
+    final now = DateTime.now();
+    host.memories['deleted-during-fetch'] =
+        SiriMemory(id: 'deleted-during-fetch', content: 'Private', createdAtMs: now.millisecondsSinceEpoch);
+    final staleRow = Memory(
+        id: 'deleted-during-fetch',
+        uid: 'siri-fetch-owner',
+        content: 'Private',
+        category: MemoryCategory.manual,
+        createdAt: now,
+        updatedAt: now,
+        visibility: MemoryVisibility.private);
+    final siri = SiriIntegration.forTest(host, 'siri-fetch-owner',
+        taskPageFetcher: ({required limit, required offset, required completed}) {
+          if (!completed) {
+            fetchStarted.complete();
+            return releaseFetch.future;
+          }
+          return Future.value(const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)));
+        },
+        conversationPageFetcher: ({required limit, required offset, required startDate}) async =>
+            const ApiSuccess<List<ServerConversation>>([]),
+        memoryPageFetcher: ({required limit, required offset, cursor}) async => GetMemoriesResult([staleRow], true));
+
+    final refresh = siri.refreshOwnerWideIndex();
+    await fetchStarted.future;
+    siri.queueDelete('memory', 'deleted-during-fetch');
+    await siri.drainIndexForTest().timeout(const Duration(seconds: 1));
+    expect(host.memories.containsKey('deleted-during-fetch'), isFalse);
+    releaseFetch.complete(const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)));
+    await refresh;
+    expect(host.memories.containsKey('deleted-during-fetch'), isFalse,
+        reason: 'stale owner-wide projection must respect the queued delete fence');
+  });
+
   test('capped conversation traversal adds fetched rows without pruning unseen ids', () async {
     final host = _SnapshotHost();
     final now = DateTime.now();

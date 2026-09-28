@@ -63,8 +63,9 @@ class _RaceToken implements IdTokenResult {
 }
 
 class _RaceUser implements User {
+  _RaceUser([this.uid = 'owner-race']);
   @override
-  String get uid => 'owner-race';
+  final String uid;
   @override
   Future<IdTokenResult> getIdTokenResult([bool forceRefresh = false]) async => _RaceToken();
   @override
@@ -145,6 +146,28 @@ class _HungIndexHost extends SiriIndexApi {
   }
 }
 
+class _CooldownHost extends RecordingSiriHost {
+  final firstDelete = Completer<void>();
+  final deletions = <(String, String, List<String>)>[];
+  int calls = 0;
+
+  @override
+  Future<void> deleteEntities(String uid, String type, List<String> ids) async {
+    calls++;
+    if (calls == 1) await firstDelete.future;
+    deletions.add((uid, type, ids));
+  }
+
+  @override
+  Future<int> wipe() async => 1;
+
+  @override
+  Future<void> publishSessionConfig(SiriSessionConfig config) async {}
+
+  @override
+  Future<List<SiriTelemetryRecord>> takeTelemetry() async => [];
+}
+
 void main() {
   test('a hung native index call releases the Dart queue and starts a cooldown', () async {
     final host = _HungIndexHost();
@@ -156,6 +179,88 @@ void main() {
     siri.queueDelete('memory', 'second');
     await siri.drainIndexForTest().timeout(const Duration(seconds: 1));
     expect(host.calls, 1, reason: 'cooldown must not pile up calls behind a wedged native operation');
+  });
+
+  test('delete and newly locked memory submitted during cooldown reach Spotlight after cooldown', () async {
+    final host = _CooldownHost();
+    addTearDown(() => host.firstDelete.complete());
+    final siri = SiriIntegration.forTest(host, 'owner-a',
+        nativeTimeout: const Duration(milliseconds: 20), indexCooldown: const Duration(milliseconds: 80));
+    siri.queueDelete('memory', 'timed-out');
+    await siri.drainIndexForTest();
+    siri.queueDelete('memory', 'confirmed-delete');
+    siri.queueDeleteMany('task', ['confirmed-batch-delete']);
+    siri.queueUpsertMemories([
+      Memory(
+          id: 'newly-locked',
+          uid: 'owner-a',
+          content: 'Private',
+          category: MemoryCategory.manual,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          visibility: MemoryVisibility.private,
+          isLocked: true)
+    ]);
+    await siri.drainIndexForTest();
+    expect(host.calls, 1);
+    await Future<void>.delayed(const Duration(milliseconds: 130));
+    await siri.drainIndexForTest();
+    expect(host.deletions.where((call) => call.$1 == 'owner-a' && call.$2 == 'memory').expand((call) => call.$3),
+        containsAll(['confirmed-delete', 'newly-locked']));
+    expect(host.deletions.where((call) => call.$1 == 'owner-a' && call.$2 == 'task').expand((call) => call.$3),
+        contains('confirmed-batch-delete'));
+  });
+
+  test('pending removals from the old account are discarded on account change', () async {
+    final host = _CooldownHost();
+    addTearDown(() => host.firstDelete.complete());
+    final siri = SiriIntegration.forTest(host, 'owner-a',
+        nativeTimeout: const Duration(milliseconds: 20),
+        indexCooldown: const Duration(milliseconds: 80),
+        sessionConfig: (user, token, generation) => SiriSessionConfig(
+            uid: user.uid,
+            generation: generation,
+            baseUrl: 'http://127.0.0.1:8977',
+            profile: 'local_dev',
+            appVersion: 'test',
+            appBuild: '0',
+            deviceIdHash: 'test',
+            token: token.token,
+            tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch));
+    siri.queueDelete('memory', 'timed-out');
+    await siri.drainIndexForTest();
+    siri.queueDelete('memory', 'old-private');
+    await siri.drainIndexForTest();
+    await siri.accountChanged(_RaceUser('owner-b'));
+    await Future<void>.delayed(const Duration(milliseconds: 130));
+    await siri.drainIndexForTest();
+    expect(host.deletions.where((call) => call.$3.contains('old-private')), isEmpty);
+  });
+
+  test('same-owner session refresh retains pending removals', () async {
+    final host = _CooldownHost();
+    addTearDown(() => host.firstDelete.complete());
+    final siri = SiriIntegration.forTest(host, 'owner-a',
+        nativeTimeout: const Duration(milliseconds: 20),
+        indexCooldown: const Duration(milliseconds: 80),
+        sessionConfig: (user, token, generation) => SiriSessionConfig(
+            uid: user.uid,
+            generation: generation,
+            baseUrl: 'http://127.0.0.1:8977',
+            profile: 'local_dev',
+            appVersion: 'test',
+            appBuild: '0',
+            deviceIdHash: 'test',
+            token: token.token,
+            tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch));
+    siri.queueDelete('memory', 'timed-out');
+    await siri.drainIndexForTest();
+    siri.queueDelete('memory', 'still-private');
+    await siri.drainIndexForTest();
+    await siri.accountChanged(_RaceUser('owner-a'));
+    await Future<void>.delayed(const Duration(milliseconds: 130));
+    await siri.drainIndexForTest();
+    expect(host.deletions.where((call) => call.$3.contains('still-private')), isNotEmpty);
   });
 
   test('iOS reindex callbacks do not bypass the owner-fenced Spotlight queue', () {
