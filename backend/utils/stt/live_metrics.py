@@ -46,3 +46,9 @@ OUTPUT_LANGUAGE_SEGMENTS = Counter(
     'Finalized live STT segment language conformance',
     ['provider', 'primary_group', 'arm', 'conformance', 'profile_source'],
 )
+LEG_TRANSCRIPT_OUTCOME = Counter(
+    'omi_stt_leg_transcript_outcome_total',
+    'Provider leg outcome after VAD speech; text must arrive within the configured deadline',
+    ['provider', 'language', 'outcome'],
+)
+ROUTING_DECISION = Counter('omi_stt_routing_decisions_total', 'Health-weighted routing decisions', ['outcome'])
