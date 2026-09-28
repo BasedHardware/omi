@@ -679,6 +679,38 @@ async def test_worker_dead_letters_the_final_failed_attempt(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_worker_durable_failure_budget_survives_a_new_task_generation(monkeypatch):
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
+    monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 8, 'attempt_count': 4},
+    )
+    monkeypatch.setattr(
+        jobs_db, 'get_finalization_job', lambda job_id: {'uid': 'uid-1', 'conversation_id': 'conversation-1'}
+    )
+    finalizer = AsyncMock(side_effect=ConversationFinalizationError('processing_failed'))
+    monkeypatch.setattr(finalization_router, 'finalize_persisted_conversation', finalizer)
+    dead_letter = MagicMock(return_value=True)
+    retryable = MagicMock()
+    monkeypatch.setattr(finalization_router, 'final_attempt_failed', dead_letter)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
+    monkeypatch.setattr(finalization_router, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 5)
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'job_id': 'job-1', 'dispatch_generation': 9}), task_retry_count=0
+    )
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'dead_letter'}
+    assert finalizer.await_args.kwargs['final_attempt'] is True
+    dead_letter.assert_called_once_with('job-1', 9, 8, 5)
+    retryable.assert_not_called()
+
+
+@pytest.mark.anyio
 async def test_worker_completes_claimed_job(monkeypatch):
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
@@ -1355,7 +1387,7 @@ async def test_finalizer_never_logs_a_provider_exception_body(monkeypatch, caplo
     monkeypatch.setattr(
         persisted_finalizer,
         'process_conversation',
-        lambda *args: (_ for _ in ()).throw(RuntimeError('private transcript excerpt')),
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('private transcript excerpt')),
     )
 
     with pytest.raises(ConversationFinalizationError):
@@ -1368,6 +1400,10 @@ async def test_finalizer_never_logs_a_provider_exception_body(monkeypatch, caplo
         )
 
     assert 'private transcript excerpt' not in caplog.text
+    assert 'stage=processing exception_type=RuntimeError' in caplog.text
+    assert f'job_hash={persisted_finalizer.finalization_diagnostic_id("job-1")}' in caplog.text
+    assert f'conversation_hash={persisted_finalizer.finalization_diagnostic_id("conversation-1")}' in caplog.text
+    assert 'uid-1' not in caplog.text
 
 
 @pytest.mark.anyio

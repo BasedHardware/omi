@@ -27,6 +27,16 @@ internal, excluded from OpenAPI, and accepts only an OIDC token from the
 configured task invoker. The handler rejects extra task fields, so content and
 credentials cannot be introduced accidentally through task payload expansion.
 
+The worker's attempt budget is the job's durable `attempt_count`, not only
+Cloud Tasks' retry header. Reconciliation creates a new named task generation,
+which resets that header; the durable count still caps failed processing at the
+configured maximum. A fresh queued generation is enqueued only by the
+transaction that created it. On failure, `finalizer.py` logs a bounded stage,
+exception class, and truncated SHA-256 keys for the job and conversation. The
+keys are log correlation aids, never metric labels; exception messages and
+transcript data are excluded. Use the job key to distinguish repeated attempts
+from distinct failing conversations before interpreting an HTTP 500 rate.
+
 ## State machine and ownership
 
 | Status | Meaning | Recovery |

@@ -30,6 +30,7 @@ from utils.observability.journeys import (
     record_capture_finalization_terminal,
     record_conversation_finalization_client_terminal,
 )
+from utils.observability.finalization import finalization_diagnostic_id
 
 logger = logging.getLogger(__name__)
 
@@ -54,18 +55,23 @@ async def _retry_or_dead_letter(
     dispatch_generation: int,
     lease_epoch: int,
     task_retry_count: int,
+    failed_attempts: int,
     reason: str,
 ) -> bool:
     """Record a task failure; return whether this was the terminal delivery."""
     max_attempts = get_listen_finalization_tasks_max_attempts_for_worker()
-    if task_retry_count >= max_attempts - 1:
+    # Cloud Tasks resets its retry header when reconciliation issues a new
+    # dispatch generation. The job's failed-processing count survives that
+    # handoff and is the authoritative budget (as on the pusher path).
+    this_attempt = max(task_retry_count, failed_attempts) + 1
+    if this_attempt >= max_attempts:
         marked_dead_letter = await run_blocking(
             db_executor,
             final_attempt_failed,
             job_id,
             dispatch_generation,
             lease_epoch,
-            task_retry_count + 1,
+            this_attempt,
         )
         if not marked_dead_letter:
             return False
@@ -104,6 +110,7 @@ async def run_listen_finalization_job(
 
     release_lock = True
     claimed_lease_epoch: int | None = None
+    failed_attempts = 0
     job: dict[str, Any] | None = None
     try:
         claim = await run_blocking(
@@ -130,6 +137,7 @@ async def run_listen_finalization_job(
         if claim_status != 'claimed':
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
         claimed_lease_epoch = claim['lease_epoch']
+        failed_attempts = int(claim.get('attempt_count') or 0)
         if claimed_lease_epoch is None:
             logger.error('listen finalization claim returned no lease epoch job=%s', job_id)
             return JSONResponse(status_code=500, content={'status': 'retry'})
@@ -137,10 +145,13 @@ async def run_listen_finalization_job(
         job = await run_blocking(db_executor, jobs_db.get_finalization_job, job_id)
         if not job or not isinstance(job.get('uid'), str) or not isinstance(job.get('conversation_id'), str):
             terminal = await _retry_or_dead_letter(
-                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, 'invalid_job'
+                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, 'invalid_job'
             )
             if terminal:
-                logger.error('listen finalization final attempt failed job=%s error=invalid_job', job_id)
+                logger.error(
+                    'listen finalization final attempt failed job_hash=%s error=invalid_job',
+                    finalization_diagnostic_id(job_id),
+                )
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
@@ -167,14 +178,18 @@ async def run_listen_finalization_job(
                 dispatch_generation=dispatch_generation,
                 lease_epoch=claimed_lease_epoch,
                 trigger=trigger_for_finalization_job(job),
-                final_attempt=task_retry_count >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
+                final_attempt=max(task_retry_count, failed_attempts)
+                >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
             )
         except ConversationFinalizationError:
             terminal = await _retry_or_dead_letter(
-                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, 'processing_failed'
+                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, 'processing_failed'
             )
             if terminal:
-                logger.error('listen finalization final attempt failed job=%s failure=processing_failed', job_id)
+                logger.error(
+                    'listen finalization final attempt failed job_hash=%s failure=processing_failed',
+                    finalization_diagnostic_id(job_id),
+                )
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
@@ -203,12 +218,19 @@ async def run_listen_finalization_job(
         else:
             record_capture_finalization_terminal('success', accepted_at)
             record_conversation_finalization_client_terminal('success', job)
+            logger.info('listen finalization completed job_hash=%s', finalization_diagnostic_id(job_id))
         return JSONResponse(status_code=200, content={'status': 'done'})
     except asyncio.CancelledError:
         release_lock = False
         logger.warning('listen finalization handler cancelled job=%s; preserving run lock until TTL', job_id)
         raise
-    except Exception:
+    except Exception as error:
+        logger.warning(
+            'listen finalization worker failed stage=handler exception_type=%s job_hash=%s dispatch_generation=%s',
+            type(error).__name__,
+            finalization_diagnostic_id(job_id),
+            dispatch_generation,
+        )
         if claimed_lease_epoch is not None:
             try:
                 terminal = await _retry_or_dead_letter(
@@ -216,13 +238,17 @@ async def run_listen_finalization_job(
                     dispatch_generation,
                     claimed_lease_epoch,
                     task_retry_count,
+                    failed_attempts,
                     'worker_failed',
                 )
             except Exception:
                 logger.error('listen finalization recovery update failed job=%s failure=worker_failed', job_id)
             else:
                 if terminal:
-                    logger.error('listen finalization final attempt failed job=%s failure=worker_failed', job_id)
+                    logger.error(
+                        'listen finalization final attempt failed job_hash=%s failure=worker_failed',
+                        finalization_diagnostic_id(job_id),
+                    )
                     return JSONResponse(status_code=200, content={'status': 'dead_letter'})
                 return JSONResponse(status_code=500, content={'status': 'retry'})
         logger.error('listen finalization handler failed job=%s failure=worker_failed', job_id)

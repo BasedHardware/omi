@@ -839,7 +839,28 @@ def test_reconciler_replaces_stale_generation_after_worker_crash():
 
     assert intent['status'] == 'queued'
     assert intent['dispatch_generation'] == 5
+    assert intent['created'] is True
     assert transaction.updates[0][1]['dispatch_generation'] == 5
+
+
+def test_reconciler_does_not_dispatch_an_already_fresh_generation():
+    now = _now()
+    transaction = _Transaction()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'queued',
+            'dispatch_generation': 5,
+            'requires_byok': False,
+            'dispatch_requested_at': now,
+        },
+    )
+
+    intent = jobs._claim_finalization_replay_txn(transaction, ref, timedelta(minutes=5), now)
+
+    assert intent['status'] == 'queued'
+    assert intent['created'] is False
+    assert transaction.updates == []
 
 
 def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
@@ -877,6 +898,7 @@ def test_final_attempt_sets_visible_dead_letter_instead_of_completed():
     assert update['status'] == 'dead_letter'
     assert update['terminal_outcome'] == 'failure'
     assert update['task_retry_count'] == 5
+    assert update['attempt_count'] == 5
     assert 'completed_at' not in update
 
 
@@ -926,6 +948,7 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
                 'lease_expires_at': _now(),
                 'reconcile_after_at': jobs.firestore.DELETE_FIELD,
                 'task_retry_count': 5,
+                'attempt_count': 5,
                 'last_failure_code': 'final_attempt_failed',
             },
         ),

@@ -160,7 +160,7 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
             logger.exception('listen finalization reconciliation claim failed job=%s', job_id)
             result['skipped'] += 1
             continue
-        if claimed['status'] != 'queued' or claimed['dispatch_generation'] is None:
+        if not claimed.get('created') or claimed['status'] != 'queued' or claimed['dispatch_generation'] is None:
             result['skipped'] += 1
             continue
         try:

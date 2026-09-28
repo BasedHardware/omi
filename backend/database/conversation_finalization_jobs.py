@@ -1159,6 +1159,7 @@ def _mark_finalization_dead_letter_txn(
             'lease_expires_at': now,
             'reconcile_after_at': firestore.DELETE_FIELD,
             'task_retry_count': retry_count,
+            'attempt_count': max(int(job.get('attempt_count') or 0) + 1, retry_count),
             'last_failure_code': 'final_attempt_failed',
         },
     )
@@ -1551,7 +1552,10 @@ def _claim_finalization_replay_txn(
         _record_projection_delta(transaction, projection_collection, job, leased=-1, queued=1)
     job['status'] = 'queued'
     job['dispatch_generation'] = generation
-    return _intent_from_job(snapshot.id, job)
+    # Only the transaction that minted this generation should enqueue it.
+    # A concurrent reconciler that observes its fresh queued row must not
+    # report another dispatch of the same named Cloud Task.
+    return _intent_from_job(snapshot.id, job, created=True)
 
 
 def claim_finalization_replay(
