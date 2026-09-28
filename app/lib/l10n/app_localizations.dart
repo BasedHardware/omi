@@ -20445,10 +20445,10 @@ abstract class AppLocalizations {
   /// **'Open call'**
   String get openCall;
 
-  /// Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings
+  /// Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings
   ///
   /// In en, this message translates to:
-  /// **'Pendant audio is not reaching the app — tap to repair'**
+  /// **'Omi isn\'t sending audio — tap to reconnect'**
   String get captureRecoveryBanner;
 
   /// No description provided for @phoneRecordingBlockedByPendantBatch.

@@ -11275,7 +11275,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get openCall => 'Deschide apelul';
 
   @override
-  String get captureRecoveryBanner => 'Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara';
+  String get captureRecoveryBanner => 'Omi nu trimite audio — atinge pentru a reconecta';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

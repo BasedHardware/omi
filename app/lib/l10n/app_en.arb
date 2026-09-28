@@ -13332,9 +13332,9 @@
     "@openCall": {
         "description": "Accessibility hint on the live card during a call; tapping opens the call screen."
     },
-    "captureRecoveryBanner": "Pendant audio is not reaching the app — tap to repair",
+    "captureRecoveryBanner": "Omi isn't sending audio — tap to reconnect",
     "@captureRecoveryBanner": {
-        "description": "Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings"
+        "description": "Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings"
     },
     "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later on your pendant before recording with your phone.",
     "captureNotTranscribing": "Not transcribing",

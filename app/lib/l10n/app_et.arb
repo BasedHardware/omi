@@ -3543,7 +3543,7 @@
     "recordWith": "Salvestusviis",
     "moreWaysToRecord": "Rohkem salvestusviise",
     "openCall": "Ava kõne",
-    "captureRecoveryBanner": "Ripatsi heli ei jõua rakendusse — parandamiseks puudutage",
+    "captureRecoveryBanner": "Omi ei saada heli — puudutage uuesti ühendamiseks",
     "phoneRecordingBlockedByPendantBatch": "Peata ripatsi režiim Transcribe Later enne telefoniga salvestamist.",
     "captureNotTranscribing": "Transkriptsioon puudub",
     "captureAudioSavedTranscribesLater": "Heli salvestatud, transkribeeritakse hiljem",

@@ -11253,7 +11253,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get openCall => 'Адкрыць званок';
 
   @override
-  String get captureRecoveryBanner => 'Гук кулона не даходзіць да праграмы — націсніце, каб выправіць';
+  String get captureRecoveryBanner => 'Omi не перадае гук — націсніце, каб падключыцца зноў';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Спыніце Transcribe Later на падвесцы перад запісам на тэлефоне.';

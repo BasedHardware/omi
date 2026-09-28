@@ -11212,7 +11212,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get openCall => 'Open call';
 
   @override
-  String get captureRecoveryBanner => 'Pendant audio is not reaching the app — tap to repair';
+  String get captureRecoveryBanner => 'Omi isn\'t sending audio — tap to reconnect';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>

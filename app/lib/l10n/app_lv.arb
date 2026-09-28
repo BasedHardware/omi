@@ -3543,7 +3543,7 @@
     "recordWith": "Ierakstīt ar",
     "moreWaysToRecord": "Citi ierakstīšanas veidi",
     "openCall": "Atvērt zvanu",
-    "captureRecoveryBanner": "Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu",
+    "captureRecoveryBanner": "Omi nesūta audio — pieskarieties, lai atkārtoti izveidotu savienojumu",
     "phoneRecordingBlockedByPendantBatch": "Pirms ierakstīšanas ar tālruni apturiet Transcribe Later piekari.",
     "captureNotTranscribing": "Netiek transkribēts",
     "captureAudioSavedTranscribesLater": "Audio saglabāts, tiks transkribēts vēlāk",

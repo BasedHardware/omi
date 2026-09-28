@@ -3578,7 +3578,7 @@
     "recordWith": "Kayıt yöntemi",
     "moreWaysToRecord": "Diğer kayıt yöntemleri",
     "openCall": "Aramayı aç",
-    "captureRecoveryBanner": "Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun",
+    "captureRecoveryBanner": "Omi ses göndermiyor — yeniden bağlanmak için dokunun",
     "phoneRecordingBlockedByPendantBatch": "Telefonunuzla kaydetmeden önce kolyenizdeki Transcribe Later'ı durdurun.",
     "captureNotTranscribing": "Metne dökülmüyor",
     "captureAudioSavedTranscribesLater": "Ses kaydedildi, sonra metne dökülecek",

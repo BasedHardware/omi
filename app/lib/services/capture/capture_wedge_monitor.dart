@@ -261,8 +261,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     final state = _stateFor(deviceId);
     if (intentional) {
       state.rapidDropEnds.clear();
-      if (state.episode != null) {
+      if (state.episode != null || state.telemetryEpisode != null) {
         state.episode = null;
+        state.telemetryEpisode = null;
         notifyListeners();
       }
       return;
@@ -310,8 +311,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     final state = _devices[deviceId];
     if (state == null) return;
     state.rapidDropEnds.clear();
-    if (state.episode == null) return;
+    if (state.episode == null && state.telemetryEpisode == null) return;
     state.episode = null;
+    state.telemetryEpisode = null;
     notifyListeners();
   }
 
@@ -343,7 +345,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     bool requireFeatureGate = true,
     Map<String, Object> extraProperties = const {},
   }) async {
-    if (state.episode != null) return;
+    if (!_canDeclare(state, trigger)) return;
     var allowed = true;
     if (requireFeatureGate) {
       try {
@@ -352,9 +354,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         allowed = false;
       }
     }
-    if (!allowed || state.episode != null) return;
+    if (!allowed || !_canDeclare(state, trigger)) return;
     final episode = CaptureWedgeEpisode(deviceId: deviceId, source: source, trigger: trigger, declaredAt: _now());
-    state.episode = episode;
+    if (_isTelemetryOnlyTrigger(trigger)) {
+      state.telemetryEpisode = episode;
+    } else {
+      state.episode = episode;
+    }
     _safeTrack('Capture Wedge Detected', {
       'source': source,
       'consecutive_zero_byte_sessions': state.zeroByteSessionEnds.length,
@@ -367,9 +373,17 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     unawaited(_attemptRecovery(episode));
   }
 
+  bool _isTelemetryOnlyTrigger(String trigger) =>
+      trigger == triggerBytesSentNoTranscript || trigger == triggerUploadSilence;
+
+  bool _canDeclare(_DeviceWedgeState state, String trigger) {
+    return _isTelemetryOnlyTrigger(trigger) ? state.telemetryEpisode == null : state.episode == null;
+  }
+
   Future<void> _attemptRecovery(CaptureWedgeEpisode episode) async {
     episode.retryAttempted = true;
-    _retryInFlightDevices.add(episode.deviceId);
+    final telemetryOnly = _isTelemetryOnlyTrigger(episode.trigger);
+    if (!telemetryOnly) _retryInFlightDevices.add(episode.deviceId);
     try {
       final transferRetry = _transferRetry;
       if ((episode.trigger == triggerUploadSilence ||
@@ -383,24 +397,31 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     } catch (e) {
       Logger.debug('CaptureWedgeMonitor: recovery retry for ${episode.deviceId} failed: $e');
     } finally {
-      _retryInFlightDevices.remove(episode.deviceId);
+      if (!telemetryOnly) _retryInFlightDevices.remove(episode.deviceId);
     }
-    if (_episodeFor(episode.deviceId) != episode) return;
+    if (_episodeFor(episode.deviceId, telemetryOnly: telemetryOnly) != episode || telemetryOnly) return;
     episode.promptVisible = true;
     notifyListeners();
   }
 
+  /// Gates the BLE retry's reconnect, so only actionable episodes count;
+  /// telemetry-only episodes never own a BLE retry.
   bool hasActiveEpisode(String deviceId) => _devices[deviceId]?.episode != null;
 
-  CaptureWedgeEpisode? _episodeFor(String deviceId) => _devices[deviceId]?.episode;
+  CaptureWedgeEpisode? _episodeFor(String deviceId, {required bool telemetryOnly}) {
+    final state = _devices[deviceId];
+    return telemetryOnly ? state?.telemetryEpisode : state?.episode;
+  }
 
   void _resolveIfActive(String deviceId, _DeviceWedgeState state) {
-    final episode = state.episode;
-    if (episode == null) return;
-    if (_now().difference(episode.declaredAt) <= resolveWindow) {
-      _safeTrack('Capture Recovery Resolved', {'source': episode.source, 'trigger': episode.trigger});
+    if (state.episode == null && state.telemetryEpisode == null) return;
+    for (final episode in [state.episode, state.telemetryEpisode]) {
+      if (episode != null && _now().difference(episode.declaredAt) <= resolveWindow) {
+        _safeTrack('Capture Recovery Resolved', {'source': episode.source, 'trigger': episode.trigger});
+      }
     }
     state.episode = null;
+    state.telemetryEpisode = null;
     notifyListeners();
   }
 
@@ -418,6 +439,7 @@ class _DeviceWedgeState {
   final List<DateTime> noTranscriptSessionEnds = [];
   final List<DateTime> rapidDropEnds = [];
   CaptureWedgeEpisode? episode;
+  CaptureWedgeEpisode? telemetryEpisode;
 }
 
 class _OpenCaptureSession {

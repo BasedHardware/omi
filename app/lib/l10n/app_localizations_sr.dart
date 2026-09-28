@@ -11238,7 +11238,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get openCall => 'Отвори позив';
 
   @override
-  String get captureRecoveryBanner => 'Звук привеска не стиже до апликације — додирните за поправку';
+  String get captureRecoveryBanner => 'Omi не шаље звук — додирните за поновно повезивање';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Zaustavite Transcribe Later na privesku pre snimanja telefonom.';

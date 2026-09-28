@@ -3543,7 +3543,7 @@
     "recordWith": "Nahrať pomocou",
     "moreWaysToRecord": "Ďalšie spôsoby nahrávania",
     "openCall": "Otvoriť hovor",
-    "captureRecoveryBanner": "Zvuk prívesku sa do aplikácie nedostáva — opravte klepnutím",
+    "captureRecoveryBanner": "Omi neposiela zvuk — klepnutím sa znova pripojte",
     "phoneRecordingBlockedByPendantBatch": "Pred nahrávaním telefónom zastavte Transcribe Later na prívesku.",
     "captureNotTranscribing": "Neprepisuje sa",
     "captureAudioSavedTranscribesLater": "Zvuk uložený, prepíše sa neskôr",
