@@ -202,7 +202,21 @@ class TestTwitterHtmlEscaping(unittest.TestCase):
             resp = asyncio.run(self.app.twitter_callback(code="valid_code", state="user123:valid_token", error=None))
             self.assertEqual(resp.status_code, 500)
             self.assertEqual(resp.content, "Authentication error")
-            self.assertNotIn("<script>", resp.content)
+    def test_twitter_api_request_exception_sanitized(self):
+        """When twitter_api_request encounters an exception, it does not leak raw str(e)."""
+        with patch.object(self.app, "get_valid_access_token", return_value="fake_token"), \
+             patch.object(self.app.requests, "get", side_effect=Exception(BREAKOUT)):
+            res = self.app.twitter_api_request("uid_test", "GET", "/test")
+            self.assertEqual(res, {"error": "API request failed"})
+            self.assertNotIn(BREAKOUT, str(res))
+
+    def test_chat_tool_exception_sanitized(self):
+        """When chat tool encounters an exception, ChatToolResponse does not leak raw str(e)."""
+        fake_req = Mock()
+        fake_req.json = Mock(side_effect=Exception(BREAKOUT))
+        res = asyncio.run(self.app.tool_post_tweet(fake_req))
+        self.assertEqual(res.error, "Failed to post tweet")
+        self.assertNotIn(BREAKOUT, str(res.error))
 
 
 if __name__ == "__main__":

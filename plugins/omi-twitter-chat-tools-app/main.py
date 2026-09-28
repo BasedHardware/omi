@@ -173,7 +173,7 @@ def twitter_api_request(uid: str, method: str, endpoint: str, params: dict = Non
 
     except Exception as e:
         log(f"Twitter API request error: {e}")
-        return {"error": str(e)}
+        return {"error": "API request failed"}
 
 
 # X API v2 rejects max_results below the endpoint's floor with HTTP 400, so a
@@ -520,9 +520,7 @@ async def tool_post_tweet(request: Request):
 
     except Exception as e:
         log(f"Error posting tweet: {e}")
-        import traceback
-        traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to post tweet: {str(e)}")
+        return ChatToolResponse(error="Failed to post tweet")
 
 
 @app.post("/tools/get_timeline", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -574,7 +572,7 @@ async def tool_get_timeline(request: Request):
 
     except Exception as e:
         log(f"Error getting timeline: {e}")
-        return ChatToolResponse(error=f"Failed to get timeline: {str(e)}")
+        return ChatToolResponse(error="Failed to get timeline")
 
 
 @app.post("/tools/get_my_tweets", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -640,7 +638,7 @@ async def tool_get_my_tweets(request: Request):
 
     except Exception as e:
         log(f"Error getting tweets: {e}")
-        return ChatToolResponse(error=f"Failed to get tweets: {str(e)}")
+        return ChatToolResponse(error="Failed to get tweets")
 
 
 @app.post("/tools/get_mentions", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -690,7 +688,7 @@ async def tool_get_mentions(request: Request):
 
     except Exception as e:
         log(f"Error getting mentions: {e}")
-        return ChatToolResponse(error=f"Failed to get mentions: {str(e)}")
+        return ChatToolResponse(error="Failed to get mentions")
 
 
 @app.post("/tools/search_tweets", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -741,7 +739,7 @@ async def tool_search_tweets(request: Request):
 
     except Exception as e:
         log(f"Error searching tweets: {e}")
-        return ChatToolResponse(error=f"Search failed: {str(e)}")
+        return ChatToolResponse(error="Search failed")
 
 
 @app.post("/tools/like_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -777,7 +775,7 @@ async def tool_like_tweet(request: Request):
 
     except Exception as e:
         log(f"Error liking tweet: {e}")
-        return ChatToolResponse(error=f"Failed to like tweet: {str(e)}")
+        return ChatToolResponse(error="Failed to like tweet")
 
 
 @app.post("/tools/unlike_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -811,7 +809,7 @@ async def tool_unlike_tweet(request: Request):
 
     except Exception as e:
         log(f"Error unliking tweet: {e}")
-        return ChatToolResponse(error=f"Failed to unlike tweet: {str(e)}")
+        return ChatToolResponse(error="Failed to unlike tweet")
 
 
 @app.post("/tools/retweet", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -847,7 +845,7 @@ async def tool_retweet(request: Request):
 
     except Exception as e:
         log(f"Error retweeting: {e}")
-        return ChatToolResponse(error=f"Failed to retweet: {str(e)}")
+        return ChatToolResponse(error="Failed to retweet")
 
 
 @app.post("/tools/delete_tweet", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -877,7 +875,7 @@ async def tool_delete_tweet(request: Request):
 
     except Exception as e:
         log(f"Error deleting tweet: {e}")
-        return ChatToolResponse(error=f"Failed to delete tweet: {str(e)}")
+        return ChatToolResponse(error="Failed to delete tweet")
 
 
 @app.post("/tools/get_user_profile", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -944,7 +942,7 @@ async def tool_get_user_profile(request: Request):
 
     except Exception as e:
         log(f"Error getting profile: {e}")
-        return ChatToolResponse(error=f"Failed to get profile: {str(e)}")
+        return ChatToolResponse(error="Failed to get profile")
 
 
 # ============================================
