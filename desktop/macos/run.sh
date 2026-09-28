@@ -54,6 +54,12 @@ for arg in "$@"; do
     esac
 done
 
+if [ "${OMI_V5_HOST:-0}" = "1" ] || [ -d "Desktop/Vendor/OmiV5Runtime.xcframework" ]; then
+    # The SwiftPM manifest links a present runtime. Rebuild the bundle so its
+    # Frameworks directory always matches the executable, even in classic mode.
+    FORCE_FULL_BUNDLE=1
+fi
+
 if [ "$FAST_ONLY" = "1" ] && [ "$FORCE_FULL_BUNDLE" = "1" ]; then
     echo "ERROR: --fast-only cannot be combined with --full or OMI_FORCE_FULL_BUNDLE=1" >&2
     exit 2
@@ -84,6 +90,7 @@ Options (via environment variables):
   OMI_PYTHON_API_URL="..."  Python backend URL (explicit override; named bundles default to dev)
   OMI_JIT_QA_TARGET="..."   omi-jit-qa only: local-dev-gcp, deployed-dev, or cloud-qa atomic endpoint tuple
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
+  OMI_V5_HOST=1           Build and embed the local v5 framework (full bundle)
   OMI_FORCE_FULL_BUNDLE=1  Rebuild the complete app bundle on this launch
                           (E2E pool slots: refused while the fast bundle is reusable — use --fast-only)
   OMI_SCAN_STALE_BUNDLES=1  Remove stale same-named app bundles under $HOME (recovery only)
@@ -847,6 +854,10 @@ sign_app_bundle() {
 
     substep "Using identity: $SIGN_IDENTITY (team=${SIGN_IDENTITY_TEAM_ID:-none}, mode=$local_signing_mode)"
     if [ "$sign_nested" = true ]; then
+        if [ -d "$bundle/Contents/Frameworks/OmiV5Runtime.framework" ]; then
+            substep "Signing OmiV5Runtime framework"
+            omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/OmiV5Runtime.framework"
+        fi
         if [ -d "$bundle/Contents/Frameworks/Sparkle.framework" ]; then
             substep "Signing Sparkle framework"
             omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sparkle.framework"
@@ -1342,6 +1353,11 @@ if [ -f scripts/check_schema_docs.sh ]; then
     bash scripts/check_schema_docs.sh || substep "Schema docs check failed (non-fatal)"
 fi
 
+if [ "${OMI_V5_HOST:-0}" = "1" ]; then
+    step "Building local v5 runtime framework..."
+    "$SCRIPT_DIR/../../v5/react-native/scripts/build-host-framework.sh"
+fi
+
 step "Building Swift app (swift build -c debug)..."
 xcrun swift build -c debug --package-path Desktop -Xswiftc -emit-const-values
 
@@ -1360,6 +1376,13 @@ substep "Embedding App Intents metadata"
 
 substep "Adding rpath for Frameworks"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
+
+if [ -d "Desktop/Vendor/OmiV5Runtime.xcframework" ]; then
+    substep "Copying OmiV5Runtime framework"
+    runtime_slice="Desktop/Vendor/OmiV5Runtime.xcframework/macos-arm64_x86_64/OmiV5Runtime.framework"
+    test -d "$runtime_slice" || { echo "Missing v5 runtime slice: $runtime_slice" >&2; exit 1; }
+    cp -R "$runtime_slice" "$APP_BUNDLE/Contents/Frameworks/"
+fi
 
 # Copy Sparkle framework
 SWIFTPM_DEBUG_PRODUCTS_DIR="Desktop/.build/debug"

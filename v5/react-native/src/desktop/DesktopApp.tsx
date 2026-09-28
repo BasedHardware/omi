@@ -91,6 +91,7 @@ export function DesktopSessionProbe() {
 }
 
 type Props = TaskMutationProps & {
+  hostMode?: boolean;
   deviceContent?: React.ReactNode;
   liveVoiceControl?: React.ReactNode;
   ambient?: ReturnType<typeof useAmbientAudio>;
@@ -128,6 +129,7 @@ type Props = TaskMutationProps & {
 };
 
 export function DesktopApp({
+  hostMode = false,
   activeGenerationId,
   authError,
   deviceContent,
@@ -164,7 +166,7 @@ export function DesktopApp({
 }: Props) {
   const [captureRevision, setCaptureRevision] = useState(0);
   const capture = useRewindCapture(
-    session === 'ready',
+    session === 'ready' && !hostMode,
     () => setCaptureRevision(value => value + 1),
     captureAutoStart,
   );
@@ -360,6 +362,9 @@ export function DesktopApp({
   // same Welcome as every other surface — never nav pills, an omnibar, Home
   // cards, Settings, or empty-state lists.
   const overlayStyles = useDesktopStyleSheets(createOverlayStyles);
+  if (hostMode && session !== 'ready') {
+    return null;
+  }
   if (session === 'signed-out') {
     return (
       <DesktopThemeProvider
@@ -406,6 +411,7 @@ export function DesktopApp({
         onSetName={onAppearanceChange}>
         <DesktopRoot>
           <DesktopShellV5
+            hostMode={hostMode}
             activeGenerationId={activeGenerationId}
             ambient={ambient}
             capture={capture}
@@ -449,6 +455,7 @@ export function DesktopApp({
       onSetName={onAppearanceChange}>
       <DesktopRoot>
         <DesktopChrome
+          hostMode={hostMode}
           chatBusy={chatBusy}
           activeGenerationId={activeGenerationId}
           chatNotice={null}

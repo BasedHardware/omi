@@ -17,6 +17,7 @@ export function useOnboarding(
     initial: boolean,
     options?: {ignoreEnabled?: boolean},
   ) => Promise<void>,
+  hostMode = false,
 ) {
   const [setupRequired, setSetupRequired] = useState(false);
   const [completingSetup, setCompletingSetup] = useState(false);
@@ -54,6 +55,13 @@ export function useOnboarding(
     let active = true;
     const operation = authOperationRef.current;
     const auth = omiAuth;
+    if (hostMode) {
+      setOnboardingRequired(false);
+      setReturningUser(false);
+      return () => {
+        active = false;
+      };
+    }
     if (auth === undefined || auth === null) {
       // A Mac without the native OmiAuth module can never establish a real
       // cloud session. It must stay on Welcome — never a faked ready shell.
@@ -88,7 +96,7 @@ export function useOnboarding(
     return () => {
       active = false;
     };
-  }, [nativeSessionRequired]);
+  }, [nativeSessionRequired, hostMode]);
 
   // Every sign-in path — first-run Welcome, Settings, Connectors, Home
   // recovery — is the same native OmiAuth session. Successful sign-in resumes

@@ -73,3 +73,6 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Host-framework builds (generated CocoaPods and Xcode products)
+macos/.build-host-framework/

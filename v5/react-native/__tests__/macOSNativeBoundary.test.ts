@@ -823,3 +823,17 @@ test('treats a generation transport failure with no HTTP response as an error', 
     'Native generation transport failed before an HTTP response',
   );
 });
+
+test('embedded runtime exposes only the host bridge symbols', () => {
+  const exportsList = readFileSync(
+    resolve(macOSRoot, '../OmiV5Runtime/exports.txt'),
+    'utf8',
+  );
+  expect(exportsList.trim().split('\n')).toEqual([
+    '_OBJC_CLASS_$_OmiV5Host',
+    '_OBJC_METACLASS_$_OmiV5Host',
+    '__OBJC_PROTOCOL_$_OmiHostSessionProvider',
+    '__OBJC_PROTOCOL_$_OmiHostCaptureController',
+    '__OBJC_PROTOCOL_$_OmiHostShellDelegate',
+  ]);
+});

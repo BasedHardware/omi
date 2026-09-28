@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import {DesktopApp} from './DesktopApp';
 import {DesktopChat} from './DesktopChat';
+import {DesktopTrafficLights} from './DesktopTrafficLights';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 
 // Set by the desktopCommands mock; holds the ⌘F handler so tests can enter
@@ -310,6 +311,29 @@ async function openChatOverlay(renderer: ReactTestRenderer.ReactTestRenderer) {
     ).length,
   ).toBeGreaterThan(0);
 }
+
+test('embedded host mode renders no v5 onboarding or window markers after sign-out', () => {
+  const renderer = renderDesktop({hostMode: true, session: 'signed-out'});
+  expect(renderer.root.findAllByType(DesktopTrafficLights)).toHaveLength(0);
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'First-run onboarding',
+    ),
+  ).toHaveLength(0);
+});
+
+test('embedded host mode hides virtual window commands and leaves Activity mounted', () => {
+  const classic = renderDesktop();
+  expect(classic.root.findAllByType(DesktopTrafficLights)).toHaveLength(1);
+
+  const embedded = renderDesktop({hostMode: true});
+  expect(embedded.root.findAllByType(DesktopTrafficLights)).toHaveLength(0);
+  expect(
+    embedded.root.findAll(
+      node => node.props.accessibilityLabel === 'Omi desktop',
+    ),
+  ).not.toHaveLength(0);
+});
 
 test('Chat suggestions prepare an editable draft without sending', async () => {
   const onDraftChange = jest.fn();

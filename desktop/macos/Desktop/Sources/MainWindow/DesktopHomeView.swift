@@ -1126,10 +1126,23 @@ struct DesktopHomeView: View {
     chatFirstNavigation.selectLegacyDestination(item)
   }
 
+  @ViewBuilder
+  private var signedInContent: some View {
+    #if canImport(OmiV5Runtime)
+      if V5UIRollout.localOverrideEnabled {
+        V5HostView()
+      } else {
+        shellContent
+      }
+    #else
+      shellContent
+    #endif
+  }
+
   private var mainContent: some View {
     mainContentWithLifecycle(
       mainContentWithNotifications(
-        mainContentWithOverlays(shellContent)
+        mainContentWithOverlays(signedInContent)
       )
     )
   }

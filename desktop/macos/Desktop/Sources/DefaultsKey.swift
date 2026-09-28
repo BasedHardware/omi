@@ -172,6 +172,8 @@ enum DefaultsKey: String {
   /// Local embedding runtime: opt in to on-device hybrid search. Defaults off on
   /// production-family bundles and on in non-production; `OMI_LOCAL_EMBEDDINGS` overrides.
   case localEmbeddingsEnabled = "localEmbeddingsEnabled"
+  /// Development-only selection of the embedded React Native Activity UI.
+  case v5UILocalOverride = "omi.v5ui.localOverride"
   /// Local embedding runtime: pin an engine id. Unknown ids fail closed to keyword-only.
   case forceLocalEmbeddingEngine = "forceLocalEmbeddingEngine"
 }

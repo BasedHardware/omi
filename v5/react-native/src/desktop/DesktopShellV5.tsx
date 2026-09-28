@@ -30,6 +30,7 @@ import type {DesktopPreferences} from '../desktopSettingsClient';
 // Kept selectable from Settings → General so the previous major interface
 // revision ships inside the same app.
 type ShellProps = TaskMutationProps & {
+  hostMode?: boolean;
   activeGenerationId: string | null;
   ambient?: ReturnType<typeof useAmbientAudio>;
   capture: ReturnType<typeof useRewindCapture>;
@@ -73,6 +74,7 @@ const EXPLORE_ROUTE_V5: Record<ExploreCheck, DesktopRouteV5> = {
 };
 
 export function DesktopShellV5({
+  hostMode = false,
   activeGenerationId,
   ambient,
   capture,
@@ -196,6 +198,7 @@ export function DesktopShellV5({
   return (
     <View style={styles.root}>
       <DesktopChromeV5
+        hostMode={hostMode}
         chatBusy={chatBusy}
         activeGenerationId={activeGenerationId}
         chatNotice={null}

@@ -58,6 +58,7 @@ export function desktopNavLabelV5(label: DesktopNavItemV5): string {
 export type OmnibarModeV5 = 'Ask' | 'Search';
 
 type Props = {
+  hostMode?: boolean;
   chatBusy?: boolean;
   mode?: OmnibarModeV5;
   onModeChange?: (mode: OmnibarModeV5) => void;
@@ -82,6 +83,7 @@ type Props = {
 };
 
 export function DesktopChromeV5({
+  hostMode = false,
   chatBusy = false,
   mode = 'Ask',
   onModeChange,
@@ -353,7 +355,7 @@ export function DesktopChromeV5({
         <View
           accessibilityLabel="Window controls"
           style={styles.windowControls}>
-          <DesktopTrafficLights />
+          {!hostMode && <DesktopTrafficLights />}
         </View>
         <View
           onLayout={event => {

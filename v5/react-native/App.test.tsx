@@ -10,6 +10,8 @@ const app = readFileSync(resolve(__dirname, 'App.tsx'), 'utf8');
 test('the product entry keeps the canonical orchestrator', () => {
   expect(app).toContain('AppOrchestrator');
   expect(app).toContain('export default function App');
+  expect(app).toContain('hostMode={hostMode}');
+  expect(orchestrator).toContain('hostMode={hostMode}');
   expect(app).not.toContain('Saved data unavailable');
 });
 

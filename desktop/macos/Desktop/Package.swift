@@ -1,3 +1,4 @@
+import Foundation
 // swift-tools-version: 6.0
 import PackageDescription
 
@@ -33,6 +34,21 @@ import PackageDescription
 let testBundleFrameworkSearchPath = LinkerSetting.unsafeFlags([
   "-Xlinker", "-rpath", "-Xlinker", "@loader_path/../../..",
 ])
+
+let packageDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+let hasV5Runtime = FileManager.default.fileExists(
+  atPath: packageDirectory.appendingPathComponent("Vendor/OmiV5Runtime.xcframework").path)
+let v5RuntimeTargets: [Target] =
+  hasV5Runtime
+  ? [
+    .binaryTarget(name: "OmiV5Runtime", path: "Vendor/OmiV5Runtime.xcframework"),
+    .target(
+      name: "V5HostKit",
+      dependencies: ["OmiV5Runtime"],
+      path: "Sources/V5HostKit",
+      swiftSettings: [.unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])]
+    ),
+  ] : []
 
 let package = Package(
   name: "Omi Computer",
@@ -105,6 +121,7 @@ let package = Package(
         "OmiTheme",
         "OmiWAL",
         "VoiceTurnDomain",
+      ] + (hasV5Runtime ? ["V5HostKit"] : []) + [
         .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
         .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
         .product(name: "PostHog", package: "posthog-ios"),
@@ -122,6 +139,7 @@ let package = Package(
         "OmiSupport",
         "OmiWAL",
         "VoiceTurnDomain",
+        "V5HostKit",
         "Bluetooth/ARCHITECTURE.md",
         "FloatingControlBar/ARCHITECTURE.md",
         "MainWindow/Pages/MemoryGraph/ARCHITECTURE.md",
@@ -203,6 +221,6 @@ let package = Package(
         .unsafeFlags(["-strict-concurrency=complete"])
       ],
     ),
-  ],
+  ] + v5RuntimeTargets,
   swiftLanguageModes: [.v6]
 )
