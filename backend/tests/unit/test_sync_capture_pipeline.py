@@ -246,7 +246,9 @@ def test_empty_retry_event_carries_bounded_correlation(pipeline, caplog, second_
         assert 'uid-secret-9f2c' not in message and '1700000000.wav' not in message
 
 
-def test_job_finalized_event_shares_segment_correlation(pipeline, caplog):
+def test_job_finalized_event_shares_segment_correlation(pipeline, caplog, monkeypatch):
+    # The seeded Redis document uses the unchanged production key contract.
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     module, _store = pipeline
     job_id = str(uuid.uuid4())
     attempt_ref = uuid.uuid4().hex

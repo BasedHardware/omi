@@ -63,6 +63,7 @@ def _set_e2e_env():
     """
     os.environ["PYTHON_DOTENV_DISABLED"] = "1"
     os.environ["LOCAL_DEVELOPMENT"] = "true"
+    os.environ["OMI_ENV_STAGE"] = "offline"
     os.environ["ENCRYPTION_SECRET"] = "test-encryption-secret-for-e2e-testing-32chars!"
     os.environ["FIREBASE_PROJECT_ID"] = "test-e2e-project"
     os.environ["GOOGLE_CLOUD_PROJECT"] = "test-e2e-project"
