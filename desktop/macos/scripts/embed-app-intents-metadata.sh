@@ -35,6 +35,29 @@ find "$build_root" -type f -name '*.swiftconstvalues' \
   exit 1
 }
 
+if [[ "$mode" = --expect-absent ]]; then
+  # The hosted Xcode 26.6 metadata processor exited 1 without diagnostics for
+  # this Siri-free target. Prove the boundary from SwiftPM's compiled source
+  # graph and the assembled bundle instead.
+  xcrun swift package --package-path "$package_dir" describe --type json > "$work_dir/package-description.json"
+  python3 - "$work_dir/package-description.json" <<'PY'
+import json
+import sys
+
+targets = {target["name"]: target for target in json.load(open(sys.argv[1], encoding="utf-8"))["targets"]}
+sources = set(targets["Omi Computer"]["sources"])
+for source in ("SiriIntegration/SiriIntents.swift", "SiriIntegration/SiriEntities.swift", "SiriIntegration/SiriDonations.swift"):
+    if source in sources:
+        raise SystemExit(f"Stable compiler unexpectedly includes {source}")
+print("Xcode 26.6 source graph excludes App Intents declarations")
+PY
+  [[ ! -e "$app_bundle/Contents/Resources/Metadata.appintents" ]] || {
+    echo "Xcode 26.6 bundle unexpectedly contains Metadata.appintents" >&2; exit 1;
+  }
+  echo "Xcode 26.6 bundle has no Metadata.appintents"
+  exit 0
+fi
+
 find "$package_dir/Sources" \
   \( -path "$package_dir/Sources/Theme" -o -path "$package_dir/Sources/OmiSupport" \
      -o -path "$package_dir/Sources/OmiWAL" -o -path "$package_dir/Sources/VoiceTurnDomain" \
@@ -61,23 +84,6 @@ xcrun appintentsmetadataprocessor \
   --force
 
 metadata_dir="$work_dir/output/Metadata.appintents"
-if [[ "$mode" = --expect-absent ]]; then
-  python3 - "$metadata_dir/extract.actionsdata" <<'PY'
-import json
-import pathlib
-import sys
-path = pathlib.Path(sys.argv[1])
-payload = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-for kind in ("actions", "entities"):
-    if payload.get(kind):
-        raise SystemExit(f"Xcode 26.6 unexpectedly emitted {kind}: {sorted(payload[kind])}")
-print("Xcode 26.6 metadata extraction: no actions or entities")
-PY
-  [[ ! -e "$app_bundle/Contents/Resources/Metadata.appintents" ]] || {
-    echo "Xcode 26.6 bundle unexpectedly contains Metadata.appintents" >&2; exit 1;
-  }
-  exit 0
-fi
 [[ -s "$metadata_dir/extract.actionsdata" ]] || {
   echo "App Intents processor produced no actions data" >&2
   exit 1

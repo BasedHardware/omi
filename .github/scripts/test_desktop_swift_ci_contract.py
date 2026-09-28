@@ -18,8 +18,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -491,6 +494,60 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("Metadata.appintents", advisory)
         self.assertIn("Siri release metadata requires Xcode 27.0", embed)
         self.assertNotRegex(embed, r"\brg\b", "release metadata script must run on stock macos-26")
+
+    def test_stable_metadata_check_does_not_invoke_unsupported_processor(self):
+        """Xcode 26.6 proves absence from its compiled source graph and bundle."""
+        embed = (REPO_ROOT / "desktop/macos/scripts/embed-app-intents-metadata.sh").read_text()
+        stable = embed.index('if [[ "$mode" = --expect-absent ]]')
+        processor = embed.index("xcrun appintentsmetadataprocessor")
+        self.assertLess(stable, processor)
+        self.assertIn("swift package --package-path", embed[stable:processor])
+        self.assertIn("SiriIntegration/SiriIntents.swift", embed[stable:processor])
+        self.assertIn("Metadata.appintents", embed[stable:processor])
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "Desktop"
+            bundle = root / "Omi.app"
+            (bundle / "Contents/Resources").mkdir(parents=True)
+            const_values = (
+                package / ".build/out/Release/Omi_Computer.build/Objects-normal/arm64/Omi.swiftconstvalues"
+            )
+            const_values.parent.mkdir(parents=True)
+            const_values.touch()
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            marker = root / "processor-called"
+            xcrun = fake_bin / "xcrun"
+            xcrun.write_text(
+                '#!/bin/sh\n'
+                'if [ "$1 $2" = "swift package" ]; then cat "$SIRI_TEST_PACKAGE_DESCRIPTION"; exit 0; fi\n'
+                'touch "$SIRI_TEST_PROCESSOR_MARKER"; exit 99\n',
+                encoding="utf-8",
+            )
+            xcrun.chmod(0o755)
+            description = root / "package.json"
+            environment = os.environ | {
+                "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                "SIRI_TEST_PACKAGE_DESCRIPTION": str(description),
+                "SIRI_TEST_PROCESSOR_MARKER": str(marker),
+            }
+            command = [
+                "bash", str(REPO_ROOT / "desktop/macos/scripts/embed-app-intents-metadata.sh"),
+                str(package), str(bundle), "Release", "arm64", "--expect-absent",
+            ]
+            description.write_text(json.dumps({"targets": [{"name": "Omi Computer", "sources": []}]}))
+            result = subprocess.run(command, env=environment, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("no Metadata.appintents", result.stdout)
+            self.assertFalse(marker.exists(), "stable check invoked the unsupported metadata processor")
+
+            description.write_text(json.dumps({"targets": [{
+                "name": "Omi Computer", "sources": ["SiriIntegration/SiriIntents.swift"],
+            }]}))
+            result = subprocess.run(command, env=environment, text=True, capture_output=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unexpectedly includes", result.stderr)
 
     def test_mobile_27_only_sources_compile_out_on_required_ci(self):
         root = REPO_ROOT / "app/ios/Runner/SiriIntegration"
