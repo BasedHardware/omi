@@ -132,16 +132,28 @@ export function defaultDesktopPreferences(): DesktopPreferences {
   return {...memoryPreferences};
 }
 
+// The native snapshot returns NSNull for unset keys, and NSNull bridges as
+// a non-nullish object — `??` would pass it straight through to the parser,
+// pinning the plane to 'old'. Only strings count as a stored choice.
+function storedPlane(
+  record: Record<string, unknown>,
+  stampedV5Origin: string | null,
+): string {
+  if (typeof record.softwarePlane === 'string' && record.softwarePlane) {
+    return record.softwarePlane;
+  }
+  if (typeof record.plane === 'string' && record.plane) {
+    return record.plane;
+  }
+  return stampedV5Origin === null ? 'old' : 'new';
+}
+
 function snapshotFromRecord(
   record: Record<string, unknown>,
 ): DesktopPreferences {
   const stampedV5Origin = parseStampedV5Origin(record.stampedV5Origin);
   return {
-    softwarePlane: parseSoftwarePlane(
-      record.softwarePlane ??
-        record.plane ??
-        (stampedV5Origin === null ? 'old' : 'new'),
-    ),
+    softwarePlane: parseSoftwarePlane(storedPlane(record, stampedV5Origin)),
     screenCapture: record.screenCapture === true,
     audioMode: parseAudioRecordingMode(record.audioMode),
     interfaceSounds: record.interfaceSounds !== false,

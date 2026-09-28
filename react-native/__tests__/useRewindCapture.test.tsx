@@ -3,13 +3,28 @@ import TestRenderer, {act} from 'react-test-renderer';
 
 const mockCapture = {
   requestCapturePermission: jest.fn(),
+  capturePermissionStatus: jest.fn(),
   startCapture: jest.fn(async () => undefined),
   stopCapture: jest.fn(async () => undefined),
   captureFrame: jest.fn(),
 };
+const mockAppStateListeners: Array<(state: string) => void> = [];
 jest.mock('react-native', () => ({
   NativeModules: {OmiRewind: mockCapture},
   Platform: {OS: 'macos'},
+  AppState: {
+    addEventListener: (_type: string, listener: (state: string) => void) => {
+      mockAppStateListeners.push(listener);
+      return {
+        remove: () => {
+          const index = mockAppStateListeners.indexOf(listener);
+          if (index >= 0) {
+            mockAppStateListeners.splice(index, 1);
+          }
+        },
+      };
+    },
+  },
 }));
 const {useRewindCapture} = require('../src/app/useRewindCapture');
 let state: ReturnType<typeof useRewindCapture>;
@@ -22,7 +37,9 @@ let renderer: TestRenderer.ReactTestRenderer;
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
+  mockAppStateListeners.length = 0;
   mockCapture.requestCapturePermission.mockResolvedValue('granted');
+  mockCapture.capturePermissionStatus.mockResolvedValue('granted');
   mockCapture.captureFrame.mockResolvedValue({captured: true});
 });
 afterEach(async () => {
@@ -34,6 +51,27 @@ async function render() {
     renderer = TestRenderer.create(<Harness />);
   });
 }
+
+test('availability follows the silent macOS permission preflight', async () => {
+  mockCapture.capturePermissionStatus.mockResolvedValue('denied');
+  await render();
+  expect(state.available).toBe(false);
+  expect(mockCapture.requestCapturePermission).not.toHaveBeenCalled();
+});
+
+test('availability re-probes when the app becomes active again', async () => {
+  mockCapture.capturePermissionStatus.mockResolvedValueOnce('denied');
+  await render();
+  expect(state.available).toBe(false);
+  mockCapture.capturePermissionStatus.mockResolvedValue('granted');
+  await act(async () => {
+    for (const listener of [...mockAppStateListeners]) {
+      listener('active');
+    }
+  });
+  expect(state.available).toBe(true);
+  expect(mockCapture.requestCapturePermission).not.toHaveBeenCalled();
+});
 
 test('capture starts only explicitly and serializes cadence until stopped', async () => {
   await render();

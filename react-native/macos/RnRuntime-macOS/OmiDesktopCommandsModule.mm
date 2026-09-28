@@ -165,6 +165,37 @@ RCT_REMAP_METHOD(setDesktopPreference,
   resolve(OmiDesktopPreferenceSnapshot());
 }
 
+RCT_REMAP_METHOD(performWindowCommand,
+                 command:(NSString *)command
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  // The native traffic lights are hidden; the React chrome draws virtual
+  // ones and routes close/minimize/zoom through here so the actions run the
+  // same AppKit paths the real buttons would (performClose: honors
+  // windowShouldClose and the app's quit teardown).
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NSWindow *window = NSApplication.sharedApplication.keyWindow;
+    if (window == nil) {
+      window = NSApplication.sharedApplication.mainWindow;
+    }
+    if (window == nil) {
+      reject(@"OMI_WINDOW_UNAVAILABLE", @"No key window", nil);
+      return;
+    }
+    if ([command isEqual:@"close"]) {
+      [window performClose:nil];
+    } else if ([command isEqual:@"minimize"]) {
+      [window miniaturize:nil];
+    } else if ([command isEqual:@"zoom"]) {
+      [window performZoom:nil];
+    } else {
+      reject(@"OMI_WINDOW_COMMAND_INVALID", @"Unknown window command", nil);
+      return;
+    }
+    resolve(@(YES));
+  });
+}
+
 RCT_REMAP_METHOD(permissionStatus,
                  permissionStatusWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {

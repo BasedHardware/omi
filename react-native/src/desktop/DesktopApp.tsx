@@ -173,6 +173,9 @@ export function DesktopApp({
   const [groupBy, setGroupBy] = useState<TimelineGrouping>('date');
   // Interface revision: v5 keeps the pages IA selectable from Settings.
   const [uiVersion, setUiVersion] = useState<DesktopUiVersion>('v5.1');
+  // Saved-v5 users would see one paint of v5.1 chrome before preferences
+  // resolve; hold the loading mark until the first read settles.
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [focusCaptureId, setFocusCaptureId] = useState<string | null>(null);
   // Chat is an overlay, not a page: small asks answer inline under the
   // omnibar and the full transcript opens here on demand.
@@ -198,11 +201,13 @@ export function DesktopApp({
         if (!cancelled) {
           setExploreDone(parseExploreProgress(prefs?.exploreProgress));
           setUiVersion(prefs?.uiVersion ?? 'v5.1');
+          setPrefsLoaded(true);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setExploreDone(new Set());
+          setPrefsLoaded(true);
         }
       });
     return () => {
@@ -373,6 +378,17 @@ export function DesktopApp({
     );
   }
   if (session === 'probing') {
+    return (
+      <DesktopThemeProvider
+        initialName={initialAppearance}
+        onSetName={onAppearanceChange}>
+        <DesktopRoot>
+          <DesktopSessionProbe />
+        </DesktopRoot>
+      </DesktopThemeProvider>
+    );
+  }
+  if (!prefsLoaded) {
     return (
       <DesktopThemeProvider
         initialName={initialAppearance}

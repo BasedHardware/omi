@@ -101,7 +101,15 @@ jest.mock('../desktopSettingsClient', () => {
   };
   return {
     defaultDesktopPreferences: () => prefs,
-    loadDesktopPreferences: jest.fn(async () => prefs),
+    // The shell gates its first paint on prefsLoaded; resolving via a
+    // synchronous thenable keeps every existing initial-render assertion
+    // (inside one act()) seeing the loaded shell, not the probe.
+    loadDesktopPreferences: jest.fn(() => ({
+      then(onFulfilled: (value: typeof prefs) => void) {
+        onFulfilled(prefs);
+        return {catch: () => undefined};
+      },
+    })),
     loadPermissionStatus: jest.fn(async () => ({
       microphone: 'unknown',
       notifications: 'unknown',

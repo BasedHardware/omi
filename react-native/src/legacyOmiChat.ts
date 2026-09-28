@@ -9,12 +9,15 @@ export type OmiChatStreamEvent =
   | {kind: 'message'; message: ChatMessage};
 
 function decodeOmiJson(value: string): unknown {
-  const bytes = decodeBase64(value.trim());
-  const encoded = Array.from(
-    bytes,
-    byte => `%${byte.toString(16).padStart(2, '0')}`,
-  ).join('');
-  return JSON.parse(decodeURIComponent(encoded));
+  return JSON.parse(decodeUtf8(decodeBase64(value.trim())));
+}
+
+function decodeUtf8(bytes: Uint8Array): string {
+  return decodeURIComponent(
+    Array.from(bytes, byte => `%${byte.toString(16).padStart(2, '0')}`).join(
+      '',
+    ),
+  );
 }
 
 function fieldValue(line: string, name: string): string | null {
@@ -60,19 +63,37 @@ export function parseOmiChatLine(line: string): OmiChatStreamEvent | null {
 }
 
 export class IncrementalOmiChatParser {
-  private readonly decoder = new TextDecoder('utf-8', {fatal: true});
+  private pendingBytes = new Uint8Array();
   private text = '';
 
   push(chunk: Uint8Array | string): readonly OmiChatStreamEvent[] {
-    this.text +=
-      typeof chunk === 'string'
-        ? chunk
-        : this.decoder.decode(chunk, {stream: true});
+    if (typeof chunk === 'string') {
+      if (this.pendingBytes.length > 0) {
+        this.text += decodeUtf8(this.pendingBytes);
+        this.pendingBytes = new Uint8Array();
+      }
+      this.text += chunk;
+    } else {
+      const bytes = new Uint8Array(this.pendingBytes.length + chunk.length);
+      bytes.set(this.pendingBytes);
+      bytes.set(chunk, this.pendingBytes.length);
+      for (let tail = 0; tail <= Math.min(3, bytes.length); tail += 1) {
+        try {
+          this.text += decodeUtf8(bytes.subarray(0, bytes.length - tail));
+          this.pendingBytes = bytes.slice(bytes.length - tail);
+          break;
+        } catch {
+          if (tail === Math.min(3, bytes.length))
+            throw new Error('UTF-8 data is invalid');
+        }
+      }
+    }
     return this.drain(false);
   }
 
   finish(): readonly OmiChatStreamEvent[] {
-    this.text += this.decoder.decode();
+    this.text += decodeUtf8(this.pendingBytes);
+    this.pendingBytes = new Uint8Array();
     return this.drain(true);
   }
 
