@@ -460,7 +460,11 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     // Register Phone Calls plugin
-    OmiPhoneCallsPlugin.register(with: engineBridge.pluginRegistry.registrar(forPlugin: "OmiPhoneCallsPlugin")!)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "OmiPhoneCallsPlugin") {
+      OmiPhoneCallsPlugin.register(with: registrar)
+    } else {
+      NSLog("[AppDelegate] Phone calls plugin registrar unavailable")
+    }
 
   }
 

@@ -210,7 +210,8 @@ final class SiriSnapshotStore {
                 let existing = snapshot.tasks[id]
                 snapshot.tasks[id] = Task(id: id, title: title, completed: completed,
                     createdAtMs: existing?.createdAtMs ?? now,
-                    dueAtMs: dueAt.map { Int64($0.timeIntervalSince1970 * 1000) } ?? existing?.dueAtMs,
+                    dueAtMs: dueAt.flatMap { CheckedIntegerConversion.int64($0.timeIntervalSince1970 * 1000) }
+                        ?? existing?.dueAtMs,
                     completedAtMs: completed ? now : nil)
             }
             if enabled {
@@ -750,10 +751,10 @@ final class SiriSnapshotStore {
             try mutateForOwner(uid) {
                 snapshot.conversations = snapshot.conversations.filter { eligible($0.value, now: now) }
                 let newest = snapshot.conversations.values.sorted { $0.startedAtMs > $1.startedAtMs }.prefix(2000)
-                snapshot.conversations = Dictionary(uniqueKeysWithValues: newest.map { ($0.id, $0) })
+                snapshot.conversations = Dictionary(newest.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
                 snapshot.memories = snapshot.memories.filter { eligible($0.value, now: now) }
                 let memories = snapshot.memories.values.sorted { $0.createdAtMs > $1.createdAtMs }.prefix(5000)
-                snapshot.memories = Dictionary(uniqueKeysWithValues: memories.map { ($0.id, $0) })
+                snapshot.memories = Dictionary(memories.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
                 snapshot.tasks = snapshot.tasks.filter { eligible($0.value, now: now) }
             }
             lock.lock()

@@ -144,7 +144,11 @@ class AppleHealthService {
         let days = args?["days"] as? Int ?? 7
 
         let endDate = Date()
-        let startDate = Calendar.current.date(byAdding: .day, value: -days, to: endDate)!
+        guard (1...365).contains(days),
+              let startDate = Calendar.current.date(byAdding: .day, value: -days, to: endDate) else {
+            result(FlutterError(code: "invalid_days", message: "days must be between 1 and 365", details: nil))
+            return
+        }
 
         var summary: [String: Any] = [:]
         let group = DispatchGroup()

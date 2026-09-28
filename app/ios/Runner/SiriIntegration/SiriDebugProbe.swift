@@ -59,7 +59,10 @@ enum SiriDebugProbe {
             let developmentKeys = [development.ownerKey, development.pendingWipeOwnersKey,
                 development.generationKey, development.enabledKey, development.pendingRouteKey,
                 development.sessionConfigKey, development.telemetryKey]
-            let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
+            guard let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12") else {
+                NSLog("[SiriProbe] flavorNamespace=FAIL (app-group defaults unavailable)")
+                return
+            }
             let probeA = SiriStorageNamespace(bundleID: "com.omi.probe.a")
             let probeB = SiriStorageNamespace(bundleID: "com.omi.probe.b")
             defaults.set("probe-a", forKey: probeA.ownerKey)
@@ -82,15 +85,22 @@ enum SiriDebugProbe {
                   backgroundModes.contains("audio") && backgroundModes.contains("bluetooth-central") ? "PASS" : "FAIL")
             let quickActionsClass = NSClassFromString("quick_actions_ios.QuickActionsPlugin")
             let sceneProtocol = NSProtocolFromString("FlutterSceneLifeCycleDelegate")
-            NSLog("[SiriProbe] quickActionScenePlugin=%@",
-                  quickActionsClass != nil && sceneProtocol != nil &&
-                  class_conformsToProtocol(quickActionsClass!, sceneProtocol!) ? "PASS" : "FAIL")
+            let quickActionAvailable: Bool
+            if let quickActionsClass, let sceneProtocol {
+                quickActionAvailable = class_conformsToProtocol(quickActionsClass, sceneProtocol)
+            } else {
+                quickActionAvailable = false
+            }
+            NSLog("[SiriProbe] quickActionScenePlugin=%@", quickActionAvailable ? "PASS" : "FAIL")
             for (label, rawURL) in [
                 ("scheme", "omi-dev://conversation/scene-probe"),
                 ("universal", "https://h.omi.me/conversation/scene-probe"),
                 ("oauth", "com.googleusercontent.apps.probe:/oauth-callback"),
             ] {
-                let url = URL(string: rawURL)!
+                guard let url = URL(string: rawURL) else {
+                    NSLog("[SiriProbe] sceneLink_%@=FAIL (invalid URL)", label)
+                    continue
+                }
                 if label == "universal" {
                     let activity = NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb)
                     activity.webpageURL = url
@@ -827,7 +837,10 @@ enum SiriDebugProbe {
                 appBuild: "0", deviceIdHash: "probe-device", token: "fake-siri-probe-token",
                 tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
             try SiriSession.shared.publish(rebound)
-            let oldConfig = SiriSession.shared.currentConfig()!
+            guard let oldConfig = SiriSession.shared.currentConfig() else {
+                NSLog("[SiriProbe] authGateDifferentUidRefused=FAIL (missing session config)")
+                return
+            }
             try auth.signOut()
             _ = try await auth.signInAnonymously().user
             let differentRefused: Bool
@@ -836,7 +849,10 @@ enum SiriDebugProbe {
             catch { differentRefused = false }
             NSLog("[SiriProbe] authGateDifferentUidRefused=%@", differentRefused ? "PASS" : "FAIL")
             _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
-            let currentUid = auth.currentUser!.uid
+            guard let currentUid = auth.currentUser?.uid else {
+                NSLog("[SiriProbe] authGateDifferentUidRefused=FAIL (missing Firebase user)")
+                return
+            }
             try await SiriSnapshotStore.shared.bind(uid: currentUid)
             let current = SiriSessionConfig(uid: currentUid,
                 generation: SiriSnapshotStore.shared.generationForOwner(currentUid) ?? -1,
