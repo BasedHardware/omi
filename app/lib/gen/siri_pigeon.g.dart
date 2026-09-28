@@ -635,6 +635,25 @@ class SiriIndexApi {
     return pigeonVar_replyValue! as int;
   }
 
+  /// Durably block engine-free Siri and clear its token before Firebase signs out.
+  Future<void> prepareForSignOut() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.prepareForSignOut$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
   /// Reuse the persisted index generation only when its snapshot still belongs to this UID.
   Future<int?> generationForOwner(String uid) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.generationForOwner$pigeonVar_messageChannelSuffix';

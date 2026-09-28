@@ -18,6 +18,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
 import 'package:omi/flavors.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -88,7 +89,8 @@ class AuthService {
         _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
         _refreshDelay = _defaultRefreshDelay,
         _recordTelemetry = _recordProductionTelemetry,
-        _telemetryContextProvider = _productionTelemetryContext;
+        _telemetryContextProvider = _productionTelemetryContext,
+        _prepareSiriSignOut = SiriIntegration.current.prepareForSignOut;
 
   @visibleForTesting
   AuthService.forTesting({
@@ -97,11 +99,13 @@ class AuthService {
     Duration? refreshAttemptTimeout,
     AuthTelemetryRecorder? recordTelemetry,
     AuthTelemetryContextProvider? telemetryContextProvider,
+    Future<void> Function()? prepareSiriSignOut,
   })  : _tokenGateway = tokenGateway,
         _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
         _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
         _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
-        _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
+        _telemetryContextProvider = telemetryContextProvider ?? (() => const {}),
+        _prepareSiriSignOut = prepareSiriSignOut ?? (() async {});
 
   /// Replaces the production Firebase token gateway on the **singleton** for
   /// the local hermetic journey lane (SCA-488).
@@ -149,6 +153,7 @@ class AuthService {
   final AuthRefreshDelay _refreshDelay;
   final AuthTelemetryRecorder _recordTelemetry;
   final AuthTelemetryContextProvider _telemetryContextProvider;
+  final Future<void> Function() _prepareSiriSignOut;
   final StreamController<AuthSessionExpiredEvent> _sessionExpiredController =
       StreamController<AuthSessionExpiredEvent>.broadcast(sync: true);
   Future<AuthTokenResult>? _refreshInFlight;
@@ -227,8 +232,7 @@ class AuthService {
     try {
       // Sign out the current user first
       Logger.debug('Signing out current user...');
-      handleAuthUserChanged(null);
-      await FirebaseAuth.instance.signOut();
+      await signOutForAccountSwitch();
       Logger.debug('User signed out successfully.');
 
       final rawNonce = generateNonce();
@@ -293,8 +297,17 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    await _prepareSiriSignOut();
     _invalidateRefreshes();
     _clearCachedIdentityAndAuth();
+    await _tokenGateway.signOut();
+  }
+
+  /// Credential collision and provider switching preserve their existing
+  /// non-Siri cache behavior, while fencing native Siri before Firebase exits.
+  Future<void> signOutForAccountSwitch() async {
+    await _prepareSiriSignOut();
+    handleAuthUserChanged(null);
     await _tokenGateway.signOut();
   }
 
@@ -541,6 +554,7 @@ class AuthService {
 
   Future<void> _runSessionExpiration() async {
     try {
+      await _prepareSiriSignOut();
       await _tokenGateway.signOut();
     } catch (e) {
       // Local session state is already terminal and cleared. A platform sign-
@@ -1059,8 +1073,7 @@ class AuthService {
     final existingCred = e.credential;
 
     // Sign out current anonymous user
-    handleAuthUserChanged(null);
-    await FirebaseAuth.instance.signOut();
+    await signOutForAccountSwitch();
 
     // Sign in with existing account
     final result = await FirebaseAuth.instance.signInWithCredential(existingCred!);

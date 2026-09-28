@@ -113,7 +113,9 @@ final class SiriSnapshotStore {
     }
     private func accountOwnerLocked() -> Bool {
         guard let uid = snapshot.ownerUid, !uid.isEmpty else { return false }
-        return owner == uid && SiriSession.shared.currentConfig()?.uid == uid
+        return owner == uid && SiriSession.shared.currentConfig()?.uid == uid &&
+            transitionGeneration == nil &&
+            (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty
     }
     private func validOwnerLocked() -> Bool { enabled && accountOwnerLocked() }
     private static let conversationAgeMs: Int64 = 180 * 86_400_000
@@ -318,6 +320,25 @@ final class SiriSnapshotStore {
             try await wipe(expectedGeneration: next)
             return next
 
+        }
+    }
+    /// Prepare before Firebase sign-out, while the Flutter engine still exists.
+    /// UserDefaults is flushed before the token mirror is removed, so a killed
+    /// process sees the marker and refuses all engine-free reads and writes.
+    func prepareForSignOut() async throws {
+        try await serialized {
+            lock.lock()
+            let next = (defaults.object(forKey: generationKey) as? Int64 ?? 0) + 1
+            let owners = Set([owner, snapshot.ownerUid, SiriSession.shared.currentConfig()?.uid].compactMap { $0 })
+                .union(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? [])
+            transitionGeneration = next
+            defaults.set(next, forKey: generationKey)
+            defaults.set(Array(owners), forKey: pendingWipeOwnersKey)
+            defaults.removeObject(forKey: routeKey)
+            let persisted = defaults.synchronize()
+            lock.unlock()
+            guard persisted else { throw SiriSession.Failure.auth }
+            try SiriSession.shared.clearForSignOut()
         }
     }
     func retryPendingWipe() async throws -> Bool {

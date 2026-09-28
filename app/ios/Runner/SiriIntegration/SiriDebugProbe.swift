@@ -36,6 +36,9 @@ enum SiriDebugProbe {
                 .standardizedFileURL.path == group.standardizedFileURL.path
             NSLog("[SiriProbe] missingAppGroupFallback=%@",
                   fallbackCorrect && groupCorrect ? "PASS" : "FAIL")
+            let unavailableSession = SiriSession(defaults: nil)
+            let unavailableFailsSafe = unavailableSession.currentConfig() == nil
+            NSLog("[SiriProbe] missingSessionSuiteUnavailable=%@", unavailableFailsSafe ? "PASS" : "FAIL")
             let production = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12")
             let development = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12.development")
             let productionKeys = [production.ownerKey, production.pendingWipeOwnersKey,
@@ -98,7 +101,7 @@ enum SiriDebugProbe {
             }
             do {
               try await SiriSnapshotStore.shared.bind(uid: "siri-probe")
-              let config = SiriSessionConfig(uid: "siri-probe",
+              var config = SiriSessionConfig(uid: "siri-probe",
                 generation: SiriSnapshotStore.shared.generationForOwner("siri-probe") ?? 0,
                 baseUrl: raw, profile: "local_dev",
                 appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
@@ -115,6 +118,35 @@ enum SiriDebugProbe {
                 NSLog("[SiriProbe] rememberPerform=returned result=%@", String(reflecting: result))
                 NSLog("[SiriProbe] engineFreeRememberIndexed=%@",
                       SiriSnapshotStore.shared.probeStoredEntity(type: "memory", id: "stub-memory-1") ? "PASS" : "FAIL")
+                // Model a process kill after the native sign-out preparation,
+                // before Flutter's auth-state callback can finish the wipe.
+                try await SiriSnapshotStore.shared.prepareForSignOut()
+                let markerPersisted = (defaults.stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? [])
+                    .contains(config.uid)
+                NSLog("[SiriProbe] pendingSignOutMarkerPersisted=%@", markerPersisted ? "PASS" : "FAIL")
+                let pendingQueriesEmpty: Bool
+                if #available(iOS 27.0, *) {
+                    pendingQueriesEmpty = SiriSnapshotStore.shared.memories(ids: nil).isEmpty &&
+                        SiriSnapshotStore.shared.memoryNotes(ids: nil).isEmpty &&
+                        SiriSnapshotStore.shared.conversations(ids: nil).isEmpty &&
+                        SiriSnapshotStore.shared.tasks(ids: nil).isEmpty
+                } else { pendingQueriesEmpty = true }
+                let pendingIntentDenied: Bool
+                do { _ = try await OmiNativeAPI().request(method: "POST", path: "/v1/memories", body: [:]); pendingIntentDenied = false }
+                catch SiriSession.Failure.auth { pendingIntentDenied = true }
+                catch { pendingIntentDenied = false }
+                NSLog("[SiriProbe] pendingSignOutQueriesEmpty=%@ intentDenied=%@",
+                      pendingQueriesEmpty ? "PASS" : "FAIL", pendingIntentDenied ? "PASS" : "FAIL")
+                let retried = try await SiriSnapshotStore.shared.retryPendingWipe()
+                NSLog("[SiriProbe] pendingSignOutWipeRetried=%@", retried ? "PASS" : "FAIL")
+                try await SiriSnapshotStore.shared.bind(uid: config.uid)
+                config = SiriSessionConfig(uid: config.uid,
+                    generation: SiriSnapshotStore.shared.generationForOwner(config.uid) ?? -1,
+                    baseUrl: config.baseUrl, profile: config.profile,
+                    appVersion: config.appVersion, appBuild: config.appBuild,
+                    deviceIdHash: config.deviceIdHash, token: "fake-siri-probe-token",
+                    tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
+                try SiriSession.shared.publish(config)
                 if #available(iOS 27.0, *) {
                     let writeConfig = URLSessionConfiguration.ephemeral
                     writeConfig.protocolClasses = [SiriProbeURLProtocol.self]

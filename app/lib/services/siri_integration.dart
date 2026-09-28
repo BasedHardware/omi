@@ -149,6 +149,16 @@ class SiriIntegration extends SiriEventsApi {
     return result;
   }
 
+  /// The native marker and token revocation must finish before Firebase
+  /// sign-out. The normal auth callback later completes Spotlight deletion.
+  Future<void> prepareForSignOut() async {
+    if (!_isIOS) return;
+    ++_accountGeneration;
+    _uid = null;
+    _nativeGeneration = null;
+    await _nativeOperation(_host.prepareForSignOut);
+  }
+
   /// Synchronous provider callbacks keep their immediate UI update. Their
   /// index work is owned by this ordered Future chain and each native call is
   /// awaited before the next callback's projection starts.

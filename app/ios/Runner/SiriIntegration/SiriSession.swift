@@ -11,10 +11,14 @@ final class SiriSession {
     #if OMI_SIRI_PROBE
     var beforeTokenLookup: (() -> Void)?
     #endif
-    private let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
+    private let defaults: UserDefaults?
     private let keychainService = SiriStorageNamespace.current.keychainService
     private let keychainAccount = SiriStorageNamespace.current.keychainAccount
     private let configKey = SiriStorageNamespace.current.sessionConfigKey
+
+    init(defaults: UserDefaults? = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")) {
+        self.defaults = defaults
+    }
 
     struct Config: Codable {
         let uid: String
@@ -31,6 +35,7 @@ final class SiriSession {
     enum Failure: Error { case auth, invalidConfiguration, network, quota, rateLimited, server }
 
     func publish(_ input: SiriSessionConfig) throws {
+        guard let defaults else { throw Failure.auth }
         guard !input.uid.isEmpty, let url = URL(string: input.baseUrl),
               ["http", "https"].contains(url.scheme ?? ""), url.host != nil else {
             throw Failure.invalidConfiguration
@@ -58,13 +63,22 @@ final class SiriSession {
     }
 
     func currentConfig() -> Config? {
-        guard let data = defaults.data(forKey: configKey) else { return nil }
+        guard let data = defaults?.data(forKey: configKey) else { return nil }
         return try? JSONDecoder().decode(Config.self, from: data)
     }
 
     func clear() {
-        defaults.removeObject(forKey: configKey)
+        defaults?.removeObject(forKey: configKey)
         SecItemDelete(keychainQuery() as CFDictionary)
+    }
+
+    /// A failed Keychain deletion leaves the pending-wipe marker in place and
+    /// prevents Firebase sign-out from proceeding through the Dart bridge.
+    func clearForSignOut() throws {
+        let status = SecItemDelete(keychainQuery() as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw Failure.auth }
+        defaults?.removeObject(forKey: configKey)
+        guard defaults?.synchronize() == true else { throw Failure.auth }
     }
 
     func validateOwner(_ config: Config) throws {
@@ -121,8 +135,8 @@ struct OmiNativeAPI {
     #endif
     func request(method: String, path: String, body: [String: Any],
                  owner: SiriSession.Config? = nil) async throws -> [String: Any] {
-        guard let config = owner ?? SiriSession.shared.currentConfig(),
-              let base = URL(string: config.baseUrl),
+        guard let config = owner ?? SiriSession.shared.currentConfig() else { throw SiriSession.Failure.auth }
+        guard let base = URL(string: config.baseUrl),
               let url = URL(string: path, relativeTo: base)?.absoluteURL,
               url.host == base.host else { throw SiriSession.Failure.invalidConfiguration }
         var request = URLRequest(url: url)

@@ -544,6 +544,30 @@ final class SiriIntentServiceTests: XCTestCase {
     }
   }
 
+  func testFailedSpotlightWipePersistsPendingOwnerAndBlocksReindexUntilRetry() async throws {
+    actor DeletedOwners {
+      var values: [String] = []
+      func append(_ owner: String) { values.append(owner) }
+    }
+    let suite = "com.omi.siri.wipe-test.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let journal = SiriIndexWipeJournal(defaults: defaults, key: "pending")
+    do {
+      try await journal.delete(owner: "old-owner") { _ in throw URLError(.notConnectedToInternet) }
+      XCTFail("Expected deletion failure")
+    } catch { XCTAssertTrue(error is URLError) }
+    XCTAssertEqual(journal.pendingOwners, ["old-owner"])
+    XCTAssertFalse(journal.canIndex)
+    let resumed = SiriIndexWipeJournal(defaults: defaults, key: "pending")
+    let deleted = DeletedOwners()
+    try await resumed.retry { owner in await deleted.append(owner) }
+    let deletedValues = await deleted.values
+    XCTAssertEqual(deletedValues, ["old-owner"])
+    XCTAssertTrue(resumed.pendingOwners.isEmpty)
+    XCTAssertTrue(resumed.canIndex)
+  }
+
   func testCompleteTaskNetworkFailureSaysTaskWasNotChanged() async {
     do {
       _ = try await SiriIntentService.completeTask(

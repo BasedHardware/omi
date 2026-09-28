@@ -97,6 +97,9 @@ final class SiriBridge: SiriIndexApi {
             catch { completion(.failure(error)) }
         }
     }
+    func prepareForSignOut(completion: @escaping (Result<Void, Error>) -> Void) {
+        complete({ try await SiriSnapshotStore.shared.prepareForSignOut() }, completion: completion)
+    }
     func generationForOwner(uid: String, completion: @escaping (Result<Int64?, Error>) -> Void) {
         completion(.success(SiriSnapshotStore.shared.generationForOwner(uid)))
     }
@@ -175,7 +178,7 @@ final class SiriBridge: SiriIndexApi {
 /// A bounded, account-scoped outbox for engine-free intent and index metrics.
 /// Records have enums/counts/durations only; user content never enters defaults.
 enum SiriTelemetry {
-    private static let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
+    private static let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")
     private static let key = SiriStorageNamespace.current.telemetryKey
     private static let lock = NSLock()
 
@@ -198,7 +201,7 @@ enum SiriTelemetry {
     }
     private static func append(kind: String, intent: String, outcome: String,
                                latencyMs: Int64, entityCounts: Int64) {
-        guard let uid = SiriSession.shared.currentConfig()?.uid else { return }
+        guard let defaults, let uid = SiriSession.shared.currentConfig()?.uid else { return }
         lock.lock(); defer { lock.unlock() }
         var rows = defaults.array(forKey: key) as? [[String: Any]] ?? []
         rows.append(["uid": uid, "kind": kind, "intent": intent, "outcome": outcome,
@@ -206,7 +209,7 @@ enum SiriTelemetry {
         defaults.set(Array(rows.suffix(100)), forKey: key)
     }
     static func take() -> [SiriTelemetryRecord] {
-        guard let uid = SiriSession.shared.currentConfig()?.uid else { return [] }
+        guard let defaults, let uid = SiriSession.shared.currentConfig()?.uid else { return [] }
         lock.lock(); defer { lock.unlock() }
         let rows = defaults.array(forKey: key) as? [[String: Any]] ?? []
         defaults.removeObject(forKey: key)
@@ -243,6 +246,7 @@ final class SiriBridge: SiriIndexApi {
     func reconcileTasks(uid: String, tasks: [SiriTask], includeCompleted: Bool, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func wipe(completion: @escaping (Result<Int64, Error>) -> Void) { completion(.success(0)) }
+    func prepareForSignOut(completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func generationForOwner(uid: String, completion: @escaping (Result<Int64?, Error>) -> Void) { completion(.success(nil)) }
     func setEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func setCurrentScreen(route: String, entityId: String?) throws {}

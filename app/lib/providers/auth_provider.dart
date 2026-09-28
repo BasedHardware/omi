@@ -349,8 +349,7 @@ class AuthenticationProvider extends BaseProvider {
           final sourceToken = await FirebaseAuth.instance.currentUser?.getIdToken();
 
           // Sign out current anonymous user
-          AuthService.instance.handleAuthUserChanged(null);
-          await FirebaseAuth.instance.signOut();
+          await AuthService.instance.signOutForAccountSwitch();
 
           // Sign in with existing account
           await FirebaseAuth.instance.signInWithCredential(existingCred!);

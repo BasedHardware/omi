@@ -13,6 +13,35 @@ enum SiriMemoryIndexRepresentation: Sendable, Equatable {
   case custom, note
 }
 
+/// Persist the old owner before a destructive Spotlight operation. A failed
+/// deletion remains a hard indexing fence across app restarts and toggles.
+final class SiriIndexWipeJournal: @unchecked Sendable {
+  private let defaults: UserDefaults
+  private let key: String
+
+  init(defaults: UserDefaults, key: String) {
+    self.defaults = defaults
+    self.key = key
+  }
+
+  var pendingOwners: [String] { defaults.stringArray(forKey: key) ?? [] }
+  var canIndex: Bool { pendingOwners.isEmpty }
+
+  func delete(owner: String, using deletion: @Sendable (String) async throws -> Void) async throws {
+    guard !owner.isEmpty else { return }
+    defaults.set(Array(Set(pendingOwners + [owner])).sorted(), forKey: key)
+    guard defaults.synchronize() else { throw CocoaError(.fileWriteUnknown) }
+    try await deletion(owner)
+    let remaining = pendingOwners.filter { $0 != owner }
+    if remaining.isEmpty { defaults.removeObject(forKey: key) } else { defaults.set(remaining, forKey: key) }
+    guard defaults.synchronize() else { throw CocoaError(.fileWriteUnknown) }
+  }
+
+  func retry(using deletion: @Sendable (String) async throws -> Void) async throws {
+    for owner in pendingOwners { try await delete(owner: owner, using: deletion) }
+  }
+}
+
 /// Owns the per-account Spotlight index. All public entry points are safe to call
 /// repeatedly; the preference and owner are checked before any content is sent.
 @available(macOS 15.4, *)
@@ -44,6 +73,7 @@ actor SiriIndexer {
     }
   }
   private let ownerKey = "siriIndexedOwnerID"
+  private let wipeJournal = SiriIndexWipeJournal(defaults: .standard, key: "siriPendingWipeOwnerIDs")
   private var indexedOwner: String?
   private var activeOperations = 0
   private var idleWaiters: [CheckedContinuation<Void, Never>] = []
@@ -209,13 +239,29 @@ actor SiriIndexer {
     while true {
       await awaitTransition()
       if transitionInProgress { continue }
+      if !wipeJournal.canIndex {
+        await acquireTransition()
+        await awaitIdle()
+        do {
+          try await wipeJournal.retry { owner in
+            try await self.index(for: owner).deleteAllSearchableItems()
+          }
+          finishTransition()
+        } catch {
+          finishTransition()
+          throw error
+        }
+        continue
+      }
       let current = RuntimeOwnerIdentity.currentOwnerId()
       if indexedOwner != current {
         transitionInProgress = true
         await awaitIdle()
         do {
           indexedOwner = try await SiriIndexOwnerFence.transition(from: indexedOwner, to: current) { owner in
-            try await self.index(for: owner).deleteAllSearchableItems()
+            try await self.wipeJournal.delete(owner: owner) { id in
+              try await self.index(for: id).deleteAllSearchableItems()
+            }
           }
           resetMemoryExpirations()
           cancelRebuildRetry()
@@ -231,7 +277,7 @@ actor SiriIndexer {
         await awaitIdle()
         continue
       }
-      guard SiriIntegrationSettings.isEnabled, let current, !current.isEmpty,
+      guard wipeJournal.canIndex, SiriIntegrationSettings.isEnabled, let current, !current.isEmpty,
         expectedOwner == nil || expectedOwner == current
       else { return nil }
       activeOperations += 1
@@ -243,7 +289,7 @@ actor SiriIndexer {
     guard Self.supportsSpotlightIndexing(ProcessInfo.processInfo.operatingSystemVersion), #available(macOS 27, *) else {
       // A pre-27 build may have left a legacy custom-memory index behind.
       // The persisted owner is removed only after Spotlight confirms deletion.
-      if indexedOwner != nil { try await wipe() }
+      if indexedOwner != nil || !wipeJournal.canIndex { try await wipe() }
       return
     }
     if !SiriIntegrationSettings.isEnabled {
@@ -257,7 +303,14 @@ actor SiriIndexer {
     await acquireTransition()
     await awaitIdle()
     do {
-      if let indexedOwner { try await index(for: indexedOwner).deleteAllSearchableItems() }
+      try await wipeJournal.retry { owner in
+        try await self.index(for: owner).deleteAllSearchableItems()
+      }
+      if let indexedOwner {
+        try await wipeJournal.delete(owner: indexedOwner) { owner in
+          try await self.index(for: owner).deleteAllSearchableItems()
+        }
+      }
       resetMemoryExpirations()
       cancelRebuildRetry()
       indexedOwner = nil

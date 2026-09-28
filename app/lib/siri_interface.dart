@@ -85,6 +85,10 @@ abstract class SiriIndexApi {
   @async
   int wipe();
 
+  /// Durably block engine-free Siri and clear its token before Firebase signs out.
+  @async
+  void prepareForSignOut();
+
   /// Reuse the persisted index generation only when its snapshot still belongs to this UID.
   @async
   int? generationForOwner(String uid);

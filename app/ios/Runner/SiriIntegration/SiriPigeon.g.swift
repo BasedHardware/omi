@@ -523,6 +523,8 @@ protocol SiriIndexApi {
   func reconcileTasks(uid: String, tasks: [SiriTask], includeCompleted: Bool, completion: @escaping (Result<Void, Error>) -> Void)
   func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void)
   func wipe(completion: @escaping (Result<Int64, Error>) -> Void)
+  /// Durably block engine-free Siri and clear its token before Firebase signs out.
+  func prepareForSignOut(completion: @escaping (Result<Void, Error>) -> Void)
   /// Reuse the persisted index generation only when its snapshot still belongs to this UID.
   func generationForOwner(uid: String, completion: @escaping (Result<Int64?, Error>) -> Void)
   func setEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
@@ -686,6 +688,22 @@ class SiriIndexApiSetup {
       }
     } else {
       wipeChannel.setMessageHandler(nil)
+    }
+    /// Durably block engine-free Siri and clear its token before Firebase signs out.
+    let prepareForSignOutChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.prepareForSignOut\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      prepareForSignOutChannel.setMessageHandler { _, reply in
+        api.prepareForSignOut { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      prepareForSignOutChannel.setMessageHandler(nil)
     }
     /// Reuse the persisted index generation only when its snapshot still belongs to this UID.
     let generationForOwnerChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.generationForOwner\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
