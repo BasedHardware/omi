@@ -47,6 +47,7 @@ import 'package:omi/widgets/bottom_nav_bar.dart';
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
   final String? autoMessage;
+  final String? initialDraft;
   final bool autoStartVoice;
   final ChatPageContext? initialChatContext;
 
@@ -54,6 +55,7 @@ class ChatPage extends StatefulWidget {
     super.key,
     this.isPivotBottom = false,
     this.autoMessage,
+    this.initialDraft,
     this.autoStartVoice = false,
     this.initialChatContext,
   });
@@ -98,6 +100,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   @override
   void initState() {
     WidgetsBinding.instance.addObserver(this);
+    if (widget.initialDraft != null) textController.text = widget.initialDraft!;
     apps = prefs.appsList;
     scrollController = ScrollController();
     textFieldFocusNode = FocusNode();
