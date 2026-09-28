@@ -687,7 +687,7 @@ export function Onboarding({
         </View>
         <Animated.View
           style={[
-            styles.stepAnim,
+            styles.titleAnim,
             {opacity: stepOpacity, transform: [{translateY: stepShift}]},
           ]}>
           <Text accessibilityRole="header" style={[styles.title, titleColor]}>
@@ -705,6 +705,12 @@ export function Onboarding({
               ? 'Teach Omi your voice'
               : 'You are all set!'}
           </Text>
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.stepAnim,
+            {opacity: stepOpacity, transform: [{translateY: stepShift}]},
+          ]}>
           {step === 'welcome' ? (
             <>
               <Text style={[styles.copy, copyColor]}>
@@ -776,7 +782,7 @@ export function Onboarding({
                   accessibilityLabel="Search languages"
                   autoCapitalize="none"
                   autoCorrect={false}
-                  label="Search languages"
+                  containerStyle={styles.bigField}
                   onChangeText={setLanguageQuery}
                   onSubmitEditing={() => {
                     const first = languageMatches[0];
@@ -787,6 +793,7 @@ export function Onboarding({
                   placeholder="Type a language or code"
                   placeholderTextColor={tokens.color.textMuted}
                   returnKeyType="search"
+                  style={styles.bigInput}
                   value={languageQuery}
                 />
               </View>
@@ -834,7 +841,7 @@ export function Onboarding({
           ) : null}
           {step === 'source' ? (
             <>
-              <View style={[styles.chips, styles.sourceChips]}>
+              <View style={styles.chips}>
                 {ACQUISITION_SOURCES.map(item => (
                   <Button
                     key={item}
@@ -853,8 +860,8 @@ export function Onboarding({
                   <Field
                     accessibilityLabel="Please specify"
                     autoCorrect={false}
+                    containerStyle={styles.bigField}
                     enablesReturnKeyAutomatically
-                    label="Please specify"
                     onChangeText={setOtherSource}
                     onSubmitEditing={() => {
                       if (otherSource.trim().length > 0) {
@@ -863,6 +870,7 @@ export function Onboarding({
                     }}
                     placeholder="Where did you hear about us?"
                     returnKeyType="done"
+                    style={styles.bigInput}
                     value={otherSource}
                   />
                 </View>
@@ -1104,7 +1112,19 @@ const createStyles = (desktopTokens: DesktopTokens) =>
       gap: tokens.space.sm,
       justifyContent: 'center',
     },
-    sourceChips: {justifyContent: 'flex-start'},
+    titleAnim: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      marginTop: 96,
+    },
+    bigField: {
+      minHeight: 52,
+      paddingVertical: tokens.space.md,
+    },
+    bigInput: {
+      fontSize: 18,
+      lineHeight: 24,
+    },
     pill: {
       borderRadius: tokens.radius.pill,
       paddingHorizontal: tokens.space.lg,
