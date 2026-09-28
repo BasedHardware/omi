@@ -122,6 +122,33 @@ test('titlebar stays click-through with no drag monitor to steal chrome clicks',
   expect(source).not.toContain('omiWindowGroundDragEvent');
 });
 
+test('hit-test swizzles install class-local overrides before replacing owned methods', () => {
+  const source = readNativeSource('AppDelegate.mm');
+  const helperStart = source.indexOf(
+    'static BOOL OmiInstallClassLocalHitTestOverride',
+  );
+  const helperEnd = source.indexOf(
+    '\nstatic void OmiSwizzleContentHitTest',
+    helperStart,
+  );
+  const helper = source.slice(helperStart, helperEnd);
+
+  expect(helper).toContain(
+    'class_addMethod(cls, selector, replacement, typeEncoding)',
+  );
+  expect(helper).toContain('method_setImplementation(ownMethod, replacement)');
+  expect(helper.indexOf('if (class_addMethod')).toBeLessThan(
+    helper.indexOf('method_setImplementation(ownMethod, replacement)'),
+  );
+  expect(helper).toContain(
+    'OmiClassOwnsInstanceMethod(cls, selector, &ownMethod)',
+  );
+  expect(helper).toContain(
+    'changes hit testing for every view using that class',
+  );
+  expect(source).toContain('[swizzled removeObject:name];');
+});
+
 test('pairs the macOS backend origin and credentials in one validated policy', () => {
   const source = readNativeSource('OmiBackendModule.mm');
   const policySource = readFileSync(
