@@ -1,6 +1,12 @@
 import React from 'react';
 import {omiPalettes} from '../design/tokens';
-import {ActivityIndicator, Animated, StyleSheet, Text} from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  ScrollView,
+  StyleSheet,
+  Text,
+} from 'react-native';
 import Renderer, {act} from 'react-test-renderer';
 import {ChatMessageRow, ChatThinking} from './ChatTranscript';
 import {DesktopChat} from '../desktop/DesktopChat';
@@ -60,6 +66,90 @@ test('retires row animation and restores a row when animation is disabled', () =
   act(() => tree.unmount());
   expect(stop).toHaveBeenCalledTimes(2);
   animation.mockRestore();
+});
+
+test('each completed Omi reply offers a copy action for its full text', async () => {
+  const onCopy = jest.fn(async () => undefined);
+  let tree!: Renderer.ReactTestRenderer;
+  act(() => {
+    tree = Renderer.create(
+      <ChatMessageRow
+        message={{
+          id: 'reply',
+          sender: 'ai',
+          text: 'Full answer\nwith details',
+          createdAt: 1000,
+          generationOutcome: 'completed',
+        }}
+        animate={false}
+        compact
+        reduceMotion
+        onCopy={onCopy}
+      />,
+    );
+  });
+  const copy = tree.root.find(node =>
+    String(node.props.accessibilityLabel)
+      .toLowerCase()
+      .includes('copy response'),
+  );
+  await act(async () => copy.props.onPress());
+  expect(onCopy).toHaveBeenCalledWith('Full answer\nwith details');
+  expect(JSON.stringify(tree.toJSON())).toContain('Copied');
+  act(() => tree.unmount());
+});
+
+test('desktop chat exposes Jump to Latest after a user scrolls away', () => {
+  const scrollToEnd = jest
+    .spyOn(ScrollView.prototype, 'scrollToEnd')
+    .mockImplementation(() => undefined);
+  let tree!: Renderer.ReactTestRenderer;
+  act(() => {
+    tree = Renderer.create(
+      <DesktopChat
+        submission={0}
+        messages={[
+          {
+            id: 'reply',
+            sender: 'ai',
+            text: 'Answer',
+            createdAt: 1000,
+            generationOutcome: 'completed',
+          },
+        ]}
+        busy={false}
+        error={null}
+        hasOlder={false}
+        loadingOlder={false}
+        onLoadOlder={jest.fn()}
+      />,
+    );
+  });
+  const scroll = tree.root.findByType(ScrollView);
+  act(() => {
+    scroll.props.onScrollBeginDrag();
+    scroll.props.onScroll({
+      nativeEvent: {
+        contentOffset: {y: 0},
+        contentSize: {height: 1000},
+        layoutMeasurement: {height: 200},
+      },
+    });
+  });
+  expect(
+    tree.root.findAll(
+      node => node.props.accessibilityLabel === 'Jump to Latest',
+    ).length,
+  ).toBeGreaterThan(0);
+  scrollToEnd.mockClear();
+  act(() =>
+    tree.root
+      .find(node => node.props.accessibilityLabel === 'Jump to Latest')
+      .props.onPress(),
+  );
+  expect(scrollToEnd).toHaveBeenCalled();
+  act(() => tree.unmount());
+  scrollToEnd.mockRestore();
 });
 
 test.each([false, true])(

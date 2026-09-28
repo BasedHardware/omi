@@ -76,7 +76,7 @@ test("Streamdown renders incremental markdown without remote images, raw HTML or
     expect(decorated).toContain("<del>");
     expect(decorated).toContain('type="checkbox"');
     expect(decorated).toContain('aria-label="Completed task"');
-    expect(decorated).toContain("data-sd-animate");
+    expect(decorated).not.toContain("data-sd-animate");
     expect(partial).toContain("<strong");
     expect(partial).toContain("Hello");
     expect(partial).not.toContain("data-sd-animate");

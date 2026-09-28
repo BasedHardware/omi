@@ -1,4 +1,4 @@
-import React, {useEffect} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -35,6 +35,7 @@ export function MobileChat({
   scrollRef,
   onScroll,
   shouldAnimate,
+  onJumpLatest,
 }: {
   messages: readonly ChatMessage[];
   busy: boolean;
@@ -50,10 +51,12 @@ export function MobileChat({
   scrollRef: React.RefObject<ScrollView | null>;
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   shouldAnimate: (id: string) => boolean;
+  onJumpLatest?: () => void;
 }) {
   const reduceMotion = useReduceMotion();
   const theme = useOmiTheme();
   const local = useOmiStyles(createStyles);
+  const [atLatest, setAtLatest] = useState(true);
   useEffect(() => {
     if (error !== null) {
       scrollRef.current?.scrollToEnd({animated: !reduceMotion});
@@ -66,7 +69,7 @@ export function MobileChat({
       <View style={local.header}>
         <FocusPressable
           accessibilityRole="button"
-          accessibilityLabel="Close chat"
+          accessibilityLabel="Back from chat"
           onPress={onClose}
           style={({pressed}) => [local.back, pressed && local.pressed]}>
           <MaterialIcon
@@ -80,7 +83,7 @@ export function MobileChat({
             tone="ink"
             size={22}
             inkColor={markInk(theme)}
-            motion={busy ? 'breathe' : 'arrive'}
+            motion={busy ? 'breathe' : undefined}
             reduceMotion={reduceMotion}
           />
           <Text accessibilityRole="header" style={local.titleText}>
@@ -92,7 +95,20 @@ export function MobileChat({
       <ScrollView
         accessibilityLabel="Chat scroll region"
         ref={scrollRef}
-        onScroll={onScroll}
+        onScroll={event => {
+          const {contentOffset, contentSize, layoutMeasurement} =
+            event.nativeEvent;
+          setAtLatest(
+            contentOffset.y + layoutMeasurement.height >=
+              contentSize.height - 48,
+          );
+          onScroll(event);
+        }}
+        onContentSizeChange={() => {
+          if (atLatest) {
+            scrollRef.current?.scrollToEnd({animated: false});
+          }
+        }}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         style={local.flex}
@@ -108,7 +124,10 @@ export function MobileChat({
             accessibilityRole="button"
             accessibilityLabel="Load older messages"
             disabled={loadingOlder}
-            onPress={onLoadOlder}
+            onPress={() => {
+              setAtLatest(false);
+              onLoadOlder();
+            }}
             style={({pressed}) => [local.older, pressed && local.pressed]}>
             <Text style={local.olderText}>
               {loadingOlder ? 'Loading Older…' : 'Load Older Messages'}
@@ -170,7 +189,28 @@ export function MobileChat({
             </Text>
           </View>
         )}
+        {error !== null && messages.length === 0 && !busy && !loadingHistory ? (
+          <View style={local.resting}>
+            <Text style={local.restingTitle}>Your message wasn’t sent</Text>
+            <Text style={local.restingCopy}>
+              Your draft is ready below. Press Send to try again.
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
+      {!atLatest && messages.length > 0 ? (
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel="Jump to Latest"
+          onPress={() => {
+            onJumpLatest?.();
+            scrollRef.current?.scrollToEnd({animated: !reduceMotion});
+            setAtLatest(true);
+          }}
+          style={local.jump}>
+          <Text style={local.jumpText}>Jump to Latest</Text>
+        </FocusPressable>
+      ) : null}
     </View>
   );
 }
@@ -178,6 +218,18 @@ export function MobileChat({
 const createStyles = (t: OmiTheme) => ({
   root: {flex: 1, backgroundColor: t.color.canvas},
   flex: {flex: 1},
+  jump: {
+    alignSelf: 'center' as const,
+    minHeight: t.size.hitTarget,
+    borderRadius: t.radius.pill,
+    borderWidth: 1,
+    borderColor: t.color.hairline,
+    backgroundColor: t.color.surface,
+    paddingHorizontal: t.space.lg,
+    justifyContent: 'center' as const,
+    marginBottom: t.space.sm,
+  },
+  jumpText: {...t.type.subhead, color: t.color.ink},
   pressed: {backgroundColor: t.color.fillPressed},
   header: {
     flexDirection: 'row' as const,

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import {Renderer, useMarkdown, type MarkedStyles} from 'react-native-marked';
 import type {ChatMessageContentProps} from './ChatMessageContent.types';
+import {useOmiTheme} from '../design/OmiTheme';
 
 class ChatMarkdownRenderer extends Renderer {
   constructor(private readonly base: TextStyle) {
@@ -73,6 +74,7 @@ function MarkdownChatMessageContent({
   text,
   style,
 }: Pick<ChatMessageContentProps, 'text' | 'style'>) {
+  const theme = useOmiTheme();
   const renderer = useMemo(
     () => new ChatMarkdownRenderer(StyleSheet.flatten(style) || {}),
     [style],
@@ -86,7 +88,7 @@ function MarkdownChatMessageContent({
       strikethrough: {...base, textDecorationLine: 'line-through'},
       strong: {...base, fontWeight: '700'},
       em: {...base, fontStyle: 'italic'},
-      link: {...base, textDecorationLine: 'underline'},
+      link: {...base, color: theme.color.link, textDecorationLine: 'underline'},
       h1: heading,
       h2: heading,
       h3: heading,
@@ -101,16 +103,16 @@ function MarkdownChatMessageContent({
             : 'monospace',
         backgroundColor: 'transparent',
       },
-      code: {backgroundColor: 'transparent', padding: 8},
+      code: {backgroundColor: theme.color.fill, padding: theme.space.sm},
       paragraph: {marginTop: 0, marginBottom: 8},
       blockquote: {
-        borderLeftColor: '#8a8a8a',
+        borderLeftColor: theme.color.hairline,
         borderLeftWidth: 2,
-        paddingLeft: 12,
+        paddingLeft: theme.space.md,
       },
-      table: {borderColor: '#8a8a8a'},
+      table: {borderColor: theme.color.hairline},
     };
-  }, [style]);
+  }, [style, theme]);
   const elements = useMarkdown(text, {renderer, styles});
   return <View>{elements}</View>;
 }

@@ -60,25 +60,34 @@ export const scenarios: AuditScenario[] = [
   },
   {
     id: "desktop-chat",
-    title: "Chat overlay with an answer",
+    title: "Chat destination with an answer",
     query: "surface=desktop&data=example&chat=ready",
     viewport: desktop,
     appearances: both,
   },
   {
     id: "desktop-chat-waiting",
-    title: "Chat overlay while Omi answers",
+    title: "Chat destination while Omi answers",
     query: "surface=desktop&data=example&chat=waiting",
     viewport: desktop,
     appearances: both,
   },
   {
     id: "desktop-chat-error",
-    title: "Chat overlay with a send error",
+    title: "Chat destination with a send error",
     query: "surface=desktop&data=example&chat=error",
     viewport: desktop,
     appearances: both,
   },
+  ...["long", "streaming", "stopped", "failed"].map(
+    (state): AuditScenario => ({
+      id: `desktop-chat-${state}`,
+      title: `Chat destination, ${state}`,
+      query: `surface=desktop&data=example&chat=${state}`,
+      viewport: desktop,
+      appearances: both,
+    })
+  ),
   {
     id: "desktop-settings",
     title: "Settings",
@@ -109,7 +118,7 @@ export const scenarios: AuditScenario[] = [
   },
   {
     id: "desktop-chat-empty",
-    title: "Chat overlay before the first message",
+    title: "Chat destination before the first message",
     query: "surface=desktop&data=example&chat=empty",
     viewport: desktop,
     appearances: both,
@@ -232,6 +241,11 @@ export const scenarios: AuditScenario[] = [
       "Ask Omi with a send error",
       "data=example&chat=error",
     ],
+    ...["long", "streaming", "stopped", "failed"].map((state) => [
+      `mobile-ask-${state}`,
+      `Ask Omi, ${state}`,
+      `data=example&chat=${state}`,
+    ]),
     [
       "mobile-device-listening",
       "Device panel, listening",

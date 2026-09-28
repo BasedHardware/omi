@@ -1142,6 +1142,7 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
           onStop={() => {
             stopGeneration().catch(() => undefined);
           }}
+          onRetryChat={retryChatMessage}
           onCancelSignIn={() => {
             cancelSignIn().catch(() => undefined);
           }}
@@ -1186,7 +1187,10 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
       loadingHistory={!chatHistorySettled}
       hasOlder={hasOlderChat && olderChatCursor !== null}
       loadingOlder={loadingOlderChat}
-      onLoadOlder={loadOlderMessages}
+      onLoadOlder={() => {
+        shouldFollowChat.current = false;
+        loadOlderMessages().catch(() => undefined);
+      }}
       onClose={() => {
         setHomeChatOpen(false);
         setRoute(beforeMobileChat.current.route);
@@ -1202,6 +1206,9 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
       scrollRef={chatScrollRef}
       shouldAnimate={shouldAnimateChatMessage}
       onScroll={handleChatScroll}
+      onJumpLatest={() => {
+        shouldFollowChat.current = true;
+      }}
     />
   ) : undefined;
 
@@ -1261,6 +1268,7 @@ function App({initialRoute, hostMode = false}: AppProps): React.JSX.Element {
             <MobileOmnibar
               key="mobile-omnibar"
               mode={mobileMode}
+              chatPage={homeChatOpen}
               onModeChange={next => {
                 setMobileMode(next);
                 if (next === 'Search' && homeChatOpen) {

@@ -186,7 +186,7 @@ test('mobile Ask Omi opens the actual chat and reports a missing backend', async
   expect(control(renderer, 'Open calls')).toBeUndefined();
   expect(control(renderer, 'Ask Omi')).toBe(input);
   expect(JSON.stringify(renderer.toJSON())).toContain('Chat');
-  await act(async () => control(renderer, 'Close chat').props.onPress());
+  await act(async () => control(renderer, 'Back from chat').props.onPress());
   expect(control(renderer, 'Open Omi device')).toBeDefined();
   expect(control(renderer, 'Ask Omi').props.value).toBe('Hello Omi');
   expect(control(renderer, 'Ask Omi')).toBe(input);
@@ -211,7 +211,7 @@ test('Search is default; switching to Ask retains the draft and returns to the p
   expect(control(renderer, 'Ask Omi')).toBe(input);
   await act(async () => control(renderer, 'Send to Omi').props.onPress());
   expect(control(renderer, 'Chat scroll region')).toBeDefined();
-  await act(async () => control(renderer, 'Close chat').props.onPress());
+  await act(async () => control(renderer, 'Back from chat').props.onPress());
   expect(
     control(renderer, 'Conversations').props.accessibilityState.selected,
   ).toBe(true);

@@ -23,6 +23,7 @@ export function MobileOmnibar({
   busy,
   canStop,
   inputRef,
+  chatPage = false,
 }: {
   mode: MobileOmnibarMode;
   onModeChange: (mode: MobileOmnibarMode) => void;
@@ -33,6 +34,7 @@ export function MobileOmnibar({
   busy: boolean;
   canStop: boolean;
   inputRef: React.RefObject<TextInput | null>;
+  chatPage?: boolean;
 }) {
   const theme = useOmiTheme();
   const styles = useOmiStyles(createStyles);
@@ -41,33 +43,41 @@ export function MobileOmnibar({
     !stopping && (value.trim() === '' || (mode === 'Ask' && busy));
   const submit = () => {
     if (!disabled) {
-      if (stopping) onStop();
-      else onSubmit();
+      if (stopping) {
+        onStop();
+      } else {
+        onSubmit();
+      }
     }
   };
   const glyph = disabled ? theme.color.inkDisabled : theme.color.onInk;
   return (
-    <View accessibilityLabel="Ask and search dock" style={styles.root}>
+    <View
+      accessibilityLabel={chatPage ? 'Chat composer' : 'Ask and search dock'}
+      style={styles.root}>
       <View style={styles.field}>
-        {(['Ask', 'Search'] as const).map(item => (
-          <FocusPressable
-            key={item}
-            accessibilityRole="button"
-            accessibilityLabel={`${item} mode`}
-            accessibilityState={{selected: mode === item}}
-            onPress={() => onModeChange(item)}
-            style={({pressed}) => [
-              styles.mode,
-              mode === item && styles.selected,
-              pressed && mode !== item && styles.pressed,
-            ]}>
-            <MaterialIcon
-              name={item === 'Ask' ? 'chat_bubble' : 'search'}
-              size={theme.size.iconSmall + 2}
-              color={mode === item ? theme.color.ink : theme.color.inkTertiary}
-            />
-          </FocusPressable>
-        ))}
+        {!chatPage &&
+          (['Ask', 'Search'] as const).map(item => (
+            <FocusPressable
+              key={item}
+              accessibilityRole="button"
+              accessibilityLabel={`${item} mode`}
+              accessibilityState={{selected: mode === item}}
+              onPress={() => onModeChange(item)}
+              style={({pressed}) => [
+                styles.mode,
+                mode === item && styles.selected,
+                pressed && mode !== item && styles.pressed,
+              ]}>
+              <MaterialIcon
+                name={item === 'Ask' ? 'chat_bubble' : 'search'}
+                size={theme.size.iconSmall + 2}
+                color={
+                  mode === item ? theme.color.ink : theme.color.inkTertiary
+                }
+              />
+            </FocusPressable>
+          ))}
         <TextInput
           ref={inputRef}
           accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search loaded data'}

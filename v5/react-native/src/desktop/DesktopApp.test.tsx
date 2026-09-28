@@ -292,9 +292,10 @@ function renderDesktop(
   return renderer!;
 }
 
-// The rail no longer has a Chat destination: the overlay opens from the
-// Activity page's checklist, which mounts once the preference read settles.
-async function openChatOverlay(renderer: ReactTestRenderer.ReactTestRenderer) {
+// Open Chat from the Activity checklist after the preference read settles.
+async function openChatDestination(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+) {
   await act(async () => {
     await Promise.resolve();
   });
@@ -307,7 +308,7 @@ async function openChatOverlay(renderer: ReactTestRenderer.ReactTestRenderer) {
   });
   expect(
     renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Chat overlay',
+      node => node.props.accessibilityLabel === 'Chat with Omi',
     ).length,
   ).toBeGreaterThan(0);
 }
@@ -339,7 +340,7 @@ test('Chat suggestions prepare an editable draft without sending', async () => {
   const onDraftChange = jest.fn();
   const onSend = jest.fn();
   const renderer = renderDesktop({onDraftChange, onSend});
-  await openChatOverlay(renderer);
+  await openChatDestination(renderer);
   act(() =>
     renderer.root
       .find(
@@ -366,7 +367,7 @@ test.each([
   'Chat suggestions are absent while the conversation cannot accept them: %p',
   async props => {
     const renderer = renderDesktop(props);
-    await openChatOverlay(renderer);
+    await openChatDestination(renderer);
     expect(
       renderer.root.findAll(node =>
         String(node.props.accessibilityLabel).startsWith('Try:'),
@@ -505,9 +506,9 @@ test('keyboard search from Chat focuses the persistent omnibar', async () => {
   const focus = jest.mocked(TextInput.prototype.focus);
   focus.mockClear();
   const renderer = renderDesktop();
-  await openChatOverlay(renderer);
+  await openChatDestination(renderer);
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
-    'Ask Omi',
+    'Message Omi',
   );
   const command = jest
     .mocked(subscribeDesktopSearchCommand)
@@ -517,7 +518,7 @@ test('keyboard search from Chat focuses the persistent omnibar', async () => {
     'Search Recall',
   );
   expect(focus).toHaveBeenCalledTimes(1);
-  act(() => command());
+  act(() => runSearchCommand());
   expect(focus).toHaveBeenCalledTimes(2);
 });
 
@@ -553,9 +554,9 @@ test('Chat shows disabled Sending until there is an actual cancellable request',
     onStop,
     onSend,
   });
-  await openChatOverlay(renderer);
+  await openChatDestination(renderer);
   const pending = renderer.root.find(
-    node => node.props.accessibilityLabel === 'Sending…',
+    node => node.props.accessibilityLabel === 'Send',
   );
   expect(pending.props.disabled).toBe(true);
   act(() => pending.props.onPress());
@@ -585,7 +586,7 @@ test('a timeline search with no matches does not claim the timeline is empty', (
   );
 });
 
-test('empty Ask is disabled and Enter cannot send, and Ask stays on Home', () => {
+test('empty Ask cannot send and its mode control opens Chat without a turn', () => {
   const onSend = jest.fn();
   const renderer = renderDesktop({draft: '   ', onSend});
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
@@ -604,14 +605,14 @@ test('empty Ask is disabled and Enter cannot send, and Ask stays on Home', () =>
       .props.onPress(),
   );
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
-    'Ask Omi',
+    'Message Omi',
   );
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Chat with Omi',
     ),
-  ).toHaveLength(0);
-  expect(renderedText(renderer)).toContain('Product review');
+  ).not.toHaveLength(0);
+  expect(onSend).not.toHaveBeenCalled();
 });
 
 test.each(['initial-loading', 'refreshing', 'unavailable'] as const)(
@@ -694,7 +695,7 @@ test('Home pre-admission sending disables Ask while Search remains usable', () =
   expect(onStop).not.toHaveBeenCalled();
 });
 
-test('the Chat overlay keeps one omnibar and navigation closes it without a leftover surface', async () => {
+test('the Chat destination keeps one omnibar and navigation closes it without a leftover surface', async () => {
   const onSend = jest.fn();
   const renderer = renderDesktop({draft: 'question', onSend});
   await act(async () =>
@@ -702,16 +703,16 @@ test('the Chat overlay keeps one omnibar and navigation closes it without a left
       .find(node => node.props.accessibilityLabel === 'Use Search mode')
       .props.onPress(),
   );
-  // Selecting a filter walks Home, closes the overlay, and resets to Ask.
+  // Selecting a filter walks Home and resets to Ask.
   await act(async () =>
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Filter All')
       .props.onPress(),
   );
-  await openChatOverlay(renderer);
+  await openChatDestination(renderer);
   expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
-    'Ask Omi',
+    'Message Omi',
   );
   act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
   expect(onSend).toHaveBeenCalledTimes(1);
@@ -730,9 +731,38 @@ test('the Chat overlay keeps one omnibar and navigation closes it without a left
   ).toBeGreaterThan(0);
   expect(
     renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Chat overlay',
+      node => node.props.accessibilityLabel === 'Chat with Omi',
     ),
   ).toHaveLength(0);
+});
+
+test('older v5 pages layout keeps the Chat composer with its transcript', async () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({
+    initialUiVersion: 'v5',
+    initialV5Route: 'Chat',
+    draft: 'A question',
+    onSend,
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Chat with Omi',
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Message Omi',
+  );
+  act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
+  expect(onSend).toHaveBeenCalledTimes(1);
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Activity')
+      .props.onPress(),
+  );
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Chat with Omi',
@@ -762,7 +792,7 @@ test('only an explicit Ask submission resumes following after reading earlier me
         },
       ],
     });
-    await openChatOverlay(renderer);
+    await openChatDestination(renderer);
     const list = () =>
       renderer.root
         .find(node => node.props.accessibilityLabel === 'Chat with Omi')
@@ -884,12 +914,12 @@ test('sending from a filtered page answers inline and an active response can sto
   expect(onSend).toHaveBeenCalledTimes(1);
   expect(
     renderer.root.findAll(
-      node => node.props.accessibilityLabel === 'Inline chat answer',
+      node => node.props.accessibilityLabel === 'Chat with Omi',
     ).length,
-  ).toBeGreaterThan(1);
+  ).toBeGreaterThan(0);
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).toEqual(['Ask about your day…']);
+  ).toEqual(['Ask Omi…']);
 
   await act(async () => {
     renderer.update(
@@ -938,7 +968,7 @@ test('desktop chat renders a truthful failed terminal state', async () => {
       },
     ],
   });
-  await openChatOverlay(renderer);
+  await openChatDestination(renderer);
   expect(renderedText(renderer)).toContain('Response failed. Try again.');
   expect(
     renderer.root.findAll(
@@ -950,7 +980,7 @@ test('desktop chat renders a truthful failed terminal state', async () => {
 test('desktop chat can load earlier messages', async () => {
   const onLoadOlderChat = jest.fn();
   const renderer = renderDesktop({hasOlderChat: true, onLoadOlderChat});
-  await openChatOverlay(renderer);
+  await openChatDestination(renderer);
   act(() => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Load earlier messages')
@@ -959,7 +989,7 @@ test('desktop chat can load earlier messages', async () => {
   expect(onLoadOlderChat).toHaveBeenCalledTimes(1);
 });
 
-test('the Chat overlay opens full loaded history with one persistent omnibar', async () => {
+test('the Chat destination opens full loaded history with one persistent omnibar', async () => {
   const messages = Array.from({length: 5}, (_, index) => ({
     id: `chat-${index}`,
     text: `Loaded message ${index}`,
@@ -969,13 +999,57 @@ test('the Chat overlay opens full loaded history with one persistent omnibar', a
   }));
   const renderer = renderDesktop({messages});
   expect(renderedText(renderer)).not.toContain('Loaded message');
-  await openChatOverlay(renderer);
+  await openChatDestination(renderer);
   for (const message of messages) {
     expect(renderedText(renderer)).toContain(message.text);
   }
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).toEqual(['Ask about your day…']);
+  ).toEqual(['Ask Omi…']);
+});
+
+test('desktop Chat remains a stage destination across Settings and Esc', async () => {
+  const renderer = renderDesktop({
+    messages: [
+      {
+        id: 'saved-reply',
+        sender: 'ai',
+        text: 'A saved answer',
+        createdAt: 1000,
+        generationOutcome: 'completed',
+      },
+    ],
+  });
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress(),
+  );
+  expect(renderedText(renderer)).toContain('A saved answer');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Chat with Omi',
+    ).length,
+  ).toBeGreaterThan(0);
+  act(() =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress(),
+  );
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Chat with Omi',
+    ),
+  ).toHaveLength(0);
+  act(() =>
+    renderer.root
+      .findByType(TextInput)
+      .props.onKeyPress({nativeEvent: {key: 'Escape'}}),
+  );
+  expect(renderedText(renderer)).toContain('A saved answer');
+  expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
+    'Message Omi',
+  );
 });
 
 test('Recall submits without sending chat', async () => {
@@ -1331,18 +1405,18 @@ test('signed-out first paint shows no chat transport error and no shell', () => 
   ).toHaveLength(0);
 });
 
-test('chat transport errors appear only in the Chat overlay', async () => {
+test('chat transport errors appear only in the Chat destination', async () => {
   const renderer = renderDesktop({
     chatError: 'Chat is temporarily unavailable.',
   });
   expect(renderedText(renderer)).not.toContain(
     'Chat is temporarily unavailable.',
   );
-  await openChatOverlay(renderer);
+  await openChatDestination(renderer);
   expect(renderedText(renderer)).toContain('Chat is temporarily unavailable.');
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
-  ).toEqual(['Ask about your day…']);
+  ).toEqual(['Ask Omi…']);
   await act(async () =>
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Filter All')
@@ -1358,7 +1432,7 @@ test('chat empty copy stays truthful while history loads or fails', async () => 
     loadingHistory: true,
     messages: [],
   });
-  await openChatOverlay(renderer);
+  await openChatDestination(renderer);
   expect(renderedText(renderer)).toContain('Loading conversation…');
   expect(renderedText(renderer)).not.toContain('What’s on your mind?');
   const props = renderer.root.findByType(DesktopApp)

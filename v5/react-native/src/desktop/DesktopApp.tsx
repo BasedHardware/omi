@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {StyleSheet, Text, TextInput, View} from 'react-native';
+import {Platform, StyleSheet, TextInput, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 import type {
@@ -52,13 +52,7 @@ import {useRewindCapture} from '../app/useRewindCapture';
 import type {useAmbientAudio} from '../app/useAmbientAudio';
 import {ShippingStage} from './ShippingStage';
 import {OmiLoadingMark} from '../ui/OmiLoadingMark';
-import {useDesktopTheme, useDesktopStyleSheets} from './DesktopTheme';
-import type {DesktopTokens} from './tokens';
-import {FocusPressable} from '../ui/Pressable';
-import {MaterialIcon} from '../ui/MaterialIcon';
-import {useOmiStyles} from '../design/OmiTheme';
-import {OmiButton} from '../design/primitives';
-import type {OmiTheme} from '../design/tokens';
+import {useDesktopTheme} from './DesktopTheme';
 
 export type {DesktopSession};
 
@@ -126,6 +120,7 @@ type Props = TaskMutationProps & {
   onLoadOlderChat: () => void;
   onSend: () => void;
   onStop: () => void;
+  onRetryChat?: (message: ChatMessage) => void;
   onWorkspaceReload?: () => void;
   onPreferencesChange?: (prefs: DesktopPreferences) => void;
   initialAppearance?: DesktopThemeName;
@@ -160,6 +155,7 @@ export function DesktopApp({
   onRefresh,
   onSend,
   onStop,
+  onRetryChat,
   onSignIn,
   onCancelSignIn,
   onSignOut,
@@ -202,10 +198,8 @@ export function DesktopApp({
   // resolve; hold the loading mark until the first read settles.
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [focusCaptureId, setFocusCaptureId] = useState<string | null>(null);
-  // Chat is an overlay, not a page: small asks answer inline under the
-  // omnibar and the full transcript opens here on demand.
+  // Chat occupies the stage; the transcript stays in the app state across routes.
   const [chatOpen, setChatOpen] = useState(initialChatOpen);
-  const [inlineAnswerOpen, setInlineAnswerOpen] = useState(false);
   const [exploreDone, setExploreDone] = useState<Set<ExploreCheck> | null>(
     null,
   );
@@ -326,10 +320,47 @@ export function DesktopApp({
   const [chatSubmission, setChatSubmission] = useState(0);
   const openChat = () => {
     setMode('Ask');
-    setInlineAnswerOpen(false);
+    setRoute('Home');
     setChatOpen(true);
   };
-  const closeChat = () => setChatOpen(false);
+  const closeChat = () => {
+    setChatOpen(false);
+    setRoute('Home');
+  };
+  useEffect(() => {
+    const browserDocument = (
+      globalThis as unknown as {
+        document?: {
+          activeElement?: {blur?: () => void};
+          addEventListener: (
+            type: string,
+            handler: (event: {key: string}) => void,
+          ) => void;
+          removeEventListener: (
+            type: string,
+            handler: (event: {key: string}) => void,
+          ) => void;
+        };
+      }
+    ).document;
+    if (Platform.OS !== 'web' || !browserDocument) {
+      return;
+    }
+    const onEscape = (event: {key: string}) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      if (chatOpen) {
+        browserDocument.activeElement?.blur?.();
+      } else if (route !== 'Home') {
+        setRoute('Home');
+        setMode('Ask');
+        setChatOpen(true);
+      }
+    };
+    browserDocument.addEventListener('keydown', onEscape);
+    return () => browserDocument.removeEventListener('keydown', onEscape);
+  }, [chatOpen, route]);
   useEffect(() => {
     if (mode !== 'Search') {
       return;
@@ -364,6 +395,7 @@ export function DesktopApp({
     setRoute('Home');
   };
   const omnibarRef = useRef<TextInput>(null);
+  const searchFocusPending = useRef(false);
   useEffect(() => {
     if (session !== 'ready') {
       setRoute('Home');
@@ -375,12 +407,21 @@ export function DesktopApp({
       setChatOpen(false);
       setRoute('Home');
       setActivityFilter('all');
-      omnibarRef.current?.focus();
+      if (chatOpen) {
+        searchFocusPending.current = true;
+      } else {
+        omnibarRef.current?.focus();
+      }
     });
     return () => subscription.remove();
-  }, []);
-  const chatNotice =
-    chatOpen || inlineAnswerOpen ? visibleChatError(session, chatError) : null;
+  }, [chatOpen]);
+  useEffect(() => {
+    if (searchFocusPending.current && !chatOpen && route === 'Home') {
+      searchFocusPending.current = false;
+      omnibarRef.current?.focus();
+    }
+  }, [chatOpen, route]);
+  const chatNotice = chatOpen ? visibleChatError(session, chatError) : null;
   // Session gate. Until OmiAuth reports a real cloud session with onboarding
   // complete, this shell paints no product IA at all: the probe keeps an
   // empty window (traffic-light spacer only) and a signed-out Mac sees the
@@ -459,6 +500,7 @@ export function DesktopApp({
             onSignIn={onSignIn}
             onSignOut={onSignOut}
             onStop={onStop}
+            onRetryChat={onRetryChat}
             onUiVersionChange={setUiVersion}
             onWorkspaceReload={onWorkspaceReload}
             outcomes={outcomes}
@@ -482,6 +524,7 @@ export function DesktopApp({
         <DesktopChrome
           hostMode={hostMode}
           chatBusy={chatBusy}
+          chatActive={chatOpen}
           activeGenerationId={activeGenerationId}
           chatNotice={null}
           draft={draft}
@@ -490,15 +533,13 @@ export function DesktopApp({
           liveControl={chatOpen ? liveVoiceControl : undefined}
           mode={mode}
           onModeChange={next => {
-            setMode(next);
             if (next === 'Search') {
-              // Search Recall is the Rewind screen: leave any overlay behind.
+              setMode('Search');
+              // Search Recall is the Rewind screen.
               setChatOpen(false);
-              setInlineAnswerOpen(false);
               setRoute('Rewind');
-            } else if (route === 'Rewind') {
-              setRoute('Home');
-              setActivityFilter('all');
+            } else {
+              openChat();
             }
           }}
           onNavigate={navigate}
@@ -524,9 +565,7 @@ export function DesktopApp({
           onSend={() => {
             if (mode === 'Ask') {
               setChatSubmission(value => value + 1);
-              // Small asks answer inline under the omnibar, like the mobile
-              // app; the full transcript is one click away.
-              setInlineAnswerOpen(true);
+              openChat();
               onSend();
             } else {
               setRecallQuery(draft.trim().slice(0, 200));
@@ -534,22 +573,35 @@ export function DesktopApp({
             }
           }}
           onStop={onStop}
-          route={route}
-          inlineCard={
-            inlineAnswerOpen && !chatOpen ? (
-              <InlineAskCard
-                busy={chatBusy || activeGenerationId !== null}
-                messages={messages}
-                notice={chatNotice}
-                onClose={() => setInlineAnswerOpen(false)}
-                onOpenChat={openChat}
-              />
-            ) : undefined
-          }
+          route={chatOpen ? 'Chat' : route}
         />
         <View style={styles.stage}>
-          <ShippingStage stageKey={route} variant="page">
-            {route === 'Home' ? (
+          <ShippingStage stageKey={chatOpen ? 'Chat' : route} variant="page">
+            {chatOpen ? (
+              <DesktopChat
+                submission={chatSubmission}
+                messages={messages}
+                busy={chatBusy || activeGenerationId !== null}
+                draft={draft}
+                onDraftChange={onDraftChange}
+                onSend={() => {
+                  setChatSubmission(value => value + 1);
+                  onSend();
+                }}
+                onStop={onStop}
+                canStop={activeGenerationId !== null}
+                onClose={closeChat}
+                onRetry={onRetryChat}
+                onSuggest={prompt => {
+                  onDraftChange(prompt);
+                }}
+                error={chatNotice}
+                hasOlder={hasOlderChat}
+                loadingOlder={loadingOlderChat}
+                loadingHistory={loadingHistory}
+                onLoadOlder={onLoadOlderChat}
+              />
+            ) : route === 'Home' ? (
               <DesktopActivity
                 captureRevision={captureRevision}
                 exploreDone={exploreDone}
@@ -587,25 +639,6 @@ export function DesktopApp({
               </View>
             )}
           </ShippingStage>
-          {chatOpen ? (
-            <ChatOverlay onClose={closeChat}>
-              <DesktopChat
-                submission={chatSubmission}
-                messages={messages}
-                busy={chatBusy || activeGenerationId !== null}
-                onSuggest={prompt => {
-                  setMode('Ask');
-                  onDraftChange(prompt);
-                  omnibarRef.current?.focus();
-                }}
-                error={chatNotice}
-                hasOlder={hasOlderChat}
-                loadingOlder={loadingOlderChat}
-                loadingHistory={loadingHistory}
-                onLoadOlder={onLoadOlderChat}
-              />
-            </ChatOverlay>
-          ) : null}
         </View>
         {postSetupHomeCue === 'proven' &&
         readsPhase === 'ready' &&
@@ -622,130 +655,6 @@ export function DesktopApp({
     </DesktopThemeProvider>
   );
 }
-
-// Small ask answers pinned under the omnibar: the trailing exchange with a
-// way into the full transcript, like the mobile app's inline bubble.
-function InlineAskCard({
-  busy,
-  messages,
-  notice,
-  onClose,
-  onOpenChat,
-}: {
-  busy: boolean;
-  messages: ChatMessage[];
-  notice: string | null;
-  onClose: () => void;
-  onOpenChat: () => void;
-}) {
-  const styles = useDesktopStyleSheets(createInlineStyles);
-  const {tokens: token} = useDesktopTheme();
-  // The exchange the omnibar just started: the last human turn plus whatever
-  // the assistant has answered so far.
-  const lastAsk = [...messages].reduce(
-    (index, message, position) =>
-      message.sender === 'human' ? position : index,
-    -1,
-  );
-  const ask = lastAsk >= 0 ? messages[lastAsk] : undefined;
-  const answer = messages
-    .slice(lastAsk + 1)
-    .find(message => message.sender === 'ai');
-  return (
-    <View accessibilityLabel="Inline chat answer" style={styles.card}>
-      <View style={styles.cardHead}>
-        <Text style={styles.cardTitle}>Omi</Text>
-        <FocusPressable
-          accessibilityLabel="Dismiss answer"
-          accessibilityRole="button"
-          onPress={onClose}
-          style={({pressed}) => [styles.close, pressed && styles.pressed]}>
-          <MaterialIcon name="close" size={14} color={token.color.inkMuted} />
-        </FocusPressable>
-      </View>
-      {ask !== undefined && ask.text.trim() !== '' ? (
-        <Text style={styles.cardAsk} numberOfLines={2}>
-          {ask.text.trim()}
-        </Text>
-      ) : null}
-      {notice !== null ? (
-        <Text style={styles.cardNotice}>{notice}</Text>
-      ) : answer !== undefined && answer.text.trim() !== '' ? (
-        <Text style={styles.cardText} numberOfLines={4}>
-          {answer.text.trim()}
-        </Text>
-      ) : (
-        <View style={styles.thinking}>
-          <OmiLoadingMark inkColor={token.color.ink} size={18} />
-          <Text style={styles.cardText}>
-            {busy ? 'Thinking…' : 'No answer yet.'}
-          </Text>
-        </View>
-      )}
-      <OmiButton
-        compact
-        label="Open Chat"
-        onPress={onOpenChat}
-        style={styles.openChat}
-      />
-    </View>
-  );
-}
-
-const createInlineStyles = (token: DesktopTokens) =>
-  StyleSheet.create({
-    card: {
-      backgroundColor: token.color.dark,
-      borderColor: token.color.lineStrong,
-      borderRadius: 18,
-      borderWidth: 1,
-      gap: 8,
-      padding: 14,
-    },
-    cardHead: {
-      alignItems: 'center',
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-    },
-    cardTitle: {
-      color: token.color.inkMuted,
-      fontFamily: token.font,
-      fontSize: 12,
-      fontWeight: '600',
-    },
-    close: {
-      alignItems: 'center',
-      borderRadius: 8,
-      height: 22,
-      justifyContent: 'center',
-      width: 22,
-    },
-    thinking: {
-      alignItems: 'center',
-      flexDirection: 'row',
-      gap: 8,
-    },
-    cardText: {
-      color: token.color.ink,
-      fontFamily: token.font,
-      fontSize: token.type.body,
-      lineHeight: 20,
-    },
-    cardAsk: {
-      color: token.color.inkMuted,
-      fontFamily: token.font,
-      fontSize: 13,
-      lineHeight: 18,
-    },
-    cardNotice: {
-      color: token.color.red,
-      fontFamily: token.font,
-      fontSize: 13,
-      lineHeight: 18,
-    },
-    openChat: {alignSelf: 'flex-start'},
-    pressed: {opacity: 0.7},
-  });
 
 const styles = StyleSheet.create({
   root: {
@@ -770,55 +679,5 @@ const styles = StyleSheet.create({
     width: desktopTrafficLightRowWidth,
   },
   page: {flex: 1},
-  // Stage wrapper: the page and the chat overlay share this region, so the
-  // overlay never covers the omnibar that feeds chat.
   stage: {flex: 1},
-});
-
-// The chat overlay renders inside DesktopThemeProvider (DesktopApp itself
-// mounts the provider), so its surface and scrim follow the appearance: a
-// light surface with dark ink in light, the dark surface in dark.
-function ChatOverlay({
-  children,
-  onClose,
-}: {
-  children: React.ReactNode;
-  onClose: () => void;
-}) {
-  const overlayStyles = useOmiStyles(createOverlayStyles);
-  return (
-    <View accessibilityLabel="Chat overlay" style={overlayStyles.chatOverlay}>
-      <FocusPressable
-        accessibilityLabel="Close chat"
-        accessibilityRole="button"
-        onPress={onClose}
-        style={overlayStyles.chatScrim}
-      />
-      <View style={overlayStyles.chatPanel}>{children}</View>
-    </View>
-  );
-}
-
-const createOverlayStyles = (t: OmiTheme) => ({
-  chatOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 20,
-  },
-  chatScrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: t.color.scrim,
-  },
-  chatPanel: {
-    alignSelf: 'center' as const,
-    backgroundColor: t.color.surface,
-    borderColor: t.color.separator,
-    borderRadius: t.radius.card,
-    borderWidth: 1,
-    flex: 1,
-    marginVertical: t.space.xs,
-    maxHeight: 720,
-    maxWidth: t.layout.chatColumn + 2 * t.space.page,
-    overflow: 'hidden' as const,
-    width: '100%' as const,
-  },
 });

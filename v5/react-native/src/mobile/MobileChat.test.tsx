@@ -60,10 +60,10 @@ test('mobile chat keeps Back outside scrolling content and suggestions never sen
   expect(onSend).not.toHaveBeenCalled();
   const scroll = tree.root.findByType(ScrollView);
   expect(
-    scroll.findAll(node => node.props.accessibilityLabel === 'Close chat'),
+    scroll.findAll(node => node.props.accessibilityLabel === 'Back from chat'),
   ).toHaveLength(0);
   expect(scroll.findAllByType(TextInput)).toHaveLength(0);
-  act(() => control('Close chat').props.onPress());
+  act(() => control('Back from chat').props.onPress());
   expect(props.onClose).toHaveBeenCalledTimes(1);
   act(() => tree.unmount());
 });
@@ -81,11 +81,12 @@ test.each([
         node => node.props.accessibilityLabel === 'Try: Find my next step',
       ),
     ).toHaveLength(0);
-    if (state.error)
+    if (state.error) {
       expect(
         tree.root.findAll(node => node.props.accessibilityRole === 'alert')
           .length,
       ).toBeGreaterThan(0);
+    }
     act(() => tree.unmount());
   },
 );
@@ -115,4 +116,37 @@ test('streaming chat uses one pending response, retains stop and gates older loa
   expect(onStop).toHaveBeenCalledTimes(1);
   expect(onSend).not.toHaveBeenCalled();
   act(() => tree.unmount());
+});
+
+test('scrolling away exposes Jump to Latest and restores follow on activation', () => {
+  const scrollToEnd = jest
+    .spyOn(ScrollView.prototype, 'scrollToEnd')
+    .mockImplementation(() => undefined);
+  const onJumpLatest = jest.fn();
+  const {tree, control} = setup({
+    messages: [
+      {
+        id: 'reply',
+        sender: 'ai',
+        text: 'Answer',
+        createdAt: 1000,
+        generationOutcome: 'completed',
+      },
+    ],
+    onJumpLatest,
+  });
+  act(() =>
+    tree.root.findByType(ScrollView).props.onScroll({
+      nativeEvent: {
+        contentOffset: {y: 0},
+        contentSize: {height: 1000},
+        layoutMeasurement: {height: 200},
+      },
+    }),
+  );
+  act(() => control('Jump to Latest').props.onPress());
+  expect(onJumpLatest).toHaveBeenCalledTimes(1);
+  expect(scrollToEnd).toHaveBeenCalled();
+  act(() => tree.unmount());
+  scrollToEnd.mockRestore();
 });

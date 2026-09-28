@@ -34,9 +34,8 @@ import {
 } from './DesktopTheme';
 
 // v5.1 routes: Home is the Activity page, Rewind is the capture-detail viewer
-// reached from timeline entries or Search, and Chat is the overlay id used by
-// the explore checklist (never a chrome destination). Conversations and Tasks
-// are filters, not routes.
+// reached from timeline entries or Search. Chat is a page destination;
+// Conversations and Tasks remain Activity filters.
 export type DesktopRoute = 'Home' | 'Rewind' | 'Settings' | 'Chat';
 
 const filterIcons: Record<ActivityFilterId, MaterialIconName> = {
@@ -51,6 +50,7 @@ export type OmnibarMode = 'Ask' | 'Search';
 type Props = {
   hostMode?: boolean;
   chatBusy?: boolean;
+  chatActive?: boolean;
   mode?: OmnibarMode;
   onModeChange?: (mode: OmnibarMode) => void;
   liveControl?: React.ReactNode;
@@ -73,9 +73,6 @@ type Props = {
   onSend: () => void;
   onStop: () => void;
   chatNotice: string | null;
-  // Small inline answer card pinned under the omnibar, like the mobile app's
-  // reply bubble. Rendered by the app shell; the chrome only places it.
-  inlineCard?: React.ReactNode;
   omnibarRef: React.RefObject<TextInput | null>;
   // When set, a decorative fake cursor travels to this destination in the
   // chrome (a filter chip or the settings gear) and nudges it until dismissed.
@@ -85,6 +82,7 @@ type Props = {
 export function DesktopChrome({
   hostMode = false,
   chatBusy = false,
+  chatActive = false,
   mode = 'Ask',
   onModeChange,
   liveControl,
@@ -101,7 +99,6 @@ export function DesktopChrome({
   onFilterChange,
   groupBy,
   onGroupByChange,
-  inlineCard,
   captureActive = false,
   captureAvailable = false,
   captureBusy = false,
@@ -344,72 +341,86 @@ export function DesktopChrome({
               );
             })}
           </View>
-          <TextInput
-            accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search Recall'}
-            blurOnSubmit={false}
-            onChangeText={onDraftChange}
-            onSubmitEditing={() => {
-              if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
-                onSend();
+          {chatActive ? (
+            <Text style={styles.chatDestination} accessibilityRole="header">
+              Chat
+            </Text>
+          ) : (
+            <TextInput
+              accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search Recall'}
+              blurOnSubmit={false}
+              onChangeText={onDraftChange}
+              onKeyPress={event => {
+                if (event.nativeEvent.key === 'Escape') {
+                  onNavigate('Chat');
+                }
+              }}
+              onSubmitEditing={() => {
+                if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
+                  onSend();
+                }
+              }}
+              placeholder={
+                mode === 'Search'
+                  ? desktopSearchPlaceholder
+                  : 'Ask about your day…'
               }
-            }}
-            placeholder={
-              mode === 'Search'
-                ? desktopSearchPlaceholder
-                : 'Ask about your day…'
-            }
-            placeholderTextColor={token.color.inkMuted}
-            ref={omnibarRef}
-            style={styles.omnibarInput}
-            value={draft}
-          />
-          {liveControl ? (
+              placeholderTextColor={token.color.inkMuted}
+              ref={omnibarRef}
+              style={styles.omnibarInput}
+              value={draft}
+            />
+          )}
+          {liveControl && !chatActive ? (
             <View style={styles.liveSlot}>{liveControl}</View>
           ) : null}
-          <FocusPressable
-            accessibilityLabel={
-              canStop
-                ? 'Stop'
-                : sending
-                ? 'Sending…'
-                : mode === 'Ask'
-                ? 'Send'
-                : 'Search'
-            }
-            accessibilityRole="button"
-            disabled={mode === 'Ask' && !canStop && (chatBusy || !draft.trim())}
-            onPress={() => {
-              if (canStop) {
-                onStop();
-              } else if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
-                onSend();
+          {!chatActive && (
+            <FocusPressable
+              accessibilityLabel={
+                canStop
+                  ? 'Stop'
+                  : sending
+                  ? 'Sending…'
+                  : mode === 'Ask'
+                  ? 'Send'
+                  : 'Search'
               }
-            }}
-            style={({pressed}) => [
-              styles.send,
-              mode === 'Ask' &&
-                !canStop &&
-                (chatBusy || !draft.trim()) &&
-                styles.sendDisabled,
-              pressed && styles.pressed,
-            ]}>
-            {canStop ? (
-              <MaterialIcon name="stop" size={14} color={token.color.dark} />
-            ) : mode === 'Ask' ? (
-              <MaterialIcon
-                name="arrow_upward"
-                size={18}
-                color={token.color.dark}
-              />
-            ) : (
-              <MaterialIcon name="search" size={17} color={token.color.dark} />
-            )}
-          </FocusPressable>
-          {inlineCard ? (
-            <View pointerEvents="box-none" style={styles.inlineCardSlot}>
-              {inlineCard}
-            </View>
-          ) : null}
+              accessibilityRole="button"
+              disabled={
+                mode === 'Ask' && !canStop && (chatBusy || !draft.trim())
+              }
+              onPress={() => {
+                if (canStop) {
+                  onStop();
+                } else if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
+                  onSend();
+                }
+              }}
+              style={({pressed}) => [
+                styles.send,
+                mode === 'Ask' &&
+                  !canStop &&
+                  (chatBusy || !draft.trim()) &&
+                  styles.sendDisabled,
+                pressed && styles.pressed,
+              ]}>
+              {canStop ? (
+                <MaterialIcon name="stop" size={14} color={token.color.dark} />
+              ) : mode === 'Ask' ? (
+                <MaterialIcon
+                  name="arrow_upward"
+                  size={18}
+                  color={token.color.dark}
+                />
+              ) : (
+                <MaterialIcon
+                  name="search"
+                  size={17}
+                  color={token.color.dark}
+                />
+              )}
+            </FocusPressable>
+          )}
         </View>
         {onToggleCapture !== null && captureAvailable ? (
           <ShippingPressable
@@ -469,6 +480,15 @@ export function DesktopChrome({
           setFiltersBox({height, width, x, y});
         }}
         style={styles.filterRow}>
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel="Open Chat"
+          accessibilityState={{selected: chatActive}}
+          onPress={() => onNavigate(chatActive ? 'Home' : 'Chat')}
+          style={[styles.modeButton, chatActive && styles.chatSelected]}>
+          <MaterialIcon name="chat_bubble" size={15} color={token.color.ink} />
+          <Text style={styles.modeText}>Chat</Text>
+        </FocusPressable>
         {desktopActivityFilters.map(id => {
           // Filters belong to the Activity page: away from it (Settings,
           // Recall search) no chip claims to be the current view.
@@ -515,39 +535,41 @@ export function DesktopChrome({
           );
         })}
         <View style={styles.groupBySlot} />
-        <View
-          accessibilityLabel="Timeline grouping"
-          accessibilityRole="tablist"
-          style={styles.groupBy}>
-          {desktopTimelineGroupings.map(value => {
-            const selected = value === groupBy;
-            return (
-              <FocusPressable
-                key={value}
-                accessibilityLabel={`Group by ${value}`}
-                accessibilityRole="button"
-                accessibilityState={{selected}}
-                onPress={() => onGroupByChange(value)}
-                style={({pressed}) => [
-                  styles.groupHit,
-                  selected && styles.groupHitSelected,
-                  pressed && styles.pressed,
-                ]}>
-                <Text
-                  style={[
-                    styles.groupText,
-                    selected && styles.groupTextSelected,
+        {chatActive ? null : (
+          <View
+            accessibilityLabel="Timeline grouping"
+            accessibilityRole="tablist"
+            style={styles.groupBy}>
+            {desktopTimelineGroupings.map(value => {
+              const selected = value === groupBy;
+              return (
+                <FocusPressable
+                  key={value}
+                  accessibilityLabel={`Group by ${value}`}
+                  accessibilityRole="button"
+                  accessibilityState={{selected}}
+                  onPress={() => onGroupByChange(value)}
+                  style={({pressed}) => [
+                    styles.groupHit,
+                    selected && styles.groupHitSelected,
+                    pressed && styles.pressed,
                   ]}>
-                  {value === 'date'
-                    ? 'Date'
-                    : value === 'type'
-                    ? 'Type'
-                    : 'Topic'}
-                </Text>
-              </FocusPressable>
-            );
-          })}
-        </View>
+                  <Text
+                    style={[
+                      styles.groupText,
+                      selected && styles.groupTextSelected,
+                    ]}>
+                    {value === 'date'
+                      ? 'Date'
+                      : value === 'type'
+                      ? 'Type'
+                      : 'Topic'}
+                  </Text>
+                </FocusPressable>
+              );
+            })}
+          </View>
+        )}
       </View>
       {guideTarget !== null && guideRect !== null ? (
         <Animated.View
@@ -635,6 +657,14 @@ const createStyles = (token: DesktopTokens) =>
     },
     modeText: {fontSize: 12, color: token.color.inkMuted},
     modeTextActive: {color: token.color.ink},
+    chatSelected: {backgroundColor: token.color.glassSelected},
+    chatDestination: {
+      color: token.color.ink,
+      flex: 1,
+      fontFamily: token.font,
+      fontSize: token.type.search,
+      fontWeight: '600',
+    },
     chrome: {
       gap: 10,
       marginBottom: 4,
@@ -688,16 +718,6 @@ const createStyles = (token: DesktopTokens) =>
       minWidth: 220,
       paddingHorizontal: 8,
       paddingVertical: 6,
-    },
-    // The inline ask answer hangs just below the omnibar without pushing the
-    // page layout underneath it.
-    inlineCardSlot: {
-      position: 'absolute',
-      top: '100%',
-      left: 0,
-      right: 0,
-      marginTop: 8,
-      zIndex: 6,
     },
     omnibarInput: {
       color: token.color.ink,

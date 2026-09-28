@@ -77,19 +77,10 @@ const allowedElements = [
   'img',
   'input',
 ];
-const animation = {
-  animation: 'fadeIn',
-  duration: 150,
-  sep: 'word',
-  stagger: 10,
-  maxBacklogMs: 150,
-} as const;
-
 export function ChatMessageContent({
   text,
   style,
   streaming = false,
-  reduceMotion = false,
 }: ChatMessageContentProps) {
   const flattened = StyleSheet.flatten(style);
   return (
@@ -111,8 +102,8 @@ export function ChatMessageContent({
         rehypePlugins={[]}
         urlTransform={safeLink}
         controls={false}
-        animated={streaming && !reduceMotion ? animation : false}
-        isAnimating={streaming}
+        animated={false}
+        isAnimating={false}
         mode={streaming ? 'streaming' : 'static'}>
         {text}
       </Streamdown>

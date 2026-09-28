@@ -13,7 +13,7 @@ transport, desktop commands, and the codec boundary. Guide-level rules:
 react-native/
   index.js → App.tsx → src/app/AppOrchestrator.tsx   # session, reads, chat orchestration
   src/desktop/
-    DesktopApp.tsx            # route state, session gate, chat overlay, theme provider
+    DesktopApp.tsx            # route state, session gate, chat destination, theme provider
     DesktopTopChrome.tsx      # v5.1 chrome: DesktopChrome (omnibar + filters + gear)
     DesktopShellV5.tsx,
     DesktopChromeV5.tsx       # v5 pages IA, kept selectable via omi.uiVersion
@@ -78,14 +78,13 @@ Implemented across `DesktopTopChrome.tsx` + `desktopChrome.ts`:
   width (`desktopTrafficLightRowWidth`), the
   persistent capture toggle, and the settings gear. Capture toggle hides
   while capture is unavailable (`onToggleCapture === null`).
-- **Row 2** — Activity filters **All / Conversations / Recall / Tasks**
+- **Row 2** — Chat destination and Activity filters **All / Conversations / Recall / Tasks**
   (`desktopActivityFilters`, human labels via `desktopFilterLabel` — the
   `recall` filter is labeled "Recall") plus the group-by segmented control
   **Date / Type / Topic** (`desktopTimelineGroupings`). Filters select a
   slice of the Activity page; they are not routes.
-- Routes are `'Home' | 'Rewind' | 'Settings'`; **Chat is an overlay, not a
-  route** (`DesktopApp.tsx` renders it over the stage so the omnibar that
-  feeds it stays visible). `Rewind` is the capture-detail page reached from
+- Routes are `'Home' | 'Rewind' | 'Settings' | 'Chat'`. Chat is the
+  conversation stage; `Rewind` is the capture-detail page reached from
   timeline entries or Search.
 - The v5 pages IA (rail: Home / Chat / Conversations / Recall / Tasks) is
   kept behind the `omi.uiVersion` preference (`'v5' | 'v5.1'`, default
@@ -148,27 +147,10 @@ both sides together.
 
 ## Chat and the omnibar
 
-- The shared omnibar has Ask and Search modes (`OmnibarMode`); Search
-  routes to the Recall destination (`'Rewind'`). Ask keeps the
-  omnibar in place, answers small asks inline under it, and opens the full
-  chat overlay on demand; the close control restores the previous page.
-  Enter submits from the omnibar and follows the measured bottom through
-  reply layout changes; scrolling away or loading earlier messages pauses
-  following until you return to the bottom or send again.
-- Assistant Markdown renders with Streamdown on web and React Native Marked
-  on native (`src/ui/ChatMessageContent.{tsx,web.tsx}`). Model-authored
-  images do not load remotely, raw HTML is inert, and links open only on
-  explicit activation. The current native chat transport delivers terminal
-  replies; renderer support for incremental Markdown does not imply token
-  streaming.
-- Omi replies use bubbles; user messages stay unboxed; pending replies show
-  a skeleton with the animated Omi dot. The mark and subtle press feedback
-  respect Reduce Motion. Scrollable Home, Chat, and Recall content fades
-  into the native window glass (`ScrollFade.tsx`) only when more content
-  remains below.
-- Chat transport errors never take over the stage; they surface under the
-  omnibar that owns chat (`visibleChatError` in `desktopChrome.ts`) and only
-  once the session is ready.
+- The omnibar has Ask and Search modes. Ask submits through the existing chat client and opens the Chat stage; the full transcript is the only answer surface. The second-row Chat control opens that stage without sending. Search opens Recall. The bottom Chat composer owns follow-up turns and Stop. Activity returns to the prior Activity stage; conversation state stays in `AppOrchestrator.tsx`.
+- Chat uses a 900-pt panel and a 680-pt reading column. User turns are quiet right-aligned blocks; Omi replies are flat markdown beside the mark. Loading, streaming, failed/retryable, stopped, and empty/prompt states share the transcript. Scrolling away pauses follow and exposes Jump to Latest.
+- Assistant Markdown uses Streamdown on web and React Native Marked on native (`src/ui/ChatMessageContent.{tsx,web.tsx}`). Model-authored images do not load remotely, raw HTML is inert, and links open only on explicit activation. Copy is available on each nonempty Omi reply. Native streaming may be terminal-only on the current transport.
+- Esc removes input focus in Chat and returns deeper pages to Chat; the host controls any later window hide. Chat transport errors appear in Chat only when the session is ready. See [chat-ux.md](chat-ux.md) for the audit and visual states.
 
 ## Home, Conversations, Settings
 
