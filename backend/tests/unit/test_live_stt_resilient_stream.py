@@ -12,11 +12,12 @@ from utils.stt.streaming import STTService
 
 
 class Socket:
-    def __init__(self, *, dead=False, reason=None, callback=None, finishing=False):
+    def __init__(self, *, dead=False, reason=None, callback=None, finishing=False, raw=None):
         self.is_connection_dead = dead
         self.typed_death_reason = reason
         self.death_reason = 'soniox error: 413 max_duration_reached' if dead else None
         self._finishing = finishing
+        self.raw = raw
         self.callback = callback
         self.sent = []
         self.finished = False
@@ -166,7 +167,7 @@ async def test_teardown_does_not_reconnect(monkeypatch):
 @pytest.mark.asyncio
 async def test_soniox_finishing_socket_does_not_start_reconnect_or_fallback(monkeypatch):
     listener = receiver(monkeypatch)
-    listener.stt_socket = Socket(dead=True, reason='soniox_rotation', finishing=True)
+    listener.stt_socket = Socket(dead=True, reason='soniox_rotation', raw=Socket(finishing=True))
     listener._stt_rebuild = (lambda: (None, None, None), 2)
     listener._create_stt_socket = AsyncMock()
     listener._rebuild_stt_socket_locked = AsyncMock(return_value=True)

@@ -1242,17 +1242,20 @@ class ListenReceiver:
 
     @staticmethod
     def _stt_socket_is_finishing(socket: Any) -> bool:
-        """Read the Soniox teardown latch through legacy socket wrappers."""
+        """Read the Soniox teardown latch through managed and legacy wrappers."""
         seen: set[int] = set()
-        current = socket
-        while current is not None and id(current) not in seen:
+        pending = [socket]
+        while pending:
+            current = pending.pop()
+            if current is None or id(current) in seen:
+                continue
             seen.add(id(current))
             try:
                 if getattr(current, '_finishing', False):
                     return True
-                current = getattr(current, '_conn', None)
+                pending.extend((getattr(current, '_conn', None), getattr(current, 'raw', None)))
             except Exception:
-                return False
+                continue
         return False
 
     async def _reconnect_stt_socket_locked(self) -> bool:
