@@ -75,8 +75,18 @@ bool is_capture_route(std::string_view route) {
          starts_with(route, "/v1/chat-attachments/") ||
          route == "/v1/device-sessions" ||
          starts_with(route, "/v1/device-sessions/") ||
+         // Legacy omi offline-sync: WAL audio upload + job polling ride the
+         // capture origin exactly like the canonical device-session wire.
+         route == "/v2/sync-local-files" ||
+         starts_with(route, "/v2/sync-local-files/") ||
          route == "/v1/conversations" || route == "/v1/memories" ||
          route == "/v1/tasks" || route == "/v1/tasks/ops";
+}
+
+// Legacy omi WAL batches can carry minutes of Opus audio per request; the
+// 60 s default would cut off healthy uploads on modest uplinks.
+bool is_sync_upload_timeout_path(std::string_view path) {
+  return strip_route(path) == "/v2/sync-local-files";
 }
 
 // Match Apple OmiRequestTimeout: URL path split on '/', leading empty segment.
@@ -127,7 +137,8 @@ int32_t omi_backend_request_timeout_seconds(const char* method,
   if (method == nullptr || path == nullptr) {
     return 60;
   }
-  if (std::strcmp(method, "POST") == 0 && is_transcribe_timeout_path(path)) {
+  if (std::strcmp(method, "POST") == 0 &&
+      (is_transcribe_timeout_path(path) || is_sync_upload_timeout_path(path))) {
     return 150;
   }
   return 60;

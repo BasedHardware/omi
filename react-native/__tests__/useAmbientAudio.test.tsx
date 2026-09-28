@@ -23,6 +23,7 @@ jest.mock('../src/omiNative', () => ({
       async () => '01923f52-3ab6-4c7d-9f8e-6a1b2c3d4e5f',
     ),
     request: jest.fn(),
+    getApiContract: jest.fn(async () => 'canonical'),
   },
 }));
 jest.mock('../src/deviceSessionClient', () => ({
@@ -181,4 +182,56 @@ test('off mode stops native capture but still drains the spool', async () => {
     await jest.advanceTimersByTimeAsync(1);
   });
   expect(openDeviceSession).toHaveBeenCalled();
+});
+
+const {omiBackend} = require('../src/omiNative');
+
+test('legacy plane drains segments through /v2/sync-local-files', async () => {
+  (omiBackend.getApiContract as jest.Mock).mockResolvedValue('omi');
+  (omiBackend.request as jest.Mock).mockResolvedValue({
+    id: 'legacy-sync',
+    status: 202,
+    body: JSON.stringify({job_id: 'job-9', status: 'completed'}),
+  });
+
+  await render();
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(1);
+  });
+
+  expect(openDeviceSession).not.toHaveBeenCalled();
+  const upload = (omiBackend.request as jest.Mock).mock.calls[0][0];
+  expect(upload.method).toBe('POST');
+  expect(upload.path).toBe('/v2/sync-local-files');
+  expect(upload.multipart).toEqual([
+    {
+      name: 'files',
+      filename: `omi-macos-ambient_${segment.capturedAtMs}.bin`,
+      contentType: 'application/octet-stream',
+      bytesBase64: expect.any(String),
+    },
+  ]);
+  expect(mockAudio.ambientAudioAcknowledgeSegment).toHaveBeenCalledWith(
+    segment.id,
+  );
+});
+
+test('legacy plane drops segments the recovery window rejects', async () => {
+  (omiBackend.getApiContract as jest.Mock).mockResolvedValue('omi');
+  (omiBackend.request as jest.Mock).mockResolvedValue({
+    id: 'legacy-sync',
+    status: 422,
+    body: JSON.stringify({code: 'backfill_lookback_exceeded'}),
+  });
+
+  await render();
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(1);
+  });
+
+  expect(openDeviceSession).not.toHaveBeenCalled();
+  // Dropped locally so the queue can drain, not retried forever.
+  expect(mockAudio.ambientAudioAcknowledgeSegment).toHaveBeenCalledWith(
+    segment.id,
+  );
 });

@@ -158,16 +158,32 @@ export async function loadOmiMemories(
       created = milliseconds(row.created_at);
     const conversation =
       row.conversation_id == null ? null : id(row.conversation_id);
+    // v3 MemoryDB carries a short `headline` plus `tags` and a `category`;
+    // surface them instead of echoing the whole body into every row.
+    const headline =
+      typeof row.headline === 'string' && row.headline.trim().length > 0
+        ? row.headline.trim()
+        : null;
+    const tags = Array.isArray(row.tags)
+      ? row.tags.filter((tag): tag is string => typeof tag === 'string')
+      : [];
+    const category =
+      typeof row.category === 'string' && row.category.length > 0
+        ? row.category
+        : null;
+    const title = headline ?? content;
     return {
       kind: 'memory' as const,
       id: id(row.id),
-      title: content,
+      title,
       summary: content,
-      searchableText: content,
+      searchableText: [content, category ?? '', ...tags]
+        .filter(part => part.length > 0)
+        .join('\n'),
       citations: conversation === null ? [] : [conversation],
       timestamp: created === null ? null : created / 1000,
       provenance: {
-        label: null,
+        label: tags.length > 0 ? tags[0] : null,
         synthesisVersion: null,
         inputDigest: null,
         outputDigest: null,
@@ -195,15 +211,20 @@ export async function loadOmiTasks(
     const evidence = row.provenance ?? [];
     if (!Array.isArray(evidence))
       throw new Error('Omi task provenance is malformed');
+    const taskDue = milliseconds(row.due_at);
     return {
       kind: 'task' as const,
       id: id(row.id),
       title: description,
-      summary: completed ? 'Completed' : 'Pending',
+      summary: completed
+        ? 'Completed'
+        : taskDue === null
+        ? 'Pending'
+        : `Due ${new Date(taskDue).toLocaleDateString()}`,
       searchableText: description,
       completed,
       completedAt: milliseconds(row.completed_at),
-      dueAt: milliseconds(row.due_at),
+      dueAt: taskDue,
       owner: row.owner == null ? null : text(row.owner),
       source: text(row.source, 'legacy'),
       provenance: evidence.map(item => {

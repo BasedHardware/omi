@@ -84,6 +84,21 @@ static void test_timeouts() {
              "/v1/device-sessions/11111111-2222-3333-4444-555555555555/"
              "transcribe") == 150,
          "uuid transcribe timeout");
+  expect(omi_backend_request_timeout_seconds("POST", "/v2/sync-local-files") ==
+             150,
+         "sync upload timeout");
+  expect(omi_backend_request_timeout_seconds(
+             "POST", "/v2/sync-local-files?client=desktop") == 150,
+         "sync upload timeout with query");
+  expect(omi_backend_request_timeout_seconds(
+             "GET", "/v2/sync-local-files/job-7") == 60,
+         "sync poll default");
+  expect(omi_backend_is_capture_path("/v2/sync-local-files") == 1,
+         "sync upload capture path");
+  expect(omi_backend_is_capture_path("/v2/sync-local-files/job-7") == 1,
+         "sync poll capture path");
+  expect(omi_backend_is_capture_path("/v2/sync-local-files-extra") == 0,
+         "sync path prefix guard");
 }
 
 static void test_example_platform() {

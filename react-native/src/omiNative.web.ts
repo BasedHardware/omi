@@ -4,6 +4,7 @@ import {
   type BrowserCapabilitySnapshot,
   type BrowserEnvironment,
 } from './browser-adapters.web';
+import {decodeBase64} from './base64';
 
 export async function requestBluetoothScanPermission(): Promise<boolean> {
   return true;
@@ -206,18 +207,42 @@ async function browserRequest(
   request: NativeHttpRequest,
   accept: string,
 ): Promise<NativeHttpResponse> {
+  let body: FormData | string | undefined = request.body;
+  if (request.multipart !== undefined) {
+    const form = new FormData();
+    const BlobPart = Blob as unknown as new (
+      parts: Uint8Array[],
+      options?: {type?: string},
+    ) => Blob;
+    const appendPart = form.append.bind(form) as (
+      name: string,
+      value: Blob,
+      filename?: string,
+    ) => void;
+    for (const part of request.multipart) {
+      const bytes = decodeBase64(part.bytesBase64);
+      appendPart(
+        part.name,
+        new BlobPart([bytes], {
+          type: part.contentType ?? 'application/octet-stream',
+        }),
+        part.filename ?? `${part.name}.bin`,
+      );
+    }
+    body = form;
+  }
   const response = await fetch(
     proxyPath(request.path),
     localProxyRequestInit({
-      body: request.body,
+      body,
       credentials: 'omit',
       headers: {...request.headers, accept},
       method: request.method,
     }),
   );
-  const body = await response.text();
+  const bodyText = await response.text();
   return {
-    body: body === '' ? null : body,
+    body: bodyText === '' ? null : bodyText,
     id: request.id,
     retryAfterSeconds: retryAfterSeconds(response),
     status: response.status,
