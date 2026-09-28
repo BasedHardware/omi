@@ -73,23 +73,30 @@ final class SiriSession {
         SecItemDelete(keychainQuery() as CFDictionary)
     }
 
-    /// A failed Keychain deletion leaves the pending-wipe marker in place and
-    /// prevents Firebase sign-out from proceeding through the Dart bridge.
-    func clearForSignOut() throws {
+    /// Revoke the engine-free credential independently of the pending-wipe
+    /// marker. Keep the config until the queued wipe so either fence can deny
+    /// requests even when the other persistence operation fails.
+    @discardableResult
+    func revokeMirroredTokenForSignOut() -> Bool {
         #if OMI_SIRI_PROBE
         if simulateKeychainDeleteFailureOnce {
             simulateKeychainDeleteFailureOnce = false
-            throw Failure.auth
+            return false
         }
         #endif
         let status = SecItemDelete(keychainQuery() as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw Failure.auth }
-        defaults?.removeObject(forKey: configKey)
-        guard defaults?.synchronize() == true else { throw Failure.auth }
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
+
+    func hasMirroredToken() -> Bool {
+        var query = keychainQuery()
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
     }
 
     func validateOwner(_ config: Config) throws {
-        guard let current = currentConfig(), current.uid == config.uid,
+        guard hasMirroredToken(), let current = currentConfig(), current.uid == config.uid,
               (current.generation ?? 0) == (config.generation ?? 0),
               SiriSnapshotStore.shared.generationForOwner(config.uid) == (config.generation ?? 0)
         else { throw Failure.auth }

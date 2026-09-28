@@ -69,6 +69,7 @@ final class SiriSnapshotStore {
     #if OMI_SIRI_PROBE
     var simulateIndexDeleteFailure = false
     var simulateSnapshotPersistFailureOnce = false
+    var simulateMarkerFlushFailureOnce = false
     private(set) var probeFullRebuildCount = 0
     #endif
     private var file: URL { container.appendingPathComponent(namespace.snapshotFileName) }
@@ -114,6 +115,7 @@ final class SiriSnapshotStore {
     private func accountOwnerLocked() -> Bool {
         guard let uid = snapshot.ownerUid, !uid.isEmpty else { return false }
         return owner == uid && SiriSession.shared.currentConfig()?.uid == uid &&
+            SiriSession.shared.hasMirroredToken() &&
             transitionGeneration == nil &&
             (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty
     }
@@ -216,6 +218,12 @@ final class SiriSnapshotStore {
     }
     #if OMI_SIRI_PROBE
     func simulateTerminatedExpiryTimer() { cancelExpiryTask() }
+    func probeSimulateColdLaunchWithoutMarker() {
+        lock.lock(); defer { lock.unlock() }
+        defaults.removeObject(forKey: pendingWipeOwnersKey)
+        _ = defaults.synchronize()
+        transitionGeneration = nil
+    }
     func probeStoredEntity(type: String, id: String) -> Bool {
         lock.lock(); defer { lock.unlock() }
         switch type {
@@ -322,29 +330,40 @@ final class SiriSnapshotStore {
 
         }
     }
-    /// Prepare before Firebase sign-out, while the Flutter engine still exists.
-    /// The pending marker is flushed before any other mutable state or Keychain
-    /// I/O. A later failure still leaves a durable engine-free privacy fence.
+    /// This fast privacy fence bypasses the Spotlight serialization gate.
+    /// Each operation runs even if another fails; the queued wipe follows via
+    /// the auth callback. Token absence alone denies a cold engine-free launch.
     func prepareForSignOut() async throws {
-        try await serialized {
-            lock.lock()
-            let owners = Set([owner, snapshot.ownerUid, SiriSession.shared.currentConfig()?.uid].compactMap { $0 })
-                .union(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? [])
-            defaults.set(Array(owners), forKey: pendingWipeOwnersKey)
-            let markerPersisted = defaults.synchronize()
-            guard markerPersisted else {
-                lock.unlock()
-                throw SiriSession.Failure.auth
-            }
-            let next = (defaults.object(forKey: generationKey) as? Int64 ?? 0) + 1
-            defaults.set(next, forKey: generationKey)
-            transitionGeneration = next
-            defaults.removeObject(forKey: routeKey)
-            let persisted = defaults.synchronize()
-            lock.unlock()
-            guard persisted else { throw SiriSession.Failure.auth }
-            try SiriSession.shared.clearForSignOut()
+        let tokenRemoved = SiriSession.shared.revokeMirroredTokenForSignOut()
+        if !tokenRemoved { NSLog("[SiriIndex] Sign-out token revocation failed; attempting durable marker") }
+        lock.lock()
+        let owners = Set([owner, snapshot.ownerUid, SiriSession.shared.currentConfig()?.uid].compactMap { $0 })
+            .union(defaults.stringArray(forKey: pendingWipeOwnersKey) ?? [])
+        defaults.set(Array(owners), forKey: pendingWipeOwnersKey)
+        #if OMI_SIRI_PROBE
+        let markerPersisted: Bool
+        if simulateMarkerFlushFailureOnce {
+            simulateMarkerFlushFailureOnce = false
+            defaults.removeObject(forKey: pendingWipeOwnersKey)
+            _ = defaults.synchronize()
+            markerPersisted = false
+        } else { markerPersisted = defaults.synchronize() }
+        #else
+        let markerPersisted = defaults.synchronize()
+        #endif
+        if !markerPersisted { NSLog("[SiriIndex] Sign-out pending-wipe marker flush failed") }
+        let next = (defaults.object(forKey: generationKey) as? Int64 ?? 0) + 1
+        defaults.set(next, forKey: generationKey)
+        transitionGeneration = next
+        defaults.removeObject(forKey: routeKey)
+        if !defaults.synchronize() { NSLog("[SiriIndex] Sign-out generation flush failed") }
+        lock.unlock()
+        // A publisher already inside the owner lock may have mirrored a token
+        // after the first deletion. Revoke it again after fencing that writer.
+        if !SiriSession.shared.revokeMirroredTokenForSignOut() {
+            NSLog("[SiriIndex] Sign-out post-fence token revocation failed")
         }
+        guard tokenRemoved && markerPersisted else { throw SiriSession.Failure.auth }
     }
     func retryPendingWipe() async throws -> Bool {
         return try await serialized {

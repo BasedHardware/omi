@@ -640,6 +640,32 @@ enum SiriDebugProbe {
                         deviceIdHash: next.deviceIdHash, token: "fake-siri-probe-token",
                         tokenExpiresAtMs: next.tokenExpiresAtMs)
                     try SiriSession.shared.publish(failedPrepOwner)
+                    let blockedMemory = SiriMemory(id: "probe-blocked-fence", content: "blocked-fence-private",
+                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([blockedMemory], uid: next.uid)
+                    await SiriReindexProbeGate.shared.arm()
+                    let blockedReindex = Task {
+                        try await MemoryQuery().reindexEntities(for: [blockedMemory.id],
+                            indexDescription: CSSearchableIndexDescription())
+                    }
+                    await SiriReindexProbeGate.shared.waitUntilPaused()
+                    let fastFence = Task { try? await SiriSnapshotStore.shared.prepareForSignOut() }
+                    try await Task.sleep(nanoseconds: 150_000_000)
+                    let fenceBypassedQueue = (defaults.stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? [])
+                        .contains(next.uid)
+                    NSLog("[SiriProbe] signOutFenceBypassesSpotlightGate=%@", fenceBypassedQueue ? "PASS" : "FAIL")
+                    await SiriReindexProbeGate.shared.release()
+                    _ = try? await blockedReindex.value
+                    await fastFence.value
+                    _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
+                    try await SiriSnapshotStore.shared.bind(uid: next.uid)
+                    let resumedAfterFence = SiriSessionConfig(uid: next.uid,
+                        generation: SiriSnapshotStore.shared.generationForOwner(next.uid) ?? -1,
+                        baseUrl: next.baseUrl, profile: next.profile,
+                        appVersion: next.appVersion, appBuild: next.appBuild,
+                        deviceIdHash: next.deviceIdHash, token: "fake-siri-probe-token",
+                        tokenExpiresAtMs: next.tokenExpiresAtMs)
+                    try SiriSession.shared.publish(resumedAfterFence)
                     SiriSession.shared.simulateKeychainDeleteFailureOnce = true
                     do { try await SiriSnapshotStore.shared.prepareForSignOut() }
                     catch { NSLog("[SiriProbe] injectedSignOutPreparationFailure=observed") }
@@ -659,6 +685,24 @@ enum SiriDebugProbe {
                     NSLog("[SiriProbe] signInAfterFailedPreparation=%@",
                           SiriSnapshotStore.shared.generationForOwner(recoveredUID) != nil &&
                           SiriSession.shared.currentConfig()?.uid == recoveredUID ? "PASS" : "FAIL")
+                    SiriSnapshotStore.shared.simulateMarkerFlushFailureOnce = true
+                    do { try await SiriSnapshotStore.shared.prepareForSignOut() }
+                    catch { NSLog("[SiriProbe] injectedMarkerFlushFailure=observed") }
+                    let tokenRemoved = !SiriSession.shared.hasMirroredToken()
+                    SiriSnapshotStore.shared.probeSimulateColdLaunchWithoutMarker()
+                    let noMarkerQueriesEmpty = SiriSnapshotStore.shared.memories(ids: nil).isEmpty &&
+                        SiriSnapshotStore.shared.tasks(ids: nil).isEmpty
+                    let noMarkerIntentDenied: Bool
+                    do { _ = try await SiriSession.shared.token(); noMarkerIntentDenied = false }
+                    catch SiriSession.Failure.auth { noMarkerIntentDenied = true }
+                    catch { noMarkerIntentDenied = false }
+                    NSLog("[SiriProbe] failedMarkerTokenRemoved=%@ coldQueriesEmpty=%@ intentDenied=%@",
+                          tokenRemoved ? "PASS" : "FAIL", noMarkerQueriesEmpty ? "PASS" : "FAIL",
+                          noMarkerIntentDenied ? "PASS" : "FAIL")
+                    _ = try await SiriSnapshotStore.shared.wipeForAccountTransition()
+                    try await SiriSnapshotStore.shared.bind(uid: "siri-probe-after-marker-failure")
+                    NSLog("[SiriProbe] signInAfterMarkerFailure=%@",
+                          SiriSnapshotStore.shared.owner == "siri-probe-after-marker-failure" ? "PASS" : "FAIL")
                 }
             } catch {
                 NSLog("[SiriProbe] request=failed type=%@", String(describing: error))

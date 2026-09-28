@@ -78,18 +78,20 @@ class _RaceHost extends SiriIndexApi {
   int generation = 0;
   final events = <String>[];
   bool hangPreparation = false;
+  bool fenced = false;
 
   @override
   Future<void> publishSessionConfig(SiriSessionConfig config) async {
     publishStarted.complete();
     await releasePublish.future;
     events.add('publish');
-    owner = config.uid;
+    if (!fenced) owner = config.uid;
   }
 
   @override
   Future<void> prepareForSignOut() async {
     events.add('pending-wipe');
+    fenced = true;
     if (hangPreparation) await Completer<void>().future;
     owner = null;
   }
@@ -307,7 +309,7 @@ void main() {
     expect(host.owner, isNull);
   });
 
-  test('pre-sign-out marker waits for prior publication and fences its owner', () async {
+  test('sign-out fence bypasses a stuck native publication', () async {
     final host = _RaceHost();
     final siri = SiriIntegration.forTest(host, 'owner-race',
         sessionConfig: (user, token, generation) => SiriSessionConfig(
@@ -323,10 +325,11 @@ void main() {
     final signingIn = siri.accountChanged(_RaceUser());
     await host.publishStarted.future.timeout(const Duration(seconds: 5));
     final preparing = siri.prepareForSignOut();
-    expect(host.events, isEmpty);
+    await Future<void>.delayed(Duration.zero);
+    expect(host.events, ['pending-wipe']);
     host.releasePublish.complete();
     await Future.wait([signingIn, preparing]);
-    expect(host.events, ['publish', 'pending-wipe']);
+    expect(host.events, ['pending-wipe', 'publish']);
     expect(host.owner, isNull);
   });
 

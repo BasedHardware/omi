@@ -153,14 +153,14 @@ class SiriIntegration extends SiriEventsApi {
     return result;
   }
 
-  /// The native marker and token revocation must finish before Firebase
-  /// sign-out. The normal auth callback later completes Spotlight deletion.
+  /// This privacy fence bypasses the index queue: a stuck Spotlight operation
+  /// must not delay Firebase sign-out or leave engine-free Siri authorized.
   Future<void> prepareForSignOut() async {
     if (!_isIOS) return;
     ++_accountGeneration;
     _uid = null;
     _nativeGeneration = null;
-    await _nativeOperation(() => _host.prepareForSignOut().timeout(_prepareTimeout));
+    await _host.prepareForSignOut().timeout(_prepareTimeout);
   }
 
   /// Synchronous provider callbacks keep their immediate UI update. Their
