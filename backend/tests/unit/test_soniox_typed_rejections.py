@@ -129,6 +129,87 @@ def test_the_error_type_match_tolerates_provider_casing():
     assert soniox_death_reason(402, 'Organization_Balance_Exhausted') == PROVIDER_BUDGET_EXHAUSTED
 
 
+def test_an_active_no_audio_rejection_remains_an_idle_death():
+    sock = _drive_socket([_frame(400, 'invalid_request', 'No audio received')])
+    assert sock.is_connection_dead
+    assert sock.typed_death_reason == SONIOX_DEATH_IDLE_TIMEOUT
+
+
+def test_zero_audio_finish_closes_without_end_frame_or_socket_death():
+    class DelayedWebSocket(FakeWebSocket):
+        def __init__(self):
+            super().__init__([])
+            self.release = asyncio.Event()
+
+        def __aiter__(self):
+            async def gen():
+                await self.release.wait()
+                yield json.dumps(_frame(400, 'invalid_request', 'No audio received'))
+
+            return gen()
+
+    async def run():
+        ws = DelayedWebSocket()
+        sock = SafeSonioxSocket(ws, lambda _segments: None, asyncio.get_running_loop())
+        with patch('utils.stt.soniox.record_stt_stream_close') as record_close:
+            sock.finish()
+            await asyncio.sleep(0.01)
+            assert ws.sent == []
+            ws.release.set()
+            await asyncio.sleep(0.01)
+            assert not sock.is_connection_dead
+            assert sock.typed_death_reason is None
+            record_close.assert_called_once_with(provider='soniox', reason='soniox_no_audio_teardown')
+
+            host = SimpleNamespace(
+                state=SimpleNamespace(active=True, stt_terminal_failure=False),
+                wait=AsyncMock(return_value=True),
+            )
+            receiver = object.__new__(ListenReceiver)
+            receiver.host = host
+            receiver.stt_socket = sock
+            receiver._failover_stt_socket = AsyncMock()
+            with patch.object(receiver_mod, 'terminate_live_stt_session', new=AsyncMock()) as terminate:
+                await receiver._monitor_stt_death()
+            assert host.state.stt_terminal_failure is False
+            receiver._failover_stt_socket.assert_not_awaited()
+            terminate.assert_not_awaited()
+            await sock.drain_and_close()
+        assert ws.sent == []
+
+    asyncio.run(run())
+
+
+def test_audio_finish_still_sends_end_frame_and_drains_finished():
+    class FinishedWebSocket(FakeWebSocket):
+        def __init__(self):
+            super().__init__([])
+            self.release = asyncio.Event()
+
+        def __aiter__(self):
+            async def gen():
+                await self.release.wait()
+                yield json.dumps({'finished': True})
+
+            return gen()
+
+        async def send(self, data):
+            await super().send(data)
+            if data == '':
+                self.release.set()
+
+    async def run():
+        ws = FinishedWebSocket()
+        sock = SafeSonioxSocket(ws, lambda _segments: None, asyncio.get_running_loop())
+        assert sock.send(b'\x01\x02')
+        sock.finish()
+        await sock.drain_and_close()
+        assert ws.sent == [b'\x01\x02', '']
+        assert not sock.is_connection_dead
+
+    asyncio.run(run())
+
+
 # ---------------------------------------------------------------------------
 # Severity: only an account-state refusal is a provider fault worth an ERROR.
 # ---------------------------------------------------------------------------
@@ -487,6 +568,7 @@ def test_stream_close_reasons_are_bounded_not_raw_vendor_text():
 
     assert bounded_stream_close_reason('organization_monthly_budget_exhausted') == 'connection_lost'
     assert bounded_stream_close_reason(PROVIDER_BUDGET_EXHAUSTED) == PROVIDER_BUDGET_EXHAUSTED
+    assert bounded_stream_close_reason('soniox_no_audio_teardown') == 'soniox_no_audio_teardown'
     from utils.metrics import OMI_STT_STREAM_CLOSE_TOTAL
 
     before = OMI_STT_STREAM_CLOSE_TOTAL.labels(provider='unknown', reason='connection_lost')._value.get()

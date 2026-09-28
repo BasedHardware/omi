@@ -117,6 +117,8 @@ class SafeSonioxSocket(STTSocket):
         self._preseconds = preseconds
         self._dead = False
         self._closed = False
+        self._finishing = False
+        self._audio_sent = False
         self._death_reason: Optional[str] = None
         # Typed, bounded death reason (e.g. PROVIDER_BUDGET_EXHAUSTED) for the
         # terminal-failure vocabulary; None until the socket dies.
@@ -155,7 +157,7 @@ class SafeSonioxSocket(STTSocket):
 
     def send(self, data: bytes) -> bool:
         with self._lock:
-            if self._dead or self._closed:
+            if self._dead or self._closed or self._finishing:
                 return False
             if not data:
                 return True
@@ -205,9 +207,9 @@ class SafeSonioxSocket(STTSocket):
 
     def finish(self) -> None:
         with self._lock:
-            if self._closed:
+            if self._closed or self._finishing:
                 return
-            self._closed = True
+            self._finishing = True
 
         def finish_on_loop() -> None:
             try:
@@ -232,17 +234,16 @@ class SafeSonioxSocket(STTSocket):
 
     async def drain_and_close(self) -> None:
         try:
-            await asyncio.sleep(0)
-            try:
-                self._send_queue.put_nowait(b'')
-            except asyncio.QueueFull:
-                pass
-            try:
-                await asyncio.wait_for(self._done_event.wait(), timeout=60)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
-                logger.warning('Soniox drain timed out waiting for finished message')
+            self.finish()
+            await asyncio.gather(self._send_task, return_exceptions=True)
+            if self._audio_sent:
+                try:
+                    await asyncio.wait_for(self._done_event.wait(), timeout=60)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    logger.warning('Soniox drain timed out waiting for finished message')
         except Exception:
             pass
+        self._closed = True
         self._recv_task.cancel()
         self._send_task.cancel()
         # Receive cleanup flushes the last committed word. Complete that callback
@@ -263,9 +264,11 @@ class SafeSonioxSocket(STTSocket):
                     continue
                 if data == b'':
                     # Documented end-of-audio signal: an empty text frame.
-                    await self._ws.send('')
+                    if self._audio_sent:
+                        await self._ws.send('')
                     break
                 await self._ws.send(data)
+                self._audio_sent = True
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws send closed: {e}')
         except Exception as e:
@@ -283,6 +286,14 @@ class SafeSonioxSocket(STTSocket):
                 if msg.get('error_code'):
                     err = f"{msg.get('error_code')} {msg.get('error_type', '')} {msg.get('error_message', '')}".strip()
                     typed = soniox_death_reason(msg.get('error_code'), msg.get('error_type'), msg.get('error_message'))
+                    if (
+                        self._finishing
+                        and str(msg.get('error_code')) == '400'
+                        and 'no audio received' in str(msg.get('error_message') or '').lower()
+                    ):
+                        record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason='soniox_no_audio_teardown')
+                        self._done_event.set()
+                        break
                     record_stt_stream_close(provider=SONIOX_SERVICE_NAME, reason=typed)
                     if typed in (PROVIDER_BUDGET_EXHAUSTED, PROVIDER_AUTH_REJECTED, SONIOX_DEATH_INVALID_HINT):
                         # The provider evaluated the account (402 / monthly budget)
