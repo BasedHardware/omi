@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:omi/backend/schema/action_item.dart';
+import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -150,12 +152,47 @@ class _CooldownHost extends RecordingSiriHost {
   final firstDelete = Completer<void>();
   final deletions = <(String, String, List<String>)>[];
   int calls = 0;
+  int repairs = 0;
+  int repairFailuresRemaining = 0;
+  int memoryReconciles = 0;
+  int taskReconciles = 0;
+  int conversationReconciles = 0;
 
   @override
   Future<void> deleteEntities(String uid, String type, List<String> ids) async {
     calls++;
     if (calls == 1) await firstDelete.future;
     deletions.add((uid, type, ids));
+  }
+
+  @override
+  Future<void> reconcileMemories(String uid, List<SiriMemory> rows) async {
+    memoryReconciles++;
+    await super.reconcileMemories(uid, rows);
+  }
+
+  @override
+  Future<void> reconcileTasks(String uid, List<SiriTask> rows, bool includeCompleted) async {
+    taskReconciles++;
+    tasks = rows;
+  }
+
+  @override
+  Future<void> reconcileConversations(String uid, List<SiriConversation> rows, int? coveredAfterMs) async {
+    conversationReconciles++;
+    conversations = rows;
+  }
+
+  @override
+  Future<void> repairOwnerIndex(String uid) async {
+    repairs++;
+    if (repairFailuresRemaining > 0) {
+      repairFailuresRemaining--;
+      throw StateError('Spotlight removal failed');
+    }
+    memories = [];
+    tasks = [];
+    conversations = [];
   }
 
   @override
@@ -209,6 +246,81 @@ void main() {
         containsAll(['confirmed-delete', 'newly-locked']));
     expect(host.deletions.where((call) => call.$1 == 'owner-a' && call.$2 == 'task').expand((call) => call.$3),
         contains('confirmed-batch-delete'));
+  });
+
+  test('latest authoritative reconciliation for each type survives cooldown', () async {
+    final host = _CooldownHost();
+    final date = DateTime.now();
+    addTearDown(() => host.firstDelete.complete());
+    final siri = SiriIntegration.forTest(host, 'owner-a',
+        nativeTimeout: const Duration(milliseconds: 20), indexCooldown: const Duration(milliseconds: 80));
+    siri.queueDelete('memory', 'trigger-timeout');
+    await siri.drainIndexForTest();
+    Memory memory(String id) => Memory(
+        id: id,
+        uid: 'owner-a',
+        content: id,
+        category: MemoryCategory.manual,
+        createdAt: date,
+        updatedAt: date,
+        visibility: MemoryVisibility.private);
+    ActionItemWithMetadata task(String id) =>
+        ActionItemWithMetadata(id: id, description: id, completed: false, createdAt: date);
+    ServerConversation conversation(String id) => ServerConversation(
+        id: id, createdAt: date, structured: Structured(id, id), status: ConversationStatus.completed);
+    await siri.reconcileMemories([memory('obsolete')]);
+    await siri.reconcileMemories([memory('current')]);
+    await siri.reconcileTasks([task('obsolete')], includeCompleted: true);
+    await siri.reconcileTasks([task('current')], includeCompleted: true);
+    await siri.reconcileConversations([conversation('obsolete')]);
+    await siri.reconcileConversations([conversation('current')]);
+    expect(host.memoryReconciles, 0);
+    expect(host.taskReconciles, 0);
+    expect(host.conversationReconciles, 0);
+    await Future<void>.delayed(const Duration(milliseconds: 130));
+    await siri.drainIndexForTest();
+    expect(host.memories.map((row) => row.id), ['current']);
+    expect(host.tasks.map((row) => row.id), ['current']);
+    expect(host.conversations.map((row) => row.id), ['current']);
+    expect(host.memoryReconciles, 1);
+    expect(host.taskReconciles, 1);
+    expect(host.conversationReconciles, 1);
+  });
+
+  test('removal ledger cap requests an owner repair and fresh traversal', () async {
+    final host = _CooldownHost();
+    final siri = SiriIntegration.forTest(host, 'owner-a',
+        taskPageFetcher: ({required limit, required offset, required completed}) async =>
+            const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)),
+        conversationPageFetcher: ({required limit, required offset, required startDate}) async =>
+            const ApiSuccess<List<ServerConversation>>([]),
+        memoryPageFetcher: ({required limit, required offset, cursor}) async => const GetMemoriesResult([], true));
+    siri.queueDeleteMany('memory', List.generate(257, (i) => 'private-$i'));
+    await siri.drainIndexForTest();
+    expect(host.repairs, 1);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await siri.drainIndexForTest();
+    expect(host.memoryReconciles, 1, reason: 'repair refills from a fresh complete snapshot');
+    expect(host.calls, 0, reason: 'an oversized id ledger is replaced by an owner index wipe');
+  });
+
+  test('failed owner repair keeps the obligation and retries after cooldown', () async {
+    final host = _CooldownHost()..repairFailuresRemaining = 1;
+    final siri = SiriIntegration.forTest(host, 'owner-a',
+        retryBase: const Duration(milliseconds: 20),
+        taskPageFetcher: ({required limit, required offset, required completed}) async =>
+            const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)),
+        conversationPageFetcher: ({required limit, required offset, required startDate}) async =>
+            const ApiSuccess<List<ServerConversation>>([]),
+        memoryPageFetcher: ({required limit, required offset, cursor}) async => const GetMemoriesResult([], true));
+    siri.queueDeleteMany('memory', List.generate(257, (i) => 'private-$i'));
+    await siri.drainIndexForTest();
+    expect(host.repairs, 1);
+    expect(host.memoryReconciles, 0);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await siri.drainIndexForTest();
+    expect(host.repairs, 2);
+    expect(host.memoryReconciles, 1);
   });
 
   test('pending removals from the old account are discarded on account change', () async {

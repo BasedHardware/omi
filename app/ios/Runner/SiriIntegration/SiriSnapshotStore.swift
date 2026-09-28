@@ -447,6 +447,21 @@ final class SiriSnapshotStore {
             try await self.removeIndex(owners: [uid])
         }
     }
+    /// A bounded Dart removal ledger escalates here. Persist the cleanup marker
+    /// before clearing the snapshot; a failed Spotlight deletion remains owed
+    /// across launches, and the caller refills only from a fresh owner traversal.
+    func repairOwnerIndex(uid: String) async throws {
+        try await serialized {
+            try requireValidOwner(uid)
+            try SiriLateRepairLedger.mark(uid, defaults: defaults, key: pendingLateRepairOwnersKey)
+            try mutateForOwner(uid) {
+                snapshot.conversations.removeAll()
+                snapshot.memories.removeAll()
+                snapshot.tasks.removeAll()
+            }
+            _ = try await retryPendingLateRepairs()
+        }
+    }
     private func repairAfterLateSpotlightCall(uid: String) async {
         do {
             try await serialized {

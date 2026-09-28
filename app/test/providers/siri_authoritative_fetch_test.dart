@@ -786,6 +786,99 @@ void main() {
         reason: 'stale owner-wide projection must respect the queued delete fence');
   });
 
+  test('a memory locked during an owner fetch stays out until a confirmed unlock', () async {
+    final host = _SnapshotHost();
+    final started = Completer<void>();
+    final release = Completer<GetMemoriesResult>();
+    final now = DateTime.now();
+    Memory row({required bool locked}) => Memory(
+        id: 'lock-race',
+        uid: 'siri-fetch-owner',
+        content: 'Private',
+        category: MemoryCategory.manual,
+        createdAt: now,
+        updatedAt: now,
+        visibility: MemoryVisibility.private,
+        isLocked: locked);
+    final siri = SiriIntegration.forTest(host, 'siri-fetch-owner',
+        memoryPageFetcher: ({required limit, required offset, cursor}) {
+      started.complete();
+      return release.future;
+    });
+    await siri.upsertMemories([row(locked: false)]);
+    final fetch = siri.refreshAuthoritativeMemories();
+    await started.future;
+    siri.queueUpsertMemories([row(locked: true)]);
+    await siri.drainIndexForTest();
+    expect(host.memories, isEmpty);
+    release.complete(GetMemoriesResult([row(locked: false)], true));
+    await fetch;
+    expect(host.memories, isEmpty, reason: 'a fetch started before the lock cannot lift its fence');
+    siri.queueUpsertMemories([row(locked: false)]);
+    await siri.drainIndexForTest();
+    expect(host.memories.keys, contains('lock-race'));
+  });
+
+  test('a task locked during an owner fetch stays out until a confirmed unlock', () async {
+    final host = _SnapshotHost();
+    final started = Completer<void>();
+    final release = Completer<ApiResult<ActionItemsResponse>>();
+    final now = DateTime.now();
+    ActionItemWithMetadata row({required bool locked}) => ActionItemWithMetadata(
+        id: 'task-lock-race', description: 'Private', completed: false, createdAt: now, isLocked: locked);
+    final siri = SiriIntegration.forTest(host, 'siri-fetch-owner',
+        taskPageFetcher: ({required limit, required offset, required completed}) {
+      if (completed) return Future.value(const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)));
+      started.complete();
+      return release.future;
+    });
+    await siri.upsertTasks([row(locked: false)]);
+    final fetch = siri.refreshAuthoritativeTasks();
+    await started.future;
+    siri.queueUpsertTasks([row(locked: true)]);
+    await siri.drainIndexForTest();
+    expect(host.tasks, isEmpty);
+    release.complete(ApiSuccess(ActionItemsResponse(actionItems: [row(locked: false)], hasMore: false)));
+    await fetch;
+    expect(host.tasks, isEmpty);
+    siri.queueUpsertTasks([row(locked: false)]);
+    await siri.drainIndexForTest();
+    expect(host.tasks.keys, contains('task-lock-race'));
+  });
+
+  test('a conversation locked during an owner fetch stays out until a confirmed unlock', () async {
+    final host = _SnapshotHost();
+    final started = Completer<void>();
+    final release = Completer<ApiResult<List<ServerConversation>>>();
+    final now = DateTime.now();
+    ServerConversation row({required bool locked}) => ServerConversation(
+        id: 'conversation-lock-race',
+        createdAt: now,
+        structured: Structured('Private', 'Summary'),
+        status: ConversationStatus.completed,
+        isLocked: locked);
+    final siri = SiriIntegration.forTest(host, 'siri-fetch-owner',
+        taskPageFetcher: ({required limit, required offset, required completed}) async =>
+            const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)),
+        conversationPageFetcher: ({required limit, required offset, required startDate}) {
+          started.complete();
+          return release.future;
+        },
+        memoryPageFetcher: ({required limit, required offset, cursor}) async => const GetMemoriesResult([], true));
+    await siri.upsertConversations([row(locked: false)]);
+    final fetch = siri.refreshOwnerWideIndex();
+    await started.future;
+    siri.queueUpsertConversations([row(locked: true)]);
+    await siri.drainIndexForTest();
+    expect(host.conversations, isEmpty);
+    release.complete(ApiSuccess<List<ServerConversation>>([row(locked: false)]));
+    await fetch;
+    expect(host.conversations, isEmpty);
+    siri.queueUpsertConversations([row(locked: false)]);
+    await siri.drainIndexForTest();
+    expect(host.conversations.keys, contains('conversation-lock-race'));
+  });
+
   test('capped conversation traversal adds fetched rows without pruning unseen ids', () async {
     final host = _SnapshotHost();
     final now = DateTime.now();
