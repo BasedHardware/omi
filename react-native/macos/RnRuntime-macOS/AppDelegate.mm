@@ -13,7 +13,9 @@
 
 static const CGFloat OmiWindowInset = 12.0;
 // Matches desktopOmnibarHeight in desktopChrome.ts: the top chrome row the
-// traffic lights and drag surface align to. v5 and v5.1 shells share it.
+// titlebar accessory spacer and drag surface align to. v5 and v5.1 shells
+// share it, and the virtual traffic lights (DesktopTrafficLights) center on
+// it inside the React chrome.
 static const CGFloat OmiChromeRowHeight = 44.0;
 static NSString *const OmiWindowPresentationChanged = @"OmiWindowPresentationChanged";
 
@@ -66,28 +68,6 @@ RCT_EXPORT_VIEW_PROPERTY(presentation, NSString)
 
 @end
 
-static NSView *OmiTrafficLightHit(NSView *fromView, NSPoint point)
-{
-  NSWindow *window = fromView.window;
-  if (window == nil) {
-    return nil;
-  }
-  for (NSNumber *kind in @[
-         @(NSWindowCloseButton), @(NSWindowMiniaturizeButton), @(NSWindowZoomButton)
-       ]) {
-    NSButton *button = [window standardWindowButton:(NSWindowButton)kind.unsignedIntegerValue];
-    if (button == nil || button.hidden) {
-      continue;
-    }
-    NSPoint inButton = [fromView convertPoint:point toView:button];
-    if (NSMouseInRect(inButton, button.bounds, button.flipped)) {
-      NSView *hit = [button hitTest:inButton];
-      return hit != nil ? hit : button;
-    }
-  }
-  return nil;
-}
-
 static void OmiSwizzleContentHitTest(NSView *contentView)
 {
   static NSMutableSet<NSString *> *swizzled;
@@ -132,11 +112,6 @@ static void OmiSwizzleContentHitTest(NSView *contentView)
       return nil;
     }
     omiHitTestDepth += 1;
-    NSView *light = OmiTrafficLightHit(self, point);
-    if (light != nil) {
-      omiHitTestDepth -= 1;
-      return light;
-    }
     NSView *hit = original(self, selector, point);
     omiHitTestDepth -= 1;
     return hit;
@@ -252,6 +227,14 @@ static void OmiSwizzleTitlebarHitTest(Class cls)
   }];
 }
 
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender
+{
+  // Single-window app: closing the window (native menu, Cmd-W, or the
+  // virtual traffic light's performClose:) should end the process — a
+  // windowless RnRuntime has no surface left to reopen.
+  return YES;
+}
+
 - (void)applicationWillTerminate:(NSNotification *)notification
 {
   self.omiWindowToreDown = YES;
@@ -273,10 +256,6 @@ static void OmiSwizzleTitlebarHitTest(Class cls)
   if (self.omiAppearanceObserver != nil) {
     [NSNotificationCenter.defaultCenter removeObserver:self.omiAppearanceObserver];
     self.omiAppearanceObserver = nil;
-  }
-  if (self.omiTitlebarLayoutObserver != nil) {
-    [NSNotificationCenter.defaultCenter removeObserver:self.omiTitlebarLayoutObserver];
-    self.omiTitlebarLayoutObserver = nil;
   }
   [super applicationWillTerminate:notification];
 }
@@ -401,7 +380,9 @@ static void OmiSwizzleTitlebarHitTest(Class cls)
   }
   self.omiWindowGlass.frame = rootView.bounds;
   if (self.omiWindowGlass.superview != rootView) {
-    [rootView addSubview:self.omiWindowGlass positioned:NSWindowBelow relativeTo:nil];
+    [rootView addSubview:self.omiWindowGlass
+              positioned:NSWindowBelow
+              relativeTo:nil];
   }
 }
 
@@ -495,81 +476,12 @@ static void OmiSwizzleTitlebarHitTest(Class cls)
   [self hideOmiTitlebarMaterial:window];
   [self installOmiTitlebarClickThrough:window];
   OmiSwizzleContentHitTest(window.contentView);
-  [window standardWindowButton:NSWindowCloseButton].hidden = NO;
-  [window standardWindowButton:NSWindowMiniaturizeButton].hidden = NO;
-  [window standardWindowButton:NSWindowZoomButton].hidden = NO;
-  [self positionOmiTrafficLights];
-  [self observeOmiTitlebarLayout];
-}
-
-// AppKit re-centers the traffic lights inside the accessory-grown titlebar
-// whenever it relays out the titlebar container (accessory install, window
-// resize, appearance change). Re-apply our row-aligned frames whenever the
-// titlebar container moves or resizes, and once on the next layout pass.
-- (void)observeOmiTitlebarLayout
-{
-  if (self.omiTitlebarLayoutObserver != nil) {
-    return;
-  }
-  NSButton *closeButton = [self.window standardWindowButton:NSWindowCloseButton];
-  NSView *titlebar = closeButton.superview;
-  if (titlebar == nil) {
-    return;
-  }
-  titlebar.postsFrameChangedNotifications = YES;
-  titlebar.superview.postsFrameChangedNotifications = YES;
-  __weak AppDelegate *weakSelf = self;
-  self.omiTitlebarLayoutObserver = [[NSNotificationCenter defaultCenter]
-      addObserverForName:NSViewFrameDidChangeNotification
-                  object:titlebar
-                   queue:nil
-              usingBlock:^(NSNotification *) {
-                [weakSelf positionOmiTrafficLights];
-              }];
-  dispatch_async(dispatch_get_main_queue(), ^{
-    [weakSelf positionOmiTrafficLights];
-  });
-}
-
-- (void)positionOmiTrafficLights
-{
-  NSWindow *window = self.window;
-  NSButton *closeButton = [window standardWindowButton:NSWindowCloseButton];
-  NSButton *miniaturizeButton = [window standardWindowButton:NSWindowMiniaturizeButton];
-  NSButton *zoomButton = [window standardWindowButton:NSWindowZoomButton];
-  if (closeButton == nil || closeButton.superview == nil) {
-    return;
-  }
-  closeButton.hidden = NO;
-  miniaturizeButton.hidden = NO;
-  zoomButton.hidden = NO;
-  NSView *titlebar = closeButton.superview;
-  NSView *container = titlebar.superview;
-  if (container == nil || container.superview == nil) {
-    return;
-  }
-  NSView *frameView = window.contentView.superview ?: container.superview;
-  CGFloat buttonHeight = NSHeight(closeButton.frame);
-  // Center the lights on the React chrome row: the row starts at the even
-  // window inset and is OmiChromeRowHeight tall, so its center sits
-  // OmiWindowInset + OmiChromeRowHeight / 2 below the top of the frame view.
-  CGFloat yInFrame = NSHeight(frameView.bounds) - OmiWindowInset - OmiChromeRowHeight +
-      floor((OmiChromeRowHeight - buttonHeight) / 2.0);
-  // AppKit renders hover glyphs and hit areas from its own titlebar layout,
-  // so re-framing the buttons individually desyncs hover from drawing.
-  // Shift the outer titlebar container instead (the inner titlebar view is
-  // clipped to the container's bounds) and leave the buttons at their
-  // AppKit-default positions inside it; drawing and hover then agree.
-  NSPoint currentInFrame = [frameView convertPoint:closeButton.frame.origin fromView:titlebar];
-  CGFloat dx = OmiWindowInset - currentInFrame.x;
-  CGFloat dy = yInFrame - currentInFrame.y;
-  if (fabs(dx) < 0.1 && fabs(dy) < 0.1) {
-    return;
-  }
-  NSRect containerFrame = container.frame;
-  containerFrame.origin.x += dx;
-  containerFrame.origin.y += dy;
-  container.frame = containerFrame;
+  // Native traffic lights stay hidden: the chrome row draws its own virtual
+  // lights (DesktopTrafficLights) at the exact spacer geometry, so AppKit's
+  // hover/hit layout for the real buttons can never desync from ours again.
+  [window standardWindowButton:NSWindowCloseButton].hidden = YES;
+  [window standardWindowButton:NSWindowMiniaturizeButton].hidden = YES;
+  [window standardWindowButton:NSWindowZoomButton].hidden = YES;
 }
 
 - (void)installOmiTitlebarClickThrough:(NSWindow *)window

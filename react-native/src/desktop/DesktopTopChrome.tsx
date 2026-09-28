@@ -26,6 +26,7 @@ import {
 } from './desktopChrome';
 import {desktopEaseSmoothOut} from './desktopMotion';
 import {ShippingPressable} from './ShippingPressable';
+import {DesktopTrafficLights} from './DesktopTrafficLights';
 import {
   type DesktopTokens,
   useDesktopTheme,
@@ -287,9 +288,9 @@ export function DesktopChrome({
         style={styles.row}>
         <View
           accessibilityLabel="Window controls"
-          pointerEvents="none"
-          style={styles.windowControls}
-        />
+          style={styles.windowControls}>
+          <DesktopTrafficLights />
+        </View>
         <View style={styles.omnibar}>
           <View style={styles.modes}>
             <Animated.View

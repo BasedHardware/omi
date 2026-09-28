@@ -35,6 +35,7 @@ export function useRewindCapture(
       ? candidate
       : undefined;
   const [capturing, setCapturing] = useState(false);
+  const [available, setAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const epoch = useRef(0);
@@ -46,6 +47,40 @@ export function useRewindCapture(
   const wake = useRef<(() => void) | null>(null);
   enabledRef.current = enabled;
   capturedRef.current = onCaptured;
+  useEffect(() => {
+    let current = true;
+    if (!enabled || native?.capturePermissionStatus === undefined) {
+      setAvailable(false);
+      return () => {
+        current = false;
+      };
+    }
+    const probe = native.capturePermissionStatus.bind(native);
+    const check = () => {
+      probe().then(
+        permission => {
+          if (current) setAvailable(permission === 'granted');
+        },
+        () => {
+          if (current) setAvailable(false);
+        },
+      );
+    };
+    check();
+    // Granting Screen Recording happens in System Settings, outside the
+    // app: re-probe whenever the app is active again so the capture toggle
+    // returns without a relaunch (a TCC reset after a dev rebuild, or a
+    // first grant from the Settings pane, both land here).
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        check();
+      }
+    });
+    return () => {
+      current = false;
+      subscription.remove();
+    };
+  }, [enabled, native]);
   const stop = useCallback(async () => {
     const stoppedEpoch = (epoch.current += 1);
     active.current = false;
@@ -122,6 +157,7 @@ export function useRewindCapture(
           : await (native.capturePermissionStatus?.() ??
               native.requestCapturePermission());
         if (!valid()) return;
+        setAvailable(permission === 'granted');
         if (permission !== 'granted') {
           setError(
             permission === 'restartRequired'
@@ -176,7 +212,7 @@ export function useRewindCapture(
     [native, stop],
   );
   return {
-    available: native?.captureFrame !== undefined,
+    available,
     capturing,
     busy,
     error,

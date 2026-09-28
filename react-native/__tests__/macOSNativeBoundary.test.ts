@@ -22,6 +22,9 @@ test('keeps a transparent glass window over the desktop', () => {
   );
   expect(source).toContain('OmiGlassPanelView');
   expect(source).toContain('setGlassCornerRadius:0');
+  expect(source).toMatch(
+    /addSubview:self\.omiWindowGlass\s+positioned:NSWindowBelow\s+relativeTo:nil/,
+  );
   expect(source).toContain('hideOmiTitlebarMaterial');
   expect(source).not.toContain('NSVisualEffectMaterialUnderWindowBackground');
   expect(source).not.toContain('NSWindowToolbarStyleUnified');
@@ -29,22 +32,26 @@ test('keeps a transparent glass window over the desktop', () => {
   expect(source).not.toContain('NSAppearanceNameVibrantDark');
 });
 
-test('puts traffic lights in the content chrome next to Home', () => {
+test('hides native traffic lights; the chrome draws virtual ones', () => {
   const source = readNativeSource('AppDelegate.mm');
+  const commands = readNativeSource('OmiDesktopCommandsModule.mm');
 
   expect(source).toContain(
-    '[window standardWindowButton:NSWindowCloseButton].hidden = NO;',
+    '[window standardWindowButton:NSWindowCloseButton].hidden = YES;',
   );
   expect(source).toContain(
-    '[window standardWindowButton:NSWindowMiniaturizeButton].hidden = NO;',
+    '[window standardWindowButton:NSWindowMiniaturizeButton].hidden = YES;',
   );
   expect(source).toContain(
-    '[window standardWindowButton:NSWindowZoomButton].hidden = NO;',
+    '[window standardWindowButton:NSWindowZoomButton].hidden = YES;',
   );
+  // The container-shift positioning machinery is gone with the buttons.
+  expect(source).not.toContain('positionOmiTrafficLights');
+  expect(source).not.toContain('observeOmiTitlebarLayout');
+  expect(source).not.toContain('OmiTrafficLightHit');
   expect(source).toContain('window.movableByWindowBackground = YES;');
   expect(source).toContain('window.title = @"";');
   expect(source).toContain('NSWindowTitleHidden');
-  expect(source).toContain('positionOmiTrafficLights');
   expect(source).toMatch(/OmiWindowInset\s*=\s*12\.0/);
   expect(source).toMatch(/OmiChromeRowHeight\s*=\s*44\.0/);
   expect(source).toContain('NSWindowStyleMaskFullSizeContentView');
@@ -56,43 +63,44 @@ test('puts traffic lights in the content chrome next to Home', () => {
   expect(source).toContain('hideOmiTitlebarMaterial');
   expect(source).not.toContain('NSWindowToolbarStyleUnified');
   expect(source).not.toContain('accessibilityLabel="Window drag handle"');
+
+  // Virtual lights route through one native command method using AppKit's
+  // own window actions, so close still honors windowShouldClose teardown.
+  expect(commands).toContain('RCT_REMAP_METHOD(performWindowCommand');
+  expect(commands).toContain('[window performClose:nil];');
+  expect(commands).toContain('[window miniaturize:nil];');
+  expect(commands).toContain('[window performZoom:nil];');
+  expect(commands).not.toContain('orderOut:');
+  // Closing the last window ends the single-window process.
+  expect(source).toContain('applicationShouldTerminateAfterLastWindowClosed');
+  expect(source).toMatch(
+    /applicationShouldTerminateAfterLastWindowClosed[\s\S]*?return YES;/,
+  );
 });
 
-test('shifts the whole titlebar container instead of reframing individual buttons', () => {
-  const source = readNativeSource('AppDelegate.mm');
-  const methodStart = source.indexOf('- (void)positionOmiTrafficLights');
-  expect(methodStart).toBeGreaterThan(-1);
-  const methodEnd = source.indexOf('\n}', methodStart);
-  const methodSource = source.slice(methodStart, methodEnd);
+test('both interface versions render the virtual traffic light cluster', () => {
+  const chrome = readFileSync(
+    resolve(__dirname, '../src/desktop/DesktopTopChrome.tsx'),
+    'utf8',
+  );
+  const chromeV5 = readFileSync(
+    resolve(__dirname, '../src/desktop/DesktopChromeV5.tsx'),
+    'utf8',
+  );
+  const lights = readFileSync(
+    resolve(__dirname, '../src/desktop/DesktopTrafficLights.tsx'),
+    'utf8',
+  );
 
-  // Hover glyphs and hit areas follow AppKit's own titlebar layout, so the
-  // buttons themselves must never be reframed; only their container moves.
-  expect(methodSource).not.toMatch(/button\.frame\s*=/);
-  expect(methodSource).not.toContain('frame.origin = inContainer;');
-  expect(methodSource).not.toContain(
-    'for (NSButton *button in @[ closeButton, miniaturizeButton, zoomButton ])',
-  );
-  expect(methodSource).toContain('NSView *titlebar = closeButton.superview;');
-  expect(methodSource).toContain('NSView *container = titlebar.superview;');
-  expect(methodSource).toContain(
-    'CGFloat buttonHeight = NSHeight(closeButton.frame);',
-  );
-  expect(methodSource).toContain(
-    'NSView *frameView = window.contentView.superview',
-  );
-  expect(methodSource).toContain(
-    '[frameView convertPoint:closeButton.frame.origin fromView:titlebar]',
-  );
-  expect(methodSource).toContain(
-    'CGFloat dx = OmiWindowInset - currentInFrame.x;',
-  );
-  expect(methodSource).toContain('if (fabs(dx) < 0.1 && fabs(dy) < 0.1) {');
-  expect(methodSource).toContain('containerFrame.origin.x += dx;');
-  expect(methodSource).toContain('containerFrame.origin.y += dy;');
-  expect(methodSource).toContain('container.frame = containerFrame;');
-  expect(methodSource).toContain(
-    'NSHeight(frameView.bounds) - OmiWindowInset - OmiChromeRowHeight',
-  );
+  for (const source of [chrome, chromeV5]) {
+    expect(source).toContain('<DesktopTrafficLights />');
+    // The spacer keeps the exact reserved geometry next to the omnibar and
+    // is interactive (self-closing passive spacer is gone).
+    expect(source).toContain('width: desktopTrafficLightRowWidth');
+    expect(source).toContain('style={styles.windowControls}>');
+  }
+  expect(lights).toContain('commands?.performWindowCommand?.(command)');
+  expect(lights).toContain('desktopTrafficLightClusterWidth');
 });
 
 test('titlebar stays click-through with no drag monitor to steal chrome clicks', () => {

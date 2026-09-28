@@ -57,21 +57,25 @@ react-native/
   opt out per-host, so buttons stay clickable while bare areas drag. A
   swizzled hitTest depth guard (`AppDelegate.mm`) survives cyclic view graphs
   after dev bundle reloads.
-- `AppDelegate.mm` also: hides the titlebar material, installs a titlebar
-  accessory spacer (`OmiChromeRowHeight + OmiWindowInset`), positions traffic
-  lights by shifting the whole titlebar container (never individual buttons —
-  hover glyphs desync), sizes the window per presentation (app ≥ 800×680,
+- `AppDelegate.mm` also: hides the titlebar material and the native traffic
+  lights, installs a titlebar accessory spacer
+  (`OmiChromeRowHeight + OmiWindowInset`), quits after the last window
+  closes, sizes the window per presentation (app ≥ 800×680,
   onboarding ≥ 640×620, permission guide ≥ 340×420, default 900×700), drives
   the System Settings permission guide, and publishes the Edit → Search
   (Cmd+K) menu item as the `desktopSearchCommand` event
-  (`react-native/src/desktopCommands.ts`).
+  (`react-native/src/desktopCommands.ts`). Window close/minimize/zoom come
+  from the React-rendered lights (`DesktopTrafficLights.tsx`) through the
+  native `performWindowCommand` (AppKit `performClose:`/`miniaturize:`/
+  `performZoom:`).
 
 ## Chrome layout contract (v5.1 Activity IA)
 
 Implemented across `DesktopTopChrome.tsx` + `desktopChrome.ts`:
 
-- **Row 1** — the omnibar (Ask / Search mode pill, input), with a spacer
-  reserving the traffic-light cluster (`desktopTrafficLightRowWidth`), the
+- **Row 1** — the omnibar (Ask / Search mode pill, input), with the virtual
+  traffic lights (`DesktopTrafficLights.tsx`) filling the reserved cluster
+  width (`desktopTrafficLightRowWidth`), the
   persistent capture toggle, and the settings gear. Capture toggle hides
   while capture is unavailable (`onToggleCapture === null`).
 - **Row 2** — Activity filters **All / Conversations / Recall / Tasks**

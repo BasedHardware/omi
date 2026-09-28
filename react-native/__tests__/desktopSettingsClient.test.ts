@@ -67,6 +67,41 @@ test('loads and writes the backend plane through desktop preferences', async () 
   delete modules.OmiDesktopCommands;
 });
 
+test('NSNull plane values fall back to the stamped origin, not to old', async () => {
+  // NSNull bridges as a non-nullish object, so `??` never skipped it.
+  const nsNull = {};
+  const modules = NativeModules as {
+    OmiDesktopCommands?: {
+      loadDesktopPreferences(): Promise<Record<string, unknown>>;
+    };
+  };
+  modules.OmiDesktopCommands = {
+    loadDesktopPreferences: async () => ({
+      softwarePlane: nsNull,
+      plane: nsNull,
+      stampedV5Origin: 'https://omi-v5-backend-staging.example.workers.dev',
+    }),
+  };
+
+  await expect(loadDesktopPreferences()).resolves.toMatchObject({
+    softwarePlane: 'new',
+  });
+
+  modules.OmiDesktopCommands = {
+    loadDesktopPreferences: async () => ({
+      softwarePlane: nsNull,
+      plane: nsNull,
+      stampedV5Origin: nsNull,
+    }),
+  };
+
+  await expect(loadDesktopPreferences()).resolves.toMatchObject({
+    softwarePlane: 'old',
+  });
+
+  delete modules.OmiDesktopCommands;
+});
+
 test('loads and writes the live voice provider through desktop preferences', async () => {
   const modules = NativeModules as {
     OmiDesktopCommands?: {

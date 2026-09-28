@@ -71,14 +71,18 @@ index.js → App.tsx → src/app/AppOrchestrator.tsx
   default) or `'v5'` (pages rail) — `DesktopShellV5.tsx` +
   `DesktopChromeV5.tsx` (`desktopNavItemsV5`, `desktopNavLabelV5`). Both
   must keep working; they share the same stage components.
-- **Traffic lights mirror chrome geometry.** `desktopWindowInset = 12` and
-  `desktopOmnibarHeight = 44` in `desktopChrome.ts` must equal
-  `OmiWindowInset = 12.0` and `OmiChromeRowHeight = 44.0` in
-  `macos/RnRuntime-macOS/AppDelegate.mm`; the lights are centered on that
-  row by shifting the titlebar container. Change both files together —
-  `__tests__/macOSNativeBoundary.test.ts` asserts the pair, the spacer
-  (`OmiChromeRowHeight + OmiWindowInset`), and the container-shift
-  implementation.
+- **Traffic lights are virtual.** `AppDelegate.mm` hides the native
+  standard-window buttons; `DesktopTrafficLights.tsx` renders the dots inside
+  the chrome row's window-controls spacer and routes close/minimize/zoom
+  through the native `performWindowCommand` (AppKit `performClose:`,
+  `miniaturize:`, `performZoom:`). The reserved geometry lives in
+  `desktopChrome.ts` (`desktopWindowInset = 12`, `desktopOmnibarHeight = 44`,
+  `desktopTrafficLightButton = 14`, spacing 8, trailing 16) and must equal
+  `OmiWindowInset = 12.0` / `OmiChromeRowHeight = 44.0` in
+  `macos/RnRuntime-macOS/AppDelegate.mm` (the titlebar accessory spacer).
+  Change both files together — `__tests__/macOSNativeBoundary.test.ts`
+  asserts the hidden buttons, the command routing, the spacer pair, and the
+  quit-after-last-window-close policy.
 - **Timeline**: `timeline/UnifiedTimeline.tsx` `mergeTimeline` merges
   conversation/memory/task projections with local capture groups into one
   filterable feed, with Date/Type/Topic grouping and collapsible sections.
