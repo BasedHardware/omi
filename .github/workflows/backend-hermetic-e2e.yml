@@ -3,7 +3,6 @@ name: Backend Hermetic E2E
 on:
   pull_request:
     branches: main
-    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: main
   schedule:
@@ -14,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
 
 concurrency:
   group: backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
@@ -44,12 +44,16 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      - name: Resolve current CI tier
+        id: tier
+        uses: ./.github/actions/ci-tier
+
       - name: Decide whether hermetic backend coverage applies
         id: scope
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
-          FULL_CI: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+          FULL_CI: ${{ steps.tier.outputs.full_ci }}
           # Resolve the PR base live against the checkout (matching
           # detect-changes) rather than the event-payload base.sha, which can be
           # stale for a queued run (FC-stale-event-payload-diff-base, #10785).
@@ -458,7 +462,7 @@ jobs:
           esac
 
           if [[ "$SCOPE_APPLIES" == 'true' && "$FULL_CI" != 'true' ]]; then
-            echo 'deferred: needs ci:full' | tee -a "$GITHUB_STEP_SUMMARY" >&2
+            echo 'deferred: fork PR — a maintainer adds label ci:full, then Re-run all jobs' | tee -a "$GITHUB_STEP_SUMMARY" >&2
             exit 1
           fi
 

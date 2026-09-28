@@ -5,7 +5,6 @@ on:
     branches: main
   pull_request:
     branches: main
-    types: [opened, synchronize, reopened, labeled, unlabeled]
   # A later backend/docs commit must not make the last path-selected Desktop
   # Swift verdict look current. Run against default-branch HEAD every day at an
   # off-round UTC minute; the selector treats this as a full health event.
@@ -19,6 +18,10 @@ on:
   # evidence without an unrelated commit. Manual dispatch is path-independent so
   # it still compiles a HEAD whose final commit only touched another component.
   workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
 
 concurrency:
   # Supersede stale revisions of the same PR, but never let a later main push
@@ -47,11 +50,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Decide whether full CI is authorized
+      - name: Resolve current CI tier
         id: tier
-        env:
-          FULL_CI: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
-        run: echo "full_ci=$FULL_CI" >> "$GITHUB_OUTPUT"
+        uses: ./.github/actions/ci-tier
 
       - name: Detect changed paths
         id: changed
@@ -484,8 +485,12 @@ jobs:
           RELEASE_REQUIRED: ${{ needs.changes.outputs.should_release_compile == 'true' || needs.changes.outputs.should_release_test_compile == 'true' || needs.changes.outputs.should_notification_release_regression == 'true' }}
         run: |
           if [ "$FULL_CI" != true ]; then
-            echo 'deferred: needs ci:full' | tee -a "$GITHUB_STEP_SUMMARY" >&2
-            exit 1
+            if [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ] || [ "$RELEASE_REQUIRED" = true ]; then
+              echo 'deferred: fork PR — a maintainer adds label ci:full, then Re-run all jobs' | tee -a "$GITHUB_STEP_SUMMARY" >&2
+              exit 1
+            fi
+            echo 'Desktop Swift Build & Tests: no heavy checks selected' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
           if [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ]; then
             test "$VERIFY_RESULT" = success

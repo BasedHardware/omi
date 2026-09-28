@@ -674,6 +674,11 @@ checks:
     triggers: [".github/scripts/check_runner_cost_policy.py", ".github/scripts/test_check_runner_cost_policy.py"]
     lanes: ["local", "ci"]
     reason: "runner cost-policy fixtures must keep rejecting the paid larger-runner label"
+  - id: ci-tier-contract
+    command: ["python3", ".github/actions/ci-tier/test_resolve.py"]
+    triggers: [".github/actions/ci-tier/**", ".github/workflows/backend-hermetic-e2e.yml", ".github/workflows/backend-unit-tests.yml", ".github/workflows/desktop-swift-ci.yml", ".github/workflows/mobile-app-checks.yml", ".github/workflows/python-cli-ci.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "fork heavy jobs depend on one live label read; same-repo runs need no API and lookup errors must fail closed"
   - id: windows-sync-pr-retirement-contract
     command: ["python3", ".github/scripts/test_retire_superseded_sync_prs.py"]
     triggers: [".github/workflows/desktop_windows_release.yml", ".github/scripts/retire_superseded_sync_prs.py", ".github/scripts/test_retire_superseded_sync_prs.py"]
