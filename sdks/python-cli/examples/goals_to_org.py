@@ -119,10 +119,38 @@ def extract_goals(data: Any) -> List[Dict[str, Any]]:
     return []
 
 
+def is_metric_goal(goal: Dict[str, Any]) -> bool:
+    """Determine whether a goal has defined numeric target metrics.
+
+    Goals created without metric options (qualitative / scale goals) have no target
+    or a zero target without bounds, and should not be treated as 100% completed.
+    """
+    target = goal.get("target_value")
+    min_val = goal.get("min_value")
+    max_val = goal.get("max_value")
+    current = goal.get("current_value")
+
+    if target is None and min_val is None and max_val is None:
+        return False
+    try:
+        t = float(target) if target is not None else 0.0
+        mn = float(min_val) if min_val is not None else 0.0
+        mx = float(max_val) if max_val is not None else 0.0
+        cur = float(current) if current is not None else 0.0
+
+        if math.isclose(t, 0.0) and min_val is None and max_val is None and math.isclose(cur, 0.0):
+            return False
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 def is_goal_completed(goal: Dict[str, Any]) -> bool:
     """Determine whether a goal has reached completion."""
     if not goal.get("is_active", True):
         return True
+    if not is_metric_goal(goal):
+        return False
     try:
         current = float(goal.get("current_value", 0))
         target = float(goal.get("target_value", 0))
@@ -133,6 +161,8 @@ def is_goal_completed(goal: Dict[str, Any]) -> bool:
 
 def calculate_progress_pct(goal: Dict[str, Any]) -> float:
     """Compute normalized progress percentage between 0.0 and 100.0."""
+    if not is_metric_goal(goal):
+        return 0.0
     try:
         current = float(goal.get("current_value", 0))
         target = float(goal.get("target_value", 0))
@@ -193,16 +223,20 @@ def format_goal_entry(goal: Dict[str, Any], zone: timezone, level: int = 1) -> s
     min_val = goal.get("min_value", 0)
     max_val = goal.get("max_value", 0)
 
+    has_metrics = is_metric_goal(goal)
     completed = is_goal_completed(goal)
     pct = calculate_progress_pct(goal)
 
     todo_state = "DONE" if completed else "TODO"
     prefix = "*" * level
 
-    # Org progress cookies in heading: e.g. [50%] [5/10]
+    # Org progress cookies in heading: e.g. [50%] [5/10] (only for metric goals)
     curr_fmt = f"{current_val:g}" if isinstance(current_val, (int, float)) else str(current_val)
     targ_fmt = f"{target_val:g}" if isinstance(target_val, (int, float)) else str(target_val)
-    cookie = f" [{pct:.0f}%] [{curr_fmt}/{targ_fmt}]" if goal_type != "boolean" else f" [{pct:.0f}%]"
+    if has_metrics:
+        cookie = f" [{pct:.0f}%] [{curr_fmt}/{targ_fmt}]" if goal_type != "boolean" else f" [{pct:.0f}%]"
+    else:
+        cookie = ""
 
     tag = clean_org_tag(goal_type)
     tag_part = f" :{tag}:" if tag else ""
@@ -213,12 +247,13 @@ def format_goal_entry(goal: Dict[str, Any], zone: timezone, level: int = 1) -> s
     lines.append(":PROPERTIES:")
     lines.append(f":OMI_ID: {one_line(goal_id)}")
     lines.append(f":GOAL_TYPE: {one_line(goal_type)}")
-    lines.append(f":CURRENT_VALUE: {curr_fmt}")
-    lines.append(f":TARGET_VALUE: {targ_fmt}")
-    if min_val is not None:
-        lines.append(f":MIN_VALUE: {min_val:g}" if isinstance(min_val, (int, float)) else f":MIN_VALUE: {min_val}")
-    if max_val is not None:
-        lines.append(f":MAX_VALUE: {max_val:g}" if isinstance(max_val, (int, float)) else f":MAX_VALUE: {max_val}")
+    if has_metrics:
+        lines.append(f":CURRENT_VALUE: {curr_fmt}")
+        lines.append(f":TARGET_VALUE: {targ_fmt}")
+        if min_val is not None:
+            lines.append(f":MIN_VALUE: {min_val:g}" if isinstance(min_val, (int, float)) else f":MIN_VALUE: {min_val}")
+        if max_val is not None:
+            lines.append(f":MAX_VALUE: {max_val:g}" if isinstance(max_val, (int, float)) else f":MAX_VALUE: {max_val}")
     if unit:
         lines.append(f":UNIT: {one_line(unit)}")
     lines.append(f":IS_ACTIVE: {'true' if is_active else 'false'}")
@@ -235,9 +270,10 @@ def format_goal_entry(goal: Dict[str, Any], zone: timezone, level: int = 1) -> s
     lines.append(":END:")
 
     # Body section with visual progress indicator and metric detail
-    unit_suffix = f" {unit}" if unit else ""
-    bar = render_ascii_progress_bar(pct, width=20)
-    lines.append(f"- Progress: {bar} ({curr_fmt} / {targ_fmt}{unit_suffix})")
+    if has_metrics:
+        unit_suffix = f" {unit}" if unit else ""
+        bar = render_ascii_progress_bar(pct, width=20)
+        lines.append(f"- Progress: {bar} ({curr_fmt} / {targ_fmt}{unit_suffix})")
     lines.append(f"- State: {'Active' if is_active else 'Archived / Inactive'}")
 
     description = str(goal.get("description") or "").strip()

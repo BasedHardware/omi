@@ -263,6 +263,28 @@ class TestGoalsToOrg(unittest.TestCase):
         content = dest.read_text(encoding="utf-8")
         self.assertIn("Stdin Goal", content)
 
+    def test_qualitative_metric_less_goal(self):
+        sample = [{
+            "id": "q1",
+            "title": "Reflect more",
+            "goal_type": "scale",
+            "is_active": True,
+        }]
+        source = self.tmp / "qualitative.json"
+        source.write_text(json.dumps(sample), encoding="utf-8")
+
+        dest = self.tmp / "qualitative.org"
+        g2org.convert(source, dest, UTC)
+
+        content = dest.read_text(encoding="utf-8")
+        self.assertIn("* 🎯 Active Goals :active:", content)
+        self.assertIn("** TODO Reflect more :scale:", content)
+        self.assertNotIn("DONE", content)
+        self.assertNotIn("[100%]", content)
+        self.assertNotIn("[0/0]", content)
+        self.assertNotIn("- Progress:", content)
+        self.assertIn("- State: Active", content)
+
 
 if __name__ == "__main__":
     unittest.main()
