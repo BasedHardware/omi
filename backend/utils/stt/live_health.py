@@ -15,6 +15,7 @@ from typing import Any, Callable
 import redis.asyncio as aioredis
 
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
+from utils.executors import start_background_task
 from utils.stt.live_metrics import LEG_TRANSCRIPT_OUTCOME, ROUTING_DECISION
 
 logger = logging.getLogger(__name__)
@@ -169,13 +170,13 @@ class FleetHealth:
         try:
             loop = asyncio.get_running_loop()
             self._loop = loop
-            loop.create_task(coroutine)
+            start_background_task(coroutine, name='live_stt_fleet_health_write')
         except RuntimeError:
             loop = self._loop
             if loop is None or loop.is_closed():
                 coroutine.close()
                 return
-            loop.call_soon_threadsafe(loop.create_task, coroutine)
+            loop.call_soon_threadsafe(lambda: start_background_task(coroutine, name='live_stt_fleet_health_write'))
 
     def quarantine(self, provider: str, kind: str, seconds: float) -> None:
         if provider not in PROVIDERS or kind not in {'account', 'selection'} or mode() == 'off':
