@@ -160,9 +160,9 @@ def _call(payload):
 
 
 class GraphqlErrorsShapeTests(unittest.TestCase):
-    def test_errors_list_returns_first_message(self):
+    def test_errors_list_returns_sanitized_error(self):
         result = _call({"errors": [{"message": "rate limited"}]})
-        self.assertEqual(result, {"error": "rate limited"})
+        self.assertEqual(result, {"error": "GraphQL error"})
 
     def test_empty_errors_list_falls_through_to_data(self):
         result = _call({"errors": [], "data": {"viewer": {"id": "u1"}}})
