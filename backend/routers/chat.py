@@ -75,7 +75,7 @@ from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_rou
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils import share_links
 from utils.other import endpoints as auth, storage
-from utils.other.chat_file import FileChatTool, UnsupportedChatFileError
+from utils.other.chat_file import FileChatTool, UnsupportedChatFileError, _safe_file_chats
 from utils.multipart import (
     CHAT_FILE_MAX_PART_SIZE,
     MultipartMaxPartSizeRoute,
@@ -469,7 +469,7 @@ def send_message(
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
             files = chat_db.get_chat_files(uid, new_file_ids)
-            files = [FileChat(**f) if f else None for f in files]
+            files = _safe_file_chats([f for f in files if f])
             message.files = files
 
     if chat_session:
