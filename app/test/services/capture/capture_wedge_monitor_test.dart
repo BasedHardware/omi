@@ -369,7 +369,7 @@ void main() {
       monitor.dispose();
     });
 
-    test('a later zero-byte streak can replace a quiet no-transcript episode', () async {
+    test('a zero-byte streak stays actionable alongside a quiet no-transcript episode', () async {
       final monitor = makeMonitor(transferRetry: () async {});
       final handle = connectedSession(monitor);
       monitor.onSocketBytesSent(handle, 640);
@@ -384,6 +384,61 @@ void main() {
       await pumpEventQueue();
       expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerZeroByteStreak);
       expect(forEvent('Capture Wedge Detected'), hasLength(2));
+
+      positiveSession(monitor);
+      expect(
+        forEvent('Capture Recovery Resolved').map((event) => event['trigger']),
+        containsAll([
+          CaptureWedgeMonitor.triggerBytesSentNoTranscript,
+          CaptureWedgeMonitor.triggerZeroByteStreak,
+        ]),
+      );
+      expect(forEvent('Capture Recovery Resolved'), hasLength(2));
+      monitor.dispose();
+    });
+
+    test('a completed telemetry retry cannot clear an overlapping BLE retry', () async {
+      final telemetryRetry = Completer<void>();
+      final bleRetry = Completer<void>();
+      var transferStarted = 0;
+      var bleStarted = 0;
+      final monitor = makeMonitor(
+        withRetry: true,
+        transferRetry: () {
+          transferStarted++;
+          return telemetryRetry.future;
+        },
+        bleRetry: (_) {
+          bleStarted++;
+          return bleRetry.future;
+        },
+      );
+      final handle = connectedSession(monitor);
+      monitor.onSocketBytesSent(handle, 640);
+      now = now.add(CaptureWedgeMonitor.connectedNoTranscriptWindow);
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+      expect(transferStarted, 1);
+
+      zeroSession(monitor);
+      zeroSession(monitor);
+      zeroSession(monitor);
+      await pumpEventQueue();
+      expect(bleStarted, 1);
+      expect(monitor.visiblePrompt, isNull);
+
+      telemetryRetry.complete();
+      await pumpEventQueue();
+      monitor.onBleSessionEnded(
+        deviceId: 'dev-a',
+        deviceType: DeviceType.omi,
+        duration: const Duration(seconds: 2),
+        intentional: true,
+      );
+      bleRetry.complete();
+      await pumpEventQueue();
+
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerZeroByteStreak);
       monitor.dispose();
     });
   });
@@ -438,7 +493,7 @@ void main() {
       monitor.dispose();
     });
 
-    test('storage risk supersedes a quiet upload episode and remains visible', () async {
+    test('storage risk stays visible alongside a quiet upload episode', () async {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeWalBacklog(pendingCount: 2, oldestPendingAt: now.subtract(const Duration(hours: 3)));
       await pumpEventQueue();
@@ -448,6 +503,12 @@ void main() {
       await pumpEventQueue();
       expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
       expect(forEvent('Capture Wedge Detected'), hasLength(2));
+      monitor.onUploadCompleted();
+      expect(
+        forEvent('Capture Recovery Resolved').map((event) => event['trigger']),
+        containsAll([CaptureWedgeMonitor.triggerUploadSilence, CaptureWedgeMonitor.triggerStorageAtRisk]),
+      );
+      expect(forEvent('Capture Recovery Resolved'), hasLength(2));
     });
   });
 
