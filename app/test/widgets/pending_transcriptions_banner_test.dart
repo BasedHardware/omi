@@ -69,6 +69,7 @@ SyncUploadGate _offlineGate() {
     uploader: (files,
         {onUploadProgress,
         conversationId,
+        captureEvidence,
         recordingSessionId,
         audioStartSeconds,
         audioEndSeconds,

@@ -10,6 +10,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
@@ -112,6 +113,12 @@ class CaptureController extends ChangeNotifier
   late final NativeBatchGeolocationPreferenceFence _phoneBatchGeolocationPreference =
       NativeBatchGeolocationPreferenceFence(writer: _writePhoneBatchGeolocationPreference);
   final RecordingLifecycleTelemetry _recordingTelemetry;
+  String? _sourceCaptureRoot;
+
+  String? get _captureEvidenceRoot {
+    if (!const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE')) return null;
+    return _sourceCaptureRoot ??= const Uuid().v4();
+  }
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -369,9 +376,13 @@ class CaptureController extends ChangeNotifier
         _recordingTelemetry.observeAudio(bytes.length);
         final frames = _activeSource?.processBytes(bytes) ?? [];
         for (final frame in frames) {
-          _wal.getSyncs().phone.onFrameCaptured(frame);
+          final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
           if (_socket?.state == SocketServiceState.connected) {
-            _socket?.send(frame.payload);
+            if (positioned.captureRoot != null) {
+              _socket?.sendEvidenceFrame(positioned);
+            } else {
+              _socket?.send(frame.payload);
+            }
             _recordingTelemetry.observeSent(frame.payload.length);
             _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
           }
@@ -790,6 +801,7 @@ class CaptureController extends ChangeNotifier
   bool _deviceIdentityStale(int? revision) => revision != null && _deviceIdentityRevision != revision;
 
   void _rollCaptureSession(String identity) {
+    _sourceCaptureRoot = null;
     _sessionOwner?.replaceSession(identity);
   }
 
@@ -1749,16 +1761,22 @@ class CaptureController extends ChangeNotifier
 
         // Process bytes through audio source and feed to WAL
         final frames = _activeSource?.processBytes(snapshot) ?? [];
+        WalFrame? positionedFrame;
         if (_isWalSupported) {
           for (final frame in frames) {
-            _wal.getSyncs().phone.onFrameCaptured(frame);
+            final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
+            if (frames.length == 1) positionedFrame = positioned;
           }
         }
 
         // Send WS
         if (_socket?.state == SocketServiceState.connected) {
           final socketPayload = _activeSource?.getSocketPayload(snapshot) ?? snapshot;
-          _socket?.send(socketPayload);
+          if (positionedFrame?.captureRoot != null && positionedFrame!.payload.length == socketPayload.length) {
+            _socket?.sendEvidenceFrame(positionedFrame);
+          } else {
+            _socket?.send(socketPayload);
+          }
 
           final wedgeSession = _wedgeSession;
           if (wedgeSession != null && wedgeSession.handle >= 0 && identical(wedgeSession.socket, _socket)) {
@@ -2389,10 +2407,14 @@ class CaptureController extends ChangeNotifier
           final frames = _activeSource?.processBytes(bytes) ?? [];
 
           for (final frame in frames) {
-            _wal.getSyncs().phone.onFrameCaptured(frame);
+            final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
 
             if (_socket?.state == SocketServiceState.connected) {
-              _socket?.send(frame.payload);
+              if (positioned.captureRoot != null) {
+                _socket?.sendEvidenceFrame(positioned);
+              } else {
+                _socket?.send(frame.payload);
+              }
               _recordingTelemetry.observeSent(frame.payload.length);
               _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
             }
@@ -3601,9 +3623,13 @@ class CaptureController extends ChangeNotifier
   /// Writes the phone source's buffered tail to the WAL and, when connected, the socket.
   void _flushPhoneFrames() {
     for (final frame in _activeSource?.flush() ?? const []) {
-      _wal.getSyncs().phone.onFrameCaptured(frame);
+      final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
       if (_socket?.state == SocketServiceState.connected) {
-        _socket?.send(frame.payload);
+        if (positioned.captureRoot != null) {
+          _socket?.sendEvidenceFrame(positioned);
+        } else {
+          _socket?.send(frame.payload);
+        }
         _recordingTelemetry.observeSent(frame.payload.length);
         _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
       }

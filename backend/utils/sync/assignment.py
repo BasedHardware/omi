@@ -9,6 +9,7 @@ from copy import deepcopy
 from typing import TYPE_CHECKING, Callable, Optional
 
 from utils.manual_speaker_assignments import apply_manual_assignments
+from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
 from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
 from utils.conversations.relevance import sync_intake_decision
@@ -242,6 +243,19 @@ def assign_in_transaction(
         finished_at=extent['finished_at'],
         transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
     )
+    if incoming.get('capture_evidence') is not None:
+        contributors = [row.get('capture_evidence') or {} for row in records] + [incoming['capture_evidence']]
+        mapped = [receipt for item in contributors for receipt in item.get('receipts') or []]
+        if mapped:
+            combined = merge_track_receipts([], mapped)
+            if any(
+                item.get('capability') != 'source_position' or item.get('coverage') == 'incomplete'
+                for item in contributors
+            ):
+                combined['coverage'] = 'incomplete'
+            result['capture_evidence'] = bounded_envelope(combined)
+        else:
+            result['capture_evidence'] = incoming['capture_evidence']
     result['has_content'] = bool(segments)
     result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
     result['sync_relevance'] = (

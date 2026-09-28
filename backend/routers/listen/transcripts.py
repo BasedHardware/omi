@@ -12,6 +12,11 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 from fastapi.websockets import WebSocketDisconnect
 
+from config.capture_evidence import capture_evidence_dark_write_enabled
+from utils.capture_evidence import unknown_envelope
+from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
+
+
 from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource
@@ -354,9 +359,36 @@ class TranscriptProcessor:
                 live_segments=fresh,
                 started_at=started_at,
                 audio_timeline=audio_timeline,
+                **(
+                    {
+                        'capture_evidence': (
+                            self.host.state.source_position_map.snapshot(
+                                (start, end)
+                                for start, end, owner in (self.host.state.conversation_sample_ranges or ())
+                                if owner == conversation.id
+                            )
+                            if self.host.state.source_position_map is not None
+                            else unknown_envelope(
+                                'multichannel_mix' if self.host.is_multi_channel else 'missing_source_position',
+                                origin='live',
+                            )
+                        )
+                    }
+                    if capture_evidence_dark_write_enabled()
+                    else {}
+                ),
                 data_protection_level=self.cache.protection_level,
                 invalidate_client_processing=False,
             )
+            if capture_evidence_dark_write_enabled():
+                OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
+                    path='live',
+                    status=(
+                        'mapped'
+                        if self.host.state.source_position_map and self.host.state.source_position_map.runs
+                        else 'unknown'
+                    ),
+                ).inc()
             if not isinstance(written, LiveTranscriptMerge):
                 return None
             if getattr(self.host.state, 'capture_timeline_v2', False):

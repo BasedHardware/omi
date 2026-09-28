@@ -946,6 +946,37 @@ export interface CanonicalKnowledgeGraphResponse {
   nodes: Array<Record<string, unknown>>;
 }
 
+export interface CaptureEvidenceLineage {
+  capability: "stable_artifact";
+  capture_root: string;
+  clock_domain: "desktop_session_ms";
+  lineage: "complete" | "incomplete";
+  units: Array<CaptureEvidenceLineageUnit>;
+  version?: 1;
+}
+
+export interface CaptureEvidenceLineageUnit {
+  end_ms: number;
+  id: string;
+  start_ms: number;
+}
+
+export interface CaptureEvidenceMetadata {
+  capability: "source_position" | "stable_artifact" | "unknown";
+  capture_root?: string | null;
+  channel?: string | null;
+  clock_epoch?: string | null;
+  conflicts?: number | null;
+  coverage?: "unknown" | "incomplete" | "mapped" | null;
+  origin?: string | null;
+  reason?: string | null;
+  receipts?: Array<Record<string, unknown>> | null;
+  runs?: Array<Record<string, unknown>> | null;
+  source_end?: number | null;
+  source_start?: number | null;
+  version?: 1;
+}
+
 export interface CaptureGroup {
   id: string;
   members?: Array<CaptureGroupMember>;
@@ -1478,6 +1509,7 @@ export interface CreateCheckoutRequest {
 }
 
 export interface CreateConversationFromTranscriptRequest {
+  capture_evidence?: CaptureEvidenceLineage | null;
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: unknown | null;
@@ -1944,6 +1976,14 @@ export interface DeveloperTranscriptSegment {
   speaker_name?: string | null;
   start: number;
   text: string;
+}
+
+export interface DiagnosticsReceipt {
+  ticket: string;
+}
+
+export interface DiagnosticsUpload {
+  bundle_base64: string;
 }
 
 export interface DismissAnnouncementRequest {
@@ -5252,6 +5292,9 @@ export interface OmiApiSchemas {
   "CandidateStatus": CandidateStatus;
   "CandidateSubjectKind": CandidateSubjectKind;
   "CanonicalKnowledgeGraphResponse": CanonicalKnowledgeGraphResponse;
+  "CaptureEvidenceLineage": CaptureEvidenceLineage;
+  "CaptureEvidenceLineageUnit": CaptureEvidenceLineageUnit;
+  "CaptureEvidenceMetadata": CaptureEvidenceMetadata;
   "CaptureGroup": CaptureGroup;
   "CaptureGroupMember": CaptureGroupMember;
   "CaptureLinkSpec": CaptureLinkSpec;
@@ -5378,6 +5421,8 @@ export interface OmiApiSchemas {
   "DeveloperMemoryVectorSearchResponse": DeveloperMemoryVectorSearchResponse;
   "DeveloperSuccessResponse": DeveloperSuccessResponse;
   "DeveloperTranscriptSegment": DeveloperTranscriptSegment;
+  "DiagnosticsReceipt": DiagnosticsReceipt;
+  "DiagnosticsUpload": DiagnosticsUpload;
   "DismissAnnouncementRequest": DismissAnnouncementRequest;
   "DismissAnnouncementResponse": DismissAnnouncementResponse;
   "Display": Display;
@@ -8453,6 +8498,16 @@ export interface OmiApiPaths {
       operationId: "extract_memory_log_v1_memories_extract_post";
       responses: {
         "200": ExtractMemoryLogResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mobile/device-diagnostics": {
+    post: {
+      operationId: "upload_device_diagnostics_v1_mobile_device_diagnostics_post";
+      responses: {
+        "201": DiagnosticsReceipt;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -15523,6 +15578,27 @@ export async function extract_memory_log_v1_memories_extract_post(header: { auth
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function upload_device_diagnostics_v1_mobile_device_diagnostics_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DiagnosticsUpload, init?: OmiApiClientInit): Promise<DiagnosticsReceipt> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mobile/device-diagnostics`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function submit_mobile_feedback_v1_mobile_feedback_post(header: { X_App_Platform?: string, X_App_Version?: string, X_App_Build?: string | null, authorization?: string, X_Device_Id_Hash?: string }, body: MobileFeedbackRequest, init?: OmiApiClientInit): Promise<MobileFeedbackReceipt> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mobile/feedback`;
@@ -19405,4 +19481,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 454 client methods generated.
+// Total: 455 client methods generated.
