@@ -262,6 +262,7 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
     expect(reprocessCalls, 1);
     expect(provider.offerSpeakerSummaryRefresh, isTrue);
+    expect(provider.trackedSpeakerConversationIds, isEmpty);
     expect(await provider.assignSpeaker(['s'], 'named-person'), isTrue);
     await tester.pump(const Duration(seconds: 4));
     expect(reprocessCalls, 1);
@@ -276,6 +277,7 @@ void main() {
     var reprocessCalls = 0;
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
+      fetchConversation: (id) async => conversation(id: id),
       reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
         expectSync(requireSpeakerReceipt, isTrue);
         reprocessCalls++;
@@ -288,6 +290,7 @@ void main() {
     provider.dispose();
     await tester.pump();
     expect(reprocessCalls, 1);
+    expect(provider.trackedSpeakerConversationIds, isEmpty);
     await tester.pump(const Duration(seconds: 4));
     expect(reprocessCalls, 1);
   });
@@ -297,6 +300,7 @@ void main() {
     final refreshedIds = <String>[];
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) => save.future,
+      fetchConversation: (id) async => conversation(id: id),
       reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
         expectSync(requireSpeakerReceipt, isTrue);
         refreshedIds.add(id);
@@ -321,6 +325,7 @@ void main() {
     final refreshedIds = <String>[];
     final provider = ConversationDetailProvider(
       assignSpeaker: (id, ids, {isUser, personId, speakerId}) => id == 'first' ? save.future : Future.value(true),
+      fetchConversation: (id) async => conversation(id: id),
       reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
         refreshedIds.add(id);
         return null;
@@ -340,6 +345,7 @@ void main() {
     expect(provider.offerSpeakerSummaryRefresh, isTrue);
     await tester.pump(const Duration(seconds: 4));
     expect(refreshedIds, ['first', 'second']);
+    expect(provider.trackedSpeakerConversationIds, isEmpty);
     provider.dispose();
     await tester.pump(const Duration(seconds: 4));
     expect(refreshedIds, ['first', 'second']);
@@ -363,6 +369,73 @@ void main() {
     expect(await assignment, isFalse);
     await tester.pump(const Duration(seconds: 4));
     expect(regenerations, 0);
+    expect(provider.trackedSpeakerConversationIds, isEmpty);
+  });
+
+  testWidgets('deleting during an in-flight label save drops its refresh', (tester) async {
+    final save = Completer<bool>();
+    final list = ConversationProvider();
+    final target = conversation();
+    var fetches = 0;
+    var regenerations = 0;
+    final provider = ConversationDetailProvider(
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) => save.future,
+      fetchConversation: (id) async {
+        fetches++;
+        return target;
+      },
+      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        regenerations++;
+        return null;
+      },
+    );
+    provider.conversationProvider = list;
+    select(provider, target);
+    final assignment = provider.assignSpeaker(['s'], 'named-person');
+    list.memoriesToDelete[target.id] = target; // The delete-with-Undo tombstone.
+    provider.dispose();
+    save.complete(true);
+
+    expect(await assignment, isTrue);
+    await tester.pump(const Duration(seconds: 4));
+    expect(fetches, 0);
+    expect(regenerations, 0);
+    expect(provider.trackedSpeakerConversationIds, isEmpty);
+    list.dispose();
+  });
+
+  testWidgets('missing detail after exit cannot trigger regeneration', (tester) async {
+    var regenerations = 0;
+    final provider = ConversationDetailProvider(
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
+      fetchConversation: (id) async => null,
+      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        regenerations++;
+        return null;
+      },
+    );
+    select(provider, conversation());
+    expect(await provider.assignSpeaker(['s'], 'named-person'), isTrue);
+    provider.dispose();
+    await tester.pump();
+    expect(regenerations, 0);
+    expect(provider.trackedSpeakerConversationIds, isEmpty);
+  });
+
+  testWidgets('completed and failed labeling sessions release tracking', (tester) async {
+    final provider = ConversationDetailProvider(
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => id == 'saved',
+      reprocess: (id, {appId, requireSpeakerReceipt = false}) async => conversation(id: id),
+    );
+    select(provider, conversation(id: 'saved'));
+    expect(await provider.assignSpeaker(['s'], 'named-person'), isTrue);
+    await tester.pump(const Duration(seconds: 4));
+    expect(provider.trackedSpeakerConversationIds, isEmpty);
+
+    select(provider, conversation(id: 'failed'));
+    expect(await provider.assignSpeaker(['s'], 'named-person'), isFalse);
+    expect(provider.trackedSpeakerConversationIds, isEmpty);
+    provider.dispose();
   });
 
   testWidgets('ended sync donor refresh follows the bridged conversation', (tester) async {

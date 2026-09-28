@@ -64,6 +64,31 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   bool get _savingSpeaker => _pendingSpeakerSaves > 0;
   Future<void> _speakerSaveTail = Future.value();
 
+  @visibleForTesting
+  Set<String> get trackedSpeakerConversationIds => {
+        ..._speakerEditGenerationByConversation.keys,
+        ..._pendingSpeakerSavesByConversation.keys,
+        ..._automaticSpeakerSummaryRefreshIds,
+        ..._endedSpeakerLabelingSessionIds,
+      };
+
+  bool _speakerConversationDeleted(String conversationId) =>
+      conversationProvider?.memoriesToDelete.containsKey(conversationId) == true ||
+      (_cachedConversation?.id == conversationId && _cachedConversation?.deleted == true);
+
+  void _dropSpeakerRefreshState(String conversationId) {
+    _automaticSpeakerSummaryRefreshIds.remove(conversationId);
+    _endedSpeakerLabelingSessionIds.remove(conversationId);
+    if (_speakerSummaryConversationId == conversationId) _speakerSummaryConversationId = null;
+    _pruneSpeakerSessionState(conversationId);
+  }
+
+  void _pruneSpeakerSessionState(String conversationId) {
+    if ((_pendingSpeakerSavesByConversation[conversationId] ?? 0) != 0) return;
+    _speakerEditGenerationByConversation.remove(conversationId);
+    _endedSpeakerLabelingSessionIds.remove(conversationId);
+  }
+
   bool get offerSpeakerSummaryRefresh =>
       _speakerSummaryConversationId != null && _speakerSummaryConversationId == conversationOrNull?.id;
 
@@ -225,7 +250,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       // open. Refresh after the queued edits drain so each edit still targets
       // the same optimistic conversation, then adopt the survivor ID.
       if (_syncConversationId.hasMatch(target.id)) _speakerRefreshId = target.id;
-      if (changed && target.status == ConversationStatus.completed && target.structured.overview.trim().isNotEmpty) {
+      if (_speakerConversationDeleted(target.id) || target.deleted) {
+        _dropSpeakerRefreshState(target.id);
+      } else if (changed &&
+          target.status == ConversationStatus.completed &&
+          target.structured.overview.trim().isNotEmpty) {
         _automaticSpeakerSummaryRefreshIds.add(target.id);
         if (!_isDisposed && identical(conversationOrNull, target)) _speakerSummaryConversationId = target.id;
       }
@@ -246,11 +275,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         _speakerRefreshId = null;
         if (!_isDisposed && refreshId != null && refreshId == conversationOrNull?.id) await refreshConversation();
       }
-      if (remaining == 0) _scheduleAutomaticSpeakerSummaryRefresh(target.id);
+      if (remaining == 0) {
+        _scheduleAutomaticSpeakerSummaryRefresh(target.id);
+        _pruneSpeakerSessionState(target.id);
+      }
     }
   }
 
   void _scheduleAutomaticSpeakerSummaryRefresh(String conversationId) {
+    if (_speakerConversationDeleted(conversationId)) {
+      _dropSpeakerRefreshState(conversationId);
+      return;
+    }
     if (!_automaticSpeakerSummaryRefreshIds.contains(conversationId)) return;
     if (_endedSpeakerLabelingSessionIds.contains(conversationId) || _isDisposed) {
       _flushEndedSpeakerLabelingSession(conversationId);
@@ -260,6 +296,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     _speakerSummaryRefreshTimer?.cancel();
     _speakerSummaryRefreshTimer = Timer(_speakerSummaryQuietPeriod, () {
       _speakerSummaryRefreshTimer = null;
+      if (_speakerConversationDeleted(conversationId)) {
+        _dropSpeakerRefreshState(conversationId);
+        return;
+      }
       if (_isDisposed || _savingSpeaker || !offerSpeakerSummaryRefresh) return;
       // A failed or unverified regeneration remains an explicit retry only.
       _automaticSpeakerSummaryRefreshIds.remove(conversationId);
@@ -272,11 +312,20 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     _speakerSummaryRefreshTimer = null;
     final conversationId = conversationOrNull?.id;
     if (conversationId == null) return;
+    if (_speakerConversationDeleted(conversationId)) {
+      _dropSpeakerRefreshState(conversationId);
+      return;
+    }
     _endedSpeakerLabelingSessionIds.add(conversationId);
     _flushEndedSpeakerLabelingSession(conversationId);
+    _pruneSpeakerSessionState(conversationId);
   }
 
   void _flushEndedSpeakerLabelingSession(String conversationId) {
+    if (_speakerConversationDeleted(conversationId)) {
+      _dropSpeakerRefreshState(conversationId);
+      return;
+    }
     if ((_pendingSpeakerSavesByConversation[conversationId] ?? 0) != 0 ||
         !_automaticSpeakerSummaryRefreshIds.remove(conversationId)) {
       return;
@@ -289,17 +338,25 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   Future<void> _regenerateSpeakerSummaryAfterExit(String conversationId) async {
     try {
-      var targetId = conversationId;
-      if (_syncConversationId.hasMatch(conversationId)) {
-        // A safety-WAL donor may have been bridged while its label save was in
-        // flight. The detail read follows that redirect; reprocess does not.
-        final current = await _fetchConversation(conversationId);
-        if (current == null) return;
-        targetId = current.id;
+      if (_speakerConversationDeleted(conversationId)) {
+        _dropSpeakerRefreshState(conversationId);
+        return;
       }
-      await _reprocess(targetId, requireSpeakerReceipt: true);
+      // This also follows a safety-WAL donor's bridge redirect. Reprocess
+      // itself does not follow that redirect or accept a deleted conversation.
+      final current = await _fetchConversation(conversationId);
+      if (current == null ||
+          current.deleted ||
+          _speakerConversationDeleted(conversationId) ||
+          _speakerConversationDeleted(current.id)) {
+        _dropSpeakerRefreshState(conversationId);
+        return;
+      }
+      await _reprocess(current.id, requireSpeakerReceipt: true);
     } catch (error) {
       Logger.debug('Speaker summary refresh after detail exit failed: ${error.runtimeType}');
+    } finally {
+      _pruneSpeakerSessionState(conversationId);
     }
   }
 
