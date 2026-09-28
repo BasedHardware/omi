@@ -1,5 +1,4 @@
 import os
-import sys
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 import pytest
@@ -11,7 +10,7 @@ os.environ.setdefault(
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
 
-from backend.database import fair_use
+from database import fair_use
 
 
 def test_clean_uid_valid():
