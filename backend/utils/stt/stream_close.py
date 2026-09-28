@@ -21,6 +21,7 @@ STT_STREAM_CLOSE_REASONS = frozenset(
     {
         *ACCOUNT_REJECTION_REASONS,
         'soniox_idle_timeout',
+        'soniox_no_audio_teardown',
         'soniox_rotation',
         'soniox_invalid_hint',
         'modulate_serve_error',
