@@ -502,9 +502,10 @@ OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_client_journey_accepted_total',
     (
         'Accepted client-segmented product journeys by bounded journey and client kind. '
+        'app_build is a constant compatibility label, not a client-supplied build. '
         'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
     ),
-    ['journey', 'client_kind'],
+    ['journey', 'client_kind', 'app_build'],
 )
 
 OMI_CLIENT_JOURNEY_TERMINAL_TOTAL = Counter(
@@ -513,13 +514,13 @@ OMI_CLIENT_JOURNEY_TERMINAL_TOTAL = Counter(
         'Terminal client-segmented product journey outcomes by bounded labels. '
         'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
     ),
-    ['journey', 'client_kind', 'outcome'],
+    ['journey', 'client_kind', 'app_build', 'outcome'],
 )
 
 OMI_CLIENT_JOURNEY_ISSUES_TOTAL = Counter(
     'omi_client_journey_issues_total',
     'Bounded issue detail for failed or degraded client-segmented product journeys',
-    ['journey', 'client_kind', 'issue_class'],
+    ['journey', 'client_kind', 'app_build', 'issue_class'],
 )
 
 OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(

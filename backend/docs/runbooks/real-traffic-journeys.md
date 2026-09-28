@@ -40,9 +40,9 @@ rewrite that contract:
 
 | Metric | Labels | Meaning |
 | --- | --- | --- |
-| `omi_client_journey_accepted_total` | `journey`, `client_kind` | A semantic journey was accepted. |
-| `omi_client_journey_terminal_total` | `journey`, `client_kind`, `outcome` | Its one-shot coarse terminal result. |
-| `omi_client_journey_issues_total` | `journey`, `client_kind`, `issue_class` | One bounded detail for a failed, degraded, or unknown terminal. |
+| `omi_client_journey_accepted_total` | `journey`, `client_kind`, `app_build` | A semantic journey was accepted. |
+| `omi_client_journey_terminal_total` | `journey`, `client_kind`, `app_build`, `outcome` | Its one-shot coarse terminal result. |
+| `omi_client_journey_issues_total` | `journey`, `client_kind`, `app_build`, `issue_class` | One bounded detail for a failed, degraded, or unknown terminal. |
 | `omi_client_journey_duration_seconds` | `journey`, `outcome` | Acceptance-to-terminal duration. |
 
 `outcome` is `success`, `failure`, `degraded`, `cancelled`, or the coercion
@@ -61,10 +61,12 @@ server cannot separate them until the clients send `X-App-Platform`; it must not
 guess an operating system.
 
 Client journey children are created on observed traffic only; no client-segmented
-alert depends on idle zero series. The `app_build` metric label was removed:
-build strings can grow without a fixed bound, and no dashboard or alert selects
-them. The metric names and the journey, client kind, outcome, and issue class
-labels remain stable. Query `up{job="backend-listen-metrics"}` to distinguish a
+alert depends on idle zero series. The `app_build` metric label stays in the
+published schema but is always `unknown`: client-supplied build strings can
+grow without a fixed bound, and no dashboard or alert selects them. Keeping
+the label key avoids changing Cloud Monitoring's existing descriptor. The
+other label axes retain their closed vocabularies. Query
+`up{job="backend-listen-metrics"}` to distinguish a
 healthy idle exporter from a failed scrape. A missing child is not evidence of
 zero traffic; range queries become populated after the first event.
 

@@ -60,17 +60,19 @@ def test_label_coercion_collapses_unbounded_values_to_unknown():
     assert bounded_app_build('240') == '240'
 
 
-def test_client_journey_attempt_does_not_export_app_build(monkeypatch):
+def test_client_journey_attempt_exports_only_constant_app_build(monkeypatch):
     accepted, terminal, _issues, _duration = _install_client_journey_metrics(monkeypatch)
     with journeys.ClientJourneyAttempt('desktop_chat', 'desktop_macos') as attempt:
         attempt.succeed()
     accepted.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_macos',
+        app_build='unknown',
     )
     terminal.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_macos',
+        app_build='unknown',
         outcome='success',
     )
 
@@ -136,7 +138,7 @@ def test_client_journey_metrics_do_not_seed_cross_products_or_created_series():
     assert len(terminal) < len(CLIENT_JOURNEYS) * len(CLIENT_KINDS) * len(CLIENT_JOURNEY_OUTCOMES)
     assert len(issues) < len(CLIENT_JOURNEYS) * len(CLIENT_KINDS) * len(CLIENT_JOURNEY_ISSUE_CLASSES)
     assert len(duration) < len(CLIENT_JOURNEYS) * len(CLIENT_JOURNEY_OUTCOMES)
-    assert all('app_build' not in dict(labels) for labels in accepted | terminal | issues)
+    assert all(dict(labels)['app_build'] == 'unknown' for labels in accepted | terminal | issues)
     assert all(
         not sample.name.endswith('_created')
         for family in metrics.OMI_CLIENT_JOURNEY_ISSUES_TOTAL.collect()
@@ -190,11 +192,13 @@ def test_streaming_attempt_records_failure_when_stream_breaks_after_success_cand
     terminal.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_macos',
+        app_build='unknown',
         outcome='failure',
     )
     issues.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_macos',
+        app_build='unknown',
         issue_class='provider_error',
     )
     duration.labels.assert_called_once_with(journey='desktop_chat', outcome='failure')
@@ -226,6 +230,7 @@ def test_streaming_attempt_records_success_only_after_clean_exhaustion(monkeypat
     terminal.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='desktop_windows',
+        app_build='unknown',
         outcome='success',
     )
     issues.labels.assert_not_called()
@@ -268,11 +273,13 @@ def test_streaming_attempt_error_frame_wins_over_later_done(monkeypatch):
     terminal.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='pi_mono_unknown_os',
+        app_build='unknown',
         outcome='failure',
     )
     issues.labels.assert_called_once_with(
         journey='desktop_chat',
         client_kind='pi_mono_unknown_os',
+        app_build='unknown',
         issue_class='upstream_rejected',
     )
 
