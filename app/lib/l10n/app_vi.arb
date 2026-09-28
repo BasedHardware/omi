@@ -3601,5 +3601,9 @@
     "chatDiscardRecording": "Hủy bỏ",
     "voiceQuestionNoSpeech": "Không nghe rõ — hãy thử lại",
     "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
-    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.",
+    "sendToSupport": "Gửi cho bộ phận hỗ trợ",
+    "deviceDiagnosticsUploadDescription": "Xem lại dữ liệu chẩn đoán JSON bên dưới. Dữ liệu gồm mã thiết bị, lịch sử kết nối, pin, firmware và sự kiện Bluetooth. Không có âm thanh hay bản chép lời.",
+    "deviceDiagnosticsTicket": "Mã hỗ trợ",
+    "deviceDiagnosticsUploadFailed": "Không thể gửi dữ liệu chẩn đoán. Vui lòng thử lại."
 }

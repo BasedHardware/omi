@@ -135,6 +135,7 @@ from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
+from utils.sync.recording_session_target import resolve_recording_session_sync_target
 from utils.sync.bridge import finish_sync_segment
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
@@ -1679,6 +1680,32 @@ async def _run_sync_vad_phase(wav_paths: list, segmented_paths: set) -> tuple[li
     return vad_errors, vad_ms
 
 
+async def _resolve_safety_wal_target(
+    uid: str,
+    stamped_target: Optional[str],
+    recording_session_id: Optional[str],
+    source: ConversationSource,
+    client_device_id: Optional[str],
+    should_lock: bool,
+    audio_start_seconds: Optional[float],
+    audio_end_seconds: Optional[float],
+) -> Optional[str]:
+    """Use server recording proof over the phone's possibly stale local stamp."""
+    if not recording_session_id or audio_start_seconds is None or audio_end_seconds is None:
+        return stamped_target
+    return await run_blocking(
+        db_executor,
+        resolve_recording_session_sync_target,
+        uid,
+        recording_session_id,
+        source,
+        client_device_id,
+        bool(should_lock),
+        audio_start_seconds,
+        audio_end_seconds,
+    )
+
+
 async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -1697,6 +1724,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     inline_run_lock_token: Optional[str] = None,
     content_run_bound: bool = False,
     ledger_fence_active: bool = True,
+    recording_session_id: Optional[str] = None,
+    audio_start_seconds: Optional[float] = None,
+    audio_end_seconds: Optional[float] = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -1721,6 +1751,19 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # keeps the caller's exact coordinates and returns the input unchanged on
     # any geocode failure, so a miss never drops the user's location.
     geolocation = await async_resolve_geolocation(geolocation)
+    # Resolve before segment intake. A unique server-side match is authoritative
+    # over a local stamp from another silence-rollover generation; no safe match
+    # invalidates the stamp. Old clients without this proof retain their stamp.
+    target_conversation_id = await _resolve_safety_wal_target(
+        uid,
+        target_conversation_id,
+        recording_session_id,
+        source,
+        client_device_id,
+        should_lock,
+        audio_start_seconds,
+        audio_end_seconds,
+    )
 
     sync_provider = 'unknown'
     sync_model = 'unknown'

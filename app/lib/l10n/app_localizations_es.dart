@@ -11452,4 +11452,17 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get siriIndexSettingDescription =>
       'Permite que Siri encuentre tus conversaciones, recuerdos y tareas en este dispositivo. Al desactivarlo, se eliminan de la búsqueda de Apple.';
+
+  @override
+  String get sendToSupport => 'Enviar a soporte';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Revisa los datos de diagnóstico JSON que aparecen abajo. Incluyen el identificador del dispositivo, el historial de conexiones, la batería, el firmware y los eventos Bluetooth. No incluyen audio ni transcripciones.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Código del ticket de soporte';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'No se pudieron enviar los datos de diagnóstico. Inténtalo de nuevo.';
 }

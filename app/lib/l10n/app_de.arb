@@ -3601,5 +3601,9 @@
     "chatDiscardRecording": "Verwerfen",
     "voiceQuestionNoSpeech": "Das habe ich nicht verstanden — versuche es erneut",
     "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
-    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.",
+    "sendToSupport": "An Support senden",
+    "deviceDiagnosticsUploadDescription": "Prüfe die Diagnosedaten im JSON unten. Sie enthalten Gerätekennung, Verbindungen, Akkuwerte, Firmwarediagnose und Bluetooth-Ereignisse. Audio und Transkripte sind nicht enthalten.",
+    "deviceDiagnosticsTicket": "Support-Ticketcode",
+    "deviceDiagnosticsUploadFailed": "Diagnosedaten konnten nicht gesendet werden. Bitte erneut versuchen."
 }

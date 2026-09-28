@@ -12275,6 +12275,33 @@
         "title": "DeveloperTranscriptSegment",
         "type": "object"
       },
+      "DiagnosticsReceipt": {
+        "properties": {
+          "ticket": {
+            "title": "Ticket",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket"
+        ],
+        "title": "DiagnosticsReceipt",
+        "type": "object"
+      },
+      "DiagnosticsUpload": {
+        "properties": {
+          "bundle_base64": {
+            "maxLength": 5600000,
+            "title": "Bundle Base64",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bundle_base64"
+        ],
+        "title": "DiagnosticsUpload",
+        "type": "object"
+      },
       "DismissAnnouncementRequest": {
         "description": "Request body for dismissing an announcement.",
         "properties": {
@@ -54187,6 +54214,93 @@
         ]
       }
     },
+    "/v1/mobile/device-diagnostics": {
+      "post": {
+        "operationId": "upload_device_diagnostics_v1_mobile_device_diagnostics_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiagnosticsUpload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosticsReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Upload Device Diagnostics",
+        "tags": [
+          "device-diagnostics"
+        ]
+      }
+    },
     "/v1/mobile/feedback": {
       "post": {
         "description": "Persist one explicit mobile feedback action.\n\nSummary targets are authenticated conversation ids. Recording targets are\nauthenticated recording-session ids whose user-scoped binding is read\nbefore the write. The idempotency key is scoped to the authenticated UID,\nso a retry is safe while a reused key with a different payload is rejected.",
@@ -68992,6 +69106,56 @@
               "description": "Target conversation ID to attach audio to (auto-sync from live capture)",
               "title": "Conversation Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Client recording session id. When conversation_id is omitted and one conversation for this user, source, and device already carries this id, attach the audio to that conversation.",
+            "in": "query",
+            "name": "recording_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Client recording session id. When conversation_id is omitted and one conversation for this user, source, and device already carries this id, attach the audio to that conversation.",
+              "title": "Recording Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audio_start_seconds",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Audio Start Seconds"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audio_end_seconds",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Audio End Seconds"
             }
           },
           {

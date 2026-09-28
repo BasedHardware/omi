@@ -24,6 +24,35 @@ final class CaptureAttemptOutcomeTelemetryTests: XCTestCase {
     XCTAssertEqual(PostHogManager.captureAttemptOutcomeEventName, "Desktop Capture Attempt Outcome")
   }
 
+  func testUpdateRelaunchContextComesFromConsumedMarker() {
+    let previousKind = CaptureLaunchContext.kind
+    let previousID = CaptureLaunchContext.updateAttemptID
+    let previousStarted = CaptureLaunchContext.hasStartedCapture
+    defer {
+      CaptureLaunchContext.kind = previousKind
+      CaptureLaunchContext.updateAttemptID = previousID
+      CaptureLaunchContext.hasStartedCapture = previousStarted
+    }
+    CaptureLaunchContext.hasStartedCapture = false
+    let attempt = UpdateInstallAttempt(
+      id: "opaque-update", sourceVersion: "1", sourceBuild: "1",
+      targetVersion: "2", targetBuild: "2", channel: "beta", startedAt: Date())
+    CaptureLaunchContext.setPendingRelaunch(
+      PendingUpdateRelaunch(restoreMainWindow: false, attempt: attempt))
+    XCTAssertEqual(CaptureLaunchContext.kindForStart(), .updateRelaunch)
+    CaptureLaunchContext.hasStartedCapture = true
+    XCTAssertEqual(CaptureLaunchContext.kindForStart(), .other)
+    XCTAssertEqual(CaptureLaunchContext.kindForStart(override: .wake), .wake)
+    let capture = CaptureAttemptOutcomeState(
+      mode: "always", intent: .auto,
+      launchContext: CaptureLaunchContext.kind.rawValue,
+      secondsSinceLaunch: "0_10s", updateAttemptID: CaptureLaunchContext.updateAttemptID)
+    let properties = PostHogManager.captureAttemptOutcomeProperties(capture, finalizationReason: .userStop)
+    XCTAssertEqual(properties["launch_context"] as? String, "update_relaunch")
+    XCTAssertEqual(properties["update_attempt_id"] as? String, "opaque-update")
+    XCTAssertEqual(properties["seconds_since_launch"] as? String, "0_10s")
+  }
+
   // MARK: - Payload contract (privacy boundary)
 
   func testOutcomePayloadCarriesExactlyTheBoundedDimensionSet() throws {
@@ -39,6 +68,7 @@ final class CaptureAttemptOutcomeTelemetryTests: XCTestCase {
       [
         "platform", "attempt_id", "mode", "intent", "capture_eligible", "first_audio_frame",
         "speech_observed", "terminal_reason", "conversation_accepted",
+        "finalization_reason", "launch_context", "seconds_since_launch", "update_attempt_id",
       ])
     XCTAssertEqual(properties["platform"] as? String, "macos")
     XCTAssertEqual(properties["mode"] as? String, "always")
@@ -47,6 +77,7 @@ final class CaptureAttemptOutcomeTelemetryTests: XCTestCase {
     XCTAssertEqual(properties["first_audio_frame"] as? Bool, true)
     XCTAssertEqual(properties["speech_observed"] as? Bool, true)
     XCTAssertEqual(properties["terminal_reason"] as? String, "completed")
+    XCTAssertEqual(properties["finalization_reason"] as? String, "user_stop")
     XCTAssertEqual(properties["conversation_accepted"] as? Bool, false)
     let attemptId = try XCTUnwrap(properties["attempt_id"] as? String)
     XCTAssertEqual(attemptId.count, 36, "attempt_id is an opaque UUID string")
