@@ -60,11 +60,19 @@ from models.action_item import (
     PendingSyncResponse,
 )
 from utils.task_intelligence import task_links
+from utils.task_intelligence.task_links import TaskLinkResolverUnavailableError, TaskLinkValidationError
 from utils.product_telemetry import emit_product_event
 
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_task_link_error(exc: Exception) -> str:
+    """Sanitize task link resolver exception details while preserving server logs."""
+    logger.warning("Task link validation failed: %s: %s", type(exc).__name__, exc)
+    return "Task link resolver is temporarily unavailable"
+
 
 # Import-compatible aliases; canonical ownership lives in models.action_item.
 CreateActionItemRequest = ActionItemCreateRequest
@@ -343,7 +351,10 @@ def create_action_item(
     """
     try:
         task_links.validate_task_links(uid, goal_id=request.goal_id, workstream_id=request.workstream_id)
-    except task_links.TaskLinkValidationError as exc:
+    except TaskLinkValidationError as exc:
+        if isinstance(exc, TaskLinkResolverUnavailableError):
+            detail = _sanitize_task_link_error(exc)
+            raise HTTPException(status_code=409, detail=detail) from exc
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     action_item_data = request.storage_payload()
 
@@ -697,7 +708,10 @@ def update_action_item(
     )
     try:
         task_links.validate_task_links(uid, goal_id=proposed_goal_id, workstream_id=proposed_workstream_id)
-    except task_links.TaskLinkValidationError as exc:
+    except TaskLinkValidationError as exc:
+        if isinstance(exc, TaskLinkResolverUnavailableError):
+            detail = _sanitize_task_link_error(exc)
+            raise HTTPException(status_code=409, detail=detail) from exc
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     update_data = request.storage_payload()
     if request.completed is True or request.status == 'completed':
@@ -952,7 +966,10 @@ def create_action_items_batch(
     for item in action_items:
         try:
             task_links.validate_task_links(uid, goal_id=item.goal_id, workstream_id=item.workstream_id)
-        except task_links.TaskLinkValidationError as exc:
+        except TaskLinkValidationError as exc:
+            if isinstance(exc, TaskLinkResolverUnavailableError):
+                detail = _sanitize_task_link_error(exc)
+                raise HTTPException(status_code=409, detail=detail) from exc
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         action_items_data.append(item.storage_payload())
 
