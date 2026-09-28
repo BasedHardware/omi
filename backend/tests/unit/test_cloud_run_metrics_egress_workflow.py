@@ -79,6 +79,11 @@ def test_workflow_provisions_live_stt_alerts_independently_of_helm() -> None:
     assert 'needs' not in provision
     assert provision_steps[0]['uses'] == 'actions/checkout@v7'
     assert provision_steps[0]['with']['ref'] == '${{ github.sha }}'
+    assert not any(
+        'google-github-actions/auth@' in step.get('uses', '')
+        or 'google-github-actions/get-gke-credentials@' in step.get('uses', '')
+        for step in provision_steps
+    )
 
     steps = provision_steps
     names = [step['name'] for step in steps]

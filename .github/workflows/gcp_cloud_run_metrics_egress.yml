@@ -155,7 +155,7 @@ jobs:
 
   provision-live-alerts:
     # Grafana alert provisioning is independent of Helm deploy health: a
-    # pre-existing GKE RBAC failure must not suppress live-STT alert updates.
+    # Helm failure must not suppress live-STT alert updates.
     if: github.ref == 'refs/heads/main'
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
