@@ -75,7 +75,12 @@ prometheus:
         memory: 2G
       limits:
         cpu: "2"
-        memory: 4Gi
+        # Head replay currently restores 2.56M series from a 24-segment WAL;
+        # the 4Gi limit OOMs shortly after replay completes. Keep the request
+        # unchanged so the StatefulSet can schedule on its current node, and
+        # leave node memory headroom while the scrape relabel below prevents
+        # this growth from recurring.
+        memory: 7Gi
     storageSpec:
     # Using PersistentVolumeClaim
       volumeClaimTemplate:
@@ -84,7 +89,8 @@ prometheus:
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:
-              storage: 50Gi
+              # Match the already-expanded production PVC and StatefulSet claim.
+              storage: 100Gi
     additionalScrapeConfigs:
       # Additional scrape configs for Deepgram Engine metrics
       - job_name: "dg_engine_metrics"
@@ -149,6 +155,15 @@ prometheus:
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
+        metric_relabel_configs:
+          # The client-journey metric contract is bounded by journey, client kind,
+          # and issue class. These counters accidentally include app_build in the
+          # running backend image; collapse that extra dimension before ingest.
+          - source_labels: [__name__]
+            regex: "omi_client_journey_(accepted|terminal|issues)_(total|created)"
+            target_label: app_build
+            replacement: ""
+            action: replace
       - job_name: pusher-metrics
         scrape_interval: 15s
         metrics_path: /metrics
