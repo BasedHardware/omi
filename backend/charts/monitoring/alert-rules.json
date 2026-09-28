@@ -13258,5 +13258,245 @@
       "receiver": "Omi - Services Alerting (Telegram)"
     },
     "record": null
+  },
+  {
+    "uid": "omi-soniox-rate-limited",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - Soniox rate limiting",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=\"soniox\",reason=\"provider_rate_limited\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0.01",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-28T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Soniox real-time streams are being rate limited",
+      "user_impact": "Live transcription is exposed to a provider-wide rate limit or to a single-provider outage.",
+      "scope": "backend-listen-metrics; bounded provider and outcome labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Check current provider capacity and funded fallback readiness before changing routing or limits.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "sum(rate(omi_stt_stream_close_total{provider=\"soniox\",reason=\"provider_rate_limited\"}[5m])) > 0.01/s for 10m",
+      "evaluated_bad": "Synthetic contract: Soniox rate-limit closes exceed 0.01 per second for 10 minutes.",
+      "evaluated_good": "Synthetic contract: the rate-limit rate remains at or below 0.01 per second."
+    },
+    "labels": {
+      "alert_identity": "omi-soniox-rate-limited",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-single-leg-risk",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - Soniox single-leg risk",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(omi_live_stt_open_streams{job=\"backend-listen-metrics\",provider=\"soniox\"}) / clamp_min(sum(omi_live_stt_open_streams{job=\"backend-listen-metrics\"}), 1) > 0.9) and on() (sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\",provider!=\"soniox\"}[30m]) unless on(provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1)) or vector(0)) == 0) and on() (sum(increase(omi_live_stt_terminal_total{job=\"backend-listen-metrics\",provider!=\"soniox\",outcome=\"transcribed\"}[30m]) unless on(provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1)) or vector(0)) == 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-28T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Soniox carries over 90% of live streams without recent funded fallback success",
+      "user_impact": "Live transcription is exposed to a provider-wide rate limit or to a single-provider outage.",
+      "scope": "backend-listen-metrics; bounded provider and outcome labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Check current provider capacity and funded fallback readiness before changing routing or limits.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "Soniox open-stream share > 90%, with no non-retired provider accepted or transcribed sessions in 30m",
+      "evaluated_bad": "Synthetic contract: the stated predicate remains true for the configured pending period.",
+      "evaluated_good": "Synthetic contract: rate-limit rate is zero or a funded alternative has recent successful sessions."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-single-leg-risk",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
   }
 ]
