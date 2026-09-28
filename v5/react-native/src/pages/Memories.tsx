@@ -18,6 +18,8 @@ import {
 } from '../desktopReadClient';
 import {matchesSearchQuery} from '../searchText';
 import {omiBackend} from '../omiNative';
+import {createMemory} from '../legacyOmiWrites';
+import {MemoryWriteActions} from './MemoryWriteActions';
 import {FocusPressable} from '../ui/Pressable';
 import {ReadStatus} from '../ui/ReadStatus';
 import {styles} from '../ui/styles';
@@ -36,9 +38,11 @@ function formatMemoryDate(timestamp: number | null): string {
 export function MemoriesPage({
   outcome,
   loading,
+  onRefresh,
 }: {
   outcome: DomainReadOutcome<DesktopReadProjection> | null;
   loading: boolean;
+  onRefresh?: () => void | Promise<void>;
 }) {
   const loaded = useMemo(
     () =>
@@ -54,6 +58,10 @@ export function MemoriesPage({
     outcome?.status === 'success' ? outcome.value.page : null,
   );
   const [query, setQuery] = useState('');
+  const [draft, setDraft] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [writeMessage, setWriteMessage] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(false);
   const generation = useRef(0);
@@ -110,6 +118,33 @@ export function MemoriesPage({
       }
     }
   };
+  const refreshMemories = async () => {
+    if (omiBackend == null) throw new Error('Memory service is unavailable');
+    const refreshed = await loadMemories(omiBackend);
+    setItems(refreshed.items);
+    setPage(refreshed.page);
+    await onRefresh?.();
+  };
+  const addMemory = async () => {
+    if (omiBackend == null || draft.trim() === '') return;
+    setCreating(true);
+    setWriteMessage(null);
+    try {
+      const result = await createMemory(omiBackend, draft.trim());
+      if (!result.ok) {
+        setWriteMessage(result.failure.detail);
+        return;
+      }
+      await refreshMemories();
+      setSelectedId(result.value.id);
+      setDraft('');
+    } catch {
+      setWriteMessage('Memory saved, but the list could not be refreshed.');
+    } finally {
+      setCreating(false);
+    }
+  };
+  const selected = items.find(item => item.id === selectedId) ?? null;
   const renderItem = useCallback(
     ({item}: {item: MemoryProjection}) => (
       <View
@@ -142,6 +177,32 @@ export function MemoriesPage({
         ]}>
         Memories
       </Text>
+      <View style={{gap: 8, marginBottom: 14}}>
+        <TextInput
+          accessibilityLabel="New memory content"
+          multiline
+          onChangeText={setDraft}
+          placeholder="Add a memory"
+          placeholderTextColor="#666666"
+          style={{minHeight: 54, padding: 8, borderWidth: 1}}
+          value={draft}
+        />
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel="Add memory"
+          disabled={
+            creating ||
+            draft.trim() === '' ||
+            outcome?.status !== 'success' ||
+            outcome.value.apiContract !== 'omi'
+          }
+          onPress={() => void addMemory()}>
+          <Text>{creating ? 'Adding…' : 'Add memory'}</Text>
+        </FocusPressable>
+        {writeMessage ? (
+          <Text accessibilityRole="alert">{writeMessage}</Text>
+        ) : null}
+      </View>
       <View style={styles.memorySearchBox}>
         <MaterialIcon
           name="search"
@@ -169,51 +230,77 @@ export function MemoriesPage({
           <Text style={styles.projectionEmptyCopy}>{error}</Text>
         </View>
       ) : (
-        <FlatList
-          contentContainerStyle={styles.memoryList}
-          data={results}
-          keyExtractor={item => item.id}
-          ListEmptyComponent={
-            <View style={styles.projectionEmpty}>
-              <Text style={styles.projectionEmptyTitle}>
-                {filtering ? 'No loaded memories match.' : 'No memories yet.'}
-              </Text>
-              {filtering && (
-                <Text style={styles.projectionEmptyCopy}>
-                  Search covers the memories loaded on this device.
-                </Text>
-              )}
+        <>
+          {selected !== null ? (
+            <View
+              accessibilityLabel="Selected memory details"
+              style={{gap: 8, marginBottom: 12}}>
+              <Text accessibilityRole="header">{selected.title}</Text>
+              <Text selectable>{selected.summary}</Text>
+              <MemoryWriteActions
+                memory={selected}
+                writesAvailable={
+                  outcome?.status === 'success' &&
+                  outcome.value.apiContract === 'omi'
+                }
+                onRefresh={refreshMemories}
+                onDeleted={() => setSelectedId(null)}
+              />
             </View>
-          }
-          ListFooterComponent={
-            page === null ? null : (
-              <View style={styles.memoryFooter}>
-                <ReadStatus label="Memories" page={page} />
-                {page.hasMore && page.nextCursor !== null && (
-                  <FocusPressable
-                    accessibilityLabel="Load more memories"
-                    accessibilityRole="button"
-                    disabled={loadingMore}
-                    onPress={loadMore}
-                    style={({pressed}) => [
-                      styles.loadOlderButton,
-                      pressed && styles.pressed,
-                    ]}>
-                    <Text style={styles.loadOlderText}>
-                      {loadingMore ? 'Loading more…' : 'Load more'}
-                    </Text>
-                  </FocusPressable>
-                )}
-                {loadMoreError && (
-                  <Text style={styles.error}>
-                    More memories could not be loaded.
+          ) : null}
+          <FlatList
+            contentContainerStyle={styles.memoryList}
+            data={results}
+            keyExtractor={item => item.id}
+            ListEmptyComponent={
+              <View style={styles.projectionEmpty}>
+                <Text style={styles.projectionEmptyTitle}>
+                  {filtering ? 'No loaded memories match.' : 'No memories yet.'}
+                </Text>
+                {filtering && (
+                  <Text style={styles.projectionEmptyCopy}>
+                    Search covers the memories loaded on this device.
                   </Text>
                 )}
               </View>
-            )
-          }
-          renderItem={renderItem}
-        />
+            }
+            ListFooterComponent={
+              page === null ? null : (
+                <View style={styles.memoryFooter}>
+                  <ReadStatus label="Memories" page={page} />
+                  {page.hasMore && page.nextCursor !== null && (
+                    <FocusPressable
+                      accessibilityLabel="Load more memories"
+                      accessibilityRole="button"
+                      disabled={loadingMore}
+                      onPress={loadMore}
+                      style={({pressed}) => [
+                        styles.loadOlderButton,
+                        pressed && styles.pressed,
+                      ]}>
+                      <Text style={styles.loadOlderText}>
+                        {loadingMore ? 'Loading more…' : 'Load more'}
+                      </Text>
+                    </FocusPressable>
+                  )}
+                  {loadMoreError && (
+                    <Text style={styles.error}>
+                      More memories could not be loaded.
+                    </Text>
+                  )}
+                </View>
+              )
+            }
+            renderItem={({item}) => (
+              <FocusPressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open memory ${item.title}`}
+                onPress={() => setSelectedId(item.id)}>
+                {renderItem({item})}
+              </FocusPressable>
+            )}
+          />
+        </>
       )}
     </View>
   );

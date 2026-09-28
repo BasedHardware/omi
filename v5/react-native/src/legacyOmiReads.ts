@@ -175,6 +175,10 @@ export async function loadOmiMemories(
     return {
       kind: 'memory' as const,
       id: id(row.id),
+      visibility:
+        row.visibility === 'public'
+          ? ('public' as const)
+          : ('private' as const),
       title,
       summary: content,
       searchableText: [content, category ?? '', ...tags]

@@ -1731,6 +1731,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   <MemoriesPage
                     loading={readsPhase === 'initial-loading'}
                     outcome={routeOutcome}
+                    onRefresh={() => refreshReads(false)}
                   />
                 ) : route === 'Tasks' ? (
                   <TasksPage
