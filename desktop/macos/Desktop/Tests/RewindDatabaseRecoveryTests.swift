@@ -12,11 +12,11 @@ import XCTest
 /// the next launch to repeat. Its fallback then wrote a `screenshots` table with
 /// later-migration columns and no migration ledger, which failed `migrate()` on every launch.
 final class RewindDatabaseRecoveryTests: XCTestCase {
-  private var scratch: URL!
+  /// XCTest creates a fresh instance per test method, so each test gets its own directory.
+  private let scratch = FileManager.default.temporaryDirectory
+    .appendingPathComponent("rewind-db-recovery-\(UUID().uuidString)", isDirectory: true)
 
   override func setUpWithError() throws {
-    scratch = FileManager.default.temporaryDirectory
-      .appendingPathComponent("rewind-db-recovery-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
   }
 
