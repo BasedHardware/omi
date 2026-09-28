@@ -2594,6 +2594,9 @@ environments:
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
               value: 'true'
               category: rollout
+            LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED:
+              value: 'true'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             LISTEN_FINALIZATION_DISPATCH_MODE:
