@@ -7,17 +7,18 @@ gate chain and per-area test coverage are documented in
 
 ## Layout
 
-| Script | Invoked by | Purpose |
-|---|---|---|
-| `check-boundaries.ts` | `bun run boundaries` (first `check` step) | Fails on tracked legacy-tree files (`app|backend|desktop|spikes|web/`), any `*.swift`, generated dirs (node_modules, Pods, DerivedData, dist), foreign lockfiles (`tools/OmiSimulator` exempt), and forbidden legacy imports in sources |
-| `setup` | `bun run setup` | `git config core.hooksPath .githooks` + `bun install --frozen-lockfile` |
-| `push-v5` | `bun run push:v5` | Requires branch `main` + clean worktree, runs full `bun run check`, then `OMI_V5_CHECKED=1 git push omi HEAD:refs/heads/v5` (mirror to `BasedHardware/omi:v5`) |
-| `start-metro.ts` | `react-native` `bun start`, PWA metro test, ad hoc | Programmatic Metro dev server for `react-native/` (options-object `listen` — Bun 1.3.14/1.4 never fire the four-argument callback form); `--port` when run directly |
-| `test-metro-startup.ts` | `pwa` `bun run test` | Boots Metro, asserts `/status` and that each platform bundle (macos/ios/android) runs its runtime initializer first |
-| `test-android-http` | CI, ad hoc | Compiles and runs the JVM transport suite with `javac --release 17` + `java -ea`; needs JDK 17+, no Android SDK |
-| `test-apple-auth` | CI (macOS), ad hoc | Compiles ~14 Obj-C++ host suites with `xcrun clang++`, several against real `native-core/src/*.cpp`; macOS only |
-| `test-apple-platforms` | `bun run platforms:test` | Clean Debug `xcodebuild` smoke builds: iOS Simulator + macOS workspaces, signing off |
-| `test-native-core` | `bun run native:test` | mktemp dir → `cmake` → build → `ctest --output-on-failure` for `native-core/` |
+| Script                             | Invoked by                                         | Purpose                                                                                                                                                                     |
+| ---------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `check-boundaries.ts`              | `bun run boundaries` (first `check` step)          | Fails on tracked legacy-tree files (`app                                                                                                                                    | backend | desktop | spikes | web/`), any `\*.swift`, generated dirs (node_modules, Pods, DerivedData, dist), foreign lockfiles (`tools/OmiSimulator` exempt), and forbidden legacy imports in sources |
+| `make-material-symbols-webfont.sh` | `bun run icons:webfont` (ad hoc)                   | Regenerates `pwa/public/MaterialSymbolsRounded.woff2` (subset of the bundled ttf) from `MaterialIcon.tsx`'s GLYPHS; run after adding glyphs (needs `wax install fonttools`) |
+| `setup`                            | `bun run setup`                                    | `git config core.hooksPath .githooks` + `bun install --frozen-lockfile`                                                                                                     |
+| `push-v5`                          | `bun run push:v5`                                  | Requires branch `main` + clean worktree, runs full `bun run check`, then `OMI_V5_CHECKED=1 git push omi HEAD:refs/heads/v5` (mirror to `BasedHardware/omi:v5`)              |
+| `start-metro.ts`                   | `react-native` `bun start`, PWA metro test, ad hoc | Programmatic Metro dev server for `react-native/` (options-object `listen` — Bun 1.3.14/1.4 never fire the four-argument callback form); `--port` when run directly         |
+| `test-metro-startup.ts`            | `pwa` `bun run test`                               | Boots Metro, asserts `/status` and that each platform bundle (macos/ios/android) runs its runtime initializer first                                                         |
+| `test-android-http`                | CI, ad hoc                                         | Compiles and runs the JVM transport suite with `javac --release 17` + `java -ea`; needs JDK 17+, no Android SDK                                                             |
+| `test-apple-auth`                  | CI (macOS), ad hoc                                 | Compiles ~14 Obj-C++ host suites with `xcrun clang++`, several against real `native-core/src/*.cpp`; macOS only                                                             |
+| `test-apple-platforms`             | `bun run platforms:test`                           | Clean Debug `xcodebuild` smoke builds: iOS Simulator + macOS workspaces, signing off                                                                                        |
+| `test-native-core`                 | `bun run native:test`                              | mktemp dir → `cmake` → build → `ctest --output-on-failure` for `native-core/`                                                                                               |
 
 ## Conventions
 
