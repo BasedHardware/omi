@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from database import conversations as db
-from models.transcript_segment import TranscriptSegment
+from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from routers.listen import transcripts
 from tests.unit.test_manual_speaker_assignments import world, read
 from utils.manual_speaker_assignments import LiveTranscriptMerge, merge_live_segments
@@ -167,6 +167,59 @@ async def test_live_adapter_uses_transaction_result_for_client_ids(world):
     assert [s['id'] for s in read(world)['transcript_segments']] == ['b']
     assert [s['id'] for s in processor.cache.data['transcript_segments']] == ['b']
     assert calls[0][1]['live_segments'][0]['text'] == 'a long continuation.'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('person_id', ['user', 'person-max'])
+async def test_recognized_speaker_words_merge_into_one_live_utterance(world, person_id):
+    store, path, _ = world
+    first = speech('a', 'I', 0, 0, 0.2)
+    first.update(
+        stt_provider='soniox',
+        speaker_id_scope='session:0',
+        speaker_match_source='live_embedding',
+        is_user=person_id == 'user',
+        person_id=None if person_id == 'user' else person_id,
+    )
+    store.rows[path]['transcript_segments'] = [first]
+
+    async def persist(fn, *args, **kwargs):
+        if fn is db.update_conversation_segments:
+            return fn(*args, **kwargs)
+        return True
+
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid='u'),
+        state=SimpleNamespace(speaker_map_dirty=False),
+        persistence=SimpleNamespace(call=persist),
+        speakers=SimpleNamespace(
+            segment_assignments={},
+            speaker_to_person={0: (person_id, 'speaker')},
+            segment_identity_status={},
+            voice_identity_status={
+                0: SpeakerIdentityStatus.user if person_id == 'user' else SpeakerIdentityStatus.not_user
+            },
+        ),
+    )
+    processor = object.__new__(transcripts.TranscriptProcessor)
+    processor.host = host
+    processor.cache = transcripts.ConversationCache(None)
+    processor.cache.data = deepcopy(store.rows[path])
+    current = SimpleNamespace(id='c', transcript_segments=[TranscriptSegment(**first)])
+    for sid, word, start, end in [('b', 'have', 0.2, 0.4), ('c', 'to', 0.4, 0.6)]:
+        incoming = speech(sid, word, 0, start, end)
+        incoming.update(stt_provider='soniox', speaker_id_scope='session:0')
+        result = await processor._update_live_conversation(
+            current, [TranscriptSegment(**incoming)], [], datetime.now(timezone.utc), None
+        )
+        assert result is not None
+        current, updated, removed = result
+        assert [segment.text for segment in current.transcript_segments] == [
+            'I ' + ('have' if sid == 'b' else 'have to')
+        ]
+        assert [segment.id for segment in updated] == ['a']
+        assert removed == [sid]
+    assert [segment['text'] for segment in read(world)['transcript_segments']] == ['I have to']
 
 
 @pytest.fixture

@@ -30,6 +30,15 @@ MAX_PENDING_DETECTIONS = 32
 MAX_DETECTION_CHARS = 512
 LIVE_PROVIDERS = frozenset({'soniox', 'modulate', 'deepgram', 'parakeet'})
 MIN_LEARNED_SESSIONS = 3
+# Only near-identical spoken language pairs belong here. Codes are normalized
+# to their base form before this intentionally small equivalence map is used.
+LANGUAGE_EQUIVALENCE = {'ur': 'hi', 'hr': 'sr', 'bs': 'sr', 'id': 'ms'}
+MAX_SONIOX_LANGUAGE_HINTS = 3
+
+
+def canonical_language(language: str | None) -> str:
+    code = normalized_stt_language(language)
+    return LANGUAGE_EQUIVALENCE.get(code, code)
 
 
 def learned_expected(primary: str, sessions: list[dict[str, int]]) -> tuple[str, ...]:
@@ -38,11 +47,15 @@ def learned_expected(primary: str, sessions: list[dict[str, int]]) -> tuple[str,
     counts = Counter[str]()
     session_presence = Counter[str]()
     for session in sessions:
-        counts.update(session)
-        session_presence.update(session.keys())
+        normalized = Counter[str]()
+        for code, count in session.items():
+            normalized[canonical_language(code)] += count
+        counts.update(normalized)
+        session_presence.update(normalized.keys())
     total = sum(counts.values())
     if not total:
         return ()
+    primary = canonical_language(primary)
     declared = (primary,) if primary not in ('', 'en') and soniox_accepts_language_hint(primary) else ()
     candidates = sorted(
         (
@@ -86,7 +99,7 @@ class LiveLanguageProfile:
         in_scope: bool = True,
         learned_sessions: list[dict[str, int]] | None = None,
     ) -> LiveLanguageProfile:
-        primary = normalized_stt_language(language)
+        primary = canonical_language(language)
         if not re.fullmatch(r'[a-z]{2,3}', primary):
             primary = ''
         expected = (primary, 'en') if multi and primary not in ('', 'en') else ((primary,) if primary else ())
@@ -135,16 +148,33 @@ def prefer_hintable_soniox(
 
 def soniox_hints(language: str, profile: LiveLanguageProfile | None = None) -> list[str]:
     normalized = normalized_stt_language(language)
-    candidates = (
-        profile.expected
-        if profile
+    if (
+        profile
         and profile.in_scope
         and profile.multi
         and profile.primary_group == 'non_en'
         and os.getenv('STT_MULTI_LANGUAGE_HINTS', 'true').lower() == 'true'
-        else (normalized,) if normalized and normalized != 'multi' else ()
-    )
-    return [code for code in candidates if soniox_accepts_language_hint(code)]
+    ):
+        candidates = profile.expected
+    else:
+        candidates = (normalized,) if normalized and normalized != 'multi' else ()
+        return [code for code in candidates if soniox_accepts_language_hint(code)]
+    normalized_candidates = list(dict.fromkeys(canonical_language(code) for code in candidates))
+    # Preserve every expected language's priority; equivalents only use spare
+    # slots after the primary, learned languages, and English have been added.
+    ordered = normalized_candidates + [
+        alias
+        for code in normalized_candidates
+        for alias, canonical in LANGUAGE_EQUIVALENCE.items()
+        if canonical == code
+    ]
+    hints = []
+    for code in ordered:
+        if code not in hints and soniox_accepts_language_hint(code):
+            hints.append(code)
+        if len(hints) >= MAX_SONIOX_LANGUAGE_HINTS:
+            break
+    return hints
 
 
 def connection_constraint(provider: str, language: str, profile: LiveLanguageProfile) -> str:
@@ -159,7 +189,7 @@ def classify_output(
     """Classify one finalized segment; caller runs uncertain detection off-loop."""
     if not profile.expected and not profile.learning_enabled:
         return 'undetermined', None
-    language = normalized_stt_language(provider_language)
+    language = canonical_language(provider_language)
     if not re.fullmatch(r'[a-z]{2,3}', language):
         language = ''
     if not language:
@@ -173,11 +203,13 @@ def classify_output(
             return 'undetermined', None
         if not guesses or guesses[0].prob < MIN_PROBABILITY:
             return 'undetermined', None
-        language = normalized_stt_language(guesses[0].lang)
+        language = canonical_language(guesses[0].lang)
         if not re.fullmatch(r'[a-z]{2,3}', language):
             return 'undetermined', None
     return (
-        'undetermined' if not profile.expected else 'in_profile' if language in profile.expected else 'out_of_profile'
+        'undetermined'
+        if not profile.expected
+        else 'in_profile' if language in {canonical_language(code) for code in profile.expected} else 'out_of_profile'
     ), language
 
 
@@ -206,6 +238,7 @@ class LiveLanguageObservations:
 
     def _record(self, provider: str, result: tuple[str, str | None]) -> None:
         conformance, code = result
+        code = canonical_language(code) if code else None
         self.counts[conformance] += 1
         if conformance == 'out_of_profile' and code:
             self.out_codes[code] += 1
@@ -218,7 +251,7 @@ class LiveLanguageObservations:
     def observe(self, segment: dict[str, Any], provider: str, spawn: Any) -> None:
         # Provider metadata is ephemeral; never persist it with transcript text.
         language = segment.pop('_provider_language', None)
-        code = normalized_stt_language(language if isinstance(language, str) else None)
+        code = canonical_language(language if isinstance(language, str) else None)
         language = code if re.fullmatch(r'[a-z]{2,3}', code) else None
         text = str(segment.get('text') or '')[:MAX_DETECTION_CHARS]
         if (

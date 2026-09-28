@@ -23,6 +23,10 @@ overlay:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:
           value: 'false'
+        STT_ROUTING_MODE:
+          value: shadow
+        SONIOX_MONTHLY_CEILING_USD:
+          value: '10000'
         STT_LEARNED_LANGUAGE_PROFILE:
           value: 'false'
         # 2026-09-27: first prod ramp of the Soniox-first arm for non-English multi-language
@@ -375,6 +379,9 @@ overlay:
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
+            value: 'true'
+            category: rollout
+          LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED:
             value: 'true'
             category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:

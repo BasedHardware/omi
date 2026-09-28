@@ -340,7 +340,9 @@ class TranscriptProcessor:
         removed: List[str] = []
         if segments:
             # Preserve unmerged speech until the transaction reads the current receipt.
-            fresh = [segment.model_dump() for segment in segments]
+            # Apply live identity to the fresh copy as well: the merge compares
+            # speaker_match_source, and a recognized persisted word has
+            # live_embedding while a raw provider word does not.
             speaker = self.host.speakers
             speaker_version = getattr(self.host.state, 'speaker_map_version', 0)
             speaker_dirty = self.host.state.speaker_map_dirty
@@ -351,6 +353,7 @@ class TranscriptProcessor:
             )
             process_speaker_assigned_segments(targets, speaker.segment_assignments, speaker.speaker_to_person)
             self._apply_speaker_identity_statuses(targets)
+            fresh = [segment.model_dump() for segment in segments]
             written = await self.host.persistence.call(
                 conversations_db.update_conversation_segments,
                 self.host.request.uid,

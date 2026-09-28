@@ -59,3 +59,19 @@ OUTPUT_LANGUAGE_SEGMENTS = Counter(
     'Finalized live STT segment language conformance',
     ['provider', 'primary_group', 'arm', 'conformance', 'profile_source'],
 )
+LEG_TRANSCRIPT_OUTCOME = Counter(
+    'omi_stt_leg_transcript_outcome_total',
+    'Provider leg outcome after VAD speech; text must arrive within the configured deadline',
+    ['provider', 'language', 'outcome'],
+)
+ROUTING_DECISION = Counter('omi_stt_routing_decisions_total', 'Health-weighted routing decisions', ['outcome'])
+FLEET_HEALTH_WRITE_DROPPED = Counter(
+    'omi_stt_fleet_health_write_dropped_total',
+    'Fleet outcome Redis writes dropped when the bounded background slots are full or unavailable',
+    ['kind'],
+)
+ROUTING_DECISION_LATENCY = Histogram(
+    'omi_stt_routing_decision_seconds',
+    'Time spent choosing the eligible live STT order without network operations',
+    buckets=(0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.05),
+)

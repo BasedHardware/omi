@@ -13233,7 +13233,7 @@
     "updated": "2026-09-26T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Live transcription is working for under 90% of sessions that should have produced a transcript.",
@@ -13242,7 +13242,7 @@
       "verification": "Hermetic rule contract checked; the metric name is also asserted to be emitted in backend source. No production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Open the Backend-listen dashboard Live transcription health row: check the per-provider success panels and breaker-open gauges, then inspect provider account state (top up balance) before touching routing.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
-      "threshold": "$A >= 50 && $B < 0.90",
+      "threshold": "$A >= 50 && $B < 0.90 for 10m",
       "evaluated_bad": "Synthetic contract: 100 counted sessions of which 80 transcribed (ratio 0.80 < 0.90); and a window with 100 no_transcript and no transcribed series at all (numerator zero-fills via 'or vector(0)', ratio 0, still fires).",
       "evaluated_good": "Synthetic contract: 100 counted sessions of which 99 transcribed (ratio 0.99); and zero counted sessions (no data, healthy)."
     },
@@ -13491,6 +13491,426 @@
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-soniox-runway-70",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Soniox monthly spend at 70% — top up Soniox",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0 && $B >= 0.70",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-28T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "top up Soniox: monthly spend reached 70% of the configured ceiling.",
+      "user_impact": "Soniox monthly spend has reached 70% of the configured ceiling; paid fallback runway may narrow.",
+      "scope": "Backend-listen Soniox usage API or metered audio estimate; no uid labels.",
+      "verification": "Local rule contract only; coordinator must verify live Grafana evaluation and Telegram delivery.",
+      "safe_next_action": "Check actual Soniox balance and monthly cap; top up Soniox before runway is exhausted. No auto-top-up is configured.",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md",
+      "threshold": "$A > 0 && $B >= 0.70 for 10m",
+      "evaluated_bad": "Configured ceiling above zero, fresh spend sample, and monthly spend at or above 70%.",
+      "evaluated_good": "Spend below 70%, or ceiling disabled."
+    },
+    "labels": {
+      "alert_identity": "omi-soniox-runway-70",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-soniox-runway-90",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Soniox monthly spend at 90% — top up Soniox",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0 && $B >= 0.90",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-28T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "top up Soniox: monthly spend reached 90% of the configured ceiling.",
+      "user_impact": "Soniox monthly spend has reached 90% of the configured ceiling; paid fallback runway may narrow.",
+      "scope": "Backend-listen Soniox usage API or metered audio estimate; no uid labels.",
+      "verification": "Local rule contract only; coordinator must verify live Grafana evaluation and Telegram delivery.",
+      "safe_next_action": "Top up Soniox or raise the approved monthly ceiling in config; verify vendor balance and project limits.",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md",
+      "threshold": "$A > 0 && $B >= 0.90 for 10m",
+      "evaluated_bad": "Configured ceiling above zero, fresh spend sample, and monthly spend at or above 90%.",
+      "evaluated_good": "Spend below 90%, or ceiling disabled."
+    },
+    "labels": {
+      "alert_identity": "omi-soniox-runway-90",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-modulate-failing-soniox",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Modulate failing — traffic on Soniox",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",provider=\"modulate\",outcome=\"failure\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",provider=\"soniox\",outcome=\"success\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 20 && $B >= 10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-28T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Modulate failing — traffic on Soniox. Watch Soniox runway and provider outcome SLI.",
+      "user_impact": "Modulate connection failures are sending live sessions to Soniox; paid fallback volume and cost may rise.",
+      "scope": "backend-listen provider connection outcomes only; bounded provider/outcome labels.",
+      "verification": "Local rule contract only; coordinator must verify live Grafana evaluation and Telegram delivery.",
+      "safe_next_action": "Inspect Modulate errors and Soniox runway; keep Soniox funded while it carries failover.",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md",
+      "threshold": "$A >= 20 && $B >= 10 for 10m",
+      "evaluated_bad": "At least 20 Modulate connection failures and 10 Soniox connection successes in five minutes, sustained for 10 minutes.",
+      "evaluated_good": "Either provider count stays below its threshold."
+    },
+    "labels": {
+      "alert_identity": "omi-modulate-failing-soniox",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
       "instatus_component": "live-transcription"
     },
     "isPaused": false,

@@ -821,7 +821,7 @@ def test_live_transcription_success_alert_measures_the_user_felt_outcome():
         assert rule["labels"]["severity"] == "critical", export_name
         assert rule["labels"]["impact"] == "user-experience", export_name
         assert rule["noDataState"] == "OK", export_name
-        assert rule["for"] == "5m", export_name
+        assert rule["for"] == "10m", export_name
         exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
         assert exprs[0] == LIVE_TRANSCRIPTION_SUCCESS_TOTAL_EXPR, export_name
         assert exprs[0] != exprs[1], export_name
@@ -832,6 +832,20 @@ def test_live_transcription_success_alert_measures_the_user_felt_outcome():
         assert math_nodes == ["$A >= 50 && $B < 0.90"], export_name
         assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
         assert (REPO / rule["annotations"]["runbook"]).is_file(), export_name
+
+
+def test_soniox_runway_and_modulate_fallback_alerts_name_the_operator_lever():
+    for export_name, rules in _all_rule_exports().items():
+        for percent in (70, 90):
+            rule = rules[f"omi-soniox-runway-{percent}"]
+            assert "top up Soniox" in rule["annotations"]["summary"], export_name
+            assert f"$B >= 0.{percent}" in rule["data"][2]["model"]["expression"], export_name
+            assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)"
+            assert (REPO / rule["annotations"]["runbook"]).is_file(), export_name
+        incident = rules["omi-modulate-failing-soniox"]
+        assert "Modulate failing" in incident["annotations"]["summary"], export_name
+        assert "traffic on Soniox" in incident["annotations"]["summary"], export_name
+        assert incident["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)"
 
 
 def test_live_transcription_success_alert_fires_when_no_transcribed_series_exists():
