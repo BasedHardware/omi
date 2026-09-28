@@ -450,13 +450,20 @@ def reconcile_abandoned_byok_finalization_jobs(limit: int = 100, *, firestore_cl
 
 
 def final_attempt_failed(
-    job_id: str, dispatch_generation: int, lease_epoch: int, retry_count: int, *, firestore_client: Any = None
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    retry_count: int,
+    *,
+    failure_code: str = 'final_attempt_failed',
+    firestore_client: Any = None,
 ) -> bool:
     marked = jobs_db.mark_finalization_dead_letter(
         job_id,
         dispatch_generation,
         lease_epoch,
         retry_count,
+        failure_code=failure_code,
         firestore_client=firestore_client,
     )
     if marked:

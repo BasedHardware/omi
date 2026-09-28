@@ -370,6 +370,9 @@ overlay:
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
             category: rollout
+          LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED:
+            value: 'true'
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
