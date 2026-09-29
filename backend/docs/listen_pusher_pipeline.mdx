@@ -464,6 +464,17 @@ sequenceDiagram
     end
 ```
 
+### Connect-time audio format admission
+
+`validate_audio_format` (`backend/utils/transcribe_decisions.py`) runs before any
+decoder or buffer is built. `sample_rate` must be one of 8000, 11025, 12000,
+16000, 22050, 24000, 32000, 44100 or 48000 for every codec (opus narrows that
+to opuslib's set, and bare `lc3` is refused); anything else closes the socket
+with 1003. Released clients send 8000 (the query default, pcm8), 16000 and
+48000 (phone calls). The query value sizes per-session buffers, so an
+unbounded rate could allocate gigabytes and OOM-kill the listen pod;
+`AudioRingBuffer` also caps its own capacity at 48 kHz as a second guard.
+
 ### Speech-profile onboarding handshake
 
 Question-based speech-profile sessions connect with `onboarding=enabled`. After
