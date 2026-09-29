@@ -5,6 +5,12 @@ from prometheus_client import Counter, Gauge, Histogram
 WINDOW_ACTIVE = Gauge('omi_stt_window_sessions_active', 'Admitted windowed TDT sessions')
 WINDOW_CAP = Gauge('omi_stt_window_sessions_capacity', 'Process windowed TDT session cap')
 WINDOW_ADMISSION = Counter('omi_stt_window_admissions_total', 'Window admission decisions', ['outcome'])
+WINDOW_PRESSURE_REFRESH = Counter(
+    'omi_stt_window_batch_pressure_refresh_total', 'Batch pressure fleet refresh outcomes', ['outcome']
+)
+WINDOW_PRESSURE_REFUSAL = Counter(
+    'omi_stt_window_batch_pressure_refusals_total', 'Window batch pressure refusals', ['reason']
+)
 WINDOW_POSTS = Counter('omi_stt_window_posts_total', 'Window POST outcomes', ['outcome'])
 WINDOW_LATENCY = Histogram('omi_stt_window_post_seconds', 'Window POST latency', buckets=(0.1, 0.5, 1, 2, 4, 8, 15))
 WINDOW_FIRST_TEXT = Histogram(
