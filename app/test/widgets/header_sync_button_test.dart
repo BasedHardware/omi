@@ -16,6 +16,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/utils/wal_file_manager.dart';
@@ -188,6 +189,25 @@ void main() {
     expect(find.text('3'), findsOneWidget);
     expect(find.bySemanticsLabel('Sync, Transcriptions pending 3'), findsOneWidget);
     semantics.dispose();
+  });
+
+  testWidgets('keeps the badge and button neutral grey while files wait on the device', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    localSync.testWals = [
+      _wal(timerStart: now - 120, storage: WalStorage.sdcard),
+      _wal(timerStart: now - 60, storage: WalStorage.flashPage),
+    ];
+    final syncProvider = await makeProvider();
+    expect(syncProvider.missingWalsOnDevice.length, 2);
+
+    await pumpButton(tester, syncProvider, hasPairedDevice: true);
+
+    final badge = tester.widget<Container>(find.byKey(const ValueKey('header_count_badge')));
+    final fill = (badge.decoration as BoxDecoration).color;
+    expect(fill, OmiColors.textTertiary);
+    expect(fill, isNot(OmiColors.warning));
+    final icon = tester.widget<Icon>(find.byIcon(Icons.cloud_rounded));
+    expect(icon.color, isNot(OmiColors.warning));
   });
 
   testWidgets('caps the badge at 9+', (tester) async {
