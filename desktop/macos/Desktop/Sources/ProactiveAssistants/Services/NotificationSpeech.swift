@@ -79,6 +79,15 @@ final class NotificationSpeechOnDelivery {
 
   func notificationWasPresented() {
     guard let text, !hasSpoken else { return }
+    // Admission and presentation can be separated by an arbitrarily long queue.
+    // Re-read the call state here so a card accepted in private never starts
+    // speaking after the user joins a call.
+    if NotificationService.shouldWithholdSpeechForPresence(
+      presence: NotificationService.currentPresence())
+    {
+      log("NotificationSpeech: withholding delivered notification because others can hear")
+      return
+    }
     hasSpoken = true
     log("NotificationSpeech: speaking delivered notification (\(text.count) chars)")
     speak(text)

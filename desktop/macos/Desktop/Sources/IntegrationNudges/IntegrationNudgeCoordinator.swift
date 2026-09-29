@@ -15,15 +15,10 @@ import Foundation
 /// triggers. Window titles (used only for browser sites) are read
 /// opportunistically and their absence simply means fewer nudges.
 ///
-/// Delivery goes straight to `FloatingControlBarManager` rather than through
-/// `NotificationService`. That is deliberate: `NotificationService` applies the
-/// proactive-AI frequency slider, which ships at 0 (Off), so routing through it
-/// would mean this feature is dark for almost every user. The master
-/// Notifications toggle is still honored — it is read in ``handleActivation``
-/// before any window inspection, and again by the policy. The floating bar's
-/// "hide for 2 hours" is deliberately *not* a gate: it is a statement about the
-/// bar, not about notifications, and `NotificationService` documents the same
-/// position — a hidden bar still delivers through the temp-show path.
+/// Delivery goes through `NotificationService.presentActionableProactiveNotification`
+/// so the shared master, category, frequency, snooze, presence, and owner gates all
+/// apply. The bounded offer budget is spent from `onPresented`, after the floating
+/// surface actually shows the card; queued or suppressed offers remain available.
 @MainActor
 final class IntegrationNudgeCoordinator {
   static let shared = IntegrationNudgeCoordinator()

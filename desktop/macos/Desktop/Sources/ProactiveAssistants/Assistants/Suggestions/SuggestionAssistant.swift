@@ -650,12 +650,6 @@ actor SuggestionAssistant: ProactiveAssistant {
       return .suppressedPresenting
     }
 
-    recentSuggestions = SuggestionDeduplication.remembering(
-      .init(text: suggestion.suggestion, category: suggestion.category),
-      in: recentSuggestions,
-      frequencyLevel: cachedFrequencyLevel
-    )
-
     await deliver(
       suggestion,
       result: result,
@@ -715,13 +709,35 @@ actor SuggestionAssistant: ProactiveAssistant {
         message: suggestion.suggestion,
         assistantId: identifier,
         context: context,
-        suggestionTelemetryIdentity: telemetryIdentity
-      )
-      if NegativeFeedbackRemediationFeature.isEnabled, let taskId {
-        var ledger = SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).load()
-        SuggestionTaskNudgePolicy.recordingDelivery(taskId: taskId, in: &ledger, now: Date())
-        SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).save(ledger)
-      }
+        suggestionTelemetryIdentity: telemetryIdentity,
+        onPresented: { [weak self] in
+          Task {
+            await self?.recordPresentedSuggestion(
+              suggestion,
+              taskId: taskId,
+              ownerID: ownerID)
+          }
+        })
+    }
+  }
+
+  /// Advances dedup and remediation state only after a real presentation receipt.
+  /// Queue admission is intentionally insufficient: snooze, screen sharing, or an
+  /// owner change can still reject the card before it reaches the user.
+  private func recordPresentedSuggestion(
+    _ suggestion: ExtractedSuggestion,
+    taskId: String?,
+    ownerID: String
+  ) async {
+    recentSuggestions = SuggestionDeduplication.remembering(
+      .init(text: suggestion.suggestion, category: suggestion.category),
+      in: recentSuggestions,
+      frequencyLevel: cachedFrequencyLevel)
+    let remediationEnabled = await MainActor.run { NegativeFeedbackRemediationFeature.isEnabled }
+    if remediationEnabled, let taskId {
+      var ledger = SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).load()
+      SuggestionTaskNudgePolicy.recordingDelivery(taskId: taskId, in: &ledger, now: Date())
+      SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).save(ledger)
     }
   }
 

@@ -301,9 +301,13 @@ struct FloatingBarNotification: Identifiable, Equatable {
   /// acts on it or dismisses it. Reserved for cards whose whole point is an
   /// explicit decision (e.g. the meeting summary share card).
   let isPersistent: Bool
+  /// Proactive cards must revalidate snooze and presence when they leave the queue.
+  let isProactive: Bool
+  /// Whether speech was eligible before live presence is applied at presentation.
+  let speechEligible: Bool
   /// The card is spoken, so the notch carries it and the bar never grows into the panel.
   /// See `FloatingBarNotchOnlyCardPolicy`.
-  let staysInNotch: Bool
+  var staysInNotch: Bool
 
   init(
     ownerID: String,
@@ -319,6 +323,8 @@ struct FloatingBarNotification: Identifiable, Equatable {
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
     isPersistent: Bool = false,
+    isProactive: Bool = false,
+    speechEligible: Bool = false,
     staysInNotch: Bool = false
   ) {
     self.ownerID = ownerID
@@ -337,6 +343,8 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.insightDeliveryID = insightDeliveryID
     self.screenshotData = screenshotData
     self.isPersistent = isPersistent
+    self.isProactive = isProactive
+    self.speechEligible = speechEligible
     self.staysInNotch = staysInNotch
   }
 

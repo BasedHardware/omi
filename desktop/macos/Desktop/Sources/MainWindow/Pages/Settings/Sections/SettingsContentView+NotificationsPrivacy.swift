@@ -1,3 +1,4 @@
+import Combine
 import OmiTheme
 import Sparkle
 import SwiftUI
@@ -245,6 +246,12 @@ extension SettingsContentView {
     .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
       syncNotificationTogglesFromAssistantSettings()
     }
+    .onReceive(NotificationCenter.default.publisher(for: .proactiveNotificationSnoozeDidChange)) { _ in
+      refreshNotificationSnoozeState()
+    }
+    .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+      refreshNotificationSnoozeState()
+    }
   }
 
   /// Re-reads the assistant notification toggles from their stores. A sync that agrees with the
@@ -443,6 +450,14 @@ extension SettingsContentView {
 
   func applyNotificationSnooze(_ duration: TimeInterval) {
     NotificationService.snoozeNotifications(for: duration)
-    notificationsSnoozedUntil = NotificationService.currentSnoozeExpiry()
+    refreshNotificationSnoozeState()
+  }
+
+  func refreshNotificationSnoozeState(now: Date = Date()) {
+    guard let expiry = NotificationService.currentSnoozeExpiry(), expiry > now else {
+      notificationsSnoozedUntil = nil
+      return
+    }
+    notificationsSnoozedUntil = expiry
   }
 }

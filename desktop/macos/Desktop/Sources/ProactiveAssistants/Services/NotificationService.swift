@@ -2,12 +2,33 @@ import AppKit
 import Foundation
 @preconcurrency import UserNotifications
 
+extension Notification.Name {
+  static let proactiveNotificationSnoozeDidChange = Notification.Name(
+    "proactiveNotificationSnoozeDidChange")
+}
+
 /// Sendable wrapper for a `UNUserNotificationCenter` completion handler so the
 /// non-Sendable closure can be captured across an isolation hop (e.g. into a
 /// `@MainActor` `Task`) without a data-race diagnostic.
 private struct UNCompletionHandlerBox: @unchecked Sendable {
   let value: (UNNotificationPresentationOptions) -> Void
   init(_ value: @escaping (UNNotificationPresentationOptions) -> Void) { self.value = value }
+}
+
+/// Collapses floating-bar and system-banner acknowledgements into one delivery receipt.
+/// A notification can reach both surfaces, but producer state must advance only once.
+@MainActor
+final class NotificationPresentationReceipt {
+  private var wasPresented = false
+  private let onPresented: (() -> Void)?
+
+  init(onPresented: (() -> Void)?) { self.onPresented = onPresented }
+
+  func record() {
+    guard !wasPresented else { return }
+    wasPresented = true
+    onPresented?()
+  }
 }
 
 /// Sound options for notifications
@@ -433,6 +454,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       jitFeedbackContext: metadata.jitFeedbackContext,
       jitAmbientFeedbackContext: metadata.jitAmbientFeedbackContext,
       isPersistent: true,
+      isProactive: true,
       authorizationSnapshot: metadata.authorizationSnapshot)
     return true
   }
@@ -647,30 +669,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
   }
 
-  /// Send a notification via the floating bar, and optionally as a native macOS system banner.
-  ///
-  /// `deliverSystemBanner` defaults to `false` because proactive AI notifications are
-  /// floating-bar cards by default — a bare top-right system banner with no conversation
-  /// context was previously reported as confusing. Functional notifications (screen-recording
-  /// permission prompts with a repair action) must pass `deliverSystemBanner: true` so they
-  /// still surface as a system banner — they either have no floating-bar equivalent
-  /// or must reach the user even when the floating bar is hidden/snoozed.
-  ///
-  /// Only the Notifications master toggle (and frequency gate) decide whether a
-  /// notification is owed. Disabling the Ask Omi bar (`askOmiBarEnabled`) hides the
-  /// persistent bar UI only: delivery still uses the existing temp-show path, which
-  /// pops the card and re-hides afterwards. `FloatingBarNotificationPreviewPolicy`
-  /// forces a system banner once the user has explicitly muted in-bar previews
-  /// (`ShortcutSettings.floatingBarNotificationPreviewsEnabled == false`) while the
-  /// Floating Bar is still enabled, so that opt-out is never fully silenced (#6765).
-  /// Previews muted *and* the bar disabled still temp-shows the card rather than
-  /// going silent or falling back to a contentless banner. That temp-show is a
-  /// proactive-notification surface only: a caller passing `deliverSystemBanner: true`
-  /// while the bar is disabled keeps its banner instead, because a card on a bar the
-  /// user turned off auto-dismisses in seconds and cannot carry a functional notice
-  /// (the screen-recording repair prompt is delivered once per broken-capture episode).
-  /// `insightDeliveryID`, when present, is an opaque Advice correlation key. It records only
-  /// bounded delivery outcomes and never carries notification text or window context.
   /// When proactive notifications are silenced until, or `nil` when they are not.
   ///
   /// Deliberately distinct from `floatingBar_snoozedUntil`. That key hides the *bar* and
@@ -727,6 +725,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   ) {
     let until = snoozeUntilTomorrowExpiry(now: now, calendar: calendar)
     defaults.set(until, forKey: notificationsSnoozedUntilDefaultsKey)
+    NotificationCenter.default.post(name: .proactiveNotificationSnoozeDidChange, object: nil)
     log("NotificationService: proactive notifications silenced until \(until)")
   }
 
@@ -752,11 +751,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     defaults: UserDefaults = .standard
   ) {
     defaults.set(now.addingTimeInterval(duration), forKey: notificationsSnoozedUntilDefaultsKey)
+    NotificationCenter.default.post(name: .proactiveNotificationSnoozeDidChange, object: nil)
     log("NotificationService: proactive notifications silenced for \(Int(duration / 60))m")
   }
 
   nonisolated static func endNotificationSnooze(defaults: UserDefaults = .standard) {
     defaults.removeObject(forKey: notificationsSnoozedUntilDefaultsKey)
+    NotificationCenter.default.post(name: .proactiveNotificationSnoozeDidChange, object: nil)
     log("NotificationService: proactive notification snooze cleared")
   }
 
@@ -823,6 +824,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     return PresenceSignals(screenShared: shared, onCall: onCall)
   }
 
+  /// Send through the floating bar and, when requested, the native banner.
+  ///
+  /// Proactive deliveries are rechecked for snooze and live presence at the actual
+  /// presentation boundary. `onPresented` therefore means the user-visible surface
+  /// really presented, not merely that a card entered the queue.
   func sendNotification(
     ownerID: String,
     title: String,
@@ -840,7 +846,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     deliveryMode: NotificationDeliveryMode = .standard,
     respectFrequency: Bool = true,
     isPersistent: Bool = false,
-    authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    onPresented: (() -> Void)? = nil
   ) {
     guard !ownerID.isEmpty,
       let authorizationSnapshot = suppliedAuthorizationSnapshot
@@ -985,7 +992,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
-    let presence = Self.currentPresence()
+    let presence =
+      respectFrequency
+      ? Self.currentPresence()
+      : PresenceSignals(screenShared: false, onCall: false)
     if Self.shouldSuppressForPresence(respectFrequency: respectFrequency, presence: presence) {
       log("NotificationService: suppressing \(assistantId) notification while the screen is shared")
       recordInsightDeliveryOutcome(
@@ -1009,12 +1019,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // `respectFrequency` is the existing proactive/functional split: assistants leave it
     // true; functional notices (onboarding test, screen-repair prompts) pass false and
     // must never be spoken.
-    let speech = NotificationSpeechOnDelivery(
-      message: message,
-      isProactive: respectFrequency,
-      othersCanHear: Self.shouldWithholdSpeechForPresence(presence: presence))
+    let speech = NotificationSpeechOnDelivery(message: message, isProactive: respectFrequency)
+    let presentationReceipt = NotificationPresentationReceipt(onPresented: onPresented)
     let recordPresentation = { [weak self] in
       speech.notificationWasPresented()
+      presentationReceipt.record()
       if respectFrequency {
         self?.recordProactiveNotificationPresented(
           assistantId: assistantId,
@@ -1053,6 +1062,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         insightDeliveryID: insightDeliveryID,
         screenshotData: screenshotData,
         isPersistent: isPersistent,
+        isProactive: respectFrequency,
         spokenAloud: speech.willSpeak,
         onPresented: recordPresentation
       )
@@ -1147,6 +1157,29 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         // LaunchServices state. A user can repair notification access from
         // Settings; background delivery simply remains unavailable.
         return
+      }
+
+      if respectFrequency {
+        if Self.shouldSuppressForSnooze(
+          respectFrequency: true,
+          snoozedUntil: Self.currentSnoozeExpiry(),
+          now: Date())
+        {
+          log("NotificationService: dropping system notification because snooze became active")
+          self?.recordInsightDeliveryOutcome(
+            floatingBarDelivered ? nil : insightDeliveryID,
+            outcome: .suppressed,
+            reason: .userSnoozed)
+          return
+        }
+        if Self.shouldSuppressForPresence(respectFrequency: true, presence: Self.currentPresence()) {
+          log("NotificationService: dropping system notification because screen sharing became active")
+          self?.recordInsightDeliveryOutcome(
+            floatingBarDelivered ? nil : insightDeliveryID,
+            outcome: .suppressed,
+            reason: .presenceActive)
+          return
+        }
       }
 
       self?.deliverNotification(
@@ -1327,10 +1360,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let deliverSystemBanner = FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
       previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled, deliverSystemBanner: false)
 
-    let speech = NotificationSpeechOnDelivery(
-      message: message,
-      isProactive: true,
-      othersCanHear: Self.shouldWithholdSpeechForPresence(presence: presence))
+    let speech = NotificationSpeechOnDelivery(message: message, isProactive: true)
     let recordPresented = { [weak self] in
       speech.notificationWasPresented()
       self?.recordProactiveNotificationPresented(
@@ -1351,6 +1381,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         jitFeedbackContext: jitFeedbackContext,
         jitAmbientFeedbackContext: jitAmbientFeedbackContext,
         isPersistent: jitFeedbackContext != nil || jitAmbientFeedbackContext != nil,
+        isProactive: true,
         spokenAloud: speech.willSpeak,
         authorizationSnapshot: authorizationSnapshot,
         onPresented: recordPresented,
@@ -1541,6 +1572,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       sound: sound,
       kind: kind,
       action: action,
+      isProactive: true,
       authorizationSnapshot: authorizationSnapshot,
       onPresented: recordPresented,
       onDropped: onDropped)

@@ -59,6 +59,17 @@ final class PresenceAwareNotificationSuppressionTests: XCTestCase {
         respectFrequency: false, presence: presence(shared: false, onCall: false)))
   }
 
+  @MainActor
+  func testDualSurfacePresentationAdvancesProducerStateOnlyOnce() {
+    var presentationCount = 0
+    let receipt = NotificationPresentationReceipt { presentationCount += 1 }
+
+    receipt.record()
+    receipt.record()
+
+    XCTAssertEqual(presentationCount, 1)
+  }
+
   // MARK: - Speech has no private surface
 
   /// A banner on a call is seen by the user alone; the same text read aloud is heard by

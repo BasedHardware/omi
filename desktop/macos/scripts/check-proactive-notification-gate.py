@@ -77,6 +77,11 @@ def mask_comments_and_strings(source: str) -> str:
             j = n if j == -1 else j + 2
             out.append("".join(c if c == "\n" else " " for c in source[i:j]))
             i = j
+        elif source.startswith('"""', i):
+            j = source.find('"""', i + 3)
+            j = n if j == -1 else j + 3
+            out.append("".join(c if c == "\n" else " " for c in source[i:j]))
+            i = j
         elif ch == '"':
             j = i + 1
             while j < n:
@@ -117,7 +122,9 @@ def violations(root: pathlib.Path):
             continue
         if "/Tests/" in f"/{rel}" or rel.startswith("Tests/"):
             continue
-        masked = mask_comments_and_strings(path.read_text(encoding="utf-8", errors="replace"))
+        masked = mask_comments_and_strings(
+            path.read_text(encoding="utf-8", errors="replace")
+        )
         for match in CALL.finditer(masked):
             line = masked.count("\n", 0, match.start()) + 1
             found.append((rel, line))
@@ -125,7 +132,9 @@ def violations(root: pathlib.Path):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "--root",
         default="desktop/macos/Desktop/Sources",
@@ -135,7 +144,10 @@ def main() -> int:
 
     root = pathlib.Path(args.root)
     if not root.is_dir():
-        print(f"check-proactive-notification-gate: no such directory: {root}", file=sys.stderr)
+        print(
+            f"check-proactive-notification-gate: no such directory: {root}",
+            file=sys.stderr,
+        )
         return 2
 
     stale = stale_allowlist_entries(root)
@@ -162,7 +174,10 @@ def main() -> int:
         file=sys.stderr,
     )
     for rel, line in found:
-        print(f"  {rel}:{line}: calls {MANAGER}.shared.{PRIMITIVE} directly", file=sys.stderr)
+        print(
+            f"  {rel}:{line}: calls {MANAGER}.shared.{PRIMITIVE} directly",
+            file=sys.stderr,
+        )
     print(
         "\nIf the notification is genuinely functional (billing, permissions, onboarding) and "
         "must reach a user who silenced suggestions, add it to ALLOWLIST in this script with "

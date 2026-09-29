@@ -3749,6 +3749,7 @@ class FloatingControlBarManager {
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
     isPersistent: Bool = false,
+    isProactive: Bool = false,
     spokenAloud: Bool = false,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onPresented: (() -> Void)? = nil,
@@ -3782,6 +3783,8 @@ class FloatingControlBarManager {
       insightDeliveryID: insightDeliveryID,
       screenshotData: screenshotData,
       isPersistent: persists,
+      isProactive: isProactive,
+      speechEligible: spokenAloud,
       staysInNotch: FloatingBarNotchOnlyCardPolicy.staysInNotch(
         spokenAloud: spokenAloud,
         hasAction: action != nil,
@@ -4777,8 +4780,10 @@ class FloatingControlBarManager {
   }
 
   @discardableResult
-  private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) -> Bool
+  private func presentNotification(_ queuedNotification: FloatingBarNotification, in window: FloatingControlBarWindow)
+    -> Bool
   {
+    var notification = queuedNotification
     guard
       let authorizationSnapshot = notificationAuthorizationSnapshots[notification.id],
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
@@ -4789,6 +4794,32 @@ class FloatingControlBarManager {
       log("FloatingControlBarManager: refusing to present stale-owner notification")
       Self.recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: .staleOwner)
       return false
+    }
+    if notification.isProactive {
+      if NotificationService.shouldSuppressForSnooze(
+        respectFrequency: true,
+        snoozedUntil: NotificationService.currentSnoozeExpiry(),
+        now: Date())
+      {
+        notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
+        notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
+        log("FloatingControlBarManager: dropping proactive notification because snooze became active")
+        Self.recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: .userSnoozed)
+        return false
+      }
+      let presence = NotificationService.currentPresence()
+      if NotificationService.shouldSuppressForPresence(respectFrequency: true, presence: presence) {
+        notificationPresentationCallbacks.removeValue(forKey: notification.id)?.onDropped()
+        notificationAuthorizationSnapshots.removeValue(forKey: notification.id)
+        log("FloatingControlBarManager: dropping proactive notification because screen sharing became active")
+        Self.recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: .presenceActive)
+        return false
+      }
+      notification.staysInNotch = FloatingBarNotchOnlyCardPolicy.staysInNotch(
+        spokenAloud: notification.speechEligible
+          && !NotificationService.shouldWithholdSpeechForPresence(presence: presence),
+        hasAction: notification.action != nil,
+        isPersistent: notification.isPersistent)
     }
     guard
       NotificationService.jitFeedbackGenerationsMatch(
@@ -4830,6 +4861,7 @@ class FloatingControlBarManager {
           .delivered, identity: suggestionIdentity)
       }
       Self.recordAdvicePresentation(notification)
+      DesktopUsageDailyReporter.shared.recordProactiveCardShown()
       AnalyticsManager.shared.notificationSent(
         notificationId: notification.id.uuidString,
         title: notification.title,
