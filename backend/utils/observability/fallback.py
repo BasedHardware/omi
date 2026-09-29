@@ -45,6 +45,8 @@ ALLOWED_REASONS = frozenset(
         'byok',
         'malformed_doc',
         'capacity_full',
+        'first_text_deadline',
+        'empty_streak',
         'allocation_rejected',
         'private_tool_output_in_context',
         'not_authorized',

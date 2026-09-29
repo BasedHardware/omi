@@ -19,6 +19,7 @@ from utils.stt.live_metrics import (
     WINDOW_PRESSURE_REFUSAL,
     WINDOW_SESSION_OUTCOME,
 )
+from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt.live_session import (
     WINDOW_VAD_CONTINUE_THRESHOLD,
     WINDOW_VAD_HANGOVER_MS,
@@ -43,6 +44,8 @@ def runtime(monkeypatch):
     # Pin that unit here so they test mechanics, not the shipped default, which
     # test_default_pace_waits_for_fifteen_seconds_of_speech pins on its own.
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '12')
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_EMPTY_STREAK', '4')
     monkeypatch.setenv('SONIOX_API_KEY', 'test')
     monkeypatch.setenv('MODULATE_API_KEY', 'test')
     monkeypatch.setenv('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://embedding.invalid')
@@ -410,7 +413,7 @@ def receiver():
 @pytest.mark.asyncio
 async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypatch):
     before_accepted = WINDOW_ADMISSION.labels(outcome='accepted')._value.get()
-    before_text = WINDOW_SESSION_OUTCOME.labels(outcome='text')._value.get()
+    before_text = WINDOW_SESSION_OUTCOME.labels(outcome='text', reason='none')._value.get()
     before_first = WINDOW_FIRST_TEXT._sum.get()
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
@@ -443,7 +446,7 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert session.consume_speech_ms_delta() == 0
     assert window.admission.active == 0
     assert WINDOW_ADMISSION.labels(outcome='accepted')._value.get() == before_accepted + 1
-    assert WINDOW_SESSION_OUTCOME.labels(outcome='text')._value.get() == before_text + 1
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='text', reason='none')._value.get() == before_text + 1
     assert WINDOW_FIRST_TEXT._sum.get() > before_first
 
 
@@ -451,19 +454,19 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
 async def test_speech_with_empty_tdt_output_counts_no_text(monkeypatch):
     monkeypatch.setattr(window, 'get_stt_client', lambda: Client(data={'text': ''}))
     before_accepted = WINDOW_ADMISSION.labels(outcome='accepted')._value.get()
-    before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get()
+    before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='none')._value.get()
     sock = await LiveChainSession(receiver()).connect(16000)
     assert sock.send(b'\x01\x00' * 16000)
     await sock.drain_and_close()
     assert WINDOW_ADMISSION.labels(outcome='accepted')._value.get() == before_accepted + 1
-    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get() == before + 1
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='none')._value.get() == before + 1
 
 
 @pytest.mark.asyncio
 async def test_session_outcome_is_recorded_before_health_close_callback():
     sock = window.connect_window(lambda _: None, 16000)
     sock._first_speech_at = window.time.monotonic()
-    before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get()
+    before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='none')._value.get()
 
     def fail_health_close():
         raise RuntimeError('health callback failed')
@@ -471,7 +474,7 @@ async def test_session_outcome_is_recorded_before_health_close_callback():
     sock._health_close = fail_health_close
     sock._on_pump_done(SimpleNamespace(cancelled=lambda: False))
 
-    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get() == before + 1
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='none')._value.get() == before + 1
     assert window.admission.active == 0
 
     # The real pump task is still running; close it through the normal async
@@ -819,6 +822,125 @@ async def test_real_receiver_initializes_window_and_survives_post_failure(monkey
     assert base.emitted[0]['speaker_id_scope']
     assert window.admission.active == 0
     await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('reason', ['first_text_deadline', 'empty_streak'])
+async def test_no_first_text_bounds_fail_over_once_and_replay_all_capture(monkeypatch, reason):
+    monkeypatch.setenv(
+        'PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '0.05' if reason == 'first_text_deadline' else '30'
+    )
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_EMPTY_STREAK', '2')
+    if reason == 'empty_streak':
+        monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    client = Client(data={'text': ''})
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    base = receiver()
+    host = base.host
+    host.request.sample_rate = 16000
+    host.request.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    host.state.stt_terminal_failure = False
+    host.client_device_context = SimpleNamespace(platform='ios')
+    host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
+    host.spawn = lambda coro, **kw: coro.close()
+    actual = ListenReceiver(host, [], {})
+    monkeypatch.setattr(actual, '_run_on_listen_loop', lambda callback, segments: callback(segments))
+    replayed = []
+    callbacks = []
+
+    async def tail(callback, *args, **kwargs):
+        callbacks.append(callback)
+        return SimpleNamespace(
+            is_connection_dead=False,
+            send=lambda data: replayed.append(data) or True,
+            finalize=lambda: None,
+            finish=lambda: None,
+        )
+
+    monkeypatch.setattr(st, 'process_audio_soniox', tail)
+    before_outcome = WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason=reason)._value.get()
+    before_fallback = OMI_FALLBACK_TOTAL.labels(
+        component='stt_live_session', from_mode='parakeet', to_mode='soniox', reason=reason, outcome='recovered'
+    )._value.get()
+    assert await actual.initialize_stt()
+    previous = actual.stt_socket
+    first = b'\x01\x00' * 16000 * (6 if reason == 'empty_streak' else 1)
+    chunks = [first]
+    actual.capture_timeline.accept(first, window.time.time(), window.time.monotonic())
+    assert previous.send(first, start_sample=0)
+    actual._window_ring().append(first, 0)
+    if reason == 'empty_streak':
+        await _wait_requests(client, 1)
+        for _ in range(100):
+            if previous.raw._empty_streak:
+                break
+            await _REAL_SLEEP(0)
+        second = b'\x02\x00' * 16000 * 6
+        chunks.append(second)
+        actual.capture_timeline.accept(second, window.time.time(), window.time.monotonic())
+        assert previous.send(second, start_sample=len(first) // 2)
+        actual._window_ring().append(second, len(first) // 2)
+    for _ in range(500):
+        if previous.is_connection_dead:
+            break
+        await _REAL_SLEEP(0.001)
+    assert previous.is_connection_dead
+    assert previous.typed_death_reason == reason
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert base.emitted == []
+    assert await actual._failover_stt_socket()
+    assert await actual._failover_stt_socket()  # already serving; no second replacement
+    assert actual._stt_failed_providers == {'parakeet'}
+    assert host.stt_service == st.STTService.soniox
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == b''.join(chunks)
+    assert actual._pending_live_failover.reason == reason
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason=reason)._value.get() == before_outcome + 1
+    callbacks[0]([{'speaker': 'speaker_0', 'text': 'replacement', 'start': 0, 'end': 1}])
+    assert (
+        OMI_FALLBACK_TOTAL.labels(
+            component='stt_live_session', from_mode='parakeet', to_mode='soniox', reason=reason, outcome='recovered'
+        )._value.get()
+        == before_fallback + 1
+    )
+    assert [segment['text'] for segment in base.emitted] == ['replacement']
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_first_text_disarms_deadline_and_empty_streak(monkeypatch):
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '0.2')
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_EMPTY_STREAK', '1')
+    posted = []
+    client = SeqClient([{'segments': [{'text': 'Done.', 'start': 0.0, 'end': 4.0}]}, {'text': ''}])
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(posted.extend, 16000)
+    sock.mark_speech()
+    assert sock.send(b'\x01\x00' * 16000 * 6)
+    await _wait_requests(client, 1)
+    for _ in range(100):
+        if posted:
+            break
+        await _REAL_SLEEP(0)
+    assert [segment['text'] for segment in posted] == ['Done.']
+    assert sock._first_text_timer is None
+    await _REAL_SLEEP(0.22)
+    assert not sock.is_connection_dead
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_empty_post_without_speech_does_not_advance_streak(monkeypatch):
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_EMPTY_STREAK', '1')
+    monkeypatch.setattr(window, 'get_stt_client', lambda: Client(data={'text': ''}))
+    sock = window.connect_window(lambda _: None, 16000)
+    pcm = bytes(16000 * 2)
+    await sock._run_job(window._WindowJob(pcm, 0.0, 1.0, 0, len(pcm), False, False))
+    assert sock._empty_streak == 0
+    assert not sock.is_connection_dead
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
 
 
 @pytest.mark.asyncio
