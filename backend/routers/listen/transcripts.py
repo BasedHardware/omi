@@ -620,7 +620,23 @@ class TranscriptProcessor:
             ):
                 return
             page = raw_segments[max(0, end - config.max_segments) : end]
-            segments = [TranscriptSegment(**raw) for raw in page if isinstance(raw, dict) and raw.get('id')]
+            policy = 'viewed_v1' if current.gemini_enabled else 'legacy'
+            segments = [
+                TranscriptSegment(**raw)
+                for raw in page
+                if isinstance(raw, dict)
+                and raw.get('id')
+                and not conversations_db.translation_materialization_is_current(
+                    self.host.request.uid,
+                    conversation,
+                    raw,
+                    coordinator.target_language,
+                    policy,
+                    coordinator.source_language,
+                )
+            ]
+            if not segments:
+                continue
             await coordinator.observe(segments, [], conversation_id)
             pending = coordinator._batch_task  # type: ignore[reportPrivateUsage]
             if pending is not None:
