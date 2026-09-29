@@ -1363,6 +1363,10 @@ def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = 
     """
     Generate a fresh account link if the previous one expired
     """
+    user_account_id = get_stripe_connect_account_id(uid)
+    if not user_account_id or user_account_id != account_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     try:
         account = refresh_connect_account_link(account_id)
         return account
