@@ -886,7 +886,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
     # Backward compatibility: Set app_home_url from first auth step if not provided
-    if 'external_integration' in data:
+    if isinstance(data.get('external_integration'), dict):
         backfill_app_home_url_from_auth_steps(data['external_integration'])
 
     try:
@@ -1113,8 +1113,8 @@ def update_app(
         data['image'] = img_url
     data['updated_at'] = datetime.now(timezone.utc)
 
-    # Backward compatibility: Set app_home_url from first auth step if not provided
-    if 'external_integration' in data:
+    # Backfill app_home_url from auth steps; explicit null clears the integration, non-dicts fail validation.
+    if isinstance(data.get('external_integration'), dict):
         backfill_app_home_url_from_auth_steps(data['external_integration'])
         _set_instructions_url_flag(data['external_integration'])
 
