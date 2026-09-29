@@ -85,6 +85,7 @@ class TranslationService:
         source_language: str = '',
         *,
         mode: TranslationMode = TranslationMode.sentence,
+        profile: TranslationProfile | None = None,
     ) -> list[TranslationOutcome]:
         canonical_units = [
             TranslationUnit(ordinal=ordinal, unit_id=unit_id, text=text)
@@ -95,6 +96,7 @@ class TranslationService:
             target_language=dest_language,
             source_language=source_language,
             mode=mode,
+            profile=profile,
         )
 
     def translate_units_batch(
