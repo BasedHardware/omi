@@ -267,7 +267,9 @@ jobs:
           guardrails_required=success
           if [ "$FULL_CI" != true ]; then
             guardrails_required=skipped
-            echo 'deferred: fork PR — a maintainer adds label ci:full, then Re-run all jobs' >> "$GITHUB_STEP_SUMMARY"
+            notice='fork PR — a maintainer adds label ci:full, then Re-run all jobs'
+            echo "::notice title=Heavy CI deferred::$notice"
+            echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ "$GUARDRAILS_RESULT" != "$guardrails_required" ]; then
             echo "FAIL: backend unit guardrails result was '$GUARDRAILS_RESULT' (expected $guardrails_required)" >&2

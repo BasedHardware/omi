@@ -765,8 +765,25 @@ jobs:
           fi
           if [[ "$FULL_CI" != "true" ]]; then
             if [[ "$HAS_GENERATED" == true || "$HAS_DART" == true || "$HAS_JOURNEYS" == true || "$HAS_ANDROID" == true || "$HAS_IOS" == true ]]; then
-              echo 'deferred: fork PR — a maintainer adds label ci:full, then Re-run all jobs' | tee -a "$GITHUB_STEP_SUMMARY" >&2
-              exit 1
+              notice='fork PR — a maintainer adds label ci:full, then Re-run all jobs'
+              echo "::notice title=Heavy CI deferred::$notice"
+              echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"
+              for spec in \
+                "$HAS_GENERATED:$GENERATED_FILES_RESULT" \
+                "$HAS_DART:$ANALYZE_AND_TEST_RESULT" \
+                "$HAS_DART:$DART_TIMEZONE_RESULT" \
+                "$HAS_JOURNEYS:$JOURNEYS_RESULT" \
+                "$HAS_ANDROID:$ANDROID_COMPILE_RESULT" \
+                "$HAS_ANDROID:$ANDROID_UNIT_RESULT" \
+                "$HAS_IOS:$IOS_COMPILE_RESULT"; do
+                required="${spec%%:*}"
+                result="${spec#*:}"
+                if [[ "$required" == true && "$result" != skipped ]]; then
+                  echo "A deferred mobile check must be skipped, got: $result" >&2
+                  exit 1
+                fi
+              done
+              exit 0
             fi
             echo 'Mobile Release Eligibility: no mobile heavy checks selected' | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
