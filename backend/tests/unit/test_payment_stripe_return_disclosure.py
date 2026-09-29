@@ -29,9 +29,9 @@ def test_stripe_return_source_does_not_invoke_is_onboarding_complete():
     end = source.index("\ndef ", start + 1)
     endpoint_code = source[start:end]
 
-    assert "is_onboarding_complete(" not in endpoint_code, (
-        "stripe_return must not invoke is_onboarding_complete to avoid disclosing onboarding status to unauthenticated callers."
-    )
+    assert (
+        "is_onboarding_complete(" not in endpoint_code
+    ), "stripe_return must not invoke is_onboarding_complete to avoid disclosing onboarding status to unauthenticated callers."
 
 
 def test_stripe_return_does_not_leak_onboarding_status_in_html(monkeypatch, client):
