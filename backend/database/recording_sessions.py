@@ -77,12 +77,7 @@ def _validate_id(value: Any, name: str) -> str:
 def _session_ref(client: Any, uid: str, recording_session_id: str) -> Any:
     valid_uid = _validate_id(uid, 'uid')
     valid_sid = _validate_id(recording_session_id, 'recording_session_id')
-    return (
-        client.collection('users')
-        .document(valid_uid)
-        .collection(RECORDING_SESSIONS_COLLECTION)
-        .document(valid_sid)
-    )
+    return client.collection('users').document(valid_uid).collection(RECORDING_SESSIONS_COLLECTION).document(valid_sid)
 
 
 def _binding(data: dict[str, Any], recording_session_id: str, *, mapping_conflict: bool) -> RecordingSessionBinding:
@@ -319,9 +314,7 @@ def tombstone_and_delete_empty_conversation(
     v_sid = _validate_id(recording_session_id, 'recording_session_id') if recording_session_id is not None else None
 
     client = _client(firestore_client)
-    conversation_ref = (
-        client.collection('users').document(v_uid).collection(CONVERSATIONS_COLLECTION).document(v_cid)
-    )
+    conversation_ref = client.collection('users').document(v_uid).collection(CONVERSATIONS_COLLECTION).document(v_cid)
     session_ref = _session_ref(client, v_uid, v_sid) if v_sid else None
 
     @firestore.transactional
@@ -491,8 +484,8 @@ def record_lifecycle_event(
         v_cid = _validate_id(conversation_id, 'conversation_id')
     except ValueError:
         return {
-            'recording_session_id': str(recording_session_id) if recording_session_id is not None else '',
-            'conversation_id': str(conversation_id) if conversation_id is not None else '',
+            'recording_session_id': str(recording_session_id or ''),
+            'conversation_id': str(conversation_id or ''),
             'lifecycle_version': LIFECYCLE_ENVELOPE_VERSION,
             'lifecycle_phase': phase,
             'lifecycle_sequence': 0,
