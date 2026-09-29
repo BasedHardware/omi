@@ -6,7 +6,7 @@ unhandled ValidationError (HTTP 500) crashes when apps contain legacy or corrupt
 
 import ast
 from pathlib import Path
-import pytest
+
 from models.app import App
 
 
