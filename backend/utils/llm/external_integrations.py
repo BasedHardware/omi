@@ -287,7 +287,7 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     people: List[Person] = []
     if all_person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     conversation_history = conversations_to_string(memories, people=people)
 
@@ -375,7 +375,7 @@ def generate_comprehensive_daily_summary(
     people: List[Person] = []
     if all_person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     conversation_history = conversations_to_string(conversations, people=people)
 

@@ -37,7 +37,7 @@ def trends_extractor(uid: str, transcript_segments: List[TranscriptSegment], per
     people: list[Person] = []
     if person_ids:
         people_data: list[PersonRecord] = users_db.get_people_by_ids(uid, list(set(person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     raw_user_name = cast(object, get_user_name(uid, use_default=False))
     user_name: Optional[str] = raw_user_name if isinstance(raw_user_name, str) else None
