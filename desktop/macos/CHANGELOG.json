@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.422",
+      "date": "2026-09-29",
+      "changes": [
+        "Fixed \"Summarize with an app\" being unreachable on a conversation that has no summary yet"
+      ]
+    },
+    {
       "version": "0.12.421",
       "date": "2026-09-29",
       "changes": [
