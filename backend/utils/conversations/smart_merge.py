@@ -3,7 +3,8 @@
 Live capture splits on two minutes of silence, so one evening can become seven
 rows. The durable finalizer calls ``smart_merge_step`` after it owns the
 fanout claim and before any derived effect of the new conversation (N) runs.
-Modes (``CONVERSATION_SMART_MERGE_MODE``, default ``off``):
+Modes (``CONVERSATION_SMART_MERGE_MODE``; unset or blank means ``merge``, an
+unrecognized value means ``off``):
 
 - ``off``: no reads, no model call, no writes.
 - ``shadow``: pick the candidate predecessor (P), ask Jev, store the decision
