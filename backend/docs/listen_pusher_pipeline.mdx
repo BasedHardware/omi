@@ -541,6 +541,11 @@ A partial replay retains its unaccepted tail and new audio
 for the next vendor leg while preserving capture sample offsets. Window POSTs mark their
 request so `parakeet_prerecorded_requests_total` excludes live canary errors
 while covering the batch path used by sync backfill.
+Before the first window transcript, 12 seconds after first VAD speech or four
+consecutive empty speech-containing POSTs ends the Parakeet leg. The death path
+replays all untranscribed capture from the 90-second ring to the next vendor;
+the failed provider is excluded for that session. After first text, window
+formation and emission continue without this startup bound.
 
 The same authoritative attempt emits fail-open PostHog product events:
 `Transcript Started` at first nontrivial audio and exactly one of `Transcript

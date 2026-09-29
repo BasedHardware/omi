@@ -23,6 +23,12 @@ overlay:
           value: '5'
         PARAKEET_WINDOW_MAX_SESSIONS:
           value: '8'
+        PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
+          value: '12'
+          category: reliability
+        PARAKEET_WINDOW_MAX_EMPTY_STREAK:
+          value: '4'
+          category: reliability
         PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
           value: '3'
         STT_SERVICE_MODELS:
