@@ -167,9 +167,13 @@ final auditPendant = BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi
 /// Mirrors HomePage's layout: the header, the Home | Tasks switcher, Home, and the floating
 /// Ask Omi row. [recaps] feeds the Daily Recaps row (none by default).
 class HomeFrame extends StatelessWidget {
-  const HomeFrame({super.key, this.recaps = _noRecaps, this.tasks});
+  const HomeFrame({super.key, this.recaps = _noRecaps, this.tasks, this.pendingSync});
 
   final RecentRecapsLoader recaps;
+
+  /// Recordings waiting to sync or transcribe: shows the Cloud button with that count as a badge,
+  /// as HeaderSyncButton does. Null leaves Cloud out (no device paired, nothing waiting).
+  final int? pendingSync;
 
   /// The Tasks page to show instead of Home (Tasks selected in the switcher; no chat bar there).
   final Widget? tasks;
@@ -188,6 +192,13 @@ class HomeFrame extends StatelessWidget {
             child: BatteryInfoWidget(),
           ),
           Row(children: [
+            if (pendingSync != null)
+              HeaderCircleButton(
+                semanticLabel: 'Sync',
+                onTap: () {},
+                badgeCount: pendingSync!,
+                icon: Icon(Icons.cloud_rounded, size: 18, color: OmiColors.textSecondary),
+              ),
             HeaderCircleButton(
               semanticLabel: 'Search',
               onTap: () {},
@@ -286,7 +297,8 @@ final captureScenarios = <AuditScenario>[
     id: 'home-feed',
     title: 'Home: daily recaps, then every conversation',
     page: _home,
-    state: 'Two recaps; five conversations across today, yesterday and last week; nothing recording',
+    state: 'Two recaps; five conversations across today, yesterday and last week; nothing recording; '
+        'one recording waiting to transcribe (Cloud badge)',
     run: (a) async {
       final now = DateTime.now();
       ServerConversation convo(String id, String title, String emoji, DateTime at, int minutes) => ServerConversation(
@@ -332,7 +344,8 @@ final captureScenarios = <AuditScenario>[
           stats: DayStats(totalConversations: 4, actionItemsCount: 1),
         ),
       ];
-      await a.pump(HomeFrame(recaps: () async => (items: recaps, ok: true)), scaffold: false, providers: [
+      await a
+          .pump(HomeFrame(recaps: () async => (items: recaps, ok: true), pendingSync: 1), scaffold: false, providers: [
         ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider()),
         ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(AuditLive.idle)),
         ChangeNotifierProvider<ConversationProvider>.value(value: conversations),

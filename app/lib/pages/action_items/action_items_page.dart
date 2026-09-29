@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/http/action_items_api_contract.dart';
-import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
@@ -21,16 +20,13 @@ import 'task_categorization.dart';
 import 'task_delete_undo.dart';
 import 'widgets/action_item_form_sheet.dart';
 import 'widgets/action_item_shimmer_widget.dart';
-import 'widgets/goal_form_sheet.dart';
 import 'widgets/task_row_parts.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
 
 class ActionItemsPage extends StatefulWidget {
-  final VoidCallback? onAddGoal;
-
-  const ActionItemsPage({super.key, this.onAddGoal});
+  const ActionItemsPage({super.key});
 
   @override
   State<ActionItemsPage> createState() => _ActionItemsPageState();
@@ -161,29 +157,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   void _showCreateActionItemSheet({DateTime? defaultDueDate}) {
     showActionItemFormSheet(context, defaultDueDate: defaultDueDate);
-  }
-
-  void _showCreateGoalSheet() {
-    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-    showGoalFormSheet(
-      context,
-      onSave: (title, current, target, _) async {
-        final created = await goalsProvider.createGoal(
-          title: title,
-          goalType: 'numeric',
-          targetValue: target,
-          currentValue: current,
-        );
-        if (created != null) {
-          PlatformManager.instance.analytics.goalCreated(
-            goalId: created.id,
-            titleLength: title.length,
-            targetValue: target,
-            source: 'tasks_page',
-          );
-        }
-      },
-    );
   }
 
   Widget _buildFab() {
@@ -531,9 +504,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        const SliverPadding(padding: EdgeInsets.only(top: 12)),
-        SliverToBoxAdapter(child: _buildGoalsRow()),
-        const SliverPadding(padding: EdgeInsets.only(top: 8)),
+        const SliverPadding(padding: EdgeInsets.only(top: 20)),
         SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
       ],
     );
@@ -596,7 +567,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               }, childCount: filteredItems.length),
             ),
         ] else ...[
-          SliverToBoxAdapter(child: _buildGoalsRow()),
           const SliverPadding(padding: EdgeInsets.only(top: 6)),
 
           // Build each category section (skip empty ones, skip overdue — rendered separately below)
@@ -620,60 +590,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         // Bottom padding so the last row scrolls clear of the nav bar
         SliverPadding(padding: EdgeInsets.only(bottom: homeBottomClearance(context))),
       ],
-    );
-  }
-
-  Widget _buildGoalsRow() {
-    return Consumer2<GoalsProvider, ActionItemsProvider>(
-      builder: (context, goalsProvider, actionProvider, child) {
-        if (goalsProvider.isLoading) return const SizedBox.shrink();
-
-        final goals = goalsProvider.goals;
-        if (goals.isEmpty) return const SizedBox.shrink();
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Padding(
-                // The row is as tall as its 44pt add button; 6pt comes off each
-                // side so the header keeps the height it had with a 32pt button,
-                // and keeps it when the button is hidden instead of jumping.
-                padding: const EdgeInsets.fromLTRB(4, 6, 0, 2),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
-                  child: Row(
-                    children: [
-                      Semantics(header: true, child: Text(context.l10n.goals, style: OmiType.headline)),
-                      const Spacer(),
-                      if (!actionProvider.isSelectionMode) ...[
-                        if (goals.length < 4)
-                          OmiIconButton.filled(
-                            label: context.l10n.addGoal,
-                            diameter: 32,
-                            fillColor: OmiColors.surface2,
-                            color: OmiColors.textSecondary,
-                            icon: const Icon(Icons.add),
-                            onPressed: () {
-                              OmiHaptics.light();
-                              PlatformManager.instance.analytics.track('Add Goal Clicked from Tasks Page');
-                              _showCreateGoalSheet();
-                            },
-                          ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              // Goal items
-              ...goals.map((goal) => _buildGoalItem(goal, actionProvider)),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
     );
   }
 
@@ -725,10 +641,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
-                              Text(
-                                title.toUpperCase(),
-                                style: _sectionLabelStyle,
-                              ),
+                              Text(title.toUpperCase(), style: _sectionLabelStyle),
                               if (orderedItems.isNotEmpty) ...[
                                 const SizedBox(width: 8),
                                 _SectionCount(orderedItems.length),
@@ -739,10 +652,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       else
                         Padding(
                           padding: _sectionHeaderLinePadding,
-                          child: Text(
-                            title.toUpperCase(),
-                            style: _sectionLabelStyle,
-                          ),
+                          child: Text(title.toUpperCase(), style: _sectionLabelStyle),
                         ),
                       const Spacer(),
                       if (category != TaskCategory.noDeadline) ...[
@@ -762,10 +672,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                             ),
                           )
                         else if (orderedItems.isNotEmpty)
-                          Padding(
-                            padding: _sectionHeaderLinePadding,
-                            child: _SectionCount(orderedItems.length),
-                          ),
+                          Padding(padding: _sectionHeaderLinePadding, child: _SectionCount(orderedItems.length)),
                       ] else if (provider.showCompletedView && orderedItems.isNotEmpty && _noDeadlineExpanded)
                         _SectionHeaderTapTarget(
                           semanticLabel: context.l10n.tasksClearCompleted,
@@ -819,13 +726,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(_overdueExpanded ? Icons.expand_less : Icons.expand_more,
-                          color: OmiColors.textTertiary, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        context.l10n.tasksOverdue.toUpperCase(),
-                        style: _sectionLabelStyle,
+                      Icon(
+                        _overdueExpanded ? Icons.expand_less : Icons.expand_more,
+                        color: OmiColors.textTertiary,
+                        size: 16,
                       ),
+                      const SizedBox(width: 4),
+                      Text(context.l10n.tasksOverdue.toUpperCase(), style: _sectionLabelStyle),
                       const SizedBox(width: 8),
                       _SectionCount(orderedItems.length),
                     ],
@@ -1272,7 +1179,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   behavior: HitTestBehavior.opaque,
                   onTap: provider.isSelectionMode ? null : () => _toggleCompleted(provider, item),
                   child: SizedBox(
-                      width: 44, height: 48, child: Center(child: TaskCompletionMark(completed: item.completed))),
+                    width: 44,
+                    height: 48,
+                    child: Center(child: TaskCompletionMark(completed: item.completed)),
+                  ),
                 ),
               ),
               // Task text
@@ -1346,104 +1256,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  void _deleteGoal(Goal goal) {
-    deleteGoalWithUndo(context, Provider.of<GoalsProvider>(context, listen: false), goal);
-  }
-
   void _showEditSheet(ActionItemWithMetadata item) {
     showActionItemFormSheet(context, actionItem: item);
-  }
-
-  Widget _buildGoalItem(Goal goal, ActionItemsProvider provider) {
-    final progress = goal.targetValue > 0 ? goal.currentValue / goal.targetValue : 0.0;
-    final progressText = '(${goal.currentValue.toInt()}/${goal.targetValue.toInt()})';
-    final displayTitle = '${goal.title} $progressText';
-
-    final goalContent = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        // Goals are not part of selection mode — selection only applies to
-        // tasks (the action bar's Export action acts on tasks only).
-        if (provider.isSelectionMode) return;
-        PlatformManager.instance.analytics.goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
-        _showEditGoalSheet(goal);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 0),
-        margin: const EdgeInsets.only(left: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 44,
-              height: 44,
-              child: Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CustomPaint(
-                    painter: GoalProgressPainter(
-                      progress: progress.clamp(0.0, 1.0),
-                      color: progress >= 1.0 ? TaskCompletionMark.doneColor : OmiColors.textTertiary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                displayTitle,
-                style: OmiType.subhead.copyWith(
-                  color: progress >= 1.0 ? OmiColors.textTertiary : OmiColors.textPrimary,
-                  decoration: progress >= 1.0 ? TextDecoration.lineThrough : null,
-                  height: 1.4,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (provider.isSelectionMode) return goalContent;
-
-    // Restorable: delete at once with Undo, no dialog (D5).
-    return Dismissible(
-      key: Key('goal_${goal.id}'),
-      direction: DismissDirection.endToStart,
-      onDismissed: (direction) {
-        PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'swipe');
-        _deleteGoal(goal);
-      },
-      background: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: Icon(Icons.delete_outline, color: OmiColors.textPrimary),
-      ),
-      child: goalContent,
-    );
-  }
-
-  void _showEditGoalSheet(Goal goal) {
-    OmiHaptics.light();
-    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-    showGoalFormSheet(
-      context,
-      goal: goal,
-      onSave: (title, current, target, _) async {
-        await goalsProvider.updateGoal(goal.id, title: title, currentValue: current, targetValue: target);
-        PlatformManager.instance.analytics.goalUpdated(goalId: goal.id, source: 'tasks_page');
-      },
-      onDelete: () {
-        PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'button');
-        _deleteGoal(goal);
-      },
-    );
   }
 }
 
@@ -1452,8 +1266,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
 
 /// A section header's label ("TODAY", "OVERDUE").
-final TextStyle _sectionLabelStyle =
-    OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600, letterSpacing: 0.8);
+final TextStyle _sectionLabelStyle = OmiType.footnote.copyWith(
+  color: OmiColors.textTertiary,
+  fontWeight: FontWeight.w600,
+  letterSpacing: 0.8,
+);
 
 /// The count beside a section header, read out as "3 tasks" rather than a bare number.
 class _SectionCount extends StatelessWidget {
@@ -1481,12 +1298,7 @@ class _SectionCount extends StatelessWidget {
 /// the header's Spacer. The child stays where it was on the text line and
 /// nothing in the list moves; the target becomes the header's full 36pt height.
 class _SectionHeaderTapTarget extends StatelessWidget {
-  const _SectionHeaderTapTarget({
-    required this.onTap,
-    required this.child,
-    required this.reach,
-    this.semanticLabel,
-  });
+  const _SectionHeaderTapTarget({required this.onTap, required this.child, required this.reach, this.semanticLabel});
 
   final VoidCallback onTap;
   final Widget child;

@@ -11,7 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/pages/conversations/widgets/pending_transcriptions_banner.dart';
+import 'package:omi/pages/home/widgets/header_sync_button.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -66,17 +66,20 @@ class _WalService implements IWalService {
 SyncUploadGate _offlineGate() {
   return SyncUploadGate(
     limiter: SyncRateLimiter.instance,
-    uploader: (files,
-        {onUploadProgress,
-        conversationId,
-        captureEvidence,
-        recordingSessionId,
-        audioStartSeconds,
-        audioEndSeconds,
-        claimLiveCapture = false,
-        geolocation}) async {
-      throw StateError('unexpected upload in banner test');
-    },
+    uploader:
+        (
+          files, {
+          onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation,
+        }) async {
+          throw StateError('unexpected upload in sync button test');
+        },
     fairUseStatusLoader: () async => {'stage': 'none'},
   );
 }
@@ -89,7 +92,7 @@ Wal _wal({required int timerStart, WalStatus status = WalStatus.miss, WalStorage
     status: status,
     storage: storage,
     device: 'omi',
-    filePath: 'banner_$timerStart.bin',
+    filePath: 'sync_button_$timerStart.bin',
   );
 }
 
@@ -105,7 +108,7 @@ void main() {
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
 
-    tempDir = await Directory.systemTemp.createTemp('pending_banner_');
+    tempDir = await Directory.systemTemp.createTemp('header_sync_button_');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       (MethodCall call) async {
@@ -139,7 +142,7 @@ void main() {
     return syncProvider;
   }
 
-  Future<void> pumpBanner(WidgetTester tester, SyncProvider syncProvider) async {
+  Future<void> pumpButton(WidgetTester tester, SyncProvider syncProvider, {bool hasPairedDevice = false}) async {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
@@ -151,15 +154,19 @@ void main() {
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: ChangeNotifierProvider<SyncProvider>.value(
-              value: syncProvider, child: const PendingTranscriptionsBanner()),
+          body: Center(
+            child: ChangeNotifierProvider<SyncProvider>.value(
+              value: syncProvider,
+              child: HeaderSyncButton(hasPairedDevice: hasPairedDevice, onTap: () {}),
+            ),
+          ),
         ),
       ),
     );
     await tester.pump();
   }
 
-  testWidgets('shows the pending count while phone-local recordings wait to upload', (tester) async {
+  testWidgets('badges the count while phone-local recordings wait, even with no device paired', (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     localSync.testWals = [
       _wal(timerStart: now - 120, status: WalStatus.miss),
@@ -168,29 +175,42 @@ void main() {
     ];
     final syncProvider = await makeProvider();
 
-    expect(syncProvider.pendingLocalTranscriptionWals.length, 3,
-        reason: 'uploaded counts as pending until the server job finishes');
+    expect(
+      syncProvider.pendingLocalTranscriptionWals.length,
+      3,
+      reason: 'uploaded counts as pending until the server job finishes',
+    );
 
-    await pumpBanner(tester, syncProvider);
+    final semantics = tester.ensureSemantics();
+    await pumpButton(tester, syncProvider);
 
-    expect(find.byKey(const Key('pending_transcriptions_banner')), findsOneWidget);
-    expect(find.text('Transcriptions pending 3'), findsOneWidget);
+    expect(find.byKey(const ValueKey('header_sync_button')), findsOneWidget);
+    expect(find.byKey(const ValueKey('header_count_badge')), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    expect(find.bySemanticsLabel('Sync, Transcriptions pending 3'), findsOneWidget);
+    semantics.dispose();
   });
 
-  testWidgets('hides when the backlog is only synced or device-side recordings', (tester) async {
+  testWidgets('caps the badge at 9+', (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    localSync.testWals = [
-      _wal(timerStart: now - 120, status: WalStatus.synced),
-      _wal(timerStart: now - 60, status: WalStatus.miss, storage: WalStorage.sdcard),
-      _wal(timerStart: now - 30, status: WalStatus.miss, storage: WalStorage.flashPage),
-    ];
+    localSync.testWals = [for (var i = 0; i < 12; i++) _wal(timerStart: now - 600 + i * 30)];
     final syncProvider = await makeProvider();
 
-    expect(syncProvider.pendingLocalTranscriptionWals, isEmpty,
-        reason: 'device-side files drain through the sync pages, not this backlog');
+    await pumpButton(tester, syncProvider);
 
-    await pumpBanner(tester, syncProvider);
+    expect(find.text('9+'), findsOneWidget);
+  });
 
-    expect(find.byKey(const Key('pending_transcriptions_banner')), findsNothing);
+  testWidgets('shows no badge when nothing waits, and hides without a paired device', (tester) async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    localSync.testWals = [_wal(timerStart: now - 120, status: WalStatus.synced)];
+    final syncProvider = await makeProvider();
+
+    await pumpButton(tester, syncProvider, hasPairedDevice: true);
+    expect(find.byKey(const ValueKey('header_sync_button')), findsOneWidget);
+    expect(find.byKey(const ValueKey('header_count_badge')), findsNothing);
+
+    await pumpButton(tester, syncProvider);
+    expect(find.byKey(const ValueKey('header_sync_button')), findsNothing);
   });
 }
