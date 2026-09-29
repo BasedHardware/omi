@@ -520,23 +520,24 @@ async def get_calendar_events_tool(
     Returns:
         Formatted list of calendar events with their details.
     """
-    uid, integration, access_token, access_err = await run_blocking(
-        db_executor,
-        prepare_access,
-        cast(Optional[Dict[str, Any]], config),
-        'google_calendar',
-        'Google Calendar',
-        'Google Calendar is not connected. Please connect your Google Calendar from settings to view your events.',
-        'Google Calendar access token not found. Please reconnect your Google Calendar from settings.',
-        'Error checking Google Calendar connection',
-    )
-    if access_err:
-        return access_err
-    if uid is None or integration is None or access_token is None:
-        return "Google Calendar access token not found."
     telemetry_context = None
 
     try:
+        uid, integration, access_token, access_err = await run_blocking(
+            db_executor,
+            prepare_access,
+            cast(Optional[Dict[str, Any]], config),
+            'google_calendar',
+            'Google Calendar',
+            'Google Calendar is not connected. Please connect your Google Calendar from settings to view your events.',
+            'Google Calendar access token not found. Please reconnect your Google Calendar from settings.',
+            'Error checking Google Calendar connection',
+        )
+        if access_err:
+            return access_err
+        if uid is None or integration is None or access_token is None:
+            return "Google Calendar access token not found."
+
         max_results = ensure_capped(max_results, 50, "⚠️ get_calendar_events_tool - max_results capped from {} to {}")
 
         # Parse dates if provided
@@ -706,9 +707,9 @@ async def get_calendar_events_tool(
                             search_query=search_query,
                         )
                     except Exception as retry_error:
-                        logger.error(f"❌ Error after token refresh: {retry_error}")
+                        logger.error(f"❌ Error after token refresh: {retry_error}", exc_info=True)
                         emit_sync_failed(telemetry_context, retry_error)
-                        return f"Error fetching calendar events: {retry_error}"
+                        return "Error fetching calendar events. Please try again."
                 else:
                     logger.error(f"❌ Token refresh failed")
                     emit_sync_failed(telemetry_context, e)
@@ -726,9 +727,9 @@ async def get_calendar_events_tool(
             emit_sync_failed(telemetry_context, e)
             return "Unable to reach Google Calendar right now. Please try again in a moment."
         except Exception as e:
-            logger.error(f"❌ Unexpected error fetching calendar events: {e}")
+            logger.error(f"❌ Unexpected error fetching calendar events: {e}", exc_info=True)
             emit_sync_failed(telemetry_context, e)
-            return f"Error fetching calendar events: {e}"
+            return "Error fetching calendar events. Please try again."
 
         if not events:
             date_info = ""
@@ -790,10 +791,10 @@ async def get_calendar_events_tool(
         emit_sync_succeeded(telemetry_context, item_count=len(events))
         return result.strip()
     except Exception as e:
-        logger.error(f"❌ Unexpected error in get_calendar_events_tool: {e}")
+        logger.error(f"❌ Unexpected error in get_calendar_events_tool: {e}", exc_info=True)
         if telemetry_context:
             emit_sync_failed(telemetry_context, e)
-        return f"Unexpected error fetching calendar events: {e}"
+        return "An unexpected error occurred while fetching calendar events. Please try again later."
 
 
 @tool
@@ -843,23 +844,21 @@ async def create_calendar_event_tool(
         f"start_time: {start_time}, end_time: {end_time}, location: {location}"
     )
 
-    uid, integration, access_token, access_err = await run_blocking(
-        db_executor,
-        prepare_access,
-        cast(Optional[Dict[str, Any]], config),
-        'google_calendar',
-        'Google Calendar',
-        'Google Calendar is not connected. Please connect your Google Calendar from settings to create events.',
-        'Google Calendar access token not found. Please reconnect your Google Calendar from settings.',
-        'Error checking Google Calendar connection',
-    )
-    if access_err:
-        return access_err
-    assert uid is not None
-    assert integration is not None
-    assert access_token is not None
-
     try:
+        uid, integration, access_token, access_err = await run_blocking(
+            db_executor,
+            prepare_access,
+            cast(Optional[Dict[str, Any]], config),
+            'google_calendar',
+            'Google Calendar',
+            'Google Calendar is not connected. Please connect your Google Calendar from settings to create events.',
+            'Google Calendar access token not found. Please reconnect your Google Calendar from settings.',
+            'Error checking Google Calendar connection',
+        )
+        if access_err:
+            return access_err
+        if uid is None or integration is None or access_token is None:
+            return "Google Calendar access token not found."
 
         # Parse start and end times
         try:
@@ -868,7 +867,7 @@ async def create_calendar_event_tool(
                 return f"Error: start_time must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:00:00-08:00'): {start_time}"
             logger.info(f"📅 Parsed start_time '{start_time}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
-            return f"Error: Invalid start_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_time} - {str(e)}"
+            return "Error: Invalid start_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM."
 
         try:
             end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
@@ -876,7 +875,7 @@ async def create_calendar_event_tool(
                 return f"Error: end_time must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T15:00:00-08:00'): {end_time}"
             logger.info(f"📅 Parsed end_time '{end_time}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
-            return f"Error: Invalid end_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_time} - {str(e)}"
+            return "Error: Invalid end_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM."
 
         # Validate that end_time is after start_time
         if end_dt <= start_dt:
@@ -969,8 +968,8 @@ async def create_calendar_event_tool(
 
                         return result.strip()
                     except Exception as retry_error:
-                        logger.error(f"❌ Error after token refresh: {retry_error}")
-                        return f"Error creating calendar event: {retry_error}"
+                        logger.error(f"❌ Error after token refresh: {retry_error}", exc_info=True)
+                        return "Error creating calendar event. Please try again."
                 else:
                     logger.error(f"❌ Token refresh failed")
                     return (
@@ -985,8 +984,8 @@ async def create_calendar_event_tool(
             return "Unable to reach Google Calendar right now. Please try again in a moment."
 
     except Exception as e:
-        logger.error(f"❌ Unexpected error in create_calendar_event_tool: {e}")
-        return f"Unexpected error creating calendar event: {e}"
+        logger.error(f"❌ Unexpected error in create_calendar_event_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while creating the calendar event. Please try again later."
 
 
 @tool
@@ -1031,23 +1030,21 @@ async def delete_calendar_event_tool(
         f"start_date: {start_date}, end_date: {end_date}, event_id: {event_id}"
     )
 
-    uid, integration, access_token, access_err = await run_blocking(
-        db_executor,
-        prepare_access,
-        cast(Optional[Dict[str, Any]], config),
-        'google_calendar',
-        'Google Calendar',
-        'Google Calendar is not connected. Please connect your Google Calendar from settings to delete events.',
-        'Google Calendar access token not found. Please reconnect your Google Calendar from settings.',
-        'Error checking Google Calendar connection',
-    )
-    if access_err:
-        return access_err
-    assert uid is not None
-    assert integration is not None
-    assert access_token is not None
-
     try:
+        uid, integration, access_token, access_err = await run_blocking(
+            db_executor,
+            prepare_access,
+            cast(Optional[Dict[str, Any]], config),
+            'google_calendar',
+            'Google Calendar',
+            'Google Calendar is not connected. Please connect your Google Calendar from settings to delete events.',
+            'Google Calendar access token not found. Please reconnect your Google Calendar from settings.',
+            'Error checking Google Calendar connection',
+        )
+        if access_err:
+            return access_err
+        if uid is None or integration is None or access_token is None:
+            return "Google Calendar access token not found."
 
         # If event_id is provided, delete directly
         if event_id:
@@ -1065,7 +1062,8 @@ async def delete_calendar_event_tool(
                             await delete_google_calendar_event(new_token, event_id)
                             return f"✅ Successfully deleted calendar event (ID: {event_id})"
                         except Exception as retry_error:
-                            return f"Error deleting calendar event: {retry_error}"
+                            logger.error(f"❌ Error after token refresh deleting event: {retry_error}", exc_info=True)
+                            return "Error deleting calendar event. Please try again."
                     else:
                         return "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
                 elif e.is_permission_error:
@@ -1076,8 +1074,8 @@ async def delete_calendar_event_tool(
                 logger.error(f"❌ Network error deleting event by ID: {e}")
                 return "Unable to reach Google Calendar right now. Please try again in a moment."
             except Exception as e:
-                logger.error(f"❌ Unexpected error deleting event by ID: {e}")
-                return f"Error deleting calendar event: {e}"
+                logger.error(f"❌ Unexpected error deleting event by ID: {e}", exc_info=True)
+                return "Error deleting calendar event. Please try again."
 
         # Otherwise, search for events matching criteria
         if not event_title and not start_date:
@@ -1214,7 +1212,8 @@ async def delete_calendar_event_tool(
 
                         return format_deleted_calendar_events(mutation_result)
                     except Exception as retry_error:
-                        return f"Error deleting calendar events: {retry_error}"
+                        logger.error(f"❌ Error after token refresh deleting events: {retry_error}", exc_info=True)
+                        return "Error deleting calendar events. Please try again."
                 else:
                     return (
                         "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
@@ -1227,12 +1226,12 @@ async def delete_calendar_event_tool(
             logger.error(f"❌ Network error searching events to delete: {e}")
             return "Unable to reach Google Calendar right now. Please try again in a moment."
         except Exception as e:
-            logger.error(f"❌ Unexpected error searching events to delete: {e}")
-            return f"Error searching for calendar events: {e}"
+            logger.error(f"❌ Unexpected error searching events to delete: {e}", exc_info=True)
+            return "An unexpected error occurred while searching for calendar events to delete. Please try again later."
 
     except Exception as e:
-        logger.error(f"❌ Unexpected error in delete_calendar_event_tool: {e}")
-        return f"Unexpected error deleting calendar events: {e}"
+        logger.error(f"❌ Unexpected error in delete_calendar_event_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while deleting calendar events. Please try again later."
 
 
 @tool
@@ -1290,23 +1289,21 @@ async def update_calendar_event_tool(
         f"add_attendees: {add_attendees}, remove_attendees: {remove_attendees}, set_attendees: {set_attendees}"
     )
 
-    uid, integration, access_token, access_err = await run_blocking(
-        db_executor,
-        prepare_access,
-        cast(Optional[Dict[str, Any]], config),
-        'google_calendar',
-        'Google Calendar',
-        'Google Calendar is not connected. Please connect your Google Calendar from settings to update events.',
-        'Google Calendar access token not found. Please reconnect your Google Calendar from settings.',
-        'Error checking Google Calendar connection',
-    )
-    if access_err:
-        return access_err
-    assert uid is not None
-    assert integration is not None
-    assert access_token is not None
-
     try:
+        uid, integration, access_token, access_err = await run_blocking(
+            db_executor,
+            prepare_access,
+            cast(Optional[Dict[str, Any]], config),
+            'google_calendar',
+            'Google Calendar',
+            'Google Calendar is not connected. Please connect your Google Calendar from settings to update events.',
+            'Google Calendar access token not found. Please reconnect your Google Calendar from settings.',
+            'Error checking Google Calendar connection',
+        )
+        if access_err:
+            return access_err
+        if uid is None or integration is None or access_token is None:
+            return "Google Calendar access token not found."
 
         # Find the event if event_id not provided
         target_event_id = event_id
@@ -1375,7 +1372,8 @@ async def update_calendar_event_tool(
                         current_event = await get_google_calendar_event(new_token, target_event_id)
                         access_token = new_token
                     except Exception as retry_error:
-                        return f"Error getting calendar event: {retry_error}"
+                        logger.error(f"❌ Error after token refresh getting event: {retry_error}", exc_info=True)
+                        return "Error getting calendar event. Please try again."
                 else:
                     return (
                         "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
@@ -1388,8 +1386,8 @@ async def update_calendar_event_tool(
             logger.error(f"❌ Network error getting event: {e}")
             return "Unable to reach Google Calendar right now. Please try again in a moment."
         except Exception as e:
-            logger.error(f"❌ Unexpected error getting event: {e}")
-            return f"Error getting calendar event: {e}"
+            logger.error(f"❌ Unexpected error getting event: {e}", exc_info=True)
+            return "Error getting calendar event. Please try again."
 
         # Prepare update fields
         update_summary = title if title is not None else None
@@ -1499,7 +1497,8 @@ async def update_calendar_event_tool(
                             result += f"   Attendees: {', '.join(update_attendees)}\n"
                         return result.strip()
                     except Exception as retry_error:
-                        return f"Error updating calendar event: {retry_error}"
+                        logger.error(f"❌ Error after token refresh updating event: {retry_error}", exc_info=True)
+                        return "Error updating calendar event. Please try again."
                 else:
                     return (
                         "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
@@ -1513,5 +1512,5 @@ async def update_calendar_event_tool(
             return "Unable to reach Google Calendar right now. Please try again in a moment."
 
     except Exception as e:
-        logger.error(f"❌ Unexpected error in update_calendar_event_tool: {e}")
-        return f"Unexpected error updating calendar event: {e}"
+        logger.error(f"❌ Unexpected error in update_calendar_event_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while updating the calendar event. Please try again later."
