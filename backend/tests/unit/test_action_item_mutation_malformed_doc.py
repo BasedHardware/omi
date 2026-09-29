@@ -48,14 +48,21 @@ def client():
 
 
 @pytest.fixture
-def notifications(monkeypatch):
-    sent = []
-    for name in ('upsert_action_item_vector', 'sync_action_item_reminder', 'record_product_event'):
-        monkeypatch.setattr(action_items_router, name, lambda *args, **kwargs: None)
-    monkeypatch.setattr(action_items_router, '_wake_task_changes', lambda *args, **kwargs: None)
+def side_effects(monkeypatch):
+    """Record every side effect the two routes trigger after their write."""
+    calls = []
+    for name in (
+        'upsert_action_item_vector',
+        'sync_action_item_reminder',
+        'record_product_event',
+        '_wake_task_changes',
+    ):
+        monkeypatch.setattr(action_items_router, name, lambda *args, _name=name, **kwargs: calls.append((_name,)))
     monkeypatch.setattr(action_items_router, 'get_user_display_name', lambda uid: 'Owner')
-    monkeypatch.setattr(action_items_router, 'send_notification', lambda *args: sent.append(args))
-    return sent
+    monkeypatch.setattr(
+        action_items_router, 'send_notification', lambda *args: calls.append(('send_notification', *args))
+    )
+    return calls
 
 
 def _fake_store(monkeypatch, doc):
@@ -75,7 +82,7 @@ def _fake_store(monkeypatch, doc):
 @pytest.mark.parametrize('path, body', MUTATIONS.values(), ids=MUTATIONS.keys())
 @pytest.mark.parametrize('doc', MALFORMED_ITEMS.values(), ids=MALFORMED_ITEMS.keys())
 def test_a_mutation_leaving_the_item_malformed_is_not_found_and_not_written(
-    client, monkeypatch, notifications, doc, path, body
+    client, monkeypatch, side_effects, doc, path, body
 ):
     versions = _fake_store(monkeypatch, doc)
 
@@ -84,10 +91,10 @@ def test_a_mutation_leaving_the_item_malformed_is_not_found_and_not_written(
     assert response.status_code == 404
     assert response.json() == {'detail': 'Action item not found'}
     assert versions == [doc]
-    assert notifications == []
+    assert side_effects == []
 
 
-def test_a_patch_supplying_the_description_repairs_the_item(client, monkeypatch, notifications):
+def test_a_patch_supplying_the_description_repairs_the_item(client, monkeypatch, side_effects):
     versions = _fake_store(monkeypatch, MALFORMED_ITEMS['null_description'])
 
     response = client.patch('/v1/action-items/a1', json={'description': 'Fixed'})
@@ -97,7 +104,7 @@ def test_a_patch_supplying_the_description_repairs_the_item(client, monkeypatch,
     assert len(versions) == 2
 
 
-def test_completing_a_valid_shared_item_still_writes_and_notifies_the_sender(client, monkeypatch, notifications):
+def test_completing_a_valid_shared_item_still_writes_and_notifies_the_sender(client, monkeypatch, side_effects):
     versions = _fake_store(monkeypatch, VALID_ITEM)
 
     response = client.patch('/v1/action-items/a1/completed?completed=true')
@@ -105,4 +112,4 @@ def test_completing_a_valid_shared_item_still_writes_and_notifies_the_sender(cli
     assert response.status_code == 200
     assert response.json()['completed'] is True
     assert len(versions) == 2
-    assert notifications == [('sender', 'Task completed', 'Owner completed: Send the deck')]
+    assert ('send_notification', 'sender', 'Task completed', 'Owner completed: Send the deck') in side_effects
