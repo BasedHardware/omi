@@ -4,7 +4,7 @@ Failure-Class: none
 Ensures internal exception messages and database errors are never returned directly in tool output strings.
 """
 
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from utils.retrieval.tools import action_item_tools, memory_tools
 
 SENTINEL_ERROR = "SENTINEL_INTERNAL_LEAK_PG_CONN_127_0_0_1_PWD_SECRET"
@@ -34,7 +34,10 @@ def test_create_action_item_tool_exception_sanitized():
 
 def test_update_action_item_tool_exception_sanitized():
     with patch(
-        "utils.retrieval.tools.action_item_tools.action_items_db.update_action_item_description",
+        "utils.retrieval.tools.action_item_tools.action_items_db.get_action_item",
+        return_value={"id": "item-123", "description": "Old description"},
+    ), patch(
+        "utils.retrieval.tools.action_item_tools.action_items_db.update_action_item",
         side_effect=RuntimeError(SENTINEL_ERROR),
     ):
         res = action_item_tools.update_action_item_tool.func(
@@ -48,7 +51,7 @@ def test_update_action_item_tool_exception_sanitized():
 
 def test_search_memories_tool_exception_sanitized():
     with patch(
-        "utils.retrieval.tools.memory_tools.memory_service.read",
+        "utils.retrieval.tools.memory_tools.MemoryService.search",
         side_effect=RuntimeError(SENTINEL_ERROR),
     ):
         res = memory_tools.search_memories_tool.func(
