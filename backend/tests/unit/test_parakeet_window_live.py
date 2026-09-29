@@ -11,6 +11,7 @@ import pytest
 
 from utils.stt import parakeet_window as window, provider_resilience, streaming as st, vad_gate
 from utils.stt.live_metrics import (
+    WINDOW_ADMISSION,
     WINDOW_FIRST_TEXT,
     WINDOW_FORCED_CUTS,
     WINDOW_POSTS,
@@ -403,6 +404,7 @@ def receiver():
 
 @pytest.mark.asyncio
 async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypatch):
+    before_accepted = WINDOW_ADMISSION.labels(outcome='accepted')._value.get()
     before_text = WINDOW_SESSION_OUTCOME.labels(outcome='text')._value.get()
     before_first = WINDOW_FIRST_TEXT._sum.get()
     client = Client()
@@ -435,6 +437,7 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert session.consume_speech_ms_delta() == 1000
     assert session.consume_speech_ms_delta() == 0
     assert window.admission.active == 0
+    assert WINDOW_ADMISSION.labels(outcome='accepted')._value.get() == before_accepted + 1
     assert WINDOW_SESSION_OUTCOME.labels(outcome='text')._value.get() == before_text + 1
     assert WINDOW_FIRST_TEXT._sum.get() > before_first
 
@@ -442,11 +445,63 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
 @pytest.mark.asyncio
 async def test_speech_with_empty_tdt_output_counts_no_text(monkeypatch):
     monkeypatch.setattr(window, 'get_stt_client', lambda: Client(data={'text': ''}))
+    before_accepted = WINDOW_ADMISSION.labels(outcome='accepted')._value.get()
     before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get()
     sock = await LiveChainSession(receiver()).connect(16000)
     assert sock.send(b'\x01\x00' * 16000)
     await sock.drain_and_close()
+    assert WINDOW_ADMISSION.labels(outcome='accepted')._value.get() == before_accepted + 1
     assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_session_outcome_is_recorded_before_health_close_callback():
+    sock = window.connect_window(lambda _: None, 16000)
+    sock._first_speech_at = window.time.monotonic()
+    before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get()
+
+    def fail_health_close():
+        raise RuntimeError('health callback failed')
+
+    sock._health_close = fail_health_close
+    sock._on_pump_done(SimpleNamespace(cancelled=lambda: False))
+
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get() == before + 1
+    assert window.admission.active == 0
+
+    # The real pump task is still running; close it through the normal async
+    # lifecycle after restoring its callback so this test leaves no task behind.
+    sock._health_close = lambda: None
+    sock._closed = True
+    sock._wake.set()
+    assert sock._pump_task is not None
+    await sock._pump_task
+    sock.finish()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', ['finish', 'fail'])
+async def test_terminal_callback_failure_releases_admission_once(terminal):
+    sock = window.connect_window(lambda _: None, 16000)
+    assert window.admission.active == 1
+
+    def fail_health_close():
+        raise RuntimeError('health callback failed')
+
+    sock._health_close = fail_health_close
+    if terminal == 'finish':
+        sock.finish()
+    else:
+        sock.fail('test_failure')
+
+    # The releasing call must not wait for the cancelled pump's done callback.
+    assert window.admission.active == 0
+    assert sock._pump_task is not None
+    with pytest.raises(asyncio.CancelledError):
+        await sock._pump_task
+    await _REAL_SLEEP(0)
+    # _on_pump_done may release again, but the admission lease is idempotent.
+    assert window.admission.active == 0
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import os
 import socket
@@ -90,6 +91,8 @@ HEAD_RECOVERY_MIN_SPEECH_SECONDS = 2.0
 # with window size now set by a 15 s pace, sliding by pace would discard 15 s of
 # speech the model returned nothing for. Keep the slide at the measured 6 s.
 EMPTY_CAP_SLIDE_SECONDS = 6.0
+
+logger = logging.getLogger(__name__)
 
 
 def pcm16_peak(pcm: bytes) -> float:
@@ -209,7 +212,6 @@ class WindowAdmission:
                 raise ParakeetConnectionError('capacity_full')
             self.active += 1
             WINDOW_ACTIVE.inc()
-            WINDOW_ADMISSION.labels(outcome='accepted').inc()
         released = False
 
         def release() -> None:
@@ -381,6 +383,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._health_close: Callable[[], None] = lambda: None
         self._first_speech_at: float | None = None
         self._first_text_recorded = False
+        self._session_outcome_recorded = False
         self._wake = asyncio.Event()
         self._pause_requested = False
         self._idle_flushed = False
@@ -422,10 +425,27 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if not self._closed:
             self._dead = True
             self._dead_reason = 'cancelled' if task.cancelled() else 'connection_lost'
-        self._health_close()
-        if self._first_speech_at is not None:
-            WINDOW_SESSION_OUTCOME.labels(outcome='text' if self._first_text_recorded else 'no_text').inc()
-        self._release()
+        try:
+            self._record_session_outcome()
+        finally:
+            try:
+                self._close_health()
+            finally:
+                self._release()
+
+    def _close_health(self) -> None:
+        try:
+            self._health_close()
+        except Exception:
+            # A health callback is auxiliary; it cannot suppress session
+            # telemetry or admission release after the pump has ended.
+            logger.warning('Parakeet window health-close callback failed')
+
+    def _record_session_outcome(self) -> None:
+        if self._session_outcome_recorded or self._first_speech_at is None:
+            return
+        self._session_outcome_recorded = True
+        WINDOW_SESSION_OUTCOME.labels(outcome='text' if self._first_text_recorded else 'no_text').inc()
 
     def mark_speech(self) -> None:
         self._next_send_speech = True
@@ -536,8 +556,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         pump = self._pump_task
         if pump is not None and not pump.done() and pump is not asyncio.current_task():
             pump.cancel()
-        self._health_close()
-        self._release()
+        try:
+            self._close_health()
+        finally:
+            self._release()
 
     async def drain_and_close(self) -> None:
         self._closed = True
@@ -587,8 +609,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             # Bounded reason only: never include audio, text or HTTP bodies in logs.
             self.fail('provider_5xx')
         finally:
-            self._health_close()
-            self._release()
+            try:
+                self._close_health()
+            finally:
+                self._release()
 
     async def _run_job(self, job: _WindowJob) -> None:
         segments = await self._post_and_parse(job.pcm, job.duration)
@@ -974,6 +998,10 @@ def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate
     try:
         socket = WindowedParakeetSocket(callback, os.environ['HOSTED_PARAKEET_API_URL'], sample_rate, release)
         socket.start()
+        # Count only a socket whose pump started successfully. Keeping this at the
+        # connection boundary makes the accepted outcome describe an actual
+        # admission, rather than an acquired slot whose socket failed to start.
+        WINDOW_ADMISSION.labels(outcome='accepted').inc()
         return socket
     except BaseException:
         release()
