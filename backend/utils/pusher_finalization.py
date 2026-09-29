@@ -23,6 +23,7 @@ from utils.observability.journeys import (
     record_capture_finalization_terminal,
     record_conversation_finalization_client_terminal,
 )
+from utils.observability.finalization import finalization_diagnostic_id
 
 logger = logging.getLogger('routers.pusher')
 
@@ -84,9 +85,9 @@ async def process_conversation_task(
             await websocket.send_bytes(bytes(data))
         except (RuntimeError, WebSocketDisconnect):
             logger.info(
-                'pusher finalization result undeliverable after source close uid=%s conversation=%s',
-                uid,
-                conversation_id,
+                'pusher finalization result undeliverable after source close uid_hash=%s conversation_hash=%s',
+                finalization_diagnostic_id(uid),
+                finalization_diagnostic_id(conversation_id),
             )
 
     job_id: Optional[str] = None
@@ -130,9 +131,9 @@ async def process_conversation_task(
             LISTEN_FINALIZATION_RETRIES_TOTAL.inc()
         except Exception:
             logger.error(
-                'pusher finalization recovery update failed uid=%s conversation=%s failure=%s terminal=%s',
-                uid,
-                conversation_id,
+                'pusher finalization recovery update failed uid_hash=%s conversation_hash=%s failure=%s terminal=%s',
+                finalization_diagnostic_id(uid),
+                finalization_diagnostic_id(conversation_id),
                 failure_code,
                 terminal,
             )
@@ -195,7 +196,9 @@ async def process_conversation_task(
         lease_epoch = claim['lease_epoch']
         if lease_epoch is None:
             logger.error(
-                'pusher finalization claim returned no lease epoch uid=%s conversation=%s', uid, conversation_id
+                'pusher finalization claim returned no lease epoch uid_hash=%s conversation_hash=%s',
+                finalization_diagnostic_id(uid),
+                finalization_diagnostic_id(conversation_id),
             )
             await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
             return
@@ -246,9 +249,9 @@ async def process_conversation_task(
         # while terminal dead-lettering is the genuine fault signal at ERROR.
         log = logger.error if terminal else logger.warning
         log(
-            'pusher finalization failed uid=%s conversation=%s failure=processing_failed terminal=%s',
-            uid,
-            conversation_id,
+            'pusher finalization failed uid_hash=%s conversation_hash=%s failure=processing_failed terminal=%s',
+            finalization_diagnostic_id(uid),
+            finalization_diagnostic_id(conversation_id),
             terminal,
         )
         try:
@@ -259,9 +262,9 @@ async def process_conversation_task(
         terminal = await record_failure('worker_failed')
         log = logger.error if terminal else logger.warning
         log(
-            'pusher finalization task failed uid=%s conversation=%s failure=worker_failed terminal=%s',
-            uid,
-            conversation_id,
+            'pusher finalization task failed uid_hash=%s conversation_hash=%s failure=worker_failed terminal=%s',
+            finalization_diagnostic_id(uid),
+            finalization_diagnostic_id(conversation_id),
             terminal,
         )
         try:
