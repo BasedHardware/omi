@@ -159,6 +159,11 @@ checks:
     triggers: ["backend/utils/retrieval/tools/file_tools.py", "backend/tests/unit/test_file_tools_sanitization.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "File search chat tools must safely handle config and session errors without leaking internal tracebacks or exception strings"
+  - id: daily-summaries-resilience-tests
+    command: ["python3", "backend/tests/unit/test_daily_summaries_resilience.py"]
+    triggers: ["backend/database/daily_summaries.py", "backend/tests/unit/test_daily_summaries_resilience.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Daily summaries database module must validate identifiers, clamp pagination boundaries, and handle Redis and transaction contention gracefully"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
