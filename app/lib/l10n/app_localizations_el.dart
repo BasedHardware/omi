@@ -11566,6 +11566,26 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Γεια σου $name, ρώτα ό,τι θέλεις';
+  }
+
+  @override
+  String get activity => 'Δραστηριότητα';
+
+  @override
+  String get places => 'Μέρη';
+
+  @override
+  String get recaps => 'Ανασκοπήσεις';
+
+  @override
+  String get recent => 'Πρόσφατα';
+
+  @override
+  String get searchPartialFailure => 'Ορισμένα αποτελέσματα δεν φορτώθηκαν';
+
+  @override
   String get singleTap => 'Απλό Πάτημα';
 
   @override

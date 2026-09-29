@@ -3623,6 +3623,12 @@
     "searchPeople": "Buscar personas",
     "addQueryAsNewPerson": "Añadir \"{query}\" como nueva persona",
     "showAllPeople": "Mostrar todas las personas ({count})",
+    "chatGreeting": "Hola {name}, pregunta lo que quieras",
+    "activity": "Actividad",
+    "places": "Lugares",
+    "recaps": "Resúmenes",
+    "recent": "Recientes",
+    "searchPartialFailure": "No se pudieron cargar algunos resultados",
     "singleTap": "Toque simple",
     "@singleTap": {
         "description": "Device button gesture: one short press"

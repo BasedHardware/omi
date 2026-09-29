@@ -3623,6 +3623,12 @@
     "searchPeople": "लोगों को खोजें",
     "addQueryAsNewPerson": "\"{query}\" को नए व्यक्ति के रूप में जोड़ें",
     "showAllPeople": "सभी {count} लोग दिखाएँ",
+    "chatGreeting": "नमस्ते {name}, कुछ भी पूछें",
+    "activity": "गतिविधि",
+    "places": "स्थान",
+    "recaps": "सारांश",
+    "recent": "हाल के",
+    "searchPartialFailure": "कुछ परिणाम लोड नहीं हो सके",
     "singleTap": "सिंगल टैप",
     "@singleTap": {
         "description": "Device button gesture: one short press"

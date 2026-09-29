@@ -11500,6 +11500,26 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Merhaba $name, ne istersen sor';
+  }
+
+  @override
+  String get activity => 'Etkinlik';
+
+  @override
+  String get places => 'Yerler';
+
+  @override
+  String get recaps => 'Özetler';
+
+  @override
+  String get recent => 'Son aramalar';
+
+  @override
+  String get searchPartialFailure => 'Bazı sonuçlar yüklenemedi';
+
+  @override
   String get singleTap => 'Tek Dokunma';
 
   @override

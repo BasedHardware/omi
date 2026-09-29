@@ -3658,6 +3658,12 @@
     "searchPeople": "Cari orang",
     "addQueryAsNewPerson": "Tambahkan \"{query}\" sebagai orang baru",
     "showAllPeople": "Tampilkan semua {count} orang",
+    "chatGreeting": "Hai {name}, tanyakan apa saja",
+    "activity": "Aktivitas",
+    "places": "Tempat",
+    "recaps": "Ringkasan",
+    "recent": "Terbaru",
+    "searchPartialFailure": "Beberapa hasil tidak dapat dimuat",
     "singleTap": "Ketuk Tunggal",
     "@singleTap": {
         "description": "Device button gesture: one short press"

@@ -11486,6 +11486,26 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Ahoj $name, zeptej se na cokoli';
+  }
+
+  @override
+  String get activity => 'Aktivita';
+
+  @override
+  String get places => 'Místa';
+
+  @override
+  String get recaps => 'Shrnutí';
+
+  @override
+  String get recent => 'Nedávné';
+
+  @override
+  String get searchPartialFailure => 'Některé výsledky se nepodařilo načíst';
+
+  @override
   String get singleTap => 'Jednoduché klepnutí';
 
   @override

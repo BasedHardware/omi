@@ -3623,6 +3623,12 @@
     "searchPeople": "Ieškoti žmonių",
     "addQueryAsNewPerson": "Pridėti „{query}“ kaip naują asmenį",
     "showAllPeople": "Rodyti visus asmenis ({count})",
+    "chatGreeting": "Labas, {name}, klausk ko tik nori",
+    "activity": "Veikla",
+    "places": "Vietos",
+    "recaps": "Santraukos",
+    "recent": "Naujausi",
+    "searchPartialFailure": "Kai kurių rezultatų nepavyko įkelti",
     "singleTap": "Vienas bakstelėjimas",
     "@singleTap": {
         "description": "Device button gesture: one short press"

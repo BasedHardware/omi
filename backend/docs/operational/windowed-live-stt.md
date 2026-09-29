@@ -11,14 +11,16 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | Environment variable | Code default | Dev listen | Prod listen |
 |---|---|---|---|
 | `STT_CONNECT_ORDER_FROM_CONFIG` | `false` | `true` | `true` |
-| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `1` |
-| `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `1` |
+| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `5` |
+| `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `8` |
 | `PARAKEET_BATCH_PRESSURE_POOL_HOST` | empty (stand down) | `dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local` | `prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local` |
-| `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` | `2` | `1` | `2` |
+| `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` | `2` | `1` | `3` |
 | `PARAKEET_WINDOW_POST_TIMEOUT_SECONDS` | `8` | `8` | `8` |
 | `PARAKEET_WINDOW_DIARIZATION` | `false` | `false` | `false` |
 | `PARAKEET_WINDOW_PACE_SECONDS` | `6` | `6` | `6` |
 | `PARAKEET_WINDOW_MAX_CONTEXT_SECONDS` | `24` | `24` | `24` |
+| `PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS` | `12` | code default | `12` |
+| `PARAKEET_WINDOW_MAX_EMPTY_STREAK` | `4` | code default | `4` |
 | `STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS` | `1800` | `1800` | `1800` |
 | `STT_CIRCUIT_HALF_OPEN_PROBES` | `1` | `1` | `1` |
 | `SONIOX_CIRCUIT_FAILURE_THRESHOLD` | `3` | `3` | `3` |
@@ -52,39 +54,41 @@ excluded listen shapes drop only the `parakeet-window` token from the configured
 list; they keep the rest of `STT_SERVICE_MODELS` (they are not rewritten onto
 code-default Modulate).
 
-## Production canary: 1%, then 2%, or 0% rollback
+## Production ramp: 1% → 5% → 25% → 50% → 100%
 
-Before deploying the 1% chart, read the running dev listen configuration and
-confirm `STT_CONNECT_ORDER_FROM_CONFIG=true`,
-`STT_SERVICE_MODELS=parakeet-window,modulate-velma-2,soniox,dg-nova-3`,
-`PARAKEET_WINDOW_ALLOCATION_PERCENT=1`, and `PARAKEET_WINDOW_MAX_SESSIONS=1`.
-Exercise eligible and ineligible languages and an overflow on dev. The chart
-and runtime manifest alone do not prove that the running deployment uses them.
+Deploy the Parakeet server revision and its 3–6 replica HPA first. Wait until
+at least three ready replicas all expose `live_pending_requests` and
+`live_oldest_pending_seconds` from `/batch/metrics`. Then deploy listen with
+`PARAKEET_WINDOW_MAX_SESSIONS=8` and the pressure gate. During a mixed-revision
+server rollout, a replica missing either field invalidates the fleet sample, so
+listen sends allocated sessions to the vendor chain. Unmarked HTTP requests
+remain in the backfill lane; only the window client's explicit
+`X-Omi-STT-Surface: live-window` header enters the live lane. Soniox stays on
+the fallback chain. Keep the merged 5% allocation for this code release; a later
+configuration rollout advances it only after the gates below pass.
 
-The stable UID bucket is the canary arm. The window is first for eligible
-allocated sessions; an unsupported language or full local slot sends traffic
-to the existing vendor chain. The
-per-process `PARAKEET_WINDOW_MAX_SESSIONS=1` is the admission safety limit;
-overflow proceeds to the next eligible leg. Keep it at 1 until the mixed live
-and sync-batch capacity curve gives a reason to change it.
+The headless Service selects ready Parakeet pods. Each listen process polls
+all ready replica `/batch/metrics` responses every five seconds with a
+one-second deadline, then caches the sample for at most 15 seconds. The
+per-replica live pending limit is **4** and the maximum oldest live wait is
+**0.75 s**. Backfill pending does not trip this gate. The count is per replica,
+so capacity scales with 3–6 pods, while a hot replica still causes a fleet
+stand-down. At the measured 0.87 s POST p95, a 0.75 s queued wait leaves
+about 0.38 s before the ~2 s live POST budget; four waiting on one replica is
+an earlier load signal. These are conservative starting thresholds, not an
+observed 100% guarantee: refine them from live queue-wait and POST p95 data.
+Missing, stale, non-finite, negative, or mixed-revision metrics stand down.
+Admission reads only the cache; it never waits on DNS or HTTP.
 
-The Parakeet chart creates a headless Service selecting the same ready pods as
-the ordinary Service. Listen resolves its pod IPs in a background task every
-five seconds and polls each `/batch/metrics` with a one-second deadline. It
-sums pending requests and takes the longest queue wait. Four pending requests
-across the pool or a one-second wait on any replica sends an allocated session
-to the next vendor leg. Admission only reads the cache; it never waits on DNS
-or HTTP. If fewer than the expected replicas answer, any response is invalid,
-or the sample is over 15 seconds old, every listen process stands down. This
-fleet-wide fallback prevents the local session cap multiplying across listen
-replicas during an outage. Deploy the Parakeet chart's headless Service before
-enabling listen canary admission; no manual Service creation is needed. An
-active TDT window that fails on timeout, 5xx, or capacity pressure replays its
-untranscribed capture audio on the replacement leg. If replay itself fails,
-the remaining tail and newly received audio follow the next vendor leg without
-resending the accepted prefix.
+The batch engine selects live requests before backfill at each GPU dispatch.
+An aged backfill item (5 s) receives one turn after four live batches; this
+prevents indefinite starvation without forming a long mixed batch. Prod GPU
+dispatch is limited to one in-flight batch so backfill cannot queue ahead of
+live work inside the GPU worker. An inference already running cannot be
+preempted, so a long historical recording can still affect a live POST; the
+live queue-wait and POST p95 gates must catch this before a ramp step.
 
-During the 1% bake, compare `omi_stt_window_canary_transcript_outcome_total`
+At each bake, compare `omi_stt_window_canary_transcript_outcome_total`
 `arm=window` with `arm=control`: the rate of `transcribed / (transcribed +
 no_transcript)` must not drop for the allocated arm. The 95% fleet SLO is shown
 on the Backend-listen dashboard; a separate page fires below 90% with its
@@ -111,13 +115,19 @@ rules treat missing telemetry as Alerting and use the existing Telegram route.
 The page action is **Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0**
 in the prod chart and runtime overlay, then recompose the runtime environment.
 
-If the 1% bake meets those criteria, change only
-`PARAKEET_WINDOW_ALLOCATION_PERCENT` from `1` to `2` in the prod listen chart
-and runtime overlay, recompose runtime env, then repeat the same checks. To
-roll back, set it to `0` in both places and recompose; the config-only switch
-does not alter the vendor order. The Telegram capacity alert names this lever.
-Neither this document nor a merged configuration change changes live traffic;
-deployment and verification belong to the coordinator.
+After the merged 5% bake, advance allocation to **25%, 50%, then 100%** of
+eligible sessions within roughly 24 hours, with an observation gate between
+each step. Require live POST p95 below ~2 s, no first-text p50 regression from
+the measured 7.5 s, stable transcript-success and no-text ratios against the
+control arm, no sustained admission overflow, and acceptable GPU utilization,
+OOM/error rates, and backfill queue age. At each step, compare the summed
+window active sessions against eight times the ready listen pod count, the
+per-lane GPU queue waits, and the per-replica live pending/oldest metrics.
+Do not advance on missing telemetry. Change allocation in both the prod listen
+chart and prod runtime overlay, then recompose the runtime environment.
+Rollback sets allocation to `0` in those sources; that removes the window
+leg while leaving Soniox available. This PR does not deploy or change the
+existing 5% allocation.
 
 ## Why windows are sentence-anchored
 
@@ -169,24 +179,40 @@ posted context.
 
 ## Capacity, audio and latency
 
-One slot per one-process listen pod means at most 12 sessions at 12 replicas or
-60 sessions at 60 replicas. Each session has one in-flight POST. The PCM buffer
-holds two max-context windows plus two pace intervals of cushion: default
-`2×24 + 2×6 = 60` s of mono PCM16, **≤ ~1.9 MB at 16 kHz**. That cushion absorbs a
-catch-up burst while one POST is in flight without killing a healthy session.
-The at-cap job already drains backlog 24 s per paced POST. Growing
-windows re-post overlapping context as `now` advances, so GPU audio per session
-is about **2.0×** fixed 6 s slicing. A minimum `PARAKEET_WINDOW_PACE_SECONDS`
-(default 6) interval between POST starts still bounds sustained traffic; delivery
-lag in simulation was p50 4–5 s, p90 7–11 s at 6 s pacing. Reconnects and initial
-flushes can burst up to the session cap; this is **not** a fleet-wide global rate
-limiter. Replicas and worker processes multiply these bounds. Default allocation
-zero is the production safety boundary; a cap of one is the smallest nonzero
-process cap for the first measured ramp, not proof that any 2–3 GPU fleet can
-sustain 60 synchronized requests alongside batch jobs. Server overload rejection
-remains authoritative. Do not increase the cap without measuring batch queueing,
-p95 latency and error rate under the actual pod count. Do not add a second
-in-flight POST per session — that doubles GPU load exactly when it is slow.
+Eight slots per one-process listen pod allow 216–320 concurrent window
+sessions at the measured 27–40 listen pods. Each session has one in-flight
+POST. With the production 24 s max context and 6 s pace, the PCM buffer cap
+is `2×24 + 2×6 = 60` s of 16 kHz mono PCM16: **1,920,000 bytes**. The
+reproducible local probe (`scripts/benchmark_parakeet_window_capacity.py`)
+created eight sockets, eight real Silero VAD states, and eight idle pump tasks:
+~11 KiB objects and task per session, ~1.92 MB buffer per session, and ~17.4
+MB process traced peak for all eight filled buffers (RSS high-water growth
+~14.1 MB after warming the shared model). One simultaneous 24 s
+AGC POST raised that peak to ~20.8 MB. Conservatively allowing that ~3.5 MB
+POST transient for every session gives **~45 MB**, about **1.3% of the
+3.5 GiB prod listen pod memory limit** (requests: 1.5 GiB). The same local
+probe measured ~73–78 ms of CPU per session per 10 s of audio for real Silero
+inference plus ingest AGC on 512-sample chunks, or ~5.8–6.2% of one core for eight
+continuously active sessions. This excludes HTTP/serialization and other
+listen work and is a local CPU result, not a pod RSS or production p95 measure.
+
+The 60 s cushion absorbs a catch-up burst while one POST is in flight.
+Before its first emitted text, a window leg fails at 12 seconds from the first
+VAD speech mark or after four consecutive speech-containing empty POSTs, whichever
+comes first. The timer also fires during a slow POST. The existing listen death
+monitor selects the next vendor and replays the untranscribed capture from the
+90-second ring; the failed Parakeet leg is excluded for the rest of that session.
+Once text has been emitted, these startup bounds are disarmed. No sentence anchor
+or emitted text is changed. `omi_stt_window_session_outcome_total` retains
+`outcome=text|no_text` and adds bounded `reason=none|first_text_deadline|empty_streak`;
+the matching recovered failover uses the same reason on `omi_fallback_total`.
+Growing windows re-post overlapping context. A minimum 6 s interval between
+POST starts bounds sustained requests to eight per listen pod per 6 s, with
+up to 216–320 synchronized sessions fleet-wide at the current pod count.
+The allocation bucket, per-pod cap, live pressure gate, and provider circuit
+remain in series; allocation 0 sends no window traffic. Monitor real traffic
+before every increase because local memory headroom does not prove GPU
+throughput or transcript quality.
 
 A 503 or a timeout on an *acquired* POST kills the window leg, releases
 admission, and opens the Parakeet serve-error circuit (existing default 180

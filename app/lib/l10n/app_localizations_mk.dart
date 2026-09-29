@@ -11550,6 +11550,26 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Здраво $name, прашај што сакаш';
+  }
+
+  @override
+  String get activity => 'Активност';
+
+  @override
+  String get places => 'Места';
+
+  @override
+  String get recaps => 'Резимеа';
+
+  @override
+  String get recent => 'Неодамнешни';
+
+  @override
+  String get searchPartialFailure => 'Некои резултати не можеа да се вчитаат';
+
+  @override
   String get singleTap => 'Единечно допирање';
 
   @override

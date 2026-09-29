@@ -6,7 +6,9 @@ import asyncio
 import hashlib
 import logging
 import os
+import threading
 import time
+from collections import deque
 from typing import TYPE_CHECKING, Awaitable, Callable
 
 if TYPE_CHECKING:
@@ -24,6 +26,24 @@ from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS, PROVIDER_RATE_LIMI
 
 Connect = Callable[[], Awaitable[STTSocket | None]]
 logger = logging.getLogger(__name__)
+_connect_failure_lock = threading.Lock()
+_FAILURE_EVIDENCE_SECONDS = 60.0
+_recent_connect_failures: deque[tuple[float, str]] = deque(maxlen=1000)
+
+
+def _connect_failures_before_shed() -> int:
+    try:
+        return min(1000, max(1, int(os.getenv('STT_SHED_CONNECT_FAILURES', '3'))))
+    except ValueError:
+        return 3
+
+
+def _note_connect_result(*, failed_provider: str | None) -> None:
+    with _connect_failure_lock:
+        if failed_provider is None:
+            _recent_connect_failures.clear()
+        else:
+            _recent_connect_failures.append((time.monotonic(), failed_provider))
 
 
 def failure_reason(error: BaseException) -> str:
@@ -44,6 +64,12 @@ class RejectedStream(RuntimeError):
     def __init__(self, reason: str):
         self.reason = reason
         super().__init__(reason)
+
+
+class ProviderChainUnavailable(RuntimeError):
+    def __init__(self, retry_after: int):
+        self.retry_after = max(1, min(retry_after, 3600))
+        super().__init__('Configured STT chain exhausted: providers unavailable')
 
 
 async def connect_configured_chain(
@@ -69,6 +95,7 @@ async def connect_configured_chain(
             ordered.append(service)
     callbacks = {**callbacks, primary_service: connect_primary}
     candidates = [primary_service, *ordered]
+    configured_candidates = candidates[:]
     decision_started = time.perf_counter()
     mode = routing_mode()
     fleet_states = {}
@@ -91,6 +118,42 @@ async def connect_configured_chain(
             if digest < 3:
                 logger.info('live_stt_routing_shadow configured=%s proposed=%s', configured, proposed)
     ROUTING_DECISION_LATENCY.observe(time.perf_counter() - decision_started)
+    # Mid-session deaths can open every pod-local circuit without proving that
+    # new connects fail. Require repeated real connect failures before shedding.
+    # A cooled circuit still reaches the normal half-open recovery probe.
+    eligible = [service for service in configured_candidates if callbacks.get(service) is not None]
+    all_benched = False
+    if eligible:
+        circuits = [_circuit_for_primary(service) for service in eligible]
+        # Half-open is an admission state: allow_request() may grant its
+        # recovery probe. Only open circuits still inside cooldown are benched.
+        all_benched = all(circuit.state == 'open' and not circuit.cooldown_elapsed() for circuit in circuits)
+        eligible_names = {service.value for service in eligible}
+        with _connect_failure_lock:
+            cutoff = time.monotonic() - _FAILURE_EVIDENCE_SECONDS
+            while _recent_connect_failures and _recent_connect_failures[0][0] < cutoff:
+                _recent_connect_failures.popleft()
+            threshold = _connect_failures_before_shed()
+            confirmed_failures = len(_recent_connect_failures) >= threshold and all(
+                provider in eligible_names for _, provider in list(_recent_connect_failures)[-threshold:]
+            )
+        fleet_snapshot_fresh = health.has_fresh_fleet_snapshot()
+        fleet_has_healthy_provider = fleet_snapshot_fresh and any(
+            (state := fleet_states.get(service.value)) is not None
+            and not state.excluded
+            and state.samples > 0
+            and state.score > 0.5
+            for service in eligible
+        )
+        fleet_confirms_outage = fleet_snapshot_fresh and all(
+            fleet_states.get(service.value) is not None and fleet_states[service.value].excluded for service in eligible
+        )
+        if all_benched and not fleet_has_healthy_provider and (fleet_confirms_outage or confirmed_failures):
+            waits = [circuit.account_cooldown_seconds_remaining for circuit in circuits if circuit.state == 'open']
+            if fleet_confirms_outage:
+                waits.extend(max(0.0, fleet_states[service.value].bench_until - time.time()) for service in eligible)
+            retry_after = max(5, int(max(waits, default=0) + 0.999))
+            raise ProviderChainUnavailable(retry_after)
     origin = primary_service.value
     prior_reason = 'circuit_open'
     attempted = False
@@ -128,6 +191,8 @@ async def connect_configured_chain(
                 on_close()
                 raise
             reason = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
+            if reason not in EXPECTED_REJECTIONS and reason != 'config_incomplete':
+                _note_connect_result(failed_provider=service.value)
             account_rejection = reason in ACCOUNT_REJECTION_REASONS
             # omi_fallback_total keeps its bounded vocabulary: the typed account
             # deaths fold onto quota/auth exactly like the socket path does.
@@ -157,6 +222,7 @@ async def connect_configured_chain(
             origin, prior_reason = service.value, fallback_reason
             return None
         LEG_ATTEMPTS.labels(to_mode=service.value, outcome='success').inc()
+        _note_connect_result(failed_provider=None)
         record_stt_provider_connect(provider=service.value, outcome=CONNECT_SUCCESS)
         attach_health = getattr(socket, 'set_health_callbacks', None)
         if getattr(socket, 'defers_selection_success', False) and callable(attach_health):
@@ -219,6 +285,22 @@ async def connect_configured_chain(
             result = await attempt(primary_service, connect_primary)
             if result is not None:
                 return result
+    if all_benched and not attempted:
+        # A spent primary must not strand a still-serving fallback whose local
+        # selection circuit opened on a mid-session death.
+        for service in configured_candidates:
+            connect = callbacks.get(service)
+            if service == STTService.parakeet or connect is None or provider_for_service(service) in failed:
+                continue
+            state = fleet_states.get(service.value)
+            if state is not None and state.bench == 'account' and state.excluded:
+                continue
+            if _circuit_for_primary(service).allow_request(max_probes=1, force=True):
+                prior_reason = 'last_resort'
+                result = await attempt(service, connect)
+                if result is not None:
+                    return result
+                break
     CHAIN_EXHAUSTED.inc()
     record_fallback(
         component='stt_selection',

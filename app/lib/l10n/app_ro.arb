@@ -3623,6 +3623,12 @@
     "searchPeople": "Caută persoane",
     "addQueryAsNewPerson": "Adaugă \"{query}\" ca persoană nouă",
     "showAllPeople": "Afișează toate cele {count} persoane",
+    "chatGreeting": "Salut {name}, întreabă orice",
+    "activity": "Activitate",
+    "places": "Locuri",
+    "recaps": "Rezumate",
+    "recent": "Recente",
+    "searchPartialFailure": "Unele rezultate nu au putut fi încărcate",
     "singleTap": "Apăsare simplă",
     "@singleTap": {
         "description": "Device button gesture: one short press"

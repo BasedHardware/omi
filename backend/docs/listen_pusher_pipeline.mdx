@@ -464,6 +464,17 @@ sequenceDiagram
     end
 ```
 
+### Connect-time audio format admission
+
+`validate_audio_format` (`backend/utils/transcribe_decisions.py`) runs before any
+decoder or buffer is built. `sample_rate` must be one of 8000, 11025, 12000,
+16000, 22050, 24000, 32000, 44100 or 48000 for every codec (opus narrows that
+to opuslib's set, and bare `lc3` is refused); anything else closes the socket
+with 1003. Released clients send 8000 (the query default, pcm8), 16000 and
+48000 (phone calls). The query value sizes per-session buffers, so an
+unbounded rate could allocate gigabytes and OOM-kill the listen pod;
+`AudioRingBuffer` also caps its own capacity at 48 kHz as a second guard.
+
 ### Speech-profile onboarding handshake
 
 Question-based speech-profile sessions connect with `onboarding=enabled`. After
@@ -530,15 +541,22 @@ the replacement provider epoch at the first unfinished sample and replays that
 audio before sending the current unsent chunk. A full ring triggers failover
 before an unfinished sample can be evicted. The replacement epoch stitches
 provider-local transcript times onto the original capture sample axis.
-Parakeet's `/batch/metrics` exports pending count and oldest queue wait;
-listen resolves every ready GPU pod through the chart's headless Service and
-polls them off the session-start path. It declines new window admissions at
-four pending requests summed across the pool or one second of oldest wait on
-any pod. A missing replica, invalid response, or stale reading stands down all
-listen processes. A partial replay retains its unaccepted tail and new audio
+Parakeet's `/batch/metrics` exports total and live-lane pending count and oldest
+queue wait. Listen resolves every ready GPU pod through the chart's headless
+Service and polls them off the session-start path. It declines new window
+admissions at four live requests pending on any replica or 0.75 seconds of
+oldest live wait. A missing replica, old server revision without live fields,
+invalid response, or stale reading stands down all listen processes. The
+window POST explicitly marks its live lane; unmarked requests remain backfill.
+A partial replay retains its unaccepted tail and new audio
 for the next vendor leg while preserving capture sample offsets. Window POSTs mark their
 request so `parakeet_prerecorded_requests_total` excludes live canary errors
 while covering the batch path used by sync backfill.
+Before the first window transcript, 12 seconds after first VAD speech or four
+consecutive empty speech-containing POSTs ends the Parakeet leg. The death path
+replays all untranscribed capture from the 90-second ring to the next vendor;
+the failed provider is excluded for that session. After first text, window
+formation and emission continue without this startup bound.
 
 The same authoritative attempt emits fail-open PostHog product events:
 `Transcript Started` at first nontrivial audio and exactly one of `Transcript
@@ -1324,7 +1342,9 @@ never erase the gap while the header claims the first run's position. Opcode
 rather than concatenating across rollovers.
 
 The dev qualification probe sends the same 17-word release fixture eight
-times (136 expected words), then near-silence while finalization completes.
+times (136 expected words) at the fixture's 100 ms PCM cadence, then
+near-silence while finalization completes. The paced send takes about 39 s;
+the terminal readback allows 240 s within the five-minute probe token lifetime.
 The base probe checks that the completed client conversation contains the
 fixture phrase and has at least four passes' words (68), while bounding that one
 conversation to at most 120% of all eight sends. Late STT flushes can land in
@@ -1332,6 +1352,10 @@ a rollover generation; the observed client conversation held about six passes
 in run 35583992730, leaving two passes of headroom at this lower bound. The
 136 words remain a diagnostic total sent. Its receipt and CI status line
 report the observed and expected counts and the failure stage without text.
+Candidate-pod attribution is checked after terminal readback even if the
+durable fixture phrase is missing, so a transcript mismatch still reports
+whether the candidate Pusher handled the finalization handoff. Passing still
+requires both candidate attribution and the durable transcript checks.
 Its separate opt-in alignment scenario sends the fixture twice (34 expected
 words), with delivered silence and an inter-arrival gap between sends. The
 shadow pass uses the first stored chunk as its time origin; its result records

@@ -3623,6 +3623,12 @@
     "searchPeople": "Cerca persones",
     "addQueryAsNewPerson": "Afegeix \"{query}\" com a persona nova",
     "showAllPeople": "Mostra totes les persones ({count})",
+    "chatGreeting": "Hola {name}, pregunta el que vulguis",
+    "activity": "Activitat",
+    "places": "Llocs",
+    "recaps": "Resums",
+    "recent": "Recents",
+    "searchPartialFailure": "No s'han pogut carregar alguns resultats",
     "singleTap": "Toc simple",
     "@singleTap": {
         "description": "Device button gesture: one short press"

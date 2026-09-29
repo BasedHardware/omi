@@ -11422,6 +11422,26 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'สวัสดี $name ถามอะไรก็ได้';
+  }
+
+  @override
+  String get activity => 'กิจกรรม';
+
+  @override
+  String get places => 'สถานที่';
+
+  @override
+  String get recaps => 'สรุป';
+
+  @override
+  String get recent => 'ล่าสุด';
+
+  @override
+  String get searchPartialFailure => 'โหลดผลลัพธ์บางส่วนไม่ได้';
+
+  @override
   String get singleTap => 'แตะครั้งเดียว';
 
   @override

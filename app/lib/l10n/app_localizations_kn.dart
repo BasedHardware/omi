@@ -11524,6 +11524,26 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'ಹಾಯ್ $name, ಏನು ಬೇಕಾದರೂ ಕೇಳಿ';
+  }
+
+  @override
+  String get activity => 'ಚಟುವಟಿಕೆ';
+
+  @override
+  String get places => 'ಸ್ಥಳಗಳು';
+
+  @override
+  String get recaps => 'ಸಾರಾಂಶಗಳು';
+
+  @override
+  String get recent => 'ಇತ್ತೀಚಿನ';
+
+  @override
+  String get searchPartialFailure => 'ಕೆಲವು ಫಲಿತಾಂಶಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
+
+  @override
   String get singleTap => 'ಒಂದು ಟ್ಯಾಪ್';
 
   @override

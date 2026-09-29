@@ -11518,6 +11518,26 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Živjo $name, vprašaj karkoli';
+  }
+
+  @override
+  String get activity => 'Dejavnost';
+
+  @override
+  String get places => 'Kraji';
+
+  @override
+  String get recaps => 'Povzetki';
+
+  @override
+  String get recent => 'Nedavno';
+
+  @override
+  String get searchPartialFailure => 'Nekaterih rezultatov ni bilo mogoče naložiti';
+
+  @override
   String get singleTap => 'Enojni dotik';
 
   @override

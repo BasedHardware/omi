@@ -57,10 +57,16 @@ export function AddTeamMemberDialog({
 
       await onMemberAdded();
       toast({
-        title: "Person added",
-        description: data.provisioned
-          ? `${normalizedEmail} now has admin dashboard access. They can sign in with Google using this email.`
-          : `${normalizedEmail} now has admin dashboard access.`,
+        title:
+          data.emailSent === false
+            ? "Added, but the invite email failed to send"
+            : "Person added",
+        description:
+          data.emailSent === false
+            ? `${normalizedEmail} now has admin dashboard access. Tell them to sign in with Google using this email.`
+            : data.provisioned
+            ? `${normalizedEmail} now has admin dashboard access. We emailed them to sign in with Google using this email.`
+            : `${normalizedEmail} now has admin dashboard access. We emailed them the sign-in details.`,
       });
       close();
     } catch (error) {

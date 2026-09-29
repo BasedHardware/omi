@@ -57,10 +57,13 @@ from utils.stt.live_failure import (
     note_typed_provider_death,
     send_live_stt_audio,
     terminate_live_stt_session,
+    terminate_live_stt_backoff,
 )
+from utils.stt.live_chain import ProviderChainUnavailable
 from config.stt_provider_policy import provider_for_service
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.live_metrics import RECONNECT
+from utils.stt.brand_terms import normalize_brand_segments
 from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import observe_live_segments, record_live_connection
@@ -764,7 +767,7 @@ class ListenReceiver(ReplayFilterMixin):
 
     def _enqueue_stt_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
         """Persist the provider epoch before local speaker numbers enter the conversation."""
-        observe_live_segments(self.host, segments, provider or self._serving_provider())
+        observe_live_segments(self.host, normalize_brand_segments(segments), provider or self._serving_provider())
         pending = self._pending_live_failover
         if pending is not None and (provider is None or provider == pending.to_mode):
             pending.note_transcript(segments)
@@ -921,6 +924,7 @@ class ListenReceiver(ReplayFilterMixin):
                     sample_rate,
                     self.host.stt_language,
                     profile=self.host.language_profile,
+                    keywords=keywords,
                 )
             # Soniox identifies language itself, so no language gate on the fallbacks;
             # they inherit the same chain a Modulate primary uses.
@@ -945,6 +949,7 @@ class ListenReceiver(ReplayFilterMixin):
                     sample_rate,
                     self.host.stt_language,
                     profile=self.host.language_profile,
+                    keywords=keywords,
                 ),
                 connect_modulate=(
                     (
@@ -1203,6 +1208,15 @@ class ListenReceiver(ReplayFilterMixin):
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
             self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
             return True
+        except ProviderChainUnavailable as error:
+            await self._drain_stt_sockets()
+            await terminate_live_stt_backoff(
+                request.websocket,
+                self.host.state,
+                reason='provider_unavailable',
+                retry_after=error.retry_after,
+            )
+            return False
         except Exception as error:
             await self._drain_stt_sockets()
             await terminate_live_stt_session(
@@ -1315,10 +1329,7 @@ class ListenReceiver(ReplayFilterMixin):
         if not self.host.state.active or self.host.state.stt_terminal_failure:
             return False
 
-        # The hop we adopted last has now died without a transcript (or is
-        # about to be replaced). Settle it as a failed failover before the
-        # next provider is tried, otherwise connect-time recovered hid a
-        # 100% dead Soniox budget-exhaustion leg for 27.5h.
+        # Settle the previous hop before trying another provider; connect alone did not prove recovery.
         self._settle_pending_live_failover_failure()
 
         dead_provider = provider_for_service(self.host.stt_service)
@@ -1347,6 +1358,7 @@ class ListenReceiver(ReplayFilterMixin):
             epoch.replay_origin_sample = replay[0][0]
         self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
         hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
+        hop.reason = getattr(previous, 'typed_death_reason', None) or 'connection_lost'
         try:
             raw = await self._create_stt_socket(
                 parakeet_callback,
@@ -1354,6 +1366,17 @@ class ListenReceiver(ReplayFilterMixin):
                 modulate_callback=modulate_callback,
                 epoch=epoch,
             )
+        except ProviderChainUnavailable as error:
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+            hop.note_failure(None)
+            await terminate_live_stt_backoff(
+                self.host.request.websocket,
+                self.host.state,
+                reason='provider_unavailable',
+                retry_after=error.retry_after,
+            )
+            return False
         except Exception:
             if managed_chain_enabled(self.host):
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection

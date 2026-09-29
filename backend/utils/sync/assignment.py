@@ -118,7 +118,7 @@ def assign_in_transaction(
         seen = set()
         while row and row.get('sync_merged_into'):
             if row['id'] in seen:
-                raise SyncAssignmentConflict('sync redirect cycle')
+                raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
             seen.add(row['id'])
             redirect_id: str = row['sync_merged_into']
             cid, row = redirect_id, load(redirect_id)
@@ -135,7 +135,7 @@ def assign_in_transaction(
         # Explicit capture proof is authoritative even before live STT produced
         # words. Only timestamp hints must exclude live-owned rows.
         if not compatible_capture(target, incoming):
-            raise SyncAssignmentConflict('sync target provenance mismatch')
+            raise SyncAssignmentConflict('sync target provenance mismatch', subtype='provenance_mismatch')
     else:
         # Missing/tombstoned explicit targets fall back to temporal assignment.
         # The independent retry-lineage check above still fences user deletion.

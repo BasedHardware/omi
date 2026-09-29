@@ -11532,6 +11532,26 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Szia $name, kérdezz bármit';
+  }
+
+  @override
+  String get activity => 'Tevékenység';
+
+  @override
+  String get places => 'Helyek';
+
+  @override
+  String get recaps => 'Összefoglalók';
+
+  @override
+  String get recent => 'Legutóbbiak';
+
+  @override
+  String get searchPartialFailure => 'Néhány találatot nem sikerült betölteni';
+
+  @override
   String get singleTap => 'Egyszeres érintés';
 
   @override

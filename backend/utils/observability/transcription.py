@@ -373,7 +373,7 @@ def record_live_stt_failover_accepted(*, provider: str | None, platform: str | N
 
 
 def record_listen_session_accepted(*, source: str | None, platform: str | None, app_build: str | None = None) -> None:
-    """Count one accepted /v4/listen socket with bounded labels only.
+    """Count one /v4/listen session admitted through STT setup with bounded labels only.
 
     WebSocket accept paths omit app_build (unknown): the handshake does not
     carry a trusted version contract.

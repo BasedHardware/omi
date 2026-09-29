@@ -479,6 +479,7 @@ async def process_audio_soniox(
     preseconds: int = 0,
     *,
     profile: LiveLanguageProfile | None = None,
+    keywords: list[str] | None = None,
 ) -> SafeSonioxSocket:
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -505,6 +506,13 @@ async def process_audio_soniox(
     hints = soniox_hints(language, profile)
     if hints:
         config['language_hints'] = hints
+    # Keep context terms off until a dev session proves this config frame is accepted;
+    # an invalid frame kills the live session with 400 after the WebSocket upgrade.
+    if os.getenv('SONIOX_CONTEXT_TERMS', 'false').lower() == 'true' and keywords:
+        terms = list(dict.fromkeys(term.strip() for term in keywords if term.strip()))
+        terms = [term for term in terms if len(term) <= 50][:100]
+        if terms:
+            config['context'] = {'terms': terms}
     rejected = (
         profile.primary
         if profile

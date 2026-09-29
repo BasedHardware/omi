@@ -11536,6 +11536,26 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'హాయ్ $name, ఏదైనా అడగండి';
+  }
+
+  @override
+  String get activity => 'కార్యకలాపం';
+
+  @override
+  String get places => 'స్థలాలు';
+
+  @override
+  String get recaps => 'సారాంశాలు';
+
+  @override
+  String get recent => 'ఇటీవలివి';
+
+  @override
+  String get searchPartialFailure => 'కొన్ని ఫలితాలను లోడ్ చేయలేకపోయాం';
+
+  @override
   String get singleTap => 'సింగిల్ ట్యాప్';
 
   @override

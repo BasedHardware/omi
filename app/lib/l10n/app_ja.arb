@@ -3623,6 +3623,12 @@
     "searchPeople": "人物を検索",
     "addQueryAsNewPerson": "「{query}」を新しい人物として追加",
     "showAllPeople": "すべての人物（{count}）を表示",
+    "chatGreeting": "こんにちは、{name}さん。何でも聞いてください",
+    "activity": "アクティビティ",
+    "places": "場所",
+    "recaps": "まとめ",
+    "recent": "最近",
+    "searchPartialFailure": "一部の結果を読み込めませんでした",
     "singleTap": "シングルタップ",
     "@singleTap": {
         "description": "Device button gesture: one short press"

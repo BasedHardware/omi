@@ -11183,6 +11183,12 @@
     "searchPeople": "חיפוש אנשים",
     "addQueryAsNewPerson": "הוספת \"{query}\" כאדם חדש",
     "showAllPeople": "הצג את כל האנשים ({count})",
+    "chatGreeting": "היי {name}, שאל כל דבר",
+    "activity": "פעילות",
+    "places": "מקומות",
+    "recaps": "סיכומים",
+    "recent": "אחרונים",
+    "searchPartialFailure": "לא ניתן היה לטעון חלק מהתוצאות",
     "singleTap": "לחץ בודד",
     "@singleTap": {
         "description": "Device button gesture: one short press"

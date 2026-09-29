@@ -11183,6 +11183,12 @@
     "searchPeople": "Pretraži osobe",
     "addQueryAsNewPerson": "Dodaj \"{query}\" kao novu osobu",
     "showAllPeople": "Prikaži sve osobe ({count})",
+    "chatGreeting": "Bok {name}, pitaj bilo što",
+    "activity": "Aktivnost",
+    "places": "Mjesta",
+    "recaps": "Sažeci",
+    "recent": "Nedavno",
+    "searchPartialFailure": "Neki rezultati nisu se mogli učitati",
     "singleTap": "Jednostruki dodir",
     "@singleTap": {
         "description": "Device button gesture: one short press"

@@ -11397,6 +11397,26 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'היי $name, שאל כל דבר';
+  }
+
+  @override
+  String get activity => 'פעילות';
+
+  @override
+  String get places => 'מקומות';
+
+  @override
+  String get recaps => 'סיכומים';
+
+  @override
+  String get recent => 'אחרונים';
+
+  @override
+  String get searchPartialFailure => 'לא ניתן היה לטעון חלק מהתוצאות';
+
+  @override
   String get singleTap => 'לחץ בודד';
 
   @override

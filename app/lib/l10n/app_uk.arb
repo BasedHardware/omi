@@ -3623,6 +3623,12 @@
     "searchPeople": "Пошук людей",
     "addQueryAsNewPerson": "Додати «{query}» як нову людину",
     "showAllPeople": "Показати всіх людей ({count})",
+    "chatGreeting": "Привіт, {name}, питай про що завгодно",
+    "activity": "Дії",
+    "places": "Місця",
+    "recaps": "Підсумки",
+    "recent": "Нещодавні",
+    "searchPartialFailure": "Не вдалося завантажити деякі результати",
     "singleTap": "Одинарне натискання",
     "@singleTap": {
         "description": "Device button gesture: one short press"
