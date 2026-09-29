@@ -13,10 +13,16 @@ from llm_gateway.gateway.errors import (
 from llm_gateway.gateway.resolver import (
     is_auto_lane_id,
     is_lkg_eligible,
+    resolve_lane,
+    resolve_embedding_route,
+    resolve_systemone_route,
     resolve_chat_completion_route,
     select_lkg_route_for_failure,
+    _validate_route_matches_lane,
+    _route_by_id,
+    _normalize_failure_class,
 )
-from llm_gateway.gateway.schemas import FailureClass, StructuredOutputMode
+from llm_gateway.gateway.schemas import FailureClass, StructuredOutputMode, Surface
 
 LANE_ID = 'omi:auto:chat-structured'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
@@ -183,3 +189,149 @@ def config_with_active_route(active_route):
         route_artifacts=route_artifacts,
         feature_bundles=base.feature_bundles,
     )
+
+EMBEDDING_LANE_ID = 'omi:auto:openai-embeddings'
+SYSTEMONE_LANE_ID = 'omi:auto:jev-decisions'
+
+def valid_embedding_request(**overrides):
+    request = {
+        'model': EMBEDDING_LANE_ID,
+        'input': 'Hello world',
+    }
+    request.update(overrides)
+    return request
+
+def valid_systemone_request(**overrides):
+    request = {
+        'model': SYSTEMONE_LANE_ID,
+        'state': 'some state',
+        'questions': {'q1': {'type': 'noul', 'instructions': 'Is it real?'}},
+    }
+    request.update(overrides)
+    return request
+
+def test_resolve_embedding_route_missing_model():
+    with pytest.raises(GatewayInvalidRequestError, match='model is required'):
+        resolve_embedding_route(load_gateway_config(prod_mode=True), valid_embedding_request(model=''))
+
+def test_resolve_embedding_route_not_auto_lane():
+    with pytest.raises(GatewayUnsupportedModelError, match='provider model names are not direct routes'):
+        resolve_embedding_route(load_gateway_config(prod_mode=True), valid_embedding_request(model='text-embedding-3-small'))
+
+def test_resolve_embedding_route_not_found():
+    with pytest.raises(GatewayModelNotFoundError, match='auto lane not found'):
+        resolve_embedding_route(load_gateway_config(prod_mode=True), valid_embedding_request(model='omi:auto:embedding-unknown'))
+
+def test_resolve_embedding_route_capability_mismatch():
+    base = load_gateway_config(prod_mode=True)
+    lanes = dict(base.lanes)
+    # create a lane that has the wrong surface
+    lanes['omi:auto:chat-mismatch'] = lanes[LANE_ID].model_copy(update={'surface': Surface.OPENAI_CHAT_COMPLETIONS})
+    config = GatewayConfig(
+        lanes=lanes,
+        route_artifacts=base.route_artifacts,
+        feature_bundles=base.feature_bundles,
+    )
+    with pytest.raises(GatewayCapabilityMismatchError, match='unsupported lane surface'):
+        resolve_embedding_route(config, valid_embedding_request(model='omi:auto:chat-mismatch'))
+
+def test_resolves_supported_embedding_auto_lane():
+    base = load_gateway_config(prod_mode=True)
+    resolved = resolve_embedding_route(base, valid_embedding_request())
+    assert resolved.lane.lane_id == EMBEDDING_LANE_ID
+    assert resolved.route.surface == Surface.OPENAI_EMBEDDINGS
+    assert resolved.validated_request.model == EMBEDDING_LANE_ID
+
+def test_resolve_systemone_route_not_auto_lane():
+    with pytest.raises(GatewayUnsupportedModelError, match='provider model names are not direct routes'):
+        resolve_systemone_route(load_gateway_config(prod_mode=True), valid_systemone_request(model='openrouter/auto'))
+
+def test_resolve_systemone_route_not_found():
+    with pytest.raises(GatewayModelNotFoundError, match='auto lane not found'):
+        resolve_systemone_route(load_gateway_config(prod_mode=True), valid_systemone_request(model='omi:auto:jev-unknown'))
+
+def test_resolve_systemone_route_capability_mismatch():
+    base = load_gateway_config(prod_mode=True)
+    lanes = dict(base.lanes)
+    # create a lane that has the wrong surface
+    lanes['omi:auto:chat-mismatch'] = lanes[LANE_ID].model_copy(update={'surface': Surface.OPENAI_CHAT_COMPLETIONS})
+    config = GatewayConfig(
+        lanes=lanes,
+        route_artifacts=base.route_artifacts,
+        feature_bundles=base.feature_bundles,
+    )
+    with pytest.raises(GatewayCapabilityMismatchError, match='unsupported lane surface'):
+        resolve_systemone_route(config, valid_systemone_request(model='omi:auto:chat-mismatch'))
+
+def test_resolves_supported_systemone_auto_lane():
+    base = load_gateway_config(prod_mode=True)
+    resolved = resolve_systemone_route(base, valid_systemone_request())
+    assert resolved.lane.lane_id == SYSTEMONE_LANE_ID
+    assert resolved.route.surface == Surface.OPENROUTER_SYSTEMONE
+    assert resolved.validated_request.model == SYSTEMONE_LANE_ID
+
+
+def test_validate_route_matches_lane_lane_id_mismatch():
+    base = load_gateway_config(prod_mode=True)
+    active_route = base.route_artifacts[ACTIVE_ROUTE]
+    lane = base.lanes[LANE_ID].model_copy(update={'lane_id': 'omi:auto:other-lane'})
+    with pytest.raises(GatewayInvalidRouteConfigError, match='lane_id mismatch'):
+        _validate_route_matches_lane(lane, active_route, pointer_name='active_route')
+
+def test_validate_route_matches_lane_surface_mismatch():
+    base = load_gateway_config(prod_mode=True)
+    active_route = base.route_artifacts[ACTIVE_ROUTE].model_copy(update={'surface': Surface.OPENAI_EMBEDDINGS})
+    lane = base.lanes[LANE_ID]
+    with pytest.raises(GatewayInvalidRouteConfigError, match='surface mismatch'):
+        _validate_route_matches_lane(lane, active_route, pointer_name='active_route')
+
+def test_validate_route_matches_lane_credential_mode_mismatch():
+    base = load_gateway_config(prod_mode=True)
+    from llm_gateway.gateway.schemas import CredentialPolicy, CredentialMode
+    active_route = base.route_artifacts[ACTIVE_ROUTE].model_copy(
+        update={'credential_policy': CredentialPolicy(mode=CredentialMode.BYOK)}
+    )
+    lane = base.lanes[LANE_ID]
+    with pytest.raises(GatewayInvalidRouteConfigError, match='credential mode mismatch'):
+        _validate_route_matches_lane(lane, active_route, pointer_name='active_route')
+
+def test_route_by_id_not_configured():
+    base = load_gateway_config(prod_mode=True)
+    with pytest.raises(GatewayInvalidRouteConfigError, match='active_route route not configured: route.unknown'):
+        _route_by_id(base, 'route.unknown', pointer_name='active_route')
+
+def test_normalize_failure_class_unknown():
+    with pytest.raises(GatewayInvalidRouteConfigError, match='unknown failure class: unknown_class'):
+        _normalize_failure_class('unknown_class')
+
+def test_resolve_lane_capability_mismatch():
+    base = load_gateway_config(prod_mode=True)
+    lanes = dict(base.lanes)
+    # create an auto lane with surface OPENAI_EMBEDDINGS
+    lanes['omi:auto:chat-to-embedding'] = lanes[LANE_ID].model_copy(update={'surface': Surface.OPENAI_EMBEDDINGS})
+    config = GatewayConfig(
+        lanes=lanes,
+        route_artifacts=base.route_artifacts,
+        feature_bundles=base.feature_bundles,
+    )
+    with pytest.raises(GatewayCapabilityMismatchError, match='unsupported lane surface'):
+        resolve_lane(config, 'omi:auto:chat-to-embedding')
+
+def test_is_lkg_eligible_never_fallback_on():
+    base = load_gateway_config(prod_mode=True)
+    active_route = base.route_artifacts[ACTIVE_ROUTE]
+    config = config_with_active_route(
+        active_route.model_copy(
+            update={
+                'fallback_policy': active_route.fallback_policy.model_copy(
+                    update={
+                        'fallback_on': [FailureClass.TIMEOUT_BEFORE_OUTPUT],
+                            'never_fallback_on': [FailureClass.PROVIDER_5XX_OMI_PAID],
+                    }
+                )
+            }
+        )
+    )
+    # create a mock route from the config
+    route = config.route_artifacts[ACTIVE_ROUTE]
+    assert not is_lkg_eligible(route, FailureClass.PROVIDER_5XX_OMI_PAID)
