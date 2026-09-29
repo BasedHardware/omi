@@ -63,7 +63,7 @@ class DailySummaryCard extends StatelessWidget {
                   right: 0,
                   bottom: hasMap ? mapHeight : 0,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                    padding: EdgeInsets.fromLTRB(14, hasMap ? 10 : 12, 14, hasMap ? 4 : 10),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -86,11 +86,13 @@ class DailySummaryCard extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 6),
-                        Text(
-                          summary.headline,
-                          style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600, height: 1.3),
-                          maxLines: hasMap ? 2 : 3,
-                          overflow: TextOverflow.ellipsis,
+                        Flexible(
+                          child: Text(
+                            summary.headline,
+                            style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600, height: 1.3),
+                            maxLines: hasMap ? 2 : 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         if (!hasMap && summary.overview.trim().isNotEmpty) ...[
                           const SizedBox(height: 4),
