@@ -1,3 +1,0 @@
-{
-  "change": "Fixed the app getting stuck on \"Preparing your data…\" after the local Rewind database was corrupted"
-}
