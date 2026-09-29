@@ -34,6 +34,9 @@ class AudioCaptureService: @unchecked Sendable {
     let deviceDescription: String
     let consecutiveSilentWindows: Int
     let isBluetoothTransport: Bool
+    let framesReceived: Int
+    let peak: Int16
+    let secondsToFirstFrame: TimeInterval?
 
     var suggestedAction: SilentMicRecoveryAction {
       isBluetoothTransport ? .fallbackToBuiltIn : .rebuildCoreAudioStack
@@ -171,6 +174,9 @@ class AudioCaptureService: @unchecked Sendable {
   // so we can detect a Bluetooth mic that's alive-but-silent (A2DP profile conflict).
   private var watchdogWindowPeak: Int16 = 0
   private var watchdogWindowStart: CFAbsoluteTime = 0
+  private var watchdogFrameCount = 0
+  private var watchdogFirstFrameAt: CFAbsoluteTime?
+  private var watchdogStartedAt: CFAbsoluteTime?
   private let silentMicWatchdogLock = NSLock()
 
   /// Dedicated queue for CoreAudio device operations (start/stop/reconfigure)
@@ -188,6 +194,9 @@ class AudioCaptureService: @unchecked Sendable {
     lastSilentMicFireTime = 0
     watchdogWindowPeak = 0
     watchdogWindowStart = 0
+    watchdogFrameCount = 0
+    watchdogFirstFrameAt = nil
+    watchdogStartedAt = CFAbsoluteTimeGetCurrent()
   }
 
   /// Classify one closed ~1-second watchdog window and update re-arm bookkeeping.
@@ -245,7 +254,12 @@ class AudioCaptureService: @unchecked Sendable {
       deviceID: deviceID,
       deviceDescription: currentDeviceDescription,
       consecutiveSilentWindows: firedWindows,
-      isBluetoothTransport: isBluetooth
+      isBluetoothTransport: isBluetooth,
+      framesReceived: watchdogFrameCount,
+      peak: peak,
+      secondsToFirstFrame: watchdogFirstFrameAt.flatMap { first in
+        watchdogStartedAt.map { max(0, first - $0) }
+      }
     )
   }
 
@@ -730,6 +744,20 @@ class AudioCaptureService: @unchecked Sendable {
     return AVAudioFrameCount(ceil(Double(frameCount) * targetSampleRate / sourceSampleRate))
   }
 
+  /// Linear16 chunks at or below the watchdog's five-count floor are silence.
+  /// Cloud capture must not stream these chunks during a silent route probe.
+  static func containsLivePCM(_ data: Data) -> Bool {
+    data.withUnsafeBytes { buffer in
+      let bytes = buffer.bindMemory(to: UInt8.self)
+      guard bytes.count >= 2 else { return false }
+      for offset in stride(from: 0, to: bytes.count - 1, by: 2) {
+        let sample = Int16(bitPattern: UInt16(bytes[offset]) | (UInt16(bytes[offset + 1]) << 8))
+        if sample < -5 || sample > 5 { return true }
+      }
+      return false
+    }
+  }
+
   /// Handle incoming audio data from the IOProc callback
   private func handleAudioInput(_ inputData: UnsafePointer<AudioBufferList>?, timestamp: UnsafePointer<AudioTimeStamp>?)
   {
@@ -830,6 +858,8 @@ class AudioCaptureService: @unchecked Sendable {
     let nowAbs = CFAbsoluteTimeGetCurrent()
     let isBluetooth = Self.isBluetoothTransport(deviceID: deviceID)
     silentMicWatchdogLock.lock()
+    watchdogFrameCount += processedFrameLength
+    if watchdogFirstFrameAt == nil { watchdogFirstFrameAt = nowAbs }
     if windowPeak > watchdogWindowPeak { watchdogWindowPeak = windowPeak }
     if watchdogWindowStart == 0 { watchdogWindowStart = nowAbs }
     let detection: SilentMicDetection?

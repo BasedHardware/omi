@@ -12564,7 +12564,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Live STT",
-    "title": "Live TDT - admission overflow",
+    "title": "Parakeet canary capacity_full — roll allocation back if sustained",
     "condition": "D",
     "data": [
       {
@@ -12620,7 +12620,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 10 && $B > 0.20",
+          "expression": "$A >= 3 && $B > 0.10",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -12673,18 +12673,18 @@
     "updated": "2026-09-21T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "10m",
+    "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
-      "summary": "Live TDT - admission overflow",
+      "summary": "Parakeet canary capacity_full: set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0 if sustained.",
       "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
-      "safe_next_action": "Inspect provider health and account state. Roll back allocation before increasing capacity; measure GPU queueing first.",
+      "safe_next_action": "Set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0; inspect batch GPU headroom and window POST latency before ramping.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
-      "threshold": "$A >= 10 && $B > 0.20",
-      "evaluated_bad": "Synthetic contract: traffic 100 with failure ratio 0.5; saturation ratio 1.0.",
-      "evaluated_good": "Synthetic contract: traffic 100 with failure ratio 0; saturation ratio 0.5."
+      "threshold": "$A >= 3 && $B > 0.10",
+      "evaluated_bad": "Three or more admissions in 5m and overflow rate above 10%.",
+      "evaluated_good": "No overflow with three or more admissions in 5m."
     },
     "labels": {
       "alert_identity": "omi-stt-window-overflow",
@@ -13119,7 +13119,7 @@
     },
     "record": null
   },
-  {
+    {
     "uid": "omi-live-transcription-success-low",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
@@ -13233,7 +13233,7 @@
     "updated": "2026-09-26T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Live transcription is working for under 90% of sessions that should have produced a transcript.",
@@ -13242,12 +13242,1492 @@
       "verification": "Hermetic rule contract checked; the metric name is also asserted to be emitted in backend source. No production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Open the Backend-listen dashboard Live transcription health row: check the per-provider success panels and breaker-open gauges, then inspect provider account state (top up balance) before touching routing.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
-      "threshold": "$A >= 50 && $B < 0.90",
-      "evaluated_bad": "Synthetic contract: 100 counted sessions of which 80 transcribed (ratio 0.80 < 0.90); and a window with 100 no_transcript and no transcribed series at all (numerator zero-fills via 'or vector(0)', ratio 0, still fires).",
-      "evaluated_good": "Synthetic contract: 100 counted sessions of which 99 transcribed (ratio 0.99); and zero counted sessions (no data, healthy)."
+      "threshold": "$A >= 50 && $B < 0.90 for 10m",
+      "evaluated_bad": "Synthetic incident shape: no transcribed series and a sustained near-zero success ratio; a 20x reconnect storm creates many no_transcript WebSocket outcomes, which increase the denominator and cannot dilute the ratio. At >=50 outcomes per 5m, the condition remains true and fires after 10m.",
+      "evaluated_good": "Synthetic contract: 99 of 100 counted sessions transcribed; zero counted sessions stays healthy because the volume guard is false."
     },
     "labels": {
       "alert_identity": "omi-live-transcription-success-low",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-soniox-rate-limited",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - Soniox rate limiting",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=\"soniox\",reason=\"provider_rate_limited\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0.01",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-28T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Soniox real-time streams are being rate limited",
+      "user_impact": "Live transcription is exposed to a provider-wide rate limit or to a single-provider outage.",
+      "scope": "backend-listen-metrics; bounded provider and outcome labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Check current provider capacity and funded fallback readiness before changing routing or limits.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "sum(rate(omi_stt_stream_close_total{provider=\"soniox\",reason=\"provider_rate_limited\"}[5m])) > 0.01/s for 10m",
+      "evaluated_bad": "Synthetic contract: Soniox rate-limit closes exceed 0.01 per second for 10 minutes.",
+      "evaluated_good": "Synthetic contract: the rate-limit rate remains at or below 0.01 per second."
+    },
+    "labels": {
+      "alert_identity": "omi-soniox-rate-limited",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-single-leg-risk",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - Soniox single-leg risk",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(omi_live_stt_open_streams{job=\"backend-listen-metrics\",provider=\"soniox\"}) / clamp_min(sum(omi_live_stt_open_streams{job=\"backend-listen-metrics\"}), 1) > 0.9) and on() (sum(increase(omi_live_stt_accepted_total{job=\"backend-listen-metrics\",provider!=\"soniox\"}[30m]) unless on(provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1)) or vector(0)) == 0) and on() (sum(increase(omi_live_stt_terminal_total{job=\"backend-listen-metrics\",provider!=\"soniox\",outcome=\"transcribed\"}[30m]) unless on(provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1)) or vector(0)) == 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-28T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Soniox carries over 90% of live streams without recent funded fallback success",
+      "user_impact": "Live transcription is exposed to a provider-wide rate limit or to a single-provider outage.",
+      "scope": "backend-listen-metrics; bounded provider and outcome labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Check current provider capacity and funded fallback readiness before changing routing or limits.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "Soniox open-stream share > 90%, with no non-retired provider accepted or transcribed sessions in 30m",
+      "evaluated_bad": "Synthetic contract: the stated predicate remains true for the configured pending period.",
+      "evaluated_good": "Synthetic contract: rate-limit rate is zero or a funded alternative has recent successful sessions."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-single-leg-risk",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-soniox-runway-70",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Soniox monthly spend at 70% — top up Soniox",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0 && $B >= 0.70",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-28T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "top up Soniox: monthly spend reached 70% of the configured ceiling.",
+      "user_impact": "Soniox monthly spend has reached 70% of the configured ceiling; paid fallback runway may narrow.",
+      "scope": "Backend-listen Soniox usage API or metered audio estimate; no uid labels.",
+      "verification": "Local rule contract only; coordinator must verify live Grafana evaluation and Telegram delivery.",
+      "safe_next_action": "Check actual Soniox balance and monthly cap; top up Soniox before runway is exhausted. No auto-top-up is configured.",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md",
+      "threshold": "$A > 0 && $B >= 0.70 for 10m",
+      "evaluated_bad": "Configured ceiling above zero, fresh spend sample, and monthly spend at or above 70%.",
+      "evaluated_good": "Spend below 70%, or ceiling disabled."
+    },
+    "labels": {
+      "alert_identity": "omi-soniox-runway-70",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-soniox-runway-90",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Soniox monthly spend at 90% — top up Soniox",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0 && $B >= 0.90",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-28T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "top up Soniox: monthly spend reached 90% of the configured ceiling.",
+      "user_impact": "Soniox monthly spend has reached 90% of the configured ceiling; paid fallback runway may narrow.",
+      "scope": "Backend-listen Soniox usage API or metered audio estimate; no uid labels.",
+      "verification": "Local rule contract only; coordinator must verify live Grafana evaluation and Telegram delivery.",
+      "safe_next_action": "Top up Soniox or raise the approved monthly ceiling in config; verify vendor balance and project limits.",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md",
+      "threshold": "$A > 0 && $B >= 0.90 for 10m",
+      "evaluated_bad": "Configured ceiling above zero, fresh spend sample, and monthly spend at or above 90%.",
+      "evaluated_good": "Spend below 90%, or ceiling disabled."
+    },
+    "labels": {
+      "alert_identity": "omi-soniox-runway-90",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-modulate-failing-soniox",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Modulate failing — traffic on Soniox",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",provider=\"modulate\",outcome=\"failure\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",provider=\"soniox\",outcome=\"success\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 20 && $B >= 10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-28T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Modulate failing — traffic on Soniox. Watch Soniox runway and provider outcome SLI.",
+      "user_impact": "Modulate connection failures are sending live sessions to Soniox; paid fallback volume and cost may rise.",
+      "scope": "backend-listen provider connection outcomes only; bounded provider/outcome labels.",
+      "verification": "Local rule contract only; coordinator must verify live Grafana evaluation and Telegram delivery.",
+      "safe_next_action": "Inspect Modulate errors and Soniox runway; keep Soniox funded while it carries failover.",
+      "runbook": "backend/docs/runbooks/live-stt-routing.md",
+      "threshold": "$A >= 20 && $B >= 10 for 10m",
+      "evaluated_bad": "At least 20 Modulate connection failures and 10 Soniox connection successes in five minutes, sustained for 10 minutes.",
+      "evaluated_good": "Either provider count stays below its threshold."
+    },
+    "labels": {
+      "alert_identity": "omi-modulate-failing-soniox",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-window-no-text",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Parakeet canary no_text above 10%",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_window_session_outcome_total{job=\"backend-listen-metrics\"}[10m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(omi_stt_window_session_outcome_total{job=\"backend-listen-metrics\",outcome=\"no_text\"}[10m])) or vector(0)) / clamp_min(sum(increase(omi_stt_window_session_outcome_total{job=\"backend-listen-metrics\"}[10m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 5 && $B > 0.10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Parakeet canary no_text: roll window allocation back to 0 if sustained.",
+      "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
+      "scope": "backend-listen-metrics, windowed TDT only; no user identifier labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0; inspect window sessions, POST latency and GPU utilization.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A >= 5 && $B > 0.10",
+      "evaluated_bad": "Synthetic threshold: volume guard met and canary metric exceeds threshold.",
+      "evaluated_good": "Synthetic threshold: volume guard met and canary metric stays below threshold."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-window-no-text",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-window-first-text",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Parakeet canary first-text p95 over 30 seconds",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_window_first_text_seconds_count{job=\"backend-listen-metrics\"}[10m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(omi_stt_window_first_text_seconds_bucket{job=\"backend-listen-metrics\"}[10m])))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 5 && $B >= 30",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Parakeet canary first-text p95 exceeds the 30 s budget; roll allocation back to 0.",
+      "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
+      "scope": "backend-listen-metrics, windowed TDT only; no user identifier labels.",
+      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0; inspect window sessions, POST latency and GPU utilization.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A >= 5 && $B >= 30",
+      "evaluated_bad": "Synthetic threshold: volume guard met and canary metric exceeds threshold.",
+      "evaluated_good": "Synthetic threshold: volume guard met and canary metric stays below threshold."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-window-first-text",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-batch-queue-depth",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Parakeet canary batch queue depth warning",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(parakeet_batch_pending_requests{container=\"parakeet\",namespace=\"prod-omi-backend\"})",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(parakeet_batch_pending_requests{container=\"parakeet\",namespace=\"prod-omi-backend\"})",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$B >= 4",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Parakeet canary batch queue depth warning. Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
+      "user_impact": "Batch queue has four pending requests; live window admission should stand down.",
+      "scope": "Shared Parakeet GPU batch path; prerecorded includes sync backfill.",
+      "verification": "Compare queue depth, p95 and prerecorded errors in the Parakeet dashboard before ramping.",
+      "safe_next_action": "Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$B >= 4",
+      "evaluated_bad": "Synthetic threshold: volume guard met and canary metric exceeds threshold.",
+      "evaluated_good": "Synthetic threshold: volume guard met and canary metric stays below threshold."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-batch-queue-depth",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-batch-queue-latency",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Parakeet canary batch queue p95 warning",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(parakeet_queue_duration_seconds_count{container=\"parakeet\",namespace=\"prod-omi-backend\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(parakeet_queue_duration_seconds_bucket{container=\"parakeet\",namespace=\"prod-omi-backend\"}[5m])))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 5 && $B >= 1",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Parakeet canary batch queue p95 warning. Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
+      "user_impact": "Batch queue p95 has reached one second; check sync backfill before ramping.",
+      "scope": "Shared Parakeet GPU batch path; prerecorded includes sync backfill.",
+      "verification": "Compare queue depth, p95 and prerecorded errors in the Parakeet dashboard before ramping.",
+      "safe_next_action": "Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A >= 5 && $B >= 1",
+      "evaluated_bad": "Synthetic threshold: volume guard met and canary metric exceeds threshold.",
+      "evaluated_good": "Synthetic threshold: volume guard met and canary metric stays below threshold."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-batch-queue-latency",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-sync-prerecorded-errors",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Parakeet sync prerecorded errors warning",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(parakeet_prerecorded_requests_total{container=\"parakeet\",namespace=\"prod-omi-backend\"}[10m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(parakeet_prerecorded_requests_total{container=\"parakeet\",namespace=\"prod-omi-backend\",status=\"error\"}[10m])) / clamp_min(sum(increase(parakeet_prerecorded_requests_total{container=\"parakeet\",namespace=\"prod-omi-backend\"}[10m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 10 && $B >= 0.02",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-21T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "2m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Parakeet sync prerecorded errors warning. Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
+      "user_impact": "Prerecorded Parakeet errors threaten sync backfill; inspect the shared GPU pool.",
+      "scope": "Parakeet prerecorded requests excluding live TDT; includes sync backfill.",
+      "verification": "Compare queue depth, p95 and prerecorded errors in the Parakeet dashboard before ramping.",
+      "safe_next_action": "Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A >= 10 && $B >= 0.02",
+      "evaluated_bad": "Synthetic threshold: volume guard met and canary metric exceeds threshold.",
+      "evaluated_good": "Synthetic threshold: volume guard met and canary metric stays below threshold."
+    },
+    "labels": {
+      "alert_identity": "omi-stt-sync-prerecorded-errors",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-soniox-budget-exhausted",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Soniox balance exhausted — top up now",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=\"soniox\",reason=\"provider_budget_exhausted\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-28T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Soniox balance exhausted — top up now",
+      "user_impact": "Soniox refused a live stream because its organization balance or project budget is exhausted; sessions depending on Soniox may lose transcription.",
+      "scope": "backend-listen omi_stt_stream_close_total{provider=\"soniox\",reason=\"provider_budget_exhausted\"}; one or more closes in the rolling 5m window.",
+      "verification": "Local rule contract only; no production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Top up Soniox or restore the approved project budget, then verify a new stream succeeds.",
+      "runbook": "backend/docs/operational/soniox-typed-rejections.md",
+      "threshold": "sum(increase(omi_stt_stream_close_total{provider=\"soniox\",reason=\"provider_budget_exhausted\"}[5m])) > 0",
+      "evaluated_bad": "Synthetic contract: at least one Soniox provider_budget_exhausted stream close in the rolling 5m window fires immediately.",
+      "evaluated_good": "Synthetic contract: zero Soniox provider_budget_exhausted stream closes in the rolling 5m window stays healthy."
+    },
+    "labels": {
+      "alert_identity": "omi-soniox-budget-exhausted",
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "critical",

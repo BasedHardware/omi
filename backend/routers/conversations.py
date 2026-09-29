@@ -120,7 +120,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
+def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync_bridge: bool = False) -> dict:
     conversation = conversations_db.get_conversation(
         uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
     )
@@ -128,7 +128,16 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversations_db.is_soft_deleted(conversation):
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        if not follow_sync_bridge or not conversation.get('sync_merged_into'):
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        survivor_id = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+        if not survivor_id:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        conversation = conversations_db.get_conversation(
+            uid, survivor_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
+        )
+        if not conversation or conversations_db.is_soft_deleted(conversation):
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -735,6 +744,7 @@ def reprocess_conversation(
     language_code: Optional[str] = None,
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
+    response: Response = None,  # type: ignore[assignment]
 ):
     """
     Whenever a user wants to reprocess a conversation, or wants to force process a discarded one
@@ -759,6 +769,12 @@ def reprocess_conversation(
 
     explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
 
+    receipt_applied = False
+
+    def record_speaker_receipt(applied: bool) -> None:
+        nonlocal receipt_applied
+        receipt_applied = applied
+
     processed_conversation = process_conversation(
         uid,
         language_code,
@@ -769,7 +785,15 @@ def reprocess_conversation(
         app_usage_attribution=(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
+        speaker_receipt_observer=record_speaker_receipt,
     )
+
+    # The mobile speaker-label refresh must distinguish this processor from an
+    # older backend that accepted reprocess but built its prompt before applying
+    # the current manual speaker receipt. A header keeps released JSON decoders
+    # compatible and is emitted only after processing returns successfully.
+    if response is not None and receipt_applied:
+        response.headers['X-Omi-Speaker-Receipt-Summary'] = '1'
 
     # Reprocessing a hidden conversation is an explicit recovery: persist it as
     # the user's choice (``restore_discarded``) so no later reassessment hides it
@@ -955,7 +979,7 @@ def get_conversation_by_id(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
     if source is not None:
         if source != 'omi':
             raise HTTPException(
@@ -1504,6 +1528,7 @@ def _assign_manual_speaker(
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     conversation = deserialize_conversation(raw)
+    resolved_conversation_id = raw.get('id') or conversation_id
     _drop_display_projection(conversation)
     if background_tasks is not None:
         for path in removed:
@@ -1513,12 +1538,12 @@ def _assign_manual_speaker(
                 extract_speaker_samples,
                 uid=uid,
                 person_id=person_id,
-                conversation_id=conversation_id,
+                conversation_id=resolved_conversation_id,
                 segment_ids=teaching_segment_ids(raw.get('transcript_segments') or [], resolved),
             )
     _emit_speaker_identity_confirmed(
         uid=uid,
-        conversation_id=conversation_id,
+        conversation_id=resolved_conversation_id,
         scope='speaker' if speaker_id is not None else 'segment' if segment_index is not None else 'bulk',
         before=[_speaker_assignment(TranscriptSegment(**{'is_user': False, **s})) for s in before],
         after=[_speaker_assignment(s) for s in conversation.transcript_segments if s.id in resolved],
@@ -1562,6 +1587,7 @@ def set_assignee_conversation_speaker(
     speaker_id: int,
     assign_type: str,
     value: Optional[str] = None,
+    data: Optional[BulkAssignSegmentsRequest] = None,
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
     background_tasks: BackgroundTasks = None,
@@ -1573,6 +1599,7 @@ def set_assignee_conversation_speaker(
         uid,
         background_tasks,
         speaker_id=speaker_id,
+        segment_ids=data.segment_ids if data else None,
         use_for_speech_training=use_for_speech_training,
     )
 
@@ -1777,17 +1804,23 @@ def send_conversation_share_email(
         # resolves would block the address until its TTL expires. Quota stands
         # and the link stays published. The caller still gets 504 — we do not
         # know that it arrived, and only the ledger pretends otherwise.
+        logger.warning('share email: ambiguous delivery: %s', e)
         try:
             conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
         except Exception:
             logger.exception('share email: failed to record ambiguous dispatch')
-        raise HTTPException(status_code=504, detail=str(e))
+        raise HTTPException(
+            status_code=504,
+            detail="Email delivery timed out or is pending confirmation. Please check back shortly.",
+        )
     except ValueError as e:
+        logger.warning('share email: invalid recipient or configuration: %s', e)
         _release_reservation_and_quota()
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail="Invalid email recipient or configuration.")
     except RuntimeError as e:
+        logger.warning('share email: delivery service temporarily unavailable: %s', e)
         _release_reservation_and_quota()
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail="Email delivery service temporarily unavailable.")
     except HTTPException:
         raise
     except Exception:
@@ -1828,7 +1861,7 @@ def get_shared_conversation_by_id(conversation_id: str):
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, person_ids)
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     # Public unauthenticated surface: return only the explicit allowlist.
     # SharedConversationResponse does not inherit Conversation and ignores extras,

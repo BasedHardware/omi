@@ -407,8 +407,8 @@ class TestSyncJobsRedis:
         mock_redis.get.return_value = None
         assert mod.get_sync_job('nonexistent') is None
 
-    def test_get_sync_job_self_heals_stale_processing_job(self):
-        """A dead worker's job is finalized to failed on read so the client re-uploads."""
+    def test_get_sync_job_preserves_stale_processing_job(self):
+        """Progress age alone cannot bypass the route's run-lease recovery boundary."""
         mod, mock_redis = self._load_sync_jobs_module()
         stale_job = {
             'job_id': 'stale-1',
@@ -420,9 +420,8 @@ class TestSyncJobsRedis:
         mock_redis.get.return_value = json.dumps(stale_job).encode()
 
         result = mod.get_sync_job('stale-1')
-        assert result['status'] == 'failed'
-        assert result['error']
-        mock_redis.set.assert_called()
+        assert result == stale_job
+        mock_redis.set.assert_not_called()
 
     def test_get_sync_job_does_not_mark_fresh_as_stale(self):
         """Processing jobs within threshold should not be marked failed."""
@@ -836,8 +835,8 @@ class TestSyncJobsRedisBoundary:
         result = mod.get_sync_job('j')
         assert result['status'] == 'processing'
 
-    def test_stale_just_over_threshold_self_heals(self):
-        """A job one second past the stale bound is finalized to failed on read."""
+    def test_stale_just_over_threshold_is_read_only(self):
+        """Crossing the stale bound does not give a reader terminal-write authority."""
         mod, mock_redis = self._load_sync_jobs_module()
         job = {
             'job_id': 'j',
@@ -847,10 +846,11 @@ class TestSyncJobsRedisBoundary:
         }
         mock_redis.get.return_value = json.dumps(job).encode()
         result = mod.get_sync_job('j')
-        assert result['status'] == 'failed'
+        assert result == job
+        mock_redis.set.assert_not_called()
 
-    def test_stale_read_persists_failure(self):
-        """The self-heal is durable — the failed status is written back, not just returned."""
+    def test_stale_read_preserves_worker_state(self):
+        """Only the owning coordinator can persist a failure, never the reader."""
         mod, mock_redis = self._load_sync_jobs_module()
         job = {
             'job_id': 'j',
@@ -860,8 +860,8 @@ class TestSyncJobsRedisBoundary:
         }
         mock_redis.get.return_value = json.dumps(job).encode()
         result = mod.get_sync_job('j')
-        assert result['status'] == 'failed'
-        mock_redis.set.assert_called()
+        assert result == job
+        mock_redis.set.assert_not_called()
 
     def test_completed_job_not_stale_checked(self):
         """Terminal jobs must not be re-evaluated for staleness."""
@@ -1328,6 +1328,9 @@ class TestAsyncCoordinatorBehavioral:
         prior_manual_assignments = sys.modules.get('utils.manual_speaker_assignments')
         from utils import manual_speaker_assignments as actual_manual_assignments
 
+        prior_capture_evidence = sys.modules.get('utils.capture_evidence')
+        from utils import capture_evidence as actual_capture_evidence
+
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -1483,6 +1486,11 @@ class TestAsyncCoordinatorBehavioral:
         # Keep receipt apply/remap real: pipeline → assignment imports the policy
         # module at scope, and a MagicMock parent for utils is not a package.
         sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+        saved_modules['utils.capture_evidence'] = prior_capture_evidence
+        # Keep the S1 evidence envelope builder real (pure, stdlib-only): the
+        # pipeline imports unknown_envelope at module scope, and a MagicMock
+        # parent for utils is not a package.
+        sys.modules['utils.capture_evidence'] = actual_capture_evidence
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
@@ -3325,6 +3333,9 @@ class TestV2EndpointExecution:
         prior_manual_assignments = sys.modules.get('utils.manual_speaker_assignments')
         from utils import manual_speaker_assignments as actual_manual_assignments
 
+        prior_capture_evidence = sys.modules.get('utils.capture_evidence')
+        from utils import capture_evidence as actual_capture_evidence
+
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -3478,6 +3489,11 @@ class TestV2EndpointExecution:
         # Keep receipt apply/remap real: pipeline → assignment imports the policy
         # module at scope, and a MagicMock parent for utils is not a package.
         sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+        saved_modules['utils.capture_evidence'] = prior_capture_evidence
+        # Keep the S1 evidence envelope builder real (pure, stdlib-only): the
+        # pipeline imports unknown_envelope at module scope, and a MagicMock
+        # parent for utils is not a package.
+        sys.modules['utils.capture_evidence'] = actual_capture_evidence
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.

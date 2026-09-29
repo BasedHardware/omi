@@ -20,9 +20,7 @@ class CaptureRecoveryBanner extends StatelessWidget {
       builder: (context, _) {
         final episode = wedge.visiblePrompt;
         if (episode == null) return const SizedBox.shrink();
-        final isTransferRecovery = episode.trigger == CaptureWedgeMonitor.triggerUploadSilence ||
-            episode.trigger == CaptureWedgeMonitor.triggerStorageAtRisk ||
-            episode.trigger == CaptureWedgeMonitor.triggerBytesSentNoTranscript;
+        final isTransferRecovery = episode.trigger == CaptureWedgeMonitor.triggerStorageAtRisk;
         if (TickerMode.valuesOf(context).enabled) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (context.mounted) wedge.markPromptShown();
@@ -58,9 +56,7 @@ class CaptureRecoveryBanner extends StatelessWidget {
                       child: Text(
                         episode.trigger == CaptureWedgeMonitor.triggerStorageAtRisk
                             ? '${context.l10n.phoneStorage}: ${context.l10n.recordingsNotSynced}'
-                            : episode.trigger == CaptureWedgeMonitor.triggerUploadSilence
-                                ? context.l10n.recordingsNotSynced
-                                : context.l10n.captureRecoveryBanner,
+                            : context.l10n.captureRecoveryBanner,
                         style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                       ),
                     ),

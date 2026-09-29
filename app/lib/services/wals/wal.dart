@@ -196,12 +196,20 @@ class Wal {
   /// arrives so WALs survive app kill and can be recovered on startup.
   String? conversationId;
 
+  /// Client recording id (`activeRecordingId` / `external_data.recording_session_id`).
+  /// Stamped when the WAL is created so a safety copy that misses
+  /// ConversationProcessingStarted can still bind to the live conversation.
+  String? recordingSessionId;
+
   /// The account that created this recording, stamped from the signed-in uid
   /// at creation (or back-filled at logout). Loaded records owned by another
   /// account are parked durably instead of being loaded, so a session never
   /// renders or uploads another account's recordings after an account switch.
   /// Null on records written before this field existed (pre-upgrade data).
   String? ownerUid;
+  String? captureRoot;
+  int? sourceFrameStart;
+  int? sourceClockEpoch;
 
   /// Canonical start-time location snapshot for delayed/offline finalization.
   Geolocation? geolocation;
@@ -320,7 +328,11 @@ class Wal {
     this.syncedFrameOffset = 0,
     this.originalStorage,
     this.conversationId,
+    this.recordingSessionId,
     this.ownerUid,
+    this.captureRoot,
+    this.sourceFrameStart,
+    this.sourceClockEpoch,
     this.geolocation,
     this.retryCount = 0,
     this.lastRetryAt = 0,
@@ -350,7 +362,11 @@ class Wal {
       originalStorage:
           json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       conversationId: json['conversation_id'],
+      recordingSessionId: json['recording_session_id'],
       ownerUid: json['owner_uid'],
+      captureRoot: json['capture_root'],
+      sourceFrameStart: json['source_frame_start'],
+      sourceClockEpoch: json['source_clock_epoch'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -380,7 +396,11 @@ class Wal {
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
       'conversation_id': conversationId,
+      'recording_session_id': recordingSessionId,
       'owner_uid': ownerUid,
+      if (captureRoot != null) 'capture_root': captureRoot,
+      if (sourceFrameStart != null) 'source_frame_start': sourceFrameStart,
+      if (sourceClockEpoch != null) 'source_clock_epoch': sourceClockEpoch,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,

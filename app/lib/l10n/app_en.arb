@@ -13332,9 +13332,9 @@
     "@openCall": {
         "description": "Accessibility hint on the live card during a call; tapping opens the call screen."
     },
-    "captureRecoveryBanner": "Pendant audio is not reaching the app — tap to repair",
+    "captureRecoveryBanner": "Omi isn't sending audio — tap to reconnect",
     "@captureRecoveryBanner": {
-        "description": "Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings"
+        "description": "Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings"
     },
     "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later on your pendant before recording with your phone.",
     "captureNotTranscribing": "Not transcribing",
@@ -13557,5 +13557,109 @@
     "appearance": "Appearance",
     "appearanceSystem": "System",
     "appearanceLight": "Light",
-    "appearanceDark": "Dark"
+    "appearanceDark": "Dark",
+    "chatDiscardRecording": "Discard",
+    "@chatDiscardRecording": {
+        "description": "Discard the current chat voice recording without transcription"
+    },
+    "voiceQuestionNoSpeech": "Didn't catch that — try again",
+    "@voiceQuestionNoSpeech": {
+        "description": "Shown in chat when a pendant voice question contains no detectable speech."
+    },
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.",
+    "sendToSupport": "Send to support",
+    "@sendToSupport": {
+        "description": "Device diagnostics support upload"
+    },
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "@deviceDiagnosticsUploadDescription": {
+        "description": "Device diagnostics support upload"
+    },
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "@deviceDiagnosticsTicket": {
+        "description": "Device diagnostics support upload"
+    },
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
+    "@deviceDiagnosticsUploadFailed": {
+        "description": "Device diagnostics support upload"
+    },
+    "feedbackGiveFeedback": "Give feedback",
+    "@feedbackGiveFeedback": {
+        "description": "Button on the summary/recording feedback prompt that opens the quick feedback sheet."
+    },
+    "feedbackAllGood": "All good",
+    "@feedbackAllGood": {
+        "description": "Chip in the feedback sheet for a positive answer; submits helpful feedback."
+    },
+    "feedbackChatWithUs": "More detail? Chat with us",
+    "@feedbackChatWithUs": {
+        "description": "Secondary row in the feedback sheet that opens the support chat."
+    },
+    "feedbackReasonSummaryInaccurate": "Inaccurate",
+    "@feedbackReasonSummaryInaccurate": {
+        "description": "Quick reason chip: the summary was inaccurate."
+    },
+    "feedbackReasonSummaryIncomplete": "Incomplete",
+    "@feedbackReasonSummaryIncomplete": {
+        "description": "Quick reason chip: the summary was incomplete."
+    },
+    "feedbackReasonSummaryIrrelevant": "Not relevant",
+    "@feedbackReasonSummaryIrrelevant": {
+        "description": "Quick reason chip: the summary was not relevant."
+    },
+    "feedbackReasonSummaryWrongContext": "Wrong context",
+    "@feedbackReasonSummaryWrongContext": {
+        "description": "Quick reason chip: the summary mixed up context."
+    },
+    "feedbackReasonSummaryOther": "Something else",
+    "@feedbackReasonSummaryOther": {
+        "description": "Quick reason chip: some other summary problem."
+    },
+    "feedbackReasonRecordingMissingAudio": "Missing audio",
+    "@feedbackReasonRecordingMissingAudio": {
+        "description": "Quick reason chip: the recording is missing audio."
+    },
+    "feedbackReasonRecordingPoorTranscription": "Poor transcription",
+    "@feedbackReasonRecordingPoorTranscription": {
+        "description": "Quick reason chip: the transcription was poor."
+    },
+    "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
+    "@feedbackReasonRecordingWrongSpeaker": {
+        "description": "Quick reason chip: the speaker attribution was wrong."
+    },
+    "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
+    "@feedbackReasonRecordingDelayedOrStuck": {
+        "description": "Quick reason chip: processing was delayed or stuck."
+    },
+    "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
+    "@feedbackReasonRecordingFragmentedOrDuplicated": {
+        "description": "Quick reason chip: the recording was fragmented or duplicated."
+    },
+    "feedbackReasonRecordingOther": "Something else",
+    "@feedbackReasonRecordingOther": {
+        "description": "Quick reason chip: some other recording problem."
+    },
+    "searchPeople": "Search people",
+    "@searchPeople": {
+        "description": "Hint for the person search field in the tag-speaker sheet"
+    },
+    "addQueryAsNewPerson": "Add \"{query}\" as a new person",
+    "@addQueryAsNewPerson": {
+        "description": "Row shown in the tag-speaker sheet when no existing person matches the search query",
+        "placeholders": {
+            "query": {
+                "type": "String"
+            }
+        }
+    },
+    "showAllPeople": "Show all {count} people",
+    "@showAllPeople": {
+        "description": "Expander chip in the tag-speaker sheet that reveals the capped person grid",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    }
 }

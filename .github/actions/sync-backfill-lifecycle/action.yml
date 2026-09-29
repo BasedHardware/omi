@@ -132,6 +132,7 @@ runs:
           ${{ steps.candidate-tag.outputs.flag }}
           --min-instances=1
           --max-instances=30
+          --max=30
           --concurrency=1
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           ${{ inputs.cloud_run_flags }}
@@ -168,7 +169,8 @@ runs:
       if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       shell: bash
       run: |
-        # Dispatch concurrency must match the worker's --max-instances above.
+        # Dispatch concurrency must match the worker's --max-instances and
+        # service-level --max above; the service cap wins when it is lower.
         # Offering more than the worker can admit makes Cloud Run reject the
         # surplus with "no available instance", and Cloud Tasks then retries
         # each rejection with exponential backoff. At the previous four-worker
@@ -198,32 +200,16 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        # The task invoker already has run.invoker on backend-sync. Reuse its
-        # audience/identity; no new service account or queue is needed.
-        SERVICE_JSON="$(gcloud run services describe '${{ inputs.service }}-sync' \
-          --region='${{ inputs.region }}' --project='${{ inputs.project_id }}' \
-          --format='json(status.url,spec.template.spec.containers[0].env)')"
-        SERVICE_URL="$(jq -r '.status.url // empty' <<< "$SERVICE_JSON")"
-        INVOKER_SA="$(jq -r '[.spec.template.spec.containers[0].env[]? | select(.name == "SYNC_TASKS_INVOKER_SA") | .value] | first // empty' <<< "$SERVICE_JSON")"
-        test -n "$SERVICE_URL"
-        test -n "$INVOKER_SA"
-        JOB='sync-backfill-uid-sequencer'
-        COMMON=(
-          --location='${{ inputs.region }}'
-          --project='${{ inputs.project_id }}'
-          --schedule='*/2 * * * *'
-          --time-zone='UTC'
-          --uri="${SERVICE_URL}/v2/sync-backfill-sequencer/sweep"
-          --http-method='POST'
-          --oidc-service-account-email="$INVOKER_SA"
-          --oidc-token-audience="${SERVICE_URL}/v2/sync-jobs/run"
-          --attempt-deadline='180s'
-        )
-        if gcloud scheduler jobs describe "$JOB" --location='${{ inputs.region }}' --project='${{ inputs.project_id }}' >/dev/null 2>&1; then
-          gcloud scheduler jobs update http "$JOB" "${COMMON[@]}"
-        else
-          gcloud scheduler jobs create http "$JOB" "${COMMON[@]}"
-        fi
+        python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+        DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
+        ENVIRONMENT=dev
+        if [[ '${{ inputs.project_id }}' == 'based-hardware' ]]; then ENVIRONMENT=prod; fi
+        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/scheduler_reconcile.py" \
+          --environment "$ENVIRONMENT" --project '${{ inputs.project_id }}' \
+          --apply --jobs sync-backfill-uid-sequencer
+        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/scheduler_reconcile.py" \
+          --environment "$ENVIRONMENT" --project '${{ inputs.project_id }}' \
+          --check --jobs sync-backfill-uid-sequencer
 
     - name: Provision and verify sync ledger TTL
       if: ${{ inputs.mode == 'platform' && inputs.provision_sync_ledger_ttl == 'true' }}
@@ -295,6 +281,10 @@ runs:
             )"
           fi
           test -n "$POLICY"
+          python3 "$DEPLOY_CONTROL_SCRIPTS/reconcile_sync_backfill_alert_policy.py" \
+            --project='${{ inputs.project_id }}' --policy="$POLICY" \
+            --display-name="$DISPLAY_NAME" --condition=threshold \
+            --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
           gcloud monitoring policies describe "$POLICY" \
             --project=${{ inputs.project_id }} \
             --format=json | python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_backfill_alert_policy.py" \
@@ -313,6 +303,11 @@ runs:
         DISPLAY_NAME="Sync backfill dispatch abort"
         LOG_FILTER="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend-sync-backfill\" AND \"The request was aborted because there was no available instance\""
         CONDITION_FILTER="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\""
+        # Cloud Tasks retries every abort, so one abort is a delay, not a loss.
+        # Alert on a sustained rate: more than 30 in a rolling 30 minutes.
+        THRESHOLD=30
+        WINDOW=1800s
+        AGGREGATION="{\"alignmentPeriod\":\"${WINDOW}\",\"perSeriesAligner\":\"ALIGN_SUM\",\"crossSeriesReducer\":\"REDUCE_SUM\"}"
         if gcloud logging metrics describe "$METRIC" --project=${{ inputs.project_id }} >/dev/null 2>&1; then
           gcloud logging metrics update "$METRIC" \
             --project=${{ inputs.project_id }} \
@@ -343,19 +338,26 @@ runs:
               --condition-display-name="$DISPLAY_NAME" \
               --condition-filter="$CONDITION_FILTER" \
               --duration=0s \
-              --if='> 0' \
+              --if="> ${THRESHOLD}" \
+              --aggregation="$AGGREGATION" \
               --trigger-count=1 \
               --combiner=OR \
               --notification-channels="$ALERT_CHANNELS" \
-              --documentation="backend-sync-backfill rejected a Cloud Tasks request because no instance was available (cold-start / scale-up abort)." \
+              --documentation="backend-sync-backfill rejected more than ${THRESHOLD} Cloud Tasks requests in 30 minutes because no instance was available. Cloud Tasks retries each one, so recordings are delayed rather than lost. Check that the service-level max instances matches the queue max-concurrent-dispatches, then instance quota and cold-start time." \
               --format='value(name)'
           )"
         fi
         test -n "$POLICY"
+        python3 "$DEPLOY_CONTROL_SCRIPTS/reconcile_sync_backfill_alert_policy.py" \
+          --project='${{ inputs.project_id }}' --policy="$POLICY" \
+          --display-name="$DISPLAY_NAME" --condition=threshold \
+          --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS" \
+          --threshold-value="$THRESHOLD" --alignment-period="$WINDOW"
         gcloud monitoring policies describe "$POLICY" \
           --project=${{ inputs.project_id }} \
           --format=json | python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_backfill_alert_policy.py" \
-            --condition=threshold --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
+            --condition=threshold --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS" \
+            --threshold-value="$THRESHOLD" --alignment-period="$WINDOW"
 
     - name: Provision routed backfill sequencer stall alert
       if: ${{ (inputs.mode == 'platform' || inputs.mode == 'dispatch') && inputs.provision_budget_alerts == 'true' }}
@@ -391,6 +393,10 @@ runs:
             --format='value(name)')"
         fi
         test -n "$POLICY"
+        python3 "$DEPLOY_CONTROL_SCRIPTS/reconcile_sync_backfill_alert_policy.py" \
+          --project='${{ inputs.project_id }}' --policy="$POLICY" \
+          --display-name="$DISPLAY_NAME" --condition=threshold \
+          --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
         gcloud monitoring policies describe "$POLICY" --project=${{ inputs.project_id }} --format=json \
           | python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_backfill_alert_policy.py" \
               --condition=threshold --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
@@ -416,7 +422,7 @@ runs:
             LOG_FILTER='resource.type="cloud_run_revision" AND resource.labels.service_name="backend-sync" AND "event=sync_uid_sequencer action=sweep_summary outcome=done"'
             CONDITION_FILTER="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\""
             CONDITION='absent'
-            DURATION='10min'
+            DURATION='600s'
           fi
           if gcloud logging metrics describe "$METRIC" --project=${{ inputs.project_id }} >/dev/null 2>&1; then
             gcloud logging metrics update "$METRIC" --project=${{ inputs.project_id }} --description="$DISPLAY_NAME" --log-filter="$LOG_FILTER"
@@ -429,13 +435,17 @@ runs:
             exit 1
           fi
           if [[ -z "$POLICY" ]]; then
-            POLICY="$(gcloud monitoring policies create \
-              --project=${{ inputs.project_id }} --display-name="$DISPLAY_NAME" \
-              --condition-display-name="$DISPLAY_NAME" --condition-filter="$CONDITION_FILTER" \
-              --duration="$DURATION" --if="$CONDITION" --combiner=OR \
+            POLICY="$(python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_monitoring_metric_alert_policy.py" \
+              --project='${{ inputs.project_id }}' \
+              --display-name="$DISPLAY_NAME" \
+              --metric-type="logging.googleapis.com/user/${METRIC}" \
+              --condition-display-name="$DISPLAY_NAME" \
+              --condition-filter="$CONDITION_FILTER" \
+              --duration="$DURATION" \
+              --comparison="$CONDITION" \
+              --combiner=OR \
               --notification-channels="$ALERT_CHANNELS" \
-              --documentation='The two-minute sync-backfill-uid-sequencer sweep failed or stopped. Admission and normal completion still dispatch; investigate crash recovery and pending age.' \
-              --format='value(name)')"
+              --documentation='The two-minute sync-backfill-uid-sequencer sweep failed or stopped. Admission and normal completion still dispatch; investigate crash recovery and pending age.')"
           fi
           test -n "$POLICY"
           if [[ "$KIND" == heartbeat ]]; then
@@ -445,6 +455,11 @@ runs:
             CONDITION_KIND=threshold
             DURATION_SECONDS=0
           fi
+          python3 "$DEPLOY_CONTROL_SCRIPTS/reconcile_sync_backfill_alert_policy.py" \
+            --project='${{ inputs.project_id }}' --policy="$POLICY" \
+            --display-name="$DISPLAY_NAME" --condition="$CONDITION_KIND" \
+            --filter="$CONDITION_FILTER" --duration-seconds="$DURATION_SECONDS" \
+            --channels="$ALERT_CHANNELS"
           gcloud monitoring policies describe "$POLICY" --project=${{ inputs.project_id }} --format=json \
             | python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_backfill_alert_policy.py" \
                 --condition="$CONDITION_KIND" --filter="$CONDITION_FILTER" \

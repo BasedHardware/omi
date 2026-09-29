@@ -173,7 +173,9 @@ def get_conversation_screen_frames_revision(uid: str, conversation_id: str) -> i
     return int(data.get('screen_frames_revision', 0) or 0)
 
 
-def mark_conversation_screen_frames_adjudicated(uid: str, conversation_id: str) -> datetime:
+def mark_conversation_screen_frames_adjudicated(
+    uid: str, conversation_id: str, *, selection_fingerprint: str
+) -> datetime:
     """Record that an adjudication pass ran for this conversation, whatever it decided.
 
     Distinct from the revision counter on purpose. `screen_frames_revision` only moves when a
@@ -188,7 +190,13 @@ def mark_conversation_screen_frames_adjudicated(uid: str, conversation_id: str) 
     stamp = datetime.now(timezone.utc)
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.set({'screen_frames_adjudicated_at': stamp}, merge=True)
+    conversation_ref.set(
+        {
+            'screen_frames_adjudicated_at': stamp,
+            'screen_frames_selection_fingerprint': selection_fingerprint,
+        },
+        merge=True,
+    )
     return stamp
 
 
@@ -198,6 +206,14 @@ def get_conversation_screen_frames_adjudicated_at(uid: str, conversation_id: str
     snapshot = conversation_ref.get(field_paths=['screen_frames_adjudicated_at'])
     data = snapshot.to_dict() or {}
     return data.get('screen_frames_adjudicated_at')
+
+
+def get_conversation_screen_frames_selection_fingerprint(uid: str, conversation_id: str):
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    snapshot = conversation_ref.get(field_paths=['screen_frames_selection_fingerprint'])
+    data = snapshot.to_dict() or {}
+    return data.get('screen_frames_selection_fingerprint')
 
 
 def get_conversation_screenshot_sharing_enabled(conversation: Dict[str, Any]) -> bool:
