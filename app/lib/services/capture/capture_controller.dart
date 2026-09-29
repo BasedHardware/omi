@@ -3584,7 +3584,8 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  // ============== Freemium: Threshold Notification =======
+  // ============== Freemium: Threshold Notification ==============
+
   /// Handle freemium threshold reached: Notify user based on required action
   void _handleFreemiumThresholdReached(FreemiumThresholdReachedEvent event) {
     if (!_freemiumThreshold.handle(event)) return;
