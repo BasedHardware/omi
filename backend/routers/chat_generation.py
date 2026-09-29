@@ -59,7 +59,7 @@ async def generate_reply(
     app_record = await run_blocking(db_executor, get_available_app_by_id, app_id, uid) if app_id else None
     if app_id and not app_record:
         raise HTTPException(status_code=404, detail={'error': 'app_not_found'})
-    app = App(**app_record) if app_record else None
+    app = App.deserialize_safe(app_record) if app_record else None
     resolved_app_id = app.id if app else None
 
     created_at = datetime.now(timezone.utc)
