@@ -1117,6 +1117,13 @@ extension RealtimeHubController {
       heard = forced
       log("RealtimeHub: TEST override provider transcript → \"\(forced.prefix(60))\"")
     }
+    let completedInputTranscript = Self.journalInputTranscript(
+      providerText: heard,
+      wakeWordInputTranscript: wakeWordInputTranscript)
+    if heard.isEmpty, !completedInputTranscript.isEmpty {
+      heard = completedInputTranscript
+      log("RealtimeHub: using wake-word text for the journal input transcript")
+    }
     let providerReply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
     let acceptedSpawnOwnerID = acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey]?.ownerID
     let reply =

@@ -131,8 +131,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   /// block. Extending one shared deadline on every chunk left several turns of speech
   /// matchable at once, and a few hundred words of ordinary English will align with almost
   /// any short sentence — live, "Sorry my mistake it's taking" was deleted that way. An
-  /// echo arrives a second or two behind the audio, so this only has to outlive that.
-  private static let spokenWordLifetime: TimeInterval = 15
+  /// Ambient transcript delivery has been measured 34–36 seconds behind playback,
+  /// so retain enough history to cover that tail without spanning multiple turns.
+  static let spokenWordLifetime: TimeInterval = 45
 
   /// Playback from the last few seconds, which is all an echo can be an echo of.
   var recentlySpokenWords: [String] {

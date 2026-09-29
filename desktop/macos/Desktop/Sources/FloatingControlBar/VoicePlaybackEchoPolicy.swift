@@ -70,6 +70,18 @@ enum VoicePlaybackEchoPolicy {
       incoming, against: spokenWords, commitsFinalSingleMatch: true)
     guard leading >= minimumWordCount else { return .keep }
     guard tokens.count - leading >= minimumWordCount else {
+      // A short but sentence-delimited tail is still a real interruption. The
+      // earlier 80% coverage rule dropped “... Omi's answer. Stop now” because
+      // two user words could not meet the four-word residue floor. Contiguous
+      // playback fragments have no sentence boundary and retain the strict drop.
+      if leading < tokens.count,
+        sentenceBreakPrecedes(tokens[leading], in: transcript, after: tokens[leading - 1])
+      {
+        let residue = String(transcript[tokens[leading].start...])
+        if !isShortPlaybackFragment(residue, spokenWords: spokenWords) {
+          return .keepResidue(residue)
+        }
+      }
       // Discarding the whole segment needs the match to actually account for the whole
       // segment. Several sentences of playback history contain enough ordinary words that
       // a short utterance can align with four of them by chance — live, "Sorry, my mistake

@@ -80,6 +80,11 @@ final class VoicePlaybackEchoPolicyTests: XCTestCase {
       .keep)
   }
 
+  @MainActor
+  func testPlaybackHistoryCoversMeasuredAmbientTranscriptLag() {
+    XCTAssertGreaterThanOrEqual(FloatingBarVoicePlaybackService.spokenWordLifetime, 36)
+  }
+
   /// Short utterances are too generic to attribute — "yes" and "okay" appear in the
   /// assistant's speech and in ordinary conversation alike. A false echo deletes
   /// something the user said, so these stay.
@@ -133,6 +138,14 @@ final class VoicePlaybackEchoPolicyTests: XCTestCase {
         "1. Mumbai, India's financial capital and home to Bollywood. 2.",
         spoken: "1. Mumbai, India's financial capital and home to Bollywood. 2. Delhi, the national capital."),
       .drop)
+  }
+
+  func testShortSentenceDelimitedBargeInSurvivesHighEchoCoverage() {
+    XCTAssertEqual(
+      classify(
+        "I can help, but I need two details first. Stop now.",
+        spoken: "I can help, but I need two details first."),
+      .keepResidue("Stop now."))
   }
 
   /// Captured live: playback continues past the interruption, so the same sentence

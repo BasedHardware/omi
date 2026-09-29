@@ -4708,13 +4708,19 @@ class FloatingControlBarManager {
     // `fromVoice` was set is what made a wake word's spoken query vanish silently.
     guard
       voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil }) ?? true
-    else { return }
+    else {
+      Self.suppressNextVisibleSurface = false
+      return
+    }
     guard let window = window, window.state.showingAIResponse else {
       // No active conversation — fall back to new conversation
       openAIInputWithQuery(query, fromVoice: fromVoice, voiceTurnID: voiceTurnID)
       return
     }
-    guard let provider = activeFloatingProvider() else { return }
+    guard let provider = activeFloatingProvider() else {
+      Self.suppressNextVisibleSurface = false
+      return
+    }
 
     // Archive current exchange as viewport id anchors (content stays on provider).
     window.state.archiveCurrentExchange(using: provider)
@@ -4722,6 +4728,7 @@ class FloatingControlBarManager {
     if provider.isSending {
       let turnOwner = chatTurnOwner(for: .visible(fromVoice: fromVoice))
       guard provider.canInterruptActiveTurn(owner: turnOwner) else {
+        Self.suppressNextVisibleSurface = false
         showSharedProviderBusy(in: window, presentation: .visible(fromVoice: fromVoice))
         return
       }
@@ -4740,7 +4747,10 @@ class FloatingControlBarManager {
       guard
         voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
           ?? true
-      else { return }
+      else {
+        Self.suppressNextVisibleSurface = false
+        return
+      }
       await self.withQueryTracer(query: query, fromVoice: fromVoice) {
         await self.sendAIQuery(
           query,

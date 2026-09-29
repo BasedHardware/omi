@@ -1158,6 +1158,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     return true
   }
 
+  static func journalInputTranscript(
+    providerText: String,
+    wakeWordInputTranscript: String?
+  ) -> String {
+    let providerText = providerText.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !providerText.isEmpty { return providerText }
+    return wakeWordInputTranscript?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+  }
+
   func runHeadlessPTTTurn(
     pcm16k: Data, timeout: Double, forceTranscript: String? = nil, textOnly: Bool = false
   ) async -> [String: String] {

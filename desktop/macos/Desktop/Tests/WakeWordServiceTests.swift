@@ -60,6 +60,15 @@ final class WakeWordServiceTests: XCTestCase {
     XCTAssertTrue(triggered.isEmpty)
   }
 
+  func testUnknownSpeakerDoesNotInheritPrimaryUserFallback() {
+    configureService()
+    let segment = SpeakerSegment(
+      segmentId: "a", speaker: -1, text: "Omi, let's order food", start: 0, end: 1,
+      isUser: false)
+    service.observe(segment, isConversationActive: false)
+    XCTAssertTrue(triggered.isEmpty)
+  }
+
   /// Regression: a live ambient session transcribed "Omi, what's the weather?" as
   /// speaker 0 with `is_user=false` (diarization only sets `is_user` once a speech
   /// profile is enrolled) and the wake word never fired. Speaker 0 is the primary
@@ -142,5 +151,16 @@ final class WakeWordServiceTests: XCTestCase {
     configureService()
     service.observe(userSegment("Omi, order pizza", id: "a"), isConversationActive: false)
     XCTAssertEqual(service.lastTriggeredCommand, "order pizza")
+  }
+
+  func testWakeWordTextBackfillsMissingProviderJournalTranscript() {
+    XCTAssertEqual(
+      RealtimeHubController.journalInputTranscript(
+        providerText: "", wakeWordInputTranscript: "  show my tasks  "),
+      "show my tasks")
+    XCTAssertEqual(
+      RealtimeHubController.journalInputTranscript(
+        providerText: "provider heard this", wakeWordInputTranscript: "show my tasks"),
+      "provider heard this")
   }
 }

@@ -52,8 +52,10 @@ extension AppState {
       guard !segment.text.isEmpty else { continue }
       UpdateInstallActivity.markTranscriptActivity()
 
-      // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0)
-      let speakerId = segment.speaker_id ?? 0
+      // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0). Keep an
+      // unattributed segment unknown: coercing nil to speaker 0 granted it the
+      // primary-user fallback used by wake word and barge-in admission.
+      let speakerId = segment.speaker_id ?? -1
 
       // Omi speaks into a room Omi is also recording, so ambient capture returns the
       // assistant's own voice attributed to the primary speaker. Every consumer below
@@ -111,7 +113,7 @@ extension AppState {
         translations: translations
       )
 
-      WakeWordService.shared.observe(newSeg)
+      var wakeWordSegment: SpeakerSegment?
 
       // Upsert: if we already have a segment with this ID, update it; otherwise append
       if let segId = segment.id,
@@ -126,6 +128,7 @@ extension AppState {
           updatedSeg.translations = speakerSegments[existingIdx].translations
         }
         speakerSegments[existingIdx] = updatedSeg
+        wakeWordSegment = updatedSeg
         log(
           "Transcript [UPDATE] Speaker \(speakerId) [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]: \(segment.text.prefix(80))"
         )
@@ -140,6 +143,7 @@ extension AppState {
         switch LocalTranscriptionDuplicatePolicy.decision(for: newSeg, existing: speakerSegments) {
         case .accept:
           appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
+          wakeWordSegment = newSeg
 
         case .suppressIncoming:
           log(
@@ -149,7 +153,8 @@ extension AppState {
         case .replaceExisting(let existingSegmentId):
           guard let existingIdx = speakerSegments.firstIndex(where: { $0.segmentId == existingSegmentId }) else {
             appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
-            continue
+            wakeWordSegment = newSeg
+            break
           }
 
           let oldWords = speakerSegments[existingIdx].text.split(separator: " ").count
@@ -159,6 +164,7 @@ extension AppState {
           var replacement = newSeg
           replacement.segmentId = existingSegmentId
           speakerSegments[existingIdx] = replacement
+          wakeWordSegment = replacement
           segmentsToPersist.append(segmentWithID(segment, id: existingSegmentId))
           log(
             "Transcript [DEDUP] Promoted system-audio copy over mic playback duplicate [\(String(format: "%.1f", segment.start))s-\(String(format: "%.1f", segment.end))s]"
@@ -166,6 +172,13 @@ extension AppState {
         }
       } else {
         appendNewTranscriptSegment(newSeg, segment: segment, to: &segmentsToPersist)
+        wakeWordSegment = newSeg
+      }
+
+      // A local mic/system duplicate can be playback echo. Only a segment that
+      // survived that policy may trigger the wake-word command path.
+      if let wakeWordSegment {
+        WakeWordService.shared.observe(wakeWordSegment)
       }
     }
 

@@ -2036,6 +2036,8 @@ import XCTest
   ///
   /// Everything pinned here lives in `FloatingControlBarWindow.swift` now, so this survives
   /// the view-layer churn that killed the previous pin.
+  // omi-test-quality: source-inspection -- static contract: the one-shot quiet-answer latch
+  // is armed and consumed only at the shared typed/wake-word dispatch boundary.
   func testQuietAnswerLatchContractSurvivesTheTypedSendRewrite() throws {
     let windowSource = try floatingControlBarWindowSource()
 
@@ -2055,8 +2057,9 @@ import XCTest
     XCTAssertTrue(windowSource.contains("let presentsSurface = !Self.suppressNextVisibleSurface"))
 
     // Every exit that abandons the query has to clear the latch, or an abandoned wake-word
-    // command quiets the next typed question instead. Two guard exits plus .voiceOnly.
-    XCTAssertEqual(windowSource.components(separatedBy: "Self.suppressNextVisibleSurface = false").count - 1, 3)
+    // command quiets the next typed question instead. This includes both submission APIs,
+    // their synchronous guard exits, the asynchronous owner recheck, and `.voiceOnly`.
+    XCTAssertEqual(windowSource.components(separatedBy: "Self.suppressNextVisibleSurface = false").count - 1, 7)
 
     // A typed question is never quiet, whatever a preceding wake-word answer left behind.
     // Both onSendQuery wirings must reset it — the default one installed at setup and the
