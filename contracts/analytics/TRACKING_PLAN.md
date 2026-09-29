@@ -143,3 +143,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | siriIntentPerformed | Siri Intent Performed | intent, platform, outcome, latency_ms, invoked_via | active | siri-intents |
 | siriAskOmiPerformed | Siri Ask Omi Performed | platform, outcome, latency_ms, invoked_via | active | siri-intents |
 | siriIndexRebuilt | Siri Index Rebuilt | platform, entity_counts, duration_ms, outcome | active | siri-index-health |
+
+## App Review Opportunity decisions
+
+`eligible`, `not_ios_or_android`, `storage_error`, `not_familiar`, `migration_cooldown`, `cooldown`, `budget_exhausted`, `version_already_attempted`, `session_already_attempted`, `lifecycle_not_appropriate`, `lifecycle_changed`, `availability_error`, `unavailable`, `request_error`, `recent_bad_experience`
