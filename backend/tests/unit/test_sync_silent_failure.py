@@ -17,6 +17,8 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
+from models.transcript_segment import SpeakerIdentityStatus
+
 
 def _read_text(path):
     return Path(path).read_text(encoding='utf-8')
@@ -308,6 +310,7 @@ class TestDeepgramRetryBehavioral:
         sys.modules['deepgram'].DeepgramClient = MagicMock()
         sys.modules['deepgram'].DeepgramClientOptions = MagicMock()
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
+        sys.modules['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
         sys.modules['utils.other.endpoints'].timeit = lambda f: f
         sys.modules['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
         sys.modules['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
@@ -934,6 +937,7 @@ class TestProcessSegmentReal:
         sys.modules['models.conversation'].CreateConversation = _CreateConversation
         sys.modules['models.conversation'].Conversation = _Conversation
         sys.modules['models.transcript_segment'].TranscriptSegment = _TranscriptSegment
+        sys.modules['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
 
         # The deterministic §1.7 minimum is pure and cheap: run the REAL module
         # against minimal enum/model stand-ins so intake exercises the true
@@ -1613,6 +1617,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['models.app'].App = MagicMock()
         sys.modules['models.app'].UsageHistoryType = MagicMock()
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
+        sys.modules['models.transcript_segment'].SpeakerIdentityStatus = SpeakerIdentityStatus
 
         # STT stubs
         sys.modules['utils.stt.pre_recorded'].PrerecordedSTTConfigurationError = type(

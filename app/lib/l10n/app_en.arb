@@ -13332,9 +13332,9 @@
     "@openCall": {
         "description": "Accessibility hint on the live card during a call; tapping opens the call screen."
     },
-    "captureRecoveryBanner": "Pendant audio is not reaching the app — tap to repair",
+    "captureRecoveryBanner": "Omi isn't sending audio — tap to reconnect",
     "@captureRecoveryBanner": {
-        "description": "Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings"
+        "description": "Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings"
     },
     "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later on your pendant before recording with your phone.",
     "captureNotTranscribing": "Not transcribing",
@@ -13383,6 +13383,282 @@
         "placeholders": {
             "name": {
                 "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyTitle": "Hear Omi's Answers",
+    "deviceOnboardingVoiceReplySample": "I've got it. Your next meeting starts in twenty minutes.",
+    "deviceOnboardingAllSetTitle": "You're All Set",
+    "deviceOnboardingAllSetSubtitle": "Tap a row to review or change it.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "When you ask with the button, Omi can read its answer out loud.",
+    "@deviceOnboardingVoiceReplySubtitle": {
+        "description": "Teaching subtitle for the voice reply onboarding step"
+    },
+    "deviceOnboardingVoiceReplyPreviewIdle": "Hear your last answer",
+    "@deviceOnboardingVoiceReplyPreviewIdle": {
+        "description": "Title of the idle voice answer preview card"
+    },
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Playing your last answer...",
+    "@deviceOnboardingVoiceReplyPreviewPlaying": {
+        "description": "Title of the voice answer preview card while audio is playing"
+    },
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Through {device}",
+    "@deviceOnboardingVoiceReplyPreviewThroughDevice": {
+        "description": "Voice preview output route when headphones are connected",
+        "placeholders": {
+            "device": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Through the phone speaker",
+    "@deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": {
+        "description": "Voice preview output route when using the phone speaker"
+    },
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Through the current audio output",
+    "@deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": {
+        "description": "Voice preview output route while the system route is not yet known"
+    },
+    "deviceOnboardingVoiceReplyOffDescription": "Answers stay on screen. Nothing is spoken.",
+    "@deviceOnboardingVoiceReplyOffDescription": {
+        "description": "Description of the Off voice response mode"
+    },
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Private. Speaks only through AirPods, Bluetooth or wired headphones.",
+    "@deviceOnboardingVoiceReplyHeadphonesDescription": {
+        "description": "Description of the Headphones only voice response mode"
+    },
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Uses the phone speaker when no headphones are connected.",
+    "@deviceOnboardingVoiceReplyAlwaysDescription": {
+        "description": "Description of the Always voice response mode"
+    },
+    "deviceOnboardingVoiceReplyStatusOff": "Omi will stay silent. Answers still appear in the app.",
+    "@deviceOnboardingVoiceReplyStatusOff": {
+        "description": "Output consequence when voice responses are off"
+    },
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} connected. Omi will speak here.",
+    "@deviceOnboardingVoiceReplyStatusHeadphonesConnected": {
+        "description": "Output consequence for Headphones only mode with connected headphones",
+        "placeholders": {
+            "device": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "No headphones connected. Omi stays silent until you connect some.",
+    "@deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": {
+        "description": "Output consequence for Headphones only mode without connected headphones"
+    },
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Plays through {device}.",
+    "@deviceOnboardingVoiceReplyStatusAlwaysHeadphones": {
+        "description": "Output consequence for Always mode with connected headphones",
+        "placeholders": {
+            "device": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Plays out loud through the phone speaker.",
+    "@deviceOnboardingVoiceReplyStatusAlwaysSpeaker": {
+        "description": "Output consequence for Always mode without connected headphones"
+    },
+    "deviceOnboardingVoiceReplySettingsHint": "You can change this anytime in {settings} › {voiceResponse}",
+    "@deviceOnboardingVoiceReplySettingsHint": {
+        "description": "Footer explaining where to change voice response settings",
+        "placeholders": {
+            "settings": {
+                "type": "String"
+            },
+            "voiceResponse": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingAllSetReplayHint": "Replay this tour anytime in {settings} › {deviceSettings} › {deviceTutorial}",
+    "@deviceOnboardingAllSetReplayHint": {
+        "description": "Footer explaining the complete Settings menu path for replaying the device tutorial",
+        "placeholders": {
+            "settings": {
+                "type": "String"
+            },
+            "deviceSettings": {
+                "type": "String"
+            },
+            "deviceTutorial": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Headphones",
+    "@deviceOnboardingVoiceReplyGenericHeadphones": {
+        "description": "Generic fallback name for connected headphones when the system does not provide a device name"
+    },
+    "usageListened": "Listened",
+    "@usageListened": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageWordsHeard": "Words heard",
+    "@usageWordsHeard": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageTasksNotes": "Tasks & notes",
+    "@usageTasksNotes": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usagePeakHour": "Peak hour",
+    "@usagePeakHour": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageBestDay": "Best day",
+    "@usageBestDay": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageBestMonth": "Best month",
+    "@usageBestMonth": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageBestYear": "Best year",
+    "@usageBestYear": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageMinutes": "Minutes",
+    "@usageMinutes": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageWords": "Words",
+    "@usageWords": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageTasks": "Tasks",
+    "@usageTasks": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageMonth": "Month",
+    "@usageMonth": {
+        "description": "Plan and Usage period selector"
+    },
+    "usageYear": "Year",
+    "@usageYear": {
+        "description": "Plan and Usage period selector"
+    },
+    "usageAll": "All time",
+    "@usageAll": {
+        "description": "Plan and Usage period selector"
+    },
+    "usageNow": "now",
+    "@usageNow": {
+        "description": "Current hour marker on Plan and Usage chart"
+    },
+    "usageChatThisMonth": "Chat this month",
+    "@usageChatThisMonth": {
+        "description": "Label for monthly chat usage meter"
+    },
+    "appearance": "Appearance",
+    "appearanceSystem": "System",
+    "appearanceLight": "Light",
+    "appearanceDark": "Dark",
+    "chatDiscardRecording": "Discard",
+    "@chatDiscardRecording": {
+        "description": "Discard the current chat voice recording without transcription"
+    },
+    "voiceQuestionNoSpeech": "Didn't catch that — try again",
+    "@voiceQuestionNoSpeech": {
+        "description": "Shown in chat when a pendant voice question contains no detectable speech."
+    },
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.",
+    "sendToSupport": "Send to support",
+    "@sendToSupport": {
+        "description": "Device diagnostics support upload"
+    },
+    "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",
+    "@deviceDiagnosticsUploadDescription": {
+        "description": "Device diagnostics support upload"
+    },
+    "deviceDiagnosticsTicket": "Support ticket code",
+    "@deviceDiagnosticsTicket": {
+        "description": "Device diagnostics support upload"
+    },
+    "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
+    "@deviceDiagnosticsUploadFailed": {
+        "description": "Device diagnostics support upload"
+    },
+    "feedbackGiveFeedback": "Give feedback",
+    "@feedbackGiveFeedback": {
+        "description": "Button on the summary/recording feedback prompt that opens the quick feedback sheet."
+    },
+    "feedbackAllGood": "All good",
+    "@feedbackAllGood": {
+        "description": "Chip in the feedback sheet for a positive answer; submits helpful feedback."
+    },
+    "feedbackChatWithUs": "More detail? Chat with us",
+    "@feedbackChatWithUs": {
+        "description": "Secondary row in the feedback sheet that opens the support chat."
+    },
+    "feedbackReasonSummaryInaccurate": "Inaccurate",
+    "@feedbackReasonSummaryInaccurate": {
+        "description": "Quick reason chip: the summary was inaccurate."
+    },
+    "feedbackReasonSummaryIncomplete": "Incomplete",
+    "@feedbackReasonSummaryIncomplete": {
+        "description": "Quick reason chip: the summary was incomplete."
+    },
+    "feedbackReasonSummaryIrrelevant": "Not relevant",
+    "@feedbackReasonSummaryIrrelevant": {
+        "description": "Quick reason chip: the summary was not relevant."
+    },
+    "feedbackReasonSummaryWrongContext": "Wrong context",
+    "@feedbackReasonSummaryWrongContext": {
+        "description": "Quick reason chip: the summary mixed up context."
+    },
+    "feedbackReasonSummaryOther": "Something else",
+    "@feedbackReasonSummaryOther": {
+        "description": "Quick reason chip: some other summary problem."
+    },
+    "feedbackReasonRecordingMissingAudio": "Missing audio",
+    "@feedbackReasonRecordingMissingAudio": {
+        "description": "Quick reason chip: the recording is missing audio."
+    },
+    "feedbackReasonRecordingPoorTranscription": "Poor transcription",
+    "@feedbackReasonRecordingPoorTranscription": {
+        "description": "Quick reason chip: the transcription was poor."
+    },
+    "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
+    "@feedbackReasonRecordingWrongSpeaker": {
+        "description": "Quick reason chip: the speaker attribution was wrong."
+    },
+    "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
+    "@feedbackReasonRecordingDelayedOrStuck": {
+        "description": "Quick reason chip: processing was delayed or stuck."
+    },
+    "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
+    "@feedbackReasonRecordingFragmentedOrDuplicated": {
+        "description": "Quick reason chip: the recording was fragmented or duplicated."
+    },
+    "feedbackReasonRecordingOther": "Something else",
+    "@feedbackReasonRecordingOther": {
+        "description": "Quick reason chip: some other recording problem."
+    },
+    "searchPeople": "Search people",
+    "@searchPeople": {
+        "description": "Hint for the person search field in the tag-speaker sheet"
+    },
+    "addQueryAsNewPerson": "Add \"{query}\" as a new person",
+    "@addQueryAsNewPerson": {
+        "description": "Row shown in the tag-speaker sheet when no existing person matches the search query",
+        "placeholders": {
+            "query": {
+                "type": "String"
+            }
+        }
+    },
+    "showAllPeople": "Show all {count} people",
+    "@showAllPeople": {
+        "description": "Expander chip in the tag-speaker sheet that reveals the capped person grid",
+        "placeholders": {
+            "count": {
+                "type": "int"
             }
         }
     }

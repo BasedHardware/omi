@@ -112,6 +112,24 @@ class PostHogManager {
     log("PostHog: Tracked event '\(eventName)'")
   }
 
+  /// EXP-002: attach `experiment_id` + `variant` to every captured event as
+  /// super-properties, so all product events (`question_asked`/`question_answered`,
+  /// `desktop_daily_summary`, PTT lifecycle, Interject teach) are sliceable by
+  /// arm without per-event plumbing. Distinct id stays the uid — the variant is
+  /// a property, never an identity. Called once the launch's arm resolves.
+  func setExperimentContext(experimentId: String, variant: String, forced: Bool) {
+    guard isInitialized else {
+      log("PostHog: experiment context skipped (not initialized)")
+      return
+    }
+    PostHogSDK.shared.register([
+      "experiment_id": experimentId,
+      "variant": variant,
+      "experiment_forced": forced,
+    ])
+    log("PostHog: registered experiment context \(experimentId)/\(variant)")
+  }
+
   nonisolated static func diagnosticErrorClass(_ value: String) -> String {
     let normalized = value.lowercased()
     if normalized.contains("timeout") || normalized.contains("timed out") {
@@ -347,17 +365,26 @@ extension PostHogManager {
     _ attempt: CaptureAttemptOutcomeState,
     finalizationReason: TranscriptionFinalizationReason
   ) -> [String: Any] {
-    [
+    var properties: [String: Any] = [
       "platform": "macos",
       "attempt_id": attempt.attemptId,
       "mode": attempt.mode,
       "intent": attempt.intent.rawValue,
+      "launch_context": attempt.launchContext,
+      "seconds_since_launch": attempt.secondsSinceLaunch,
+      "update_attempt_id": attempt.updateAttemptID ?? "none",
       "capture_eligible": attempt.captureEligible,
       "first_audio_frame": attempt.firstAudioFrame,
       "speech_observed": attempt.speechObserved,
       "terminal_reason": attempt.terminalReason(for: finalizationReason).rawValue,
+      "finalization_reason": finalizationReason.rawValue,
       "conversation_accepted": attempt.conversationAccepted,
     ]
+    if let episodeID = attempt.armedEpisodeID {
+      properties["armed_retry"] = true
+      properties["armed_episode_id"] = episodeID
+    }
+    return properties
   }
 
   /// Minimal outcome payload for an attempt whose process died mid-flight:

@@ -6,6 +6,8 @@
   omi-cli 指南 (Simplified Chinese agent guide).
 * [`agent_quickstart.zh-TW.md`](agent_quickstart.zh-TW.md) — 給 Agent 的
   omi-cli 指南 (Traditional Chinese agent guide).
+* [`agent_quickstart.es.md`](agent_quickstart.es.md) — guía para agentes de
+  omi-cli en español (Spanish agent guide).
 * [`agent_quickstart.ja.md`](agent_quickstart.ja.md) — エージェントのための
   omi-cli ガイド (Japanese agent guide).
 * [`agent_quickstart.fr.md`](agent_quickstart.fr.md) — guide omi-cli pour les
@@ -14,6 +16,10 @@
   (Portuguese agent guide).
 * [`agent_quickstart.ms.md`](agent_quickstart.ms.md) — omi-cli untuk ejen
   (Malay agent guide).
+* [`agent_quickstart.cy.md`](agent_quickstart.cy.md) — canllaw omi-cli ar gyfer
+  asiantau (Welsh agent guide).
+* [`agent_quickstart.th.md`](agent_quickstart.th.md) — คู่มือ omi-cli สำหรับ
+  AI agent (Thai agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
@@ -28,6 +34,8 @@
 * [`conversations_markdown.pt.md`](conversations_markdown.pt.md) — exportar conversas do Omi para Markdown (Portuguese recipe).
 * [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
   JSON export to CSV for spreadsheets.
+* [`conversations_csv.es.md`](conversations_csv.es.md) — convertir una
+  exportación de conversaciones a CSV en español.
 * [`conversations_digest.md`](conversations_digest.md) — summarise conversation-list
   exports into a digest: per-day totals, categories and longest sessions.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
@@ -67,6 +75,7 @@
 * [`quickstart.mn.md`](quickstart.mn.md) — omi-cli хурдан эхлүүлэх гарын авлага (Mongolian Quickstart).
 * [`quickstart.ca.md`](quickstart.ca.md) — guia d'inici ràpid per a omi-cli en català (Catalan Quickstart).
 * [`quickstart.ha.md`](quickstart.ha.md) — Jagorar farawa cikin sauri ta omi-cli (Hausa Quickstart).
+* [`quickstart.ig.md`](quickstart.ig.md) — Ntuziaka mmalite ngwa ngwa nke omi-cli (Igbo Quickstart).
 * [`quickstart.mai.md`](quickstart.mai.md) — omi-cli त्वरित मार्गदर्शिका (Maithili Quickstart).
 * [`quickstart.as.md`](quickstart.as.md) — omi-cli ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart).
 * [`quickstart.sd.md`](quickstart.sd.md) — سنڌي ۾ omi-cli تڪڙو آغاز (Sindhi Quickstart).

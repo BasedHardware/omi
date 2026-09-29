@@ -1,13 +1,21 @@
 import Foundation
 
 /// Which native call apps end the call when they release the microphone.
+///
+/// Browsers are never listed: they drop mic input when a call is muted while the call continues.
+/// Entries come from `desktop/macos/scripts/call-app-catalog/catalog.json`, which records the
+/// evidence for each one. `score.py --apply` regenerates the block below from it (the weekly
+/// scoring job proposes changes as a PR); `test_call_app_catalog.py` fails if they disagree.
 enum CallAppReleasePolicy {
-  /// `us.zoom.xos` measured 2026-09-26 on macOS 27: Zoom keeps microphone input
-  /// running through mute/unmute and through AirPods connect/disconnect. Leaving
-  /// a meeting stops input and output in the same millisecond; the next meeting
-  /// re-acquired both 8.0s later. A browser mic release is not in this catalog —
-  /// browsers drop input on mute while the call continues.
+  // BEGIN GENERATED: call-app-catalog (desktop/macos/scripts/call-app-catalog/score.py)
+  static let releaseEndsCallBundleIDs: Set<String> = [
+    "us.zoom.xos"
+  ]
+  // END GENERATED: call-app-catalog
+
+  /// `bundleID` is the app's catalog key: a native call app's resolved ID
+  /// (`ConferencingApps.nativeCallAppID`), not one of its helper processes.
   static func releaseEndsCall(bundleID: String) -> Bool {
-    bundleID.lowercased() == "us.zoom.xos"
+    releaseEndsCallBundleIDs.contains(bundleID.lowercased())
   }
 }

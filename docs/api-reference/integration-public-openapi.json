@@ -80,6 +80,24 @@
         "title": "ActionItem",
         "type": "object"
       },
+      "ConversationCreateResponse": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "conversation_id"
+        ],
+        "title": "ConversationCreateResponse",
+        "type": "object"
+      },
       "ConversationItem": {
         "properties": {
           "app_id": {
@@ -2903,7 +2921,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EmptyResponse"
+                  "$ref": "#/components/schemas/ConversationCreateResponse"
                 }
               }
             },

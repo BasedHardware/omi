@@ -51,7 +51,7 @@ class _PhoneSync {
   int getInFlightSeconds() => 0;
   List<dynamic> getSessionUnsyncedWals(int start) => const [];
   Future<void> finalizeCurrentSession() async {}
-  Future<void> stampConversationId(int start, String id) async {}
+  Future<void> stampConversationId(int start, String id, {String? recordingSessionId}) async {}
 }
 
 class _Wal implements IWalService {

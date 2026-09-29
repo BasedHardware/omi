@@ -39,7 +39,6 @@ from scripts.select_backend_unit_tests import LEGACY_UNLISTED_TESTS, discover_un
 WORKFLOW_COVERED_PREFIXES = {
     'testing/e2e/': ('backend-hermetic-e2e.yml', 'directory'),
     'testing/contracts/': ('desktop-backend-contracts.yml', 'directory'),
-    'tests/container/': ('parakeet_gpu_tests.yml', 'explicit'),
 }
 
 # Excluded from CI by written policy (AGENTS.md Testing: live-service tests
@@ -53,6 +52,14 @@ POLICY_EXCLUDED_PREFIXES = {
 # must exist on disk; additions are a reviewed diff of this checker itself.
 MANUAL_ONLY_TESTS: dict[str, str] = {
     'testing/desktop_beta_admission/firestore_contention_test.py': 'on-demand Firestore emulator proof for Beta admission fence; no scheduled runner',
+    'tests/container/test_parakeet_concurrency.py': 'on-demand GPU concurrency qualification; nightly GPU job retired',
+    'tests/container/test_parakeet_contract.py': 'on-demand container dependency contract; nightly GPU job retired',
+    'tests/container/test_parakeet_der_benchmark.py': 'on-demand GPU diarization benchmark; nightly GPU job retired',
+    'tests/container/test_parakeet_der_gate.py': 'on-demand container diarization test; nightly GPU job retired',
+    'tests/container/test_parakeet_high_concurrency.py': 'on-demand GPU load qualification; nightly GPU job retired',
+    'tests/container/test_parakeet_smoke.py': 'on-demand container import and GPU smoke tests; nightly GPU job retired',
+    'tests/container/test_parakeet_vram_stress.py': 'on-demand GPU memory qualification; nightly GPU job retired',
+    'tests/container/test_parakeet_wer_gate.py': 'on-demand GPU WER benchmark; nightly GPU job retired',
 }
 
 # Frozen copy of the selector's LEGACY_UNLISTED_TESTS. Pinned in both

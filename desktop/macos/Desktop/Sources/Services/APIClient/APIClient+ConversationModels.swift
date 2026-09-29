@@ -222,13 +222,16 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       && lhs.startedAt == rhs.startedAt
       && lhs.finishedAt == rhs.finishedAt && lhs.structured == rhs.structured
       && lhs.status == rhs.status && lhs.discarded == rhs.discarded && lhs.deleted == rhs.deleted
-      && lhs.isLocked == rhs.isLocked && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
+      && lhs.isLocked == rhs.isLocked && lhs.visibility == rhs.visibility
+      && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
       && lhs.source == rhs.source
       && lhs.audioFiles == rhs.audioFiles
       && lhs.conversationAudio == rhs.conversationAudio
       && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
       && lhs.localSummary == rhs.localSummary
       && lhs.captureGroup == rhs.captureGroup
+      && lhs.audioTimelineVersion == rhs.audioTimelineVersion
+      && lhs.createdFromSegments == rhs.createdFromSegments
   }
 
   let id: String
@@ -255,11 +258,16 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   /// bounded adapter.
   let audioFiles: [CaptureAudioFile]
   let conversationAudio: CaptureConversationAudio?
+  /// Provenance needed to decide whether transcript offsets have a stable wall-clock origin.
+  let audioTimelineVersion: Int?
+  /// Desktop `/from-segments` conversations anchor offsets to the client session start.
+  let createdFromSegments: Bool
 
   let status: ConversationStatus
   let discarded: Bool
   let deleted: Bool
   let isLocked: Bool
+  let visibility: String
   var starred: Bool
   let folderId: String?
   let inputDeviceName: String?
@@ -287,6 +295,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case discarded
     case deleted
     case isLocked = "is_locked"
+    case visibility
     case starred
     case folderId = "folder_id"
     case inputDeviceName = "input_device_name"
@@ -323,10 +332,16 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     language = wire.language
     audioFiles = (wire.audioFiles ?? []).map(CaptureAudioFile.init)
     conversationAudio = wire.conversationAudio.map(CaptureConversationAudio.init)
+    audioTimelineVersion = wire.audioTimeline?.version
+    createdFromSegments =
+      (wire.externalData?["from_segments_client_session_id"]?.value as? String)?.isEmpty == false
     status = wire.status.map { ConversationStatus(rawValue: $0.rawValue) ?? .completed } ?? .completed
     discarded = wire.discarded ?? false
     deleted = false  // backend REST Conversation schema does not expose deleted
     isLocked = wire.isLocked ?? false
+    // Visibility is optional on older payloads. A malformed Siri-only field
+    // must not reject the entire app conversation page.
+    visibility = (try? container.decode(String.self, forKey: .visibility)) ?? "private"
     starred = wire.starred ?? false
     folderId = wire.folderId
     inputDeviceName = wire.clientDeviceId
@@ -373,10 +388,13 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     language: String?,
     audioFiles: [CaptureAudioFile] = [],
     conversationAudio: CaptureConversationAudio? = nil,
+    audioTimelineVersion: Int? = nil,
+    createdFromSegments: Bool = false,
     status: ConversationStatus,
     discarded: Bool,
     deleted: Bool,
     isLocked: Bool,
+    visibility: String = "private",
     starred: Bool,
     folderId: String?,
     inputDeviceName: String?,
@@ -400,10 +418,13 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.language = language
     self.audioFiles = audioFiles
     self.conversationAudio = conversationAudio
+    self.audioTimelineVersion = audioTimelineVersion
+    self.createdFromSegments = createdFromSegments
     self.status = status
     self.discarded = discarded
     self.deleted = deleted
     self.isLocked = isLocked
+    self.visibility = visibility
     self.starred = starred
     self.folderId = folderId
     self.inputDeviceName = inputDeviceName

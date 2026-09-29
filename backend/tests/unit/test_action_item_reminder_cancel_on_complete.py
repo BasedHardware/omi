@@ -167,8 +167,9 @@ def test_router_wires_helper_and_no_longer_blindly_rearms():
     assert len(_live_call_lines("routers/action_items.py")) >= 3
     # the old unconditional "re-arm whenever due_at present" block is gone
     assert "if 'due_at' in update_data and update_data['due_at']:" not in ai
-    # creating an already-completed item must not arm a reminder
-    assert "not request.completed" in ai
+    # A create replay uses the saved state, which may now be completed.
+    # Behavioral coverage is in test_action_item_idempotency.py.
+    assert "not response.completed" in ai
 
 
 def test_agentic_and_developer_paths_wired():

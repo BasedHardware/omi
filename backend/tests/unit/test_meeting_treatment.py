@@ -38,7 +38,7 @@ def test_call_over_five_minutes_with_enough_speech_is_eligible():
         duration_seconds=MIN_MEETING_DURATION_SECONDS + 60,
         segments=[
             {'text': 'first exchange', 'start': 0, 'end': 35},
-            {'text': 'second exchange', 'start': 45, 'end': 70},
+            {'text': 'second exchange', 'start': 335, 'end': 360},
         ],
     )
 
@@ -62,21 +62,44 @@ def test_long_mostly_silent_call_is_ineligible():
 
 def test_overlapping_duplicate_stream_segments_are_counted_once():
     segments = [
-        {'text': 'remote party through microphone', 'start': 0, 'end': 45},
-        {'text': 'remote party through system audio', 'start': 0, 'end': 45},
-        {'text': 'partially overlapping continuation', 'start': 35, 'end': 60},
+        {'text': 'remote party through microphone', 'start': 0, 'end': 35},
+        {'text': 'remote party through system audio', 'start': 0, 'end': 35},
+        {'text': 'partially overlapping continuation', 'start': 25, 'end': 45},
+        {'text': 'closing discussion', 'start': 585, 'end': 600},
     ]
 
     assert deduplicated_transcribed_speech_seconds(segments) == 60
-    assert is_meeting_treatment_eligible(_meeting(duration_seconds=10 * 60, segments=segments)) is True
+
+    # Duration is the transcript span (#19391), so the eligible-meeting fixture
+    # needs duplicate streams whose span also clears the five-minute bar.
+    meeting_segments = [
+        {'text': 'remote party through microphone', 'start': 240, 'end': 270},
+        {'text': 'remote party through system audio', 'start': 240, 'end': 270},
+        {'text': 'partially overlapping continuation', 'start': 255, 'end': 300},
+    ]
+    assert deduplicated_transcribed_speech_seconds(meeting_segments) == 60
+    assert is_meeting_treatment_eligible(_meeting(duration_seconds=10 * 60, segments=meeting_segments)) is True
 
 
 @pytest.mark.parametrize(
     ('updates', 'reason', 'eligible'),
     [
         ({}, 'eligible', True),
-        ({'finished_at': NOW + timedelta(seconds=299)}, 'too_short', False),
-        ({'transcript_segments': [{'text': 'brief', 'start': 0, 'end': 59}]}, 'insufficient_speech', False),
+        # Duration is the transcript span (#19391): a short span, not a short
+        # wall window, is what makes a meeting too short.
+        ({'transcript_segments': [{'text': 'measured discussion', 'start': 0, 'end': 299}]}, 'too_short', False),
+        # Span clears the five-minute bar while the deduplicated speech does not.
+        ({'transcript_segments': [{'text': 'brief', 'start': 271, 'end': 300}]}, 'insufficient_speech', False),
+        (
+            {
+                'transcript_segments': [
+                    {'text': 'opening', 'start': 0, 'end': 30},
+                    {'text': 'closing', 'start': 1690.8, 'end': 1719.8},
+                ]
+            },
+            'insufficient_speech',
+            False,
+        ),
         (
             {
                 'external_data': {
@@ -94,7 +117,7 @@ def test_overlapping_duplicate_stream_segments_are_counted_once():
 def test_verdict_records_reason_and_measured_inputs_for_every_policy_branch(updates, reason, eligible):
     conversation = _meeting(
         duration_seconds=1720,
-        segments=[{'text': 'measured discussion', 'start': 0, 'end': 1719.8}],
+        segments=[{'text': 'measured discussion', 'start': 0, 'end': 1720}],
     )
     conversation.update(updates)
 
@@ -102,5 +125,16 @@ def test_verdict_records_reason_and_measured_inputs_for_every_policy_branch(upda
 
     assert verdict.eligible is eligible
     assert verdict.reason == reason
-    assert verdict.duration_s == (299 if reason == 'too_short' else 1720)
-    assert verdict.dedup_speech_s == (59 if reason == 'insufficient_speech' else 1719.8)
+    expected_duration = max((segment['end'] for segment in conversation['transcript_segments']), default=1720)
+    expected_speech = deduplicated_transcribed_speech_seconds(conversation['transcript_segments'])
+    assert verdict.duration_s == pytest.approx(expected_duration)
+    assert verdict.dedup_speech_s == pytest.approx(expected_speech)
+
+
+def test_wall_duration_is_used_when_transcript_is_empty():
+    conversation = _meeting(duration_seconds=20 * 60, segments=[])
+
+    verdict = meeting_treatment_verdict(conversation)
+
+    assert verdict.duration_s == 20 * 60
+    assert verdict.dedup_speech_s == 0

@@ -49,7 +49,9 @@ def persisted_started_seconds(started_at: Any) -> Optional[float]:
             return datetime.fromisoformat(started_at).timestamp()
         except ValueError:
             return None
-    if isinstance(started_at, (int, float)):
+    # bool is an int subclass in Python; a stray True/False must not be read
+    # as a 1970-epoch offset (1.0/0.0 seconds).
+    if isinstance(started_at, (int, float)) and not isinstance(started_at, bool):
         return float(started_at)
     return None
 
@@ -101,6 +103,7 @@ class ListenSessionState:
     speaker_id_enabled: bool = False
     speaker_id_done: asyncio.Event = field(default_factory=asyncio.Event)
     speaker_map_dirty: bool = False
+    speaker_map_version: int = 0
     first_audio_byte_timestamp: Optional[float] = None
     # Capture sample clock (single-channel server-STT sessions): the per-socket
     # sample cursor, per-conversation pinned first-audio origins (wall seconds),
@@ -111,6 +114,7 @@ class ListenSessionState:
     # admits the v2 *persistence* (projected times, started_at pin, marker,
     # pusher projection) for this recording only.
     capture_timeline: Any = None
+    source_position_map: Any = None
     capture_timeline_v2: bool = False
     conversation_capture_origins: Dict[str, 'ConversationCaptureOrigin'] = field(default_factory=dict)
     conversations_awaiting_capture_origin: set = field(default_factory=set)
@@ -121,6 +125,10 @@ class ListenSessionState:
     live_transcription_attempt: Any = None
     client_live_transcription_attempt: Any = None
     live_transcription_failed: bool = False
+    # Headline SLI latch: flipped once when the first nonempty transcript batch
+    # was delivered to the client (runtime.complete_live_transcription). Read at
+    # teardown by _record_session_transcript_outcome.
+    live_transcript_delivered: bool = False
     last_usage_record_timestamp: Optional[float] = None
     words_transcribed_since_last_record: int = 0
     last_transcript_time: Optional[float] = None

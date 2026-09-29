@@ -23,7 +23,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/capture_sources.dart';
 
-const _metaColor = OmiColors.textSecondary;
+Color get _metaColor => OmiColors.textSecondary;
 
 /// The conversation page's header, shared by every tab so switching between
 /// Summary, Transcript and Action items never loses the title or the facts.
@@ -75,7 +75,9 @@ class ConversationDetailHeader extends StatelessWidget {
                       recordings: recordings,
                       onTap: () {
                         trackConversationAction(
-                            ConversationActionAction.recordingsOpen, ConversationActionSurface.detailBody);
+                          ConversationActionAction.recordingsOpen,
+                          ConversationActionSurface.detailBody,
+                        );
                         onOpenRecordings(recordings);
                       },
                     ),
@@ -93,7 +95,7 @@ class ConversationDetailHeader extends StatelessWidget {
 
   Widget _titleRow(BuildContext context, ConversationDetailProvider provider, ServerConversation conversation) {
     final titleStyle = OmiType.title3.copyWith(height: 1.25);
-    // The title is one line, so the emoji centres on it.
+    // The title field grows from one to two lines; centre the emoji against its current height.
     return Row(
       children: [
         if (!conversation.discarded) ...[
@@ -204,7 +206,7 @@ class ConversationDetailHeader extends StatelessWidget {
 
   Widget _peopleChip(BuildContext context, ServerConversation conversation, String label) {
     final chip = _HeaderChip(
-      icon: const Icon(Icons.people_outline, size: 15, color: OmiColors.textSecondary),
+      icon: Icon(Icons.people_outline, size: 15, color: OmiColors.textSecondary),
       label: label,
       color: OmiColors.textSecondary,
     );
@@ -238,7 +240,7 @@ class _HeaderChip extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minHeight: 30),
       padding: EdgeInsets.only(left: 10, right: trailing == true ? 6 : 10, top: 4, bottom: 4),
-      decoration: BoxDecoration(color: background ?? OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+      decoration: BoxDecoration(color: background ?? OmiColors.chipSurface, borderRadius: OmiRadius.pillAll),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -252,10 +254,7 @@ class _HeaderChip extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (trailing == true) ...[
-            const SizedBox(width: 2),
-            Icon(Icons.keyboard_arrow_down, size: 16, color: color),
-          ],
+          if (trailing == true) ...[const SizedBox(width: 2), Icon(Icons.keyboard_arrow_down, size: 16, color: color)],
         ],
       ),
     );
@@ -445,7 +444,7 @@ class _VisibilityChip extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isSelected) const Icon(Icons.check_circle, color: OmiColors.textPrimary, size: 22),
+              if (isSelected) Icon(Icons.check_circle, color: OmiColors.textPrimary, size: 22),
             ],
           ),
         ),

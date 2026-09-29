@@ -222,6 +222,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                     topMargin: false,
                     canDisplaySeconds: provider.canDisplaySeconds,
                     isConversationDetail: true,
+                    unresolvedSpeakers: conversation.speakerResolution?.status == 'unavailable',
                     bottomMargin: 150,
                     searchQuery: widget.searchQuery,
                     currentResultIndex: widget.currentResultIndex,

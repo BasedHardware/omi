@@ -38,6 +38,44 @@ session.
 from that session; each adopted provider gets a new speaker-provider epoch.
 Operational controls and capacity arithmetic: [windowed live STT](../../docs/operational/windowed-live-stt.md).
 
+## Language constraint
+
+`language_policy.py` builds one immutable live-session profile from the client's
+primary language and the account's single-language setting. Multilingual
+non-English sessions expect the primary plus English. A stable UID hash can
+prefer Soniox ahead of the normal configured chain; the percentage defaults
+to zero in production. The profile and arm survive mid-session failover.
+Multichannel, custom STT, and BYOK sessions stay outside routing and hints;
+an explicit client Parakeet preference retains its existing priority.
+`STT_MULTI_LANGUAGE_HINTS=false` restores Soniox's former unhinted `multi`
+request. Soniox always keeps language identification enabled. Other providers
+retain their existing language parameters and order.
+
+When `STT_LEARNED_LANGUAGE_PROFILE=true`, a 20-session rolling projection on
+`users/{uid}` supplies a spoken-language prior after three classified sessions.
+The declared non-English primary keeps priority; languages with at least 20%
+of classified segments and English with at least 10% enter a three-language
+Soniox-validated set. An English-primary account can then enter the same
+non-English Soniox-first UID arm. A failed or slow profile read uses the declared
+prior. Session close schedules one bounded transaction off the listen loop;
+the projection contains normalized language codes and counts only. Single
+language, multichannel, custom STT and BYOK sessions do not read or write it.
+The flag defaults off and is enabled only in development.
+
+Soniox documents a `language` code on every token when identification is on;
+its adapter uses final tokens only and passes a code only when all tokens in
+one segment agree. Velma's live adapter reads an optional `language` on final
+utterance frames (the batch response has per-utterance codes); live frame
+presence has not been verified against a provider connection. When no provider
+code is available, `langdetect` runs off the listen loop. At least 24 letters
+avoid short-phrase guesses, and a 0.95 top-probability floor avoids calling
+close-language guesses a mismatch. A 32-task per-session cap makes overflow
+undetermined; each detector sees at most 512 characters to bound CPU time.
+A local 200-call warm benchmark measured 1.2 ms median and
+1.36 ms p95, with a 125 ms cold maximum, which is why detection runs off-loop.
+Only normalized codes and bounded conformance labels reach metrics and logs;
+the private provider-language field is removed before transcript persistence.
+
 ## Speaker boundaries
 
 `speaker_embedding.py` owns enrolled voiceprint extraction; `speaker_match.py`

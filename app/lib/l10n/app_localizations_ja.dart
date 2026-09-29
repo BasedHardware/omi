@@ -11038,7 +11038,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get openCall => '通話を開く';
 
   @override
-  String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';
+  String get captureRecoveryBanner => 'Omiが音声を送信していません — タップして再接続';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '携帯で録音する前に、ペンダントの Transcribe Later を停止してください。';
@@ -11079,5 +11079,221 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String participantsSummaryUncounted(String name) {
     return '$nameほか';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Omiの回答を聞く';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => '了解しました。次の会議は20分後に始まります。';
+
+  @override
+  String get deviceOnboardingAllSetTitle => '準備ができました';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => '確認または変更するには行をタップしてください。';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'ボタンで質問すると、Omi が答えを読み上げます。';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => '最後の答えを聞いてください';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => '最後の答えを再生しています...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device まで';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => '電話のスピーカーを通して';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => '現在のオーディオ出力を通じて';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => '答えは画面上に残ります。何も語られない。';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription => 'プライベート。 AirPods、Bluetooth、または有線ヘッドフォンを介してのみ話します。';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'ヘッドフォンが接続されていない場合は、電話のスピーカーを使用します。';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omiは沈黙します。答えは引き続きアプリに表示されます。';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device 接続されました。 Omi がここで話します。';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => 'ヘッドフォンが接続されていません。 Omi は接続するまで沈黙を保ちます。';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '$device まで再生します。';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => '電話のスピーカーから大音量で再生されます。';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'これはいつでも $settings › $voiceResponse で変更できます。';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return '$settings › $deviceSettings › $deviceTutorial でいつでもこのツアーを再生できます';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'ヘッドフォン';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => '分';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'タスク';
+
+  @override
+  String get usageMonth => '今月';
+
+  @override
+  String get usageYear => '今年';
+
+  @override
+  String get usageAll => '全期間';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => '外観';
+
+  @override
+  String get appearanceSystem => 'システム';
+
+  @override
+  String get appearanceLight => 'ライト';
+
+  @override
+  String get appearanceDark => 'ダーク';
+
+  @override
+  String get chatDiscardRecording => '破棄';
+
+  @override
+  String get voiceQuestionNoSpeech => '聞き取れませんでした — もう一度お試しください';
+
+  @override
+  String get siriIndexSetting => 'SiriとApple IntelligenceでOmiを使用';
+
+  @override
+  String get siriIndexSettingDescription => 'Siriがこのデバイス上の会話、メモリー、タスクを検索できるようにします。オフにするとAppleの検索から削除されます。';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'フィードバックを送る';
+
+  @override
+  String get feedbackAllGood => '問題なし';
+
+  @override
+  String get feedbackChatWithUs => '詳しくは？チャットでご連絡ください';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => '正確でない';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => '不完全';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => '関係がない';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => '文脈が違う';
+
+  @override
+  String get feedbackReasonSummaryOther => 'その他';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => '音声がない';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => '文字起こしが不正確';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => '話者が違う';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => '遅い・止まっている';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => '分断・重複している';
+
+  @override
+  String get feedbackReasonRecordingOther => 'その他';
+
+  @override
+  String get searchPeople => '人物を検索';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '「$query」を新しい人物として追加';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'すべての人物（$count）を表示';
   }
 }

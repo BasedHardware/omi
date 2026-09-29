@@ -14,6 +14,7 @@ defaults off, and flags are read at the call boundary, never at import.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 
 JEV_AUTO_LANE_ID = 'omi:auto:jev-decisions'
 # Pinned: a new Jev version changes calibration, and every threshold below was
@@ -33,6 +34,9 @@ JEV_CLIENT_MAX_ATTEMPTS = 2
 
 CONVERSATION_RELEVANCE_JEV_ENABLED_ENV = 'CONVERSATION_RELEVANCE_JEV_ENABLED'
 MEMORY_OWNER_JEV_FLIP_ENABLED_ENV = 'MEMORY_OWNER_JEV_FLIP_ENABLED'
+CAPTURE_JEV_SHADOW_ENABLED_ENV = 'CAPTURE_JEV_SHADOW_ENABLED'
+CAPTURE_JEV_SHADOW_EXPIRY_ENV = 'CAPTURE_JEV_SHADOW_EXPIRY'
+CAPTURE_JEV_SHADOW_DEFAULT_EXPIRY = '2026-10-18T00:00:00Z'
 
 _TRUE_VALUES = frozenset({'1', 'true', 'yes', 'on'})
 
@@ -49,3 +53,20 @@ def conversation_relevance_jev_enabled() -> bool:
 def memory_owner_jev_flip_enabled() -> bool:
     """Capture may re-attribute a third-party memory candidate to the user on a confident Jev answer."""
     return _flag(MEMORY_OWNER_JEV_FLIP_ENABLED_ENV)
+
+
+def capture_jev_shadow_enabled(now: datetime | None = None) -> tuple[bool, str]:
+    """A malformed deadline disables the experiment; its default is a hard UTC stop."""
+    if not _flag(CAPTURE_JEV_SHADOW_ENABLED_ENV):
+        return False, 'flag_off'
+    try:
+        configured = datetime.fromisoformat(
+            os.getenv(CAPTURE_JEV_SHADOW_EXPIRY_ENV, CAPTURE_JEV_SHADOW_DEFAULT_EXPIRY).replace('Z', '+00:00')
+        )
+        hard_stop = datetime.fromisoformat(CAPTURE_JEV_SHADOW_DEFAULT_EXPIRY.replace('Z', '+00:00'))
+        expiry = min(configured, hard_stop)
+        if expiry.tzinfo is None or (now or datetime.now(timezone.utc)) >= expiry:
+            return False, 'expired'
+    except ValueError:
+        return False, 'expired'
+    return True, 'enabled'

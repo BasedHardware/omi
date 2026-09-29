@@ -91,6 +91,12 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  # Keep these aligned with the production GitHub environment variables used
+  # by the Cloud Run backend; api.omi.me is served by backend-listen.
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+    value: "https://api.omi.me"
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+    value: "208440318997-compute@developer.gserviceaccount.com"
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://omi.me"
   - name: FREE_TIER_LOCAL_PROCESSING
@@ -113,6 +119,8 @@ env:
     value: "0.01"
   - name: USE_VERTEX_AI
     value: "true"
+  - name: TTS_PROVIDER
+    value: "gemini"
   # Direct-provider surfaces (desktop_proxy, omni_relay) write their attempts
   # to the gateway ledger under this switch; the manifest declares it, this is
   # where it actually reaches the pod.
@@ -123,6 +131,11 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GEMINI_API_KEY
+  - name: ELEVENLABS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: ELEVENLABS_API_KEY
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles"
   - name: GITHUB_TOKEN
@@ -164,6 +177,12 @@ env:
     value: "false"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
+  - name: CAPTURE_JEV_SHADOW_ENABLED
+    value: "true"
+  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: CAPTURE_JEV_SHADOW_PERCENT
+    value: "0"
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -353,10 +372,34 @@ env:
     value: "false"
   - name: STT_CONNECT_ORDER_FROM_CONFIG
     value: "true"
+  - name: STT_RESILIENT_RECONNECT
+    value: "false"
+  - name: STT_ROUTING_MODE
+    value: "shadow"
+  - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
+    value: "0.075"
+  - name: STT_ROUTING_PROBE_PERCENT
+    value: "2"
+  - name: STT_NO_TEXT_SECONDS
+    value: "30"
+  - name: SONIOX_MONTHLY_CEILING_USD
+    value: "10000"
+  - name: SONIOX_ESTIMATED_USD_PER_HOUR
+    value: "0.07537"
+  - name: STT_MULTI_LANGUAGE_HINTS
+    value: "true"
+  - name: STT_LEARNED_LANGUAGE_PROFILE
+    value: "false"
+  - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
+    value: "25"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
-    value: "0"
+    value: "1"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
     value: "1"
+  - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
+    value: "prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local"
+  - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
+    value: "2"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
@@ -367,6 +410,8 @@ env:
     value: "24"
   - name: STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS
     value: "1800"
+  - name: LISTEN_RECONNECT_BUDGET_PER_MIN
+    value: "6"
   - name: STT_CIRCUIT_HALF_OPEN_PROBES
     value: "1"
   - name: SONIOX_CIRCUIT_FAILURE_THRESHOLD
@@ -374,7 +419,7 @@ env:
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
+    value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS

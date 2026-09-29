@@ -2,6 +2,141 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.417",
+      "date": "2026-09-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.416",
+      "date": "2026-09-28",
+      "changes": [
+        "Ask Omi questions with Siri and continue in the desktop chat"
+      ]
+    },
+    {
+      "version": "0.12.415",
+      "date": "2026-09-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.414",
+      "date": "2026-09-28",
+      "changes": [
+        "Fixed Rewind video encoding in macOS releases built with Xcode 27"
+      ]
+    },
+    {
+      "version": "0.12.413",
+      "date": "2026-09-28",
+      "changes": [
+        "Fixed repeated recording restarts when a microphone briefly alternates between silence and live audio"
+      ]
+    },
+    {
+      "version": "0.12.412",
+      "date": "2026-09-28",
+      "changes": [
+        "Add Siri and Apple Intelligence actions for memories, tasks, search and listening, with local Spotlight indexing controls.",
+        "Improved voice answers so they start speaking while audio is still being generated"
+      ]
+    },
+    {
+      "version": "0.12.411",
+      "date": "2026-09-28",
+      "changes": [
+        "Fixed automatic microphone retries opening the mic while you are away and counting silent retry probes as recording errors"
+      ]
+    },
+    {
+      "version": "0.12.410",
+      "date": "2026-09-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.409",
+      "date": "2026-09-28",
+      "changes": [
+        "Recording now waits for the microphone after an app update and resumes on its own when the input becomes available"
+      ]
+    },
+    {
+      "version": "0.12.408",
+      "date": "2026-09-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.407",
+      "date": "2026-09-27",
+      "changes": [
+        "Long conversation titles and related generated labels now remain readable through wrapping or tooltips on mobile and macOS.",
+        "Stopped conversation notes from showing screenshots captured outside the conversation's trusted transcript window"
+      ]
+    },
+    {
+      "version": "0.12.406",
+      "date": "2026-09-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.405",
+      "date": "2026-09-27",
+      "changes": [
+        "Fixed desktop chat usage showing unlimited for keys that do not power chat, and clarified that BYOK covers supported features rather than every Omi service"
+      ]
+    },
+    {
+      "version": "0.12.404",
+      "date": "2026-09-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.403",
+      "date": "2026-09-27",
+      "changes": [
+        "Fixed conversation summaries to show compact Sources controls instead of internal transcript identifiers"
+      ]
+    },
+    {
+      "version": "0.12.402",
+      "date": "2026-09-26",
+      "changes": [
+        "Improved chat scrolling reliability and added read-only automation that blocks actions which can change app or account data."
+      ]
+    },
+    {
+      "version": "0.12.401",
+      "date": "2026-09-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.400",
+      "date": "2026-09-26",
+      "changes": [
+        "Beta experiment: a randomized group sees Omi as memory first — the daily postcard leads, Interject on, proactive director quiet, generic web answers starved — while everyone else keeps today's experience"
+      ]
+    },
+    {
+      "version": "0.12.399",
+      "date": "2026-09-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.398",
       "date": "2026-09-26",
       "changes": [

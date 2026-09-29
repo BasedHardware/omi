@@ -1,3 +1,32 @@
 {
-  "entries": []
+  "entries": [
+    {
+      "path": "backend/utils/external_oauth/admission.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/external_oauth/authorization.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/external_oauth/fake_provider.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/external_oauth/google_reads.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/external_oauth/repository.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/external_oauth/service.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    },
+    {
+      "path": "backend/utils/external_oauth/vault.py",
+      "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
+    }
+  ]
 }
