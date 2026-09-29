@@ -11483,6 +11483,26 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Chào $name, hỏi bất cứ điều gì';
+  }
+
+  @override
+  String get activity => 'Hoạt động';
+
+  @override
+  String get places => 'Địa điểm';
+
+  @override
+  String get recaps => 'Tóm tắt';
+
+  @override
+  String get recent => 'Gần đây';
+
+  @override
+  String get searchPartialFailure => 'Không thể tải một số kết quả';
+
+  @override
   String get secondDevice => 'Thiết bị thứ hai';
 
   @override

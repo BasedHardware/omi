@@ -168,6 +168,7 @@ and an explicit empty literal renders as `''`.
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `SCREEN_FRAME_EGRESS_ENABLED` | Allow meeting-note screen frame egress | backend | env | closed | — | true | — | — | graduate | 2026-10-23 | dazheng |
 | `SELFHEAL_MODE` | Conversation self-heal sweeper mode: off/detect-only/nudge/heal | backend | env | closed | — | — | — | — | pending | 2026-10-15 | backend runtime_env (PR #18855) |
+| `SONIOX_CONTEXT_TERMS` | Send session vocabulary (Omi first) as Soniox context terms after dev config-frame validation | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
 | `SONIOX_ELAPSED_AXIS` | Measure Soniox elapsed timestamps before enabling speaker windows | backend | env | closed | — | — | — | — | pending | 2026-10-27 | dazheng |
 | `SONIOX_MONTHLY_CEILING_USD` | Enable Soniox monthly spend runway against a configured USD ceiling | backend | env | closed | 0 | 0 (backend-listen (chart), gke/backend-listen) | 10000 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | dazheng |
 | `STT_CONNECT_ORDER_FROM_CONFIG` | Use configured STT provider connection order | backend | env | closed | false | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | unowned |

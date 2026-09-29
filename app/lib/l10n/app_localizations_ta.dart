@@ -11566,6 +11566,26 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'வணக்கம் $name, எதையும் கேளுங்கள்';
+  }
+
+  @override
+  String get activity => 'செயல்பாடு';
+
+  @override
+  String get places => 'இடங்கள்';
+
+  @override
+  String get recaps => 'சுருக்கங்கள்';
+
+  @override
+  String get recent => 'சமீபத்தியவை';
+
+  @override
+  String get searchPartialFailure => 'சில முடிவுகளை ஏற்ற முடியவில்லை';
+
+  @override
   String get secondDevice => 'இரண்டாவது சாதனம்';
 
   @override

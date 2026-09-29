@@ -11488,6 +11488,26 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'হাই $name, যা খুশি জিজ্ঞেস করুন';
+  }
+
+  @override
+  String get activity => 'কার্যকলাপ';
+
+  @override
+  String get places => 'স্থান';
+
+  @override
+  String get recaps => 'সারাংশ';
+
+  @override
+  String get recent => 'সাম্প্রতিক';
+
+  @override
+  String get searchPartialFailure => 'কিছু ফলাফল লোড করা যায়নি';
+
+  @override
   String get secondDevice => 'দ্বিতীয় ডিভাইস';
 
   @override

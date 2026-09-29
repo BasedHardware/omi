@@ -8,6 +8,9 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/pages/goals/goals_page.dart';
+import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/payments/payments_page.dart';
@@ -32,6 +35,23 @@ import '../harness.dart';
 const _account = 'Signed-in fixture account; no device connected';
 
 final settingsPagesScenarios = <AuditScenario>[
+  AuditScenario(
+    id: 'settings-goals',
+    title: 'Settings › Goals',
+    page: 'lib/pages/goals/goals_page.dart (GoalsPage)',
+    state: 'Two goals: one halfway, one just started',
+    run: (a) async {
+      final goals = GoalsProvider(
+          goalsFetcher: () async => [
+                Goal.fromJson({'id': 'g1', 'title': 'Read 12 books', 'current_value': 6, 'target_value': 12}),
+                Goal.fromJson({'id': 'g2', 'title': 'Run 100 km', 'current_value': 12, 'target_value': 100}),
+              ]);
+      await a.tester.runAsync(goals.init);
+      await a.pump(const GoalsPage(),
+          scaffold: false, providers: [ChangeNotifierProvider<GoalsProvider>.value(value: goals)]);
+      await a.shot('Open Settings › Goals');
+    },
+  ),
   AuditScenario(
     id: 'settings-developer',
     title: 'Developer settings',

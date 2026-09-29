@@ -8,7 +8,8 @@ Brightness resolveAppearanceBrightness(ThemeMode mode, Brightness systemBrightne
       ThemeMode.system => systemBrightness,
     };
 
-/// Persists the user's appearance choice; unknown stored values follow the system.
+/// Persists the user's appearance choice. The app is light until someone picks Dark or System;
+/// an unknown stored value is light too.
 class AppearanceProvider extends ChangeNotifier {
   AppearanceProvider({String Function()? read, Future<void> Function(String)? write})
       : _read = read ?? (() => SharedPreferencesUtil().appearanceMode),
@@ -23,9 +24,9 @@ class AppearanceProvider extends ChangeNotifier {
   ThemeMode get mode => _mode;
 
   static ThemeMode parse(String? value) => switch (value) {
-        'light' => ThemeMode.light,
         'dark' => ThemeMode.dark,
-        _ => ThemeMode.system,
+        'system' => ThemeMode.system,
+        _ => ThemeMode.light,
       };
 
   Future<void> setMode(ThemeMode mode) async {

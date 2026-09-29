@@ -20925,6 +20925,42 @@ abstract class AppLocalizations {
   /// **'Show all {count} people'**
   String showAllPeople(int count);
 
+  /// Greeting at the top of an empty chat; name is the user's first name
+  ///
+  /// In en, this message translates to:
+  /// **'Hi {name}, ask anything'**
+  String chatGreeting(String name);
+
+  /// Title of the sheet listing the steps Omi took to answer a chat message
+  ///
+  /// In en, this message translates to:
+  /// **'Activity'**
+  String get activity;
+
+  /// Search tile that opens conversations on a map
+  ///
+  /// In en, this message translates to:
+  /// **'Places'**
+  String get places;
+
+  /// Search tile and result section for daily recaps
+  ///
+  /// In en, this message translates to:
+  /// **'Recaps'**
+  String get recaps;
+
+  /// Heading above recent search queries
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get recent;
+
+  /// Shown under global search results when one kind of result (conversations, recaps, tasks or memories) failed to load
+  ///
+  /// In en, this message translates to:
+  /// **'Some results couldn\'t load'**
+  String get searchPartialFailure;
+
   /// Section title on the device page for the device paired next to the primary one (Omi + OmiGlass)
   ///
   /// In en, this message translates to:

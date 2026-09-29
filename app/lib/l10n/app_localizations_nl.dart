@@ -11524,6 +11524,26 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Hoi $name, vraag maar raak';
+  }
+
+  @override
+  String get activity => 'Activiteit';
+
+  @override
+  String get places => 'Plaatsen';
+
+  @override
+  String get recaps => 'Samenvattingen';
+
+  @override
+  String get recent => 'Recent';
+
+  @override
+  String get searchPartialFailure => 'Sommige resultaten konden niet worden geladen';
+
+  @override
   String get secondDevice => 'Tweede apparaat';
 
   @override

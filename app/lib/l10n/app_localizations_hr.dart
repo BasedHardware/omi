@@ -11524,6 +11524,26 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Bok $name, pitaj bilo što';
+  }
+
+  @override
+  String get activity => 'Aktivnost';
+
+  @override
+  String get places => 'Mjesta';
+
+  @override
+  String get recaps => 'Sažeci';
+
+  @override
+  String get recent => 'Nedavno';
+
+  @override
+  String get searchPartialFailure => 'Neki rezultati nisu se mogli učitati';
+
+  @override
   String get secondDevice => 'Drugi uređaj';
 
   @override

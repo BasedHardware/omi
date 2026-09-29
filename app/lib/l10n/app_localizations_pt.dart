@@ -11506,6 +11506,26 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Olá $name, pergunte o que quiser';
+  }
+
+  @override
+  String get activity => 'Atividade';
+
+  @override
+  String get places => 'Lugares';
+
+  @override
+  String get recaps => 'Resumos';
+
+  @override
+  String get recent => 'Recentes';
+
+  @override
+  String get searchPartialFailure => 'Não foi possível carregar alguns resultados';
+
+  @override
   String get secondDevice => 'Segundo dispositivo';
 
   @override

@@ -15,7 +15,7 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
-import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/widgets/home_bottom_bar.dart';
 
 import 'task_categorization.dart';
 import 'task_delete_undo.dart';
@@ -197,7 +197,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           right: 20,
           // Rides on top of the nav bar, so it follows the bar's height and the
           // system inset the bar reserves rather than a literal tuned to one device.
-          bottom: bottomNavBarClearance(context),
+          bottom: homeBottomClearance(context),
           child: Semantics(
             button: true,
             label: context.l10n.newTask,
@@ -521,7 +521,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 16)),
         const ActionItemsShimmerList(itemCount: 7),
-        SliverPadding(padding: EdgeInsets.only(bottom: bottomNavBarClearance(context))),
+        SliverPadding(padding: EdgeInsets.only(bottom: homeBottomClearance(context))),
       ],
     );
   }
@@ -618,7 +618,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ],
 
         // Bottom padding so the last row scrolls clear of the nav bar
-        SliverPadding(padding: EdgeInsets.only(bottom: bottomNavBarClearance(context))),
+        SliverPadding(padding: EdgeInsets.only(bottom: homeBottomClearance(context))),
       ],
     );
   }

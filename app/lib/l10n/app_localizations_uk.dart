@@ -11509,6 +11509,26 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Привіт, $name, питай про що завгодно';
+  }
+
+  @override
+  String get activity => 'Дії';
+
+  @override
+  String get places => 'Місця';
+
+  @override
+  String get recaps => 'Підсумки';
+
+  @override
+  String get recent => 'Нещодавні';
+
+  @override
+  String get searchPartialFailure => 'Не вдалося завантажити деякі результати';
+
+  @override
   String get secondDevice => 'Другий пристрій';
 
   @override
