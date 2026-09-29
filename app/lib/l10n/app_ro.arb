@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "Aceasta le elimină mostrele vocale și nu poate fi anulată. Replicile lor din conversațiile trecute devin vorbitori fără nume.",
     "personTalkTime": "Timp de vorbire",
     "personLastHeard": "Ultima ascultare",
-    "deletePeopleTitle": "{count, plural, =1{Ștergi 1 persoană?} other{Ștergi persoane: {count}?}}"
+    "deletePeopleTitle": "{count, plural, =1{Ștergi 1 persoană?} other{Ștergi persoane: {count}?}}",
+    "peopleFilterNeedsVoice": "Necesită voce",
+    "peopleCount": "{count, plural, =1{1 persoană} other{Persoane: {count}}}",
+    "noMatchingPeople": "Nicio persoană potrivită",
+    "deselectAll": "Deselectează tot",
+    "voiceRecognitionSettings": "Recunoaștere vocală"
 }

@@ -3731,5 +3731,10 @@
     "deletePeopleMessage": "Ez eltávolítja a hangmintáikat, és nem vonható vissza. A korábbi beszélgetésekben elhangzott mondataik névtelen beszélőkké válnak.",
     "personTalkTime": "Beszédidő",
     "personLastHeard": "Utoljára hallott",
-    "deletePeopleTitle": "{count, plural, =1{1 személy törlése?} other{{count} személy törlése?}}"
+    "deletePeopleTitle": "{count, plural, =1{1 személy törlése?} other{{count} személy törlése?}}",
+    "peopleFilterNeedsVoice": "Hang szükséges",
+    "peopleCount": "{count, plural, =1{1 személy} other{{count} személy}}",
+    "noMatchingPeople": "Nincs egyező személy",
+    "deselectAll": "Kijelölés megszüntetése",
+    "voiceRecognitionSettings": "Hangfelismerés"
 }

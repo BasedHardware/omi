@@ -3670,5 +3670,10 @@
     "deletePeopleMessage": "Isso remove as amostras de voz e não pode ser desfeito. As falas em conversas passadas viram falantes sem nome.",
     "personTalkTime": "Tempo de fala",
     "personLastHeard": "Última escuta",
-    "deletePeopleTitle": "{count, plural, =1{Excluir 1 pessoa?} other{Excluir {count} pessoas?}}"
+    "deletePeopleTitle": "{count, plural, =1{Excluir 1 pessoa?} other{Excluir {count} pessoas?}}",
+    "peopleFilterNeedsVoice": "Falta a voz",
+    "peopleCount": "{count, plural, =1{1 pessoa} other{{count} pessoas}}",
+    "noMatchingPeople": "Nenhuma Pessoa Correspondente",
+    "deselectAll": "Desmarcar Tudo",
+    "voiceRecognitionSettings": "Reconhecimento de Voz"
 }

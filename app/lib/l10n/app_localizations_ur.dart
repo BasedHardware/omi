@@ -11547,4 +11547,27 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'آواز درکار';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count افراد',
+      one: '1 شخص',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'کوئی مماثل شخص نہیں';
+
+  @override
+  String get deselectAll => 'سب کا انتخاب ختم کریں';
+
+  @override
+  String get voiceRecognitionSettings => 'آواز کی شناخت';
 }

@@ -11349,4 +11349,27 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => '음성 필요';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명',
+      one: '1명',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '일치하는 사람 없음';
+
+  @override
+  String get deselectAll => '모두 선택 해제';
+
+  @override
+  String get voiceRecognitionSettings => '음성 인식';
 }

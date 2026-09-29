@@ -11532,4 +11532,27 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'نیاز به صدا';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count نفر',
+      one: '۱ نفر',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'فردی مطابق یافت نشد';
+
+  @override
+  String get deselectAll => 'لغو انتخاب همه';
+
+  @override
+  String get voiceRecognitionSettings => 'تشخیص صدا';
 }

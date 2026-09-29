@@ -11548,4 +11548,27 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Ses Gerekli';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kişi',
+      one: '1 kişi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Eşleşen Kişi Yok';
+
+  @override
+  String get deselectAll => 'Tümünün Seçimini Kaldır';
+
+  @override
+  String get voiceRecognitionSettings => 'Ses Tanıma';
 }

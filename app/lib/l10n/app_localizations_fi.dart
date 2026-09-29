@@ -11539,4 +11539,27 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Ääni puuttuu';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count henkilöä',
+      one: '1 henkilö',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Ei vastaavia henkilöitä';
+
+  @override
+  String get deselectAll => 'Poista valinnat';
+
+  @override
+  String get voiceRecognitionSettings => 'Äänentunnistus';
 }

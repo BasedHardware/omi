@@ -11195,5 +11195,10 @@
     "deletePeopleMessage": "S tem odstranite njihove glasovne vzorce, dejanja ni mogoče razveljaviti. Njihove izjave v preteklih pogovorih postanejo neimenovani govorci.",
     "personTalkTime": "Čas govorjenja",
     "personLastHeard": "Nazadnje slišano",
-    "deletePeopleTitle": "{count, plural, =1{Izbrišem 1 osebo?} other{Izbrišem osebe: {count}?}}"
+    "deletePeopleTitle": "{count, plural, =1{Izbrišem 1 osebo?} other{Izbrišem osebe: {count}?}}",
+    "peopleFilterNeedsVoice": "Potreben glas",
+    "peopleCount": "{count, plural, =1{1 oseba} other{Oseb: {count}}}",
+    "noMatchingPeople": "Ni ujemajočih se oseb",
+    "deselectAll": "Prekliči izbor vseh",
+    "voiceRecognitionSettings": "Prepoznavanje glasu"
 }

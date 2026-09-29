@@ -11470,4 +11470,27 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'ต้องการเสียง';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count คน',
+      one: '1 คน',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'ไม่พบบุคคลที่ตรงกัน';
+
+  @override
+  String get deselectAll => 'ยกเลิกการเลือกทั้งหมด';
+
+  @override
+  String get voiceRecognitionSettings => 'การจดจำเสียง';
 }

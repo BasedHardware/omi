@@ -11590,4 +11590,27 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Necesită voce';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Persoane: $count',
+      one: '1 persoană',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nicio persoană potrivită';
+
+  @override
+  String get deselectAll => 'Deselectează tot';
+
+  @override
+  String get voiceRecognitionSettings => 'Recunoaștere vocală';
 }

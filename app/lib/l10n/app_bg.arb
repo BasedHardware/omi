@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "Това премахва гласовите им проби и не може да бъде отменено. Репликите им в минали разговори стават безименни говорители.",
     "personTalkTime": "Време за говорене",
     "personLastHeard": "Последно чут",
-    "deletePeopleTitle": "{count, plural, =1{Изтриване на 1 човек?} other{Изтриване на {count} души?}}"
+    "deletePeopleTitle": "{count, plural, =1{Изтриване на 1 човек?} other{Изтриване на {count} души?}}",
+    "peopleFilterNeedsVoice": "Нужен глас",
+    "peopleCount": "{count, plural, =1{1 човек} other{{count} души}}",
+    "noMatchingPeople": "Няма съвпадащи хора",
+    "deselectAll": "Размаркирай всички",
+    "voiceRecognitionSettings": "Разпознаване на глас"
 }

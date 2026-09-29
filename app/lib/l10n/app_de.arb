@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "Dadurch werden die Stimmproben entfernt. Das lässt sich nicht rückgängig machen. Ihre Beiträge in früheren Gesprächen werden zu unbenannten Sprechern.",
     "personTalkTime": "Sprechzeit",
     "personLastHeard": "Zuletzt gehört",
-    "deletePeopleTitle": "{count, plural, =1{1 Person löschen?} other{{count} Personen löschen?}}"
+    "deletePeopleTitle": "{count, plural, =1{1 Person löschen?} other{{count} Personen löschen?}}",
+    "peopleFilterNeedsVoice": "Stimme fehlt",
+    "peopleCount": "{count, plural, =1{1 Person} other{{count} Personen}}",
+    "noMatchingPeople": "Keine passenden Personen",
+    "deselectAll": "Alle abwählen",
+    "voiceRecognitionSettings": "Stimmerkennung"
 }

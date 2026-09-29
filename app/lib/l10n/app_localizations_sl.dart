@@ -11566,4 +11566,27 @@ class AppLocalizationsSl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Potreben glas';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Oseb: $count',
+      one: '1 oseba',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Ni ujemajočih se oseb';
+
+  @override
+  String get deselectAll => 'Prekliči izbor vseh';
+
+  @override
+  String get voiceRecognitionSettings => 'Prepoznavanje glasu';
 }

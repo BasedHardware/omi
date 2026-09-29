@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "Thao tác này sẽ xóa các mẫu giọng nói của họ và không thể hoàn tác. Lời họ nói trong các cuộc trò chuyện trước sẽ thành người nói không tên.",
     "personTalkTime": "Thời gian nói",
     "personLastHeard": "Nghe gần nhất",
-    "deletePeopleTitle": "{count, plural, =1{Xóa 1 người?} other{Xóa {count} người?}}"
+    "deletePeopleTitle": "{count, plural, =1{Xóa 1 người?} other{Xóa {count} người?}}",
+    "peopleFilterNeedsVoice": "Cần giọng nói",
+    "peopleCount": "{count, plural, =1{1 người} other{{count} người}}",
+    "noMatchingPeople": "Không có người phù hợp",
+    "deselectAll": "Bỏ chọn tất cả",
+    "voiceRecognitionSettings": "Nhận dạng giọng nói"
 }

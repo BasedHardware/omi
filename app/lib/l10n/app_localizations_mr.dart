@@ -11544,4 +11544,27 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'आवाज हवा';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count लोक',
+      one: '1 व्यक्ती',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'जुळणारे लोक नाहीत';
+
+  @override
+  String get deselectAll => 'सर्व निवड रद्द करा';
+
+  @override
+  String get voiceRecognitionSettings => 'आवाज ओळख';
 }

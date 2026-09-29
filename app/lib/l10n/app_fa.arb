@@ -11195,5 +11195,10 @@
     "deletePeopleMessage": "این کار نمونه‌های صدای آن‌ها را حذف می‌کند و قابل بازگشت نیست. گفته‌های آن‌ها در گفتگوهای قبلی به گوینده‌های بی‌نام تبدیل می‌شود.",
     "personTalkTime": "زمان صحبت",
     "personLastHeard": "آخرین شنیده‌شدن",
-    "deletePeopleTitle": "{count, plural, =1{حذف ۱ نفر؟} other{حذف {count} نفر؟}}"
+    "deletePeopleTitle": "{count, plural, =1{حذف ۱ نفر؟} other{حذف {count} نفر؟}}",
+    "peopleFilterNeedsVoice": "نیاز به صدا",
+    "peopleCount": "{count, plural, =1{۱ نفر} other{{count} نفر}}",
+    "noMatchingPeople": "فردی مطابق یافت نشد",
+    "deselectAll": "لغو انتخاب همه",
+    "voiceRecognitionSettings": "تشخیص صدا"
 }

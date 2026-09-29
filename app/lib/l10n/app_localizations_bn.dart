@@ -11536,4 +11536,27 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'ভয়েস প্রয়োজন';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count জন',
+      one: '১ জন',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'মিলে যাওয়া কেউ নেই';
+
+  @override
+  String get deselectAll => 'সব বাদ দিন';
+
+  @override
+  String get voiceRecognitionSettings => 'ভয়েস শনাক্তকরণ';
 }

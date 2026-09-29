@@ -11561,4 +11561,27 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Nepieciešama balss';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Personas: $count',
+      one: '1 persona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nav atbilstošu personu';
+
+  @override
+  String get deselectAll => 'Noņemt visu atlasi';
+
+  @override
+  String get voiceRecognitionSettings => 'Balss atpazīšana';
 }

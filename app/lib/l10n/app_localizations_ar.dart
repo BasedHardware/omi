@@ -11466,4 +11466,27 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'يحتاج إلى صوت';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'الأشخاص: $count',
+      one: 'شخص واحد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'لا يوجد أشخاص مطابقون';
+
+  @override
+  String get deselectAll => 'إلغاء تحديد الكل';
+
+  @override
+  String get voiceRecognitionSettings => 'التعرف على الصوت';
 }

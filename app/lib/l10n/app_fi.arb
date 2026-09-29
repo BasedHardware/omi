@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "Tämä poistaa heidän ääninäytteensä, eikä sitä voi perua. Heidän repliikkinsä aiemmissa keskusteluissa muuttuvat nimettömiksi puhujiksi.",
     "personTalkTime": "Puheaika",
     "personLastHeard": "Viimeksi kuultu",
-    "deletePeopleTitle": "{count, plural, =1{Poistetaanko 1 henkilö?} other{Poistetaanko {count} henkilöä?}}"
+    "deletePeopleTitle": "{count, plural, =1{Poistetaanko 1 henkilö?} other{Poistetaanko {count} henkilöä?}}",
+    "peopleFilterNeedsVoice": "Ääni puuttuu",
+    "peopleCount": "{count, plural, =1{1 henkilö} other{{count} henkilöä}}",
+    "noMatchingPeople": "Ei vastaavia henkilöitä",
+    "deselectAll": "Poista valinnat",
+    "voiceRecognitionSettings": "Äänentunnistus"
 }

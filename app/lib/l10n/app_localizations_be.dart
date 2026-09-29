@@ -11566,4 +11566,27 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Патрэбны голас';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Людзей: $count',
+      one: '1 чалавек',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Няма адпаведных людзей';
+
+  @override
+  String get deselectAll => 'Зняць выбар з усіх';
+
+  @override
+  String get voiceRecognitionSettings => 'Распазнаванне голасу';
 }

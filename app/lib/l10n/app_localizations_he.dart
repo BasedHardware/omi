@@ -11445,4 +11445,27 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'חסר קול';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count אנשים',
+      one: 'אדם אחד',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'אין אנשים תואמים';
+
+  @override
+  String get deselectAll => 'בטל בחירת הכל';
+
+  @override
+  String get voiceRecognitionSettings => 'זיהוי קול';
 }

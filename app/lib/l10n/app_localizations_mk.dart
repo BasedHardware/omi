@@ -11598,4 +11598,27 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Потребен глас';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Луѓе: $count',
+      one: '1 личност',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Нема соодветни луѓе';
+
+  @override
+  String get deselectAll => 'Поништи ги сите';
+
+  @override
+  String get voiceRecognitionSettings => 'Препознавање глас';
 }

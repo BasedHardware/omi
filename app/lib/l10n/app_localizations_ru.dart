@@ -11575,4 +11575,27 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Нужен голос';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Людей: $count',
+      one: '1 человек',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Нет подходящих людей';
+
+  @override
+  String get deselectAll => 'Снять выбор';
+
+  @override
+  String get voiceRecognitionSettings => 'Распознавание голоса';
 }

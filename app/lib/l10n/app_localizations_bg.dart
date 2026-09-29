@@ -11579,4 +11579,27 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Нужен глас';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count души',
+      one: '1 човек',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Няма съвпадащи хора';
+
+  @override
+  String get deselectAll => 'Размаркирай всички';
+
+  @override
+  String get voiceRecognitionSettings => 'Разпознаване на глас';
 }

@@ -3670,5 +3670,10 @@
     "deletePeopleMessage": "Bu, ses örneklerini kaldırır ve geri alınamaz. Geçmiş konuşmalardaki sözleri adsız konuşmacılara dönüşür.",
     "personTalkTime": "Konuşma süresi",
     "personLastHeard": "Son duyulma",
-    "deletePeopleTitle": "{count, plural, =1{1 kişi silinsin mi?} other{{count} kişi silinsin mi?}}"
+    "deletePeopleTitle": "{count, plural, =1{1 kişi silinsin mi?} other{{count} kişi silinsin mi?}}",
+    "peopleFilterNeedsVoice": "Ses Gerekli",
+    "peopleCount": "{count, plural, =1{1 kişi} other{{count} kişi}}",
+    "noMatchingPeople": "Eşleşen Kişi Yok",
+    "deselectAll": "Tümünün Seçimini Kaldır",
+    "voiceRecognitionSettings": "Ses Tanıma"
 }

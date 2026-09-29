@@ -11195,5 +11195,10 @@
     "deletePeopleMessage": "Aalisin nito ang kanilang mga voice sample at hindi na ito maibabalik. Ang kanilang mga sinabi sa mga nakaraang usapan ay magiging mga speaker na walang pangalan.",
     "personTalkTime": "Oras ng pagsasalita",
     "personLastHeard": "Huling narinig",
-    "deletePeopleTitle": "{count, plural, =1{Burahin ang 1 tao?} other{Burahin ang {count} tao?}}"
+    "deletePeopleTitle": "{count, plural, =1{Burahin ang 1 tao?} other{Burahin ang {count} tao?}}",
+    "peopleFilterNeedsVoice": "Kailangan ng Boses",
+    "peopleCount": "{count, plural, =1{1 tao} other{{count} tao}}",
+    "noMatchingPeople": "Walang Tugmang Tao",
+    "deselectAll": "Alisin ang Lahat ng Pili",
+    "voiceRecognitionSettings": "Pagkilala sa Boses"
 }

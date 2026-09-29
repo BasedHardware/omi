@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "Tai pašalins jų balso pavyzdžius ir to atšaukti negalima. Jų replikos ankstesniuose pokalbiuose taps be vardo kalbėtojais.",
     "personTalkTime": "Kalbėjimo laikas",
     "personLastHeard": "Paskutinį kartą girdėta",
-    "deletePeopleTitle": "{count, plural, =1{Ištrinti 1 žmogų?} other{Ištrinti žmones: {count}?}}"
+    "deletePeopleTitle": "{count, plural, =1{Ištrinti 1 žmogų?} other{Ištrinti žmones: {count}?}}",
+    "peopleFilterNeedsVoice": "Trūksta balso",
+    "peopleCount": "{count, plural, =1{1 asmuo} other{Asmenų: {count}}}",
+    "noMatchingPeople": "Atitinkančių asmenų nėra",
+    "deselectAll": "Atžymėti viską",
+    "voiceRecognitionSettings": "Balso atpažinimas"
 }

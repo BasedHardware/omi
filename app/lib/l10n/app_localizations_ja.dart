@@ -11345,4 +11345,27 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => '声が未登録';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count人',
+      one: '1人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '一致する人がいません';
+
+  @override
+  String get deselectAll => 'すべて選択解除';
+
+  @override
+  String get voiceRecognitionSettings => '音声認識';
 }

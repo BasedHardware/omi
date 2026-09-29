@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "Це видалить зразки їхнього голосу, і скасувати це не можна. Їхні репліки в минулих розмовах стануть безіменними мовцями.",
     "personTalkTime": "Час мовлення",
     "personLastHeard": "Востаннє чули",
-    "deletePeopleTitle": "{count, plural, =1{Видалити 1 людину?} other{Видалити людей: {count}?}}"
+    "deletePeopleTitle": "{count, plural, =1{Видалити 1 людину?} other{Видалити людей: {count}?}}",
+    "peopleFilterNeedsVoice": "Потрібен голос",
+    "peopleCount": "{count, plural, =1{1 людина} other{Людей: {count}}}",
+    "noMatchingPeople": "Немає відповідних людей",
+    "deselectAll": "Зняти вибір",
+    "voiceRecognitionSettings": "Розпізнавання голосу"
 }

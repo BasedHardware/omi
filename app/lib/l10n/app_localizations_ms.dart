@@ -11567,4 +11567,27 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Perlu Suara';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count orang',
+      one: '1 orang',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Tiada Orang yang Sepadan';
+
+  @override
+  String get deselectAll => 'Nyahpilih Semua';
+
+  @override
+  String get voiceRecognitionSettings => 'Pengecaman Suara';
 }

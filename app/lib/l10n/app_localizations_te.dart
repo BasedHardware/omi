@@ -11584,4 +11584,27 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'వాయిస్ అవసరం';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count మంది',
+      one: '1 వ్యక్తి',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'సరిపోలే వ్యక్తులు లేరు';
+
+  @override
+  String get deselectAll => 'అన్నింటి ఎంపిక తీసివేయి';
+
+  @override
+  String get voiceRecognitionSettings => 'వాయిస్ గుర్తింపు';
 }

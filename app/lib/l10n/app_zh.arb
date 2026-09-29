@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "这将删除他们的声音样本，且无法撤销。他们在过往对话中的发言将变为未命名的说话人。",
     "personTalkTime": "说话时长",
     "personLastHeard": "最近一次听到",
-    "deletePeopleTitle": "{count, plural, =1{删除 1 个人？} other{删除 {count} 个人？}}"
+    "deletePeopleTitle": "{count, plural, =1{删除 1 个人？} other{删除 {count} 个人？}}",
+    "peopleFilterNeedsVoice": "需要声音",
+    "peopleCount": "{count, plural, =1{1 人} other{{count} 人}}",
+    "noMatchingPeople": "没有匹配的人",
+    "deselectAll": "取消全选",
+    "voiceRecognitionSettings": "声音识别"
 }

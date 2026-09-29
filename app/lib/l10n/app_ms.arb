@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "Ini akan mengalih keluar sampel suara mereka dan tidak boleh dibuat asal. Ucapan mereka dalam perbualan lalu menjadi penutur tanpa nama.",
     "personTalkTime": "Masa bercakap",
     "personLastHeard": "Terakhir didengar",
-    "deletePeopleTitle": "{count, plural, =1{Padam 1 orang?} other{Padam {count} orang?}}"
+    "deletePeopleTitle": "{count, plural, =1{Padam 1 orang?} other{Padam {count} orang?}}",
+    "peopleFilterNeedsVoice": "Perlu Suara",
+    "peopleCount": "{count, plural, =1{1 orang} other{{count} orang}}",
+    "noMatchingPeople": "Tiada Orang yang Sepadan",
+    "deselectAll": "Nyahpilih Semua",
+    "voiceRecognitionSettings": "Pengecaman Suara"
 }

@@ -21002,6 +21002,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Delete 1 Person?} other{Delete {count} People?}}'**
   String deletePeopleTitle(int count);
+
+  /// Filter chip on the People list: people whose voice Omi has not learned yet
+  ///
+  /// In en, this message translates to:
+  /// **'Needs Voice'**
+  String get peopleFilterNeedsVoice;
+
+  /// A count of people (People list filters and summary)
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 person} other{{count} people}}'**
+  String peopleCount(int count);
+
+  /// Empty state title when the People search or filter matches nobody
+  ///
+  /// In en, this message translates to:
+  /// **'No Matching People'**
+  String get noMatchingPeople;
+
+  /// Toolbar button in select mode when every visible row is selected
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect All'**
+  String get deselectAll;
+
+  /// Section header above the voice-learning switches on the People page
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Recognition'**
+  String get voiceRecognitionSettings;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

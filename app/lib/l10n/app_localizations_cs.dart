@@ -11534,4 +11534,27 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Chybí hlas';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Počet osob: $count',
+      one: '1 osoba',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Žádné odpovídající osoby';
+
+  @override
+  String get deselectAll => 'Zrušit výběr';
+
+  @override
+  String get voiceRecognitionSettings => 'Rozpoznávání hlasu';
 }

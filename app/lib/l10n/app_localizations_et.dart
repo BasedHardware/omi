@@ -11532,4 +11532,27 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Hääl puudub';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inimest',
+      one: '1 inimene',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Sobivaid inimesi pole';
+
+  @override
+  String get deselectAll => 'Tühista kõik valikud';
+
+  @override
+  String get voiceRecognitionSettings => 'Häältuvastus';
 }

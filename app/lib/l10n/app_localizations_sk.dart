@@ -11527,4 +11527,27 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Chýba hlas';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Počet osôb: $count',
+      one: '1 osoba',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Žiadne zodpovedajúce osoby';
+
+  @override
+  String get deselectAll => 'Zrušiť výber';
+
+  @override
+  String get voiceRecognitionSettings => 'Rozpoznávanie hlasu';
 }

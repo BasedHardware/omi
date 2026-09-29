@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "See eemaldab nende häälenäidised ja seda ei saa tagasi võtta. Nende read varasemates vestlustes muutuvad nimetuteks kõnelejateks.",
     "personTalkTime": "Rääkimisaeg",
     "personLastHeard": "Viimati kuuldud",
-    "deletePeopleTitle": "{count, plural, =1{Kustuta 1 inimene?} other{Kustuta {count} inimest?}}"
+    "deletePeopleTitle": "{count, plural, =1{Kustuta 1 inimene?} other{Kustuta {count} inimest?}}",
+    "peopleFilterNeedsVoice": "Hääl puudub",
+    "peopleCount": "{count, plural, =1{1 inimene} other{{count} inimest}}",
+    "noMatchingPeople": "Sobivaid inimesi pole",
+    "deselectAll": "Tühista kõik valikud",
+    "voiceRecognitionSettings": "Häältuvastus"
 }

@@ -11195,5 +11195,10 @@
     "deletePeopleMessage": "ఇది వారి వాయిస్ నమూనాలను తొలగిస్తుంది, దీన్ని రద్దు చేయలేరు. గత సంభాషణలలో వారి మాటలు పేరు లేని వక్తలుగా మారతాయి.",
     "personTalkTime": "మాట్లాడిన సమయం",
     "personLastHeard": "చివరిగా విన్నది",
-    "deletePeopleTitle": "{count, plural, =1{1 వ్యక్తిని తొలగించాలా?} other{{count} మంది వ్యక్తులను తొలగించాలా?}}"
+    "deletePeopleTitle": "{count, plural, =1{1 వ్యక్తిని తొలగించాలా?} other{{count} మంది వ్యక్తులను తొలగించాలా?}}",
+    "peopleFilterNeedsVoice": "వాయిస్ అవసరం",
+    "peopleCount": "{count, plural, =1{1 వ్యక్తి} other{{count} మంది}}",
+    "noMatchingPeople": "సరిపోలే వ్యక్తులు లేరు",
+    "deselectAll": "అన్నింటి ఎంపిక తీసివేయి",
+    "voiceRecognitionSettings": "వాయిస్ గుర్తింపు"
 }

@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "Dette fjerner stemmeprøvene deres og kan ikke angres. Replikkene deres i tidligere samtaler blir til navnløse talere.",
     "personTalkTime": "Taletid",
     "personLastHeard": "Sist hørt",
-    "deletePeopleTitle": "{count, plural, =1{Slette 1 person?} other{Slette {count} personer?}}"
+    "deletePeopleTitle": "{count, plural, =1{Slette 1 person?} other{Slette {count} personer?}}",
+    "peopleFilterNeedsVoice": "Mangler stemme",
+    "peopleCount": "{count, plural, =1{1 person} other{{count} personer}}",
+    "noMatchingPeople": "Ingen samsvarende personer",
+    "deselectAll": "Fjern alle valg",
+    "voiceRecognitionSettings": "Stemmegjenkjenning"
 }

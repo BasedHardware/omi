@@ -3670,5 +3670,10 @@
     "deletePeopleMessage": "Это удалит образцы их голоса, и отменить это нельзя. Их реплики в прошлых разговорах станут безымянными говорящими.",
     "personTalkTime": "Время речи",
     "personLastHeard": "Слышали в последний раз",
-    "deletePeopleTitle": "{count, plural, =1{Удалить 1 человека?} other{Удалить людей: {count}?}}"
+    "deletePeopleTitle": "{count, plural, =1{Удалить 1 человека?} other{Удалить людей: {count}?}}",
+    "peopleFilterNeedsVoice": "Нужен голос",
+    "peopleCount": "{count, plural, =1{1 человек} other{Людей: {count}}}",
+    "noMatchingPeople": "Нет подходящих людей",
+    "deselectAll": "Снять выбор",
+    "voiceRecognitionSettings": "Распознавание голоса"
 }

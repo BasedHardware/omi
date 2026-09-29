@@ -11324,4 +11324,27 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => '需要声音';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 人',
+      one: '1 人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '没有匹配的人';
+
+  @override
+  String get deselectAll => '取消全选';
+
+  @override
+  String get voiceRecognitionSettings => '声音识别';
 }

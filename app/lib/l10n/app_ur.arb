@@ -11195,5 +11195,10 @@
     "deletePeopleMessage": "یہ ان کے آواز کے نمونے ہٹا دیتا ہے اور اسے واپس نہیں کیا جا سکتا۔ ماضی کی گفتگوؤں میں ان کے جملے بے نام مقررین بن جاتے ہیں۔",
     "personTalkTime": "بولنے کا وقت",
     "personLastHeard": "آخری بار سنا",
-    "deletePeopleTitle": "{count, plural, =1{1 شخص کو حذف کریں؟} other{{count} لوگوں کو حذف کریں؟}}"
+    "deletePeopleTitle": "{count, plural, =1{1 شخص کو حذف کریں؟} other{{count} لوگوں کو حذف کریں؟}}",
+    "peopleFilterNeedsVoice": "آواز درکار",
+    "peopleCount": "{count, plural, =1{1 شخص} other{{count} افراد}}",
+    "noMatchingPeople": "کوئی مماثل شخص نہیں",
+    "deselectAll": "سب کا انتخاب ختم کریں",
+    "voiceRecognitionSettings": "آواز کی شناخت"
 }

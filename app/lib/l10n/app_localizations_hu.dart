@@ -11580,4 +11580,27 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Hang szükséges';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy',
+      one: '1 személy',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nincs egyező személy';
+
+  @override
+  String get deselectAll => 'Kijelölés megszüntetése';
+
+  @override
+  String get voiceRecognitionSettings => 'Hangfelismerés';
 }

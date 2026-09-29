@@ -11195,5 +11195,10 @@
     "deletePeopleMessage": "Гэта выдаліць узоры іх голасу, і гэта нельга скасаваць. Іх рэплікі ў мінулых размовах стануць безыменнымі гаворцамі.",
     "personTalkTime": "Час размовы",
     "personLastHeard": "Апошні раз чутны",
-    "deletePeopleTitle": "{count, plural, =1{Выдаліць 1 чалавека?} other{Выдаліць людзей: {count}?}}"
+    "deletePeopleTitle": "{count, plural, =1{Выдаліць 1 чалавека?} other{Выдаліць людзей: {count}?}}",
+    "peopleFilterNeedsVoice": "Патрэбны голас",
+    "peopleCount": "{count, plural, =1{1 чалавек} other{Людзей: {count}}}",
+    "noMatchingPeople": "Няма адпаведных людзей",
+    "deselectAll": "Зняць выбар з усіх",
+    "voiceRecognitionSettings": "Распазнаванне голасу"
 }

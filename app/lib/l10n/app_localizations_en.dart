@@ -11524,4 +11524,27 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Needs Voice';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count people',
+      one: '1 person',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'No Matching People';
+
+  @override
+  String get deselectAll => 'Deselect All';
+
+  @override
+  String get voiceRecognitionSettings => 'Voice Recognition';
 }

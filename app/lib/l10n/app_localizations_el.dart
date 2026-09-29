@@ -11614,4 +11614,27 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Χρειάζεται φωνή';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count άτομα',
+      one: '1 άτομο',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Δεν Βρέθηκαν Άτομα';
+
+  @override
+  String get deselectAll => 'Αποεπιλογή Όλων';
+
+  @override
+  String get voiceRecognitionSettings => 'Αναγνώριση Φωνής';
 }

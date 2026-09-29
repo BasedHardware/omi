@@ -28,12 +28,22 @@ class PeopleProvider extends BaseProvider {
   int? currentPlayingIndex;
   bool isPlaying = false;
 
-  void initialize() {
+  /// True when the last load failed; the list then shows what was cached, or an error state.
+  bool loadFailed = false;
+  bool _listening = false;
+
+  Future<void> initialize() {
     loading = true;
     notifyListeners();
-    setPeople();
-    _setupAudioPlayerListeners();
+    if (!_listening) {
+      _listening = true;
+      _setupAudioPlayerListeners();
+    }
+    return setPeople();
   }
+
+  /// Pull-to-refresh: reloads without the first-load spinner.
+  Future<void> refresh() => setPeople();
 
   void clearUserData() {
     people = [];
@@ -47,9 +57,10 @@ class PeopleProvider extends BaseProvider {
     notifyListeners();
   }
 
-  setPeople() async {
+  Future<void> setPeople() async {
     final value = await _loadPeople();
     loading = false;
+    loadFailed = value == null;
     if (value != null) {
       people = [
         ...value,

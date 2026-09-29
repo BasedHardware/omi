@@ -11531,4 +11531,27 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Cần giọng nói';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count người',
+      one: '1 người',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Không có người phù hợp';
+
+  @override
+  String get deselectAll => 'Bỏ chọn tất cả';
+
+  @override
+  String get voiceRecognitionSettings => 'Nhận dạng giọng nói';
 }

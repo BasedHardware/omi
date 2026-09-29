@@ -3670,5 +3670,10 @@
     "deletePeopleMessage": "Tindakan ini menghapus sampel suara mereka dan tidak dapat dibatalkan. Ucapan mereka di percakapan sebelumnya menjadi pembicara tanpa nama.",
     "personTalkTime": "Waktu bicara",
     "personLastHeard": "Terakhir terdengar",
-    "deletePeopleTitle": "{count, plural, =1{Hapus 1 orang?} other{Hapus {count} orang?}}"
+    "deletePeopleTitle": "{count, plural, =1{Hapus 1 orang?} other{Hapus {count} orang?}}",
+    "peopleFilterNeedsVoice": "Perlu Suara",
+    "peopleCount": "{count, plural, =1{1 orang} other{{count} orang}}",
+    "noMatchingPeople": "Tidak Ada Orang yang Cocok",
+    "deselectAll": "Batalkan Semua",
+    "voiceRecognitionSettings": "Pengenalan Suara"
 }

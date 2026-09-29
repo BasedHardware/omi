@@ -11195,5 +11195,10 @@
     "deletePeopleMessage": "ಇದು ಅವರ ಧ್ವನಿ ಮಾದರಿಗಳನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ ಮತ್ತು ಹಿಂದಕ್ಕೆ ಪಡೆಯಲಾಗುವುದಿಲ್ಲ. ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿನ ಅವರ ಮಾತುಗಳು ಹೆಸರಿಲ್ಲದ ಮಾತನಾಡುವವರಾಗುತ್ತವೆ.",
     "personTalkTime": "ಮಾತನಾಡಿದ ಸಮಯ",
     "personLastHeard": "ಕೊನೆಯ ಬಾರಿ ಕೇಳಿದ್ದು",
-    "deletePeopleTitle": "{count, plural, =1{1 ವ್ಯಕ್ತಿಯನ್ನು ಅಳಿಸಬೇಕೇ?} other{{count} ಜನರನ್ನು ಅಳಿಸಬೇಕೇ?}}"
+    "deletePeopleTitle": "{count, plural, =1{1 ವ್ಯಕ್ತಿಯನ್ನು ಅಳಿಸಬೇಕೇ?} other{{count} ಜನರನ್ನು ಅಳಿಸಬೇಕೇ?}}",
+    "peopleFilterNeedsVoice": "ಧ್ವನಿ ಬೇಕು",
+    "peopleCount": "{count, plural, =1{1 ವ್ಯಕ್ತಿ} other{{count} ಜನರು}}",
+    "noMatchingPeople": "ಹೊಂದಿಕೆಯಾಗುವ ಜನರಿಲ್ಲ",
+    "deselectAll": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ರದ್ದುಮಾಡಿ",
+    "voiceRecognitionSettings": "ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ"
 }

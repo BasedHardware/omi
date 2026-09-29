@@ -11572,4 +11572,27 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'ಧ್ವನಿ ಬೇಕು';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಜನರು',
+      one: '1 ವ್ಯಕ್ತಿ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'ಹೊಂದಿಕೆಯಾಗುವ ಜನರಿಲ್ಲ';
+
+  @override
+  String get deselectAll => 'ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ರದ್ದುಮಾಡಿ';
+
+  @override
+  String get voiceRecognitionSettings => 'ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ';
 }

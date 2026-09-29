@@ -11557,4 +11557,27 @@ class AppLocalizationsUk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Потрібен голос';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Людей: $count',
+      one: '1 людина',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Немає відповідних людей';
+
+  @override
+  String get deselectAll => 'Зняти вибір';
+
+  @override
+  String get voiceRecognitionSettings => 'Розпізнавання голосу';
 }

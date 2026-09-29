@@ -11603,4 +11603,27 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Cal la veu';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count persones',
+      one: '1 persona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Cap persona coincident';
+
+  @override
+  String get deselectAll => 'Desselecciona-ho tot';
+
+  @override
+  String get voiceRecognitionSettings => 'Reconeixement de veu';
 }

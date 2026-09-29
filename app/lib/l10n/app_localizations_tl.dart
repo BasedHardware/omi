@@ -11637,4 +11637,27 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Kailangan ng Boses';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tao',
+      one: '1 tao',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Walang Tugmang Tao';
+
+  @override
+  String get deselectAll => 'Alisin ang Lahat ng Pili';
+
+  @override
+  String get voiceRecognitionSettings => 'Pagkilala sa Boses';
 }

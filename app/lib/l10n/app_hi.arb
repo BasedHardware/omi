@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "इससे उनके आवाज़ के नमूने हट जाएंगे और इसे पूर्ववत नहीं किया जा सकता। पिछली बातचीतों में उनकी बातें बिना नाम वाले वक्ता बन जाएंगी।",
     "personTalkTime": "बोलने का समय",
     "personLastHeard": "आखिरी बार सुना",
-    "deletePeopleTitle": "{count, plural, =1{1 व्यक्ति को हटाएं?} other{{count} लोगों को हटाएं?}}"
+    "deletePeopleTitle": "{count, plural, =1{1 व्यक्ति को हटाएं?} other{{count} लोगों को हटाएं?}}",
+    "peopleFilterNeedsVoice": "आवाज़ चाहिए",
+    "peopleCount": "{count, plural, =1{1 व्यक्ति} other{{count} लोग}}",
+    "noMatchingPeople": "कोई मेल खाता व्यक्ति नहीं",
+    "deselectAll": "सभी अचयनित करें",
+    "voiceRecognitionSettings": "आवाज़ पहचान"
 }

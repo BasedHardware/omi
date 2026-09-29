@@ -11536,4 +11536,27 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Mangler stemme';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personer',
+      one: '1 person',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Ingen samsvarende personer';
+
+  @override
+  String get deselectAll => 'Fjern alle valg';
+
+  @override
+  String get voiceRecognitionSettings => 'Stemmegjenkjenning';
 }

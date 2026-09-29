@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "Detta tar bort deras röstprover och kan inte ångras. Deras repliker i tidigare samtal blir namnlösa talare.",
     "personTalkTime": "Taltid",
     "personLastHeard": "Senast hörd",
-    "deletePeopleTitle": "{count, plural, =1{Ta bort 1 person?} other{Ta bort {count} personer?}}"
+    "deletePeopleTitle": "{count, plural, =1{Ta bort 1 person?} other{Ta bort {count} personer?}}",
+    "peopleFilterNeedsVoice": "Röst saknas",
+    "peopleCount": "{count, plural, =1{1 person} other{{count} personer}}",
+    "noMatchingPeople": "Inga matchande personer",
+    "deselectAll": "Avmarkera alla",
+    "voiceRecognitionSettings": "Röstigenkänning"
 }

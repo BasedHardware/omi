@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/settings/person_name_dialog.dart';
+import 'package:omi/pages/settings/widgets/person_avatar.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -113,6 +114,17 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// Pull-to-refresh: the person's stats and the first page of conversations.
+  Future<void> _refresh() async {
+    if (_loading) return;
+    setState(() {
+      _conversations.clear();
+      _page = 0;
+      _hasMore = true;
+    });
+    await Future.wait([context.read<PeopleProvider>().refresh(), _loadMore()]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -128,11 +140,11 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
     final person = provider.people[index];
     final dates = OmiDateFormat.of(context);
     final samples = person.speechSamples ?? const <String>[];
+    final transcripts = person.speechSampleTranscripts ?? const <String>[];
     return Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         leading: const OmiBackButton(),
-        title: Text(person.name),
         actions: [
           OmiIconButton(
             icon: const Icon(Icons.edit_outlined),
@@ -146,70 +158,176 @@ class _PersonDetailPageState extends State<PersonDetailPage> {
           ),
         ],
       ),
-      body: ListView(
-        controller: _scroll,
-        padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + OmiSpacing.xl),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(OmiSpacing.md),
-            child: Row(
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          controller: _scroll,
+          padding: EdgeInsets.fromLTRB(
+              OmiSpacing.md, 0, OmiSpacing.md, MediaQuery.paddingOf(context).bottom + OmiSpacing.xl),
+          children: [
+            _Header(person: person),
+            const SizedBox(height: OmiSpacing.lg),
+            Row(
               children: [
-                _Stat(
-                  value: person.conversationCount?.toString() ?? '–',
-                  label: l10n.conversations,
-                ),
+                _Stat(value: person.conversationCount?.toString() ?? '–', label: l10n.conversations),
+                const SizedBox(width: OmiSpacing.xs),
                 _Stat(
                   value: person.talkSeconds == null ? '–' : OmiDuration.compact(person.talkSeconds!.round(), l10n),
                   label: l10n.personTalkTime,
                 ),
+                const SizedBox(width: OmiSpacing.xs),
                 _Stat(
-                  value: person.lastHeardAt == null ? '–' : dates.date(person.lastHeardAt!),
+                  value: person.lastHeardAt == null ? '–' : dates.dayHeader(person.lastHeardAt!),
                   label: l10n.personLastHeard,
                 ),
               ],
             ),
+            const SizedBox(height: OmiSpacing.xl),
+            OmiSectionHeader(l10n.speechProfile),
+            _Card(children: [
+              if (samples.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(OmiSpacing.md),
+                  child: Text(
+                    l10n.voiceSettingsSaveOthersSubtitle,
+                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                  ),
+                ),
+              for (final (j, sample) in samples.indexed)
+                PersonSampleRow(
+                  title: l10n.sampleNumber(j + 1),
+                  transcript: j < transcripts.length ? transcripts[j] : null,
+                  playing: provider.currentPlayingPersonIndex == index &&
+                      provider.currentPlayingIndex == j &&
+                      provider.isPlaying,
+                  onPlayPause: () => provider.playPause(index, j, sample),
+                  onDelete: () => _confirmDeleteSample(provider, index, person, j),
+                ),
+            ]),
+            const SizedBox(height: OmiSpacing.xl),
+            OmiSectionHeader(l10n.conversations),
+            if (_conversations.isEmpty && _failed)
+              OmiErrorState(message: l10n.somethingWentWrongTryAgain, onRetry: _loadMore)
+            else if (_conversations.isEmpty && !_loading)
+              OmiEmptyState(icon: Icons.forum_outlined, title: l10n.noConversationsYet)
+            else if (_conversations.isNotEmpty)
+              _Card(children: [
+                for (final conversation in _conversations)
+                  _ConversationRow(conversation: conversation, onTap: () => _open(conversation)),
+              ]),
+            if (_loading) const Padding(padding: EdgeInsets.all(OmiSpacing.lg), child: Center(child: OmiSpinner())),
+            if (_failed && _conversations.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: OmiSpacing.md),
+                child: OmiButton.secondary(label: l10n.tryAgain, onPressed: _loadMore),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Large avatar, name, and what Omi knows of their voice.
+class _Header extends StatelessWidget {
+  const _Header({required this.person});
+
+  final Person person;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        PersonAvatar(person: person, size: 88, ring: OmiColors.surface0),
+        const SizedBox(height: OmiSpacing.sm),
+        Semantics(
+          header: true,
+          child: Text(person.name, style: OmiType.title2, textAlign: TextAlign.center),
+        ),
+        const SizedBox(height: OmiSpacing.xxs),
+        Text(
+          context.l10n.voiceRecognitionStatus(person.voiceReadiness),
+          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
+/// Rows in one rounded card, separated by hairlines.
+class _Card extends StatelessWidget {
+  const _Card({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: OmiRadius.lgAll,
+      child: Material(
+        color: OmiColors.surface1,
+        child: Column(
+          children: [
+            for (final (i, child) in children.indexed) ...[
+              if (i > 0) Divider(height: 1, thickness: 1, indent: OmiSpacing.md, color: OmiColors.border),
+              child,
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConversationRow extends StatelessWidget {
+  const _ConversationRow({required this.conversation, required this.onTap});
+
+  final ServerConversation conversation;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final seconds = conversation.getDurationInSeconds();
+    final when = OmiDateFormat.of(context).timestamp(conversation.startedAt ?? conversation.createdAt);
+    final subtitle = seconds > 0 ? '$when · ${OmiDuration.compact(seconds, context.l10n)}' : when;
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 64),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+          child: Row(
+            children: [
+              ExcludeSemantics(
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                  child: Text(conversation.structured.emoji, style: OmiType.title3, textScaler: TextScaler.noScaling),
+                ),
+              ),
+              const SizedBox(width: OmiSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      conversation.structured.title,
+                      style: OmiType.body,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: OmiColors.textTertiary),
+            ],
           ),
-          OmiSectionHeader(l10n.speechProfile),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-            child: Text(
-              l10n.voiceRecognitionStatus(person.voiceReadiness),
-              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-            ),
-          ),
-          for (final (j, sample) in samples.indexed)
-            PersonSampleRow(
-              title: l10n.sampleNumber(j + 1),
-              transcript: person.speechSampleTranscripts != null && j < person.speechSampleTranscripts!.length
-                  ? person.speechSampleTranscripts![j]
-                  : null,
-              playing: provider.currentPlayingPersonIndex == index &&
-                  provider.currentPlayingIndex == j &&
-                  provider.isPlaying,
-              onPlayPause: () => provider.playPause(index, j, sample),
-              onDelete: () => _confirmDeleteSample(provider, index, person, j),
-            ),
-          OmiSectionHeader(l10n.conversations),
-          if (_conversations.isEmpty && !_loading && !_failed)
-            Padding(
-              padding: const EdgeInsets.all(OmiSpacing.xl),
-              child: OmiEmptyState(icon: Icons.forum_outlined, title: l10n.noConversationsYet),
-            ),
-          for (final conversation in _conversations)
-            ListTile(
-              leading: Text(conversation.structured.emoji, style: OmiType.title2),
-              title: Text(conversation.structured.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text(dates.timestamp(conversation.startedAt ?? conversation.createdAt)),
-              trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary),
-              onTap: () => _open(conversation),
-            ),
-          if (_loading) const Padding(padding: EdgeInsets.all(OmiSpacing.lg), child: Center(child: OmiSpinner())),
-          if (_failed)
-            Padding(
-              padding: const EdgeInsets.all(OmiSpacing.md),
-              child: OmiButton.secondary(label: l10n.tryAgain, onPressed: _loadMore),
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -224,12 +342,23 @@ class _Stat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Column(
-        children: [
-          Text(value, style: OmiType.title3, maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 2),
-          Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary), maxLines: 1),
-        ],
+      child: MergeSemantics(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: OmiSpacing.sm),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+          child: Column(
+            children: [
+              Text(value, style: OmiType.headline, maxLines: 1, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -259,7 +388,6 @@ class PersonSampleRow extends StatelessWidget {
     final hasTranscript = transcript != null && transcript!.isNotEmpty;
     return InkWell(
       onTap: onPlayPause,
-      borderRadius: OmiRadius.mdAll,
       child: Row(
         children: [
           OmiIconButton(

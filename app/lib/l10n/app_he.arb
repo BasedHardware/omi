@@ -11195,5 +11195,10 @@
     "deletePeopleMessage": "פעולה זו מסירה את דגימות הקול שלהם ואי אפשר לבטל אותה. הדברים שאמרו בשיחות קודמות יהפכו לדוברים ללא שם.",
     "personTalkTime": "זמן דיבור",
     "personLastHeard": "נשמע לאחרונה",
-    "deletePeopleTitle": "{count, plural, =1{למחוק אדם אחד?} other{למחוק אנשים: {count}?}}"
+    "deletePeopleTitle": "{count, plural, =1{למחוק אדם אחד?} other{למחוק אנשים: {count}?}}",
+    "peopleFilterNeedsVoice": "חסר קול",
+    "peopleCount": "{count, plural, =1{אדם אחד} other{{count} אנשים}}",
+    "noMatchingPeople": "אין אנשים תואמים",
+    "deselectAll": "בטל בחירת הכל",
+    "voiceRecognitionSettings": "זיהוי קול"
 }

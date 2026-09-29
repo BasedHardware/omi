@@ -13723,5 +13723,30 @@
                 "type": "int"
             }
         }
+    },
+    "peopleFilterNeedsVoice": "Needs Voice",
+    "@peopleFilterNeedsVoice": {
+        "description": "Filter chip on the People list: people whose voice Omi has not learned yet"
+    },
+    "peopleCount": "{count, plural, =1{1 person} other{{count} people}}",
+    "@peopleCount": {
+        "description": "A count of people (People list filters and summary)",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "noMatchingPeople": "No Matching People",
+    "@noMatchingPeople": {
+        "description": "Empty state title when the People search or filter matches nobody"
+    },
+    "deselectAll": "Deselect All",
+    "@deselectAll": {
+        "description": "Toolbar button in select mode when every visible row is selected"
+    },
+    "voiceRecognitionSettings": "Voice Recognition",
+    "@voiceRecognitionSettings": {
+        "description": "Section header above the voice-learning switches on the People page"
     }
 }

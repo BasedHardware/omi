@@ -11572,4 +11572,27 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Stem nodig';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personen',
+      one: '1 persoon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Geen Overeenkomende Personen';
+
+  @override
+  String get deselectAll => 'Alles Deselecteren';
+
+  @override
+  String get voiceRecognitionSettings => 'Stemherkenning';
 }

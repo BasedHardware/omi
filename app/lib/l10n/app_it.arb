@@ -3635,5 +3635,10 @@
     "deletePeopleMessage": "Questo rimuove i loro campioni vocali e non può essere annullato. Le loro battute nelle conversazioni passate diventano interlocutori senza nome.",
     "personTalkTime": "Tempo di parola",
     "personLastHeard": "Ultimo ascolto",
-    "deletePeopleTitle": "{count, plural, =1{Eliminare 1 persona?} other{Eliminare {count} persone?}}"
+    "deletePeopleTitle": "{count, plural, =1{Eliminare 1 persona?} other{Eliminare {count} persone?}}",
+    "peopleFilterNeedsVoice": "Voce mancante",
+    "peopleCount": "{count, plural, =1{1 persona} other{{count} persone}}",
+    "noMatchingPeople": "Nessuna Persona Corrispondente",
+    "deselectAll": "Deseleziona Tutto",
+    "voiceRecognitionSettings": "Riconoscimento Vocale"
 }

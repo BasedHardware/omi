@@ -11516,4 +11516,27 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get peopleFilterNeedsVoice => 'आवाज़ चाहिए';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count लोग',
+      one: '1 व्यक्ति',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'कोई मेल खाता व्यक्ति नहीं';
+
+  @override
+  String get deselectAll => 'सभी अचयनित करें';
+
+  @override
+  String get voiceRecognitionSettings => 'आवाज़ पहचान';
 }
