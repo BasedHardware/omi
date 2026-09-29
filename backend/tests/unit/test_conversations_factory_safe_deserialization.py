@@ -7,52 +7,9 @@ Mirrors Person.deserialize_many_safe and Message.deserialize_many_safe.
 
 from __future__ import annotations
 
-import os
-import sys
-import types
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
 
 import pytest
-
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
-
-def _ensure_stub(name: str):
-    existing = sys.modules.get(name)
-    if existing is not None and getattr(existing, "__file__", None):
-        return existing
-    if existing is None:
-        mod = types.ModuleType(name)
-        sys.modules[name] = mod
-    return sys.modules[name]
-
-
-# Stub database chain so models/utils can import without Firestore credentials
-_ensure_stub("database")
-sys.modules["database"].__path__ = getattr(sys.modules["database"], "__path__", [])
-for _sub in ["_client", "redis_db", "users", "folders", "auth"]:
-    _ensure_stub(f"database.{_sub}")
-sys.modules["database._client"].db = MagicMock()
-sys.modules["database.auth"].get_user_name = MagicMock(return_value="TestUser")
-sys.modules["database.users"].get_people_by_ids = MagicMock(return_value=[])
-sys.modules["database.folders"].get_folders = MagicMock(return_value=[])
-
-for _mod in [
-    "models",
-    "models.conversation",
-    "models.conversation_enums",
-    "models.structured",
-    "utils",
-    "utils.conversations",
-    "utils.conversations.factory",
-]:
-    _existing = sys.modules.get(_mod)
-    if _existing is not None and not getattr(_existing, "__file__", None):
-        del sys.modules[_mod]
 
 from models.conversation import Conversation
 from models.conversation_enums import CategoryEnum
