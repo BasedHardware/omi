@@ -109,3 +109,39 @@ def test_action_item_get_stops_on_empty_page(authed_profile, respx_mock, cli_run
     result = cli_runner.invoke(app, ["--json", "action-item", "get", "missing"])
     assert result.exit_code == 5
     assert route.call_count == 1
+
+
+@pytest.mark.parametrize("bad_desc", ["", "   ", " \t \n "])
+def test_action_item_create_rejects_empty_description(authed_profile, respx_mock, cli_runner, bad_desc) -> None:
+    result = cli_runner.invoke(app, ["action-item", "create", bad_desc])
+    assert result.exit_code == 1
+    assert "Invalid description" in result.stderr
+
+
+def test_action_item_create_rejects_too_long_description(authed_profile, respx_mock, cli_runner) -> None:
+    long_desc = "a" * 501
+    result = cli_runner.invoke(app, ["action-item", "create", long_desc])
+    assert result.exit_code == 1
+    assert "Description too long" in result.stderr
+
+
+def test_action_item_create_escapes_markup_in_id(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.post("/v1/dev/user/action-items").respond(
+        json={"id": "item[bold]special[/bold]", "description": "buy milk", "completed": False}
+    )
+    result = cli_runner.invoke(app, ["action-item", "create", "buy milk"])
+    assert result.exit_code == 0
+    assert "item[bold]special[/bold]" in result.stdout
+
+
+@pytest.mark.parametrize("bad_desc", ["", "   "])
+def test_action_item_update_rejects_empty_description(authed_profile, respx_mock, cli_runner, bad_desc) -> None:
+    result = cli_runner.invoke(app, ["action-item", "update", "a1", "--description", bad_desc])
+    assert result.exit_code == 1
+    assert "Invalid description" in result.stderr
+
+
+def test_action_item_update_rejects_too_long_description(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["action-item", "update", "a1", "--description", "x" * 501])
+    assert result.exit_code == 1
+    assert "Description too long" in result.stderr

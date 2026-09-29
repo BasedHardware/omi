@@ -207,3 +207,48 @@ def test_goal_update_rejects_set_and_clear_unit(authed_profile, respx_mock, monk
     assert "--unit" in error["detail"]
     assert "--clear-unit" in error["detail"]
     assert not respx_mock.calls
+
+
+@pytest.mark.parametrize("bad_title", ["", "   ", " \t \n "])
+def test_goal_create_rejects_empty_title(authed_profile, respx_mock, cli_runner, bad_title) -> None:
+    result = cli_runner.invoke(app, ["goal", "create", bad_title])
+    assert result.exit_code == 1
+    assert "Invalid title" in result.stderr
+
+
+def test_goal_create_rejects_too_long_title(authed_profile, respx_mock, cli_runner) -> None:
+    long_title = "g" * 501
+    result = cli_runner.invoke(app, ["goal", "create", long_title])
+    assert result.exit_code == 1
+    assert "Title too long" in result.stderr
+
+
+def test_goal_create_escapes_markup_in_id(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.post("/v1/dev/user/goals").respond(
+        json={
+            "id": "goal[bold]highlight[/bold]",
+            "title": "run marathon",
+            "goal_type": "scale",
+            "target_value": 42.0,
+            "current_value": 0,
+            "min_value": 0,
+            "max_value": 42,
+            "is_active": True,
+        }
+    )
+    result = cli_runner.invoke(app, ["goal", "create", "run marathon"])
+    assert result.exit_code == 0
+    assert "goal[bold]highlight[/bold]" in result.stdout
+
+
+@pytest.mark.parametrize("bad_title", ["", "   "])
+def test_goal_update_rejects_empty_title(authed_profile, respx_mock, cli_runner, bad_title) -> None:
+    result = cli_runner.invoke(app, ["goal", "update", "g1", "--title", bad_title])
+    assert result.exit_code == 1
+    assert "Invalid title" in result.stderr
+
+
+def test_goal_update_rejects_too_long_title(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["goal", "update", "g1", "--title", "g" * 501])
+    assert result.exit_code == 1
+    assert "Title too long" in result.stderr

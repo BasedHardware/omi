@@ -117,7 +117,15 @@ def create_goal(
             message="--target is required when using metric options",
             detail="Pass --target, or omit --type/--current/--min/--max/--unit to create a qualitative goal.",
         )
-    body: dict[str, object] = {"title": title}
+    cleaned_title = title.strip()
+    if not cleaned_title:
+        raise UsageError(message="Invalid title", detail="Title cannot be empty or whitespace.")
+    if len(cleaned_title) > 500:
+        raise UsageError(
+            message="Title too long",
+            detail=f"Title must be 500 characters or fewer (got {len(cleaned_title)}).",
+        )
+    body: dict[str, object] = {"title": cleaned_title}
     if unit is not None:
         body["unit"] = unit
     if has_metrics:
@@ -130,7 +138,8 @@ def create_goal(
     # No metric options given: send a qualitative goal (the API supports omitting all metric fields).
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/goals", json_body=body)
-    ctx.renderer.success(f"Goal created: [bold]{result.get('id')}[/bold]")
+    item_id = escape(str(result.get("id") or ""))
+    ctx.renderer.success(f"Goal created: [bold]{item_id}[/bold]")
     ctx.renderer.emit(result)
 
 
@@ -151,7 +160,15 @@ def update_goal(
         raise UsageError(message="Conflicting options", detail="--unit and --clear-unit are mutually exclusive.")
     body: dict[str, object] = {}
     if title is not None:
-        body["title"] = title
+        cleaned_title = title.strip()
+        if not cleaned_title:
+            raise UsageError(message="Invalid title", detail="Title cannot be empty or whitespace.")
+        if len(cleaned_title) > 500:
+            raise UsageError(
+                message="Title too long",
+                detail=f"Title must be 500 characters or fewer (got {len(cleaned_title)}).",
+            )
+        body["title"] = cleaned_title
     if target_value is not None:
         body["target_value"] = target_value
     if current_value is not None:
