@@ -1377,16 +1377,13 @@ def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = 
 @router.get("/v1/stripe/return/{account_id}", response_class=HTMLResponse)
 def stripe_return(account_id: str):
     """
-    Handle the return flow from Stripe Connect account creation
+    Handle the return flow from Stripe Connect account creation.
+    Account onboarding status is updated via webhook and queried by authenticated
+    clients at /v1/stripe/onboarded. This landing page provides user feedback without
+    leaking account onboarding status to unauthenticated callers.
     """
-    onboarding_complete = is_onboarding_complete(account_id)
-    title = "Stripe Account Setup Complete" if onboarding_complete else "Stripe Account Setup Incomplete"
-    message_class = "" if onboarding_complete else "error"
-    message = (
-        "Your Stripe account has been successfully set up with Omi AI. You can now start receiving payments."
-        if onboarding_complete
-        else "The account setup process was not completed. Please try again in a few minutes. If the issue persists, contact support."
-    )
+    title = "Stripe Account Setup"
+    message = "Your setup session has ended. You can now close this window and return to the app to verify your account status."
 
     html_content = f"""
     <!DOCTYPE html>
@@ -1427,14 +1424,11 @@ def stripe_return(account_id: str):
                 text-align: center;
                 margin-top: 20px;
             }}
-            .error {{
-                color: #d32f2f;
-            }}
         </style>
     </head>
     <body>
         <h1 class="heading">{title}</h1>
-        <p class="message {message_class}">{message}</p>
+        <p class="message">{message}</p>
         <p class="close-instruction">You can now close this window and return to the app</p>
     </body>
     </html>
