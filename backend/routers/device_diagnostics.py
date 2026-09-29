@@ -81,14 +81,18 @@ def _admin_key(
     x_admin_user: str | None = Header(None, alias='X-Admin-User'),
 ) -> str:
     expected = os.getenv('ADMIN_KEY', '')
-    if not expected or not hmac.compare_digest(x_admin_key, expected):
+    if not expected or not x_admin_key or not hmac.compare_digest(x_admin_key.strip(), expected.strip()):
         raise HTTPException(status_code=403, detail='Invalid admin key')
-    key_id = hashlib.sha256(x_admin_key.encode()).hexdigest()[:8]
-    return f'admin:{key_id}/{x_admin_user[:64] if x_admin_user else "unattributed"}'
+    key_id = hashlib.sha256(x_admin_key.strip().encode()).hexdigest()[:8]
+    clean_user = x_admin_user.strip()[:64] if x_admin_user and x_admin_user.strip() else 'unattributed'
+    return f'admin:{key_id}/{clean_user}'
 
 
 @router.post('/v1/mobile/device-diagnostics', response_model=DiagnosticsReceipt, status_code=201)
 async def upload_device_diagnostics(payload: DiagnosticsUpload, uid: str = Depends(upload_uid)) -> DiagnosticsReceipt:
+    clean_uid = uid.strip() if isinstance(uid, str) else ''
+    if not clean_uid:
+        raise HTTPException(status_code=401, detail='Authentication required')
     if len(payload.bundle_base64) > MAX_ENCODED_BYTES:
         raise HTTPException(status_code=413, detail='Diagnostics bundle is too large')
     try:
@@ -103,16 +107,30 @@ async def upload_device_diagnostics(payload: DiagnosticsUpload, uid: str = Depen
         raise HTTPException(status_code=400, detail='Diagnostics bundle must be JSON') from exc
     if not isinstance(parsed, dict) or parsed.get('schema_version') != 2:
         raise HTTPException(status_code=400, detail='Unsupported diagnostics schema')
-    ticket = await run_blocking(storage_executor, device_diagnostics_storage.save_bundle, uid, body)
+    try:
+        ticket = await run_blocking(storage_executor, device_diagnostics_storage.save_bundle, clean_uid, body)
+    except ValueError as exc:
+        logger.warning('Rejected diagnostics upload for uid=%s: %s', clean_uid, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception('Failed to save diagnostics bundle for uid=%s', clean_uid)
+        raise HTTPException(status_code=500, detail='Failed to save diagnostics bundle') from exc
     return DiagnosticsReceipt(ticket=ticket)
 
 
 @router.get('/v1/admin/device-diagnostics/{ticket}', response_model=DiagnosticsBundle, tags=['admin'])
 async def read_device_diagnostics(ticket: str, admin: str = Depends(_admin_key)) -> DiagnosticsBundle:
-    if not TICKET_PATTERN.fullmatch(ticket):
+    clean_ticket = ticket.strip().upper() if isinstance(ticket, str) else ''
+    if not TICKET_PATTERN.fullmatch(clean_ticket):
         raise HTTPException(status_code=404, detail='Ticket not found')
-    bundle = await run_blocking(storage_executor, device_diagnostics_storage.read_bundle, ticket)
+    try:
+        bundle = await run_blocking(storage_executor, device_diagnostics_storage.read_bundle, clean_ticket)
+    except Exception as exc:
+        logger.exception('Failed to read diagnostics bundle for ticket=%s', clean_ticket)
+        raise HTTPException(status_code=500, detail='Failed to retrieve diagnostics bundle') from exc
     if bundle is None:
         raise HTTPException(status_code=404, detail='Ticket not found')
-    logger.info('%s read device diagnostics ticket_hash=%s', admin, hashlib.sha256(ticket.encode()).hexdigest()[:12])
+    logger.info(
+        '%s read device diagnostics ticket_hash=%s', admin, hashlib.sha256(clean_ticket.encode()).hexdigest()[:12]
+    )
     return DiagnosticsBundle(bundle=bundle)
