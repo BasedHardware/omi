@@ -43,6 +43,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
+from utils.conversations.onopen_translation import translate_open_page
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
     merge_typesense_page_with_transcript_hits,
@@ -982,6 +983,9 @@ def get_conversation_by_id(
     source: Optional[str] = Query(None, description="Optional provenance constraint for a detail read"),
     include_discarded: bool = Query(True),
     uid: str = Depends(auth.get_current_user_uid),
+    include_translations: bool = Query(False),
+    translation_cursor: Optional[str] = Query(None),
+    response: Response = None,
 ):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
@@ -998,6 +1002,18 @@ def get_conversation_by_id(
         conversation = _enrich_deferred_conversation(uid, conversation)
     else:
         _dispatch_first_open_work(uid, conversation)
+    if include_translations is True:
+        try:
+            conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail='Invalid translation cursor') from error
+        except Exception as error:
+            logger.error('On-open translation unavailable type=%s', type(error).__name__)
+            translation_status, next_cursor = 'unavailable', None
+        if response is not None:
+            response.headers['X-Translation-Status'] = translation_status
+            if next_cursor is not None:
+                response.headers['X-Translation-Cursor'] = next_cursor
     return conversation
 
 

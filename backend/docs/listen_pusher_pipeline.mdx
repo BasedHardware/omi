@@ -1339,7 +1339,13 @@ socket's own stream seconds *before* the callback rewrites `start`/`end`
 onto other clocks, and TDT timestamps at/beyond the posted window duration
 or re-detections of already-emitted audio are dropped and counted in
 `omi_stt_window_emission_drops_total` rather than emitted at a fabricated
-position. Ownership of recent
+position. The window replay ring uses that emitted anchor, mapped through
+the provider epoch's accepted-send spans onto capture samples, as its trim
+floor. It retains every later capture sample during an in-flight POST and
+replays from the floor on failover; VAD-gated gaps do not move the provider
+anchor onto the wrong capture position. A 90-second ring overrun fails the
+window leg before accepting another chunk if un-emitted speech still needs
+the space. Ownership of recent
 capture ranges is retained as coalesced same-conversation *runs* for 120 s of
 capture time (a hard run cap is a pathological bound, not the working limit),
 so a provider final trailing its audio by tens of seconds still resolves its
@@ -1689,3 +1695,10 @@ semantic guarantee; either flag can be disabled independently for recall rollbac
 decisions; `omi_translation_skip_total` counts skip, defer and rejection reasons. Neither
 counter measures shown badges or fleet correctness. No user text enters labels or logs.
 Historical translations, client rendering, STT routing and billing are unchanged.
+
+The backend-only [on-demand translation contract](translation-on-demand.md)
+adds socket-local `client_state` demand with an optional renewable lease,
+source-fenced display materialization, and an explicit bounded detail-read
+request. Per the owner decision of 2026-09-29 these switches ship enabled
+(default on) with kill switches back to legacy behavior. Current clients send
+visibility edges but do not renew a lease or opt into detail translation.

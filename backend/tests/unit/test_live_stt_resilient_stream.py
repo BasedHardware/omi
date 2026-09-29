@@ -225,6 +225,7 @@ async def test_failed_window_replays_only_untranscribed_audio_once(monkeypatch, 
     assert listener._filter_replayed_segments(
         [{'text': 'already', '_capture_start_sample': 0, '_capture_end_sample': 2}], 'parakeet'
     )
+    ring.finalize_through(2)  # model the emitted anchor; this fake socket has no window pump
     ring.append(b'B\x00' * 2, 2)
     old = Socket(dead=True, reason=reason)
     listener.stt_socket = old

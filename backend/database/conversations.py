@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import logging
 import uuid
@@ -56,6 +57,9 @@ from .first_open_obligations import (
     first_open_effect_is_authorized,
     initialize_first_open_work,
 )
+
+from config.translation import resolve_ondemand_config
+from database.translation_admission import TranslationReservation, reservation_is_current
 
 logger = logging.getLogger(__name__)
 
@@ -2741,6 +2745,136 @@ def update_conversation_segments(
         return accepted if return_segments else True
 
     return run_transactional(client, _write_segments)
+
+
+def translation_materialization_is_current(
+    uid: str,
+    conversation: Dict[str, Any],
+    segment: Dict[str, Any],
+    target: str,
+    policy_version: str,
+    source_hint: str = '',
+) -> bool:
+    """Treat missing or mismatched private provenance as a cache miss."""
+    raw = conversation.get('translation_materializations')
+    try:
+        metadata = _reveal_json_value(raw, uid, True) if raw is not None else {}
+    except (ValueError, TypeError, json.JSONDecodeError, zlib.error):
+        return False
+    if not isinstance(metadata, dict):
+        return False
+    segment_records = metadata.get(segment.get('id'))
+    record = segment_records.get(target) if isinstance(segment_records, dict) else None
+    stored_translations = segment.get('translations')
+    translation = (
+        next((item for item in stored_translations if isinstance(item, dict) and item.get('lang') == target), None)
+        if isinstance(stored_translations, list)
+        else None
+    )
+    source_text = segment.get('text')
+    translated_text = translation.get('text') if isinstance(translation, dict) else None
+    return bool(
+        isinstance(record, dict)
+        and isinstance(source_text, str)
+        and isinstance(translated_text, str)
+        and record.get('source') == hashlib.sha256(source_text.encode('utf-8')).hexdigest()
+        and record.get('translation') == hashlib.sha256(translated_text.encode('utf-8')).hexdigest()
+        and record.get('policy') == policy_version
+        and record.get('source_hint') == (source_hint.strip().lower() or 'detect-v1')
+    )
+
+
+def materialize_translation(
+    uid: str,
+    conversation_id: str,
+    segment_id: str,
+    source_text: str,
+    target: str,
+    translated_text: str,
+    *,
+    source_hint: str = '',
+    policy_version: str = 'legacy',
+    admission_kind: str = 'live',
+    reservation: TranslationReservation | None = None,
+    firestore_client: Any = None,
+) -> Optional[Dict[str, Any]]:
+    """Fence a display translation against the current source and merge one target."""
+    if not segment_id or not source_text or not target or not translated_text:
+        return None
+    config = resolve_ondemand_config()
+    if policy_version != 'legacy' and not (config.gate_enabled if admission_kind == 'live' else config.onopen_enabled):
+        return None
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    source_digest = hashlib.sha256(source_text.encode('utf-8')).hexdigest()
+    value_digest = hashlib.sha256(translated_text.encode('utf-8')).hexdigest()
+
+    @firestore.transactional
+    def _write(transaction):
+        # Kill-switch recheck at COMMIT time (Luna R3-4): a transaction retry
+        # must not land a viewed result after the gate flipped off mid-flight.
+        commit_config = resolve_ondemand_config()
+        if policy_version != 'legacy' and not (
+            commit_config.gate_enabled if admission_kind == 'live' else commit_config.onopen_enabled
+        ):
+            return None
+        snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(snapshot, 'exists', False):
+            return None
+        current = snapshot.to_dict() or {}
+        if is_soft_deleted(current) or current.get('is_locked'):
+            return None
+        segments = _decode_transcript_segments_strict(
+            uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
+        )
+        selected = next((segment for segment in segments if segment.get('id') == segment_id), None)
+        if selected is None or selected.get('text') != source_text:
+            return None
+        raw_metadata = current.get('translation_materializations')
+        try:
+            metadata = _reveal_json_value(raw_metadata, uid, True) if raw_metadata is not None else {}
+        except (ValueError, TypeError, json.JSONDecodeError, zlib.error):
+            metadata = {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        by_target = metadata.get(segment_id)
+        if not isinstance(by_target, dict):
+            by_target = {}
+        prior = by_target.get(target)
+        existing = next(
+            (value for value in selected.get('translations', []) or [] if value.get('lang') == target), None
+        )
+        if (
+            policy_version == 'legacy'
+            and isinstance(prior, dict)
+            and prior.get('policy') == 'viewed_v1'
+            and prior.get('source') == source_digest
+            and isinstance(existing, dict)
+            and prior.get('translation') == hashlib.sha256(existing.get('text', '').encode('utf-8')).hexdigest()
+        ):
+            return selected
+        selected['translations'] = [
+            value for value in selected.get('translations', []) or [] if value.get('lang') != target
+        ] + [{'lang': target, 'text': translated_text}]
+        by_target[target] = {
+            'source': source_digest,
+            'translation': value_digest,
+            'source_hint': source_hint.strip().lower() or 'detect-v1',
+            'policy': policy_version,
+            'model': 'gemini-2.5-flash-lite' if policy_version == 'viewed_v1' else 'legacy-configured',
+            'prompt': 'v1' if policy_version == 'viewed_v1' else 'legacy',
+        }
+        metadata[segment_id] = by_target
+        level = current.get('data_protection_level', 'standard')
+        payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, level)
+        payload['translation_materializations'] = _protect_json_value(metadata, uid, 'enhanced')
+        payload['translation_materializations_compressed'] = True
+        if reservation is not None and not reservation_is_current(reservation):
+            return None
+        transaction.update(doc_ref, payload)
+        return selected
+
+    return run_transactional(client, _write)
 
 
 # ***********************************

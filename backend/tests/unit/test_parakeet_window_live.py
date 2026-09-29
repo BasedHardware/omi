@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from utils.stt import parakeet_window as window, provider_resilience, streaming as st, vad_gate
+from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_metrics import (
     WINDOW_ADMISSION,
     WINDOW_FIRST_TEXT,
@@ -981,6 +982,170 @@ async def _receiver_with_racing_window(monkeypatch, client, *, speech_seconds=6,
     await asyncio.wait_for(client.started.wait(), timeout=2)
     assert previous.raw._first_text_timer is not None
     return actual, base, previous, pcm, replayed, callbacks
+
+
+class ProgressThenHoldClient:
+    def __init__(self, *, hold_after=None):
+        self.hold_after = hold_after
+        self.requests = []
+        self.blocked = asyncio.Event()
+        self.cancelled = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        if self.hold_after is not None and len(self.requests) >= self.hold_after:
+            self.blocked.set()
+            try:
+                await self.release.wait()
+            except asyncio.CancelledError:
+                self.cancelled.set()
+                await self.release.wait()
+        duration = _wav_duration(kwargs)
+        return httpx.Response(
+            200,
+            json={'segments': [{'text': f'Part {len(self.requests)}.', 'start': 0.0, 'end': duration - 1.5}]},
+            request=httpx.Request('POST', url),
+        )
+
+
+async def _receiver_for_anchor_replay(monkeypatch, client):
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '60')
+    monkeypatch.setenv('PARAKEET_WINDOW_POST_TIMEOUT_SECONDS', '60')
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    base = receiver()
+    host = base.host
+    host.request.sample_rate = 16000
+    host.request.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    host.state.stt_terminal_failure = False
+    host.state.fair_use_dg_budget_exhausted = False
+    host.state.fair_use_track_dg_usage = False
+    host.state.dg_usage_ms_pending = 0
+    host.client_device_context = SimpleNamespace(platform='ios')
+    host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
+    host.spawn = lambda coro, **kw: coro.close()
+    actual = ListenReceiver(host, [], {})
+    monkeypatch.setattr(actual, '_run_on_listen_loop', lambda callback, segments: callback(segments))
+    replayed = []
+    callbacks = []
+
+    async def tail(callback, *args, **kwargs):
+        callbacks.append(callback)
+        return SimpleNamespace(
+            is_connection_dead=False,
+            send=lambda data: replayed.append(data) or True,
+            finalize=lambda: None,
+            finish=lambda: None,
+        )
+
+    monkeypatch.setattr(st, 'process_audio_soniox', tail)
+    assert await actual.initialize_stt()
+    return actual, base, actual.stt_socket, replayed, callbacks
+
+
+async def _flush_capture(actual, pcm, start_sample):
+    actual.capture_timeline.accept(pcm, window.time.time(), window.time.monotonic())
+    actual._stt_buffer_start_sample = start_sample
+    await actual._flush_stt_buffer(bytearray(pcm), force=True)
+
+
+async def _wait_replay_anchor(raw, previous):
+    deadline = asyncio.get_running_loop().time() + 2
+    while raw.replay_anchor_sample() is None or raw.replay_anchor_sample() <= previous:
+        if asyncio.get_running_loop().time() >= deadline:
+            raise TimeoutError('window emit anchor did not advance')
+        await _REAL_SLEEP(0)
+
+
+@pytest.mark.asyncio
+async def test_five_minutes_of_continuous_window_speech_keeps_bounded_replay(monkeypatch):
+    client = ProgressThenHoldClient()
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    ring = actual._window_ring()
+    pcm = b'\x01\x00' * 16000 * 6
+    before_trims = WINDOW_REPLAY_SAFE_TRIMS._value.get()
+    anchor = -1
+
+    for step in range(50):
+        await _flush_capture(actual, pcm, step * len(pcm) // 2)
+        await _wait_requests(client, step + 1)
+        await _wait_replay_anchor(previous.raw, anchor)
+        anchor = previous.raw.replay_anchor_sample()
+        assert actual.stt_socket is previous
+        assert not previous.is_connection_dead
+        assert ring.buffered_bytes <= 90 * 16000 * 2
+
+    assert len(client.requests) == 50
+    assert len(base.emitted) == 50
+    assert replayed == [] and callbacks == []
+    assert WINDOW_REPLAY_SAFE_TRIMS._value.get() > before_trims
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_stalled_window_post_fails_once_and_replays_exactly_from_emit_anchor(monkeypatch):
+    client = ProgressThenHoldClient(hold_after=2)
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    ring = actual._window_ring()
+    ring.ring_seconds = 12
+    pcm = b'\x01\x00' * 16000 * 6
+    await _flush_capture(actual, pcm, 0)
+    await _wait_replay_anchor(previous.raw, -1)
+    anchor = previous.window_replay_anchor_sample()
+    assert anchor is not None and anchor > 0
+    assert ring.snapshot()[0][0] == anchor
+
+    await _flush_capture(actual, pcm, 6 * 16000)
+    await asyncio.wait_for(client.blocked.wait(), 2)
+    assert previous.raw.has_untranscribed_speech()
+    assert not previous.raw._pump_task.done()
+    await _flush_capture(actual, pcm, 12 * 16000)
+
+    assert previous.raw.death_reason == 'capacity_full'
+    assert actual._pending_live_failover.reason == 'capacity_full'
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == pcm[anchor * 2 :] + pcm + pcm
+    client.release.set()
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert len(base.emitted) == 1
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_trim_during_inflight_window_post_retains_its_entire_unemitted_span(monkeypatch):
+    client = ProgressThenHoldClient(hold_after=2)
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    ring = actual._window_ring()
+    ring.ring_seconds = 12
+    pcm = b'\x01\x00' * 16000 * 6
+    # Delay the immediate progress callback so this test trims while the next
+    # real pump POST is in flight, as can happen at a send/failover boundary.
+    previous.raw.set_replay_progress_callback(lambda: None)
+    await _flush_capture(actual, pcm, 0)
+    await _wait_replay_anchor(previous.raw, -1)
+    anchor = previous.window_replay_anchor_sample()
+    assert anchor is not None and anchor > 0
+    actual.capture_timeline.accept(pcm, window.time.time(), window.time.monotonic())
+    assert previous.send(pcm, start_sample=6 * 16000)
+    ring.append(pcm, 6 * 16000)  # preserve the pre-trim state at this race boundary
+    await asyncio.wait_for(client.blocked.wait(), 2)
+    assert ring.snapshot()[0][0] == 0
+    before = WINDOW_REPLAY_SAFE_TRIMS._value.get()
+    trim_window_replay_to_anchor(ring, previous)
+    assert ring.snapshot()[0][0] == anchor
+    assert WINDOW_REPLAY_SAFE_TRIMS._value.get() == before + 1
+    previous.raw.fail('provider_5xx')
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == pcm[anchor * 2 :] + pcm
+    client.release.set()
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert len(base.emitted) == 1
+    await actual._drain_stt_sockets()
 
 
 @pytest.mark.asyncio
