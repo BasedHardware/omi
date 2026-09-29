@@ -20,6 +20,7 @@ from routers.listen.contracts import ConversationCaptureOrigin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.capture_evidence import SourcePositionMap, parse_live_frame
 from utils.translation_demand import TranslationDemand
+from utils.translation_core.metrics import get_translation_metrics
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -1684,12 +1685,22 @@ class ListenReceiver(ReplayFilterMixin):
                     if self._translation_expiry_task is not None:
                         self._translation_expiry_task.cancel()
                     snapshot = self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled)
+                    get_translation_metrics().demand(
+                        snapshot.policy.value,
+                        'enforced' if config.gate_enabled else 'shadow',
+                        self._telemetry_platform(),
+                    )
                     if snapshot.expires_at is not None:
                         self._translation_expiry_task = self.host.spawn(
                             self._expire_translation_demand(snapshot.expires_at), name='translation_demand_expiry'
                         )
                     if self.host.transcripts is not None:
-                        await self.host.transcripts.on_translation_demand_changed()
+                        coordinator = getattr(self.host.transcripts, 'translation_coordinator', None)
+                        if coordinator is not None:
+                            coordinator.demand_changed()
+                        self.host.spawn(
+                            self.host.transcripts.on_translation_demand_changed(), name='translation_demand_reconcile'
+                        )
         elif kind == 'capture_evidence_frame' and capture_evidence_dark_write_enabled():
             # The next binary message alone may consume this claim. A new
             # control message supersedes an unpaired one, never a later frame.
@@ -1710,7 +1721,16 @@ class ListenReceiver(ReplayFilterMixin):
     async def _expire_translation_demand(self, expires_at: float) -> None:
         interrupted = await self.host.wait(max(0.0, expires_at - time.monotonic()))
         if not interrupted and self.host.transcripts is not None:
-            await self.host.transcripts.on_translation_demand_changed()
+            config = resolve_ondemand_config()
+            get_translation_metrics().demand(
+                self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled).policy.value,
+                'enforced' if config.gate_enabled else 'shadow',
+                self._telemetry_platform(),
+            )
+            coordinator = getattr(self.host.transcripts, 'translation_coordinator', None)
+            if coordinator is not None:
+                coordinator.demand_changed()
+            self.host.spawn(self.host.transcripts.on_translation_demand_changed(), name='translation_demand_reconcile')
 
     async def _handle_speaker_assigned(self, payload: Dict[str, Any]) -> None:
         segment_ids = payload.get('segment_ids', [])

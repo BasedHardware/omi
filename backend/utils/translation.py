@@ -15,6 +15,7 @@ from utils.translation_core.cache import (
     CachedTranslation,
     TranslationCache,
     get_default_translation_store,
+    viewed_cache_fingerprint,
 )
 from utils.translation_core.engine import (
     TranslationEngine,
@@ -159,8 +160,24 @@ class TranslationService:
     def get_negative_cache(self, fingerprint: str, target_language: str) -> bool:
         return self.cache.is_negative(fingerprint, target_language)
 
-    def set_negative_cache(self, fingerprint: str, target_language: str) -> None:
-        self.cache.put_negative(fingerprint, target_language, self._profile_resolver())
+    def set_negative_cache(
+        self,
+        fingerprint: str,
+        target_language: str,
+        *,
+        profile: TranslationProfile | None = None,
+        source_language: str = '',
+        mode: TranslationMode = TranslationMode.whole_text,
+    ) -> None:
+        selected = profile or self._profile_resolver()
+        key = (
+            fingerprint
+            if selected.policy_version == 'legacy'
+            else viewed_cache_fingerprint(
+                fingerprint, source_language, target_language, mode.value, selected.policy_version
+            )
+        )
+        self.cache.put_negative(key, target_language, selected)
 
     def clear_session_cache(self) -> None:
         """Release per-session translation state while retaining shared Redis data."""

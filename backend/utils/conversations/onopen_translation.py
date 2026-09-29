@@ -31,6 +31,11 @@ def _revision(segments: list[dict[str, Any]]) -> str:
     return digest.hexdigest()
 
 
+def _materialization_revision(conversation: dict[str, Any], segments: list[dict[str, Any]]) -> str:
+    value = [conversation.get('translation_materializations'), [s.get('translations') for s in segments]]
+    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode('utf-8')).hexdigest()
+
+
 def _cursor_secret(uid: str) -> bytes:
     return hmac.new(os.environ['ENCRYPTION_SECRET'].encode('utf-8'), uid.encode('utf-8'), hashlib.sha256).digest()
 
@@ -81,16 +86,24 @@ def translate_open_page(
     if not conversation_id or not isinstance(segments, list):
         return conversation, 'unavailable', None
     revision = _revision(segments)
+    materialization_revision = _materialization_revision(conversation, segments)
     policy = 'viewed_v1' if config.gemini_enabled else 'legacy'
     start = 0
     stale_cursor = False
     if cursor:
         payload = _decode_cursor(uid, cursor)
-        if (payload.get('id'), payload.get('target'), payload.get('revision'), payload.get('policy')) == (
+        if (
+            payload.get('id'),
+            payload.get('target'),
+            payload.get('revision'),
+            payload.get('policy'),
+            payload.get('materialization_revision'),
+        ) == (
             conversation_id,
             target,
             revision,
             policy,
+            materialization_revision,
         ):
             start = min(payload['index'], len(segments))
         else:
@@ -100,6 +113,7 @@ def translate_open_page(
     chars = 0
     next_index = len(segments)
     oversized = False
+    deferred_index: int | None = None
     for index in range(start, len(segments)):
         segment = segments[index]
         if not isinstance(segment, dict) or not isinstance(segment.get('text'), str) or not segment.get('id'):
@@ -107,7 +121,11 @@ def translate_open_page(
         text = segment['text']
         if conversations_db.translation_materialization_is_current(uid, conversation, segment, target, policy):
             continue
-        if classify_translation_need(text, target, is_stable=True) == TranslationNeed.SKIP:
+        need = classify_translation_need(text, target, is_stable=True)
+        if need == TranslationNeed.SKIP:
+            continue
+        if need == TranslationNeed.DEFER:
+            deferred_index = index if deferred_index is None else min(deferred_index, index)
             continue
         if len(text) > config.max_chars:
             next_index = index
@@ -121,12 +139,22 @@ def translate_open_page(
 
     def make_cursor(index: int) -> str:
         return _encode_cursor(
-            uid, {'id': conversation_id, 'target': target, 'revision': revision, 'policy': policy, 'index': index}
+            uid,
+            {
+                'id': conversation_id,
+                'target': target,
+                'revision': revision,
+                'policy': policy,
+                'materialization_revision': _materialization_revision(conversation, segments),
+                'index': index,
+            },
         )
 
     if not selected:
         if oversized:
             return conversation, 'deferred', make_cursor(next_index)
+        if deferred_index is not None:
+            return conversation, 'deferred', make_cursor(deferred_index)
         if next_index < len(segments) or stale_cursor:
             return conversation, 'partial', make_cursor(next_index)
         return conversation, 'complete', None
@@ -192,6 +220,8 @@ def translate_open_page(
         release_translation(reservation, actual_chars)
     if failed:
         return conversation, 'deferred', make_cursor(next_index)
+    if deferred_index is not None:
+        return conversation, 'deferred', make_cursor(deferred_index)
     if next_index < len(segments) or stale_cursor:
         return conversation, 'partial', make_cursor(next_index)
     return conversation, 'complete', None

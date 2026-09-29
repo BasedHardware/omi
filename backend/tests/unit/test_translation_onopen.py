@@ -1,4 +1,6 @@
-from fastapi import Response
+from fastapi import FastAPI, Response
+from fastapi.testclient import TestClient
+from datetime import datetime, timezone
 import pytest
 
 from routers import conversations as conversation_routes
@@ -66,7 +68,7 @@ def test_opt_in_page_is_bounded_and_cursor_is_uid_bound(monkeypatch):
     assert status == 'partial' and cursor
     assert len(service.calls) == 1 and len(service.calls[0][1]) == 1
     assert detail['transcript_segments'][0]['text'].startswith('Yến')
-    _, status, final_cursor = onopen_translation.translate_open_page('u', conversation(), cursor, service=service)
+    _, status, final_cursor = onopen_translation.translate_open_page('u', detail, cursor, service=service)
     assert status == 'complete' and final_cursor is None
     with pytest.raises(ValueError):
         onopen_translation.translate_open_page('another-user', conversation(), cursor, service=service)
@@ -105,3 +107,32 @@ def test_default_detail_route_has_no_translation_side_effect(monkeypatch):
         == detail
     )
     assert not called and 'X-Translation-Status' not in response.headers
+
+
+def test_authenticated_detail_http_opt_in_returns_status_without_shape_change(monkeypatch):
+    detail = {
+        'id': 'canonical',
+        'created_at': datetime.now(timezone.utc),
+        'started_at': None,
+        'finished_at': None,
+        'structured': {'title': 'Test', 'overview': 'Summary'},
+        'transcript_segments': [],
+    }
+    monkeypatch.setattr(conversation_routes, '_get_valid_conversation_by_id', lambda *args, **kwargs: detail)
+    monkeypatch.setattr(conversation_routes, '_dispatch_first_open_work', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        conversation_routes,
+        'translate_open_page',
+        lambda uid, current, cursor: (current, 'partial', 'signed-next-page'),
+    )
+    app = FastAPI()
+    app.include_router(conversation_routes.router)
+    app.dependency_overrides[conversation_routes.auth.get_current_user_uid] = lambda: 'u'
+    client = TestClient(app)
+    ordinary = client.get('/v1/conversations/canonical')
+    opted = client.get('/v1/conversations/canonical?include_translations=true')
+    assert ordinary.status_code == opted.status_code == 200
+    assert ordinary.json() == opted.json()
+    assert 'x-translation-status' not in ordinary.headers
+    assert opted.headers['x-translation-status'] == 'partial'
+    assert opted.headers['x-translation-cursor'] == 'signed-next-page'

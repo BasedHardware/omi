@@ -149,6 +149,7 @@ class TranslationCoordinator:
         realtime_interpreter: bool = False,
         uid: str = '',
         demand: TranslationDemand | None = None,
+        spawn_task: Callable[..., asyncio.Task[None]] | None = None,
     ):
         self.target_language = target_language
         self.target_base = _normalize_base_language(target_language) or ''
@@ -160,6 +161,8 @@ class TranslationCoordinator:
         self.realtime_interpreter = realtime_interpreter
         self.uid = uid
         self.demand = demand
+        self._spawn_task = spawn_task
+        self._inflight_tasks: set[asyncio.Task[None]] = set()
         self._result_context: dict[tuple[str, str], tuple[str, str, object | None]] = {}
         self._decision_metrics = get_translation_metrics()
         self._conversation_id: Optional[str] = None
@@ -399,12 +402,23 @@ class TranslationCoordinator:
         self._decision_metrics.decision(self.target_language, 'skip', 'target_language')
         state.committed_text = text
         text_hash = hashlib.md5(text.encode()).hexdigest()
-        await run_blocking(
-            db_executor,
-            self.translation_service.set_negative_cache,
-            text_hash,
-            self.target_language,
-        )
+        config = resolve_ondemand_config()
+        if self._admission() == DemandPolicy.viewed and config.gemini_enabled:
+            await run_blocking(
+                db_executor,
+                self.translation_service.set_negative_cache,
+                text_hash,
+                self.target_language,
+                profile=viewed_translation_profile(resolve_translation_profile(), config),
+                source_language=self.source_language,
+            )
+        else:
+            await run_blocking(
+                db_executor,
+                self.translation_service.set_negative_cache,
+                text_hash,
+                self.target_language,
+            )
         self.metrics['negative_cache_sets'] += 1
 
     def _queue_translation(
@@ -419,6 +433,10 @@ class TranslationCoordinator:
         self._decision_metrics.decision(self.target_language, 'translate', 'eligible')
         version = self._next_version()
         state.version = version
+        if self._admission() == DemandPolicy.viewed:
+            self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment_id]
+            if len(self._batch_buffer) >= 200:
+                self._batch_buffer.pop(0)
         self._batch_buffer.append((segment_id, text, conversation_id, version))
 
     def _invalidate_segment_work(self, segment_id: str, state: SegmentState) -> None:
@@ -431,16 +449,28 @@ class TranslationCoordinator:
             self._batch_task.cancel()
         self._batch_task = None
 
+    def _spawn(self, coro: Awaitable[None], name: str) -> asyncio.Task[None]:
+        task = self._spawn_task(coro, name=name) if self._spawn_task is not None else asyncio.ensure_future(coro)
+        self._inflight_tasks.add(task)
+        task.add_done_callback(self._inflight_tasks.discard)
+        return task
+
+    async def wait_inflight(self) -> None:
+        tasks = [task for task in self._inflight_tasks if not task.done()]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     def _restart_batch_timer(self) -> None:
         if not self._batch_buffer:
             return
         self._cancel_batch_timer()
-        self._batch_task = asyncio.ensure_future(self._flush_after_batch_window())
+        self._batch_task = self._spawn(self._flush_after_batch_window(), 'translation_batch_timer')
 
     async def _flush_after_batch_window(self) -> None:
         await asyncio.sleep(BATCH_WINDOW_SECONDS)
         # Shield provider work from timer cancellation once flushing has begun.
-        await asyncio.shield(self._flush_batch())
+        provider_task = self._spawn(self._flush_batch(), 'translation_batch_provider')
+        await asyncio.shield(provider_task)
 
     async def _flush_batch(self):
         """Translate all queued segments in a single batched API call.
@@ -476,6 +506,23 @@ class TranslationCoordinator:
             return
         profile = viewed_translation_profile(resolve_translation_profile(), config) if viewed else None
 
+        remaining_units: List[Tuple[str, str, str, int]] = []
+        if viewed:
+            selected_units: List[Tuple[str, str, str, int]] = []
+            selected_chars = 0
+            for unit in reversed(valid_units):
+                if len(unit[1]) > config.max_chars:
+                    self._decision_metrics.decision(self.target_language, 'defer', 'oversized')
+                    continue
+                if len(selected_units) < config.max_segments and selected_chars + len(unit[1]) <= config.max_chars:
+                    selected_units.append(unit)
+                    selected_chars += len(unit[1])
+                else:
+                    remaining_units.append(unit)
+            valid_units = list(reversed(selected_units))
+            if not valid_units:
+                return
+
         # Prepare (unit_id, text) pairs for batch API
         api_units: List[Tuple[str, str]] = [(seg_id, text) for seg_id, text, _, _ in valid_units]
 
@@ -505,18 +552,30 @@ class TranslationCoordinator:
         logger.info(f"translate_coordinator [batch] units={len(api_units)}")
 
         actual_chars = sum(len(text) for _, text in api_units)
+        batch_succeeded = False
         try:
             # Run the sync provider call in a thread pool to avoid blocking the event loop
-            outcomes = await run_blocking(
-                sync_executor,
-                self.translation_service.translate_outcomes,
-                self.target_language,
-                api_units,
-                source_language=self.source_language,
-                **({'mode': TranslationMode.whole_text, 'profile': profile} if viewed else {}),
-            )
+            if viewed:
+                outcomes = await run_blocking(
+                    sync_executor,
+                    self.translation_service.translate_outcomes,
+                    self.target_language,
+                    api_units,
+                    source_language=self.source_language,
+                    mode=TranslationMode.whole_text,
+                    profile=profile,
+                )
+            else:
+                outcomes = await run_blocking(
+                    sync_executor,
+                    self.translation_service.translate_outcomes,
+                    self.target_language,
+                    api_units,
+                    source_language=self.source_language,
+                )
             if len(outcomes) != len(valid_units):
                 raise RuntimeError('Translation service returned the wrong number of outcomes')
+            batch_succeeded = True
             actual_chars += sum(
                 len(outcome.text) for outcome in outcomes if outcome.status == TranslationStatus.translated
             )
@@ -560,12 +619,22 @@ class TranslationCoordinator:
                         ):
                             # Only target-language no-ops belong in the negative cache.
                             text_hash = hashlib.md5(original_text.encode()).hexdigest()
-                            await run_blocking(
-                                db_executor,
-                                self.translation_service.set_negative_cache,
-                                text_hash,
-                                self.target_language,
-                            )
+                            if viewed:
+                                await run_blocking(
+                                    db_executor,
+                                    self.translation_service.set_negative_cache,
+                                    text_hash,
+                                    self.target_language,
+                                    profile=profile,
+                                    source_language=self.source_language,
+                                )
+                            else:
+                                await run_blocking(
+                                    db_executor,
+                                    self.translation_service.set_negative_cache,
+                                    text_hash,
+                                    self.target_language,
+                                )
                             self.metrics['negative_cache_sets'] += 1
                         state.committed_text = original_text
                     continue
@@ -601,12 +670,16 @@ class TranslationCoordinator:
                     reservation,
                     actual_chars,
                 )
+            if batch_succeeded and remaining_units and self._admission() == DemandPolicy.viewed:
+                self._batch_buffer.extend(reversed(remaining_units))
+                self._restart_batch_timer()
 
     async def flush(self):
         """Flush all pending translations before session cleanup."""
         self._flushing = True
 
         self._cancel_batch_timer()
+        await self.wait_inflight()
         if self._admission() not in {DemandPolicy.hidden, DemandPolicy.lease_expired, DemandPolicy.closed}:
             await self._flush_batch()
         else:

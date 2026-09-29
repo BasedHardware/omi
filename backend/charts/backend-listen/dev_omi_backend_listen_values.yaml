@@ -292,6 +292,32 @@ env:
     value: "http://nllb.omiapi.com"
   - name: TRANSLATION_SERVICE_MODELS
     value: "nllb,gemini"
+  - name: TRANSLATION_DEMAND_SHADOW_ENABLED
+    value: "false"
+  - name: TRANSLATION_DEMAND_GATE_ENABLED
+    value: "false"
+  - name: TRANSLATION_DEMAND_LEASE_V1_ENABLED
+    value: "false"
+  - name: TRANSLATION_ONDEMAND_GEMINI_ENABLED
+    value: "false"
+  - name: TRANSLATION_ONOPEN_ENABLED
+    value: "false"
+  - name: TRANSLATION_ONDEMAND_COHORT_PERCENT
+    value: "0"
+  - name: TRANSLATION_ONDEMAND_UID_ALLOWLIST
+    value: ""
+  - name: TRANSLATION_ONDEMAND_MAX_SEGMENTS
+    value: "50"
+  - name: TRANSLATION_ONDEMAND_MAX_CHARS
+    value: "12000"
+  - name: TRANSLATION_ONDEMAND_DEADLINE_SECONDS
+    value: "3"
+  - name: TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS
+    value: "4096"
+  - name: TRANSLATION_ONDEMAND_UID_DAILY_CHARS
+    value: "0"
+  - name: TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS
+    value: "0"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
