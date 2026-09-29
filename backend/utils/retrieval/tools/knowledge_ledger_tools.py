@@ -316,7 +316,7 @@ def search_knowledge(
     try:
         parsed_kinds = _parse_kinds(kinds)
     except ValueError as exc:
-        return f"Error: {exc}"
+        return "Error reading knowledge ledger. Please try again later."
     uid = _resolve_uid(config)
     if not uid:
         return "Error: User ID not found in configuration"
