@@ -61,6 +61,7 @@ def test_budget_and_completion_observations_are_bounded():
     assert completion_size_bucket(64) == 'le_64'
     assert completion_size_bucket(16385) == 'gt_16384'
 
+
 def test_caller_output_limit_with_max_completion_tokens_wins(monkeypatch):
     monkeypatch.setenv(OUTPUT_BUDGET_EXPERIMENTS_ENV_VAR, 'session_titles')
     request, decision = apply_output_budget(
@@ -71,6 +72,7 @@ def test_caller_output_limit_with_max_completion_tokens_wins(monkeypatch):
     assert request['max_completion_tokens'] == 64
     assert decision.source == 'caller'
     assert decision.max_completion_tokens == 64
+
 
 def test_caller_output_limit_ignores_bool_max_completion_tokens(monkeypatch):
     monkeypatch.setenv(OUTPUT_BUDGET_EXPERIMENTS_ENV_VAR, 'session_titles')
@@ -83,6 +85,7 @@ def test_caller_output_limit_ignores_bool_max_completion_tokens(monkeypatch):
     assert decision.source == 'route_default'
     assert decision.max_completion_tokens == 128
 
+
 def test_caller_output_limit_ignores_bool_max_tokens(monkeypatch):
     monkeypatch.setenv(OUTPUT_BUDGET_EXPERIMENTS_ENV_VAR, 'session_titles')
     request, decision = apply_output_budget(
@@ -93,6 +96,7 @@ def test_caller_output_limit_ignores_bool_max_tokens(monkeypatch):
     assert request['max_completion_tokens'] == 128
     assert decision.source == 'route_default'
     assert decision.max_completion_tokens == 128
+
 
 def test_apply_output_budget_when_policy_is_none():
     request, decision = apply_output_budget(
