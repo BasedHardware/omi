@@ -363,12 +363,23 @@ _ENTRIES: list[dict[str, Any]] = [
     {
         'id': 'developer_from_segments_1776',
         'label': (
-            'routers/developer.py:1776 from-segments '
-            '(coordinator-with-exact-args; default source=phone, §1.2 non-desktop)'
+            'routers/developer.py:2142 from-segments '
+            '(coordinator-with-exact-args; default source=phone, trigger=CLIENT_FINALIZE, §1.2 non-desktop)'
         ),
         'kind': 'create',
         'source': ConversationSource.phone,
-        'kwargs': {},
+        'kwargs': {'trigger': ProcessingTrigger.CLIENT_FINALIZE},
+    },
+    {
+        'id': 'developer_from_segments_desktop',
+        'label': (
+            'routers/developer.py:2142 from-segments desktop '
+            '(coordinator-with-exact-args; a client-uploaded final transcript runs as '
+            'trigger=CLIENT_FINALIZE, so the freemium desktop capture deferral must not store the placeholder)'
+        ),
+        'kind': 'create',
+        'source': ConversationSource.desktop,
+        'kwargs': {'trigger': ProcessingTrigger.CLIENT_FINALIZE},
     },
     {
         'id': 'listen_157_via_finalizer_137',
