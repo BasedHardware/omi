@@ -11517,4 +11517,24 @@ class AppLocalizationsMs extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Tunjukkan semua $count orang';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hai $name, tanya apa sahaja';
+  }
+
+  @override
+  String get activity => 'Aktiviti';
+
+  @override
+  String get places => 'Tempat';
+
+  @override
+  String get recaps => 'Ringkasan';
+
+  @override
+  String get recent => 'Terkini';
+
+  @override
+  String get searchPartialFailure => 'Sesetengah hasil tidak dapat dimuatkan';
 }

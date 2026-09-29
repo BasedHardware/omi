@@ -11472,4 +11472,24 @@ class AppLocalizationsDa extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Vis alle $count personer';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hej $name, spørg om hvad som helst';
+  }
+
+  @override
+  String get activity => 'Aktivitet';
+
+  @override
+  String get places => 'Steder';
+
+  @override
+  String get recaps => 'Opsummeringer';
+
+  @override
+  String get recent => 'Seneste';
+
+  @override
+  String get searchPartialFailure => 'Nogle resultater kunne ikke indlæses';
 }

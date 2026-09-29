@@ -3657,5 +3657,11 @@
     "feedbackReasonRecordingOther": "Autre chose",
     "searchPeople": "Rechercher des personnes",
     "addQueryAsNewPerson": "Ajouter « {query} » comme nouvelle personne",
-    "showAllPeople": "Afficher les {count} personnes"
+    "showAllPeople": "Afficher les {count} personnes",
+    "chatGreeting": "Bonjour {name}, posez n’importe quelle question",
+    "activity": "Activité",
+    "places": "Lieux",
+    "recaps": "Récaps",
+    "recent": "Récents",
+    "searchPartialFailure": "Certains résultats n'ont pas pu être chargés"
 }

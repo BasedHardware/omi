@@ -12,6 +12,7 @@ import 'package:omi/pages/apps/update_app.dart';
 import 'package:omi/pages/apps/widgets/app_actions.dart';
 import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/settings/ai_app_generator_page.dart';
+import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/providers/app_provider.dart';
 
 import '../../journeys/support/fixture_backend.dart';
@@ -48,6 +49,21 @@ AppProvider _catalog(List<App> apps) => AppProvider()
   ..retrievePopularAppsOverride = (() async => apps);
 
 final appsScenarios = <AuditScenario>[
+  AuditScenario(
+    id: 'apps-integrations',
+    title: 'Settings › Integrations: connected services, then the app catalog',
+    page: 'lib/pages/settings/integrations_page.dart (IntegrationsPage)',
+    state: 'Nothing connected; AppProvider catalog with three approved apps under Popular',
+    run: (a) async {
+      final apps = [_app(id: 'asana'), _app(id: 'notion', name: 'Notion'), _app(id: 'slack', name: 'Slack summaries')];
+      await primeNetworkImages(a.tester, apps.map((app) => app.getImageUrl()));
+      await a.pump(const IntegrationsPage(), scaffold: false, providers: [
+        ChangeNotifierProvider<AppProvider>.value(value: _catalog(apps)),
+        ChangeNotifierProvider<AddAppProvider>(create: (_) => InertAddAppProvider()),
+      ]);
+      await a.scrollSeries('Open Settings › Integrations and scroll to the apps');
+    },
+  ),
   AuditScenario(
     id: 'apps-store',
     title: 'Apps store home',
