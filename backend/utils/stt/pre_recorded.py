@@ -37,6 +37,7 @@ from utils.byok import get_byok_key
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
+from utils.stt.brand_terms import normalize_brand_terms
 from utils.stt.speaker_clustering import select_speaker_cluster
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 
@@ -1243,7 +1244,7 @@ def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegme
     starts_at = segments[0]['start']
     return [
         TranscriptSegment(
-            text=str(segment['text']).strip().capitalize(),
+            text=normalize_brand_terms(str(segment['text']).strip().capitalize()),
             speaker=segment['speaker'],
             is_user=segment['is_user'],
             person_id=None,

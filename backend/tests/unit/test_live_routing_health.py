@@ -109,9 +109,12 @@ async def test_stale_scores_keep_known_fleet_account_bench(monkeypatch):
 
     health = live_health.FleetHealth(clock=lambda: now[0], redis_client=BenchedRedis())
     health.cached_snapshot(['soniox'], 'en')
+    assert not health.has_fresh_fleet_snapshot()
     await health.refresh_once()
+    assert health.has_fresh_fleet_snapshot()
     assert health.cached_snapshot(['soniox'], 'en')['soniox'].score == pytest.approx(28 / 29)
     now[0] += live_health.CACHE_STALE_SECONDS + 1
+    assert not health.has_fresh_fleet_snapshot()
     state = health.cached_snapshot(['soniox'], 'en')['soniox']
     assert state.score == 0.5  # Fleet score expired; the known account bench did not.
     assert state.bench == 'account'
@@ -123,6 +126,7 @@ async def test_stale_scores_keep_known_fleet_account_bench(monkeypatch):
     health._client = DownRedis()
     await health.refresh_once()
     assert health._cache_at is None
+    assert not health.has_fresh_fleet_snapshot()
     assert health.cached_snapshot(['soniox'], 'en')['soniox'].bench == 'account'
 
 
@@ -359,6 +363,12 @@ async def test_hanging_redis_adds_under_five_ms_to_connection_decision(monkeypat
             await asyncio.sleep(1.0)
 
     class Circuit:
+        state = 'closed'
+        account_cooldown_seconds_remaining = 0.0
+
+        def cooldown_elapsed(self):
+            return True
+
         def allow_request(self, **_kwargs):
             return True
 
@@ -431,6 +441,12 @@ async def test_hanging_recovery_lease_is_not_awaited_by_connection(monkeypatch):
             await asyncio.sleep(1.0)
 
     class Circuit:
+        state = 'closed'
+        account_cooldown_seconds_remaining = 0.0
+
+        def cooldown_elapsed(self):
+            return True
+
         def allow_request(self, **_kwargs):
             return True
 
@@ -573,6 +589,11 @@ async def test_local_probe_is_checked_before_fleet_lease_and_released_on_denial(
         def __init__(self, allowed):
             self.allowed = allowed
             self.releases = 0
+            self.state = 'closed'
+            self.account_cooldown_seconds_remaining = 0.0
+
+        def cooldown_elapsed(self):
+            return True
 
         def allow_request(self, **_kwargs):
             return self.allowed

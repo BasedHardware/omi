@@ -11517,4 +11517,77 @@ class AppLocalizationsMs extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Tunjukkan semua $count orang';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hai $name, tanya apa sahaja';
+  }
+
+  @override
+  String get activity => 'Aktiviti';
+
+  @override
+  String get places => 'Tempat';
+
+  @override
+  String get recaps => 'Ringkasan';
+
+  @override
+  String get recent => 'Terkini';
+
+  @override
+  String get searchPartialFailure => 'Sesetengah hasil tidak dapat dimuatkan';
+
+  @override
+  String get peopleSearchPlaceholder => 'Cari orang';
+
+  @override
+  String get peopleNotHeardYet => 'Belum didengar';
+
+  @override
+  String get peopleRecent => 'Terkini';
+
+  @override
+  String get deletePeopleMessage =>
+      'Ini akan mengalih keluar sampel suara mereka dan tidak boleh dibuat asal. Ucapan mereka dalam perbualan lalu menjadi penutur tanpa nama.';
+
+  @override
+  String get personTalkTime => 'Masa bercakap';
+
+  @override
+  String get personLastHeard => 'Terakhir didengar';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Padam $count orang?',
+      one: 'Padam 1 orang?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Perlu Suara';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count orang',
+      one: '1 orang',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Tiada Orang yang Sepadan';
+
+  @override
+  String get deselectAll => 'Nyahpilih Semua';
+
+  @override
+  String get voiceRecognitionSettings => 'Pengecaman Suara';
 }

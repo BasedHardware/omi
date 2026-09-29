@@ -11530,4 +11530,77 @@ class AppLocalizationsHu extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Az összes ($count) személy megjelenítése';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Szia $name, kérdezz bármit';
+  }
+
+  @override
+  String get activity => 'Tevékenység';
+
+  @override
+  String get places => 'Helyek';
+
+  @override
+  String get recaps => 'Összefoglalók';
+
+  @override
+  String get recent => 'Legutóbbiak';
+
+  @override
+  String get searchPartialFailure => 'Néhány találatot nem sikerült betölteni';
+
+  @override
+  String get peopleSearchPlaceholder => 'Személyek keresése';
+
+  @override
+  String get peopleNotHeardYet => 'Még nem hallott';
+
+  @override
+  String get peopleRecent => 'Legutóbbiak';
+
+  @override
+  String get deletePeopleMessage =>
+      'Ez eltávolítja a hangmintáikat, és nem vonható vissza. A korábbi beszélgetésekben elhangzott mondataik névtelen beszélőkké válnak.';
+
+  @override
+  String get personTalkTime => 'Beszédidő';
+
+  @override
+  String get personLastHeard => 'Utoljára hallott';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy törlése?',
+      one: '1 személy törlése?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Hang szükséges';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy',
+      one: '1 személy',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nincs egyező személy';
+
+  @override
+  String get deselectAll => 'Kijelölés megszüntetése';
+
+  @override
+  String get voiceRecognitionSettings => 'Hangfelismerés';
 }

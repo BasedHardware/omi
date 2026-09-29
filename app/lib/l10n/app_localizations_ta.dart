@@ -11564,4 +11564,77 @@ class AppLocalizationsTa extends AppLocalizations {
   String showAllPeople(int count) {
     return 'அனைத்து ($count) நபர்களையும் காட்டு';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'வணக்கம் $name, எதையும் கேளுங்கள்';
+  }
+
+  @override
+  String get activity => 'செயல்பாடு';
+
+  @override
+  String get places => 'இடங்கள்';
+
+  @override
+  String get recaps => 'சுருக்கங்கள்';
+
+  @override
+  String get recent => 'சமீபத்தியவை';
+
+  @override
+  String get searchPartialFailure => 'சில முடிவுகளை ஏற்ற முடியவில்லை';
+
+  @override
+  String get peopleSearchPlaceholder => 'நபர்களைத் தேடு';
+
+  @override
+  String get peopleNotHeardYet => 'இன்னும் கேட்கப்படவில்லை';
+
+  @override
+  String get peopleRecent => 'சமீபத்தியவை';
+
+  @override
+  String get deletePeopleMessage =>
+      'இது அவர்களின் குரல் மாதிரிகளை நீக்கும்; இதைச் செயல்தவிர்க்க முடியாது. கடந்த உரையாடல்களில் அவர்களின் பேச்சு பெயரற்ற பேச்சாளர்களாக மாறும்.';
+
+  @override
+  String get personTalkTime => 'பேசிய நேரம்';
+
+  @override
+  String get personLastHeard => 'கடைசியாகக் கேட்டது';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count நபர்களை நீக்கவா?',
+      one: '1 நபரை நீக்கவா?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'குரல் தேவை';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count நபர்கள்',
+      one: '1 நபர்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'பொருந்தும் நபர்கள் இல்லை';
+
+  @override
+  String get deselectAll => 'அனைத்தையும் தேர்வுநீக்கு';
+
+  @override
+  String get voiceRecognitionSettings => 'குரல் அடையாளம்';
 }

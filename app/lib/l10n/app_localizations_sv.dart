@@ -11495,4 +11495,77 @@ class AppLocalizationsSv extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Visa alla $count personer';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hej $name, fråga vad du vill';
+  }
+
+  @override
+  String get activity => 'Aktivitet';
+
+  @override
+  String get places => 'Platser';
+
+  @override
+  String get recaps => 'Sammanfattningar';
+
+  @override
+  String get recent => 'Senaste';
+
+  @override
+  String get searchPartialFailure => 'Vissa resultat kunde inte läsas in';
+
+  @override
+  String get peopleSearchPlaceholder => 'Sök personer';
+
+  @override
+  String get peopleNotHeardYet => 'Inte hörd ännu';
+
+  @override
+  String get peopleRecent => 'Senaste';
+
+  @override
+  String get deletePeopleMessage =>
+      'Detta tar bort deras röstprover och kan inte ångras. Deras repliker i tidigare samtal blir namnlösa talare.';
+
+  @override
+  String get personTalkTime => 'Taltid';
+
+  @override
+  String get personLastHeard => 'Senast hörd';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ta bort $count personer?',
+      one: 'Ta bort 1 person?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Röst saknas';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personer',
+      one: '1 person',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Inga matchande personer';
+
+  @override
+  String get deselectAll => 'Avmarkera alla';
+
+  @override
+  String get voiceRecognitionSettings => 'Röstigenkänning';
 }

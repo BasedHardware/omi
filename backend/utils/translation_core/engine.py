@@ -11,7 +11,7 @@ from typing import Callable
 from config.translation import TranslationProfile, resolve_translation_profile
 from utils.translation_core.quality import output_rejection_reason
 from utils.translation_core.metrics import get_translation_metrics
-from utils.translation_core.cache import CachedTranslation, TranslationCache
+from utils.translation_core.cache import CachedTranslation, TranslationCache, viewed_cache_fingerprint
 from utils.translation_core.planner import (
     PlannedUnit,
     TranslationMode,
@@ -58,17 +58,28 @@ class TranslationEngine:
         target_language: str,
         source_language: str = '',
         mode: TranslationMode = TranslationMode.sentence,
+        profile: TranslationProfile | None = None,
     ) -> list[TranslationOutcome]:
         if not units:
             return []
 
-        profile = self._profile_resolver()
+        profile = profile or self._profile_resolver()
+        if profile.policy_version != 'legacy' and mode != TranslationMode.whole_text:
+            raise ValueError('Viewed translation must use whole segment units')
+
+        def cache_key(fingerprint: str) -> str:
+            if profile.policy_version == 'legacy':
+                return fingerprint
+            return viewed_cache_fingerprint(
+                fingerprint, source_language, target_language, mode.value, profile.policy_version
+            )
+
         self._report_config_diagnostics(profile)
         outcomes: dict[int, TranslationOutcome] = {}
         pending: list[TranslationUnit] = []
 
         for unit in units:
-            full_fingerprint = fingerprint_text(unit.text)
+            full_fingerprint = cache_key(fingerprint_text(unit.text))
             if not unit.text.strip():
                 outcomes[unit.ordinal] = _unchanged(unit, '')
                 continue
@@ -90,10 +101,10 @@ class TranslationEngine:
         missing: list[tuple[str, str]] = []
 
         for segment in plan.unique_segments:
-            cached = self.cache.get(segment.fingerprint, target_language)
+            cached = self.cache.get(cache_key(segment.fingerprint), target_language)
             if cached is not None:
                 segment_values[segment.fingerprint] = _guard_value(segment.text, cached, target_language)
-            elif self.cache.is_negative(segment.fingerprint, target_language):
+            elif self.cache.is_negative(cache_key(segment.fingerprint), target_language):
                 # A negative-cache hit marks "this segment needs no translation", which is not a
                 # language detection. It must not vote in the unit's dominant language, or a unit
                 # mixing cached target-language text with foreign speech reports the target
@@ -133,7 +144,7 @@ class TranslationEngine:
             for fingerprint, value in staged.items():
                 guarded = _guard_value(segment_text[fingerprint], value, target_language)
                 if guarded is value:
-                    self.cache.put(fingerprint, target_language, value, profile)
+                    self.cache.put(cache_key(fingerprint), target_language, value, profile)
                 segment_values[fingerprint] = guarded
 
         for planned_unit in plan.units:
@@ -153,7 +164,7 @@ class TranslationEngine:
                 planned_unit.full_fingerprint != planned_unit.segment_fingerprints[0]
             ):
                 if outcome.status == TranslationStatus.translated:
-                    self.cache.put(planned_unit.full_fingerprint, target_language, full_value, profile)
+                    self.cache.put(cache_key(planned_unit.full_fingerprint), target_language, full_value, profile)
 
         return _ordered(units, outcomes)
 

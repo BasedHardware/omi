@@ -5,6 +5,12 @@ from prometheus_client import Counter, Gauge, Histogram
 WINDOW_ACTIVE = Gauge('omi_stt_window_sessions_active', 'Admitted windowed TDT sessions')
 WINDOW_CAP = Gauge('omi_stt_window_sessions_capacity', 'Process windowed TDT session cap')
 WINDOW_ADMISSION = Counter('omi_stt_window_admissions_total', 'Window admission decisions', ['outcome'])
+WINDOW_PRESSURE_REFRESH = Counter(
+    'omi_stt_window_batch_pressure_refresh_total', 'Batch pressure fleet refresh outcomes', ['outcome']
+)
+WINDOW_PRESSURE_REFUSAL = Counter(
+    'omi_stt_window_batch_pressure_refusals_total', 'Window batch pressure refusals', ['reason']
+)
 WINDOW_POSTS = Counter('omi_stt_window_posts_total', 'Window POST outcomes', ['outcome'])
 WINDOW_LATENCY = Histogram('omi_stt_window_post_seconds', 'Window POST latency', buckets=(0.1, 0.5, 1, 2, 4, 8, 15))
 WINDOW_FIRST_TEXT = Histogram(
@@ -13,7 +19,11 @@ WINDOW_FIRST_TEXT = Histogram(
     buckets=(2, 5, 10, 15, 20, 25, 30, 45, 60),
 )
 WINDOW_SESSION_OUTCOME = Counter(
-    'omi_stt_window_session_outcome_total', 'Windowed sessions with VAD speech', ['outcome']
+    'omi_stt_window_session_outcome_total', 'Windowed sessions with VAD speech', ['outcome', 'reason']
+)
+WINDOW_REPLAY_SAFE_TRIMS = Counter(
+    'omi_stt_window_replay_safe_trims_total',
+    'Window replay ring trims through emitted anchors or speech-free capture',
 )
 WINDOW_CANARY_OUTCOME = Counter(
     'omi_stt_window_canary_transcript_outcome_total',

@@ -52,6 +52,26 @@ REQUIRED_IDENTICAL_LITERALS = (
 # Explained listen-only residuals. New listen-only keys fail until added here
 # *or* declared on pusher. Do not copy secret refs onto pusher from this list
 # without an ExternalSecret inventory (#12298).
+_TRANSLATION_LISTEN_ONLY = frozenset(
+    {
+        # Visibility belongs to authenticated listen sockets and opt-in detail
+        # reads; pusher hosts neither transport and must not admit this spend.
+        'TRANSLATION_DEMAND_SHADOW_ENABLED',
+        'TRANSLATION_DEMAND_GATE_ENABLED',
+        'TRANSLATION_DEMAND_LEASE_V1_ENABLED',
+        'TRANSLATION_ONDEMAND_GEMINI_ENABLED',
+        'TRANSLATION_ONOPEN_ENABLED',
+        'TRANSLATION_ONDEMAND_COHORT_PERCENT',
+        'TRANSLATION_ONDEMAND_UID_ALLOWLIST',
+        'TRANSLATION_ONDEMAND_MAX_SEGMENTS',
+        'TRANSLATION_ONDEMAND_MAX_CHARS',
+        'TRANSLATION_ONDEMAND_DEADLINE_SECONDS',
+        'TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS',
+        'TRANSLATION_ONDEMAND_UID_DAILY_CHARS',
+        'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS',
+        'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES',
+    }
+)
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
@@ -68,8 +88,10 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
             "SONIOX_ESTIMATED_USD_PER_HOUR",
             "SONIOX_MONTHLY_CEILING_USD",
+            "SONIOX_CONTEXT_TERMS",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
+            "STT_SHED_CONNECT_FAILURES",
             "STT_CONNECT_ORDER_FROM_CONFIG",
             "STT_RESILIENT_RECONNECT",
             "STT_LEARNED_LANGUAGE_PROFILE",
@@ -108,6 +130,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
+            # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
+            "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MEETING_RECEIPT_RECONCILER_ENABLED",
             "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
@@ -144,7 +168,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "WAKE_WORD_ADJUDICATION_ENABLED",
             "X_OAUTH_CLIENT_SECRET",
         }
-    ),
+    )
+    | _TRANSLATION_LISTEN_ONLY,
     "prod": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
@@ -153,6 +178,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             "PARAKEET_WINDOW_MAX_SESSIONS",
+            "PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS",
+            "PARAKEET_WINDOW_MAX_EMPTY_STREAK",
             "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
             "PARAKEET_WINDOW_PACE_SECONDS",
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
@@ -160,8 +187,10 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
             "SONIOX_ESTIMATED_USD_PER_HOUR",
             "SONIOX_MONTHLY_CEILING_USD",
+            "SONIOX_CONTEXT_TERMS",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
+            "STT_SHED_CONNECT_FAILURES",
             "STT_CONNECT_ORDER_FROM_CONFIG",
             "STT_RESILIENT_RECONNECT",
             "STT_LEARNED_LANGUAGE_PROFILE",
@@ -202,6 +231,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
+            # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
+            "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MCP_OAUTH_CLIENTS_JSON",
             "MEETING_RECEIPT_RECONCILER_ENABLED",
@@ -229,7 +260,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "WAKE_WORD_ADJUDICATION_ENABLED",
             "X_OAUTH_CLIENT_SECRET",
         }
-    ),
+    )
+    | _TRANSLATION_LISTEN_ONLY,
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {

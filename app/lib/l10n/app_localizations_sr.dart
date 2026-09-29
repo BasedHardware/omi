@@ -11500,4 +11500,77 @@ class AppLocalizationsSr extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Прикажи све особе ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Здраво $name, питај било шта';
+  }
+
+  @override
+  String get activity => 'Активност';
+
+  @override
+  String get places => 'Места';
+
+  @override
+  String get recaps => 'Резимеи';
+
+  @override
+  String get recent => 'Недавно';
+
+  @override
+  String get searchPartialFailure => 'Неки резултати нису могли да се учитају';
+
+  @override
+  String get peopleSearchPlaceholder => 'Претражи особе';
+
+  @override
+  String get peopleNotHeardYet => 'Још није чуто';
+
+  @override
+  String get peopleRecent => 'Недавно';
+
+  @override
+  String get deletePeopleMessage =>
+      'Ово уклања њихове узорке гласа и не може се поништити. Њихове реплике у прошлим разговорима постају неименовани говорници.';
+
+  @override
+  String get personTalkTime => 'Време говора';
+
+  @override
+  String get personLastHeard => 'Последњи пут чуто';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Избрисати особе: $count?',
+      one: 'Избрисати 1 особу?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Потребан глас';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Особа: $count',
+      one: '1 особа',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Нема одговарајућих особа';
+
+  @override
+  String get deselectAll => 'Поништи избор свих';
+
+  @override
+  String get voiceRecognitionSettings => 'Препознавање гласа';
 }

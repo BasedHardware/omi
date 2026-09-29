@@ -13661,5 +13661,92 @@
                 "type": "int"
             }
         }
+    },
+    "chatGreeting": "Hi {name}, ask anything",
+    "@chatGreeting": {
+        "description": "Greeting at the top of an empty chat; name is the user's first name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "activity": "Activity",
+    "@activity": {
+        "description": "Title of the sheet listing the steps Omi took to answer a chat message"
+    },
+    "places": "Places",
+    "@places": {
+        "description": "Search tile that opens conversations on a map"
+    },
+    "recaps": "Recaps",
+    "@recaps": {
+        "description": "Search tile and result section for daily recaps"
+    },
+    "recent": "Recent",
+    "@recent": {
+        "description": "Heading above recent search queries"
+    },
+    "searchPartialFailure": "Some results couldn't load",
+    "@searchPartialFailure": {
+        "description": "Shown under global search results when one kind of result (conversations, recaps, tasks or memories) failed to load"
+    },
+    "peopleSearchPlaceholder": "Search people",
+    "@peopleSearchPlaceholder": {
+        "description": "Search field placeholder on the People list"
+    },
+    "peopleNotHeardYet": "Not Heard Yet",
+    "@peopleNotHeardYet": {
+        "description": "Section header and row subtitle for a person with zero conversations"
+    },
+    "peopleRecent": "Recent",
+    "@peopleRecent": {
+        "description": "Section header for people heard recently"
+    },
+    "deletePeopleMessage": "This removes their voice samples and can't be undone. Their lines in past conversations become unnamed speakers.",
+    "@deletePeopleMessage": {
+        "description": "Delete people dialog body"
+    },
+    "personTalkTime": "Talk time",
+    "@personTalkTime": {
+        "description": "Stat label on a person's page: total time this person spoke"
+    },
+    "personLastHeard": "Last heard",
+    "@personLastHeard": {
+        "description": "Stat label on a person's page: most recent conversation date"
+    },
+    "deletePeopleTitle": "{count, plural, =1{Delete 1 Person?} other{Delete {count} People?}}",
+    "@deletePeopleTitle": {
+        "description": "Delete people dialog title",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "peopleFilterNeedsVoice": "Needs Voice",
+    "@peopleFilterNeedsVoice": {
+        "description": "Filter chip on the People list: people whose voice Omi has not learned yet"
+    },
+    "peopleCount": "{count, plural, =1{1 person} other{{count} people}}",
+    "@peopleCount": {
+        "description": "A count of people (People list filters and summary)",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "noMatchingPeople": "No Matching People",
+    "@noMatchingPeople": {
+        "description": "Empty state title when the People search or filter matches nobody"
+    },
+    "deselectAll": "Deselect All",
+    "@deselectAll": {
+        "description": "Toolbar button in select mode when every visible row is selected"
+    },
+    "voiceRecognitionSettings": "Voice Recognition",
+    "@voiceRecognitionSettings": {
+        "description": "Section header above the voice-learning switches on the People page"
     }
 }

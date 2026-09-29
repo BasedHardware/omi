@@ -10,7 +10,18 @@ import numpy as np
 import pytest
 
 from utils.stt import parakeet_window as window, provider_resilience, streaming as st, vad_gate
-from utils.stt.live_metrics import WINDOW_FIRST_TEXT, WINDOW_FORCED_CUTS, WINDOW_POSTS, WINDOW_SESSION_OUTCOME
+from utils.stt.resilient_stream import trim_window_replay_to_anchor
+from utils.stt.live_metrics import (
+    WINDOW_ADMISSION,
+    WINDOW_FIRST_TEXT,
+    WINDOW_FORCED_CUTS,
+    WINDOW_POSTS,
+    WINDOW_PRESSURE_REFRESH,
+    WINDOW_PRESSURE_REFUSAL,
+    WINDOW_REPLAY_SAFE_TRIMS,
+    WINDOW_SESSION_OUTCOME,
+)
+from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.stt.live_session import (
     WINDOW_VAD_CONTINUE_THRESHOLD,
     WINDOW_VAD_HANGOVER_MS,
@@ -35,6 +46,8 @@ def runtime(monkeypatch):
     # Pin that unit here so they test mechanics, not the shipped default, which
     # test_default_pace_waits_for_fifteen_seconds_of_speech pins on its own.
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '12')
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_EMPTY_STREAK', '4')
     monkeypatch.setenv('SONIOX_API_KEY', 'test')
     monkeypatch.setenv('MODULATE_API_KEY', 'test')
     monkeypatch.setenv('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://embedding.invalid')
@@ -89,22 +102,197 @@ async def test_batch_pressure_cache_never_waits_at_admission_and_stands_down(mon
     pressure = window.BatchPressure()
     began = asyncio.Event()
     release = asyncio.Event()
+    missing_before = WINDOW_PRESSURE_REFUSAL.labels(reason='missing')._value.get()
+    pressure_before = WINDOW_PRESSURE_REFUSAL.labels(reason='pressure')._value.get()
+    stale_before = WINDOW_PRESSURE_REFUSAL.labels(reason='stale')._value.get()
 
-    async def refresh(_host, _replicas):
+    async def refresh(_host, _replicas, _client):
         began.set()
         await release.wait()
         pressure._busy = True
         pressure._observed_at = window.time.monotonic()
 
     monkeypatch.setattr(pressure, '_refresh', refresh)
-    assert not pressure.allows('tdt-headless.invalid', 2)  # schedules a poll without waiting
-    await began.wait()
+    assert not pressure.allows('tdt-headless.invalid', 2)  # admission never starts a poll
+    assert WINDOW_PRESSURE_REFUSAL.labels(reason='missing')._value.get() == missing_before + 1
+    assert pressure._task is None
+    pressure.start('tdt-headless.invalid', 2)
+    try:
+        await began.wait()
+        assert not pressure.allows('tdt-headless.invalid', 2)
+        release.set()
+        await asyncio.sleep(0)
+        assert not pressure.allows('tdt-headless.invalid', 2)
+        assert WINDOW_PRESSURE_REFUSAL.labels(reason='pressure')._value.get() == pressure_before + 1
+        pressure._observed_at -= pressure.STALE_SECONDS + 1
+        assert not pressure.allows('tdt-headless.invalid', 2)  # stale signal: fleet stands down
+        assert WINDOW_PRESSURE_REFUSAL.labels(reason='stale')._value.get() == stale_before + 1
+    finally:
+        await pressure.stop()
+
+
+@pytest.mark.asyncio
+async def test_batch_pressure_keeps_sample_fresh_between_rare_admissions(monkeypatch):
+    pressure = window.BatchPressure()
+    pressure.REFRESH_SECONDS = 0.01
+    clock = [100.0]
+    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    refreshed = asyncio.Event()
+    calls = 0
+
+    async def refresh(_host, _replicas, _client):
+        nonlocal calls
+        calls += 1
+        pressure._busy = False
+        pressure._observed_at = clock[0]
+        refreshed.set()
+
+    monkeypatch.setattr(pressure, '_refresh', refresh)
+    pressure.start('tdt-headless.invalid', 2)
+    try:
+        assert not pressure.allows('tdt-headless.invalid', 2)
+        await refreshed.wait()
+        assert pressure.allows('tdt-headless.invalid', 2)
+        for _ in range(2):
+            refreshed.clear()
+            clock[0] += 16.0
+            await asyncio.wait_for(refreshed.wait(), 1)
+            assert pressure.allows('tdt-headless.invalid', 2)
+        assert calls >= 3
+    finally:
+        await pressure.stop()
+
+
+@pytest.mark.asyncio
+async def test_batch_pressure_poller_retries_exception_starts_once_and_stops(monkeypatch):
+    pressure = window.BatchPressure()
+    pressure.REFRESH_SECONDS = 0.01
+    recovered = asyncio.Event()
+    calls = 0
+    unavailable_before = WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable')._value.get()
+
+    async def refresh(_host, _replicas, _client):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError('transient poll failure')
+        pressure._observed_at = window.time.monotonic()
+        recovered.set()
+
+    monkeypatch.setattr(pressure, '_refresh', refresh)
+    pressure.start('tdt-headless.invalid', 2)
+    task = pressure._task
+    pressure.start('tdt-headless.invalid', 2)
+    assert pressure._task is task
+    try:
+        await asyncio.wait_for(recovered.wait(), 1)
+        assert pressure.allows('tdt-headless.invalid', 2)
+        assert calls >= 2
+        assert WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable')._value.get() == unavailable_before + 1
+    finally:
+        await pressure.stop()
+    assert task.done()
+    assert pressure._task is None
     assert not pressure.allows('tdt-headless.invalid', 2)
-    release.set()
-    await pressure._task
-    assert not pressure.allows('tdt-headless.invalid', 2)
-    pressure._observed_at -= pressure.STALE_SECONDS + 1
-    assert not pressure.allows('tdt-headless.invalid', 2)  # stale signal: fleet stands down
+
+
+@pytest.mark.asyncio
+async def test_batch_pressure_poller_off_configuration_does_no_work(monkeypatch):
+    pressure = window.BatchPressure()
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0')
+    pressure.start_from_env()
+    assert pressure._task is None
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '1')
+    monkeypatch.delenv('PARAKEET_BATCH_PRESSURE_POOL_HOST')
+    pressure.start_from_env()
+    assert pressure._task is None
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_POOL_HOST', 'tdt-headless.invalid')
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', 'nan')
+    pressure.start_from_env()
+    assert pressure._task is None
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '1')
+    monkeypatch.setattr(pressure, '_refresh', AsyncMock())
+    pressure.start_from_env()
+    task = pressure._task
+    assert task is not None
+    pressure.start_from_env()
+    assert pressure._task is task
+    await pressure.stop()
+
+
+@pytest.mark.asyncio
+async def test_batch_pressure_reuses_bounded_client_until_shutdown(monkeypatch):
+    pressure = window.BatchPressure()
+    pressure.REFRESH_SECONDS = 0.01
+    created = []
+    used = []
+    refreshed_twice = asyncio.Event()
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.options = kwargs
+            self.closed = False
+            created.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            self.closed = True
+
+    async def refresh(_host, _replicas, client):
+        used.append(client)
+        if len(used) == 2:
+            refreshed_twice.set()
+
+    monkeypatch.setattr(window.httpx, 'AsyncClient', Client)
+    monkeypatch.setattr(pressure, '_refresh', refresh)
+    pressure.start('tdt-headless.invalid', 2)
+    try:
+        await asyncio.wait_for(refreshed_twice.wait(), 1)
+        assert len(created) == 1
+        assert used[:2] == [created[0], created[0]]
+        assert created[0].options['timeout'] == 1.0
+        assert created[0].options['trust_env'] is False
+        limits = created[0].options['limits']
+        assert limits.max_connections == pressure.MAX_REPLICAS
+        assert limits.max_keepalive_connections == pressure.MAX_REPLICAS
+        assert not created[0].closed
+    finally:
+        await pressure.stop()
+    assert created[0].closed
+
+
+def test_batch_pressure_poller_can_restart_on_a_new_event_loop(monkeypatch):
+    pressure = window.BatchPressure()
+    clients = []
+
+    class Client:
+        def __init__(self, **_kwargs):
+            self.closed = False
+            clients.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            self.closed = True
+
+    monkeypatch.setattr(window.httpx, 'AsyncClient', Client)
+    monkeypatch.setattr(pressure, '_refresh', AsyncMock())
+
+    async def one_lifecycle():
+        pressure.start('tdt-headless.invalid', 2)
+        task = pressure._task
+        await asyncio.sleep(0)
+        await pressure.stop()
+        assert task is not None and task.done()
+
+    asyncio.run(one_lifecycle())
+    asyncio.run(one_lifecycle())
+    assert len(clients) == 2
+    assert clients[0] is not clients[1]
+    assert all(client.closed for client in clients)
 
 
 @pytest.mark.asyncio
@@ -118,8 +306,8 @@ async def test_batch_pressure_endpoint_thresholds_and_unavailable_signal(monkeyp
         AsyncMock(side_effect=lambda *_args, **_kwargs: [(None, None, None, None, (ip, 8080)) for ip in ips]),
     )
     payloads = {
-        '10.0.0.1': {'pending_requests': 2, 'oldest_pending_seconds': 0},
-        '10.0.0.2': {'pending_requests': 2, 'oldest_pending_seconds': 0},
+        '10.0.0.1': {'pending_requests': 100, 'live_pending_requests': 3, 'live_oldest_pending_seconds': 0},
+        '10.0.0.2': {'pending_requests': 100, 'live_pending_requests': 3, 'live_oldest_pending_seconds': 0},
     }
 
     class Response:
@@ -132,35 +320,50 @@ async def test_batch_pressure_endpoint_thresholds_and_unavailable_signal(monkeyp
         def json(self):
             return self.payload
 
-    class ClientContext:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *args):
-            return None
+    class Client:
+        def __init__(self):
+            self.requests = []
 
         async def get(self, url):
+            self.requests.append(url)
             return Response(payloads[url.split('/')[2].split(':')[0]])
 
-    monkeypatch.setattr(window.httpx, 'AsyncClient', ClientContext)
-    await pressure._refresh('tdt-headless.invalid', 2)
-    assert not pressure.allows('tdt-headless.invalid', 2)  # 2 + 2 trips pool cutoff
-    payloads['10.0.0.2']['pending_requests'] = 0
-    await pressure._refresh('tdt-headless.invalid', 2)
-    assert pressure.allows('tdt-headless.invalid', 2)
-    payloads['10.0.0.2']['oldest_pending_seconds'] = 1
-    await pressure._refresh('tdt-headless.invalid', 2)
+    client = Client()
+    await pressure._refresh('tdt-headless.invalid', 2, client)
+    assert pressure.allows('tdt-headless.invalid', 2)  # Backfill and fleet sum do not trip the live gate.
+    payloads['10.0.0.2']['live_pending_requests'] = 4
+    await pressure._refresh('tdt-headless.invalid', 2, client)
     assert not pressure.allows('tdt-headless.invalid', 2)
-    payloads['10.0.0.2']['oldest_pending_seconds'] = 0
+    payloads['10.0.0.2']['live_pending_requests'] = 0
+    payloads['10.0.0.2']['live_oldest_pending_seconds'] = 0.75
+    await pressure._refresh('tdt-headless.invalid', 2, client)
+    assert not pressure.allows('tdt-headless.invalid', 2)
+    payloads['10.0.0.2']['live_oldest_pending_seconds'] = 0
     ips.pop()
-    await pressure._refresh('tdt-headless.invalid', 2)
+    await pressure._refresh('tdt-headless.invalid', 2, client)
     assert not pressure.allows('tdt-headless.invalid', 2)  # incomplete DNS set
+    ips.append('10.0.0.2')
+    payloads['10.0.0.2']['live_pending_requests'] = float('nan')
+    await pressure._refresh('tdt-headless.invalid', 2, client)
+    assert not pressure.allows('tdt-headless.invalid', 2)  # invalid telemetry
+    payloads['10.0.0.2']['live_pending_requests'] = 0
+    await pressure._refresh('tdt-headless.invalid', 2, client)
+    assert pressure.allows('tdt-headless.invalid', 2)
+    del payloads['10.0.0.2']['live_oldest_pending_seconds']
+    await pressure._refresh('tdt-headless.invalid', 2, client)
+    assert not pressure.allows('tdt-headless.invalid', 2)  # Old GPU replica: fail closed.
+    payloads['10.0.0.2']['live_oldest_pending_seconds'] = 0
+    requests_before = len(client.requests)
+    ips[:] = [f'10.0.0.{i}' for i in range(1, pressure.MAX_REPLICAS + 2)]
+    await pressure._refresh('tdt-headless.invalid', 2, client)
+    assert not pressure.allows('tdt-headless.invalid', 2)  # no partial sample of an oversized fleet
+    assert pressure._observed_at == 0
+    assert len(client.requests) == requests_before
+    ips[:] = ['10.0.0.1', '10.0.0.2']
+    await pressure._refresh('tdt-headless.invalid', 2, client)
+    assert pressure.allows('tdt-headless.invalid', 2)
     pressure._observed_at -= pressure.STALE_SECONDS + 1
     assert not pressure.allows('tdt-headless.invalid', 2)
-    await pressure._task
 
 
 class SeqClient:
@@ -211,7 +414,8 @@ def receiver():
 
 @pytest.mark.asyncio
 async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypatch):
-    before_text = WINDOW_SESSION_OUTCOME.labels(outcome='text')._value.get()
+    before_accepted = WINDOW_ADMISSION.labels(outcome='accepted')._value.get()
+    before_text = WINDOW_SESSION_OUTCOME.labels(outcome='text', reason='none')._value.get()
     before_first = WINDOW_FIRST_TEXT._sum.get()
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
@@ -243,18 +447,71 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert session.consume_speech_ms_delta() == 1000
     assert session.consume_speech_ms_delta() == 0
     assert window.admission.active == 0
-    assert WINDOW_SESSION_OUTCOME.labels(outcome='text')._value.get() == before_text + 1
+    assert WINDOW_ADMISSION.labels(outcome='accepted')._value.get() == before_accepted + 1
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='text', reason='none')._value.get() == before_text + 1
     assert WINDOW_FIRST_TEXT._sum.get() > before_first
 
 
 @pytest.mark.asyncio
 async def test_speech_with_empty_tdt_output_counts_no_text(monkeypatch):
     monkeypatch.setattr(window, 'get_stt_client', lambda: Client(data={'text': ''}))
-    before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get()
+    before_accepted = WINDOW_ADMISSION.labels(outcome='accepted')._value.get()
+    before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='none')._value.get()
     sock = await LiveChainSession(receiver()).connect(16000)
     assert sock.send(b'\x01\x00' * 16000)
     await sock.drain_and_close()
-    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get() == before + 1
+    assert WINDOW_ADMISSION.labels(outcome='accepted')._value.get() == before_accepted + 1
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='none')._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_session_outcome_is_recorded_before_health_close_callback():
+    sock = window.connect_window(lambda _: None, 16000)
+    sock._first_speech_at = window.time.monotonic()
+    before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='none')._value.get()
+
+    def fail_health_close():
+        raise RuntimeError('health callback failed')
+
+    sock._health_close = fail_health_close
+    sock._on_pump_done(SimpleNamespace(cancelled=lambda: False))
+
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='none')._value.get() == before + 1
+    assert window.admission.active == 0
+
+    # The real pump task is still running; close it through the normal async
+    # lifecycle after restoring its callback so this test leaves no task behind.
+    sock._health_close = lambda: None
+    sock._closed = True
+    sock._wake.set()
+    assert sock._pump_task is not None
+    await sock._pump_task
+    sock.finish()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', ['finish', 'fail'])
+async def test_terminal_callback_failure_releases_admission_once(terminal):
+    sock = window.connect_window(lambda _: None, 16000)
+    assert window.admission.active == 1
+
+    def fail_health_close():
+        raise RuntimeError('health callback failed')
+
+    sock._health_close = fail_health_close
+    if terminal == 'finish':
+        sock.finish()
+    else:
+        sock.fail('test_failure')
+
+    # The releasing call must not wait for the cancelled pump's done callback.
+    assert window.admission.active == 0
+    assert sock._pump_task is not None
+    with pytest.raises(asyncio.CancelledError):
+        await sock._pump_task
+    await _REAL_SLEEP(0)
+    # _on_pump_done may release again, but the admission lease is idempotent.
+    assert window.admission.active == 0
 
 
 @pytest.mark.asyncio
@@ -306,6 +563,24 @@ async def test_overflow_moves_to_soniox_and_releases_on_finish(monkeypatch):
     second.finish()
 
 
+def test_eight_session_cap_is_hard_and_releases_idempotently(monkeypatch):
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
+    admission = window.WindowAdmission()
+    releases = [admission.acquire() for _ in range(8)]
+    assert admission.active == 8
+    with pytest.raises(st.ParakeetConnectionError, match='capacity_full'):
+        admission.acquire()
+    releases[0]()
+    releases[0]()
+    assert admission.active == 7
+    replacement = admission.acquire()
+    assert admission.active == 8
+    for release in releases[1:]:
+        release()
+    replacement()
+    assert admission.active == 0
+
+
 @pytest.mark.parametrize('fault', ['503', 'timeout'])
 @pytest.mark.asyncio
 async def test_post_failure_benches_leg_and_releases_slot(monkeypatch, fault):
@@ -345,6 +620,7 @@ async def test_one_post_in_flight_buffer_bounded_and_cancel_releases(monkeypatch
     assert len(calls) == 1
     assert sock.is_connection_dead
     assert sock.death_reason == 'capacity_full'
+    assert sock.typed_death_reason == 'capacity_full'
     assert st._parakeet_circuit.state == 'open'
     assert window.admission.active == 0
     await asyncio.gather(sock._pump_task, return_exceptions=True)
@@ -357,6 +633,7 @@ async def test_cancellation_before_pump_start_and_during_drain_release(monkeypat
     await asyncio.gather(sock._pump_task, return_exceptions=True)
     assert window.admission.active == 0
     assert sock.is_connection_dead
+    assert sock.death_reason == 'cancelled'
     sock = window.connect_window(lambda _: None, 16000)
     started = asyncio.Event()
 
@@ -549,6 +826,525 @@ async def test_real_receiver_initializes_window_and_survives_post_failure(monkey
     assert base.emitted[0]['speaker_id_scope']
     assert window.admission.active == 0
     await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('reason', ['first_text_deadline', 'empty_streak'])
+async def test_no_first_text_bounds_fail_over_once_and_replay_all_capture(monkeypatch, reason):
+    monkeypatch.setenv(
+        'PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '0.05' if reason == 'first_text_deadline' else '30'
+    )
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_EMPTY_STREAK', '2')
+    if reason == 'empty_streak':
+        monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    client = Client(data={'text': ''})
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    base = receiver()
+    host = base.host
+    host.request.sample_rate = 16000
+    host.request.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    host.state.stt_terminal_failure = False
+    host.client_device_context = SimpleNamespace(platform='ios')
+    host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
+    host.spawn = lambda coro, **kw: coro.close()
+    actual = ListenReceiver(host, [], {})
+    monkeypatch.setattr(actual, '_run_on_listen_loop', lambda callback, segments: callback(segments))
+    replayed = []
+    callbacks = []
+
+    async def tail(callback, *args, **kwargs):
+        callbacks.append(callback)
+        return SimpleNamespace(
+            is_connection_dead=False,
+            send=lambda data: replayed.append(data) or True,
+            finalize=lambda: None,
+            finish=lambda: None,
+        )
+
+    monkeypatch.setattr(st, 'process_audio_soniox', tail)
+    before_outcome = WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason=reason)._value.get()
+    before_fallback = OMI_FALLBACK_TOTAL.labels(
+        component='stt_live_session', from_mode='parakeet', to_mode='soniox', reason=reason, outcome='recovered'
+    )._value.get()
+    assert await actual.initialize_stt()
+    previous = actual.stt_socket
+    first = b'\x01\x00' * 16000 * (6 if reason == 'empty_streak' else 1)
+    chunks = [first]
+    actual.capture_timeline.accept(first, window.time.time(), window.time.monotonic())
+    assert previous.send(first, start_sample=0)
+    actual._window_ring().append(first, 0)
+    if reason == 'empty_streak':
+        await _wait_requests(client, 1)
+        for _ in range(100):
+            if previous.raw._empty_streak:
+                break
+            await _REAL_SLEEP(0)
+        second = b'\x02\x00' * 16000 * 6
+        chunks.append(second)
+        actual.capture_timeline.accept(second, window.time.time(), window.time.monotonic())
+        assert previous.send(second, start_sample=len(first) // 2)
+        actual._window_ring().append(second, len(first) // 2)
+    for _ in range(500):
+        if previous.is_connection_dead:
+            break
+        await _REAL_SLEEP(0.001)
+    assert previous.is_connection_dead
+    assert previous.typed_death_reason == reason
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert base.emitted == []
+    assert await actual._failover_stt_socket()
+    assert await actual._failover_stt_socket()  # already serving; no second replacement
+    assert actual._stt_failed_providers == {'parakeet'}
+    assert host.stt_service == st.STTService.soniox
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == b''.join(chunks)
+    assert actual._pending_live_failover.reason == reason
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason=reason)._value.get() == before_outcome + 1
+    callbacks[0]([{'speaker': 'speaker_0', 'text': 'replacement', 'start': 0, 'end': 1}])
+    assert (
+        OMI_FALLBACK_TOTAL.labels(
+            component='stt_live_session', from_mode='parakeet', to_mode='soniox', reason=reason, outcome='recovered'
+        )._value.get()
+        == before_fallback + 1
+    )
+    assert [segment['text'] for segment in base.emitted] == ['replacement']
+    await actual._drain_stt_sockets()
+
+
+class RacingTextClient:
+    def __init__(self, *, propagate_cancel: bool = False):
+        self.started = asyncio.Event()
+        self.cancelled = asyncio.Event()
+        self.release = asyncio.Event()
+        self.propagate_cancel = propagate_cancel
+        self.requests = []
+
+    async def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        self.started.set()
+        try:
+            await self.release.wait()
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            await self.release.wait()
+            if self.propagate_cancel:
+                raise
+        return httpx.Response(
+            200,
+            json={'segments': [{'text': 'Done.', 'start': 0.0, 'end': 4.0}]},
+            request=httpx.Request('POST', url),
+        )
+
+
+async def _receiver_with_racing_window(monkeypatch, client, *, speech_seconds=6, silence_seconds=0):
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '30')
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    base = receiver()
+    host = base.host
+    host.request.sample_rate = 16000
+    host.request.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    host.state.stt_terminal_failure = False
+    host.state.fair_use_dg_budget_exhausted = False
+    host.state.fair_use_track_dg_usage = False
+    host.state.dg_usage_ms_pending = 0
+    host.client_device_context = SimpleNamespace(platform='ios')
+    host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
+    host.spawn = lambda coro, **kw: coro.close()
+    actual = ListenReceiver(host, [], {})
+    monkeypatch.setattr(actual, '_run_on_listen_loop', lambda callback, segments: callback(segments))
+    replayed = []
+    callbacks = []
+
+    async def tail(callback, *args, **kwargs):
+        callbacks.append(callback)
+        return SimpleNamespace(
+            is_connection_dead=False,
+            send=lambda data: replayed.append(data) or True,
+            finalize=lambda: None,
+            finish=lambda: None,
+        )
+
+    monkeypatch.setattr(st, 'process_audio_soniox', tail)
+    assert await actual.initialize_stt()
+    previous = actual.stt_socket
+    speech = b'\x01\x00' * 16000 * speech_seconds
+    silence = bytes(16000 * 2 * silence_seconds)
+    pcm = speech + silence
+    actual.capture_timeline.accept(pcm, window.time.time(), window.time.monotonic())
+    if silence:
+        previous.raw.mark_speech()
+        assert previous.raw.send(speech)
+        assert previous.raw.send(silence)
+    else:
+        assert previous.send(pcm, start_sample=0)
+    actual._window_ring().append(pcm, 0)
+    await asyncio.wait_for(client.started.wait(), timeout=2)
+    assert previous.raw._first_text_timer is not None
+    return actual, base, previous, pcm, replayed, callbacks
+
+
+class ProgressThenHoldClient:
+    def __init__(self, *, hold_after=None):
+        self.hold_after = hold_after
+        self.requests = []
+        self.blocked = asyncio.Event()
+        self.cancelled = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        if self.hold_after is not None and len(self.requests) >= self.hold_after:
+            self.blocked.set()
+            try:
+                await self.release.wait()
+            except asyncio.CancelledError:
+                self.cancelled.set()
+                await self.release.wait()
+        duration = _wav_duration(kwargs)
+        return httpx.Response(
+            200,
+            json={'segments': [{'text': f'Part {len(self.requests)}.', 'start': 0.0, 'end': duration - 1.5}]},
+            request=httpx.Request('POST', url),
+        )
+
+
+async def _receiver_for_anchor_replay(monkeypatch, client):
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '60')
+    monkeypatch.setenv('PARAKEET_WINDOW_POST_TIMEOUT_SECONDS', '60')
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    base = receiver()
+    host = base.host
+    host.request.sample_rate = 16000
+    host.request.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    host.state.stt_terminal_failure = False
+    host.state.fair_use_dg_budget_exhausted = False
+    host.state.fair_use_track_dg_usage = False
+    host.state.dg_usage_ms_pending = 0
+    host.client_device_context = SimpleNamespace(platform='ios')
+    host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
+    host.spawn = lambda coro, **kw: coro.close()
+    actual = ListenReceiver(host, [], {})
+    monkeypatch.setattr(actual, '_run_on_listen_loop', lambda callback, segments: callback(segments))
+    replayed = []
+    callbacks = []
+
+    async def tail(callback, *args, **kwargs):
+        callbacks.append(callback)
+        return SimpleNamespace(
+            is_connection_dead=False,
+            send=lambda data: replayed.append(data) or True,
+            finalize=lambda: None,
+            finish=lambda: None,
+        )
+
+    monkeypatch.setattr(st, 'process_audio_soniox', tail)
+    assert await actual.initialize_stt()
+    return actual, base, actual.stt_socket, replayed, callbacks
+
+
+async def _flush_capture(actual, pcm, start_sample):
+    actual.capture_timeline.accept(pcm, window.time.time(), window.time.monotonic())
+    actual._stt_buffer_start_sample = start_sample
+    await actual._flush_stt_buffer(bytearray(pcm), force=True)
+
+
+async def _wait_replay_anchor(raw, previous):
+    deadline = asyncio.get_running_loop().time() + 2
+    while raw.replay_anchor_sample() is None or raw.replay_anchor_sample() <= previous:
+        if asyncio.get_running_loop().time() >= deadline:
+            raise TimeoutError('window emit anchor did not advance')
+        await _REAL_SLEEP(0)
+
+
+@pytest.mark.asyncio
+async def test_five_minutes_of_continuous_window_speech_keeps_bounded_replay(monkeypatch):
+    client = ProgressThenHoldClient()
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    ring = actual._window_ring()
+    pcm = b'\x01\x00' * 16000 * 6
+    before_trims = WINDOW_REPLAY_SAFE_TRIMS._value.get()
+    anchor = -1
+
+    for step in range(50):
+        await _flush_capture(actual, pcm, step * len(pcm) // 2)
+        await _wait_requests(client, step + 1)
+        await _wait_replay_anchor(previous.raw, anchor)
+        anchor = previous.raw.replay_anchor_sample()
+        assert actual.stt_socket is previous
+        assert not previous.is_connection_dead
+        assert ring.buffered_bytes <= 90 * 16000 * 2
+
+    assert len(client.requests) == 50
+    assert len(base.emitted) == 50
+    assert replayed == [] and callbacks == []
+    assert WINDOW_REPLAY_SAFE_TRIMS._value.get() > before_trims
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_stalled_window_post_fails_once_and_replays_exactly_from_emit_anchor(monkeypatch):
+    client = ProgressThenHoldClient(hold_after=2)
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    ring = actual._window_ring()
+    ring.ring_seconds = 12
+    pcm = b'\x01\x00' * 16000 * 6
+    await _flush_capture(actual, pcm, 0)
+    await _wait_replay_anchor(previous.raw, -1)
+    anchor = previous.window_replay_anchor_sample()
+    assert anchor is not None and anchor > 0
+    assert ring.snapshot()[0][0] == anchor
+
+    await _flush_capture(actual, pcm, 6 * 16000)
+    await asyncio.wait_for(client.blocked.wait(), 2)
+    assert previous.raw.has_untranscribed_speech()
+    assert not previous.raw._pump_task.done()
+    await _flush_capture(actual, pcm, 12 * 16000)
+
+    assert previous.raw.death_reason == 'capacity_full'
+    assert actual._pending_live_failover.reason == 'capacity_full'
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == pcm[anchor * 2 :] + pcm + pcm
+    client.release.set()
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert len(base.emitted) == 1
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_trim_during_inflight_window_post_retains_its_entire_unemitted_span(monkeypatch):
+    client = ProgressThenHoldClient(hold_after=2)
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    ring = actual._window_ring()
+    ring.ring_seconds = 12
+    pcm = b'\x01\x00' * 16000 * 6
+    # Delay the immediate progress callback so this test trims while the next
+    # real pump POST is in flight, as can happen at a send/failover boundary.
+    previous.raw.set_replay_progress_callback(lambda: None)
+    await _flush_capture(actual, pcm, 0)
+    await _wait_replay_anchor(previous.raw, -1)
+    anchor = previous.window_replay_anchor_sample()
+    assert anchor is not None and anchor > 0
+    actual.capture_timeline.accept(pcm, window.time.time(), window.time.monotonic())
+    assert previous.send(pcm, start_sample=6 * 16000)
+    ring.append(pcm, 6 * 16000)  # preserve the pre-trim state at this race boundary
+    await asyncio.wait_for(client.blocked.wait(), 2)
+    assert ring.snapshot()[0][0] == 0
+    before = WINDOW_REPLAY_SAFE_TRIMS._value.get()
+    trim_window_replay_to_anchor(ring, previous)
+    assert ring.snapshot()[0][0] == anchor
+    assert WINDOW_REPLAY_SAFE_TRIMS._value.get() == before + 1
+    previous.raw.fail('provider_5xx')
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == pcm[anchor * 2 :] + pcm
+    client.release.set()
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert len(base.emitted) == 1
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_pending_window_post_overflow_replays_speech_before_next_chunk(monkeypatch):
+    client = RacingTextClient()
+    actual, base, previous, pcm, replayed, callbacks = await _receiver_with_racing_window(monkeypatch, client)
+    ring = actual._window_ring()
+    ring.ring_seconds = 6
+    next_speech = b'\x02\x00' * 16000
+    actual.capture_timeline.accept(next_speech, window.time.time(), window.time.monotonic())
+    actual._stt_buffer_start_sample = len(pcm) // 2
+    before_trims = WINDOW_REPLAY_SAFE_TRIMS._value.get()
+
+    assert previous.raw.has_untranscribed_speech()
+    assert not previous.raw._pump_task.done()  # the real pump is still awaiting the POST
+    assert ring.snapshot() == ((0, pcm),)
+    await actual._flush_stt_buffer(bytearray(next_speech), force=True)
+
+    assert WINDOW_REPLAY_SAFE_TRIMS._value.get() == before_trims
+    assert previous.raw.death_reason == 'capacity_full'
+    assert actual._pending_live_failover.reason == 'capacity_full'
+    assert len(callbacks) == 1  # exactly one replacement leg
+    assert b''.join(replayed) == pcm + next_speech
+    assert base.emitted == []
+    client.release.set()
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert base.emitted == []  # a late POST cannot duplicate the replayed speech
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    assert len(client.requests) == 1
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_completed_window_post_allows_silent_ring_trim_without_failover(monkeypatch):
+    client = RacingTextClient()
+    actual, base, previous, pcm, replayed, callbacks = await _receiver_with_racing_window(
+        monkeypatch, client, speech_seconds=4, silence_seconds=2
+    )
+    ring = actual._window_ring()
+    ring.ring_seconds = 6
+    before_trims = WINDOW_REPLAY_SAFE_TRIMS._value.get()
+    assert previous.raw.has_untranscribed_speech()
+
+    client.release.set()
+    for _ in range(100):
+        if base.emitted and previous.raw._anchor_bytes >= 4 * 16000 * 2:
+            break
+        await _REAL_SLEEP(0)
+    assert [segment['text'] for segment in base.emitted] == ['Done.']
+    assert previous.raw._anchor_bytes >= 4 * 16000 * 2
+    assert not previous.raw.has_untranscribed_speech()
+    assert len(client.requests) == 1
+
+    next_silence = bytes(16000 * 2)
+    actual.capture_timeline.accept(next_silence, window.time.time(), window.time.monotonic())
+    actual._stt_buffer_start_sample = len(pcm) // 2
+    await actual._flush_stt_buffer(bytearray(next_silence), force=True)
+
+    assert WINDOW_REPLAY_SAFE_TRIMS._value.get() == before_trims + 1
+    assert actual.stt_socket is previous
+    assert not previous.is_connection_dead
+    assert replayed == []
+    assert callbacks == []
+    assert ring.snapshot()[0][0] == 16000
+    assert ring.buffered_bytes == len(pcm)
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('propagate_cancel', [False, True])
+async def test_deadline_during_post_replays_once_without_late_text(monkeypatch, propagate_cancel):
+    client = RacingTextClient(propagate_cancel=propagate_cancel)
+    actual, base, previous, pcm, replayed, callbacks = await _receiver_with_racing_window(monkeypatch, client)
+    before_outcome = WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='first_text_deadline')._value.get()
+    fallback = OMI_FALLBACK_TOTAL.labels(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='first_text_deadline',
+        outcome='recovered',
+    )
+    before_fallback = fallback._value.get()
+    previous.raw._expire_first_text()
+    await asyncio.wait_for(client.cancelled.wait(), timeout=2)
+    client.release.set()  # the POST completes with text after the deadline, or propagates cancellation
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert previous.death_reason == 'first_text_deadline'
+    assert previous.typed_death_reason == 'first_text_deadline'
+    assert base.emitted == []
+    assert (
+        WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='first_text_deadline')._value.get()
+        == before_outcome + 1
+    )
+    assert await actual._failover_stt_socket()
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == pcm
+    assert actual._pending_live_failover.reason == 'first_text_deadline'
+    callbacks[0]([{'speaker': 'speaker_0', 'text': 'Done.', 'start': 0, 'end': 4}])
+    assert [segment['text'] for segment in base.emitted] == ['Done.']
+    assert fallback._value.get() == before_fallback + 1
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_text_post_just_before_deadline_disarms_failover(monkeypatch):
+    client = RacingTextClient()
+    actual, base, previous, _pcm, replayed, callbacks = await _receiver_with_racing_window(monkeypatch, client)
+    client.release.set()
+    for _ in range(100):
+        if base.emitted:
+            break
+        await _REAL_SLEEP(0)
+    assert [segment['text'] for segment in base.emitted] == ['Done.']
+    assert previous.raw._first_text_recorded
+    assert previous.raw._first_text_timer is None
+    previous.raw._expire_first_text()  # stale scheduled callback cannot fail a session with text
+    assert not previous.is_connection_dead
+    assert await actual._failover_stt_socket()
+    assert actual.stt_socket is previous
+    assert replayed == []
+    assert callbacks == []
+    assert len(client.requests) == 1
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_first_text_disarms_deadline_and_empty_streak(monkeypatch):
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '0.2')
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_EMPTY_STREAK', '1')
+    posted = []
+    client = SeqClient([{'segments': [{'text': 'Done.', 'start': 0.0, 'end': 4.0}]}, {'text': ''}])
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(posted.extend, 16000)
+    sock.mark_speech()
+    assert sock.send(b'\x01\x00' * 16000 * 6)
+    await _wait_requests(client, 1)
+    for _ in range(100):
+        if posted:
+            break
+        await _REAL_SLEEP(0)
+    assert [segment['text'] for segment in posted] == ['Done.']
+    assert sock._first_text_timer is None
+    await _REAL_SLEEP(0.22)
+    assert not sock.is_connection_dead
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_empty_post_without_speech_does_not_advance_streak(monkeypatch):
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_EMPTY_STREAK', '1')
+    monkeypatch.setattr(window, 'get_stt_client', lambda: Client(data={'text': ''}))
+    sock = window.connect_window(lambda _: None, 16000)
+    pcm = bytes(16000 * 2)
+    await sock._run_job(window._WindowJob(pcm, 0.0, 1.0, 0, len(pcm), False, False))
+    assert sock._empty_streak == 0
+    assert not sock.is_connection_dead
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_long_vad_silence_does_not_replace_healthy_window_leg(monkeypatch):
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    fallback = AsyncMock(side_effect=AssertionError('silent window must not select Soniox'))
+    monkeypatch.setattr(st, 'process_audio_soniox', fallback)
+    base = receiver()
+    host = base.host
+    host.request.sample_rate = 16000
+    host.request.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    host.state.stt_terminal_failure = False
+    host.state.fair_use_dg_budget_exhausted = False
+    host.state.fair_use_track_dg_usage = False
+    host.state.dg_usage_ms_pending = 0
+    host.client_device_context = SimpleNamespace(platform='ios')
+    host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
+    host.spawn = lambda coro, **kw: coro.close()
+    actual = ListenReceiver(host, [], {})
+    assert await actual.initialize_stt()
+    previous = actual.stt_socket
+    ring = actual._window_ring()
+    ring.ring_seconds = 3
+    one_second = bytes(16000 * 2)
+    for second in range(5):
+        actual.capture_timeline.accept(one_second, window.time.time(), window.time.monotonic())
+        actual._stt_buffer_start_sample = second * 16000
+        await actual._flush_stt_buffer(bytearray(one_second), force=True)
+    assert actual.stt_socket is previous
+    assert not previous.is_connection_dead
+    assert not previous.raw.has_untranscribed_speech()
+    assert ring.buffered_bytes == 3 * len(one_second)
+    assert ring.snapshot()[0][0] == 2 * 16000
+    assert client.requests == []
+    fallback.assert_not_awaited()
+    await actual._drain_stt_sockets()
+    assert previous.raw.death_reason is None  # normal teardown never becomes connection_lost
 
 
 @pytest.mark.asyncio

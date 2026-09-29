@@ -153,6 +153,21 @@ jobs:
           kubectl get service "$EXPORTER_RELEASE" \
             --namespace "$MONITORING_NAMESPACE"
 
+  provision-live-alerts:
+    # Grafana alert provisioning is independent of Helm deploy health: a
+    # Helm failure must not suppress live-STT alert updates.
+    if: github.ref == 'refs/heads/main'
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed monitoring configuration
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
       - name: Import allowlisted live-STT Grafana alerts
         env:
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}

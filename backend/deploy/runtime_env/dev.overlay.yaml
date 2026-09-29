@@ -8,6 +8,9 @@ overlay:
   gke:
     backend-listen:
       env:
+        LISTEN_RECONNECT_BUDGET_PER_MIN:
+          value: '6'
+          category: reliability
         PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
           value: 'gateway'
         TRANSCRIPTION_SHADOW_ENABLED:

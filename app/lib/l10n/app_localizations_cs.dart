@@ -11484,4 +11484,77 @@ class AppLocalizationsCs extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Zobrazit všechny osoby ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Ahoj $name, zeptej se na cokoli';
+  }
+
+  @override
+  String get activity => 'Aktivita';
+
+  @override
+  String get places => 'Místa';
+
+  @override
+  String get recaps => 'Shrnutí';
+
+  @override
+  String get recent => 'Nedávné';
+
+  @override
+  String get searchPartialFailure => 'Některé výsledky se nepodařilo načíst';
+
+  @override
+  String get peopleSearchPlaceholder => 'Hledat lidi';
+
+  @override
+  String get peopleNotHeardYet => 'Zatím neslyšeni';
+
+  @override
+  String get peopleRecent => 'Nedávní';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tím se odstraní jejich hlasové vzorky a nelze to vrátit zpět. Jejich repliky v minulých konverzacích se stanou nepojmenovanými mluvčími.';
+
+  @override
+  String get personTalkTime => 'Doba mluvení';
+
+  @override
+  String get personLastHeard => 'Naposledy slyšen';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Smazat lidi: $count?',
+      one: 'Smazat 1 člověka?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Chybí hlas';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Počet osob: $count',
+      one: '1 osoba',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Žádné odpovídající osoby';
+
+  @override
+  String get deselectAll => 'Zrušit výběr';
+
+  @override
+  String get voiceRecognitionSettings => 'Rozpoznávání hlasu';
 }

@@ -85,10 +85,12 @@ jobs:
           fi
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
-          [[ "$DEPLOY_SHA" == "$main_sha" ]] || {
-            echo "ERROR: main advanced before source admission; refusing stale development deployment." >&2
-            exit 1
-          }
+          if [[ "$DEPLOY_SHA" != "$main_sha" ]]; then
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Superseded::main advanced to ${main_sha}; a newer run deploys it"
+            echo "Superseded: main advanced to ${main_sha}; a newer run deploys it" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
           gh api -H "Accept: application/vnd.github+json" \
             "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
@@ -101,12 +103,14 @@ jobs:
           printf 'admitted_sha=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Checkout admitted source
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' }}
         uses: actions/checkout@v7
         with:
           ref: ${{ steps.admitted_source.outputs.admitted_sha }}
           fetch-depth: 0
 
       - name: Google Auth
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' }}
         id: auth
         uses: 'google-github-actions/auth@v3'
         with:
@@ -115,20 +119,25 @@ jobs:
           service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Login to GCR
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' }}
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' }}
         uses: docker/setup-buildx-action@v4
 
       - name: Compute short SHA
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' }}
         id: image-tag
         run: |
           echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Install Python deps for deploy scripts
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' }}
         run: python3 -m pip install -q pyyaml
 
       - name: Get GKE credentials for gateway serving gate
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' }}
         uses: google-github-actions/get-gke-credentials@v3
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
@@ -136,6 +145,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Verify LLM Gateway serving data plane
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' }}
         id: gateway-serving
         run: |
           python3 backend/scripts/verify-llm-gateway-serving.py \
@@ -145,6 +155,7 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
 
       - name: Build runtime image
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -158,6 +169,7 @@ jobs:
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
       - name: Build ledger drain runtime image
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -171,6 +183,7 @@ jobs:
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.LEDGER_DRAIN_SERVICE }}:buildcache,mode=max
 
       - name: Verify built runtime image before publish
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' }}
         run: |
           image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           python3 backend/scripts/runtime_image_contracts.py smoke \
@@ -182,18 +195,23 @@ jobs:
             --image "$ledger_image"
 
       - name: Recheck admitted main before image publication
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' }}
+        id: superseded_before_image_publication
         env:
           ADMITTED_SHA: ${{ steps.admitted_source.outputs.admitted_sha }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           current_main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
-          [[ "$current_main_sha" == "$ADMITTED_SHA" ]] || {
-            echo "ERROR: main advanced after source admission; refusing stale image publication." >&2
-            exit 1
-          }
+          if [[ "$current_main_sha" != "$ADMITTED_SHA" ]]; then
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Superseded::main advanced to ${current_main_sha}; a newer run deploys it"
+            echo "Superseded: main advanced to ${current_main_sha}; a newer run deploys it" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
       - name: Push verified runtime image
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' && steps.superseded_before_image_publication.outputs.superseded != 'true' }}
         run: |
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
@@ -201,6 +219,7 @@ jobs:
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.LEDGER_DRAIN_SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
 
       - name: Probe memory L2 gateway lane from the Cloud Run VPC
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' && steps.superseded_before_image_publication.outputs.superseded != 'true' }}
         run: |
           bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
             --project "${{ vars.GCP_PROJECT_ID }}" \
@@ -214,6 +233,7 @@ jobs:
             --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Render maintenance runtime env from the gated gateway endpoint
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' && steps.superseded_before_image_publication.outputs.superseded != 'true' }}
         id: runtime-env
         env:
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
@@ -224,22 +244,28 @@ jobs:
           python3 backend/scripts/render_backend_runtime_env.py --env dev --job knowledge-ledger-drain-job >> "$GITHUB_OUTPUT"
 
       - name: Validate backend runtime env before deploy
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' && steps.superseded_before_image_publication.outputs.superseded != 'true' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
 
       - name: Recheck admitted main before Cloud Run deployment
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' && steps.superseded_before_image_publication.outputs.superseded != 'true' }}
+        id: superseded_before_deployment
         env:
           ADMITTED_SHA: ${{ steps.admitted_source.outputs.admitted_sha }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           current_main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
-          [[ "$current_main_sha" == "$ADMITTED_SHA" ]] || {
-            echo "ERROR: main advanced after image publication; refusing stale Cloud Run deployment." >&2
-            exit 1
-          }
+          if [[ "$current_main_sha" != "$ADMITTED_SHA" ]]; then
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Superseded::main advanced to ${current_main_sha}; a newer run deploys it"
+            echo "Superseded: main advanced to ${current_main_sha}; a newer run deploys it" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
       - name: Deploy to Cloud Run
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v3
         with:
@@ -252,6 +278,7 @@ jobs:
           secrets: ${{ steps.runtime-env.outputs.daily_memory_sweep_job_secrets }}
 
       - name: Deploy independent ledger drain to Cloud Run
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         id: deploy-ledger-drain
         uses: google-github-actions/deploy-cloudrun@v3
         with:
@@ -264,6 +291,7 @@ jobs:
           secrets: ${{ steps.runtime-env.outputs.knowledge_ledger_drain_job_secrets }}
 
       - name: Authorize ledger drain Scheduler invocations
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         run: |
           gcloud run jobs add-iam-policy-binding "$LEDGER_DRAIN_SERVICE" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
@@ -273,6 +301,7 @@ jobs:
             --quiet
 
       - name: Reconcile declared Scheduler triggers
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         run: |
           python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
           python3 backend/scripts/scheduler_reconcile.py \
@@ -283,4 +312,5 @@ jobs:
             --jobs "$SCHEDULER_JOB" "$LEDGER_DRAIN_SCHEDULER_JOB"
 
       - name: Show Output
+        if: ${{ steps.admitted_source.outputs.superseded != 'true' && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         run: echo ${{ steps.deploy.outputs.url }}

@@ -11420,4 +11420,77 @@ class AppLocalizationsTh extends AppLocalizations {
   String showAllPeople(int count) {
     return 'แสดงทั้งหมด $count คน';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'สวัสดี $name ถามอะไรก็ได้';
+  }
+
+  @override
+  String get activity => 'กิจกรรม';
+
+  @override
+  String get places => 'สถานที่';
+
+  @override
+  String get recaps => 'สรุป';
+
+  @override
+  String get recent => 'ล่าสุด';
+
+  @override
+  String get searchPartialFailure => 'โหลดผลลัพธ์บางส่วนไม่ได้';
+
+  @override
+  String get peopleSearchPlaceholder => 'ค้นหาบุคคล';
+
+  @override
+  String get peopleNotHeardYet => 'ยังไม่เคยได้ยิน';
+
+  @override
+  String get peopleRecent => 'ล่าสุด';
+
+  @override
+  String get deletePeopleMessage =>
+      'การดำเนินการนี้จะลบตัวอย่างเสียงของบุคคลนั้นและย้อนกลับไม่ได้ คำพูดในบทสนทนาที่ผ่านมาจะกลายเป็นผู้พูดที่ไม่มีชื่อ';
+
+  @override
+  String get personTalkTime => 'เวลาที่พูด';
+
+  @override
+  String get personLastHeard => 'ได้ยินล่าสุด';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ลบ $count คนหรือไม่?',
+      one: 'ลบ 1 คนหรือไม่?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'ต้องการเสียง';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count คน',
+      one: '1 คน',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'ไม่พบบุคคลที่ตรงกัน';
+
+  @override
+  String get deselectAll => 'ยกเลิกการเลือกทั้งหมด';
+
+  @override
+  String get voiceRecognitionSettings => 'การจดจำเสียง';
 }

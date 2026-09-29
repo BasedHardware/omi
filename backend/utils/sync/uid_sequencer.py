@@ -8,11 +8,36 @@ from datetime import datetime, timezone
 from typing import Any
 
 from database import sync_backfill_sequencer as registry
-from database.sync_jobs import TERMINAL_STATUSES, get_raw_sync_job, sync_job_run_lock_present
+from database.sync_jobs import (
+    TERMINAL_STATUSES,
+    SyncLedgerFenceMode,
+    get_raw_sync_job,
+    get_sync_ledger_fence_mode,
+    sync_job_run_lock_present,
+)
 from utils.cloud_tasks import enqueue_sync_job
-from utils.sync import backfill_cutover
+from utils.sync import backfill_cutover, stage as sync_stage
 
 logger = logging.getLogger(__name__)
+
+
+def production_stage() -> bool:
+    """Pure runtime identity check for async route guards."""
+    return sync_stage.production_stage()
+
+
+def production_fence_mode() -> SyncLedgerFenceMode | None:
+    """Read the sync fence only for the production delivery path."""
+    return get_sync_ledger_fence_mode() if production_stage() else None
+
+
+def foreign_delivery(payload: Any) -> bool:
+    """ACK non-prod sequenced and legacy backfill tasks before shared state access."""
+    return (
+        sync_stage.nonproduction_stage()
+        and isinstance(payload, dict)
+        and (payload.get('sequencer_epoch') is not None or payload.get('lane') == 'backfill')
+    )
 
 
 def enabled() -> bool:
@@ -37,6 +62,8 @@ def _enqueue_wake(uid: str, uid_hash: str, deadline: int) -> None:
 
 def kick(uid: str) -> bool:
     """Select one pending job and enqueue it; a persisted reservation survives uncertainty."""
+    if not registry.production_stage():
+        return False
     remaining, direct_job_id = (
         backfill_cutover.quiet_remaining(uid) if enabled() else backfill_cutover.direct_remaining_for_uid(uid)
     )
@@ -76,6 +103,8 @@ def kick(uid: str) -> bool:
 
 
 def reconcile_uid(uid: str, owner: dict[str, Any], *, now: datetime | None = None) -> str:
+    if not registry.production_stage():
+        return 'disabled'
     current = now or datetime.now(timezone.utc)
     sample = registry.waiting_sample(uid, now=current)
     waiting, oldest_age = sample['depth'], sample['age_seconds']
@@ -152,6 +181,8 @@ def reconcile_uid(uid: str, owner: dict[str, Any], *, now: datetime | None = Non
 
 def sweep(*, limit: int = 100) -> dict[str, int]:
     """One bounded Scheduler tick; each UID is independent and transaction-fenced."""
+    if not registry.production_stage():
+        return {'disabled': 1}
     now = datetime.now(timezone.utc)
     outcomes: dict[str, int] = {}
     owners = registry.due_owners(limit=limit, now=now)

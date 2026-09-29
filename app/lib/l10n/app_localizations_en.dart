@@ -11474,4 +11474,77 @@ class AppLocalizationsEn extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Show all $count people';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hi $name, ask anything';
+  }
+
+  @override
+  String get activity => 'Activity';
+
+  @override
+  String get places => 'Places';
+
+  @override
+  String get recaps => 'Recaps';
+
+  @override
+  String get recent => 'Recent';
+
+  @override
+  String get searchPartialFailure => 'Some results couldn\'t load';
+
+  @override
+  String get peopleSearchPlaceholder => 'Search people';
+
+  @override
+  String get peopleNotHeardYet => 'Not Heard Yet';
+
+  @override
+  String get peopleRecent => 'Recent';
+
+  @override
+  String get deletePeopleMessage =>
+      'This removes their voice samples and can\'t be undone. Their lines in past conversations become unnamed speakers.';
+
+  @override
+  String get personTalkTime => 'Talk time';
+
+  @override
+  String get personLastHeard => 'Last heard';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Delete $count People?',
+      one: 'Delete 1 Person?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Needs Voice';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count people',
+      one: '1 person',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'No Matching People';
+
+  @override
+  String get deselectAll => 'Deselect All';
+
+  @override
+  String get voiceRecognitionSettings => 'Voice Recognition';
 }

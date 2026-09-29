@@ -11275,4 +11275,76 @@ class AppLocalizationsZh extends AppLocalizations {
   String showAllPeople(int count) {
     return '显示全部 $count 人';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return '你好，$name，随便问吧';
+  }
+
+  @override
+  String get activity => '活动';
+
+  @override
+  String get places => '地点';
+
+  @override
+  String get recaps => '回顾';
+
+  @override
+  String get recent => '最近';
+
+  @override
+  String get searchPartialFailure => '部分结果无法加载';
+
+  @override
+  String get peopleSearchPlaceholder => '搜索人物';
+
+  @override
+  String get peopleNotHeardYet => '尚未听过';
+
+  @override
+  String get peopleRecent => '最近';
+
+  @override
+  String get deletePeopleMessage => '这将删除他们的声音样本，且无法撤销。他们在过往对话中的发言将变为未命名的说话人。';
+
+  @override
+  String get personTalkTime => '说话时长';
+
+  @override
+  String get personLastHeard => '最近一次听到';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '删除 $count 个人？',
+      one: '删除 1 个人？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => '需要声音';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 人',
+      one: '1 人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '没有匹配的人';
+
+  @override
+  String get deselectAll => '取消全选';
+
+  @override
+  String get voiceRecognitionSettings => '声音识别';
 }

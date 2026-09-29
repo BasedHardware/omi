@@ -11482,4 +11482,77 @@ class AppLocalizationsEt extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Kuva kõik inimesed ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Tere, $name, küsi mida tahes';
+  }
+
+  @override
+  String get activity => 'Tegevus';
+
+  @override
+  String get places => 'Kohad';
+
+  @override
+  String get recaps => 'Kokkuvõtted';
+
+  @override
+  String get recent => 'Hiljutised';
+
+  @override
+  String get searchPartialFailure => 'Mõnda tulemust ei õnnestunud laadida';
+
+  @override
+  String get peopleSearchPlaceholder => 'Otsi inimesi';
+
+  @override
+  String get peopleNotHeardYet => 'Pole veel kuulnud';
+
+  @override
+  String get peopleRecent => 'Hiljutised';
+
+  @override
+  String get deletePeopleMessage =>
+      'See eemaldab nende häälenäidised ja seda ei saa tagasi võtta. Nende read varasemates vestlustes muutuvad nimetuteks kõnelejateks.';
+
+  @override
+  String get personTalkTime => 'Rääkimisaeg';
+
+  @override
+  String get personLastHeard => 'Viimati kuuldud';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kustuta $count inimest?',
+      one: 'Kustuta 1 inimene?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Hääl puudub';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inimest',
+      one: '1 inimene',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Sobivaid inimesi pole';
+
+  @override
+  String get deselectAll => 'Tühista kõik valikud';
+
+  @override
+  String get voiceRecognitionSettings => 'Häältuvastus';
 }

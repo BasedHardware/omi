@@ -173,6 +173,14 @@ class JourneyFixtureBackend {
         await req.response.close();
         return;
 
+      case 'POST /v1/conversations/search':
+        // One page of every seeded conversation (the person page's speaker filter included).
+        req.response.statusCode = 200;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({'items': conversations, 'current_page': 1, 'per_page': 20, 'total_pages': 1}));
+        await req.response.close();
+        return;
+
       case 'POST /v1/action-items':
         final body = jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>;
         final now = DateTime.now().toUtc().toIso8601String();

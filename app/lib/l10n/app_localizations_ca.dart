@@ -11553,4 +11553,77 @@ class AppLocalizationsCa extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Mostra totes les persones ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hola $name, pregunta el que vulguis';
+  }
+
+  @override
+  String get activity => 'Activitat';
+
+  @override
+  String get places => 'Llocs';
+
+  @override
+  String get recaps => 'Resums';
+
+  @override
+  String get recent => 'Recents';
+
+  @override
+  String get searchPartialFailure => 'No s\'han pogut carregar alguns resultats';
+
+  @override
+  String get peopleSearchPlaceholder => 'Cerca persones';
+
+  @override
+  String get peopleNotHeardYet => 'Encara no s\'ha sentit';
+
+  @override
+  String get peopleRecent => 'Recents';
+
+  @override
+  String get deletePeopleMessage =>
+      'Això elimina les seves mostres de veu i no es pot desfer. Les seves intervencions en converses anteriors passen a ser parlants sense nom.';
+
+  @override
+  String get personTalkTime => 'Temps de parla';
+
+  @override
+  String get personLastHeard => 'Última vegada';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Eliminar $count persones?',
+      one: 'Eliminar 1 persona?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Cal la veu';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count persones',
+      one: '1 persona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Cap persona coincident';
+
+  @override
+  String get deselectAll => 'Desselecciona-ho tot';
+
+  @override
+  String get voiceRecognitionSettings => 'Reconeixement de veu';
 }

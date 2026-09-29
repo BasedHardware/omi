@@ -11520,4 +11520,77 @@ class AppLocalizationsEs extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Mostrar todas las personas ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hola $name, pregunta lo que quieras';
+  }
+
+  @override
+  String get activity => 'Actividad';
+
+  @override
+  String get places => 'Lugares';
+
+  @override
+  String get recaps => 'Resúmenes';
+
+  @override
+  String get recent => 'Recientes';
+
+  @override
+  String get searchPartialFailure => 'No se pudieron cargar algunos resultados';
+
+  @override
+  String get peopleSearchPlaceholder => 'Buscar personas';
+
+  @override
+  String get peopleNotHeardYet => 'Aún sin escuchar';
+
+  @override
+  String get peopleRecent => 'Recientes';
+
+  @override
+  String get deletePeopleMessage =>
+      'Esto elimina sus muestras de voz y no se puede deshacer. Sus intervenciones en conversaciones anteriores pasan a ser hablantes sin nombre.';
+
+  @override
+  String get personTalkTime => 'Tiempo de habla';
+
+  @override
+  String get personLastHeard => 'Última vez';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '¿Eliminar $count personas?',
+      one: '¿Eliminar 1 persona?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Falta la voz';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personas',
+      one: '1 persona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'No Hay Personas Coincidentes';
+
+  @override
+  String get deselectAll => 'Deseleccionar Todo';
+
+  @override
+  String get voiceRecognitionSettings => 'Reconocimiento de Voz';
 }

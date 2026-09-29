@@ -11540,4 +11540,77 @@ class AppLocalizationsRo extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Afișează toate cele $count persoane';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Salut $name, întreabă orice';
+  }
+
+  @override
+  String get activity => 'Activitate';
+
+  @override
+  String get places => 'Locuri';
+
+  @override
+  String get recaps => 'Rezumate';
+
+  @override
+  String get recent => 'Recente';
+
+  @override
+  String get searchPartialFailure => 'Unele rezultate nu au putut fi încărcate';
+
+  @override
+  String get peopleSearchPlaceholder => 'Caută persoane';
+
+  @override
+  String get peopleNotHeardYet => 'Încă neauzit';
+
+  @override
+  String get peopleRecent => 'Recente';
+
+  @override
+  String get deletePeopleMessage =>
+      'Aceasta le elimină mostrele vocale și nu poate fi anulată. Replicile lor din conversațiile trecute devin vorbitori fără nume.';
+
+  @override
+  String get personTalkTime => 'Timp de vorbire';
+
+  @override
+  String get personLastHeard => 'Ultima ascultare';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ștergi persoane: $count?',
+      one: 'Ștergi 1 persoană?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Necesită voce';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Persoane: $count',
+      one: '1 persoană',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nicio persoană potrivită';
+
+  @override
+  String get deselectAll => 'Deselectează tot';
+
+  @override
+  String get voiceRecognitionSettings => 'Recunoaștere vocală';
 }

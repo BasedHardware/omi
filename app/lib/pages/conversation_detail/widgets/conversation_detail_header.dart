@@ -75,7 +75,9 @@ class ConversationDetailHeader extends StatelessWidget {
                       recordings: recordings,
                       onTap: () {
                         trackConversationAction(
-                            ConversationActionAction.recordingsOpen, ConversationActionSurface.detailBody);
+                          ConversationActionAction.recordingsOpen,
+                          ConversationActionSurface.detailBody,
+                        );
                         onOpenRecordings(recordings);
                       },
                     ),
@@ -252,10 +254,7 @@ class _HeaderChip extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (trailing == true) ...[
-            const SizedBox(width: 2),
-            Icon(Icons.keyboard_arrow_down, size: 16, color: color),
-          ],
+          if (trailing == true) ...[const SizedBox(width: 2), Icon(Icons.keyboard_arrow_down, size: 16, color: color)],
         ],
       ),
     );

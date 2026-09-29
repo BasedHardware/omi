@@ -1311,6 +1311,23 @@ DAILY_SUMMARY_RECIPIENTS_QUERY = FirestoreQuerySpec(
 )
 
 
+# Smart merge (utils/conversations/smart_merge.py): the newest visible rows of one
+# source before a just-finished conversation. Same signature as the existing
+# `conversations_discarded_source_status_created` index, so nothing new is provisioned.
+CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY = FirestoreQuerySpec(
+    identifier='conversations_smart_merge_preceding',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('source', '==', 'source'),
+        FirestoreQueryFilter('status', 'in', 'statuses'),
+        FirestoreQueryFilter('created_at', '<', 'created_before'),
+    ),
+    index_fields=(_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
+)
+
+
 CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
     identifier='conversation_photos_name_range_export',
     collection_group='photos',
@@ -1394,6 +1411,7 @@ QUERY_SPECS = (
     DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY,
     DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
     DAILY_SUMMARY_RECIPIENTS_QUERY,
+    CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

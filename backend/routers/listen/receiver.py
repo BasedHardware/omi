@@ -14,10 +14,13 @@ from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config.audio_timeline import audio_timeline_v2_enabled, live_speaker_capture_clock_enabled
+from config.translation import resolve_ondemand_config
 from config.capture_evidence import capture_evidence_dark_write_enabled
 from routers.listen.contracts import ConversationCaptureOrigin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.capture_evidence import SourcePositionMap, parse_live_frame
+from utils.translation_demand import TranslationDemand
+from utils.translation_core.metrics import get_translation_metrics
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -57,12 +60,19 @@ from utils.stt.live_failure import (
     note_typed_provider_death,
     send_live_stt_audio,
     terminate_live_stt_session,
+    terminate_live_stt_backoff,
 )
+from utils.stt.live_chain import ProviderChainUnavailable
 from config.stt_provider_policy import provider_for_service
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.live_metrics import RECONNECT
+from utils.stt.brand_terms import normalize_brand_segments
 from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
-from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
+from utils.stt.resilient_stream import (
+    enabled as resilient_reconnect_enabled,
+    trim_window_replay_to_anchor,
+    window_replay_action,
+)
 from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
@@ -194,6 +204,8 @@ def _get_lc3() -> Any:
 class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.host = host
+        self.translation_demand = TranslationDemand()
+        self._translation_expiry_task: asyncio.Task[Any] | None = None
         self.channel_configs = channel_configs
         self.channel_id_to_index = channel_id_to_index
         self.stt_socket: Any = None
@@ -239,7 +251,9 @@ class ListenReceiver(ReplayFilterMixin):
         ):
             self.capture_timeline = CaptureTimeline(sample_rate=int(host.request.sample_rate))
             # One 90s ring per session matches the maximum window buffer (30/15).
-            self._window_replay_audio = ResilientAudio(int(host.request.sample_rate), ring_seconds=90)
+            self._window_replay_audio = ResilientAudio(
+                int(host.request.sample_rate), ring_seconds=90, strict_replay=True
+            )
             if resilient_reconnect_enabled():
                 self._resilient_audio = ResilientAudio(int(host.request.sample_rate))
             # Pin the persistence mode for the recording's life; the flag is
@@ -764,7 +778,7 @@ class ListenReceiver(ReplayFilterMixin):
 
     def _enqueue_stt_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
         """Persist the provider epoch before local speaker numbers enter the conversation."""
-        observe_live_segments(self.host, segments, provider or self._serving_provider())
+        observe_live_segments(self.host, normalize_brand_segments(segments), provider or self._serving_provider())
         pending = self._pending_live_failover
         if pending is not None and (provider is None or provider == pending.to_mode):
             pending.note_transcript(segments)
@@ -921,6 +935,7 @@ class ListenReceiver(ReplayFilterMixin):
                     sample_rate,
                     self.host.stt_language,
                     profile=self.host.language_profile,
+                    keywords=keywords,
                 )
             # Soniox identifies language itself, so no language gate on the fallbacks;
             # they inherit the same chain a Modulate primary uses.
@@ -945,6 +960,7 @@ class ListenReceiver(ReplayFilterMixin):
                     sample_rate,
                     self.host.stt_language,
                     profile=self.host.language_profile,
+                    keywords=keywords,
                 ),
                 connect_modulate=(
                     (
@@ -1203,6 +1219,15 @@ class ListenReceiver(ReplayFilterMixin):
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
             self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
             return True
+        except ProviderChainUnavailable as error:
+            await self._drain_stt_sockets()
+            await terminate_live_stt_backoff(
+                request.websocket,
+                self.host.state,
+                reason='provider_unavailable',
+                retry_after=error.retry_after,
+            )
+            return False
         except Exception as error:
             await self._drain_stt_sockets()
             await terminate_live_stt_session(
@@ -1315,10 +1340,7 @@ class ListenReceiver(ReplayFilterMixin):
         if not self.host.state.active or self.host.state.stt_terminal_failure:
             return False
 
-        # The hop we adopted last has now died without a transcript (or is
-        # about to be replaced). Settle it as a failed failover before the
-        # next provider is tried, otherwise connect-time recovered hid a
-        # 100% dead Soniox budget-exhaustion leg for 27.5h.
+        # Settle the previous hop before trying another provider; connect alone did not prove recovery.
         self._settle_pending_live_failover_failure()
 
         dead_provider = provider_for_service(self.host.stt_service)
@@ -1342,11 +1364,13 @@ class ListenReceiver(ReplayFilterMixin):
         previous = self.stt_socket
         previous_selection = (self.host.stt_service, self.host.stt_language, self.host.stt_model)
         window_ring = self._window_ring()
+        trim_window_replay_to_anchor(window_ring, previous)
         replay = window_ring.snapshot() if window_ring is not None else ()
         if replay and epoch is not None:
             epoch.replay_origin_sample = replay[0][0]
         self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
         hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
+        hop.reason = getattr(previous, 'typed_death_reason', None) or 'connection_lost'
         try:
             raw = await self._create_stt_socket(
                 parakeet_callback,
@@ -1354,6 +1378,17 @@ class ListenReceiver(ReplayFilterMixin):
                 modulate_callback=modulate_callback,
                 epoch=epoch,
             )
+        except ProviderChainUnavailable as error:
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+            hop.note_failure(None)
+            await terminate_live_stt_backoff(
+                self.host.request.websocket,
+                self.host.state,
+                reason='provider_unavailable',
+                retry_after=error.retry_after,
+            )
+            return False
         except Exception:
             if managed_chain_enabled(self.host):
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
@@ -1512,10 +1547,8 @@ class ListenReceiver(ReplayFilterMixin):
             outbound_audio = bytes(buffer)
             outbound_start_sample = self._stt_buffer_start_sample
             window_ring = self._window_ring()
-            if window_ring is not None and window_ring.would_overflow(outbound_audio, outbound_start_sample):
-                raw = getattr(self.stt_socket, 'raw', None)
-                if raw is not None:
-                    raw.fail('capacity_full')
+            ring_action = window_replay_action(window_ring, self.stt_socket, outbound_audio, outbound_start_sample)
+            if ring_action == 'failover':
                 if await self._failover_stt_socket():
                     continue
                 return
@@ -1651,6 +1684,28 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'client_state':
             if not self.host.state.realtime_demand.observe(payload):
                 logger.debug('Ignored malformed or over-budget client_state')
+            config = resolve_ondemand_config()
+            if config.shadow_enabled or config.gate_enabled:
+                if self.translation_demand.observe(payload, lease_v1_enabled=config.lease_v1_enabled):
+                    if self._translation_expiry_task is not None:
+                        self._translation_expiry_task.cancel()
+                    snapshot = self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled)
+                    get_translation_metrics().demand(
+                        snapshot.policy.value,
+                        'enforced' if config.gate_enabled else 'shadow',
+                        self._telemetry_platform(),
+                    )
+                    if snapshot.expires_at is not None:
+                        self._translation_expiry_task = self.host.spawn(
+                            self._expire_translation_demand(snapshot.expires_at), name='translation_demand_expiry'
+                        )
+                    if self.host.transcripts is not None:
+                        coordinator = getattr(self.host.transcripts, 'translation_coordinator', None)
+                        if coordinator is not None:
+                            coordinator.demand_changed()
+                        self.host.spawn(
+                            self.host.transcripts.on_translation_demand_changed(), name='translation_demand_reconcile'
+                        )
         elif kind == 'capture_evidence_frame' and capture_evidence_dark_write_enabled():
             # The next binary message alone may consume this claim. A new
             # control message supersedes an unpaired one, never a later frame.
@@ -1667,6 +1722,20 @@ class ListenReceiver(ReplayFilterMixin):
                 'retry',
             }:
                 self.host.state.finalization_reason = reason
+
+    async def _expire_translation_demand(self, expires_at: float) -> None:
+        interrupted = await self.host.wait(max(0.0, expires_at - time.monotonic()))
+        if not interrupted and self.host.transcripts is not None:
+            config = resolve_ondemand_config()
+            get_translation_metrics().demand(
+                self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled).policy.value,
+                'enforced' if config.gate_enabled else 'shadow',
+                self._telemetry_platform(),
+            )
+            coordinator = getattr(self.host.transcripts, 'translation_coordinator', None)
+            if coordinator is not None:
+                coordinator.demand_changed()
+            self.host.spawn(self.host.transcripts.on_translation_demand_changed(), name='translation_demand_reconcile')
 
     async def _handle_speaker_assigned(self, payload: Dict[str, Any]) -> None:
         segment_ids = payload.get('segment_ids', [])
@@ -1878,6 +1947,15 @@ class ListenReceiver(ReplayFilterMixin):
                 await self._flush_stt_buffer(buffer, force=True)
             await self._drain_stt_sockets()
             self.host.state.active = False
+            demand = getattr(self, 'translation_demand', None)
+            if demand is not None:
+                demand.close()
+            expiry_task = getattr(self, '_translation_expiry_task', None)
+            if expiry_task is not None:
+                expiry_task.cancel()
+            coordinator = getattr(getattr(self.host, 'transcripts', None), 'translation_coordinator', None)
+            if coordinator is not None:
+                coordinator.demand_changed()
 
     async def flush_multi_channel_tail(self) -> None:
         if not should_flush_final_multi_channel_mix(
@@ -1893,6 +1971,12 @@ class ListenReceiver(ReplayFilterMixin):
             buffer.clear()
 
     def finish(self) -> None:
+        demand = getattr(self, 'translation_demand', None)
+        if demand is not None:
+            demand.close()
+        expiry_task = getattr(self, '_translation_expiry_task', None)
+        if expiry_task is not None:
+            expiry_task.cancel()
         self._resilient_closing = True
         if self._resilient_audio is not None:
             self._resilient_audio.close()

@@ -1067,7 +1067,8 @@ enum AppReviewOpportunityDecision {
   lifecycleChanged("lifecycle_changed"),
   availabilityError("availability_error"),
   unavailable("unavailable"),
-  requestError("request_error");
+  requestError("request_error"),
+  recentBadExperience("recent_bad_experience");
   const AppReviewOpportunityDecision(this.wireName);
   final String wireName;
 }
@@ -1589,7 +1590,8 @@ enum SiriIntentPerformedIntent {
   completeTask("complete_task"),
   createTask("create_task"),
   startListening("start_listening"),
-  stopListening("stop_listening");
+  stopListening("stop_listening"),
+  openChat("open_chat");
   const SiriIntentPerformedIntent(this.wireName);
   final String wireName;
 }
@@ -1633,6 +1635,46 @@ final class SiriIntentPerformed extends RegisteredEvent {
   String get wireName => "Siri Intent Performed";
   @override
   Map<String, Object> get properties => {"intent": intent.wireName, "platform": platform.wireName, "outcome": outcome.wireName, "latency_ms": latencyMs, "invoked_via": invokedVia.wireName};
+}
+
+enum SiriAskOmiPerformedPlatform {
+  macos("macos"),
+  ios("ios");
+  const SiriAskOmiPerformedPlatform(this.wireName);
+  final String wireName;
+}
+
+enum SiriAskOmiPerformedOutcome {
+  ok("ok"),
+  auth("auth"),
+  network("network"),
+  rateLimited("rate_limited"),
+  quota("quota"),
+  server("server"),
+  cancelled("cancelled");
+  const SiriAskOmiPerformedOutcome(this.wireName);
+  final String wireName;
+}
+
+enum SiriAskOmiPerformedInvokedVia {
+  siri("siri"),
+  shortcuts("shortcuts"),
+  spotlight("spotlight"),
+  unknown("unknown");
+  const SiriAskOmiPerformedInvokedVia(this.wireName);
+  final String wireName;
+}
+
+final class SiriAskOmiPerformed extends RegisteredEvent {
+  const SiriAskOmiPerformed({required this.platform, required this.outcome, required this.latencyMs, required this.invokedVia});
+  final SiriAskOmiPerformedPlatform platform;
+  final SiriAskOmiPerformedOutcome outcome;
+  final int latencyMs;
+  final SiriAskOmiPerformedInvokedVia invokedVia;
+  @override
+  String get wireName => "Siri Ask Omi Performed";
+  @override
+  Map<String, Object> get properties => {"platform": platform.wireName, "outcome": outcome.wireName, "latency_ms": latencyMs, "invoked_via": invokedVia.wireName};
 }
 
 enum SiriIndexRebuiltPlatform {
