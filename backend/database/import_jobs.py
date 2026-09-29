@@ -47,7 +47,7 @@ def _resolve_client(client: Optional[Any] = None) -> Any:
 
 def create_import_job(job_data: Dict[str, Any], client: Optional[Any] = None) -> str:
     """Create a new import job in Firestore."""
-    if not isinstance(job_data, dict):
+    if not isinstance(job_data, dict):  # pyright: ignore[reportUnnecessaryIsInstance]
         raise ValueError("job_data must be a dictionary")
 
     raw_id = job_data.get("id")
@@ -78,10 +78,8 @@ def update_import_job(job_id: str, updates: Dict[str, Any], client: Optional[Any
         logger.warning("Attempted to update import job with invalid ID: %r", job_id)
         return False
 
-    if not isinstance(updates, dict):
-        logger.warning(
-            "Invalid updates payload for job %s: expected dict, got %s", cleaned_id, type(updates).__name__
-        )
+    if not isinstance(updates, dict):  # pyright: ignore[reportUnnecessaryIsInstance]
+        logger.warning("Invalid updates payload for job %s: expected dict, got %s", cleaned_id, type(updates).__name__)
         return False
 
     if not updates:
