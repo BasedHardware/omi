@@ -46,9 +46,7 @@ def test_get_integration_checked_sanitizes_timeout_error():
     with (
         patch(
             "utils.retrieval.tools.integration_base.users_db.get_integration",
-            side_effect=TimeoutError(
-                "FirestoreTimeoutError: Deadline exceeded in cluster us-central1"
-            ),
+            side_effect=TimeoutError("FirestoreTimeoutError: Deadline exceeded in cluster us-central1"),
         ),
         patch("utils.retrieval.tools.integration_base.logger.error") as mock_logger,
     ):
@@ -75,8 +73,7 @@ def test_parse_iso_with_tz_sanitizes_value_error():
         )
         assert dt is None
         assert (
-            err
-            == "Error: Invalid start_time format. Expected ISO-8601 string with timezone: invalid-date-format-12345"
+            err == "Error: Invalid start_time format. Expected ISO-8601 string with timezone: invalid-date-format-12345"
         )
         assert "ValueError" not in err
         assert "fromisoformat" not in err
@@ -86,9 +83,7 @@ def test_parse_iso_with_tz_sanitizes_value_error():
 
 def test_retry_on_auth_sanitizes_sensitive_non_auth_exception():
     """Assert retry_on_auth does not leak bearer tokens or internal server error details."""
-    sensitive_msg = (
-        "Bearer secret_token_12345 failed with 500: Internal cluster gateway failure"
-    )
+    sensitive_msg = "Bearer secret_token_12345 failed with 500: Internal cluster gateway failure"
     call_fn = MagicMock(side_effect=RuntimeError(sensitive_msg))
     refresh_fn = MagicMock()
 
@@ -146,7 +141,9 @@ async def test_retry_on_auth_async_sanitizes_sensitive_non_auth_exception():
 
 def test_retry_on_auth_sanitizes_error_after_token_refresh():
     """Assert retry_on_auth does not leak exception details if call fails after token refresh."""
-    sensitive_err_after_refresh = "Internal database connection failed to internal-db.cluster.local:5432 with password secret_pw"
+    sensitive_err_after_refresh = (
+        "Internal database connection failed to internal-db.cluster.local:5432 with password secret_pw"
+    )
     attempts = 0
 
     def mock_call(**kwargs):
@@ -184,9 +181,7 @@ def test_retry_on_auth_sanitizes_error_after_token_refresh():
 @pytest.mark.asyncio
 async def test_retry_on_auth_async_sanitizes_error_after_token_refresh():
     """Assert retry_on_auth_async does not leak exception details if call fails after token refresh."""
-    sensitive_err_after_refresh = (
-        "Async connection pool exhausted on redis://auth:secret@redis-internal:6379"
-    )
+    sensitive_err_after_refresh = "Async connection pool exhausted on redis://auth:secret@redis-internal:6379"
     attempts = 0
 
     async def mock_async_call(**kwargs):
