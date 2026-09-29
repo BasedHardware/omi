@@ -121,3 +121,17 @@ jobs:
           GRAFANA_URL: ${{ vars.GRAFANA_URL }}
           GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
         run: python3 web/admin/grafana/apply_omi_tv_dashboard.py
+
+      - name: Reconcile admin precompute Scheduler trigger
+        env:
+          SCHEDULER_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT == 'prod' && 'prod' || 'dev' }}
+        run: |
+          python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+          if [[ "$SCHEDULER_ENVIRONMENT" == prod ]]; then
+            python3 backend/scripts/scheduler_reconcile.py \
+              --environment prod --project "${{ vars.GCP_PROJECT_ID }}" \
+              --apply --jobs omi-admin-stats-precompute
+            python3 backend/scripts/scheduler_reconcile.py \
+              --environment prod --project "${{ vars.GCP_PROJECT_ID }}" \
+              --check --jobs omi-admin-stats-precompute
+          fi

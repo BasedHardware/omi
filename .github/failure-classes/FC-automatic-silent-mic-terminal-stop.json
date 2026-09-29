@@ -5,7 +5,8 @@
   "canonical_prevention": "Release CoreAudio and STT on automatic silent-mic exhaustion, retain intent in an explicit waiting state, retry on bounded backoff and recovery signals, and measure the route and recovery outcome with bounded telemetry.",
   "canonical_prevention_artifact": [
     "desktop/macos/Desktop/Tests/ArmedCaptureRecoveryPolicyTests.swift",
-    "desktop/macos/Desktop/Tests/SilentMicDiagnosticTelemetryTests.swift"
+    "desktop/macos/Desktop/Tests/SilentMicDiagnosticTelemetryTests.swift",
+    "desktop/macos/Desktop/Tests/CaptureAttemptOutcomeTelemetryTests.swift"
   ],
   "evidence_prs": [],
   "scope_hints": [

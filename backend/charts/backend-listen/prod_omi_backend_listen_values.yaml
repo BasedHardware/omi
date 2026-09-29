@@ -372,14 +372,34 @@ env:
     value: "false"
   - name: STT_CONNECT_ORDER_FROM_CONFIG
     value: "true"
+  - name: STT_RESILIENT_RECONNECT
+    value: "false"
+  - name: STT_ROUTING_MODE
+    value: "shadow"
+  - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
+    value: "0.075"
+  - name: STT_ROUTING_PROBE_PERCENT
+    value: "2"
+  - name: STT_NO_TEXT_SECONDS
+    value: "30"
+  - name: SONIOX_MONTHLY_CEILING_USD
+    value: "10000"
+  - name: SONIOX_ESTIMATED_USD_PER_HOUR
+    value: "0.07537"
   - name: STT_MULTI_LANGUAGE_HINTS
     value: "true"
+  - name: STT_LEARNED_LANGUAGE_PROFILE
+    value: "false"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
     value: "25"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
-    value: "0"
+    value: "1"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
     value: "1"
+  - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
+    value: "prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local"
+  - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
+    value: "2"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
@@ -397,7 +417,7 @@ env:
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
+    value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS

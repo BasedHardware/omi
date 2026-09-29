@@ -9,6 +9,7 @@ import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/services/client_device_service.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
@@ -112,6 +113,9 @@ class MemoriesProvider extends ChangeNotifier {
   final FetchLedgerHistoryRequest _fetchLedgerHistoryRequest;
   final FetchLedgerHistoryCursorRequest? _fetchLedgerHistoryCursorRequest;
   final Future<bool> Function(String) _deleteMemoryRequest;
+  final Future<bool> Function() _deleteAllMemoriesRequest;
+  final Future<Memory?> Function(String, String, String) _createMemoryRequest;
+  final Future<bool> Function(String, String) _updateMemoryVisibilityRequest;
   final ReviewMemoryRequest _reviewMemoryRequest;
   final EditMemoryRequest _editMemoryRequest;
   final RevertMemoryRequest _revertMemoryRequest;
@@ -152,6 +156,9 @@ class MemoriesProvider extends ChangeNotifier {
     FetchLedgerHistoryRequest? fetchLedgerHistoryRequest,
     FetchLedgerHistoryCursorRequest? fetchLedgerHistoryCursorRequest,
     Future<bool> Function(String)? deleteMemoryRequest,
+    Future<bool> Function()? deleteAllMemoriesRequest,
+    Future<Memory?> Function(String, String, String)? createMemoryRequest,
+    Future<bool> Function(String, String)? updateMemoryVisibilityRequest,
     ReviewMemoryRequest? reviewMemoryRequest,
     EditMemoryRequest? editMemoryRequest,
     RevertMemoryRequest? revertMemoryRequest,
@@ -164,6 +171,9 @@ class MemoriesProvider extends ChangeNotifier {
         _fetchLedgerHistoryCursorRequest = fetchLedgerHistoryCursorRequest ??
             (fetchMemoriesRequest == null && fetchLedgerHistoryRequest == null ? getLedgerHistory : null),
         _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer,
+        _deleteAllMemoriesRequest = deleteAllMemoriesRequest ?? deleteAllMemoriesServer,
+        _createMemoryRequest = createMemoryRequest ?? createMemoryServer,
+        _updateMemoryVisibilityRequest = updateMemoryVisibilityRequest ?? updateMemoryVisibilityServer,
         _reviewMemoryRequest = reviewMemoryRequest ?? reviewMemoryServer,
         _editMemoryRequest = editMemoryRequest ?? editMemoryServer,
         _revertMemoryRequest = revertMemoryRequest ?? revertMemoryServer,
@@ -640,6 +650,8 @@ class MemoriesProvider extends ChangeNotifier {
     final seenCurrent = <String>{};
     var offset = 0;
     String? memoryCursor;
+    var currentTraversalComplete = false;
+    var currentFetchCoversAll = false;
     var viewProtocolRestarts = 0;
     var deviceScopeSupported = true;
     var ledgerHistorySupported = false;
@@ -648,6 +660,7 @@ class MemoriesProvider extends ChangeNotifier {
     var ledgerHistoryOffset = 0;
     String? ledgerHistoryNextCursor;
     for (var page = 0; page < maxPages; page++) {
+      final requestedView = _beliefEnabled == true ? serverView : null;
       final result = await _fetchMemoryPage(
         limit: limit,
         // Cursor pages and offset pages are different protocols. The API
@@ -659,7 +672,7 @@ class MemoriesProvider extends ChangeNotifier {
         // Do not send a temporal selector until the capability probe has
         // confirmed it. A restart below binds the first cursor page to the
         // same selector used by every continuation page.
-        view: _beliefEnabled == true ? serverView : null,
+        view: requestedView,
       );
       if (generation != _sessionGeneration || loadSequence != _loadSequence) {
         return;
@@ -677,7 +690,6 @@ class MemoriesProvider extends ChangeNotifier {
         return;
       }
       deviceScopeSupported = result.deviceScopeSupported;
-      final requestedView = _beliefEnabled == true ? serverView : null;
       // A missing header is a capability reset. Do not let a prior true value
       // leak into a stable/older response on the next page or account.
       _beliefEnabled = result.beliefEnabled;
@@ -687,6 +699,7 @@ class MemoriesProvider extends ChangeNotifier {
           viewProtocolRestarts++;
           all.clear();
           seenCurrent.clear();
+          currentFetchCoversAll = false;
           offset = 0;
           memoryCursor = null;
           Logger.debug(
@@ -699,6 +712,9 @@ class MemoriesProvider extends ChangeNotifier {
         );
         break;
       }
+      // Scope belongs to the successful current-page response. The separate
+      // ledger-history request may reset capability without broadening it.
+      currentFetchCoversAll = result.beliefEnabled != true || requestedView == MemoryReadView.all;
       all.addAll(result.memories.where((memory) => seenCurrent.add(memory.id)));
       // A truncated page is an honest partial response with no resumable cursor;
       // stop loading instead of continuing with an unstable offset.
@@ -729,7 +745,12 @@ class MemoriesProvider extends ChangeNotifier {
         memoryCursor = result.nextCursor;
         continue;
       }
-      if (result.memories.length < limit) break;
+      // A cursor ending or a short offset page proves this owner/view was
+      // exhausted. Truncated or capped traversals are additive only.
+      if (memoryCursor != null || result.memories.length < limit) {
+        currentTraversalComplete = true;
+        break;
+      }
       offset += result.memories.length;
     }
     // History is an additive owner-scoped projection, fetched independently
@@ -818,6 +839,15 @@ class MemoriesProvider extends ChangeNotifier {
     final currentTombstoneId = _pendingDeletionId;
     final effectiveTombstoneId = currentTombstoneId ?? tombstoneId;
     _memories = effectiveTombstoneId != null ? all.where((memory) => memory.id != effectiveTombstoneId).toList() : all;
+    // The default useful-now/device views do not cover every indexed memory.
+    // Only an exhausted, owner-wide all/current view may remove absent IDs.
+    final siriMemoryFetchIsAuthoritative = currentTraversalComplete && !_filterThisDeviceOnly && currentFetchCoversAll;
+    if (siriMemoryFetchIsAuthoritative) {
+      await SiriIntegration.current.reconcileMemories(_memories);
+    } else {
+      await SiriIntegration.current.upsertMemories(_memories);
+      await SiriIntegration.current.refreshAuthoritativeMemories();
+    }
     _deviceScopeSupported = deviceScopeSupported;
     _ledgerHistorySupported = ledgerHistorySupported;
     _ledgerHistoryTruncated = ledgerHistoryTruncated;
@@ -825,7 +855,6 @@ class MemoriesProvider extends ChangeNotifier {
     _ledgerHistoryOffset = ledgerHistoryOffset;
     _ledgerHistoryNextCursor = ledgerHistoryNextCursor;
     _loadFailed = false;
-
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
     for (var pending in pendingMemories) {
@@ -903,10 +932,10 @@ class MemoriesProvider extends ChangeNotifier {
     for (var memory in List.from(pendingMemories)) {
       if (generation != _sessionGeneration) return;
       try {
-        final serverMemory = await createMemoryServer(
+        final serverMemory = await _createMemoryRequest(
           memory.content,
-          memory.visibility.name,
-          memory.category.name,
+          memory.visibility.toString().split('.').last,
+          memory.category.toString().split('.').last,
         );
 
         if (serverMemory != null) {
@@ -921,6 +950,7 @@ class MemoriesProvider extends ChangeNotifier {
             // assessment fields that are absent from an offline draft.
             _memories[idx] = serverMemory;
           }
+          await SiriIntegration.current.upsertMemories([serverMemory]);
         }
         if (generation != _sessionGeneration) return;
       } catch (e) {
@@ -967,6 +997,8 @@ class MemoriesProvider extends ChangeNotifier {
         // live row (a later refresh, another surface) still wins: this map is
         // only consulted when the id does not resolve.
         _settledUnresolvedReviews[memory.id] = value;
+        memory.userReview = value;
+        await SiriIntegration.current.upsertMemories([memory]);
         notifyListeners();
         return true;
       } catch (error) {
@@ -999,6 +1031,7 @@ class MemoriesProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    await SiriIntegration.current.upsertMemories([memory]);
     return true;
   }
 
@@ -1160,10 +1193,12 @@ class MemoriesProvider extends ChangeNotifier {
         _memories.removeWhere(
           (candidate) => candidate.id == staleCurrentTail.id,
         );
+        await SiriIntegration.current.delete('memory', staleCurrentTail.id);
       }
       if (existingReplacementIndex == -1) {
         _memories.add(replacement);
       }
+      await SiriIntegration.current.upsertMemories([replacement]);
       _setCategories();
       await _refreshLedgerHistoryAfterRevert(
         generation,
@@ -1310,23 +1345,26 @@ class MemoriesProvider extends ChangeNotifier {
   Memory? _lastDeletedMemory;
   Timer? _deletionTimer;
   String? _pendingDeletionId;
+  final Map<String, Future<void>> _pendingIndexDeletes = {};
 
   Memory? get lastDeletedMemory => _lastDeletedMemory;
 
-  void deleteMemory(Memory memory) {
+  Future<void> deleteMemory(Memory memory) async {
     _cancelDeletionTimer();
-    if (_pendingDeletionId != null) {
-      unawaited(_finalizeDeletion());
-    }
-
+    final previousCommit = _pendingDeletionId != null ? _finalizeDeletion() : Future<void>.value();
     _lastDeletedMemory = memory;
     _pendingDeletionId = memory.id;
-
     _memories.remove(memory);
     _setCategories();
     notifyListeners();
-
     _startDeletionTimer();
+    final indexDelete = previousCommit.then((_) => SiriIntegration.current.delete('memory', memory.id));
+    _pendingIndexDeletes[memory.id] = indexDelete;
+    try {
+      await indexDelete;
+    } finally {
+      if (identical(_pendingIndexDeletes[memory.id], indexDelete)) _pendingIndexDeletes.remove(memory.id);
+    }
   }
 
   void _cancelDeletionTimer() {
@@ -1337,7 +1375,9 @@ class MemoriesProvider extends ChangeNotifier {
   /// Backstop commit; the Undo toast (OmiFeedbackTiming.undo) commits sooner and must close first.
   static const Duration pendingDeletionWindow = Duration(seconds: 8);
 
-  void _startDeletionTimer() => _deletionTimer = Timer(pendingDeletionWindow, _finalizeDeletion);
+  void _startDeletionTimer() => _deletionTimer = Timer(pendingDeletionWindow, () async {
+        await _finalizeDeletion();
+      });
 
   Future<void> _finalizeDeletion() async {
     if (_pendingDeletionId == null) {
@@ -1368,6 +1408,8 @@ class MemoriesProvider extends ChangeNotifier {
         _memories.add(deletedMemory!);
       }
       _setCategories();
+      await _pendingIndexDeletes[id];
+      await SiriIntegration.current.upsertMemories([deletedMemory!]);
       notifyListeners();
     }
 
@@ -1390,20 +1432,30 @@ class MemoriesProvider extends ChangeNotifier {
 
     _cancelDeletionTimer();
     _pendingDeletionId = null;
-
-    _memories.add(_lastDeletedMemory!);
+    final restored = _lastDeletedMemory!;
+    _memories.add(restored);
     _lastDeletedMemory = null;
-
     _setCategories();
     notifyListeners();
+    await _pendingIndexDeletes[restored.id];
+    await SiriIntegration.current.upsertMemories([restored]);
 
     return true;
   }
 
   Future<bool> deleteAllMemories() async {
+    final generation = _sessionGeneration;
+    final ownerUid = SharedPreferencesUtil().uid;
     final int countBeforeDeletion = _memories.length;
-    if (!await deleteAllMemoriesServer()) return false;
+    if (!await _deleteAllMemoriesRequest()) return false;
+    if (generation != _sessionGeneration || SharedPreferencesUtil().uid != ownerUid) return false;
     _memories.clear();
+    _cancelDeletionTimer();
+    _pendingDeletionId = null;
+    _lastDeletedMemory = null;
+    SharedPreferencesUtil().pendingMemories = [];
+    SharedPreferencesUtil().cachedMemories = [];
+    await SiriIntegration.current.reconcileMemories([]);
     if (countBeforeDeletion > 0) {
       PlatformManager.instance.analytics.memoriesAllDeleted(
         countBeforeDeletion,
@@ -1445,7 +1497,7 @@ class MemoriesProvider extends ChangeNotifier {
     SharedPreferencesUtil().addPendingMemory(newMemory);
 
     // Try to sync to server immediately
-    final serverMemory = await createMemoryServer(
+    final serverMemory = await _createMemoryRequest(
       content,
       visibility.name,
       category.name,
@@ -1463,6 +1515,8 @@ class MemoriesProvider extends ChangeNotifier {
       if (idx != -1) {
         _memories[idx].id = serverMemory.id;
       }
+      await SiriIntegration.current.upsertMemories([serverMemory]);
+      unawaited(SiriIntegration.instance.donateUiAction('memory', serverMemory.id));
     }
     if (generation != _sessionGeneration) return true;
 
@@ -1474,7 +1528,9 @@ class MemoriesProvider extends ChangeNotifier {
     Memory memory,
     MemoryVisibility visibility,
   ) async {
-    if (!await updateMemoryVisibilityServer(memory.id, visibility.name)) return false;
+    final generation = _sessionGeneration;
+    if (!await _updateMemoryVisibilityRequest(memory.id, visibility.name)) return false;
+    if (generation != _sessionGeneration) return false;
 
     final idx = _memories.indexWhere((m) => m.id == memory.id);
     if (idx != -1) {
@@ -1487,6 +1543,7 @@ class MemoriesProvider extends ChangeNotifier {
         visibility,
       );
       _setCategories();
+      await SiriIntegration.current.upsertMemories([memoryToUpdate]);
     }
     return true;
   }
@@ -1510,6 +1567,7 @@ class MemoriesProvider extends ChangeNotifier {
     String value, [
     MemoryCategory? category,
   ]) async {
+    final generation = _sessionGeneration;
     if (memory.isKnowledgeLedger &&
         (memory.deleted ||
             memory.invalidAt != null ||
@@ -1519,6 +1577,7 @@ class MemoriesProvider extends ChangeNotifier {
       return false;
     }
     final result = await _editMemoryRequest(memory.id, value);
+    if (generation != _sessionGeneration) return false;
 
     if (result.persisted) {
       final idx = _memories.indexWhere((m) => m.id == memory.id);
@@ -1544,6 +1603,7 @@ class MemoriesProvider extends ChangeNotifier {
             return false;
           }
           _memories[idx] = replacement;
+          await SiriIntegration.current.delete('memory', memory.id);
         } else {
           memory.content = value;
           if (category != null) {
@@ -1554,8 +1614,21 @@ class MemoriesProvider extends ChangeNotifier {
           _memories[idx] = memory;
         }
 
+        await SiriIntegration.current.upsertMemories([_memories[idx]]);
+
         _setCategories();
         notifyListeners();
+      } else if (memory.isKnowledgeLedger) {
+        // A recap may edit a row outside the loaded page. Remove the stale
+        // source projection until an authoritative replacement is available.
+        await SiriIntegration.current.delete('memory', memory.id);
+        await SiriIntegration.current.refreshAuthoritativeMemories();
+      } else {
+        memory.content = value;
+        if (category != null) memory.category = category;
+        memory.updatedAt = DateTime.now();
+        memory.edited = true;
+        await SiriIntegration.current.upsertMemories([memory]);
       }
     }
 
@@ -1563,6 +1636,7 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<bool> updateAllMemoriesVisibility(bool makePrivate) async {
+    final generation = _sessionGeneration;
     final visibility = makePrivate ? MemoryVisibility.private : MemoryVisibility.public;
     int updatedCount = 0;
     var allUpdated = true;
@@ -1571,10 +1645,11 @@ class MemoriesProvider extends ChangeNotifier {
     for (var memory in List.from(_memories)) {
       if (memory.visibility != visibility) {
         try {
-          if (!await updateMemoryVisibilityServer(memory.id, visibility.name)) {
+          if (!await _updateMemoryVisibilityRequest(memory.id, visibility.name)) {
             allUpdated = false;
             continue;
           }
+          if (generation != _sessionGeneration) return false;
           final idx = _memories.indexWhere((m) => m.id == memory.id);
           if (idx != -1) {
             _memories[idx].visibility = visibility;
@@ -1589,6 +1664,7 @@ class MemoriesProvider extends ChangeNotifier {
     }
 
     if (updatedCount > 0) {
+      await SiriIntegration.current.upsertMemories(memoriesSuccessfullyUpdated);
       PlatformManager.instance.analytics.memoriesAllVisibilityChanged(
         visibility,
         updatedCount,

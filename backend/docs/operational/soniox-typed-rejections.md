@@ -7,7 +7,8 @@ free-text line:
 
 | Frame | Typed reason | Owner | Severity |
 |---|---|---|---|
-| 400 `invalid_request` "No audio received" | `soniox_idle_timeout` | this session's VAD pattern | WARNING |
+| 400 `invalid_request` "No audio received" during an active session | `soniox_idle_timeout` | this session's VAD pattern | WARNING |
+| 400 `invalid_request` "No audio received" after teardown starts | `soniox_no_audio_teardown` | clean session teardown | metric only; no failure/failover |
 | 402 `organization_balance_exhausted` / `organization_monthly_budget_exhausted` / `project_monthly_budget_exhausted` | `provider_budget_exhausted` | the provider/account | **ERROR** |
 | 413 `max_duration_reached` | `soniox_rotation` | documented protocol rotation | WARNING |
 
@@ -52,8 +53,16 @@ free-text line:
   deliberately do not — an idle timeout is this session's VAD pattern, not a
   provider fault.
 - Vendor close frames increment `omi_stt_stream_close_total` with a bounded
-  `reason` (`provider_budget_exhausted`, idle/rotation/hint, else
+  `reason` (`provider_budget_exhausted`, idle/rotation/hint/teardown, else
   `connection_lost`). Raw vendor messages are never label values.
+- The active-session idle rejection does not follow a keepalive gap in the
+  current adapter: `_send_loop` sends a keepalive after each 10 seconds without
+  queued audio, below Soniox's documented 20-second idle close. VAD starvation
+  still remains visible as `soniox_idle_timeout`; keepalive is not audio.
+- Teardown sends Soniox's empty end-of-audio frame only after at least one audio
+  payload reached the provider. A zero-audio finish closes without that frame
+  or a wait for `finished`; a teardown-phase no-audio rejection is counted as
+  `soniox_no_audio_teardown` and is not latched as a socket death.
 - `_fallback_failure_reason` classifies `exhausted`/`balance` text as `quota`;
   `bounded_provider` accepts the live-path provider tokens.
 

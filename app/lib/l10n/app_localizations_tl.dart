@@ -11321,7 +11321,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get openCall => 'Buksan ang tawag';
 
   @override
-  String get captureRecoveryBanner => 'Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin';
+  String get captureRecoveryBanner => 'Hindi nagpapadala ng audio ang Omi — i-tap para muling kumonekta';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11514,6 +11514,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get voiceQuestionNoSpeech => 'Hindi ko narinig iyon — subukan ulit';
 
   @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
   String get sendToSupport => 'Send to support';
 
   @override
@@ -11525,4 +11532,59 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Maghanap ng mga tao';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Idagdag ang \"$query\" bilang bagong tao';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Ipakita ang lahat ng $count na tao';
+  }
 }

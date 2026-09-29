@@ -11300,7 +11300,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get openCall => 'அழைப்பைத் திறக்கவும்';
 
   @override
-  String get captureRecoveryBanner => 'பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்';
+  String get captureRecoveryBanner => 'Omi ஆடியோவை அனுப்பவில்லை — மீண்டும் இணைக்கத் தட்டவும்';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11491,6 +11491,13 @@ class AppLocalizationsTa extends AppLocalizations {
   String get voiceQuestionNoSpeech => 'கேட்கவில்லை — மீண்டும் முயற்சிக்கவும்';
 
   @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
   String get sendToSupport => 'Send to support';
 
   @override
@@ -11502,4 +11509,59 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'நபர்களைத் தேடு';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" ஐ புதிய நபராகச் சேர்க்கவும்';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'அனைத்து ($count) நபர்களையும் காட்டு';
+  }
 }

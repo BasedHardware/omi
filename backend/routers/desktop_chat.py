@@ -1940,15 +1940,14 @@ async def chat_completions(
     attempt = ClientJourneyAttempt(
         'desktop_chat',
         _desktop_chat_client_kind(x_app_platform, user_agent),
-        app_build=extract_app_build({'x-app-version': x_app_version or ''}),
     )
 
     def _record_desktop_chat_product() -> None:
         record_product_event(
             'desktop_chat_completion',
             client_kind=attempt.client_kind,
-            app_build=attempt.app_build,
             outcome=attempt.outcome or 'unknown',
+            app_build=extract_app_build({'x-app-version': x_app_version or ''}),
         )
 
     try:

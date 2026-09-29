@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/action_item.dart';
+import 'package:omi/backend/http/api/memories.dart' show GetMemoriesResult;
+import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/pages/home/home_deep_links.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/home/home_prompt_gate.dart';
+import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/enums.dart';
 
 /// Home shell navigation: links open inside the one Home (nav #3, #18), prompts wait while the
@@ -36,7 +42,10 @@ void main() {
       expect(HomeDeepLink.parse('/action-items')!.tabIndex, 2);
       expect(HomeDeepLink.parse('/apps/xyz')!.tabIndex, 3);
       expect(HomeDeepLink.parse('/memories')!.tabIndex, 0);
-      expect(HomeDeepLink.parse('/conversation/abc')!.tabIndex, isNull);
+      expect(HomeDeepLink.parse('/conversation/abc')!.tabIndex, 1);
+      expect(HomeDeepLink.parse('/memory/m-1')!.tabIndex, 0);
+      expect(HomeDeepLink.parse('/task/t-1')!.tabIndex, 2);
+      expect(HomeDeepLink.parse('/search?q=meeting')!.tabIndex, 1);
     });
   });
 
@@ -108,6 +117,145 @@ void main() {
         expect(opened, isFalse);
       });
     });
+  });
+
+  testWidgets('indexed task opens by backend id outside the visible filtered page', (tester) async {
+    const task = ActionItemWithMetadata(id: 'task-150', description: 'Older indexed task', completed: false);
+    final provider = ActionItemsProvider(
+      getActionItems: (
+              {limit = 100,
+              offset = 0,
+              completed,
+              conversationId,
+              startDate,
+              endDate,
+              dueStartDate,
+              dueEndDate}) async =>
+          const ActionItemsResponse(actionItems: [], hasMore: false),
+    );
+    addTearDown(provider.dispose);
+    final opened = <String>[];
+    final requested = <String>[];
+    await tester.pumpWidget(ChangeNotifierProvider<ActionItemsProvider>.value(
+      value: provider,
+      child: const MaterialApp(home: SizedBox(key: Key('task-link-home'))),
+    ));
+    final context = tester.element(find.byKey(const Key('task-link-home')));
+
+    await openHomeDeepLink(context, const HomeDeepLink('task', id: 'task-150'),
+        openSettings: () async {},
+        taskById: (id) async {
+          requested.add(id);
+          return task;
+        },
+        onTaskOpened: (item) => opened.add(item.id));
+
+    expect(requested, ['task-150']);
+    expect(opened, ['task-150']);
+  });
+
+  testWidgets('indexed memory opens by backend id outside the visible filter', (tester) async {
+    final now = DateTime.now();
+    final memory = Memory(
+      id: 'memory-hidden-by-filter',
+      uid: 'owner',
+      content: 'Private remembered fact',
+      category: MemoryCategory.manual,
+      createdAt: now,
+      updatedAt: now,
+      visibility: MemoryVisibility.private,
+    );
+    final provider = MemoriesProvider();
+    addTearDown(provider.dispose);
+    final requested = <String>[];
+    final opened = <String>[];
+    await tester.pumpWidget(ChangeNotifierProvider<MemoriesProvider>.value(
+      value: provider,
+      child: const MaterialApp(home: SizedBox(key: Key('memory-link-home'))),
+    ));
+    final context = tester.element(find.byKey(const Key('memory-link-home')));
+    await openHomeDeepLink(
+      context,
+      const HomeDeepLink('memory', id: 'memory-hidden-by-filter'),
+      openSettings: () async {},
+      memoryById: (id) async {
+        requested.add(id);
+        return memory;
+      },
+      onMemoryOpened: (row) => opened.add(row.id),
+    );
+    expect(requested, ['memory-hidden-by-filter']);
+    expect(opened, ['memory-hidden-by-filter']);
+  });
+
+  testWidgets('stale indexed task link does not open a cancelled task', (tester) async {
+    const cancelled = ActionItemWithMetadata(
+      id: 'cancelled-task',
+      description: 'No longer visible',
+      completed: false,
+      status: 'cancelled',
+    );
+    final opened = <String>[];
+    var unavailable = 0;
+    await tester.pumpWidget(const MaterialApp(home: SizedBox(key: Key('stale-task-home'))));
+    final context = tester.element(find.byKey(const Key('stale-task-home')));
+    await openHomeDeepLink(context, const HomeDeepLink('task', id: 'cancelled-task'),
+        openSettings: () async {},
+        taskById: (_) async => cancelled,
+        onTaskOpened: (row) => opened.add(row.id),
+        onItemUnavailable: () => unavailable++);
+    expect(opened, isEmpty);
+    expect(unavailable, 1);
+  });
+
+  test('indexed memory resolver follows owner-wide cursors beyond the visible page', () async {
+    final now = DateTime.now();
+    Memory memory(String id, {String uid = 'owner', MemoryLayer? layer}) => Memory(
+          id: id,
+          uid: uid,
+          content: id,
+          category: MemoryCategory.manual,
+          createdAt: now,
+          updatedAt: now,
+          visibility: MemoryVisibility.private,
+          layer: layer,
+        );
+    final cursors = <String?>[];
+    final found = await resolveIndexedMemoryById('target',
+        uid: 'owner',
+        ownerIsCurrent: () => true,
+        fetchPage: ({required limit, required offset, cursor}) async {
+          cursors.add(cursor);
+          return cursor == null
+              ? GetMemoriesResult([memory('other')], true, nextCursor: 'second')
+              : GetMemoriesResult([memory('target')], true);
+        });
+    expect(cursors, [null, 'second']);
+    expect(found?.id, 'target');
+
+    final archived = await resolveIndexedMemoryById('target',
+        uid: 'owner',
+        ownerIsCurrent: () => true,
+        fetchPage: ({required limit, required offset, cursor}) async =>
+            GetMemoriesResult([memory('target', layer: MemoryLayer.archive)], true));
+    expect(archived, isNull);
+
+    final foreign = await resolveIndexedMemoryById('target',
+        uid: 'owner',
+        ownerIsCurrent: () => true,
+        fetchPage: ({required limit, required offset, cursor}) async =>
+            GetMemoriesResult([memory('target', uid: 'other')], true));
+    expect(foreign, isNull);
+
+    var stillCurrent = true;
+    final switched = await resolveIndexedMemoryById('target',
+        uid: 'owner',
+        ownerIsCurrent: () => stillCurrent,
+        fetchPage: ({required limit, required offset, cursor}) async {
+          stillCurrent = false;
+          return GetMemoriesResult([memory('target')], true);
+        });
+    expect(switched, isNull);
   });
 }
 

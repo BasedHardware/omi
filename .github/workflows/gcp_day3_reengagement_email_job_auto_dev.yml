@@ -202,14 +202,13 @@ jobs:
           env_vars: ${{ steps.runtime-env.outputs.day3_reengagement_email_job_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.day3_reengagement_email_job_secrets }}
 
-      - name: Provision daily Scheduler trigger from admitted source
+      - name: Reconcile declared Scheduler trigger
         run: |
-          python3 backend/scripts/provision_day3_reengagement_scheduler.py \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" \
-            --scheduler-job "$SCHEDULER_JOB" \
-            --cloud-run-job "$SERVICE" \
-            --service-account "$SCHEDULER_SERVICE_ACCOUNT"
+          python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+          python3 backend/scripts/scheduler_reconcile.py \
+            --environment dev --project "${{ vars.GCP_PROJECT_ID }}" --apply --jobs "$SCHEDULER_JOB"
+          python3 backend/scripts/scheduler_reconcile.py \
+            --environment dev --project "${{ vars.GCP_PROJECT_ID }}" --check --jobs "$SCHEDULER_JOB"
 
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}

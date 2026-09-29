@@ -57,7 +57,12 @@ async def test_base_probe_records_counts_when_rollover_or_duplication_changes_th
 ):
     phrase = probe.load_fixture().expected_phrase
     monkeypatch.setattr(probe, '_read_token', lambda *_: 'token')
-    monkeypatch.setattr(probe, '_listen_sample', lambda *_a, **_k: asyncio.sleep(0, result=(True, '')))
+
+    async def held_listen(*_args, hold_open, **_kwargs):
+        await hold_open.wait()
+        return True, ''
+
+    monkeypatch.setattr(probe, '_listen_sample', held_listen)
     monkeypatch.setattr(
         probe,
         '_terminal_readback',
@@ -83,6 +88,44 @@ async def test_base_probe_records_counts_when_rollover_or_duplication_changes_th
     assert receipt['word_counts'] == {'live': 17 * passes, 'expected': 136}
     assert receipt['consumer_readback'] == {'status': 'PASS'}
     assert receipt.get('failure_stage') == (None if passed else 'transcript_word_count')
+
+
+@pytest.mark.asyncio
+async def test_base_probe_reports_terminal_stt_socket_death_before_readback_timeout(monkeypatch, probe, tmp_path):
+    """A 1011 listen failure cannot masquerade as a finalization timeout."""
+    from websockets.frames import Close
+
+    monkeypatch.setattr(probe, '_read_token', lambda *_: 'token')
+
+    async def failed_listen(*_args, **_kwargs):
+        await asyncio.sleep(0)
+        raise probe.websockets.exceptions.ConnectionClosedError(Close(1011, 'provider details'), None)
+
+    async def waiting_readback(*_args, **_kwargs):
+        await asyncio.sleep(3600)
+        pytest.fail('readback unexpectedly finished')
+
+    monkeypatch.setattr(probe, '_listen_sample', failed_listen)
+    monkeypatch.setattr(probe, '_terminal_readback', waiting_readback)
+    deployment_receipt = tmp_path / 'deployment.json'
+    deployment_receipt.write_text(json.dumps({'image': {'digest': 'sha256:synthetic'}}))
+    args = SimpleNamespace(
+        run_id='123',
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment_receipt,
+        api_url='https://example.invalid',
+        allow_local_http=False,
+        finalization_timeout_seconds=180,
+        project='synthetic',
+        namespace='synthetic',
+    )
+
+    receipt, passed = await asyncio.wait_for(probe.run_probe(args), timeout=1)
+
+    assert not passed
+    assert receipt['failure_stage'] == 'stt_unavailable'
+    assert receipt['consumer_readback'] == {'status': 'FAIL'}
+    assert 'provider details' not in json.dumps(receipt)
 
 
 def test_base_probe_status_line_exposes_only_bounded_diagnostics(monkeypatch, probe, tmp_path, capsys):
@@ -309,6 +352,19 @@ async def test_listen_sample_still_fails_closed_when_the_phrase_never_lands(monk
         await probe._terminal_readback(
             'https://api.example.invalid', 'token', 'conversation-1', 1, expected_phrase=fixture.expected_phrase
         )
+
+
+@pytest.mark.asyncio
+async def test_listen_sample_reports_bounded_stt_failure_event(monkeypatch, probe):
+    clock = [0.0]
+    socket = _FailoverListenSocket('conversation-1', 90.0, clock)
+    socket._early.append({'type': 'service_status', 'status': 'stt_failed', 'status_text': 'provider details'})
+    _install_fake_timeline(monkeypatch, probe, clock)
+    monkeypatch.setattr(probe.websockets, 'connect', lambda *_a, **_k: _FakeConnect(socket))
+    fixture = probe.Fixture(pcm=b'\x00' * (16000 * 2), sample_rate=16000, expected_phrase='hello')
+
+    with pytest.raises(probe.ProbeError, match='^stt_unavailable$'):
+        await probe._listen_sample('https://api.example.invalid', 'token', fixture, 'conversation-1')
 
 
 @pytest.mark.asyncio

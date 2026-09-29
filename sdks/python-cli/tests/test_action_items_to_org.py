@@ -17,7 +17,9 @@ import sys
 import tempfile
 import unittest
 
-script_path = Path(__file__).resolve().parent.parent / "examples" / "action_items_to_org.py"
+script_path = Path(__file__).resolve().parent / "action_items_to_org.py"
+if not script_path.exists():
+    script_path = Path(__file__).resolve().parent.parent / "examples" / "action_items_to_org.py"
 spec = importlib.util.spec_from_file_location("action_items_to_org", script_path)
 ai2org = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ai2org)
@@ -129,6 +131,39 @@ class TestActionItemsToOrg(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 1)
         self.assertFalse(destination.exists())
+
+    def test_extract_action_items_envelopes(self):
+        item1 = {"id": "a1", "description": "Item 1", "completed": False}
+        item2 = {"id": "a2", "description": "Item 2", "completed": True}
+
+        # Bare list
+        self.assertEqual(ai2org.extract_action_items([item1, item2]), [item1, item2])
+
+        # Wrapped envelopes
+        self.assertEqual(ai2org.extract_action_items({"action_items": [item1, item2]}), [item1, item2])
+        self.assertEqual(ai2org.extract_action_items({"items": [item1]}), [item1])
+        self.assertEqual(ai2org.extract_action_items({"data": [item2]}), [item2])
+
+        # Empty envelopes
+        self.assertEqual(ai2org.extract_action_items({"action_items": []}), [])
+        self.assertEqual(ai2org.extract_action_items({"items": []}), [])
+        self.assertEqual(ai2org.extract_action_items({"data": []}), [])
+
+        # Non-envelope dictionary returns None (raises ValueError on convert)
+        self.assertIsNone(ai2org.extract_action_items(item1))
+
+    def test_export_wrapped_envelope(self):
+        payload = {"action_items": [{"id": "a1", "description": "Buy groceries", "completed": False}]}
+        counts, org = self.export(payload)
+        self.assertEqual(counts, (1, 1))
+        self.assertIn("* TODO Buy groceries", org)
+
+    def test_export_empty_envelope_produces_empty_file(self):
+        counts, org = self.export({"action_items": []})
+        self.assertEqual(counts, (0, 0))
+        self.assertIn("#+TITLE: Omi action items", org)
+        self.assertNotIn("* TODO", org)
+        self.assertNotIn("* DONE", org)
 
 
 if __name__ == "__main__":

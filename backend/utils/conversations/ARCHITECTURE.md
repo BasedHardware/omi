@@ -70,7 +70,10 @@ and background processing.
 - `finalizer.py` is the durable handoff boundary for a persisted conversation.
   A caller must have already acquired a finalization-job lease before invoking
   it; it loads the conversation, performs enrichment through the postprocess
-  bulkhead, and runs external integrations.
+  bulkhead, and runs external integrations. For `SERVER_RECOVERY`, a minimal
+  structure is a typed failure before persistence. The flagged Cloud Tasks
+  worker closes that job on its first occurrence, retaining the transcript as
+  a visible completed conversation; provider and parser errors still retry.
 - `duplicate_capture.py` owns the advisory cross-source overlap policy (#3244).
   After durable finalization, it links the shorter completed capture using
   `external_data.duplicate_capture_of` plus structured overlap evidence. The

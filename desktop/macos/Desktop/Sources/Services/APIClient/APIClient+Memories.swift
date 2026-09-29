@@ -222,7 +222,6 @@ enum ServerMemoryEvidenceState: Equatable {
   case valid([ServerMemoryEvidence])
   case invalid
 }
-
 struct ServerMemory: Decodable, Identifiable {
   let id: String
   let content: String
@@ -246,6 +245,7 @@ struct ServerMemory: Decodable, Identifiable {
   let contextSummary: String?
   let isRead: Bool
   let isDismissed: Bool
+  var isLocked: Bool = false
   // Tags for filtering (e.g., ["tips", "productivity"])
   let tags: [String]
   // Reasoning behind the memory/tip (from advice system)
@@ -288,7 +288,6 @@ struct ServerMemory: Decodable, Identifiable {
     if case .valid = evidenceState { return true }
     return false
   }
-
   enum CodingKeys: String, CodingKey {
     case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning,
       headline, tier, layer, evidence
@@ -307,6 +306,7 @@ struct ServerMemory: Decodable, Identifiable {
     case contextSummary = "context_summary"
     case isRead = "is_read"
     case isDismissed = "is_dismissed"
+    case isLocked = "is_locked"
     case currentActivity = "current_activity"
     case inputDeviceName = "input_device_name"
     case windowTitle = "window_title"
@@ -384,7 +384,6 @@ struct ServerMemory: Decodable, Identifiable {
     let updatedAtString = wire?.updatedAt ?? (try? container.decode(String.self, forKey: .updatedAt))
     updatedAt = (updatedAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? createdAt
     expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
-
     func parseMemoryDate(_ key: CodingKeys) -> Date? {
       guard let raw = try? container.decode(String.self, forKey: key) else { return nil }
       return f.date(from: raw) ?? std.date(from: raw)
@@ -415,9 +414,9 @@ struct ServerMemory: Decodable, Identifiable {
     // (schema-validated); fall back to container decoding when the wire DTO
     // could not be constructed (missing required fields like uid).
     let layerValue =
-      try wire?.layer.flatMap(MemoryLayer.init(rawValue:))
-      ?? container.decodeIfPresent(MemoryLayer.self, forKey: .layer)
-    let tierValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .tier)
+      wire?.layer.flatMap(MemoryLayer.init(rawValue:))
+      ?? (try? container.decode(MemoryLayer.self, forKey: .layer))
+    let tierValue = try? container.decode(MemoryLayer.self, forKey: .tier)
     let memoryTierValue =
       try wire?.memoryTier.flatMap { MemoryLayer(rawValue: $0.rawValue) }
       ?? container.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
@@ -466,6 +465,7 @@ struct ServerMemory: Decodable, Identifiable {
     contextSummary = try container.decodeIfPresent(String.self, forKey: .contextSummary)
     isRead = try container.decodeIfPresent(Bool.self, forKey: .isRead) ?? false
     isDismissed = try container.decodeIfPresent(Bool.self, forKey: .isDismissed) ?? false
+    isLocked = wire?.isLocked ?? (try? container.decode(Bool.self, forKey: .isLocked)) ?? false
     tags = wire?.tags ?? (try? container.decode([String].self, forKey: .tags)) ?? []
     reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
     currentActivity = try container.decodeIfPresent(String.self, forKey: .currentActivity)
