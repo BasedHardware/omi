@@ -234,8 +234,8 @@ class BatchPressure:
     REFRESH_SECONDS = 5.0
     STALE_SECONDS = 15.0
     MAX_REPLICAS = 8
-    MAX_PENDING = 4
-    MAX_OLDEST_SECONDS = 1.0
+    MAX_LIVE_PENDING_PER_REPLICA = 4
+    MAX_LIVE_OLDEST_SECONDS = 0.75
 
     def __init__(self) -> None:
         self._task: asyncio.Task[None] | None = None
@@ -332,13 +332,15 @@ class BatchPressure:
             if len(ips) < min_replicas:
                 raise ValueError('Parakeet batch pool has fewer ready replicas than expected')
             responses = await asyncio.gather(*(client.get(f'http://{ip}:8080/batch/metrics') for ip in ips))
-            pending_total = 0.0
-            oldest_max = 0.0
+            busiest_live_replica = 0.0
+            oldest_live_wait = 0.0
             for response in responses:
                 response.raise_for_status()
                 metrics = response.json()
-                pending = metrics['pending_requests']
-                oldest = metrics['oldest_pending_seconds']
+                # A mixed-revision pool lacks these fields. Stand down until
+                # every ready GPU replica reports the live lane explicitly.
+                pending = metrics['live_pending_requests']
+                oldest = metrics['live_oldest_pending_seconds']
                 if any(
                     isinstance(value, bool)
                     or not isinstance(value, (int, float))
@@ -347,9 +349,14 @@ class BatchPressure:
                     for value in (pending, oldest)
                 ):
                     raise ValueError('Invalid Parakeet batch pressure sample')
-                pending_total += pending
-                oldest_max = max(oldest_max, oldest)
-            self._busy = pending_total >= self.MAX_PENDING or oldest_max >= self.MAX_OLDEST_SECONDS
+                if int(pending) != pending:
+                    raise ValueError('Invalid Parakeet live pending count')
+                busiest_live_replica = max(busiest_live_replica, pending)
+                oldest_live_wait = max(oldest_live_wait, oldest)
+            self._busy = (
+                busiest_live_replica >= self.MAX_LIVE_PENDING_PER_REPLICA
+                or oldest_live_wait >= self.MAX_LIVE_OLDEST_SECONDS
+            )
             self._observed_at = time.monotonic()
             WINDOW_PRESSURE_REFRESH.labels(outcome='pressure' if self._busy else 'healthy').inc()
         except Exception:

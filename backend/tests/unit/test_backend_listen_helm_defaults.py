@@ -187,7 +187,7 @@ def test_windowed_live_rollout_is_prod_canary_and_bounded():
         _env_value(prod, 'PARAKEET_BATCH_PRESSURE_POOL_HOST')
         == 'prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local'
     )
-    assert _env_value(prod, 'PARAKEET_BATCH_PRESSURE_MIN_REPLICAS') == '2'
+    assert _env_value(prod, 'PARAKEET_BATCH_PRESSURE_MIN_REPLICAS') == '3'
     assert _env_value(dev, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
     assert _env_value(dev, 'PARAKEET_WINDOW_ALLOCATION_PERCENT') == '1'
     assert (
@@ -197,8 +197,9 @@ def test_windowed_live_rollout_is_prod_canary_and_bounded():
     assert _env_value(dev, 'PARAKEET_BATCH_PRESSURE_MIN_REPLICAS') == '1'
     assert _env_value(dev, 'STT_SERVICE_MODELS') == _env_value(prod, 'STT_SERVICE_MODELS')
     assert _env_value(prod, 'STT_SERVICE_MODELS') == 'parakeet-window,modulate-velma-2,soniox,dg-nova-3'
+    assert _env_value(prod, 'PARAKEET_WINDOW_MAX_SESSIONS') == '8'
+    assert _env_value(dev, 'PARAKEET_WINDOW_MAX_SESSIONS') == '1'
     for values in (prod, dev):
-        assert _env_value(values, 'PARAKEET_WINDOW_MAX_SESSIONS') == '1'
         assert _env_value(values, 'PARAKEET_WINDOW_DIARIZATION') == 'false'
         assert _env_value(values, 'PARAKEET_WINDOW_PACE_SECONDS') == '6'
         assert _env_value(values, 'PARAKEET_WINDOW_MAX_CONTEXT_SECONDS') == '24'
