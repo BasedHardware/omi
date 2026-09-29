@@ -11531,4 +11531,57 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Dažus rezultātus neizdevās ielādēt';
+
+  @override
+  String get peopleSearchPlaceholder => 'Meklēt cilvēkus';
+
+  @override
+  String get peopleNotHeardYet => 'Vēl nav dzirdēts';
+
+  @override
+  String get peopleRecent => 'Nesenie';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tas noņem viņu balss paraugus, un to nevar atsaukt. Viņu replikas iepriekšējās sarunās kļūs par bezvārda runātājiem.';
+
+  @override
+  String get personTalkTime => 'Runas laiks';
+
+  @override
+  String get personLastHeard => 'Pēdējo reizi dzirdēts';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dzēst $count cilvēku?',
+      one: 'Dzēst 1 cilvēku?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Nepieciešama balss';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Personas: $count',
+      one: '1 persona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nav atbilstošu personu';
+
+  @override
+  String get deselectAll => 'Noņemt visu atlasi';
+
+  @override
+  String get voiceRecognitionSettings => 'Balss atpazīšana';
 }

@@ -11524,4 +11524,57 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Kai kurių rezultatų nepavyko įkelti';
+
+  @override
+  String get peopleSearchPlaceholder => 'Ieškoti žmonių';
+
+  @override
+  String get peopleNotHeardYet => 'Dar negirdėta';
+
+  @override
+  String get peopleRecent => 'Naujausi';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tai pašalins jų balso pavyzdžius ir to atšaukti negalima. Jų replikos ankstesniuose pokalbiuose taps be vardo kalbėtojais.';
+
+  @override
+  String get personTalkTime => 'Kalbėjimo laikas';
+
+  @override
+  String get personLastHeard => 'Paskutinį kartą girdėta';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ištrinti žmones: $count?',
+      one: 'Ištrinti 1 žmogų?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Trūksta balso';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Asmenų: $count',
+      one: '1 asmuo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Atitinkančių asmenų nėra';
+
+  @override
+  String get deselectAll => 'Atžymėti viską';
+
+  @override
+  String get voiceRecognitionSettings => 'Balso atpažinimas';
 }

@@ -3628,5 +3628,17 @@
     "places": "Vietas",
     "recaps": "Kopsavilkumi",
     "recent": "Nesenie",
-    "searchPartialFailure": "Dažus rezultātus neizdevās ielādēt"
+    "searchPartialFailure": "Dažus rezultātus neizdevās ielādēt",
+    "peopleSearchPlaceholder": "Meklēt cilvēkus",
+    "peopleNotHeardYet": "Vēl nav dzirdēts",
+    "peopleRecent": "Nesenie",
+    "deletePeopleMessage": "Tas noņem viņu balss paraugus, un to nevar atsaukt. Viņu replikas iepriekšējās sarunās kļūs par bezvārda runātājiem.",
+    "personTalkTime": "Runas laiks",
+    "personLastHeard": "Pēdējo reizi dzirdēts",
+    "deletePeopleTitle": "{count, plural, =1{Dzēst 1 cilvēku?} other{Dzēst {count} cilvēku?}}",
+    "peopleFilterNeedsVoice": "Nepieciešama balss",
+    "peopleCount": "{count, plural, =1{1 persona} other{Personas: {count}}}",
+    "noMatchingPeople": "Nav atbilstošu personu",
+    "deselectAll": "Noņemt visu atlasi",
+    "voiceRecognitionSettings": "Balss atpazīšana"
 }

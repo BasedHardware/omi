@@ -451,6 +451,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     def typed_death_reason(self) -> str | None:
         return getattr(self, '_typed_death_reason', None)
 
+    def has_untranscribed_speech(self) -> bool:
+        """Whether replay still protects speech that this leg has not emitted."""
+        return (self._first_speech_at is not None and not self._first_text_recorded) or self._has_unemitted_speech()
+
     def start(self) -> None:
         super().start()
         assert self._pump_task is not None
@@ -592,7 +596,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if self._dead:
             return
         self._dead, self._dead_reason = True, reason
-        if reason in {'first_text_deadline', 'empty_streak'}:
+        if reason in {'first_text_deadline', 'empty_streak', 'capacity_full'}:
             self._typed_death_reason = reason
         self.finish()
 

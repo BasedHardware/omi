@@ -3670,5 +3670,17 @@
     "places": "Steder",
     "recaps": "Opsummeringer",
     "recent": "Seneste",
-    "searchPartialFailure": "Nogle resultater kunne ikke indlæses"
+    "searchPartialFailure": "Nogle resultater kunne ikke indlæses",
+    "peopleSearchPlaceholder": "Søg efter personer",
+    "peopleNotHeardYet": "Endnu ikke hørt",
+    "peopleRecent": "Seneste",
+    "deletePeopleMessage": "Dette fjerner deres stemmeprøver og kan ikke fortrydes. Deres replikker i tidligere samtaler bliver til unavngivne talere.",
+    "personTalkTime": "Taletid",
+    "personLastHeard": "Sidst hørt",
+    "deletePeopleTitle": "{count, plural, =1{Slet 1 person?} other{Slet {count} personer?}}",
+    "peopleFilterNeedsVoice": "Mangler stemme",
+    "peopleCount": "{count, plural, =1{1 person} other{{count} personer}}",
+    "noMatchingPeople": "Ingen matchende personer",
+    "deselectAll": "Fravælg alle",
+    "voiceRecognitionSettings": "Stemmegenkendelse"
 }

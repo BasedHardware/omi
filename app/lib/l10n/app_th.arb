@@ -3628,5 +3628,17 @@
     "places": "สถานที่",
     "recaps": "สรุป",
     "recent": "ล่าสุด",
-    "searchPartialFailure": "โหลดผลลัพธ์บางส่วนไม่ได้"
+    "searchPartialFailure": "โหลดผลลัพธ์บางส่วนไม่ได้",
+    "peopleSearchPlaceholder": "ค้นหาบุคคล",
+    "peopleNotHeardYet": "ยังไม่เคยได้ยิน",
+    "peopleRecent": "ล่าสุด",
+    "deletePeopleMessage": "การดำเนินการนี้จะลบตัวอย่างเสียงของบุคคลนั้นและย้อนกลับไม่ได้ คำพูดในบทสนทนาที่ผ่านมาจะกลายเป็นผู้พูดที่ไม่มีชื่อ",
+    "personTalkTime": "เวลาที่พูด",
+    "personLastHeard": "ได้ยินล่าสุด",
+    "deletePeopleTitle": "{count, plural, =1{ลบ 1 คนหรือไม่?} other{ลบ {count} คนหรือไม่?}}",
+    "peopleFilterNeedsVoice": "ต้องการเสียง",
+    "peopleCount": "{count, plural, =1{1 คน} other{{count} คน}}",
+    "noMatchingPeople": "ไม่พบบุคคลที่ตรงกัน",
+    "deselectAll": "ยกเลิกการเลือกทั้งหมด",
+    "voiceRecognitionSettings": "การจดจำเสียง"
 }

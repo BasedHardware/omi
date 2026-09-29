@@ -98,6 +98,10 @@ class Person(BaseModel):
     speech_sample_transcripts: Optional[List[str]] = None
     speech_samples_version: int = 3
     voice_readiness: VoiceReadiness = VoiceReadiness.unknown
+    # Only filled by GET /v1/users/people?include_stats=true (newest conversations; never stored).
+    conversation_count: Optional[int] = None
+    last_heard_at: Optional[datetime] = None
+    talk_seconds: Optional[float] = None
 
     @model_validator(mode='before')
     @classmethod

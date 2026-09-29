@@ -11607,4 +11607,57 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Hindi ma-load ang ilang resulta';
+
+  @override
+  String get peopleSearchPlaceholder => 'Maghanap ng tao';
+
+  @override
+  String get peopleNotHeardYet => 'Hindi pa naririnig';
+
+  @override
+  String get peopleRecent => 'Kamakailan';
+
+  @override
+  String get deletePeopleMessage =>
+      'Aalisin nito ang kanilang mga voice sample at hindi na ito maibabalik. Ang kanilang mga sinabi sa mga nakaraang usapan ay magiging mga speaker na walang pangalan.';
+
+  @override
+  String get personTalkTime => 'Oras ng pagsasalita';
+
+  @override
+  String get personLastHeard => 'Huling narinig';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Burahin ang $count tao?',
+      one: 'Burahin ang 1 tao?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Kailangan ng Boses';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tao',
+      one: '1 tao',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Walang Tugmang Tao';
+
+  @override
+  String get deselectAll => 'Alisin ang Lahat ng Pili';
+
+  @override
+  String get voiceRecognitionSettings => 'Pagkilala sa Boses';
 }

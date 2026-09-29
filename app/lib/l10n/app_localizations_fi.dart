@@ -11509,4 +11509,57 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Joitakin tuloksia ei voitu ladata';
+
+  @override
+  String get peopleSearchPlaceholder => 'Etsi henkilöitä';
+
+  @override
+  String get peopleNotHeardYet => 'Ei vielä kuultu';
+
+  @override
+  String get peopleRecent => 'Viimeaikaiset';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tämä poistaa heidän ääninäytteensä, eikä sitä voi perua. Heidän repliikkinsä aiemmissa keskusteluissa muuttuvat nimettömiksi puhujiksi.';
+
+  @override
+  String get personTalkTime => 'Puheaika';
+
+  @override
+  String get personLastHeard => 'Viimeksi kuultu';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Poistetaanko $count henkilöä?',
+      one: 'Poistetaanko 1 henkilö?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Ääni puuttuu';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count henkilöä',
+      one: '1 henkilö',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Ei vastaavia henkilöitä';
+
+  @override
+  String get deselectAll => 'Poista valinnat';
+
+  @override
+  String get voiceRecognitionSettings => 'Äänentunnistus';
 }

@@ -3628,5 +3628,17 @@
     "places": "Địa điểm",
     "recaps": "Tóm tắt",
     "recent": "Gần đây",
-    "searchPartialFailure": "Không thể tải một số kết quả"
+    "searchPartialFailure": "Không thể tải một số kết quả",
+    "peopleSearchPlaceholder": "Tìm người",
+    "peopleNotHeardYet": "Chưa nghe",
+    "peopleRecent": "Gần đây",
+    "deletePeopleMessage": "Thao tác này sẽ xóa các mẫu giọng nói của họ và không thể hoàn tác. Lời họ nói trong các cuộc trò chuyện trước sẽ thành người nói không tên.",
+    "personTalkTime": "Thời gian nói",
+    "personLastHeard": "Nghe gần nhất",
+    "deletePeopleTitle": "{count, plural, =1{Xóa 1 người?} other{Xóa {count} người?}}",
+    "peopleFilterNeedsVoice": "Cần giọng nói",
+    "peopleCount": "{count, plural, =1{1 người} other{{count} người}}",
+    "noMatchingPeople": "Không có người phù hợp",
+    "deselectAll": "Bỏ chọn tất cả",
+    "voiceRecognitionSettings": "Nhận dạng giọng nói"
 }

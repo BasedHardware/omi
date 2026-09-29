@@ -11320,4 +11320,56 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get searchPartialFailure => '일부 결과를 불러오지 못했습니다';
+
+  @override
+  String get peopleSearchPlaceholder => '사람 검색';
+
+  @override
+  String get peopleNotHeardYet => '아직 듣지 못함';
+
+  @override
+  String get peopleRecent => '최근';
+
+  @override
+  String get deletePeopleMessage => '음성 샘플이 삭제되며 되돌릴 수 없습니다. 지난 대화에서 이 사람의 발언은 이름 없는 화자로 바뀝니다.';
+
+  @override
+  String get personTalkTime => '발화 시간';
+
+  @override
+  String get personLastHeard => '마지막으로 들은 날';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명을 삭제할까요?',
+      one: '1명을 삭제할까요?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => '음성 필요';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명',
+      one: '1명',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '일치하는 사람 없음';
+
+  @override
+  String get deselectAll => '모두 선택 해제';
+
+  @override
+  String get voiceRecognitionSettings => '음성 인식';
 }

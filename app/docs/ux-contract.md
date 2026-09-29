@@ -76,6 +76,7 @@ There are exactly two ways out, and they mean different things.
 | On/off setting | `OmiSwitch` in an `OmiSettingsRow` | a checkbox, a purple/green/indigo switch |
 | Settings list | `OmiSettingsGroup` of `OmiSettingsRow`s under an `OmiSectionHeader` | a hand-built row per page |
 | Search | `OmiSearchField(placeholder: l10n.searchConversations)` | a styled `TextField` per page |
+| Filters over a list | a row of `OmiFilterChip(label:, selected:, onSelected:, count:)` — one selected, accent-filled; 44 pt target | a local chip with its own colours per page |
 | Loading indicator | `OmiSpinner` (small / regular / large) | `CircularProgressIndicator(` with a local colour and stroke (`raw-spinner`) |
 
 - Every tappable control is at least **44×44 pt** (48 dp on Android is fine), including the label

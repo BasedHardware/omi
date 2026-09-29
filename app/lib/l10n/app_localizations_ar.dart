@@ -11436,4 +11436,57 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'تعذّر تحميل بعض النتائج';
+
+  @override
+  String get peopleSearchPlaceholder => 'البحث عن الأشخاص';
+
+  @override
+  String get peopleNotHeardYet => 'لم يُسمع بعد';
+
+  @override
+  String get peopleRecent => 'الأحدث';
+
+  @override
+  String get deletePeopleMessage =>
+      'يؤدي هذا إلى إزالة عيّنات صوته ولا يمكن التراجع عنه. تصبح عباراته في المحادثات السابقة متحدثين بلا أسماء.';
+
+  @override
+  String get personTalkTime => 'مدة الحديث';
+
+  @override
+  String get personLastHeard => 'آخر استماع';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'حذف الأشخاص: $count؟',
+      one: 'حذف شخص واحد؟',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'يحتاج إلى صوت';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'الأشخاص: $count',
+      one: 'شخص واحد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'لا يوجد أشخاص مطابقون';
+
+  @override
+  String get deselectAll => 'إلغاء تحديد الكل';
+
+  @override
+  String get voiceRecognitionSettings => 'التعرف على الصوت';
 }
