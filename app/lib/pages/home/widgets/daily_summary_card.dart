@@ -97,12 +97,19 @@ class DailySummaryCard extends StatelessWidget {
                         if (!hasMap && summary.overview.trim().isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Expanded(
-                            child: Text(
-                              summary.overview.trim(),
-                              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35),
-                              maxLines: 4,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            // As many whole lines as the card has room for, ending on an ellipsis.
+                            child: LayoutBuilder(builder: (context, box) {
+                              final style = OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35);
+                              final line = MediaQuery.textScalerOf(context).scale(style.fontSize!) * style.height!;
+                              final lines = (box.maxHeight / line).floor();
+                              if (lines < 1) return const SizedBox.shrink();
+                              return Text(
+                                summary.overview.trim(),
+                                style: style,
+                                maxLines: lines,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            }),
                           ),
                         ] else if (!hasMap) ...[
                           const Spacer(),

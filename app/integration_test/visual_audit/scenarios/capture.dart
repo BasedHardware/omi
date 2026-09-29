@@ -167,9 +167,12 @@ final auditPendant = BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi
 /// Mirrors HomePage's layout: the header, the Home | Tasks switcher, Home, and the floating
 /// Ask Omi row. [recaps] feeds the Daily Recaps row (none by default).
 class HomeFrame extends StatelessWidget {
-  const HomeFrame({super.key, this.recaps = _noRecaps});
+  const HomeFrame({super.key, this.recaps = _noRecaps, this.tasks});
 
   final RecentRecapsLoader recaps;
+
+  /// The Tasks page to show instead of Home (Tasks selected in the switcher; no chat bar there).
+  final Widget? tasks;
 
   @override
   Widget build(BuildContext context) {
@@ -201,15 +204,16 @@ class HomeFrame extends StatelessWidget {
       body: Stack(children: [
         Column(children: [
           HomeTabSwitcher(onTabTap: (_, __) {}),
-          Expanded(child: HomeContentPage(loadRecaps: recaps)),
+          Expanded(child: tasks ?? HomeContentPage(loadRecaps: recaps)),
         ]),
-        const HomeChatBarBackdrop(),
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: homeChatBarOffset(context),
-          child: const Row(children: [Expanded(child: _AskOmiBar()), SizedBox(width: 10), HomeRecordButton()]),
-        ),
+        if (tasks == null) const HomeChatBarBackdrop(),
+        if (tasks == null)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: homeChatBarOffset(context),
+            child: const Row(children: [Expanded(child: _AskOmiBar()), SizedBox(width: 10), HomeRecordButton()]),
+          ),
       ]),
     );
   }
@@ -311,7 +315,7 @@ final captureScenarios = <AuditScenario>[
       final recaps = [
         DailySummary(
           id: 'r1',
-          date: '${today.subtract(const Duration(days: 1)).toIso8601String().substring(0, 10)}',
+          date: today.subtract(const Duration(days: 1)).toIso8601String().substring(0, 10),
           createdAt: today,
           headline: 'Rewrite, equity, and product polish dominated',
           overview: 'Most of the day went to the v5 rewrite plan and a long equity conversation, '
@@ -321,7 +325,7 @@ final captureScenarios = <AuditScenario>[
         ),
         DailySummary(
           id: 'r2',
-          date: '${today.subtract(const Duration(days: 2)).toIso8601String().substring(0, 10)}',
+          date: today.subtract(const Duration(days: 2)).toIso8601String().substring(0, 10),
           createdAt: today,
           headline: 'Omi Reliability Talk on Stage',
           overview: '',
