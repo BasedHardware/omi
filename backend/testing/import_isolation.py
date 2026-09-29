@@ -56,6 +56,20 @@ class AutoMockModule(ModuleType):
         return mock
 
 
+def install_auto_mock_modules(names: Iterable[str]) -> None:
+    """Stub each top-level dependency with an ``AutoMockModule`` before an import.
+
+    Module-import-time companion to :func:`stub_modules` for the residual case where
+    the module under test imports optional dependencies eagerly and the stub must be
+    present before that import runs. Prefer ``stub_modules`` (fixture scope) when the
+    import does not need the fakes up front; the static checker bans direct
+    module-scope ``sys.modules`` writes in test files, so route through here instead.
+    """
+    for name in names:
+        if name not in sys.modules or not isinstance(sys.modules[name], AutoMockModule):
+            sys.modules[name] = AutoMockModule(name)
+
+
 def _set_parent_attr(name: str, module: ModuleType | None) -> None:
     if "." not in name:
         return

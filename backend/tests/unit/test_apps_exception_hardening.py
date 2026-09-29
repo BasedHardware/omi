@@ -1,29 +1,25 @@
-import sys
-import types
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from tests.unit.memory_import_isolation import (
-    AutoMockModule,
-    install_database_client_stub,
-)
+from testing.import_isolation import install_auto_mock_modules
+from tests.unit.memory_import_isolation import install_database_client_stub
 
 stub = install_database_client_stub()
 stub.run_transactional = MagicMock()
 
-for name in [
-    "anthropic",
-    "openai",
-    "pinecone",
-    "typesense",
-    "pycountry",
-    "stripe",
-    "langchain_anthropic",
-    "langchain_openai",
-    "langchain_google_genai",
-    "langchain_community",
-]:
-    if name not in sys.modules or not isinstance(sys.modules[name], AutoMockModule):
-        sys.modules[name] = AutoMockModule(name)
+install_auto_mock_modules(
+    [
+        "anthropic",
+        "openai",
+        "pinecone",
+        "typesense",
+        "pycountry",
+        "stripe",
+        "langchain_anthropic",
+        "langchain_openai",
+        "langchain_google_genai",
+        "langchain_community",
+    ]
+)
 
 import pytest
 from fastapi import HTTPException
