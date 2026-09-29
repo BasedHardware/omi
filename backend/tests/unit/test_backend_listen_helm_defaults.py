@@ -171,14 +171,23 @@ def test_windowed_live_rollout_is_prod_canary_and_bounded():
     dev = _load_values(ENV_IDENTITY_DEFAULTS['dev']['values_file'])
     # Prod connects in configured order since the 2026-09-26 Modulate incident
     # (#19069) so Soniox backs Modulate; the guard that matters is that the
-    # windowed TDT leg stays at a bounded 1% allocation there.
+    # windowed TDT leg stays on a reviewed step of the approved ramp
+    # (David, 2026-09-29), and the chart agrees with the prod runtime overlay.
     assert _env_value(prod, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
-    assert _env_value(prod, 'PARAKEET_WINDOW_ALLOCATION_PERCENT') == '1'
+    prod_allocation = _env_value(prod, 'PARAKEET_WINDOW_ALLOCATION_PERCENT')
+    assert prod_allocation in {'0', '1', '2', '5', '25', '50', '100'}
+    overlay = yaml.safe_load(
+        (Path(__file__).resolve().parents[2] / 'deploy' / 'runtime_env' / 'prod.overlay.yaml').read_text(
+            encoding='utf-8'
+        )
+    )
+    listen_env = overlay['overlay']['gke']['backend-listen']['env']
+    assert str(listen_env['PARAKEET_WINDOW_ALLOCATION_PERCENT']['value']) == prod_allocation
     assert (
         _env_value(prod, 'PARAKEET_BATCH_PRESSURE_POOL_HOST')
         == 'prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local'
     )
-    assert _env_value(prod, 'PARAKEET_BATCH_PRESSURE_MIN_REPLICAS') == '2'
+    assert _env_value(prod, 'PARAKEET_BATCH_PRESSURE_MIN_REPLICAS') == '3'
     assert _env_value(dev, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
     assert _env_value(dev, 'PARAKEET_WINDOW_ALLOCATION_PERCENT') == '1'
     assert (
@@ -188,8 +197,9 @@ def test_windowed_live_rollout_is_prod_canary_and_bounded():
     assert _env_value(dev, 'PARAKEET_BATCH_PRESSURE_MIN_REPLICAS') == '1'
     assert _env_value(dev, 'STT_SERVICE_MODELS') == _env_value(prod, 'STT_SERVICE_MODELS')
     assert _env_value(prod, 'STT_SERVICE_MODELS') == 'parakeet-window,modulate-velma-2,soniox,dg-nova-3'
+    assert _env_value(prod, 'PARAKEET_WINDOW_MAX_SESSIONS') == '8'
+    assert _env_value(dev, 'PARAKEET_WINDOW_MAX_SESSIONS') == '1'
     for values in (prod, dev):
-        assert _env_value(values, 'PARAKEET_WINDOW_MAX_SESSIONS') == '1'
         assert _env_value(values, 'PARAKEET_WINDOW_DIARIZATION') == 'false'
         assert _env_value(values, 'PARAKEET_WINDOW_PACE_SECONDS') == '6'
         assert _env_value(values, 'PARAKEET_WINDOW_MAX_CONTEXT_SECONDS') == '24'

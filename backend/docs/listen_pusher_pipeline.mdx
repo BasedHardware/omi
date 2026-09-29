@@ -530,12 +530,14 @@ the replacement provider epoch at the first unfinished sample and replays that
 audio before sending the current unsent chunk. A full ring triggers failover
 before an unfinished sample can be evicted. The replacement epoch stitches
 provider-local transcript times onto the original capture sample axis.
-Parakeet's `/batch/metrics` exports pending count and oldest queue wait;
-listen resolves every ready GPU pod through the chart's headless Service and
-polls them off the session-start path. It declines new window admissions at
-four pending requests summed across the pool or one second of oldest wait on
-any pod. A missing replica, invalid response, or stale reading stands down all
-listen processes. A partial replay retains its unaccepted tail and new audio
+Parakeet's `/batch/metrics` exports total and live-lane pending count and oldest
+queue wait. Listen resolves every ready GPU pod through the chart's headless
+Service and polls them off the session-start path. It declines new window
+admissions at four live requests pending on any replica or 0.75 seconds of
+oldest live wait. A missing replica, old server revision without live fields,
+invalid response, or stale reading stands down all listen processes. The
+window POST explicitly marks its live lane; unmarked requests remain backfill.
+A partial replay retains its unaccepted tail and new audio
 for the next vendor leg while preserving capture sample offsets. Window POSTs mark their
 request so `parakeet_prerecorded_requests_total` excludes live canary errors
 while covering the batch path used by sync backfill.
