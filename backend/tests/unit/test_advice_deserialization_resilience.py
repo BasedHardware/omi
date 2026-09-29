@@ -195,8 +195,9 @@ class TestAdviceDeserializationResilience(unittest.TestCase):
         }
         raw_stream = [self.valid_doc_1, corrupted_missing_content, self.valid_doc_2, corrupted_invalid_confidence]
 
-        with patch.object(advice_router.advice_db, "get_advice", return_value=raw_stream), \
-             patch.object(advice_router.logger, "warning") as mock_warn:
+        with patch.object(advice_router.advice_db, "get_advice", return_value=raw_stream), patch.object(
+            advice_router.logger, "warning"
+        ) as mock_warn:
             results = advice_router.get_advice(uid=self.uid)
 
             # Both valid items are preserved; corrupted items are skipped
@@ -226,8 +227,9 @@ class TestAdviceDeserializationResilience(unittest.TestCase):
         }
         req = advice_router.UpdateAdviceRequest(is_read=True)
 
-        with patch.object(advice_router.advice_db, "update_advice", return_value=bad_updated_record), \
-             patch.object(advice_router.logger, "warning") as mock_warn:
+        with patch.object(advice_router.advice_db, "update_advice", return_value=bad_updated_record), patch.object(
+            advice_router.logger, "warning"
+        ) as mock_warn:
             with self.assertRaises(advice_router.HTTPException) as ctx:
                 advice_router.update_advice("adv-1", req, uid=self.uid)
             self.assertEqual(ctx.exception.status_code, 404)
