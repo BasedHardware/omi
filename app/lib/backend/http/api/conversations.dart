@@ -367,8 +367,11 @@ class ConversationApi {
           ServerConversation.fromJson,
           fallback: recordFallback,
         )) {
-          ApiSuccess(:final data, :final rejectedRows) =>
-            ApiSuccess(data, rejectedRows: rejectedRows, truncated: truncated),
+          ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(
+              data,
+              rejectedRows: rejectedRows,
+              truncated: truncated,
+            ),
           ApiFailure(:final problem) => ApiFailure(problem),
         },
     };

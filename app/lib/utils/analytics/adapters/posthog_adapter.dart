@@ -130,6 +130,12 @@ class PostHogAnalyticsAdapter
   Future<bool> isFeatureEnabled(String key) => Posthog().isFeatureEnabled(key);
 
   @override
+  Future<Object?> getFeatureFlagPayload(String key) async {
+    final result = await Posthog().getFeatureFlagResult(key);
+    return result?.enabled == true ? result?.payload : null;
+  }
+
+  @override
   Future<String> settleIdentity(String? identity, {required bool reset}) async {
     String? distinctId;
     await _serialize(() async {

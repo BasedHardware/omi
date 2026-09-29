@@ -107,6 +107,9 @@ final class SiriBridge: SiriIndexApi {
     func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void) {
         complete({ try await SiriSnapshotStore.shared.delete(type: type, ids: ids, uid: uid) }, completion: completion)
     }
+    func repairOwnerIndex(uid: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        complete({ try await SiriSnapshotStore.shared.repairOwnerIndex(uid: uid) }, completion: completion)
+    }
     func wipe(completion: @escaping (Result<Int64, Error>) -> Void) {
         Task {
             do { completion(.success(try await SiriSnapshotStore.shared.wipeForAccountTransition())) }
@@ -315,6 +318,7 @@ final class SiriBridge: SiriIndexApi {
     func upsertTasks(uid: String, tasks: [SiriTask], completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func reconcileTasks(uid: String, tasks: [SiriTask], includeCompleted: Bool, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
+    func repairOwnerIndex(uid: String, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func wipe(completion: @escaping (Result<Int64, Error>) -> Void) { completion(.success(0)) }
     func prepareForSignOut(completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
     func generationForOwner(uid: String, completion: @escaping (Result<Int64?, Error>) -> Void) { completion(.success(nil)) }

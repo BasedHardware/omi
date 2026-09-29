@@ -9,12 +9,14 @@ import socket
 import threading
 import time
 from collections import deque
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Callable, cast
 
 import httpx
 import numpy as np
 
+from utils.executors import start_background_task
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.observability.fallback import record_fallback
 from utils.stt import streaming as st
@@ -30,6 +32,8 @@ from utils.stt.live_metrics import (
     WINDOW_HEAD_RECOVERIES,
     WINDOW_LATENCY,
     WINDOW_POSTS,
+    WINDOW_PRESSURE_REFRESH,
+    WINDOW_PRESSURE_REFUSAL,
     WINDOW_SESSION_OUTCOME,
 )
 from utils.stt.streaming import ParakeetConnectionError, ParakeetStreamingSocket, _pcm16_to_wav_bytes  # type: ignore[reportPrivateUsage]  # shared WAV encoder
@@ -227,26 +231,92 @@ class BatchPressure:
 
     REFRESH_SECONDS = 5.0
     STALE_SECONDS = 15.0
+    MAX_REPLICAS = 8
     MAX_PENDING = 4
     MAX_OLDEST_SECONDS = 1.0
 
     def __init__(self) -> None:
         self._task: asyncio.Task[None] | None = None
-        self._next_refresh = 0.0
         self._observed_at = 0.0
         self._busy = False
 
+    def start_from_env(self) -> None:
+        """Start one poller only on processes configured to serve window sessions."""
+        if os.getenv('STT_CONNECT_ORDER_FROM_CONFIG', 'false').lower() != 'true':
+            return
+        try:
+            allocation = float(os.getenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0'))
+            min_replicas = int(os.getenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2'))
+        except ValueError:
+            return
+        pool_host = os.getenv('PARAKEET_BATCH_PRESSURE_POOL_HOST', '')
+        if not math.isfinite(allocation) or allocation <= 0 or not pool_host or min_replicas < 1:
+            return
+        self.start(pool_host, min_replicas)
+
+    def start(self, pool_host: str, min_replicas: int) -> None:
+        loop = asyncio.get_running_loop()
+        if self._task is not None and not self._task.done():
+            if self._task.get_loop() is not loop:
+                raise RuntimeError('Batch pressure poller belongs to another running event loop')
+            return
+        self._observed_at = 0.0
+        self._busy = False
+        self._task = start_background_task(self._refresh_forever(pool_host, min_replicas), name='window_batch_pressure')
+
+    async def stop(self) -> None:
+        task = self._task
+        if task is not None:
+            if task.get_loop() is not asyncio.get_running_loop():
+                raise RuntimeError('Batch pressure poller must stop on its owning event loop')
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+        self._task = None
+        self._observed_at = 0.0
+        self._busy = False
+
+    async def _refresh_forever(self, pool_host: str, min_replicas: int) -> None:
+        while True:
+            try:
+                limits = httpx.Limits(
+                    max_connections=self.MAX_REPLICAS,
+                    max_keepalive_connections=self.MAX_REPLICAS,
+                    keepalive_expiry=30.0,
+                )
+                async with httpx.AsyncClient(timeout=1.0, trust_env=False, limits=limits) as client:
+                    while True:
+                        try:
+                            await self._refresh(pool_host, min_replicas, client)
+                        except Exception:
+                            # Even an unexpected refresh fault invalidates the sample, then retries.
+                            self._observed_at = 0.0
+                            WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable').inc()
+                        await asyncio.sleep(self.REFRESH_SECONDS)
+            except Exception:
+                # Client construction/closure can also fail; retry with a fresh client.
+                self._observed_at = 0.0
+                WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable').inc()
+                await asyncio.sleep(self.REFRESH_SECONDS)
+
     def allows(self, pool_host: str, min_replicas: int) -> bool:
         if not pool_host or min_replicas < 1:
+            WINDOW_PRESSURE_REFUSAL.labels(reason='unconfigured').inc()
             return False
         now = time.monotonic()
-        if now >= self._next_refresh and (self._task is None or self._task.done()):
-            self._next_refresh = now + self.REFRESH_SECONDS
-            self._task = asyncio.get_running_loop().create_task(self._refresh(pool_host, min_replicas))
         # Every listen process stands down when pool telemetry is missing/stale.
-        return self._observed_at > 0 and now - self._observed_at <= self.STALE_SECONDS and not self._busy
+        if self._observed_at <= 0:
+            WINDOW_PRESSURE_REFUSAL.labels(reason='missing').inc()
+            return False
+        if now - self._observed_at > self.STALE_SECONDS:
+            WINDOW_PRESSURE_REFUSAL.labels(reason='stale').inc()
+            return False
+        if self._busy:
+            WINDOW_PRESSURE_REFUSAL.labels(reason='pressure').inc()
+            return False
+        return True
 
-    async def _refresh(self, pool_host: str, min_replicas: int) -> None:
+    async def _refresh(self, pool_host: str, min_replicas: int, client: httpx.AsyncClient) -> None:
         try:
             if not pool_host or min_replicas < 1:
                 raise ValueError('Parakeet batch pool discovery is not configured')
@@ -255,10 +325,11 @@ class BatchPressure:
                 timeout=1.0,
             )
             ips = {address[4][0] for address in addresses}
+            if len(ips) > self.MAX_REPLICAS:
+                raise ValueError('Parakeet batch pool has more replicas than the poll cap')
             if len(ips) < min_replicas:
                 raise ValueError('Parakeet batch pool has fewer ready replicas than expected')
-            async with httpx.AsyncClient(timeout=1.0, trust_env=False) as client:
-                responses = await asyncio.gather(*(client.get(f'http://{ip}:8080/batch/metrics') for ip in ips))
+            responses = await asyncio.gather(*(client.get(f'http://{ip}:8080/batch/metrics') for ip in ips))
             pending_total = 0.0
             oldest_max = 0.0
             for response in responses:
@@ -278,9 +349,11 @@ class BatchPressure:
                 oldest_max = max(oldest_max, oldest)
             self._busy = pending_total >= self.MAX_PENDING or oldest_max >= self.MAX_OLDEST_SECONDS
             self._observed_at = time.monotonic()
+            WINDOW_PRESSURE_REFRESH.labels(outcome='pressure' if self._busy else 'healthy').inc()
         except Exception:
             # A failed replica query invalidates the fleet sample; admission stays local and nonblocking.
             self._observed_at = 0.0
+            WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable').inc()
 
 
 batch_pressure = BatchPressure()
