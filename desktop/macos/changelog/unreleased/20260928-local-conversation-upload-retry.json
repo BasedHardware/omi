@@ -1,3 +1,0 @@
-{
-  "change": "Conversations transcribed on-device now finish uploading once you are back online, even after a long outage or backend errors, instead of getting stuck on this Mac"
-}
