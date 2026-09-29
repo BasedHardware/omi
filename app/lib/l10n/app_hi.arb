@@ -3657,5 +3657,6 @@
     "deleteChatMessage": "यह पिछली चैट से हमेशा के लिए हट जाएगी।",
     "deleteChat": "चैट हटाएं",
     "appsAskWith": "Omi से पूछें इनके साथ",
-    "conversationsTodayCount": "{count, plural, =0{आज कोई बातचीत नहीं।} =1{आज 1 बातचीत।} other{आज {count} बातचीत।}}"
+    "conversationsTodayCount": "{count, plural, =0{आज कोई बातचीत नहीं।} =1{आज 1 बातचीत।} other{आज {count} बातचीत।}}",
+    "askAnythingButton": "कुछ भी पूछें"
 }

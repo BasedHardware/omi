@@ -11699,4 +11699,7 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'எதையும் கேளுங்கள்';
 }

@@ -11632,4 +11632,7 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'کچھ بھی پوچھیں';
 }

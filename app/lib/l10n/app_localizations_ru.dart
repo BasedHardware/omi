@@ -11660,4 +11660,7 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'Спросите что угодно';
 }

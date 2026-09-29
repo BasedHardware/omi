@@ -11217,5 +11217,6 @@
     "deleteChatMessage": "এটি আগের চ্যাট থেকে চিরতরে মুছে যাবে।",
     "deleteChat": "চ্যাট মুছুন",
     "appsAskWith": "যার সঙ্গে Omi-কে জিজ্ঞাসা করবেন",
-    "conversationsTodayCount": "{count, plural, =0{আজ কোনো কথোপকথন নেই।} =1{আজ ১টি কথোপকথন।} other{আজ {count}টি কথোপকথন।}}"
+    "conversationsTodayCount": "{count, plural, =0{আজ কোনো কথোপকথন নেই।} =1{আজ ১টি কথোপকথন।} other{আজ {count}টি কথোপকথন।}}",
+    "askAnythingButton": "যেকোনো কিছু জিজ্ঞাসা করুন"
 }

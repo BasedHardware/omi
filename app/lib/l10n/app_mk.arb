@@ -11217,5 +11217,6 @@
     "deleteChatMessage": "Трајно исчезнува од претходните разговори.",
     "deleteChat": "Избриши разговор",
     "appsAskWith": "Прашај го Omi со",
-    "conversationsTodayCount": "{count, plural, =0{Денес нема разговори.} =1{1 разговор денес.} other{{count} разговори денес.}}"
+    "conversationsTodayCount": "{count, plural, =0{Денес нема разговори.} =1{1 разговор денес.} other{{count} разговори денес.}}",
+    "askAnythingButton": "Праши било што"
 }

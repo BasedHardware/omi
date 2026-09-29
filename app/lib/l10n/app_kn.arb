@@ -11217,5 +11217,6 @@
     "deleteChatMessage": "ಇದು ಹಿಂದಿನ ಚಾಟ್‌ಗಳಿಂದ ಶಾಶ್ವತವಾಗಿ ಹೋಗುತ್ತದೆ.",
     "deleteChat": "ಚಾಟ್ ಅಳಿಸಿ",
     "appsAskWith": "ಇದರೊಂದಿಗೆ Omi ಅನ್ನು ಕೇಳಿ",
-    "conversationsTodayCount": "{count, plural, =0{ಇಂದು ಯಾವುದೇ ಸಂಭಾಷಣೆ ಇಲ್ಲ.} =1{ಇಂದು 1 ಸಂಭಾಷಣೆ.} other{ಇಂದು {count} ಸಂಭಾಷಣೆಗಳು.}}"
+    "conversationsTodayCount": "{count, plural, =0{ಇಂದು ಯಾವುದೇ ಸಂಭಾಷಣೆ ಇಲ್ಲ.} =1{ಇಂದು 1 ಸಂಭಾಷಣೆ.} other{ಇಂದು {count} ಸಂಭಾಷಣೆಗಳು.}}",
+    "askAnythingButton": "ಯಾವುದೇ ವಿಷಯ ಕೇಳಿ"
 }

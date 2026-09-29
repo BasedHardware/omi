@@ -3753,5 +3753,6 @@
     "deleteChatMessage": "Véglegesen eltűnik a korábbi csevegések közül.",
     "deleteChat": "Csevegés törlése",
     "appsAskWith": "Kérdezd az Omit ezzel",
-    "conversationsTodayCount": "{count, plural, =0{Ma nem volt beszélgetés.} =1{1 beszélgetés ma.} other{{count} beszélgetés ma.}}"
+    "conversationsTodayCount": "{count, plural, =0{Ma nem volt beszélgetés.} =1{1 beszélgetés ma.} other{{count} beszélgetés ma.}}",
+    "askAnythingButton": "Kérdezz bármit"
 }

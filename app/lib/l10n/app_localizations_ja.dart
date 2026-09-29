@@ -11430,4 +11430,7 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => '何でも聞いてください';
 }

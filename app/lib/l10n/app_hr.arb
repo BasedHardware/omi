@@ -11217,5 +11217,6 @@
     "deleteChatMessage": "Trajno nestaje iz prethodnih razgovora.",
     "deleteChat": "Izbriši razgovor",
     "appsAskWith": "Pitaj Omi uz",
-    "conversationsTodayCount": "{count, plural, =0{Danas nema razgovora.} =1{1 razgovor danas.} other{{count} razgovora danas.}}"
+    "conversationsTodayCount": "{count, plural, =0{Danas nema razgovora.} =1{1 razgovor danas.} other{{count} razgovora danas.}}",
+    "askAnythingButton": "Pitaj bilo što"
 }

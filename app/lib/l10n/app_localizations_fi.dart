@@ -11624,4 +11624,7 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'Kysy mitä tahansa';
 }

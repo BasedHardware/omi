@@ -11621,4 +11621,7 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'যেকোনো কিছু জিজ্ঞাসা করুন';
 }

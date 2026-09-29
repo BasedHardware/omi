@@ -11434,4 +11434,7 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => '무엇이든 물어보세요';
 }

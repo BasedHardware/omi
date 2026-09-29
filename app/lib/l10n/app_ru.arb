@@ -3692,5 +3692,6 @@
     "deleteChatMessage": "Он навсегда исчезнет из прошлых чатов.",
     "deleteChat": "Удалить чат",
     "appsAskWith": "Спрашивать Omi с помощью",
-    "conversationsTodayCount": "{count, plural, =0{Сегодня разговоров нет.} =1{1 разговор сегодня.} other{{count} разговоров сегодня.}}"
+    "conversationsTodayCount": "{count, plural, =0{Сегодня разговоров нет.} =1{1 разговор сегодня.} other{{count} разговоров сегодня.}}",
+    "askAnythingButton": "Спросите что угодно"
 }

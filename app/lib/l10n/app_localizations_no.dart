@@ -11621,4 +11621,7 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'Spør om hva som helst';
 }

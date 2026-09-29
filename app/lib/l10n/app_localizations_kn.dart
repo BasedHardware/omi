@@ -11657,4 +11657,7 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'ಯಾವುದೇ ವಿಷಯ ಕೇಳಿ';
 }

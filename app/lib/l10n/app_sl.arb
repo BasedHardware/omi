@@ -11217,5 +11217,6 @@
     "deleteChatMessage": "Iz prejšnjih klepetov bo za vedno izginil.",
     "deleteChat": "Izbriši klepet",
     "appsAskWith": "Vprašajte Omi z",
-    "conversationsTodayCount": "{count, plural, =0{Danes ni pogovorov.} =1{1 pogovor danes.} other{{count} pogovorov danes.}}"
+    "conversationsTodayCount": "{count, plural, =0{Danes ni pogovorov.} =1{1 pogovor danes.} other{{count} pogovorov danes.}}",
+    "askAnythingButton": "Vprašaj kaj koli"
 }

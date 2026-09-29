@@ -13829,5 +13829,9 @@
                 "type": "int"
             }
         }
+    },
+    "askAnythingButton": "Ask Anything",
+    "@askAnythingButton": {
+        "description": "Home button that opens AI chat, shown without an icon"
     }
 }

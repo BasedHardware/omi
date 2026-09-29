@@ -11616,4 +11616,7 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'Hỏi bất cứ điều gì';
 }

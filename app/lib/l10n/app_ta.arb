@@ -11217,5 +11217,6 @@
     "deleteChatMessage": "இது முந்தைய அரட்டைகளிலிருந்து நிரந்தரமாக நீங்கும்.",
     "deleteChat": "அரட்டையை நீக்கு",
     "appsAskWith": "இதனுடன் Omi-யிடம் கேளுங்கள்",
-    "conversationsTodayCount": "{count, plural, =0{இன்று உரையாடல்கள் இல்லை.} =1{இன்று 1 உரையாடல்.} other{இன்று {count} உரையாடல்கள்.}}"
+    "conversationsTodayCount": "{count, plural, =0{இன்று உரையாடல்கள் இல்லை.} =1{இன்று 1 உரையாடல்.} other{இன்று {count} உரையாடல்கள்.}}",
+    "askAnythingButton": "எதையும் கேளுங்கள்"
 }

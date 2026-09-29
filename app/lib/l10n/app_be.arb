@@ -11217,5 +11217,6 @@
     "deleteChatMessage": "Ён знікне з мінулых чатаў назаўсёды.",
     "deleteChat": "Выдаліць чат",
     "appsAskWith": "Пытайцеся ў Omi з",
-    "conversationsTodayCount": "{count, plural, =0{Сёння размоў няма.} =1{1 размова сёння.} other{{count} размоў сёння.}}"
+    "conversationsTodayCount": "{count, plural, =0{Сёння размоў няма.} =1{1 размова сёння.} other{{count} размоў сёння.}}",
+    "askAnythingButton": "Запытайцеся чаго-небудзь"
 }

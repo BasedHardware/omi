@@ -3657,5 +3657,6 @@
     "deleteChatMessage": "Θα φύγει οριστικά από τις προηγούμενες συνομιλίες.",
     "deleteChat": "Διαγραφή συνομιλίας",
     "appsAskWith": "Ρωτήστε το Omi με",
-    "conversationsTodayCount": "{count, plural, =0{Καμία συζήτηση σήμερα.} =1{1 συζήτηση σήμερα.} other{{count} συζητήσεις σήμερα.}}"
+    "conversationsTodayCount": "{count, plural, =0{Καμία συζήτηση σήμερα.} =1{1 συζήτηση σήμερα.} other{{count} συζητήσεις σήμερα.}}",
+    "askAnythingButton": "Ρωτήστε οτιδήποτε"
 }

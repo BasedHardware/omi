@@ -3657,5 +3657,6 @@
     "deleteChatMessage": "Ia hilang daripada sembang lepas buat selamanya.",
     "deleteChat": "Padam sembang",
     "appsAskWith": "Tanya Omi dengan",
-    "conversationsTodayCount": "{count, plural, =0{Tiada perbualan hari ini.} =1{1 perbualan hari ini.} other{{count} perbualan hari ini.}}"
+    "conversationsTodayCount": "{count, plural, =0{Tiada perbualan hari ini.} =1{1 perbualan hari ini.} other{{count} perbualan hari ini.}}",
+    "askAnythingButton": "Tanya apa sahaja"
 }

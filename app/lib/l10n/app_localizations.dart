@@ -21134,6 +21134,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =0{No conversations today.} =1{1 conversation today.} other{{count} conversations today.}}'**
   String conversationsTodayCount(int count);
+
+  /// Home button that opens AI chat, shown without an icon
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Anything'**
+  String get askAnythingButton;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

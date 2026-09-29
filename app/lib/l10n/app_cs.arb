@@ -3657,5 +3657,6 @@
     "deleteChatMessage": "Z předchozích chatů zmizí natrvalo.",
     "deleteChat": "Smazat chat",
     "appsAskWith": "Ptejte se Omi s",
-    "conversationsTodayCount": "{count, plural, =0{Dnes žádné rozhovory.} =1{1 rozhovor dnes.} other{{count} rozhovorů dnes.}}"
+    "conversationsTodayCount": "{count, plural, =0{Dnes žádné rozhovory.} =1{1 rozhovor dnes.} other{{count} rozhovorů dnes.}}",
+    "askAnythingButton": "Zeptejte se na cokoliv"
 }

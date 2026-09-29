@@ -11617,4 +11617,7 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'Küsi mida tahes';
 }

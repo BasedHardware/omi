@@ -3692,5 +3692,6 @@
     "deleteChatMessage": "Zniknie z poprzednich czatów na zawsze.",
     "deleteChat": "Usuń czat",
     "appsAskWith": "Pytaj Omi z",
-    "conversationsTodayCount": "{count, plural, =0{Dziś brak rozmów.} =1{1 rozmowa dzisiaj.} other{{count} rozmów dzisiaj.}}"
+    "conversationsTodayCount": "{count, plural, =0{Dziś brak rozmów.} =1{1 rozmowa dzisiaj.} other{{count} rozmów dzisiaj.}}",
+    "askAnythingButton": "Zapytaj o cokolwiek"
 }

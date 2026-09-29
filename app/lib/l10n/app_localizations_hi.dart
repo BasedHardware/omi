@@ -11601,4 +11601,7 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'कुछ भी पूछें';
 }

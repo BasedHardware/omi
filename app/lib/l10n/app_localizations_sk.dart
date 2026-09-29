@@ -11612,4 +11612,7 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'Spýtajte sa na čokoľvek';
 }

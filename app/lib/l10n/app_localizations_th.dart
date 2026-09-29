@@ -11555,4 +11555,7 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'ถามอะไรก็ได้';
 }

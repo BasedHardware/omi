@@ -3657,5 +3657,6 @@
     "deleteChatMessage": "Nó sẽ biến mất khỏi các cuộc trò chuyện trước vĩnh viễn.",
     "deleteChat": "Xóa cuộc trò chuyện",
     "appsAskWith": "Hỏi Omi bằng",
-    "conversationsTodayCount": "{count, plural, =0{Hôm nay chưa có cuộc trò chuyện.} =1{Hôm nay có 1 cuộc trò chuyện.} other{Hôm nay có {count} cuộc trò chuyện.}}"
+    "conversationsTodayCount": "{count, plural, =0{Hôm nay chưa có cuộc trò chuyện.} =1{Hôm nay có 1 cuộc trò chuyện.} other{Hôm nay có {count} cuộc trò chuyện.}}",
+    "askAnythingButton": "Hỏi bất cứ điều gì"
 }

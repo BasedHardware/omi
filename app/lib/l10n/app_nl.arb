@@ -3657,5 +3657,6 @@
     "deleteChatMessage": "Hij verdwijnt voorgoed uit eerdere chats.",
     "deleteChat": "Chat verwijderen",
     "appsAskWith": "Omi vragen met",
-    "conversationsTodayCount": "{count, plural, =0{Vandaag geen gesprekken.} =1{1 gesprek vandaag.} other{{count} gesprekken vandaag.}}"
+    "conversationsTodayCount": "{count, plural, =0{Vandaag geen gesprekken.} =1{1 gesprek vandaag.} other{{count} gesprekken vandaag.}}",
+    "askAnythingButton": "Vraag wat je wilt"
 }

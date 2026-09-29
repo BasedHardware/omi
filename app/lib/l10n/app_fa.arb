@@ -11217,5 +11217,6 @@
     "deleteChatMessage": "برای همیشه از گفتگوهای قبلی حذف می‌شود.",
     "deleteChat": "حذف گفتگو",
     "appsAskWith": "از Omi بپرسید با",
-    "conversationsTodayCount": "{count, plural, =0{امروز گفتگویی نبوده.} =1{۱ گفتگو امروز.} other{{count} گفتگو امروز.}}"
+    "conversationsTodayCount": "{count, plural, =0{امروز گفتگویی نبوده.} =1{۱ گفتگو امروز.} other{{count} گفتگو امروز.}}",
+    "askAnythingButton": "هر چیزی بپرسید"
 }

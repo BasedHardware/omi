@@ -11217,5 +11217,6 @@
     "deleteChatMessage": "ఇది గత చాట్‌ల నుండి శాశ్వతంగా పోతుంది.",
     "deleteChat": "చాట్ తొలగించండి",
     "appsAskWith": "వీటితో Omi ని అడగండి",
-    "conversationsTodayCount": "{count, plural, =0{ఈరోజు సంభాషణలు లేవు.} =1{ఈరోజు 1 సంభాషణ.} other{ఈరోజు {count} సంభాషణలు.}}"
+    "conversationsTodayCount": "{count, plural, =0{ఈరోజు సంభాషణలు లేవు.} =1{ఈరోజు 1 సంభాషణ.} other{ఈరోజు {count} సంభాషణలు.}}",
+    "askAnythingButton": "ఏదైనా అడగండి"
 }

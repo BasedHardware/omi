@@ -3692,5 +3692,6 @@
     "deleteChatMessage": "Chat ini hilang dari chat sebelumnya untuk selamanya.",
     "deleteChat": "Hapus chat",
     "appsAskWith": "Tanya Omi dengan",
-    "conversationsTodayCount": "{count, plural, =0{Tidak ada percakapan hari ini.} =1{1 percakapan hari ini.} other{{count} percakapan hari ini.}}"
+    "conversationsTodayCount": "{count, plural, =0{Tidak ada percakapan hari ini.} =1{1 percakapan hari ini.} other{{count} percakapan hari ini.}}",
+    "askAnythingButton": "Tanyakan apa saja"
 }

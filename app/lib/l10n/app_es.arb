@@ -3657,5 +3657,6 @@
     "deleteChatMessage": "Desaparecerá de los chats anteriores para siempre.",
     "deleteChat": "Eliminar chat",
     "appsAskWith": "Pregunta a Omi con",
-    "conversationsTodayCount": "{count, plural, =0{Ninguna conversación hoy.} =1{1 conversación hoy.} other{{count} conversaciones hoy.}}"
+    "conversationsTodayCount": "{count, plural, =0{Ninguna conversación hoy.} =1{1 conversación hoy.} other{{count} conversaciones hoy.}}",
+    "askAnythingButton": "Pregunta cualquier cosa"
 }

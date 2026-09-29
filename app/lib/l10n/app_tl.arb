@@ -11217,5 +11217,6 @@
     "deleteChatMessage": "Mawawala ito sa mga nakaraang chat nang tuluyan.",
     "deleteChat": "Burahin ang chat",
     "appsAskWith": "Tanungin si Omi gamit ang",
-    "conversationsTodayCount": "{count, plural, =0{Walang usapan ngayon.} =1{1 usapan ngayon.} other{{count} usapan ngayon.}}"
+    "conversationsTodayCount": "{count, plural, =0{Walang usapan ngayon.} =1{1 usapan ngayon.} other{{count} usapan ngayon.}}",
+    "askAnythingButton": "Tanungin ang kahit ano"
 }

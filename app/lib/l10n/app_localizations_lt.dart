@@ -11639,4 +11639,7 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'Klauskite bet ko';
 }

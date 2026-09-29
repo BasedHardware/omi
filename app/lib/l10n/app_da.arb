@@ -3699,5 +3699,6 @@
     "deleteChatMessage": "Den forsvinder fra tidligere chats for altid.",
     "deleteChat": "Slet chat",
     "appsAskWith": "Spørg Omi med",
-    "conversationsTodayCount": "{count, plural, =0{Ingen samtaler i dag.} =1{1 samtale i dag.} other{{count} samtaler i dag.}}"
+    "conversationsTodayCount": "{count, plural, =0{Ingen samtaler i dag.} =1{1 samtale i dag.} other{{count} samtaler i dag.}}",
+    "askAnythingButton": "Spørg om hvad som helst"
 }

@@ -3657,5 +3657,6 @@
     "deleteChatMessage": "Desapareixerà dels xats anteriors per sempre.",
     "deleteChat": "Suprimeix el xat",
     "appsAskWith": "Pregunta a Omi amb",
-    "conversationsTodayCount": "{count, plural, =0{Avui cap conversa.} =1{1 conversa avui.} other{{count} converses avui.}}"
+    "conversationsTodayCount": "{count, plural, =0{Avui cap conversa.} =1{1 conversa avui.} other{{count} converses avui.}}",
+    "askAnythingButton": "Pregunta qualsevol cosa"
 }

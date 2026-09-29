@@ -11217,5 +11217,6 @@
     "deleteChatMessage": "הוא ייעלם מהצ'אטים הקודמים לתמיד.",
     "deleteChat": "מחיקת הצ'אט",
     "appsAskWith": "לשאול את Omi עם",
-    "conversationsTodayCount": "{count, plural, =0{אין שיחות היום.} =1{שיחה אחת היום.} other{{count} שיחות היום.}}"
+    "conversationsTodayCount": "{count, plural, =0{אין שיחות היום.} =1{שיחה אחת היום.} other{{count} שיחות היום.}}",
+    "askAnythingButton": "שאל כל דבר"
 }

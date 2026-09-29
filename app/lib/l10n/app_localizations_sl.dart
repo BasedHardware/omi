@@ -11651,4 +11651,7 @@ class AppLocalizationsSl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'Vprašaj kaj koli';
 }

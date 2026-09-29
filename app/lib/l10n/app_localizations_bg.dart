@@ -11664,4 +11664,7 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get askAnythingButton => 'Попитайте каквото и да е';
 }
