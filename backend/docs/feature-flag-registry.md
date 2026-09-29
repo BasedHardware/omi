@@ -135,6 +135,8 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_NOTES_V2_ENABLED` | Select notes-v2 summary versus legacy structure extraction | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-15 | unowned |
 | `CONVERSATION_OCR_CONTEXT_ENABLED` | Read OCR meeting identity during conversation processing | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
 | `CONVERSATION_RELEVANCE_JEV_ENABLED` | Enable Jev conversation relevance decisions | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-23 | unowned |
+| `CONVERSATION_SMART_MERGE_MODE` | Fold a finished pendant conversation into its predecessor when Jev says same occasion (off\|shadow\|merge) | backend | env | closed | — | — | — | — | pending | 2026-10-29 | dazheng |
+| `CONVERSATION_SMART_MERGE_UID_ALLOWLIST` | Limit smart merge to listed UIDs; empty admits every user | backend | env | closed | — | — | — | — | pending | 2026-10-29 | dazheng |
 | `ContextBucketsFeature.isEnabled` | Beta-by-bundle context bucket pipeline, stable off | macos | bundle | open | — | — | — | — | pending | 2026-10-23 | unowned |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering on selected hosts | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | pending | 2026-10-23 | unowned |
 | `FREE_TIER_LOCAL_PROCESSING` | Enable on-device processing for eligible free users | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
@@ -290,6 +292,8 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CAPTURE_JEV_SHADOW_EXPIRY` — Shorten the Jev capture shadow hard deadline (fail: closed)
 - `CAPTURE_JEV_SHADOW_GLOBAL_DAILY_CAP` — Global daily Jev capture shadow call budget (fail: closed)
 - `CAPTURE_JEV_SHADOW_USER_DAILY_CAP` — Per-user daily Jev capture shadow call budget (fail: closed)
+- `CONVERSATION_SMART_MERGE_MODE` — Fold a finished pendant conversation into its predecessor when Jev says same occasion (off|shadow|merge) (fail: closed)
+- `CONVERSATION_SMART_MERGE_UID_ALLOWLIST` — Limit smart merge to listed UIDs; empty admits every user (fail: closed)
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
