@@ -316,25 +316,30 @@ class TestDailySummariesResilience(unittest.TestCase):
             self.assertTrue(deleted)
             self.assertNotIn("s1", fake_db._collections[daily_summaries.DAILY_SUMMARIES_COLLECTION])
 
-    def test_set_daily_summary_visibility_guards_inputs_and_missing_doc(self):
-        """set_daily_summary_visibility guards empty inputs and handles missing documents gracefully."""
+    def test_set_daily_summary_visibility_guards_inputs_and_propagates_failures(self):
+        """set_daily_summary_visibility guards empty inputs and propagates document update failures."""
         summaries = {"s1": {"id": "s1", "visibility": "private"}}
         fake_db = _FakeDb(summaries=summaries)
         with self._patch_db(fake_db):
-            self.assertFalse(daily_summaries.set_daily_summary_visibility("", "s1", "public"))
-            self.assertFalse(daily_summaries.set_daily_summary_visibility("u1", "", "public"))
-            self.assertFalse(daily_summaries.set_daily_summary_visibility("u1", "s1", ""))
-            self.assertFalse(daily_summaries.set_daily_summary_visibility("u1", "s/1", "public"))
+            with self.assertRaises(ValueError):
+                daily_summaries.set_daily_summary_visibility("", "s1", "public")
+            with self.assertRaises(ValueError):
+                daily_summaries.set_daily_summary_visibility("u1", "", "public")
+            with self.assertRaises(ValueError):
+                daily_summaries.set_daily_summary_visibility("u1", "s1", "")
+            with self.assertRaises(ValueError):
+                daily_summaries.set_daily_summary_visibility("u1", "s/1", "public")
 
             # Success on existing doc
-            self.assertTrue(daily_summaries.set_daily_summary_visibility("u1", "s1", "public"))
+            daily_summaries.set_daily_summary_visibility("u1", "s1", "public")
             self.assertEqual(summaries["s1"]["visibility"], "public")
 
-            # Missing doc returns False without crashing
-            self.assertFalse(daily_summaries.set_daily_summary_visibility("u1", "nonexistent", "public"))
+            # Missing doc raises exception so caller does not update cache with mismatched state
+            with self.assertRaises(KeyError):
+                daily_summaries.set_daily_summary_visibility("u1", "nonexistent", "public")
 
     def test_get_summaries_count_handles_aggregation_and_empty_uid(self):
-        """get_summaries_count returns 0 on invalid uid or counts existing summaries correctly."""
+        """get_summaries_count returns 0 on invalid uid, counts correctly, and propagates query failure."""
         summaries = {"s1": {"id": "s1"}, "s2": {"id": "s2"}}
         fake_db = _FakeDb(summaries=summaries)
         with self._patch_db(fake_db):
@@ -342,8 +347,8 @@ class TestDailySummariesResilience(unittest.TestCase):
             self.assertEqual(daily_summaries.get_summaries_count("u/1"), 0)
             self.assertEqual(daily_summaries.get_summaries_count("u1"), 2)
 
-    def test_upsert_desktop_daily_usage_merges_counters_by_max(self):
-        """upsert_desktop_daily_usage applies max() over running counters and guards inputs."""
+    def test_upsert_desktop_daily_usage_merges_counters_and_propagates_failures(self):
+        """upsert_desktop_daily_usage applies max() over counters, guards inputs, and propagates failures."""
         usage = {
             "2026-09-28__dev-1": {
                 "date": "2026-09-28",
@@ -355,19 +360,17 @@ class TestDailySummariesResilience(unittest.TestCase):
         }
         fake_db = _FakeDb(usage=usage)
         with self._patch_db(fake_db):
-            self.assertFalse(
+            with self.assertRaises(ValueError):
                 daily_summaries.upsert_desktop_daily_usage(
                     "", "2026-09-28", "America/New_York", "dev-1", {"watching_seconds": 150}
                 )
-            )
-            self.assertFalse(
+            with self.assertRaises(ValueError):
                 daily_summaries.upsert_desktop_daily_usage(
                     "u1", "2026-09-28", "America/New_York", "dev/1", {"watching_seconds": 150}
                 )
-            )
 
             # Update: watching_seconds increases, listening_seconds is lower than existing (must stay 300)
-            success = daily_summaries.upsert_desktop_daily_usage(
+            daily_summaries.upsert_desktop_daily_usage(
                 "u1",
                 "2026-09-28",
                 "America/New_York",
@@ -379,7 +382,6 @@ class TestDailySummariesResilience(unittest.TestCase):
                     "ptt_turns": -5,  # negative should be clamped to 0
                 },
             )
-            self.assertTrue(success)
             doc = usage["2026-09-28__dev-1"]
             self.assertEqual(doc["watching_seconds"], 200)
             self.assertEqual(doc["listening_seconds"], 300)  # max(300, 100)
@@ -415,6 +417,32 @@ class TestDailySummariesResilience(unittest.TestCase):
             self.assertEqual(totals["watching_seconds"], 150)
             self.assertEqual(totals["listening_seconds"], 350)
             self.assertEqual(totals["proactive_cards_shown"], 0)
+
+
+    def test_upsert_desktop_daily_usage_propagates_contention_failure(self):
+        """upsert_desktop_daily_usage raises when contention retries or transactions fail."""
+        fake_db = _FakeDb()
+        with self._patch_db(fake_db), patch.object(
+            daily_summaries, "run_with_transaction_contention_retry", side_effect=RuntimeError("Contention exhausted")
+        ):
+            with self.assertRaises(RuntimeError):
+                daily_summaries.upsert_desktop_daily_usage(
+                    "u1", "2026-09-28", "America/New_York", "dev-1", {"watching_seconds": 150}
+                )
+
+    def test_get_summaries_count_propagates_aggregation_error(self):
+        """get_summaries_count propagates aggregation failures without unbounded collection scans."""
+        mock_user = MagicMock()
+        mock_collection = MagicMock()
+        mock_user.collection.return_value = mock_collection
+        mock_collection.count.side_effect = RuntimeError("Aggregation service unavailable")
+
+        fake_db = MagicMock()
+        fake_db.collection.return_value.document.return_value = mock_user
+
+        with self._patch_db(fake_db):
+            with self.assertRaises(RuntimeError):
+                daily_summaries.get_summaries_count("u1")
 
 
 if __name__ == "__main__":

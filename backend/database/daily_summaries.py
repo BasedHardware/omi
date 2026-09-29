@@ -69,13 +69,13 @@ def upsert_desktop_daily_usage(
     timezone_name: str,
     client_device_id: str,
     counters: Dict[str, int],
-) -> bool:
+) -> None:
     """Atomically merge one device's running daily counters by maximum value."""
     clean_uid = _clean_id(uid)
     clean_date = _clean_str(date)
     clean_device_id = _clean_id(client_device_id)
     if not clean_uid or not clean_date or not clean_device_id:
-        return False
+        raise ValueError('uid, date, and client_device_id must be valid non-empty identifiers')
 
     user_ref = db.collection('users').document(clean_uid)
     doc_id = f'{clean_date}__{clean_device_id}'
@@ -105,14 +105,9 @@ def upsert_desktop_daily_usage(
             payload[field] = max(previous_value, curr_value)
         write_transaction.set(usage_ref, payload)
 
-    try:
-        run_with_transaction_contention_retry(
-            db.transaction, merge_running_totals, operation_name='upsert_desktop_daily_usage'
-        )
-        return True
-    except Exception as exc:
-        logger.warning(f"upsert_desktop_daily_usage failed for uid={clean_uid} doc_id={doc_id}: {exc}")
-        return False
+    run_with_transaction_contention_retry(
+        db.transaction, merge_running_totals, operation_name='upsert_desktop_daily_usage'
+    )
 
 
 def get_desktop_daily_usage(uid: str, date: str) -> Dict[str, int]:
@@ -331,22 +326,17 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
     return True
 
 
-def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> bool:
+def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> None:
     """Update visibility ('public' or 'private') for a daily summary."""
     clean_uid = _clean_id(uid)
     clean_summary_id = _clean_id(summary_id)
     clean_visibility = _clean_str(visibility)
     if not clean_uid or not clean_summary_id or not clean_visibility:
-        return False
+        raise ValueError('uid, summary_id, and visibility must be valid non-empty identifiers')
 
     user_ref = db.collection('users').document(clean_uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(clean_summary_id)
-    try:
-        summary_ref.update({'visibility': clean_visibility})
-        return True
-    except Exception as exc:
-        logger.warning(f"set_daily_summary_visibility failed for summary_id={clean_summary_id}: {exc}")
-        return False
+    summary_ref.update({'visibility': clean_visibility})
 
 
 def get_summaries_count(uid: str) -> int:
@@ -364,13 +354,6 @@ def get_summaries_count(uid: str) -> int:
         return 0
 
     user_ref = db.collection('users').document(clean_uid)
-    try:
-        count_query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).count()
-        result = count_query.get()
-        return int(result[0][0].value or 0)
-    except Exception as exc:
-        logger.warning(f"get_summaries_count aggregation failed for uid={clean_uid}: {exc}")
-        try:
-            return len(list(user_ref.collection(DAILY_SUMMARIES_COLLECTION).stream()))
-        except Exception:
-            return 0
+    count_query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).count()
+    result = count_query.get()
+    return int(result[0][0].value or 0)
