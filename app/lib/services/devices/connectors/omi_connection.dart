@@ -910,18 +910,23 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
-  /// Serial values that identify no unit: the firmware's DIS fallback string
-  /// and common unset markers. Hashing one of these would merge every unit
-  /// that reports it into a single analytics hardware_id.
-  static const Set<String> _placeholderSerials = {'unknown', 'none', 'n/a', 'na', 'null', 'default'};
+  /// CV1 publishes its nRF FICR device ID as exactly 16 hex characters.
+  /// Only that shape is accepted: this connection also serves other
+  /// Omi-protocol devices, and any constant or fallback serial they report
+  /// (e.g. the firmware's "unknown") would merge every unit into one
+  /// analytics hardware_id.
+  static final RegExp _unitIdPattern = RegExp(r'^[0-9A-F]{16}$');
 
-  /// Parses a DIS Serial Number String read, returning null when it is empty,
-  /// a placeholder, or a run of a single repeated character (e.g. all zeros).
+  /// Bounds the serial read so a missing native callback cannot stall setup.
+  static const Duration _serialReadTimeout = Duration(seconds: 3);
+
+  /// Parses a DIS Serial Number String read into a CV1 unit ID, or null when
+  /// it is not a 16-hex-character ID or is a single repeated digit (unset FICR).
   @visibleForTesting
   static String? parseSerialNumber(List<int> value) {
     if (value.isEmpty) return null;
-    final serial = String.fromCharCodes(value).replaceAll('\u0000', '').trim();
-    if (serial.isEmpty || _placeholderSerials.contains(serial.toLowerCase())) return null;
+    final serial = String.fromCharCodes(value).replaceAll('\u0000', '').trim().toUpperCase();
+    if (!_unitIdPattern.hasMatch(serial)) return null;
     if (serial.split('').toSet().length == 1) return null;
     return serial;
   }
@@ -987,10 +992,9 @@ class OmiDeviceConnection extends DeviceConnection {
       // hardware ID serves it here; older firmware has no such characteristic
       // and the transport returns an empty read, leaving serialNumber unset.
       try {
-        final serialValue = await transport.readCharacteristic(
-          deviceInformationServiceUuid,
-          serialNumberCharacteristicUuid,
-        );
+        final serialValue = await transport
+            .readCharacteristic(deviceInformationServiceUuid, serialNumberCharacteristicUuid)
+            .timeout(_serialReadTimeout);
         final serial = parseSerialNumber(serialValue);
         if (serial != null) {
           deviceInfo['serialNumber'] = serial;

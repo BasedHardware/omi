@@ -87,6 +87,12 @@ void main() {
       expect(device.serialNumber, isNull);
     });
 
+    test('a non-CV1 serial from another Omi-protocol device is ignored', () async {
+      final device = await _resolve(_DisTransport(_cv1Reads(serial: 'SN-0001')));
+
+      expect(device.serialNumber, isNull);
+    });
+
     test('a failing serial read does not drop the other DIS fields', () async {
       final device = await _resolve(_DisTransport(_cv1Reads(serial: '1A2B3C4D5E6F7081'), throwOnSerial: true));
 
@@ -97,14 +103,26 @@ void main() {
   });
 
   group('parseSerialNumber', () {
-    test('rejects empty, placeholder and single-character-run values', () {
-      for (final value in ['', '   ', 'unknown', 'UNKNOWN', 'None', 'n/a', '0000000000000000', 'FFFFFFFFFFFFFFFF']) {
+    test('accepts only a 16-hex-character unit ID', () {
+      for (final value in [
+        '',
+        '   ',
+        'unknown',
+        'None',
+        'Based Hardware',
+        'OMI-SERIAL-001',
+        '1A2B3C4D5E6F708',
+        '1A2B3C4D5E6F70812',
+        '1A2B3C4D5E6F708G',
+        '0000000000000000',
+        'FFFFFFFFFFFFFFFF',
+      ]) {
         expect(OmiDeviceConnection.parseSerialNumber(value.codeUnits), isNull, reason: value);
       }
     });
 
-    test('trims whitespace and NUL padding', () {
-      expect(OmiDeviceConnection.parseSerialNumber([...' 1A2B3C4D5E6F7081'.codeUnits, 0, 0]), '1A2B3C4D5E6F7081');
+    test('normalizes case, whitespace and NUL padding', () {
+      expect(OmiDeviceConnection.parseSerialNumber([...' 1a2b3c4d5e6f7081'.codeUnits, 0, 0]), '1A2B3C4D5E6F7081');
     });
   });
 }
