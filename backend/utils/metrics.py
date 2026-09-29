@@ -388,7 +388,16 @@ def record_lazy_desktop_deferral(*, event: str) -> None:
 # and `reason="model_error"` is the model tier failing open to keep.
 CONVERSATION_RELEVANCE_LABELS = {
     'trigger': frozenset(
-        {'capture_end', 'client_finalize', 'sync_update', 'first_open', 'user_reprocess', 'merge', 'sync_intake'}
+        {
+            'capture_end',
+            'client_finalize',
+            'sync_update',
+            'first_open',
+            'user_reprocess',
+            'merge',
+            'sync_intake',
+            'smart_merge',
+        }
     ),
     'verdict': frozenset({'keep', 'discard'}),
     'decided_by': frozenset({'policy', 'user', 'rule', 'model', 'jev', 'override'}),
@@ -426,7 +435,15 @@ def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str
 # decision, never a user; every non-success outcome means the caller kept its
 # safe default.
 JEV_DECISION_LABELS = {
-    'lane': frozenset({'conversation_relevance', 'memory_owner', 'capture_same_scene', 'capture_resummary'}),
+    'lane': frozenset(
+        {
+            'conversation_relevance',
+            'memory_owner',
+            'capture_same_scene',
+            'capture_resummary',
+            'conversation_smart_merge',
+        }
+    ),
     'outcome': frozenset({'success', 'unconfigured', 'timeout', 'transport_error', 'http_error', 'malformed'}),
 }
 
@@ -500,6 +517,73 @@ def record_memory_owner_jev(outcome: str) -> None:
     """Never raises: observability must not change a capture outcome."""
     try:
         MEMORY_OWNER_JEV_TOTAL.labels(outcome=outcome if outcome in MEMORY_OWNER_JEV_OUTCOMES else 'other').inc()
+    except Exception:
+        pass
+
+
+# Folding a finished pendant conversation into its predecessor
+# (utils/conversations/smart_merge.py, CONVERSATION_SMART_MERGE_MODE). `decision`
+# is merge/keep for a Jev answer and skip when the pair never reached Jev;
+# `reason` is a bounded rule or outcome id; `gap_bucket` is the recorded gap.
+CONVERSATION_SMART_MERGE_LABELS = {
+    'mode': frozenset({'shadow', 'merge'}),
+    'decision': frozenset({'merge', 'keep', 'skip'}),
+    'gap_bucket': frozenset({'2_5m', '5_15m', '15_30m', '30_60m', 'none'}),
+}
+CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES = frozenset({'refreshed', 'fenced', 'lease_busy', 'failed'})
+
+CONVERSATION_SMART_MERGE_DECISION_TOTAL = Counter(
+    'omi_conversation_smart_merge_decision_total',
+    'Smart-merge decisions for finished conversations by mode, decision, bounded reason and recorded-gap bucket. '
+    'Never labeled by uid. Per-pod; sum() across jobs.',
+    ['mode', 'decision', 'reason', 'gap_bucket'],
+)
+CONVERSATION_SMART_MERGE_SCORE = Histogram(
+    'omi_conversation_smart_merge_score',
+    'Jev P(same occasion) for smart-merge candidate pairs, by mode (threshold 0.35).',
+    ['mode'],
+    buckets=(0.05, 0.1, 0.2, 0.25, 0.3, 0.325, 0.35, 0.375, 0.4, 0.5, 0.7, 1),
+)
+CONVERSATION_SMART_MERGE_REFRESH_TOTAL = Counter(
+    'omi_conversation_smart_merge_refresh_total',
+    'Survivor refreshes after a smart merge by outcome. Never labeled by uid.',
+    ['outcome'],
+)
+
+
+def _smart_merge_gap_bucket(gap_seconds: float | None) -> str:
+    if gap_seconds is None or gap_seconds < 120 or gap_seconds > 3600:
+        return 'none'
+    for limit, bucket in ((300, '2_5m'), (900, '5_15m'), (1800, '15_30m')):
+        if gap_seconds < limit:
+            return bucket
+    return '30_60m'
+
+
+def record_conversation_smart_merge(
+    *, mode: str, decision: str, reason: str, gap_seconds: float | None = None, p_same: float | None = None
+) -> None:
+    """Never raises: observability must not change a finalization outcome."""
+    try:
+        labels = {
+            name: value if value in CONVERSATION_SMART_MERGE_LABELS[name] else 'other'
+            for name, value in (('mode', mode), ('decision', decision))
+        }
+        labels['reason'] = reason if _RELEVANCE_REASON.match(reason) else 'other'
+        labels['gap_bucket'] = _smart_merge_gap_bucket(gap_seconds)
+        CONVERSATION_SMART_MERGE_DECISION_TOTAL.labels(**labels).inc()
+        if p_same is not None:
+            CONVERSATION_SMART_MERGE_SCORE.labels(mode=labels['mode']).observe(p_same)
+    except Exception:
+        pass
+
+
+def record_conversation_smart_merge_refresh(outcome: str) -> None:
+    """Never raises: observability must not change a finalization outcome."""
+    try:
+        CONVERSATION_SMART_MERGE_REFRESH_TOTAL.labels(
+            outcome=outcome if outcome in CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES else 'other'
+        ).inc()
     except Exception:
         pass
 
