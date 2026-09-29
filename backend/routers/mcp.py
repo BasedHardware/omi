@@ -699,17 +699,25 @@ class SimpleActionItem(BaseModel):
     updated_at: Optional[datetime] = None
     deleted: Optional[bool] = None
 
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
 
-def _validate_simple_action_items(items: Sequence[Any], uid: str) -> List[SimpleActionItem]:
+
+def _validate_simple_action_items(items: Sequence[Any], uid: str) -> List[dict]:
     """Validate each action item individually so one malformed row cannot 500 the whole page."""
-    valid_items: List[SimpleActionItem] = []
+    valid_items: List[dict] = []
     for item in items:
-        if not isinstance(item, dict) or not item.get("id"):
+        if not isinstance(item, (dict, SimpleActionItem)):
             continue
         try:
-            valid_items.append(SimpleActionItem.model_validate(item))
+            if isinstance(item, dict):
+                SimpleActionItem.model_validate(item)
+                valid_items.append(item)
+            else:
+                valid_items.append(item.model_dump())
         except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
-            logger.warning(f"Skipping malformed action item {item.get('id', 'unknown')} for uid {uid}: {e}")
+            item_id = item.get("id") if isinstance(item, dict) else getattr(item, "id", "unknown")
+            logger.warning(f"Skipping malformed action item {item_id} for uid {uid}: {e}")
             continue
     return valid_items
 
@@ -937,6 +945,9 @@ class SimplePerson(BaseModel):
     created_at: Optional[datetime] = None
     speech_sample_transcripts: List[str] = []
 
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
+
 
 @router.get("/v1/mcp/people", response_model=List[SimplePerson], tags=["mcp"])
 def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
@@ -947,14 +958,19 @@ def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
     assert spec is not None
     result = spec.handler(uid, {}, None)
     raw_people = result.get("people", []) if isinstance(result, dict) else []
-    valid_people: List[SimplePerson] = []
+    valid_people: List[dict] = []
     for person in raw_people:
-        if not isinstance(person, dict) or not person.get("id"):
+        if not isinstance(person, (dict, SimplePerson)):
             continue
         try:
-            valid_people.append(SimplePerson.model_validate(person))
+            if isinstance(person, dict):
+                SimplePerson.model_validate(person)
+                valid_people.append(person)
+            else:
+                valid_people.append(person.model_dump())
         except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
-            logger.warning(f"Skipping malformed person {person.get('id', 'unknown')} for uid {uid}: {e}")
+            person_id = person.get("id") if isinstance(person, dict) else getattr(person, "id", "unknown")
+            logger.warning(f"Skipping malformed person {person_id} for uid {uid}: {e}")
             continue
     return valid_people
 

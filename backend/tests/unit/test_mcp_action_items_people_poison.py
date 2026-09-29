@@ -186,9 +186,9 @@ class TestGetActionItemsPoisonPage:
             result = rest.get_action_items(resp, uid=UID)
 
         assert len(result) == 2
-        assert [item.id for item in result] == ["ai-1", "ai-2"]
-        assert result[0].description == "Review PR"
-        assert result[1].description == "Submit report"
+        assert [item["id"] for item in result] == ["ai-1", "ai-2"]
+        assert result[0]["description"] == "Review PR"
+        assert result[1]["description"] == "Submit report"
         assert resp.headers.get("X-Next-Cursor") == "cursor-123"
 
     def test_get_action_items_sync_feed_skips_malformed_records(self):
@@ -205,7 +205,7 @@ class TestGetActionItemsPoisonPage:
             result = rest.get_action_items(resp, updated_since="2026-06-01T00:00:00Z", uid=UID)
 
         assert len(result) == 1
-        assert result[0].id == "ai-sync-1"
+        assert result[0]["id"] == "ai-sync-1"
         assert resp.headers.get("X-Next-Cursor") == "next-sync-cursor"
 
     def test_get_action_items_all_valid(self):
@@ -221,7 +221,7 @@ class TestGetActionItemsPoisonPage:
             result = rest.get_action_items(_response(), uid=UID)
 
         assert len(result) == 2
-        assert [item.id for item in result] == ["ai-1", "ai-2"]
+        assert [item["id"] for item in result] == ["ai-1", "ai-2"]
 
 
 class TestSearchActionItemsPoisonPage:
@@ -241,8 +241,8 @@ class TestSearchActionItemsPoisonPage:
             result = rest.search_action_items("groceries", uid=UID)
 
         assert len(result) == 1
-        assert result[0].id == "ai-search-1"
-        assert result[0].description == "Buy groceries"
+        assert result[0]["id"] == "ai-search-1"
+        assert result[0]["description"] == "Buy groceries"
 
 
 class TestGetPeoplePoisonPage:
@@ -260,9 +260,9 @@ class TestGetPeoplePoisonPage:
             result = rest.get_people(uid=UID)
 
         assert len(result) == 2
-        assert [p.id for p in result] == ["person-1", "person-2"]
-        assert result[0].name == "Bob"
-        assert result[1].name == "Charlie"
+        assert [p["id"] for p in result] == ["person-1", "person-2"]
+        assert result[0]["name"] == "Bob"
+        assert result[1]["name"] == "Charlie"
 
     def test_get_people_all_valid(self):
         records = [
@@ -274,7 +274,7 @@ class TestGetPeoplePoisonPage:
             result = rest.get_people(uid=UID)
 
         assert len(result) == 2
-        assert [p.id for p in result] == ["p-1", "p-2"]
+        assert [p["id"] for p in result] == ["p-1", "p-2"]
 
 
 class TestASTValidationGuards:
