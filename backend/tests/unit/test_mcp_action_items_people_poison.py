@@ -282,4 +282,6 @@ class TestASTValidationGuards:
                         elif isinstance(sub.func, ast.Attribute) and "validate" in sub.func.attr.lower():
                             validated_funcs.add(node.name)
 
-        assert validated_funcs == handler_names, f"Expected all handlers to call validation: {handler_names - validated_funcs}"
+        assert (
+            validated_funcs == handler_names
+        ), f"Expected all handlers to call validation: {handler_names - validated_funcs}"
