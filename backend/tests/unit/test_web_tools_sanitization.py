@@ -25,13 +25,9 @@ async def test_connect_error_sanitized(caplog):
 
     assert "10.0.0.1" not in res
     assert "secret_internal_host" not in res
-    assert (
-        res
-        == "Error: Could not connect to the specified URL. Please check that the URL is valid and accessible."
-    )
+    assert res == "Error: Could not connect to the specified URL. Please check that the URL is valid and accessible."
     assert any(
-        record.levelname == "WARNING"
-        and "fetch_url_tool - connection error fetching" in record.message
+        record.levelname == "WARNING" and "fetch_url_tool - connection error fetching" in record.message
         for record in caplog.records
     )
 
@@ -50,14 +46,9 @@ async def test_generic_exception_sanitized(caplog):
         res = await web_tools.fetch_url_tool.coroutine("https://example.com/db")
 
     assert "/internal/certs/key.pem" not in res
-    assert (
-        res
-        == "Error: An error occurred while fetching the URL. Please verify the URL and try again later."
-    )
+    assert res == "Error: An error occurred while fetching the URL. Please verify the URL and try again later."
     assert any(
-        record.levelname == "ERROR"
-        and "database pool connection failed" in record.message
-        for record in caplog.records
+        record.levelname == "ERROR" and "database pool connection failed" in record.message for record in caplog.records
     )
 
 
@@ -77,8 +68,7 @@ async def test_httpx_timeout_sanitized(caplog):
     assert "sk-999" not in res
     assert res == "Error: The request to the specified URL timed out."
     assert any(
-        record.levelname == "WARNING"
-        and "fetch_url_tool - timeout fetching" in record.message
+        record.levelname == "WARNING" and "fetch_url_tool - timeout fetching" in record.message
         for record in caplog.records
     )
 
@@ -97,8 +87,7 @@ async def test_asyncio_timeout_sanitized(caplog):
 
     assert res == "Error: The request to the specified URL timed out."
     assert any(
-        record.levelname == "WARNING"
-        and "fetch_url_tool - timeout fetching" in record.message
+        record.levelname == "WARNING" and "fetch_url_tool - timeout fetching" in record.message
         for record in caplog.records
     )
 
