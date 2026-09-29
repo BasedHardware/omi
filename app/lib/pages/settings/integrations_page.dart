@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
+import 'package:omi/pages/apps/add_mcp_server_page.dart';
+import 'package:omi/pages/apps/explore_install_page.dart';
+import 'package:omi/providers/app_provider.dart';
 import 'package:omi/pages/settings/apple_health_detail_page.dart';
 import 'package:omi/pages/settings/integration_selection_card.dart';
 import 'package:omi/providers/integration_provider.dart';
@@ -116,7 +121,19 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     // Schedule loading for after the first frame to avoid setState during build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadFromBackend();
+      unawaited(_loadApps());
     });
+  }
+
+  /// The app catalog below the connected services (what the Apps tab loaded).
+  Future<void> _loadApps() async {
+    try {
+      final appProvider = context.read<AppProvider>();
+      if (appProvider.apps.isEmpty) await appProvider.getApps();
+      if (mounted && appProvider.popularApps.isEmpty) await appProvider.getPopularApps();
+    } catch (e, s) {
+      Logger.handle(e, s, message: 'Error loading the app catalog on Integrations');
+    }
   }
 
   @override
@@ -412,6 +429,22 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     );
   }
 
+  Widget _buildAddMcpServerTile() {
+    return _buildRow(
+      leading: Container(
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+        child: Icon(Icons.cable_rounded, color: OmiColors.textPrimary, size: 22),
+      ),
+      title: context.l10n.addMcpServer,
+      trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
+      onTap: () {
+        PlatformManager.instance.analytics.pageOpened('Add MCP Server');
+        routeToPage(context, const AddMcpServerPage());
+      },
+    );
+  }
+
+  /// Connected services first, then the whole app catalog (it was the Apps tab until 2026-09-29).
   @override
   Widget build(BuildContext context) {
     // Watch provider to rebuild when it changes
@@ -421,42 +454,41 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     return Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.integrations)),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(OmiSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // App List
-              Expanded(
-                child: ListView(
-                  children: [
-                    ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
-                      child: Divider(color: OmiColors.border, thickness: 1),
+        bottom: false,
+        child: ExploreInstallPage(
+          leadingSlivers: [
+            const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.sm)),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+              sliver: SliverList.list(
+                children: [
+                  ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
+                    child: Divider(color: OmiColors.border, thickness: 1),
+                  ),
+                  _buildCreateYourOwnAppTile(),
+                  _buildAddMcpServerTile(),
+                  Padding(
+                    padding: const EdgeInsets.only(top: OmiSpacing.xs),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 16),
+                        const SizedBox(width: OmiSpacing.xs),
+                        Expanded(
+                          child: Text(
+                            context.l10n.integrationsFooter,
+                            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                          ),
+                        ),
+                      ],
                     ),
-                    _buildCreateYourOwnAppTile(),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              // Footer
-              Padding(
-                padding: const EdgeInsets.only(top: OmiSpacing.lg),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 16),
-                    const SizedBox(width: OmiSpacing.xs),
-                    Expanded(
-                      child: Text(
-                        context.l10n.integrationsFooter,
-                        style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.lg)),
+          ],
         ),
       ),
     );

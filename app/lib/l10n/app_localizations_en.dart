@@ -11212,7 +11212,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get openCall => 'Open call';
 
   @override
-  String get captureRecoveryBanner => 'Pendant audio is not reaching the app — tap to repair';
+  String get captureRecoveryBanner => 'Omi isn\'t sending audio — tap to reconnect';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11419,4 +11419,132 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Search people';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Add \"$query\" as a new person';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Show all $count people';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hi $name, ask anything';
+  }
+
+  @override
+  String get activity => 'Activity';
+
+  @override
+  String get places => 'Places';
+
+  @override
+  String get recaps => 'Recaps';
+
+  @override
+  String get recent => 'Recent';
+
+  @override
+  String get searchPartialFailure => 'Some results couldn\'t load';
+
+  @override
+  String get peopleSearchPlaceholder => 'Search people';
+
+  @override
+  String get peopleNotHeardYet => 'Not Heard Yet';
+
+  @override
+  String get peopleRecent => 'Recent';
+
+  @override
+  String get deletePeopleMessage =>
+      'This removes their voice samples and can\'t be undone. Their lines in past conversations become unnamed speakers.';
+
+  @override
+  String get personTalkTime => 'Talk time';
+
+  @override
+  String get personLastHeard => 'Last heard';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Delete $count People?',
+      one: 'Delete 1 Person?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Needs Voice';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count people',
+      one: '1 person',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'No Matching People';
+
+  @override
+  String get deselectAll => 'Deselect All';
+
+  @override
+  String get voiceRecognitionSettings => 'Voice Recognition';
 }

@@ -11220,7 +11220,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get openCall => 'باز کردن تماس';
 
   @override
-  String get captureRecoveryBanner => 'صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید';
+  String get captureRecoveryBanner => 'Omi صدا ارسال نمی‌کند — برای اتصال دوباره ضربه بزنید';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'قبل از ضبط با گوشی، Transcribe Later را روی آویز خود متوقف کنید.';
@@ -11427,4 +11427,132 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'جستجوی افراد';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'افزودن \"$query\" به عنوان فرد جدید';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'نمایش همه افراد ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'سلام $name، هر چه می‌خواهی بپرس';
+  }
+
+  @override
+  String get activity => 'فعالیت';
+
+  @override
+  String get places => 'مکان‌ها';
+
+  @override
+  String get recaps => 'خلاصه‌ها';
+
+  @override
+  String get recent => 'اخیر';
+
+  @override
+  String get searchPartialFailure => 'برخی نتایج بارگیری نشد';
+
+  @override
+  String get peopleSearchPlaceholder => 'جستجوی افراد';
+
+  @override
+  String get peopleNotHeardYet => 'هنوز شنیده نشده';
+
+  @override
+  String get peopleRecent => 'اخیر';
+
+  @override
+  String get deletePeopleMessage =>
+      'این کار نمونه‌های صدای آن‌ها را حذف می‌کند و قابل بازگشت نیست. گفته‌های آن‌ها در گفتگوهای قبلی به گوینده‌های بی‌نام تبدیل می‌شود.';
+
+  @override
+  String get personTalkTime => 'زمان صحبت';
+
+  @override
+  String get personLastHeard => 'آخرین شنیده‌شدن';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'حذف $count نفر؟',
+      one: 'حذف ۱ نفر؟',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'نیاز به صدا';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count نفر',
+      one: '۱ نفر',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'فردی مطابق یافت نشد';
+
+  @override
+  String get deselectAll => 'لغو انتخاب همه';
+
+  @override
+  String get voiceRecognitionSettings => 'تشخیص صدا';
 }

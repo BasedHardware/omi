@@ -260,7 +260,6 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
     root = Path(__file__).resolve().parents[3]
     owner_checks = {
         ".github/actions/sync-backfill-lifecycle/action.yml": "--check --jobs sync-backfill-uid-sequencer",
-        ".github/workflows/gcp_admin.yml": "--check --jobs omi-admin-stats-precompute",
         ".github/workflows/gcp_daily_memory_sweep_job.yml": "--jobs \"$SCHEDULER_JOB\" \"$LEDGER_DRAIN_SCHEDULER_JOB\"",
         ".github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml": "--jobs \"$SCHEDULER_JOB\" \"$LEDGER_DRAIN_SCHEDULER_JOB\"",
         ".github/workflows/gcp_day3_reengagement_email_job.yml": "--check --jobs \"$SCHEDULER_JOB\"",
@@ -277,6 +276,18 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
         check_commands = [command for command in scheduler_calls if "--check" in command]
         assert check_commands, relative_path
         assert all("--jobs" in command for command in check_commands), relative_path
+
+    admin_workflow = (root / ".github/workflows/gcp_admin.yml").read_text(encoding="utf-8")
+    assert "scheduler_reconcile.py" not in admin_workflow
+    assert "omi-admin-stats-precompute" not in admin_workflow
+
+    central_workflow = (root / ".github/workflows/gcp_scheduler_reconcile.yml").read_text(encoding="utf-8")
+    assert "--apply" in central_workflow
+    assert "--check" in central_workflow
+
+    jobs_yaml = (root / "backend/deploy/scheduler/jobs.yaml").read_text(encoding="utf-8")
+    admin_job = jobs_yaml.split("- name: omi-admin-stats-precompute", 1)[1].split("- name:", 1)[0]
+    assert "owner: .github/workflows/gcp_scheduler_reconcile.yml" in admin_job
 
     central = (root / ".github/workflows/gcp_scheduler_reconcile.yml").read_text(encoding="utf-8")
     assert '--project "$PROJECT_ID" --check' in central

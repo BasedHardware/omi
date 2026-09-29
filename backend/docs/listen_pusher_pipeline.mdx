@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-09-27 (S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
+> Last updated: 2026-09-29 (same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -416,6 +416,46 @@ no index migration, and no automatic clearing of historical discard flags or lin
 UI grouping, transcript merging, multi-capture chain consolidation, and link
 reconciliation after later user edits/discards remain follow-ups.
 
+
+## Same-occasion folding across a silence split (smart merge)
+
+The two-minute silence split can turn one occasion into several pendant
+conversations. `utils/conversations/smart_merge.py` runs inside
+`finalize_persisted_conversation` on both finalization hosts (pusher for the
+live handoff, backend-sync for Cloud Tasks), only for `CAPTURE_END` jobs, after
+the fanout claim is `claimed` and before duplicate-capture linking or any derived
+effect. `CONVERSATION_SMART_MERGE_MODE` selects `merge` (the default when the
+variable is unset or blank), `shadow` (decide and record, never merge) or `off`
+(the kill switch: one env read, no I/O; an unrecognized value also means `off`);
+`CONVERSATION_SMART_MERGE_UID_ALLOWLIST` optionally narrows the users.
+
+The candidate is the newest visible conversation of the same source created
+before this one, then the first row of the same device partition; a busy
+immediate predecessor blocks the pair instead of being skipped. Deterministic
+gates (source `omi`, recorded gap 120 s-60 min, speech gap at least 120 s, 25
+words per side, no user-managed row, no wake word, no user-ended predecessor,
+no custom-STT row, 3 h span, 4,000 segments, 12 fragments) run before one Jev question on the
+`conversation_smart_merge` lane (3 s, one attempt). `p_same >= 0.35` merges;
+any error keeps both. Every answered pair stores a server-only
+`smart_merge_decision` (numbers and ids, no text) on the new conversation.
+For a merge verdict, the decision is persisted before the absorb transaction
+so a retry reuses the same score.
+
+A merge keeps the earlier conversation's id. One transaction appends the new
+transcript on the survivor's absolute timeline and turns the new row into the
+sync bridge's redirect tombstone (`deleted`, `discarded`, `sync_merged_into`),
+so the listen `memory_created` event for it carries `discarded=true`, detail
+reads redirect to the survivor, and the survivor's deletion purges it. The new
+conversation's own derived effects never run; the donor's search/vector rows
+are retracted through the sync bridge seam, retained audio is copied when the
+survivor keeps cloud audio, and the survivor is reprocessed once per merge
+(`ProcessingTrigger.SMART_MERGE`) under a revision lease. A committed merge whose
+cleanup or refresh fails fails the finalization attempt; every retry resumes the
+donor, whatever the mode. Late repair WALs that target a donor append to its
+survivor (`utils/sync/assignment.py`). The absorb advances the survivor's
+`sync_content_revision` to fence an older processor, and the refresh write
+requires the current lease owner and revision.
+
 ## Conversation start location
 
 Mobile clients may send one bounded `X-Omi-Conversation-Geolocation` header on
@@ -463,6 +503,17 @@ sequenceDiagram
         Backend-->>Client: JSON array of segments [{id, text, speaker, ...}]
     end
 ```
+
+### Connect-time audio format admission
+
+`validate_audio_format` (`backend/utils/transcribe_decisions.py`) runs before any
+decoder or buffer is built. `sample_rate` must be one of 8000, 11025, 12000,
+16000, 22050, 24000, 32000, 44100 or 48000 for every codec (opus narrows that
+to opuslib's set, and bare `lc3` is refused); anything else closes the socket
+with 1003. Released clients send 8000 (the query default, pcm8), 16000 and
+48000 (phone calls). The query value sizes per-session buffers, so an
+unbounded rate could allocate gigabytes and OOM-kill the listen pod;
+`AudioRingBuffer` also caps its own capacity at 48 kHz as a second guard.
 
 ### Speech-profile onboarding handshake
 
@@ -522,6 +573,30 @@ error_class}` (recorded on both the legacy order and the configured chain),
 breakers, and `omi_stt_provider_retired{provider}` exporting the deployment's
 `STT_RETIRED_PROVIDERS` (default `deepgram`). See
 `backend/docs/operational/windowed-live-stt.md` for the alerts.
+
+For an allocated windowed-TDT session, listen retains a bounded 90-second
+capture-positioned PCM ring. Delivered window segments advance its finalized
+sample boundary. If the socket dies after accepting audio, the receiver starts
+the replacement provider epoch at the first unfinished sample and replays that
+audio before sending the current unsent chunk. A full ring triggers failover
+before an unfinished sample can be evicted. The replacement epoch stitches
+provider-local transcript times onto the original capture sample axis.
+Parakeet's `/batch/metrics` exports total and live-lane pending count and oldest
+queue wait. Listen resolves every ready GPU pod through the chart's headless
+Service and polls them off the session-start path. It declines new window
+admissions at four live requests pending on any replica or 0.75 seconds of
+oldest live wait. A missing replica, old server revision without live fields,
+invalid response, or stale reading stands down all listen processes. The
+window POST explicitly marks its live lane; unmarked requests remain backfill.
+A partial replay retains its unaccepted tail and new audio
+for the next vendor leg while preserving capture sample offsets. Window POSTs mark their
+request so `parakeet_prerecorded_requests_total` excludes live canary errors
+while covering the batch path used by sync backfill.
+Before the first window transcript, 12 seconds after first VAD speech or four
+consecutive empty speech-containing POSTs ends the Parakeet leg. The death path
+replays all untranscribed capture from the 90-second ring to the next vendor;
+the failed provider is excluded for that session. After first text, window
+formation and emission continue without this startup bound.
 
 The same authoritative attempt emits fail-open PostHog product events:
 `Transcript Started` at first nontrivial audio and exactly one of `Transcript
@@ -1264,7 +1339,13 @@ socket's own stream seconds *before* the callback rewrites `start`/`end`
 onto other clocks, and TDT timestamps at/beyond the posted window duration
 or re-detections of already-emitted audio are dropped and counted in
 `omi_stt_window_emission_drops_total` rather than emitted at a fabricated
-position. Ownership of recent
+position. The window replay ring uses that emitted anchor, mapped through
+the provider epoch's accepted-send spans onto capture samples, as its trim
+floor. It retains every later capture sample during an in-flight POST and
+replays from the floor on failover; VAD-gated gaps do not move the provider
+anchor onto the wrong capture position. A 90-second ring overrun fails the
+window leg before accepting another chunk if un-emitted speech still needs
+the space. Ownership of recent
 capture ranges is retained as coalesced same-conversation *runs* for 120 s of
 capture time (a hard run cap is a pathological bound, not the working limit),
 so a provider final trailing its audio by tens of seconds still resolves its
@@ -1307,7 +1388,9 @@ never erase the gap while the header claims the first run's position. Opcode
 rather than concatenating across rollovers.
 
 The dev qualification probe sends the same 17-word release fixture eight
-times (136 expected words), then near-silence while finalization completes.
+times (136 expected words) at the fixture's 100 ms PCM cadence, then
+near-silence while finalization completes. The paced send takes about 39 s;
+the terminal readback allows 240 s within the five-minute probe token lifetime.
 The base probe checks that the completed client conversation contains the
 fixture phrase and has at least four passes' words (68), while bounding that one
 conversation to at most 120% of all eight sends. Late STT flushes can land in
@@ -1315,6 +1398,10 @@ a rollover generation; the observed client conversation held about six passes
 in run 35583992730, leaving two passes of headroom at this lower bound. The
 136 words remain a diagnostic total sent. Its receipt and CI status line
 report the observed and expected counts and the failure stage without text.
+Candidate-pod attribution is checked after terminal readback even if the
+durable fixture phrase is missing, so a transcript mismatch still reports
+whether the candidate Pusher handled the finalization handoff. Passing still
+requires both candidate attribution and the durable transcript checks.
 Its separate opt-in alignment scenario sends the fixture twice (34 expected
 words), with delivered silence and an inter-arrival gap between sends. The
 shadow pass uses the first stored chunk as its time origin; its result records
@@ -1531,8 +1618,17 @@ only committed IDs drive live updates and `SegmentsDeletedEvent`.
 Translation and inference flushes use `segment_update_fields`: they can update
 existing IDs but cannot restore retired IDs or replace speech text/timestamps.
 Both lifecycle processor writers reapply the current receipt before committing.
-This preserves attribution while leaving summary refresh explicit; processor
-content freshness for non-sync rows is a separate pre-existing limitation.
+The processor also reads and applies that receipt to its in-memory transcript
+before building the summary prompt, including when audio-based speaker resolution
+is unavailable. The mobile detail page regenerates an existing summary after
+four seconds without a newly acknowledged speaker edit, or when the detail page
+closes. Saves still in flight keep their conversation ID and regenerate once
+after the final successful acknowledgement, even if the detail page was disposed.
+The reprocess response carries `X-Omi-Speaker-Receipt-Summary: 1` only after
+the processor successfully reads and applies the manual receipt (including a
+confirmed empty receipt); a failed receipt read or application sends no header.
+Without it, the detail page keeps the explicit retry action. Processor content
+freshness for non-sync rows remains a separate limitation.
 Protection migration re-encodes the receipt and transcript in one per-document
 transaction; the stored level outranks a live caller's cached hint.
 
@@ -1599,3 +1695,10 @@ semantic guarantee; either flag can be disabled independently for recall rollbac
 decisions; `omi_translation_skip_total` counts skip, defer and rejection reasons. Neither
 counter measures shown badges or fleet correctness. No user text enters labels or logs.
 Historical translations, client rendering, STT routing and billing are unchanged.
+
+The backend-only [on-demand translation contract](translation-on-demand.md)
+adds socket-local `client_state` demand with an optional renewable lease,
+source-fenced display materialization, and an explicit bounded detail-read
+request. Per the owner decision of 2026-09-29 these switches ship enabled
+(default on) with kill switches back to legacy behavior. Current clients send
+visibility edges but do not renew a lease or opt into detail translation.

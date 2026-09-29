@@ -11224,7 +11224,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get openCall => 'কল খুলুন';
 
   @override
-  String get captureRecoveryBanner => 'পেন্ডেন্টের অডিও অ্যাপে পৌঁছাচ্ছে না — মেরামত করতে ট্যাপ করুন';
+  String get captureRecoveryBanner => 'Omi অডিও পাঠাচ্ছে না — আবার সংযোগ করতে ট্যাপ করুন';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11431,4 +11431,132 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'মানুষ খুঁজুন';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\"-কে নতুন ব্যক্তি হিসেবে যোগ করুন';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'সমস্ত ($count) জনকে দেখান';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'হাই $name, যা খুশি জিজ্ঞেস করুন';
+  }
+
+  @override
+  String get activity => 'কার্যকলাপ';
+
+  @override
+  String get places => 'স্থান';
+
+  @override
+  String get recaps => 'সারাংশ';
+
+  @override
+  String get recent => 'সাম্প্রতিক';
+
+  @override
+  String get searchPartialFailure => 'কিছু ফলাফল লোড করা যায়নি';
+
+  @override
+  String get peopleSearchPlaceholder => 'মানুষ খুঁজুন';
+
+  @override
+  String get peopleNotHeardYet => 'এখনও শোনা হয়নি';
+
+  @override
+  String get peopleRecent => 'সাম্প্রতিক';
+
+  @override
+  String get deletePeopleMessage =>
+      'এটি তাদের ভয়েস স্যাম্পল সরিয়ে দেবে এবং পূর্বাবস্থায় ফেরানো যাবে না। আগের কথোপকথনে তাদের বক্তব্য নামহীন বক্তা হিসেবে থাকবে।';
+
+  @override
+  String get personTalkTime => 'কথা বলার সময়';
+
+  @override
+  String get personLastHeard => 'সর্বশেষ শোনা';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count জনকে মুছবেন?',
+      one: '1 জনকে মুছবেন?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'ভয়েস প্রয়োজন';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count জন',
+      one: '১ জন',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'মিলে যাওয়া কেউ নেই';
+
+  @override
+  String get deselectAll => 'সব বাদ দিন';
+
+  @override
+  String get voiceRecognitionSettings => 'ভয়েস শনাক্তকরণ';
 }

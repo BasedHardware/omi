@@ -11253,7 +11253,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get openCall => 'Адкрыць званок';
 
   @override
-  String get captureRecoveryBanner => 'Гук кулона не даходзіць да праграмы — націсніце, каб выправіць';
+  String get captureRecoveryBanner => 'Omi не перадае гук — націсніце, каб падключыцца зноў';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Спыніце Transcribe Later на падвесцы перад запісам на тэлефоне.';
@@ -11461,4 +11461,132 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Пошук людзей';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Дадаць «$query» як новага чалавека';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Паказаць усіх людзей ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Прывітанне, $name, пытайся пра што заўгодна';
+  }
+
+  @override
+  String get activity => 'Актыўнасць';
+
+  @override
+  String get places => 'Месцы';
+
+  @override
+  String get recaps => 'Зводкі';
+
+  @override
+  String get recent => 'Нядаўнія';
+
+  @override
+  String get searchPartialFailure => 'Не ўдалося загрузіць некаторыя вынікі';
+
+  @override
+  String get peopleSearchPlaceholder => 'Пошук людзей';
+
+  @override
+  String get peopleNotHeardYet => 'Пакуль не чутыя';
+
+  @override
+  String get peopleRecent => 'Нядаўнія';
+
+  @override
+  String get deletePeopleMessage =>
+      'Гэта выдаліць узоры іх голасу, і гэта нельга скасаваць. Іх рэплікі ў мінулых размовах стануць безыменнымі гаворцамі.';
+
+  @override
+  String get personTalkTime => 'Час размовы';
+
+  @override
+  String get personLastHeard => 'Апошні раз чутны';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выдаліць людзей: $count?',
+      one: 'Выдаліць 1 чалавека?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Патрэбны голас';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Людзей: $count',
+      one: '1 чалавек',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Няма адпаведных людзей';
+
+  @override
+  String get deselectAll => 'Зняць выбар з усіх';
+
+  @override
+  String get voiceRecognitionSettings => 'Распазнаванне голасу';
 }

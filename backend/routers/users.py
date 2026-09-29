@@ -134,6 +134,7 @@ from utils.other.notifications import (
 )
 from models.notification_message import NotificationMessage
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
+from utils.daily_summary_search import DAILY_SUMMARY_SEARCH_WINDOW, filter_daily_summaries
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
 from utils.other.storage import (
@@ -636,9 +637,24 @@ def get_single_person(
 
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
-def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
+def get_all_people(
+    include_speech_samples: bool = True,
+    include_stats: bool = False,
+    uid: str = Depends(auth.get_current_user_uid),
+):
     logger.info(f'get_all_people {include_speech_samples}')
     people = Person.deserialize_many_safe(get_people(uid))
+    if include_stats and people:
+        from utils.people_stats import collect_people_stats
+
+        stats = collect_people_stats(
+            lambda limit, offset: conversations_db.get_conversations_without_photos(uid, limit=limit, offset=offset)
+        )
+        for person in people:
+            entry = stats.get(person.id)
+            person.conversation_count = entry['conversation_count'] if entry else 0
+            person.last_heard_at = entry['last_heard_at'] if entry else None
+            person.talk_seconds = entry['talk_seconds'] if entry else 0.0
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
         for i, person in enumerate(people):
@@ -1944,6 +1960,25 @@ def create_user_daily_summary(
         # empty at the exact moment it was being summarized.
         raise HTTPException(status_code=409, detail='This recap is already being generated. Try again in a moment.')
     raise HTTPException(status_code=400, detail=f'Nothing to summarize for {date_str}')
+
+
+# Declared before `/v1/users/daily-summaries/{summary_id}` so `search` is not captured as an id.
+@router.get('/v1/users/daily-summaries/search', tags=['v1'], response_model=DailySummariesResponse)
+def search_daily_summaries(
+    query: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=50),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Search the user's recent daily summaries, newest first.
+
+    Case-insensitive substring match: every whitespace-separated term must appear
+    in the recap's readable text (headline, overview, highlights, action items,
+    questions, decisions, knowledge nuggets, learned memories, place addresses).
+    Only the latest 365 summaries are scanned.
+    """
+    summaries = daily_summaries_db.get_daily_summaries(uid, limit=DAILY_SUMMARY_SEARCH_WINDOW, offset=0)
+    return {'summaries': filter_daily_summaries(summaries, query, limit)}
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)

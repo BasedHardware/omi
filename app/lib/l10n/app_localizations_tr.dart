@@ -11235,7 +11235,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get openCall => 'Aramayı aç';
 
   @override
-  String get captureRecoveryBanner => 'Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun';
+  String get captureRecoveryBanner => 'Omi ses göndermiyor — yeniden bağlanmak için dokunun';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11443,4 +11443,132 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Geri bildirim ver';
+
+  @override
+  String get feedbackAllGood => 'Her şey yolunda';
+
+  @override
+  String get feedbackChatWithUs => 'Detay paylaşmak ister misin? Bizimle yazış';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Hatalı';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Eksik';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Alakasız';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Yanlış bağlam';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Başka bir şey';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Ses eksik';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Kötü transkripsiyon';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Yanlış konuşmacı';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Gecikmeli veya takılı';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Parçalı veya tekrarlı';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Başka bir şey';
+
+  @override
+  String get searchPeople => 'Kişi ara';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" adlı yeni bir kişi ekle';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Tüm $count kişiyi göster';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Merhaba $name, ne istersen sor';
+  }
+
+  @override
+  String get activity => 'Etkinlik';
+
+  @override
+  String get places => 'Yerler';
+
+  @override
+  String get recaps => 'Özetler';
+
+  @override
+  String get recent => 'Son aramalar';
+
+  @override
+  String get searchPartialFailure => 'Bazı sonuçlar yüklenemedi';
+
+  @override
+  String get peopleSearchPlaceholder => 'Kişi ara';
+
+  @override
+  String get peopleNotHeardYet => 'Henüz duyulmadı';
+
+  @override
+  String get peopleRecent => 'Yakınlarda';
+
+  @override
+  String get deletePeopleMessage =>
+      'Bu, ses örneklerini kaldırır ve geri alınamaz. Geçmiş konuşmalardaki sözleri adsız konuşmacılara dönüşür.';
+
+  @override
+  String get personTalkTime => 'Konuşma süresi';
+
+  @override
+  String get personLastHeard => 'Son duyulma';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kişi silinsin mi?',
+      one: '1 kişi silinsin mi?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Ses Gerekli';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kişi',
+      one: '1 kişi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Eşleşen Kişi Yok';
+
+  @override
+  String get deselectAll => 'Tümünün Seçimini Kaldır';
+
+  @override
+  String get voiceRecognitionSettings => 'Ses Tanıma';
 }

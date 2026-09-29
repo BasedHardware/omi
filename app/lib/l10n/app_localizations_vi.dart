@@ -11218,7 +11218,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openCall => 'Mở cuộc gọi';
 
   @override
-  String get captureRecoveryBanner => 'Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa';
+  String get captureRecoveryBanner => 'Omi không gửi âm thanh — chạm để kết nối lại';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11426,4 +11426,132 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Không thể gửi dữ liệu chẩn đoán. Vui lòng thử lại.';
+
+  @override
+  String get feedbackGiveFeedback => 'Gửi phản hồi';
+
+  @override
+  String get feedbackAllGood => 'Mọi thứ đều ổn';
+
+  @override
+  String get feedbackChatWithUs => 'Thêm chi tiết? Nhắn tin với chúng tôi';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Không chính xác';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Chưa đầy đủ';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Không liên quan';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Sai ngữ cảnh';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Vấn đề khác';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Thiếu âm thanh';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Chuyển ngữ kém';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Sai người nói';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Bị chậm hoặc treo';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Đứt đoạn hoặc trùng lặp';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Vấn đề khác';
+
+  @override
+  String get searchPeople => 'Tìm kiếm người';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Thêm \"$query\" như một người mới';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Hiển thị tất cả $count người';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Chào $name, hỏi bất cứ điều gì';
+  }
+
+  @override
+  String get activity => 'Hoạt động';
+
+  @override
+  String get places => 'Địa điểm';
+
+  @override
+  String get recaps => 'Tóm tắt';
+
+  @override
+  String get recent => 'Gần đây';
+
+  @override
+  String get searchPartialFailure => 'Không thể tải một số kết quả';
+
+  @override
+  String get peopleSearchPlaceholder => 'Tìm người';
+
+  @override
+  String get peopleNotHeardYet => 'Chưa nghe';
+
+  @override
+  String get peopleRecent => 'Gần đây';
+
+  @override
+  String get deletePeopleMessage =>
+      'Thao tác này sẽ xóa các mẫu giọng nói của họ và không thể hoàn tác. Lời họ nói trong các cuộc trò chuyện trước sẽ thành người nói không tên.';
+
+  @override
+  String get personTalkTime => 'Thời gian nói';
+
+  @override
+  String get personLastHeard => 'Nghe gần nhất';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Xóa $count người?',
+      one: 'Xóa 1 người?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Cần giọng nói';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count người',
+      one: '1 người',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Không có người phù hợp';
+
+  @override
+  String get deselectAll => 'Bỏ chọn tất cả';
+
+  @override
+  String get voiceRecognitionSettings => 'Nhận dạng giọng nói';
 }

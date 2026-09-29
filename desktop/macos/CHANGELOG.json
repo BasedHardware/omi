@@ -2,6 +2,57 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.421",
+      "date": "2026-09-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.420",
+      "date": "2026-09-29",
+      "changes": [
+        "Ask Omi a full question with Siri in one breath and get an answer"
+      ]
+    },
+    {
+      "version": "0.12.419",
+      "date": "2026-09-29",
+      "changes": [
+        "Proactive Insights now always skip apps you excluded from Rewind and can only read, never change, your local screen history and tasks",
+        "Conversations transcribed on-device now finish uploading once you are back online, even after a long outage or backend errors, instead of getting stuck on this Mac",
+        "Fixed the app getting stuck on \"Preparing your data…\" after the local Rewind database was corrupted"
+      ]
+    },
+    {
+      "version": "0.12.418",
+      "date": "2026-09-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.417",
+      "date": "2026-09-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.416",
+      "date": "2026-09-28",
+      "changes": [
+        "Ask Omi questions with Siri and continue in the desktop chat"
+      ]
+    },
+    {
+      "version": "0.12.415",
+      "date": "2026-09-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.414",
       "date": "2026-09-28",
       "changes": [

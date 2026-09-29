@@ -16,17 +16,17 @@ import 'package:omi/ui/omi_tokens.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('appearance preference defaults to System and round trips', () async {
+  test('appearance preference defaults to Light and round trips', () async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     final prefs = SharedPreferencesUtil();
-    expect(AppearanceProvider.parse(prefs.appearanceMode), ThemeMode.system);
-
-    await prefs.setAppearanceMode('light');
     expect(AppearanceProvider.parse(prefs.appearanceMode), ThemeMode.light);
-    expect((await SharedPreferences.getInstance()).getString(SharedPreferencesUtil.appearanceModeKey), 'light');
-    await prefs.setAppearanceMode('unexpected');
+
+    await prefs.setAppearanceMode('system');
     expect(AppearanceProvider.parse(prefs.appearanceMode), ThemeMode.system);
+    expect((await SharedPreferences.getInstance()).getString(SharedPreferencesUtil.appearanceModeKey), 'system');
+    await prefs.setAppearanceMode('unexpected');
+    expect(AppearanceProvider.parse(prefs.appearanceMode), ThemeMode.light);
   });
 
   test('provider notifies on a change and persists its value', () async {
@@ -35,7 +35,7 @@ void main() {
     addTearDown(provider.dispose);
     var notifications = 0;
     provider.addListener(() => notifications++);
-    expect(provider.mode, ThemeMode.system);
+    expect(provider.mode, ThemeMode.light);
     await provider.setMode(ThemeMode.dark);
     expect(provider.mode, ThemeMode.dark);
     expect(stored, 'dark');

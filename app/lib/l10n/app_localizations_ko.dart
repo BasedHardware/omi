@@ -11042,7 +11042,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get openCall => '통화 열기';
 
   @override
-  String get captureRecoveryBanner => '펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구';
+  String get captureRecoveryBanner => 'Omi가 오디오를 보내지 않고 있습니다 — 탭하여 다시 연결하세요';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '휴대폰으로 녹음하기 전에 펜던트에서 Transcribe Later를 중지하세요.';
@@ -11245,4 +11245,131 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => '피드백 보내기';
+
+  @override
+  String get feedbackAllGood => '문제없음';
+
+  @override
+  String get feedbackChatWithUs => '자세한 이야기가 필요한가요? 채팅으로 알려주세요';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => '정확하지 않음';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => '불완전함';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => '관련 없음';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => '잘못된 맥락';
+
+  @override
+  String get feedbackReasonSummaryOther => '기타';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => '오디오 없음';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => '전사 품질 낮음';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => '잘못된 화자';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => '지연 또는 중단';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => '불완전하거나 중복됨';
+
+  @override
+  String get feedbackReasonRecordingOther => '기타';
+
+  @override
+  String get searchPeople => '사람 검색';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\"을(를) 새 사람으로 추가';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return '모두 $count명 표시';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return '안녕하세요 $name님, 무엇이든 물어보세요';
+  }
+
+  @override
+  String get activity => '활동';
+
+  @override
+  String get places => '장소';
+
+  @override
+  String get recaps => '요약';
+
+  @override
+  String get recent => '최근';
+
+  @override
+  String get searchPartialFailure => '일부 결과를 불러오지 못했습니다';
+
+  @override
+  String get peopleSearchPlaceholder => '사람 검색';
+
+  @override
+  String get peopleNotHeardYet => '아직 듣지 못함';
+
+  @override
+  String get peopleRecent => '최근';
+
+  @override
+  String get deletePeopleMessage => '음성 샘플이 삭제되며 되돌릴 수 없습니다. 지난 대화에서 이 사람의 발언은 이름 없는 화자로 바뀝니다.';
+
+  @override
+  String get personTalkTime => '발화 시간';
+
+  @override
+  String get personLastHeard => '마지막으로 들은 날';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명을 삭제할까요?',
+      one: '1명을 삭제할까요?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => '음성 필요';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명',
+      one: '1명',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '일치하는 사람 없음';
+
+  @override
+  String get deselectAll => '모두 선택 해제';
+
+  @override
+  String get voiceRecognitionSettings => '음성 인식';
 }

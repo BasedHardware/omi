@@ -11220,7 +11220,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get openCall => 'Ava kõne';
 
   @override
-  String get captureRecoveryBanner => 'Ripatsi heli ei jõua rakendusse — parandamiseks puudutage';
+  String get captureRecoveryBanner => 'Omi ei saada heli — puudutage uuesti ühendamiseks';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11427,4 +11427,132 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Otsi inimesi';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Lisa \"$query\" uue inimesena';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Kuva kõik inimesed ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Tere, $name, küsi mida tahes';
+  }
+
+  @override
+  String get activity => 'Tegevus';
+
+  @override
+  String get places => 'Kohad';
+
+  @override
+  String get recaps => 'Kokkuvõtted';
+
+  @override
+  String get recent => 'Hiljutised';
+
+  @override
+  String get searchPartialFailure => 'Mõnda tulemust ei õnnestunud laadida';
+
+  @override
+  String get peopleSearchPlaceholder => 'Otsi inimesi';
+
+  @override
+  String get peopleNotHeardYet => 'Pole veel kuulnud';
+
+  @override
+  String get peopleRecent => 'Hiljutised';
+
+  @override
+  String get deletePeopleMessage =>
+      'See eemaldab nende häälenäidised ja seda ei saa tagasi võtta. Nende read varasemates vestlustes muutuvad nimetuteks kõnelejateks.';
+
+  @override
+  String get personTalkTime => 'Rääkimisaeg';
+
+  @override
+  String get personLastHeard => 'Viimati kuuldud';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kustuta $count inimest?',
+      one: 'Kustuta 1 inimene?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Hääl puudub';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inimest',
+      one: '1 inimene',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Sobivaid inimesi pole';
+
+  @override
+  String get deselectAll => 'Tühista kõik valikud';
+
+  @override
+  String get voiceRecognitionSettings => 'Häältuvastus';
 }

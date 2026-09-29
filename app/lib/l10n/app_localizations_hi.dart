@@ -11203,7 +11203,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get openCall => 'कॉल खोलें';
 
   @override
-  String get captureRecoveryBanner => 'पेंडेंट का ऑडियो ऐप तक नहीं पहुंच रहा है — ठीक करने के लिए टैप करें';
+  String get captureRecoveryBanner => 'Omi ऑडियो नहीं भेज रहा है — फिर से कनेक्ट करने के लिए टैप करें';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11411,4 +11411,132 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'प्रतिक्रिया दें';
+
+  @override
+  String get feedbackAllGood => 'सब ठीक है';
+
+  @override
+  String get feedbackChatWithUs => 'और बताना है? हमसे चैट करें';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'ग़लत';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'अधूरा';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'अप्रासंगिक';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'ग़लत संदर्भ';
+
+  @override
+  String get feedbackReasonSummaryOther => 'कुछ और';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'ऑडियो गायब';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'ट्रांसक्रिप्शन खराब';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'ग़लत वक्ता';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'देरी या अटकना';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'टुकड़ों में या डुप्लिकेट';
+
+  @override
+  String get feedbackReasonRecordingOther => 'कुछ और';
+
+  @override
+  String get searchPeople => 'लोगों को खोजें';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" को नए व्यक्ति के रूप में जोड़ें';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'सभी $count लोग दिखाएँ';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'नमस्ते $name, कुछ भी पूछें';
+  }
+
+  @override
+  String get activity => 'गतिविधि';
+
+  @override
+  String get places => 'स्थान';
+
+  @override
+  String get recaps => 'सारांश';
+
+  @override
+  String get recent => 'हाल के';
+
+  @override
+  String get searchPartialFailure => 'कुछ परिणाम लोड नहीं हो सके';
+
+  @override
+  String get peopleSearchPlaceholder => 'लोगों को खोजें';
+
+  @override
+  String get peopleNotHeardYet => 'अभी तक सुना नहीं गया';
+
+  @override
+  String get peopleRecent => 'हाल के';
+
+  @override
+  String get deletePeopleMessage =>
+      'इससे उनके आवाज़ के नमूने हट जाएंगे और इसे पूर्ववत नहीं किया जा सकता। पिछली बातचीतों में उनकी बातें बिना नाम वाले वक्ता बन जाएंगी।';
+
+  @override
+  String get personTalkTime => 'बोलने का समय';
+
+  @override
+  String get personLastHeard => 'आखिरी बार सुना';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count लोगों को हटाएं?',
+      one: '1 व्यक्ति को हटाएं?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'आवाज़ चाहिए';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count लोग',
+      one: '1 व्यक्ति',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'कोई मेल खाता व्यक्ति नहीं';
+
+  @override
+  String get deselectAll => 'सभी अचयनित करें';
+
+  @override
+  String get voiceRecognitionSettings => 'आवाज़ पहचान';
 }

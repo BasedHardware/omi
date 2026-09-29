@@ -11257,7 +11257,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get openCall => 'Gesprek openen';
 
   @override
-  String get captureRecoveryBanner => 'De audio van de hanger komt niet aan in de app — tik om te repareren';
+  String get captureRecoveryBanner => 'Omi verzendt geen audio — tik om opnieuw verbinding te maken';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11467,4 +11467,132 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Feedback geven';
+
+  @override
+  String get feedbackAllGood => 'Alles goed';
+
+  @override
+  String get feedbackChatWithUs => 'Meer te melden? Chat met ons';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Niet nauwkeurig';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Onvolledig';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Niet relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Verkeerde context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Iets anders';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Audio ontbreekt';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Slechte transcriptie';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Verkeerde spreker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Vertraagd of vastgelopen';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Gefragmenteerd of gedupliceerd';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Iets anders';
+
+  @override
+  String get searchPeople => 'Personen zoeken';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" toevoegen als nieuwe persoon';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Alle $count personen weergeven';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hoi $name, vraag maar raak';
+  }
+
+  @override
+  String get activity => 'Activiteit';
+
+  @override
+  String get places => 'Plaatsen';
+
+  @override
+  String get recaps => 'Samenvattingen';
+
+  @override
+  String get recent => 'Recent';
+
+  @override
+  String get searchPartialFailure => 'Sommige resultaten konden niet worden geladen';
+
+  @override
+  String get peopleSearchPlaceholder => 'Zoek mensen';
+
+  @override
+  String get peopleNotHeardYet => 'Nog niet gehoord';
+
+  @override
+  String get peopleRecent => 'Recent';
+
+  @override
+  String get deletePeopleMessage =>
+      'Hiermee worden hun stemsamples verwijderd. Dit kan niet ongedaan worden gemaakt. Hun uitspraken in eerdere gesprekken worden naamloze sprekers.';
+
+  @override
+  String get personTalkTime => 'Spreektijd';
+
+  @override
+  String get personLastHeard => 'Laatst gehoord';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personen verwijderen?',
+      one: '1 persoon verwijderen?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Stem nodig';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personen',
+      one: '1 persoon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Geen Overeenkomende Personen';
+
+  @override
+  String get deselectAll => 'Alles Deselecteren';
+
+  @override
+  String get voiceRecognitionSettings => 'Stemherkenning';
 }

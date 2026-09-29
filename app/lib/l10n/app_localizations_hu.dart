@@ -11266,7 +11266,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get openCall => 'Hívás megnyitása';
 
   @override
-  String get captureRecoveryBanner => 'A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson';
+  String get captureRecoveryBanner => 'Az Omi nem küld hangot — koppintson az újracsatlakozáshoz';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11475,4 +11475,132 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Személyek keresése';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '„$query” hozzáadása új személyként';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Az összes ($count) személy megjelenítése';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Szia $name, kérdezz bármit';
+  }
+
+  @override
+  String get activity => 'Tevékenység';
+
+  @override
+  String get places => 'Helyek';
+
+  @override
+  String get recaps => 'Összefoglalók';
+
+  @override
+  String get recent => 'Legutóbbiak';
+
+  @override
+  String get searchPartialFailure => 'Néhány találatot nem sikerült betölteni';
+
+  @override
+  String get peopleSearchPlaceholder => 'Személyek keresése';
+
+  @override
+  String get peopleNotHeardYet => 'Még nem hallott';
+
+  @override
+  String get peopleRecent => 'Legutóbbiak';
+
+  @override
+  String get deletePeopleMessage =>
+      'Ez eltávolítja a hangmintáikat, és nem vonható vissza. A korábbi beszélgetésekben elhangzott mondataik névtelen beszélőkké válnak.';
+
+  @override
+  String get personTalkTime => 'Beszédidő';
+
+  @override
+  String get personLastHeard => 'Utoljára hallott';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy törlése?',
+      one: '1 személy törlése?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Hang szükséges';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy',
+      one: '1 személy',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nincs egyező személy';
+
+  @override
+  String get deselectAll => 'Kijelölés megszüntetése';
+
+  @override
+  String get voiceRecognitionSettings => 'Hangfelismerés';
 }

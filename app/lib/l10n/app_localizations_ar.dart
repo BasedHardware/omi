@@ -11155,7 +11155,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get openCall => 'فتح المكالمة';
 
   @override
-  String get captureRecoveryBanner => 'صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح';
+  String get captureRecoveryBanner => 'أومي لا يرسل الصوت — انقر لإعادة الاتصال';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'أوقف «النسخ لاحقًا» على قلادتك قبل التسجيل بهاتفك.';
@@ -11361,4 +11361,132 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'ابحث عن الأشخاص';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'إضافة \"$query\" كشخص جديد';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'إظهار كل الأشخاص ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'مرحبًا $name، اسأل أي شيء';
+  }
+
+  @override
+  String get activity => 'النشاط';
+
+  @override
+  String get places => 'الأماكن';
+
+  @override
+  String get recaps => 'الملخصات';
+
+  @override
+  String get recent => 'الأخيرة';
+
+  @override
+  String get searchPartialFailure => 'تعذّر تحميل بعض النتائج';
+
+  @override
+  String get peopleSearchPlaceholder => 'البحث عن الأشخاص';
+
+  @override
+  String get peopleNotHeardYet => 'لم يُسمع بعد';
+
+  @override
+  String get peopleRecent => 'الأحدث';
+
+  @override
+  String get deletePeopleMessage =>
+      'يؤدي هذا إلى إزالة عيّنات صوته ولا يمكن التراجع عنه. تصبح عباراته في المحادثات السابقة متحدثين بلا أسماء.';
+
+  @override
+  String get personTalkTime => 'مدة الحديث';
+
+  @override
+  String get personLastHeard => 'آخر استماع';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'حذف الأشخاص: $count؟',
+      one: 'حذف شخص واحد؟',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'يحتاج إلى صوت';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'الأشخاص: $count',
+      one: 'شخص واحد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'لا يوجد أشخاص مطابقون';
+
+  @override
+  String get deselectAll => 'إلغاء تحديد الكل';
+
+  @override
+  String get voiceRecognitionSettings => 'التعرف على الصوت';
 }

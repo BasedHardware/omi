@@ -22,6 +22,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.smart_merge import smart_merge_step
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.conversations.process_conversation import (
     DerivedEffectsDisposition,
@@ -153,8 +154,11 @@ async def finalize_persisted_conversation(
                     outcome='degraded',
                     log=logger,
                 )
-                geolocation = Geolocation(**geolocation)
-                conversation.geolocation = await async_resolve_geolocation(geolocation)
+                cached_geo = Geolocation.deserialize_safe(geolocation)
+                if cached_geo:
+                    conversation.geolocation = await async_resolve_geolocation(cached_geo)
+                else:
+                    logger.warning('Skipping malformed cached user geolocation for uid=%s', uid)
 
         # The post-processing bulkhead preserves request context (including
         # validated live BYOK keys) while isolating this expensive sync path
@@ -215,6 +219,23 @@ async def finalize_persisted_conversation(
             dispatch_generation,
             lease_epoch,
         )
+        if fanout['status'] == 'claimed':
+            # Folding into the preceding conversation happens behind the claim and
+            # before any derived effect of this one; a donor skips all of them.
+            stage = 'smart_merge'
+            if await smart_merge_step(
+                uid, conversation_id, conversation_data, trigger=trigger, owner=finalization_job_id
+            ):
+                stage = 'fanout_completion'
+                if not await run_blocking(
+                    db_executor,
+                    lifecycle_service.complete_finalization_fanout,
+                    finalization_job_id,
+                    dispatch_generation,
+                    lease_epoch,
+                ):
+                    raise ConversationFinalizationError('fanout_completion_conflict')
+                return ConversationFinalizationDisposition.completed
         stage = 'duplicate_capture'
         if fanout['status'] in {'claimed', 'completed'}:
             await run_blocking(db_executor, link_duplicate_captures, uid, conversation)

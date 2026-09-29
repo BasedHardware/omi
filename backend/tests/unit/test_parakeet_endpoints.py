@@ -106,6 +106,13 @@ def _make_app_with_mocks(gpu_ready=True, nim_mode=False, fatal_cuda_reason=None)
         "rejected_requests": 0,
         "pending_requests": 0,
     }
+    mock_engine.pressure_snapshot.return_value = {
+        'pending_requests': 0,
+        'oldest_pending_seconds': 0,
+        'live_pending_requests': 0,
+        'live_oldest_pending_seconds': 0,
+        'backfill_pending_requests': 0,
+    }
 
     if nim_mode:
         parakeet_main.gpu_worker = None
@@ -183,6 +190,11 @@ class TestBatchMetricsEndpoint:
         data = resp.json()
         assert data["total_requests"] == 10
         assert data["total_batches"] == 3
+        assert data["pending_requests"] == 0
+        assert data["oldest_pending_seconds"] == 0
+        assert data['live_pending_requests'] == 0
+        assert data['live_oldest_pending_seconds'] == 0
+        assert data['backfill_pending_requests'] == 0
 
     def test_batch_metrics_without_engine(self):
         app, mod, _, _ = _make_app_with_mocks(nim_mode=True)
@@ -190,6 +202,20 @@ class TestBatchMetricsEndpoint:
         resp = client.get("/batch/metrics")
         assert resp.status_code == 200
         assert resp.json() == {}
+
+
+def test_live_window_marker_excludes_request_from_prerecorded_error_metric():
+    app, mod, _, _ = _make_app_with_mocks(gpu_ready=False)
+    client = TestClient(app, raise_server_exceptions=False)
+    before = mod.PRERECORDED_REQUESTS.labels(status='error')._value.get()
+    response = client.post(
+        '/v1/transcribe', files={'file': ('a.wav', b'abc')}, headers={'X-Omi-STT-Surface': 'live-window'}
+    )
+    assert response.status_code == 503
+    assert mod.PRERECORDED_REQUESTS.labels(status='error')._value.get() == before
+    response = client.post('/v1/transcribe', files={'file': ('a.wav', b'abc')})
+    assert response.status_code == 503
+    assert mod.PRERECORDED_REQUESTS.labels(status='error')._value.get() == before + 1
 
 
 class TestStreamAdmissionEndpoint:
@@ -264,7 +290,7 @@ class TestV1TranscribeEndpoint:
     def test_v1_batch_submit_returns_result(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
             return {
                 "text": "batch result",
                 "timestamp": {"segment": [{"segment": "batch result", "start": 0.0, "end": 1.0}]},
@@ -276,6 +302,14 @@ class TestV1TranscribeEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["text"] == "batch result"
+        assert engine.submit.await_args.kwargs['lane'] == 'backfill'
+        resp = client.post(
+            '/v1/transcribe',
+            files={'file': ('test.wav', b'fake audio data', 'audio/wav')},
+            headers={'X-Omi-STT-Surface': 'live-window'},
+        )
+        assert resp.status_code == 200
+        assert engine.submit.await_args.kwargs['lane'] == 'live'
 
     def test_v1_queue_full_returns_503(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
@@ -299,7 +333,7 @@ class TestV2TranscribeEndpoint:
     def test_v2_batch_submit_with_diarize_false(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
             return {"text": "v2 result", "timestamp": {"segment": [{"segment": "v2 result", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -331,7 +365,7 @@ class TestV2TranscribeEndpoint:
     def _post_v2_with_mocked_transcriber(self, data):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
             return {"text": "v2 result", "timestamp": {"segment": [{"segment": "v2 result", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -457,7 +491,7 @@ class TestAudioDurationFromBytes:
     def test_v1_with_real_wav_observes_audio_duration(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -557,7 +591,7 @@ class TestDurationGuardHTTP413:
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 60.0
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -589,7 +623,7 @@ class TestDurationGuardHTTP413:
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 0.0
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -602,7 +636,7 @@ class TestDurationGuardHTTP413:
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 60.0
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)
@@ -620,7 +654,7 @@ class TestDurationGuardHTTP413:
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 5.0
 
-        async def fake_submit(path, timestamps=True, owns_file=False):
+        async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill"):
             return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
 
         engine.submit = AsyncMock(side_effect=fake_submit)

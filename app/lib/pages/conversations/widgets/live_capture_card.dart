@@ -169,7 +169,7 @@ class LiveCaptureCard extends StatelessWidget {
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       statusRow,
       if (lastLine != null && lastLine!.trim().isNotEmpty) ...[
-        const SizedBox(height: OmiSpacing.sm),
+        const SizedBox(height: OmiSpacing.xs),
         Text('… ${lastLine!.trim()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary),
       ],
       if (note != null) ...[

@@ -11275,7 +11275,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get openCall => 'Deschide apelul';
 
   @override
-  String get captureRecoveryBanner => 'Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara';
+  String get captureRecoveryBanner => 'Omi nu trimite audio — atinge pentru a reconecta';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11485,4 +11485,132 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Caută persoane';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Adaugă \"$query\" ca persoană nouă';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Afișează toate cele $count persoane';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Salut $name, întreabă orice';
+  }
+
+  @override
+  String get activity => 'Activitate';
+
+  @override
+  String get places => 'Locuri';
+
+  @override
+  String get recaps => 'Rezumate';
+
+  @override
+  String get recent => 'Recente';
+
+  @override
+  String get searchPartialFailure => 'Unele rezultate nu au putut fi încărcate';
+
+  @override
+  String get peopleSearchPlaceholder => 'Caută persoane';
+
+  @override
+  String get peopleNotHeardYet => 'Încă neauzit';
+
+  @override
+  String get peopleRecent => 'Recente';
+
+  @override
+  String get deletePeopleMessage =>
+      'Aceasta le elimină mostrele vocale și nu poate fi anulată. Replicile lor din conversațiile trecute devin vorbitori fără nume.';
+
+  @override
+  String get personTalkTime => 'Timp de vorbire';
+
+  @override
+  String get personLastHeard => 'Ultima ascultare';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ștergi persoane: $count?',
+      one: 'Ștergi 1 persoană?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Necesită voce';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Persoane: $count',
+      one: '1 persoană',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nicio persoană potrivită';
+
+  @override
+  String get deselectAll => 'Deselectează tot';
+
+  @override
+  String get voiceRecognitionSettings => 'Recunoaștere vocală';
 }

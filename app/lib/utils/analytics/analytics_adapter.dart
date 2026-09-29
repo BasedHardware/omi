@@ -59,4 +59,5 @@ abstract interface class AnalyticsIdentityAdapter {
 
 abstract interface class AnalyticsFeatureFlagAdapter {
   Future<bool> isFeatureEnabled(String key);
+  Future<Object?> getFeatureFlagPayload(String key);
 }

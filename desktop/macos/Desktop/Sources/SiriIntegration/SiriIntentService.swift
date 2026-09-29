@@ -17,6 +17,17 @@ enum SiriFailure: Error, Equatable {
   }
 
   func message(for action: String) -> String {
+    if action == "ask" {
+      switch self {
+      case .auth: return "Open Omi and sign in first."
+      case .network: return "Omi couldn't finish the answer. Open Omi and ask in chat."
+      case .quota: return "Your Omi limit has been reached."
+      case .rateLimited: return "Omi is receiving too many requests. Try again shortly."
+      case .unsupported: return "What would you like to ask Omi?"
+      case .cancelled: return "The question was cancelled."
+      default: return "Omi couldn't answer right now. Open Omi and try again."
+      }
+    }
     if action == "start_listening" || action == "stop_listening" {
       switch self {
       case .recordingOff: return "Turn on audio recording in Omi first."
@@ -96,8 +107,14 @@ struct SiriActionFailure: LocalizedError, Equatable {
   var errorDescription: String? { failure.message(for: action) }
 }
 
+enum SiriAskResult {
+  case answered(String)
+  case pending, draft
+}
+
 enum SiriIntentService {
   @TaskLocal static var memoryWriter: (@Sendable (String) async throws -> ServerMemory)?
+  @TaskLocal static var answerWriter: (@Sendable (String) async throws -> String?)?
   @TaskLocal static var taskCompletionWriter: (@Sendable (String) async throws -> TaskActionItem)?
   @TaskLocal static var taskCreationWriter: (@Sendable (String, Date?) async throws -> TaskActionItem)?
   static func normalizedMemory(_ input: String) -> String {
@@ -106,6 +123,57 @@ enum SiriIntentService {
       value = String(value.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
     return value
+  }
+
+  static func normalizedQuestion(_ input: String) -> String {
+    var value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    for prefix in ["ask omi about ", "ask omi ", "ask about ", "ask "] where value.lowercased().hasPrefix(prefix) {
+      value = String(value.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+      break
+    }
+    return value
+  }
+
+  static func attemptedAnswerResult(_ answer: String?) -> SiriAskResult {
+    answer.map(SiriAskResult.answered) ?? .pending
+  }
+
+  /// Use the canonical main-chat provider so Siri's turn belongs to the same
+  /// journal and answer timeline as a typed Ask Omi turn.
+  @MainActor
+  static func ask(_ input: String) async throws -> SiriAskResult {
+    let question = normalizedQuestion(input)
+    guard !question.isEmpty else { throw SiriActionFailure(action: "ask", failure: .unsupported) }
+    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      throw SiriFailure.auth
+    }
+    if let answerWriter {
+      let answer = try await answerWriter(question)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw SiriFailure.cancelled }
+      // The writer ran. A missing response may follow an accepted send, so
+      // opening chat must never cause an automatic second send.
+      return attemptedAnswerResult(answer)
+    }
+    guard let provider = ChatProvider.mainInstance, provider.canAcceptSend else {
+      return .draft
+    }
+    // Siri has a short execution window. Once a send starts, an unfinished
+    // answer stays in main chat; opening that timeline must not duplicate it.
+    let (stream, continuation) = AsyncStream<String?>.makeStream()
+    Task { @MainActor in
+      continuation.yield(await provider.sendMessage(question))
+      continuation.finish()
+    }
+    let timeout = Task {
+      do { try await Task.sleep(for: .seconds(18)) } catch { return }
+      continuation.yield(nil)
+      continuation.finish()
+    }
+    var iterator = stream.makeAsyncIterator()
+    let answer = await iterator.next() ?? nil
+    timeout.cancel()
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw SiriFailure.cancelled }
+    return attemptedAnswerResult(answer)
   }
 
   static func remember(_ input: String) async throws -> ServerMemory {

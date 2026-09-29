@@ -111,6 +111,18 @@ class MobileFeedbackReceipt {
   }
 }
 
+/// Signature of [submitMobileFeedback]. Callers that surface the feedback flow
+/// accept an override of this shape so tests can observe the request path.
+typedef MobileFeedbackSubmit = Future<MobileFeedbackReceipt?> Function({
+  required MobileFeedbackKind kind,
+  required String targetId,
+  required int value,
+  MobileFeedbackReason? reason,
+  String? correlationId,
+  String? feedbackId,
+  required MobileFeedbackTargetKind targetKind,
+});
+
 Future<MobileFeedbackReceipt?> submitMobileFeedback({
   required MobileFeedbackKind kind,
   required String targetId,
@@ -345,9 +357,10 @@ Future<Person?> createPerson(String name) async {
   return null;
 }
 
-Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true}) async {
+Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true, bool includeStats = false}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples',
+    url:
+        '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples${includeStats ? '&include_stats=true' : ''}',
     headers: {},
     method: 'GET',
     body: '',

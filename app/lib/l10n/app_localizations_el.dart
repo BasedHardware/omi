@@ -11299,7 +11299,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get openCall => 'Άνοιγμα κλήσης';
 
   @override
-  String get captureRecoveryBanner => 'Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή';
+  String get captureRecoveryBanner => 'Το Omi δεν στέλνει ήχο — πατήστε για επανασύνδεση';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11509,4 +11509,132 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Αναζήτηση ατόμων';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Προσθήκη του «$query» ως νέο άτομο';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Εμφάνιση όλων των ατόμων ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Γεια σου $name, ρώτα ό,τι θέλεις';
+  }
+
+  @override
+  String get activity => 'Δραστηριότητα';
+
+  @override
+  String get places => 'Μέρη';
+
+  @override
+  String get recaps => 'Ανασκοπήσεις';
+
+  @override
+  String get recent => 'Πρόσφατα';
+
+  @override
+  String get searchPartialFailure => 'Ορισμένα αποτελέσματα δεν φορτώθηκαν';
+
+  @override
+  String get peopleSearchPlaceholder => 'Αναζήτηση ατόμων';
+
+  @override
+  String get peopleNotHeardYet => 'Δεν έχει ακουστεί ακόμα';
+
+  @override
+  String get peopleRecent => 'Πρόσφατα';
+
+  @override
+  String get deletePeopleMessage =>
+      'Αυτό αφαιρεί τα δείγματα φωνής τους και δεν μπορεί να αναιρεθεί. Οι ατάκες τους σε παλαιότερες συζητήσεις γίνονται ανώνυμοι ομιλητές.';
+
+  @override
+  String get personTalkTime => 'Χρόνος ομιλίας';
+
+  @override
+  String get personLastHeard => 'Τελευταία φορά';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Διαγραφή $count ατόμων;',
+      one: 'Διαγραφή 1 ατόμου;',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Χρειάζεται φωνή';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count άτομα',
+      one: '1 άτομο',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Δεν Βρέθηκαν Άτομα';
+
+  @override
+  String get deselectAll => 'Αποεπιλογή Όλων';
+
+  @override
+  String get voiceRecognitionSettings => 'Αναγνώριση Φωνής';
 }

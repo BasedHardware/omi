@@ -190,11 +190,52 @@ final class SiriIntentServiceTests: XCTestCase {
     XCTAssertEqual(SiriIntentService.normalizedMemory("that\twe should meet"), "that\twe should meet")
   }
 
+  func testSiriQuestionCarrierIsRemovedWithoutRewritingItsWords() {
+    XCTAssertEqual(SiriIntentService.normalizedQuestion("  Ask Omi about what I did today  "), "what I did today")
+    XCTAssertEqual(SiriIntentService.normalizedQuestion("Ask Omi what did Sam promise?"), "what did Sam promise?")
+    XCTAssertEqual(SiriIntentService.normalizedQuestion("Ask about my tasks"), "my tasks")
+    XCTAssertEqual(SiriIntentService.normalizedQuestion("Ask what I did today"), "what I did today")
+    XCTAssertEqual(SiriIntentService.normalizedQuestion("What did I do today?"), "What did I do today?")
+  }
+
   func testClassicShortcutsUseTheCorrectExecutionProcess() {
     XCTAssertFalse(RememberIntent.openAppWhenRun)
+    XCTAssertFalse(AskOmiIntent.openAppWhenRun)
+    XCTAssertFalse(OpenOmiChatIntent.isDiscoverable)
+    XCTAssertTrue(OpenOmiChatActionIntent.isDiscoverable)
+    XCTAssertTrue(OpenOmiChatActionIntent.openAppWhenRun)
+    XCTAssertTrue(AskOmiIntent.isDiscoverable)
     XCTAssertTrue(StartListeningIntent.openAppWhenRun)
     XCTAssertTrue(StopListeningIntent.openAppWhenRun)
-    XCTAssertEqual(OmiAppShortcuts.appShortcuts.count, 3)
+    XCTAssertEqual(OmiAppShortcuts.appShortcuts.count, 5)
+  }
+
+  func testAttemptedAskContinuationNeverAutoSendsAgain() {
+    if case .pending = SiriIntentService.attemptedAnswerResult(nil) {
+      // A lost response must stay pending even when a writer has no answer.
+    } else {
+      XCTFail("An attempted send must not become an unsent draft")
+    }
+    let question = "What did I do today?"
+    for result in [SiriAskResult.pending, .answered("answer")] {
+      let continuation = AskOmiIntent.continuation(after: result, question: question, ownerID: "owner")
+      XCTAssertNil(continuation.draft)
+      XCTAssertFalse(
+        OpenOmiChatIntent.shouldAutoSend(
+          draft: continuation.draft, wasAttempted: continuation.draftWasAttempted))
+    }
+    let unsent = AskOmiIntent.continuation(after: .draft, question: question, ownerID: "owner")
+    XCTAssertEqual(unsent.draft, question)
+    XCTAssertTrue(OpenOmiChatIntent.shouldAutoSend(draft: unsent.draft, wasAttempted: unsent.draftWasAttempted))
+    XCTAssertFalse(OpenOmiChatIntent.shouldAutoSend(draft: question, wasAttempted: true))
+  }
+
+  func testAskOmiFailureIsNeverSpokenAsAnAnswer() {
+    XCTAssertEqual(SiriFailure.auth.message(for: "ask"), "Open Omi and sign in first.")
+    XCTAssertEqual(
+      SiriFailure.network.message(for: "ask"),
+      "Omi couldn't finish the answer. Open Omi and ask in chat.")
+    XCTAssertEqual(SiriFailure.unsupported.message(for: "ask"), "What would you like to ask Omi?")
   }
 
   func testBackendFailuresHaveTypedSpokenOutcomes() {

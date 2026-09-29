@@ -8,25 +8,47 @@ overlay:
   gke:
     backend-listen:
       env:
+        LISTEN_RECONNECT_BUDGET_PER_MIN:
+          value: '6'
+          category: reliability
         # 2026-09-26 incident: with the code-fixed order, a Modulate breaker opening sent
         # new sessions to Deepgram (402 since 09-14) and then streaming Parakeet (no ready
         # frame, 0 connects since 08-26), so they got no transcript. The configured order
-        # (STT_SERVICE_MODELS) puts Soniox second. Parakeet window allocation stays 0.
+        # The allocated windowed TDT cohort precedes the unchanged vendor order;
+        # otherwise Soniox is second after Modulate. Canary allocation follows the
+        # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29).
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
+        PARAKEET_WINDOW_ALLOCATION_PERCENT:
+          value: '5'
+        PARAKEET_WINDOW_MAX_SESSIONS:
+          value: '8'
+        PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
+          value: '12'
+          category: reliability
+        PARAKEET_WINDOW_MAX_EMPTY_STREAK:
+          value: '4'
+          category: reliability
+        PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+          value: '3'
+        STT_SERVICE_MODELS:
+          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:
           value: 'false'
         STT_ROUTING_MODE:
           value: shadow
         SONIOX_MONTHLY_CEILING_USD:
           value: '10000'
+        # 2026-09-28: learn each user's expected languages from observed output. About 75% of
+        # English-default sessions are mostly another language (largely Indic).
         STT_LEARNED_LANGUAGE_PROFILE:
-          value: 'false'
-        # 2026-09-27: first prod ramp of the Soniox-first arm for non-English multi-language
-        # users (live STT language constraint, omi#19343). Compare arm=hintable vs control on
-        # omi_stt_output_language_segments_total before ramping further.
+          value: 'true'
+          category: rollout
+        # Soniox-first arm for non-English multi-language users (omi#19343): 25% on 2026-09-27,
+        # then 50% on 2026-09-28 together with the learned profile. Compare arm=hintable vs control
+        # per language group before ramping further.
         STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
-          value: '25'
+          value: '50'
           category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
@@ -205,7 +227,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:

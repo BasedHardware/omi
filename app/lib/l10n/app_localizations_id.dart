@@ -11233,7 +11233,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get openCall => 'Buka panggilan';
 
   @override
-  String get captureRecoveryBanner => 'Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki';
+  String get captureRecoveryBanner => 'Omi tidak mengirim audio — ketuk untuk menghubungkan kembali';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11442,4 +11442,132 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Beri masukan';
+
+  @override
+  String get feedbackAllGood => 'Semua baik-baik saja';
+
+  @override
+  String get feedbackChatWithUs => 'Ingin menambahkan detail? Ngobrol dengan kami';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Tidak akurat';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Tidak lengkap';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Tidak relevan';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Konteks salah';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Hal lain';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Audio hilang';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Transkripsi buruk';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Pembicara salah';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Tertunda atau macet';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Terfragmentasi atau terduplikasi';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Hal lain';
+
+  @override
+  String get searchPeople => 'Cari orang';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Tambahkan \"$query\" sebagai orang baru';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Tampilkan semua $count orang';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hai $name, tanyakan apa saja';
+  }
+
+  @override
+  String get activity => 'Aktivitas';
+
+  @override
+  String get places => 'Tempat';
+
+  @override
+  String get recaps => 'Ringkasan';
+
+  @override
+  String get recent => 'Terbaru';
+
+  @override
+  String get searchPartialFailure => 'Beberapa hasil tidak dapat dimuat';
+
+  @override
+  String get peopleSearchPlaceholder => 'Cari orang';
+
+  @override
+  String get peopleNotHeardYet => 'Belum terdengar';
+
+  @override
+  String get peopleRecent => 'Terbaru';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tindakan ini menghapus sampel suara mereka dan tidak dapat dibatalkan. Ucapan mereka di percakapan sebelumnya menjadi pembicara tanpa nama.';
+
+  @override
+  String get personTalkTime => 'Waktu bicara';
+
+  @override
+  String get personLastHeard => 'Terakhir terdengar';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hapus $count orang?',
+      one: 'Hapus 1 orang?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Perlu Suara';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count orang',
+      one: '1 orang',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Tidak Ada Orang yang Cocok';
+
+  @override
+  String get deselectAll => 'Batalkan Semua';
+
+  @override
+  String get voiceRecognitionSettings => 'Pengenalan Suara';
 }

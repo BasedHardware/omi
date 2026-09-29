@@ -11250,7 +11250,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get openCall => 'Atvērt zvanu';
 
   @override
-  String get captureRecoveryBanner => 'Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu';
+  String get captureRecoveryBanner => 'Omi nesūta audio — pieskarieties, lai atkārtoti izveidotu savienojumu';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => 'Pirms ierakstīšanas ar tālruni apturiet Transcribe Later piekari.';
@@ -11456,4 +11456,132 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Meklēt cilvēkus';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Pievienot \"$query\" kā jaunu personu';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Rādīt visas personas ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Sveiks, $name, jautā jebko';
+  }
+
+  @override
+  String get activity => 'Darbības';
+
+  @override
+  String get places => 'Vietas';
+
+  @override
+  String get recaps => 'Kopsavilkumi';
+
+  @override
+  String get recent => 'Nesenie';
+
+  @override
+  String get searchPartialFailure => 'Dažus rezultātus neizdevās ielādēt';
+
+  @override
+  String get peopleSearchPlaceholder => 'Meklēt cilvēkus';
+
+  @override
+  String get peopleNotHeardYet => 'Vēl nav dzirdēts';
+
+  @override
+  String get peopleRecent => 'Nesenie';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tas noņem viņu balss paraugus, un to nevar atsaukt. Viņu replikas iepriekšējās sarunās kļūs par bezvārda runātājiem.';
+
+  @override
+  String get personTalkTime => 'Runas laiks';
+
+  @override
+  String get personLastHeard => 'Pēdējo reizi dzirdēts';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dzēst $count cilvēku?',
+      one: 'Dzēst 1 cilvēku?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Nepieciešama balss';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Personas: $count',
+      one: '1 persona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nav atbilstošu personu';
+
+  @override
+  String get deselectAll => 'Noņemt visu atlasi';
+
+  @override
+  String get voiceRecognitionSettings => 'Balss atpazīšana';
 }

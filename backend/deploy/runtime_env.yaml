@@ -14,6 +14,48 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          TRANSLATION_DEMAND_SHADOW_ENABLED:
+            value: 'false'
+            category: rollout
+          TRANSLATION_DEMAND_GATE_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_DEMAND_LEASE_V1_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONDEMAND_GEMINI_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONOPEN_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONDEMAND_COHORT_PERCENT:
+            value: '100'
+            category: rollout
+          TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_SEGMENTS:
+            value: '50'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_CHARS:
+            value: '12000'
+            category: rollout
+          TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
+            value: '3'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
+            value: '4096'
+            category: rollout
+          TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
+            value: '10000000'
+            category: rollout
+          TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
+            value: '1000000000'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+            value: '4'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'true'
@@ -109,6 +151,9 @@ environments:
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
             category: rollout
+          SONIOX_CONTEXT_TERMS:
+            value: 'false'
+            category: rollout
           STT_LEARNED_LANGUAGE_PROFILE:
             value: 'true'
             category: rollout
@@ -116,7 +161,7 @@ environments:
             value: '100'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '100'
+            value: '1'
             category: rollout
           PARAKEET_WINDOW_MAX_SESSIONS:
             value: '1'
@@ -133,11 +178,20 @@ environments:
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
             value: '24'
             category: rollout
+          PARAKEET_BATCH_PRESSURE_POOL_HOST:
+            value: dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local
+            category: service_discovery
+          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+            value: '1'
+            category: rollout
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
             value: '1800'
             category: rollout
           STT_CIRCUIT_HALF_OPEN_PROBES:
             value: '1'
+            category: rollout
+          STT_SHED_CONNECT_FAILURES:
+            value: '3'
             category: rollout
           SONIOX_CIRCUIT_FAILURE_THRESHOLD:
             value: '3'
@@ -146,7 +200,7 @@ environments:
             value: '30'
             category: rollout
           STT_SERVICE_MODELS:
-            value: parakeet-window,soniox
+            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -190,6 +244,9 @@ environments:
             value: http://diarizer.omiapi.com:80
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
+            category: reliability
+          LISTEN_RECONNECT_BUDGET_PER_MIN:
+            value: '6'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: gateway
@@ -679,6 +736,48 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            TRANSLATION_DEMAND_SHADOW_ENABLED:
+              value: 'false'
+              category: rollout
+            TRANSLATION_DEMAND_GATE_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_DEMAND_LEASE_V1_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONDEMAND_GEMINI_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONOPEN_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONDEMAND_COHORT_PERCENT:
+              value: '100'
+              category: rollout
+            TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+              value: ''
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_SEGMENTS:
+              value: '50'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CHARS:
+              value: '12000'
+              category: rollout
+            TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
+              value: '3'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
+              value: '4096'
+              category: rollout
+            TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
+              value: '10000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
+              value: '1000000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+              value: '4'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1728,6 +1827,48 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          TRANSLATION_DEMAND_SHADOW_ENABLED:
+            value: 'false'
+            category: rollout
+          TRANSLATION_DEMAND_GATE_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_DEMAND_LEASE_V1_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONDEMAND_GEMINI_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONOPEN_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONDEMAND_COHORT_PERCENT:
+            value: '100'
+            category: rollout
+          TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_SEGMENTS:
+            value: '50'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_CHARS:
+            value: '12000'
+            category: rollout
+          TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
+            value: '3'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
+            value: '4096'
+            category: rollout
+          TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
+            value: '10000000'
+            category: rollout
+          TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
+            value: '1000000000'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+            value: '4'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'false'
@@ -1821,17 +1962,20 @@ environments:
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
             category: rollout
-          STT_LEARNED_LANGUAGE_PROFILE:
+          SONIOX_CONTEXT_TERMS:
             value: 'false'
             category: rollout
+          STT_LEARNED_LANGUAGE_PROFILE:
+            value: 'true'
+            category: rollout
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
-            value: '25'
+            value: '50'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '0'
+            value: '5'
             category: rollout
           PARAKEET_WINDOW_MAX_SESSIONS:
-            value: '1'
+            value: '8'
             category: rollout
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
             value: '8'
@@ -1845,11 +1989,20 @@ environments:
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
             value: '24'
             category: rollout
+          PARAKEET_BATCH_PRESSURE_POOL_HOST:
+            value: prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local
+            category: service_discovery
+          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+            value: '3'
+            category: rollout
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
             value: '1800'
             category: rollout
           STT_CIRCUIT_HALF_OPEN_PROBES:
             value: '1'
+            category: rollout
+          STT_SHED_CONNECT_FAILURES:
+            value: '3'
             category: rollout
           SONIOX_CIRCUIT_FAILURE_THRESHOLD:
             value: '3'
@@ -1858,7 +2011,7 @@ environments:
             value: '30'
             category: rollout
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1902,6 +2055,9 @@ environments:
             value: http://diarizer.omi.me:80
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
+            category: reliability
+          LISTEN_RECONNECT_BUDGET_PER_MIN:
+            value: '6'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
@@ -1989,6 +2145,12 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
+          PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
+            value: '12'
+            category: reliability
+          PARAKEET_WINDOW_MAX_EMPTY_STREAK:
+            value: '4'
+            category: reliability
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
@@ -2161,7 +2323,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -2287,6 +2449,48 @@ environments:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
           env:
+            TRANSLATION_DEMAND_SHADOW_ENABLED:
+              value: 'false'
+              category: rollout
+            TRANSLATION_DEMAND_GATE_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_DEMAND_LEASE_V1_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONDEMAND_GEMINI_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONOPEN_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONDEMAND_COHORT_PERCENT:
+              value: '100'
+              category: rollout
+            TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+              value: ''
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_SEGMENTS:
+              value: '50'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CHARS:
+              value: '12000'
+              category: rollout
+            TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
+              value: '3'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
+              value: '4096'
+              category: rollout
+            TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
+              value: '10000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
+              value: '1000000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+              value: '4'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'

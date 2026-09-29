@@ -11254,7 +11254,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get openCall => 'Abrir llamada';
 
   @override
-  String get captureRecoveryBanner => 'El audio del colgante no llega a la app — toca para reparar';
+  String get captureRecoveryBanner => 'Omi no está enviando audio — toca para volver a conectar';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11465,4 +11465,132 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'No se pudieron enviar los datos de diagnóstico. Inténtalo de nuevo.';
+
+  @override
+  String get feedbackGiveFeedback => 'Enviar comentarios';
+
+  @override
+  String get feedbackAllGood => 'Todo bien';
+
+  @override
+  String get feedbackChatWithUs => '¿Más detalle? Chatea con nosotros';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inexacto';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incompleto';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'No es relevante';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Contexto equivocado';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Otra cosa';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Falta el audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Transcripción deficiente';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Orador equivocado';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Con retraso o atascado';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmentado o duplicado';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Otra cosa';
+
+  @override
+  String get searchPeople => 'Buscar personas';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Añadir \"$query\" como nueva persona';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Mostrar todas las personas ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hola $name, pregunta lo que quieras';
+  }
+
+  @override
+  String get activity => 'Actividad';
+
+  @override
+  String get places => 'Lugares';
+
+  @override
+  String get recaps => 'Resúmenes';
+
+  @override
+  String get recent => 'Recientes';
+
+  @override
+  String get searchPartialFailure => 'No se pudieron cargar algunos resultados';
+
+  @override
+  String get peopleSearchPlaceholder => 'Buscar personas';
+
+  @override
+  String get peopleNotHeardYet => 'Aún sin escuchar';
+
+  @override
+  String get peopleRecent => 'Recientes';
+
+  @override
+  String get deletePeopleMessage =>
+      'Esto elimina sus muestras de voz y no se puede deshacer. Sus intervenciones en conversaciones anteriores pasan a ser hablantes sin nombre.';
+
+  @override
+  String get personTalkTime => 'Tiempo de habla';
+
+  @override
+  String get personLastHeard => 'Última vez';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '¿Eliminar $count personas?',
+      one: '¿Eliminar 1 persona?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Falta la voz';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personas',
+      one: '1 persona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'No Hay Personas Coincidentes';
+
+  @override
+  String get deselectAll => 'Deseleccionar Todo';
+
+  @override
+  String get voiceRecognitionSettings => 'Reconocimiento de Voz';
 }

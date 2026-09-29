@@ -45,6 +45,7 @@ from utils.fair_use import (
 )
 from utils.listen_pusher_session import ListenPusherSession, ListenPusherSessionConfig, ListenPusherSessionDeps
 from utils.listen_session_bootstrap import finalize_listen_connect_context, load_listen_connect_base
+from utils.listen_reconnect_budget import listen_reconnect_budget
 from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
@@ -58,7 +59,9 @@ from utils.observability.transcription import (
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.product_telemetry import emit_product_event
 from utils.stt.streaming import get_stt_service_for_language
-from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
+from utils.stt.live_failure import terminate_live_stt_backoff
+from utils.stt.live_rollout import managed_chain_enabled, window_allocation, window_selection_kwargs
+from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME
 from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
@@ -136,7 +139,6 @@ class ListenSessionRuntime:
             request.websocket.headers
         )
         self.client_kind = resolve_client_kind_from_headers(request.websocket.headers)
-        record_listen_session_accepted(source=request.source, platform=self.client_device_context.platform)
         self.use_custom_stt = request.custom_stt_mode.value == 'enabled'
         self.pusher_enabled = PUSHER_ENABLED
         self.is_multi_channel = request.channels >= 2
@@ -386,19 +388,33 @@ class ListenSessionRuntime:
         if getattr(self, 'use_custom_stt', False):
             return
         try:
+            outcome = self._session_transcript_outcome()
             record_live_session_transcript_outcome(
-                outcome=self._session_transcript_outcome(),
+                outcome=outcome,
                 uid=self.request.uid,
                 source=self.request.source,
                 platform=self.client_device_context.platform,
                 recording_id=self.request.client_conversation_id,
             )
+            WINDOW_CANARY_OUTCOME.labels(
+                arm='window' if window_allocation(self.request.uid) else 'control', outcome=outcome
+            ).inc()
         except Exception as error:
             logger.warning('Listen session transcript outcome metric failed type=%s', type(error).__name__)
 
     async def _admit(self) -> bool:
         if not self.request.uid:
             await self.request.websocket.close(code=1008, reason='Bad uid')
+            return False
+        device_id = getattr(getattr(self, 'client_device_context', None), 'client_device_id', None)
+        allowed, retry_after = listen_reconnect_budget.admit(self.request.uid, device_id)
+        if not allowed:
+            await terminate_live_stt_backoff(
+                self.request.websocket,
+                self.state,
+                reason='reconnect_budget',
+                retry_after=retry_after,
+            )
             return False
         if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
             await self.request.websocket.send_json(
@@ -911,6 +927,7 @@ class ListenSessionRuntime:
             )
             if not await self.receiver.initialize_stt():
                 return
+            record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
             await self._start_pusher()
             receive_task = self.task_supervisor.create_task(self.receiver.receive_data(), name='receive')
             background.extend(

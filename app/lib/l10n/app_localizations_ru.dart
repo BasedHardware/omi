@@ -11260,7 +11260,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get openCall => 'Открыть звонок';
 
   @override
-  String get captureRecoveryBanner => 'Звук кулона не доходит до приложения — нажмите, чтобы исправить';
+  String get captureRecoveryBanner => 'Omi не передаёт звук — нажмите, чтобы подключиться снова';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11470,4 +11470,132 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Отправить отзыв';
+
+  @override
+  String get feedbackAllGood => 'Всё хорошо';
+
+  @override
+  String get feedbackChatWithUs => 'Подробнее? Напишите нам';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Неточно';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Неполно';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Не по теме';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Не тот контекст';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Другое';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Нет звука';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Плохая расшифровка';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Неверный спикер';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Задержка или зависание';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Фрагментация или дублирование';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Другое';
+
+  @override
+  String get searchPeople => 'Поиск людей';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Добавить «$query» как нового человека';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Показать всех людей ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Привет, $name, спрашивай о чём угодно';
+  }
+
+  @override
+  String get activity => 'Действия';
+
+  @override
+  String get places => 'Места';
+
+  @override
+  String get recaps => 'Итоги';
+
+  @override
+  String get recent => 'Недавние';
+
+  @override
+  String get searchPartialFailure => 'Не удалось загрузить некоторые результаты';
+
+  @override
+  String get peopleSearchPlaceholder => 'Поиск людей';
+
+  @override
+  String get peopleNotHeardYet => 'Ещё не слышали';
+
+  @override
+  String get peopleRecent => 'Недавние';
+
+  @override
+  String get deletePeopleMessage =>
+      'Это удалит образцы их голоса, и отменить это нельзя. Их реплики в прошлых разговорах станут безымянными говорящими.';
+
+  @override
+  String get personTalkTime => 'Время речи';
+
+  @override
+  String get personLastHeard => 'Слышали в последний раз';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Удалить людей: $count?',
+      one: 'Удалить 1 человека?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Нужен голос';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Людей: $count',
+      one: '1 человек',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Нет подходящих людей';
+
+  @override
+  String get deselectAll => 'Снять выбор';
+
+  @override
+  String get voiceRecognitionSettings => 'Распознавание голоса';
 }

@@ -19571,6 +19571,45 @@
         "title": "MemoryEditResponse",
         "type": "object"
       },
+      "MemoryGlobalReadGateObservability": {
+        "description": "Global memory read kill-switch observability attached to search responses.",
+        "properties": {
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Fallback reason when reads are disabled.",
+            "title": "Fallback Reason"
+          },
+          "read_decision": {
+            "description": "Server read decision value (USE_MEMORY or DENY_MEMORY).",
+            "title": "Read Decision",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Effective reason (fallback_reason when present, else the gate reason).",
+            "title": "Reason",
+            "type": "string"
+          },
+          "source_path": {
+            "description": "Firestore source path of the global read gate.",
+            "title": "Source Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_path",
+          "read_decision",
+          "reason"
+        ],
+        "title": "MemoryGlobalReadGateObservability",
+        "type": "object"
+      },
       "MemoryItemStatus": {
         "enum": [
           "active",
@@ -19706,6 +19745,39 @@
           "review_id"
         ],
         "title": "MemoryReviewItemResponse",
+        "type": "object"
+      },
+      "MemorySearchPolicyPayload": {
+        "description": "Access-policy snapshot attached to product memory search responses.",
+        "properties": {
+          "app_has_default_memory_grant": {
+            "description": "Whether the caller holds the default-memory grant.",
+            "title": "App Has Default Memory Grant",
+            "type": "boolean"
+          },
+          "archive_capability": {
+            "description": "Whether the policy grants Archive access.",
+            "title": "Archive Capability",
+            "type": "boolean"
+          },
+          "consumer": {
+            "description": "Memory consumer value (e.g. omi_chat).",
+            "title": "Consumer",
+            "type": "string"
+          },
+          "raw_provenance_capability": {
+            "description": "Whether raw provenance access is granted.",
+            "title": "Raw Provenance Capability",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "consumer",
+          "app_has_default_memory_grant",
+          "archive_capability",
+          "raw_provenance_capability"
+        ],
+        "title": "MemorySearchPolicyPayload",
         "type": "object"
       },
       "MemorySubjectScope": {
@@ -21595,6 +21667,17 @@
       },
       "Person": {
         "properties": {
+          "conversation_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Count"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -21610,6 +21693,18 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "last_heard_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heard At"
           },
           "name": {
             "title": "Name",
@@ -21641,6 +21736,17 @@
             "default": 3,
             "title": "Speech Samples Version",
             "type": "integer"
+          },
+          "talk_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Talk Seconds"
           },
           "updated_at": {
             "anyOf": [
@@ -22169,6 +22275,337 @@
         "title": "ProcessConversationRequest",
         "type": "object"
       },
+      "ProductMemorySearchItem": {
+        "additionalProperties": true,
+        "description": "One product memory search result row.\n\nThis is the projection the read seam emits (``_product_memory_result`` in\n``utils.memory.memory_read_api`` and the equivalent universal projection in\n``MemoryService.default_product_search``) — not a raw ``MemoryItem``.\nUnknown keys are preserved so a projection gaining a field does not silently\ndrop it from the wire.",
+        "properties": {
+          "access_reason": {
+            "description": "Why this row was admitted by the access policy.",
+            "title": "Access Reason",
+            "type": "string"
+          },
+          "agent_use": {
+            "description": "How an agent may use this row.",
+            "title": "Agent Use",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Confidence score when the layer emits one.",
+            "title": "Confidence"
+          },
+          "content": {
+            "description": "Memory content text.",
+            "title": "Content",
+            "type": "string"
+          },
+          "date": {
+            "description": "ISO-8601 timestamp of the last update.",
+            "title": "Date",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Evidence payloads for the row.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "lifecycle_status": {
+            "description": "Lifecycle status of the underlying item.",
+            "title": "Lifecycle Status",
+            "type": "string"
+          },
+          "memory_id": {
+            "description": "Logical memory id.",
+            "title": "Memory Id",
+            "type": "string"
+          },
+          "memory_layer": {
+            "description": "Read layer that produced the row (always product_memory here).",
+            "title": "Memory Layer",
+            "type": "string"
+          },
+          "processing_state": {
+            "description": "Processing state of the underlying item.",
+            "title": "Processing State",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Primary evidence source id, when present.",
+            "title": "Source"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Memory id that supersedes this row, if any.",
+            "title": "Superseded By"
+          },
+          "tier": {
+            "description": "Memory tier value (short_term, long_term, archive).",
+            "title": "Tier",
+            "type": "string"
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Visibility of the memory.",
+            "title": "Visibility"
+          },
+          "visibility_source": {
+            "description": "Which read seam decided the visibility value.",
+            "title": "Visibility Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory_id",
+          "memory_layer",
+          "tier",
+          "content",
+          "lifecycle_status",
+          "processing_state",
+          "visibility_source",
+          "date",
+          "agent_use",
+          "access_reason"
+        ],
+        "title": "ProductMemorySearchItem",
+        "type": "object"
+      },
+      "ProductMemorySearchResponse": {
+        "description": "Default-visible product memory search response.\n\nReturned by ``GET /memory/search``.",
+        "properties": {
+          "archive_default_visible": {
+            "description": "Always false; Archive is never default-visible.",
+            "title": "Archive Default Visible",
+            "type": "boolean"
+          },
+          "global_read_gate": {
+            "$ref": "#/components/schemas/MemoryGlobalReadGateObservability",
+            "description": "Global read kill-switch observability."
+          },
+          "items": {
+            "description": "Default-visible memory rows for the current page.",
+            "items": {
+              "$ref": "#/components/schemas/ProductMemorySearchItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "description": "Bounded page size used for this response.",
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Offset into the result set for this page.",
+            "title": "Offset",
+            "type": "integer"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/MemorySearchPolicyPayload",
+            "description": "Access-policy snapshot used for this read."
+          },
+          "query": {
+            "description": "Search query string.",
+            "title": "Query",
+            "type": "string"
+          },
+          "returned_count": {
+            "description": "Number of items returned in this page.",
+            "title": "Returned Count",
+            "type": "integer"
+          },
+          "rollout": {
+            "$ref": "#/components/schemas/ProductRolloutObservability",
+            "description": "Per-route default-read rollout observability."
+          },
+          "total_count": {
+            "description": "Total default-visible items matching the query.",
+            "title": "Total Count",
+            "type": "integer"
+          },
+          "uid": {
+            "description": "Authenticated user id.",
+            "title": "Uid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uid",
+          "query",
+          "items",
+          "total_count",
+          "returned_count",
+          "limit",
+          "offset",
+          "archive_default_visible",
+          "policy",
+          "global_read_gate",
+          "rollout"
+        ],
+        "title": "ProductMemorySearchResponse",
+        "type": "object"
+      },
+      "ProductRolloutObservability": {
+        "description": "Per-route default-read rollout observability for product memory routes.\n\nExtends the base per-consumer observability with the product-route context\nfields added by the shared authorization seam.",
+        "properties": {
+          "app_context": {
+            "additionalProperties": true,
+            "description": "Caller app/key/scope context payload.",
+            "title": "App Context",
+            "type": "object"
+          },
+          "archive_capability": {
+            "description": "Persisted Archive capability flag for the consumer.",
+            "title": "Archive Capability",
+            "type": "boolean"
+          },
+          "archive_capability_granted": {
+            "description": "Whether Archive capability was granted for this request.",
+            "title": "Archive Capability Granted",
+            "type": "boolean"
+          },
+          "archive_capability_required": {
+            "description": "Whether the route requires Archive capability.",
+            "title": "Archive Capability Required",
+            "type": "boolean"
+          },
+          "archive_default_visible": {
+            "description": "Always false; Archive is never default-visible.",
+            "title": "Archive Default Visible",
+            "type": "boolean"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/ReadRolloutCapabilities",
+            "description": "Raw rollout capability flags."
+          },
+          "consumer": {
+            "description": "Memory consumer (mcp, developer_api, omi_chat).",
+            "title": "Consumer",
+            "type": "string"
+          },
+          "default_memory_grant": {
+            "description": "Whether the app holds the default-memory grant.",
+            "title": "Default Memory Grant",
+            "type": "boolean"
+          },
+          "enabled": {
+            "description": "Whether default memory reads are enabled for this consumer.",
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "explicit_archive_request": {
+            "description": "Whether the caller explicitly requested Archive access.",
+            "title": "Explicit Archive Request",
+            "type": "boolean"
+          },
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Fallback reason when reads are not enabled.",
+            "title": "Fallback Reason"
+          },
+          "legacy_reads_authoritative": {
+            "description": "Whether legacy reads remain authoritative.",
+            "title": "Legacy Reads Authoritative",
+            "type": "boolean"
+          },
+          "memory_reads_enabled": {
+            "description": "Whether memory reads are enabled by capabilities.",
+            "title": "Memory Reads Enabled",
+            "type": "boolean"
+          },
+          "mode": {
+            "description": "Rollout capabilities mode value.",
+            "title": "Mode",
+            "type": "string"
+          },
+          "read_decision": {
+            "description": "Server read decision value (USE_MEMORY or DENY_MEMORY).",
+            "title": "Read Decision",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Effective reason (fallback_reason when present, else the decision reason).",
+            "title": "Reason",
+            "type": "string"
+          },
+          "surface": {
+            "description": "Product surface that requested the read (e.g. product_default_search).",
+            "title": "Surface",
+            "type": "string"
+          },
+          "vector_repair_outbox_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present only on the vector search route.",
+            "title": "Vector Repair Outbox Enabled"
+          }
+        },
+        "required": [
+          "consumer",
+          "enabled",
+          "reason",
+          "read_decision",
+          "mode",
+          "memory_reads_enabled",
+          "legacy_reads_authoritative",
+          "default_memory_grant",
+          "archive_default_visible",
+          "archive_capability",
+          "capabilities",
+          "surface",
+          "archive_capability_required",
+          "archive_capability_granted",
+          "explicit_archive_request",
+          "app_context"
+        ],
+        "title": "ProductRolloutObservability",
+        "type": "object"
+      },
       "ProgressExtractRequest": {
         "description": "Request to extract progress from text.",
         "properties": {
@@ -22605,6 +23042,45 @@
           }
         },
         "title": "RateMessageRequest",
+        "type": "object"
+      },
+      "ReadRolloutCapabilities": {
+        "description": "Raw memory default-read rollout capability flags for one consumer.",
+        "properties": {
+          "legacy_only": {
+            "description": "Whether the consumer is legacy-only (no default memory).",
+            "title": "Legacy Only",
+            "type": "boolean"
+          },
+          "legacy_reads_authoritative": {
+            "description": "Whether legacy reads remain authoritative.",
+            "title": "Legacy Reads Authoritative",
+            "type": "boolean"
+          },
+          "memory_reads_enabled": {
+            "description": "Whether memory reads are enabled.",
+            "title": "Memory Reads Enabled",
+            "type": "boolean"
+          },
+          "memory_writes_enabled": {
+            "description": "Whether memory writes are enabled.",
+            "title": "Memory Writes Enabled",
+            "type": "boolean"
+          },
+          "shadow_artifacts_enabled": {
+            "description": "Whether shadow artifacts are enabled.",
+            "title": "Shadow Artifacts Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "legacy_only",
+          "shadow_artifacts_enabled",
+          "memory_writes_enabled",
+          "memory_reads_enabled",
+          "legacy_reads_authoritative"
+        ],
+        "title": "ReadRolloutCapabilities",
         "type": "object"
       },
       "RebuildResponse": {
@@ -23897,6 +24373,115 @@
           "per_page"
         ],
         "title": "SearchConversationsResponse",
+        "type": "object"
+      },
+      "SearchOverviewFolder": {
+        "description": "One conversation folder with its non-discarded conversation count (null when it could not be counted).",
+        "properties": {
+          "color": {
+            "default": "#6B7280",
+            "title": "Color",
+            "type": "string"
+          },
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
+          },
+          "icon": {
+            "default": "folder",
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SearchOverviewFolder",
+        "type": "object"
+      },
+      "SearchOverviewResponse": {
+        "description": "Counts behind the global-search tiles shown before the user types.\n\nEvery count is decoration: a failed aggregation reports null (never a\nfalse 0) instead of failing the response.",
+        "properties": {
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/SearchOverviewFolder"
+            },
+            "title": "Folders",
+            "type": "array"
+          },
+          "memories": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memories"
+          },
+          "people": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "People"
+          },
+          "places": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Places"
+          },
+          "recaps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recaps"
+          },
+          "starred": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starred"
+          }
+        },
+        "title": "SearchOverviewResponse",
         "type": "object"
       },
       "SearchRequest": {
@@ -31697,6 +32282,148 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/memory/search": {
+      "get": {
+        "description": "Search default-visible memory product memory for the authenticated user.\n\nThis product endpoint constructs the default Omi-chat access policy explicitly\nand delegates Firestore reads/filtering to the memory product read service. It\nnever enables Archive capability; beta useful-now reads admit current, fading,\nand unknown records while an explicit history view retrieves dated non-Archive\nrecords under the same grant.",
+        "operationId": "search_product_memory_memory_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "View"
+            }
+          },
+          {
+            "in": "query",
+            "name": "as_of",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductMemorySearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Search Product Memory",
+        "tags": [
+          "memories",
+          "memory"
+        ]
+      }
+    },
     "/v1/account/cutover/control": {
       "get": {
         "description": "Stable authenticated bootstrap projection for bridge clients.\n\nAlways reachable for signed-in users, including while product traffic is\nfenced for migrating / force-upgrade / stranded states. Does not migrate\nany account; absent documents project as legacy. Malformed authoritative\ndocuments fail closed.",
@@ -40784,6 +41511,32 @@
               "default": true,
               "title": "Include Discarded",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_translations",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Translations",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "translation_cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Translation Cursor"
             }
           },
           {
@@ -56557,6 +57310,84 @@
         ]
       }
     },
+    "/v1/search/overview": {
+      "get": {
+        "description": "Counts for the global-search tiles shown before the user types.\n\nEvery count is a Firestore server-side aggregation and fails independently\n(reported as null, so the tile shows no number rather than a false 0). Semantics:\n\n- `starred`: starred, non-discarded, non-deleted conversations (same count as\n  `GET /v1/conversations/count?starred=true`).\n- `folders`: the user's folders in display order, each with its non-discarded,\n  non-deleted conversation count.\n- `recaps`: stored daily summaries.\n- `memories`: approximation of the default memories list — active canonical\n  memory items (Archive tier included), or the legacy collection when the\n  account has no canonical items. See `count_default_visible_memories`.\n- `people`: the people (speaker profiles) collection.\n- `places`: conversations with a geolocation, discarded ones included (an\n  exact non-discarded filter would need an undeclared composite index).",
+        "operationId": "get_search_overview_v1_search_overview_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchOverviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Search Overview",
+        "tags": [
+          "search"
+        ]
+      }
+    },
     "/v1/speaker-tag-prompts": {
       "get": {
         "description": "Today's small set of voices to confirm, from conversations in the last 48 hours.",
@@ -57298,7 +58129,7 @@
     },
     "/v1/stripe/return/{account_id}": {
       "get": {
-        "description": "Handle the return flow from Stripe Connect account creation",
+        "description": "Handle the return flow from Stripe Connect account creation.\nAccount onboarding status is updated via webhook and queried by authenticated\nclients at /v1/stripe/onboarded. This landing page provides user feedback without\nleaking account onboarding status to unauthenticated callers.",
         "operationId": "stripe_return_v1_stripe_return__account_id__get",
         "parameters": [
           {
@@ -60432,6 +61263,106 @@
           }
         ],
         "summary": "Create User Daily Summary",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/daily-summaries/search": {
+      "get": {
+        "description": "Search the user's recent daily summaries, newest first.\n\nCase-insensitive substring match: every whitespace-separated term must appear\nin the recap's readable text (headline, overview, highlights, action items,\nquestions, decisions, knowledge nuggets, learned memories, place addresses).\nOnly the latest 365 summaries are scanned.",
+        "operationId": "search_daily_summaries_v1_users_daily_summaries_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailySummariesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Search Daily Summaries",
         "tags": [
           "v1"
         ]
@@ -64294,6 +65225,16 @@
             "schema": {
               "default": true,
               "title": "Include Speech Samples",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_stats",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Stats",
               "type": "boolean"
             }
           },
