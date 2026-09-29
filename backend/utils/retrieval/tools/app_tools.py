@@ -32,6 +32,7 @@ from utils.mcp_client import call_mcp_tool
 from utils.http_client import get_webhook_circuit_breaker
 from utils.executors import db_executor, run_blocking
 from utils.notifications import send_notification
+from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -408,13 +409,13 @@ async def _call_tool_endpoint(
                     if isinstance(loaded_err, dict):
                         err_data = cast(Dict[str, Any], loaded_err)
                         if 'error' in err_data:
-                            error_msg += f" - {err_data['error']}"
+                            error_msg += f" - {sanitize(err_data['error'])}"
                         else:
-                            error_msg += f" - {str(err_data)}"
+                            error_msg += f" - {sanitize(str(err_data))}"
                     else:
-                        error_msg += f" - {str(loaded_err)}"
+                        error_msg += f" - {sanitize(str(loaded_err))}"
                 except ValueError:
-                    error_msg += f" - {response.text[:200]}"
+                    error_msg += f" - {sanitize(response.text[:200])}"
                 return error_msg
 
     except httpx.TimeoutException:
@@ -432,12 +433,13 @@ async def _call_tool_endpoint(
         await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, 'ConnectError')
         return f"Error: Could not connect to {app_tool.name}. The app endpoint may be unreachable."
     except Exception as e:
+        logger.error(f"Error calling {app_tool.name}: {sanitize(str(e))}")
         cb.record_failure()
         action = await run_blocking(
             db_executor, record_app_webhook_failure, app_id, 0, type(e).__name__, ENDPOINT_CHAT_TOOL
         )
         await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, type(e).__name__)
-        return f"Error calling {app_tool.name}: {str(e)}"
+        return f"Error calling {app_tool.name}: Request failed."
 
 
 def load_app_tools(uid: str) -> List[BaseTool]:
