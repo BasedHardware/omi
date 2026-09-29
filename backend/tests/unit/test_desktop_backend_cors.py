@@ -174,6 +174,11 @@ def test_desktop_backend_metrics_route_is_fail_closed(monkeypatch):
 
 def test_desktop_backend_mounts_authenticated_metrics(monkeypatch):
     monkeypatch.setenv('METRICS_SECRET', 'test-metrics-secret')
+    from utils.metrics import OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL
+
+    OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(
+        journey='desktop_chat', client_kind='desktop_macos', app_build='unknown'
+    ).inc()
     client = _test_client(monkeypatch, desktop_backend._build_app())
 
     with client:

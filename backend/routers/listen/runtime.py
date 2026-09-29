@@ -14,6 +14,7 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from database.firestore_read_metrics import FirestoreReadSite
+from database.live_language_profile import get_live_language_sessions
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
@@ -57,7 +58,8 @@ from utils.observability.transcription import (
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.product_telemetry import emit_product_event
 from utils.stt.streaming import get_stt_service_for_language
-from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
+from utils.stt.live_rollout import managed_chain_enabled, window_allocation, window_selection_kwargs
+from utils.stt.live_metrics import WINDOW_CANARY_OUTCOME
 from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
@@ -123,6 +125,7 @@ class ListenSessionRuntime:
 
     def __init__(self, request: ListenRequest):
         self.request = request
+        self.declared_codec = request.codec
         self.limits = ListenLimits()
         self.persistence = ListenPersistence()
         self.state = ListenSessionState()
@@ -384,13 +387,17 @@ class ListenSessionRuntime:
         if getattr(self, 'use_custom_stt', False):
             return
         try:
+            outcome = self._session_transcript_outcome()
             record_live_session_transcript_outcome(
-                outcome=self._session_transcript_outcome(),
+                outcome=outcome,
                 uid=self.request.uid,
                 source=self.request.source,
                 platform=self.client_device_context.platform,
                 recording_id=self.request.client_conversation_id,
             )
+            WINDOW_CANARY_OUTCOME.labels(
+                arm='window' if window_allocation(self.request.uid) else 'control', outcome=outcome
+            ).inc()
         except Exception as error:
             logger.warning('Listen session transcript outcome metric failed type=%s', type(error).__name__)
 
@@ -470,11 +477,25 @@ class ListenSessionRuntime:
         )
         # Retained so a mid-session failover reselects under the same language policy.
         self.multi_lang_enabled = not single_language_mode
+        language_profile_in_scope = not (self.is_multi_channel or self.use_custom_stt or get_byok_keys())
+        learned_sessions = None
+        if (
+            language_profile_in_scope
+            and self.multi_lang_enabled
+            and os.getenv('STT_LEARNED_LANGUAGE_PROFILE', 'false').lower() == 'true'
+        ):
+            try:
+                learned_sessions = await asyncio.wait_for(
+                    run_blocking(db_executor, get_live_language_sessions, request.uid), timeout=2.0
+                )
+            except Exception:
+                logger.warning('Live STT language profile read failed')
         self.language_profile = LiveLanguageProfile.create(
             self.language,
             multi=self.multi_lang_enabled,
             uid=request.uid,
-            in_scope=not (self.is_multi_channel or self.use_custom_stt or get_byok_keys()),
+            in_scope=language_profile_in_scope,
+            learned_sessions=learned_sessions,
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
@@ -1044,7 +1065,7 @@ class ListenSessionRuntime:
         if self.onboarding_handler:
             self.onboarding_handler.cleanup()
         if self.language_observations is not None:
-            await self.language_observations.summarize()
+            await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
         if not owner_persistence_blocked:
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
         self.receiver.clear()

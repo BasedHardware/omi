@@ -91,6 +91,7 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
     return TextField(
       keyboardType: TextInputType.text,
       textInputAction: TextInputAction.done,
+      minLines: 1,
       maxLines: 2,
       focusNode: widget.focusNode,
       controller: widget.controller,
@@ -100,6 +101,7 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
         contentPadding: EdgeInsets.zero,
         isDense: true,
         hintText: context.l10n.untitledConversation,
+        hintMaxLines: 1,
         hintStyle: widget.style.copyWith(color: OmiColors.textTertiary),
       ),
       style: widget.style,

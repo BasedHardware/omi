@@ -34,8 +34,12 @@ extension AppState {
     {
       return
     }
-    if armedMicrophoneRecovery.isWaitingOrProbing && !armedRetry {
-      if userInitiated { armedMicrophoneRecovery.cancel() } else { return }
+    if userInitiated {
+      // A manual start ends any remembered automatic flap episode, including
+      // the recovered-but-still-continuable interval.
+      armedMicrophoneRecovery.cancel()
+    } else if armedMicrophoneRecovery.isWaitingOrProbing && !armedRetry {
+      return
     }
     guard AssistantSettings.shared.audioRecordingMode != .off else {
       log("Transcription: start ignored because Audio Recording is Off")
@@ -272,7 +276,8 @@ extension AppState {
         launchContext: captureContext.rawValue,
         secondsSinceLaunch: CaptureLaunchContext.timeBucket(
           Date().timeIntervalSince(CaptureLaunchContext.launchedAt)),
-        updateAttemptID: captureContext == .updateRelaunch ? CaptureLaunchContext.updateAttemptID : nil)
+        updateAttemptID: captureContext == .updateRelaunch ? CaptureLaunchContext.updateAttemptID : nil,
+        armedEpisodeID: armedRetry ? armedMicrophoneRecovery.episodeID : nil)
       CaptureLaunchContext.hasStartedCapture = true
       AudioLevelMonitor.shared.reset()
       RecordingTimer.shared.start()
@@ -507,6 +512,7 @@ extension AppState {
       let useLocalSTT = sttSession.useLocalSTT
       let localService = localMicService
       let mixer = audioMixer
+      let probeAudioGate = armedMicrophoneRecovery.outboundAudioGate
       // A dictation app holding the mic replaces the chunk with silence (`DictationMicSuppression`).
       let dictationGate = ensureDictationMicSuppressionMonitor().gate
       let firstAudioFrame = CaptureAttemptFirstAudioFrameLatch()
@@ -535,9 +541,13 @@ extension AppState {
             }
           }
           if useLocalSTT {
-            localService?.appendAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              localService?.appendAudio(chunk)
+            }
           } else {
-            mixer?.setMicAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              mixer?.setMicAudio(chunk)
+            }
           }
         },
         onAudioLevel: { level in
@@ -582,6 +592,7 @@ extension AppState {
       let useLocalSTT = sttSession.useLocalSTT
       let localSystem = localSystemService
       let mixer = audioMixer
+      let probeAudioGate = armedMicrophoneRecovery.outboundAudioGate
       let firstAudioFrame = CaptureAttemptFirstAudioFrameLatch()
       try await systemService.startCapture(
         onAudioChunk: { [weak self] audioData in
@@ -589,9 +600,13 @@ extension AppState {
             self?.captureAttempt?.noteFirstAudioFrame()
           }
           if useLocalSTT {
-            localSystem?.appendAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              localSystem?.appendAudio(chunk)
+            }
           } else {
-            mixer?.setSystemAudio(audioData)
+            probeAudioGate.forward(audioData) { chunk in
+              mixer?.setSystemAudio(chunk)
+            }
           }
         },
         onAudioLevel: { level in

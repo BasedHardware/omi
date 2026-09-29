@@ -192,12 +192,12 @@ def load_input_data(input_src: str) -> List[Dict[str, Any]]:
     if isinstance(data, list):
         return [it for it in data if isinstance(it, dict)]
     elif isinstance(data, dict):
-        if "items" in data and isinstance(data["items"], list):
-            return [it for it in data["items"] if isinstance(it, dict)]
-        if "action_items" in data and isinstance(data["action_items"], list):
-            return [it for it in data["action_items"] if isinstance(it, dict)]
-        # Single action item
-        return [data]
+        for key in ("action_items", "items", "data"):
+            val = data.get(key)
+            if isinstance(val, list):
+                return [it for it in val if isinstance(it, dict)]
+        if data:
+            return [data]
     return []
 
 

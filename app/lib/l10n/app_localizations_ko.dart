@@ -11042,7 +11042,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get openCall => '통화 열기';
 
   @override
-  String get captureRecoveryBanner => '펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구';
+  String get captureRecoveryBanner => 'Omi가 오디오를 보내지 않고 있습니다 — 탭하여 다시 연결하세요';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '휴대폰으로 녹음하기 전에 펜던트에서 Transcribe Later를 중지하세요.';
@@ -11228,6 +11228,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get voiceQuestionNoSpeech => '잘 듣지 못했어요 — 다시 시도해 주세요';
 
   @override
+  String get siriIndexSetting => 'Siri 및 Apple Intelligence와 함께 Omi 사용';
+
+  @override
+  String get siriIndexSettingDescription => 'Siri가 이 기기에서 대화, 기억, 작업을 찾도록 허용합니다. 끄면 Apple 검색에서 삭제됩니다.';
+
+  @override
   String get sendToSupport => 'Send to support';
 
   @override
@@ -11239,4 +11245,59 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => '피드백 보내기';
+
+  @override
+  String get feedbackAllGood => '문제없음';
+
+  @override
+  String get feedbackChatWithUs => '자세한 이야기가 필요한가요? 채팅으로 알려주세요';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => '정확하지 않음';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => '불완전함';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => '관련 없음';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => '잘못된 맥락';
+
+  @override
+  String get feedbackReasonSummaryOther => '기타';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => '오디오 없음';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => '전사 품질 낮음';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => '잘못된 화자';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => '지연 또는 중단';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => '불완전하거나 중복됨';
+
+  @override
+  String get feedbackReasonRecordingOther => '기타';
+
+  @override
+  String get searchPeople => '사람 검색';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\"을(를) 새 사람으로 추가';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return '모두 $count명 표시';
+  }
 }

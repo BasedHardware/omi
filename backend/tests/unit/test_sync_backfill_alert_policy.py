@@ -27,6 +27,28 @@ def test_threshold_policy_requires_exact_filter_duration_and_channels():
     ]
 
 
+def test_rate_policy_checks_threshold_and_window_only_when_declared():
+    policy = _policy(
+        {
+            'conditionThreshold': {
+                'filter': FILTER,
+                'duration': '0s',
+                'thresholdValue': 30,
+                'aggregations': [{'alignmentPeriod': '1800s', 'perSeriesAligner': 'ALIGN_SUM'}],
+            }
+        }
+    )
+    kwargs = dict(condition='threshold', filter_text=FILTER, duration_seconds=0, channels=CHANNELS)
+    assert check_policy(policy, **kwargs, threshold_value=30, alignment_period='1800s') == []
+    assert check_policy(policy, **kwargs) == []
+    assert check_policy(policy, **kwargs, threshold_value=0, alignment_period='60s') == [
+        'condition threshold differs',
+        'condition alignment period differs',
+    ]
+    del policy['conditions'][0]['conditionThreshold']['aggregations']
+    assert check_policy(policy, **kwargs, alignment_period='1800s') == ['condition alignment period differs']
+
+
 def test_absence_policy_requires_ten_minute_duration():
     policy = _policy({'conditionAbsent': {'filter': FILTER, 'duration': '600s'}})
     assert check_policy(policy, condition='absent', filter_text=FILTER, duration_seconds=600, channels=CHANNELS) == []

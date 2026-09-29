@@ -10,6 +10,7 @@ type AdminDoc = {
 const mocks = vi.hoisted(() => ({
   verifyAdmin: vi.fn(),
   getUserByEmail: vi.fn(),
+  createUser: vi.fn(),
   memberSet: vi.fn(),
   memberDelete: vi.fn(),
   docs: new Map<string, AdminDoc>(),
@@ -17,7 +18,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth", () => ({ verifyAdmin: mocks.verifyAdmin }));
 vi.mock("@/lib/firebase/admin", () => ({
-  getAdminAuth: () => ({ getUserByEmail: mocks.getUserByEmail }),
+  getAdminAuth: () => ({
+    getUserByEmail: mocks.getUserByEmail,
+    createUser: mocks.createUser,
+  }),
   getDb: () => ({
     collection: () => ({
       get: async () => ({
@@ -96,7 +100,9 @@ describe("POST /api/omi/team-members", () => {
         role: "Admin",
         email: "architdraftid@gmail.com",
       },
+      provisioned: false,
     });
+    expect(mocks.createUser).not.toHaveBeenCalled();
     expect(mocks.getUserByEmail).toHaveBeenCalledWith(
       "architdraftid@gmail.com"
     );
@@ -109,17 +115,57 @@ describe("POST /api/omi/team-members", () => {
     );
   });
 
-  it("explains when the person has not signed in to Omi yet", async () => {
+  it("provisions a uid for someone who has never signed in to Omi", async () => {
     mocks.getUserByEmail.mockRejectedValue({ code: "auth/user-not-found" });
+    mocks.createUser.mockResolvedValue({ uid: "jan-uid", displayName: null });
 
-    const response = await POST(
-      requestWith({ email: "architdraftid@gmail.com" })
-    );
+    const response = await POST(requestWith({ email: "jan@example.com" }));
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual({
-      error:
-        "No Omi account found for architdraftid@gmail.com. Ask them to sign in to Omi once, then try again.",
+      teamMember: {
+        id: "jan-uid",
+        name: "jan@example.com",
+        role: "Admin",
+        email: "jan@example.com",
+      },
+      provisioned: true,
+    });
+    // Credential-less and unverified, so their first Google sign-in links
+    // into this uid instead of being refused as a different credential.
+    expect(mocks.createUser).toHaveBeenCalledWith({
+      email: "jan@example.com",
+      emailVerified: false,
+    });
+    expect(mocks.memberSet).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "jan@example.com", role: "Admin" })
+    );
+  });
+
+  it("reuses the existing uid when provisioning races a first sign-in", async () => {
+    mocks.getUserByEmail
+      .mockRejectedValueOnce({ code: "auth/user-not-found" })
+      .mockResolvedValueOnce({ uid: "jan-uid", displayName: "Jan" });
+    mocks.createUser.mockRejectedValue({ code: "auth/email-already-exists" });
+
+    const response = await POST(requestWith({ email: "jan@example.com" }));
+
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.teamMember.id).toBe("jan-uid");
+    expect(body.teamMember.name).toBe("Jan");
+    expect(mocks.memberSet).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not grant admin access when provisioning fails", async () => {
+    mocks.getUserByEmail.mockRejectedValue({ code: "auth/user-not-found" });
+    mocks.createUser.mockRejectedValue({ code: "auth/invalid-email" });
+
+    const response = await POST(requestWith({ email: "jan@example.com" }));
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: "Failed to add team member",
     });
     expect(mocks.memberSet).not.toHaveBeenCalled();
   });

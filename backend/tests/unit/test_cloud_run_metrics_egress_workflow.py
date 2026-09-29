@@ -33,6 +33,8 @@ def test_workflow_owns_dev_auto_deploy_and_manual_production() -> None:
     assert set(triggers['push']['paths']) == {
         'backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml',
         'backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml',
+        'backend/charts/monitoring/alerts/live-stt.json',
+        'backend/charts/monitoring/live-alert-gate.json',
         '.github/workflows/gcp_cloud_run_metrics_egress.yml',
     }
     environment = triggers['workflow_dispatch']['inputs']['environment']
@@ -59,6 +61,55 @@ def test_workflow_installs_both_pinned_releases_atomically() -> None:
     assert 'prometheus-stackdriver-exporter \\\n  --version 4.8.3' in scripts
     assert 'kube-prometheus-stack \\\n  --version 75.15.1' in scripts
     assert 'kubectl rollout status "deployment/$EXPORTER_RELEASE"' in scripts
+
+
+def test_workflow_provisions_live_stt_alerts_independently_of_helm() -> None:
+    workflow = _workflow()
+    jobs = workflow['jobs']
+    deploy = jobs['deploy']
+    provision = jobs['provision-live-alerts']
+    provision_steps = provision['steps']
+    deploy_names = {step['name'] for step in deploy['steps']}
+    assert 'Import allowlisted live-STT Grafana alerts' not in deploy_names
+    assert 'Verify imported live-STT Grafana alert coverage' not in deploy_names
+
+    assert provision['if'] == "github.ref == 'refs/heads/main'"
+    assert provision['environment'] == deploy['environment']
+    assert provision['permissions'] == {'contents': 'read'}
+    assert 'needs' not in provision
+    assert provision_steps[0]['uses'] == 'actions/checkout@v7'
+    assert provision_steps[0]['with']['ref'] == '${{ github.sha }}'
+    assert not any(
+        'google-github-actions/auth@' in step.get('uses', '')
+        or 'google-github-actions/get-gke-credentials@' in step.get('uses', '')
+        for step in provision_steps
+    )
+
+    steps = provision_steps
+    names = [step['name'] for step in steps]
+    imported = names.index('Import allowlisted live-STT Grafana alerts')
+    verified = names.index('Verify imported live-STT Grafana alert coverage')
+    assert imported < verified
+    import_run = steps[imported]['run']
+    verify_run = steps[verified]['run']
+    assert '--mode import' in import_run
+    assert '--mode fleet' in verify_run
+    assert '--alert-set live-stt' in verify_run
+    assert '--fail-on gated' in verify_run
+    for run in (import_run, verify_run):
+        assert 'MONITOR_GRAFANA_TOKEN' in run
+        assert 'token_file' in run
+        assert '--token-file "$token_file"' in run
+        assert 'umask 077' in run
+        assert 'trap cleanup EXIT' in run
+        assert (
+            steps[imported if run == import_run else verified]['env']['MONITOR_GRAFANA_TOKEN']
+            == '${{ secrets.MONITOR_GRAFANA_TOKEN }}'
+        )
+        assert 'python3 backend/scripts/verify_pusher_live_alert_route.py' in run
+    push_paths = set(workflow['on']['push']['paths'])
+    assert 'backend/charts/monitoring/alerts/live-stt.json' in push_paths
+    assert 'backend/charts/monitoring/live-alert-gate.json' in push_paths
 
 
 def test_workflow_values_exist_for_every_environment() -> None:

@@ -4,14 +4,20 @@ import threading
 from typing import Any
 
 from fastapi import Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest, start_http_server
-
-from utils.journey_metrics_contract import (
-    CLIENT_JOURNEY_ISSUE_CLASSES,
-    CLIENT_JOURNEY_OUTCOMES,
-    CLIENT_JOURNEYS,
-    CLIENT_KINDS,
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    disable_created_metrics,
+    generate_latest,
+    start_http_server,
 )
+
+# All backend, backend-listen, and pusher metrics endpoints import this module.
+# The pinned prometheus_client (0.21.1) otherwise exports a second _created
+# series for every Counter and Histogram child, including idle zero children.
+disable_created_metrics()
 
 OMI_PRODUCT_EVENT_TOTAL = Counter(
     'omi_product_event_total',
@@ -215,12 +221,6 @@ OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL = Counter(
 )
 for _mode in ('legacy', 'v2'):
     for _provider in AUDIO_TIMELINE_PROVIDERS:
-        for _send_path in AUDIO_TIMELINE_SEND_PATHS:
-            OMI_AUDIO_TIMELINE_MAPPED_TOTAL.labels(mode=_mode, provider=_provider, send_path=_send_path)
-            for _reason in AUDIO_TIMELINE_REJECT_REASONS:
-                OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(
-                    mode=_mode, reason=_reason, provider=_provider, send_path=_send_path
-                )
         OMI_AUDIO_TIMELINE_CALLBACK_ERRORS_TOTAL.labels(mode=_mode, provider=_provider)
     for _outcome in (
         'mapped',
@@ -501,7 +501,8 @@ def record_memory_owner_jev(outcome: str) -> None:
 OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_client_journey_accepted_total',
     (
-        'Accepted client-segmented product journeys by bounded journey, client kind, and app build. '
+        'Accepted client-segmented product journeys by bounded journey and client kind. '
+        'app_build is a constant compatibility label, not a client-supplied build. '
         'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
     ),
     ['journey', 'client_kind', 'app_build'],
@@ -532,29 +533,9 @@ OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
 # This is a separate, versioned contract from the legacy omi_journey_* family
 # above. Keep client_kind off the histogram: its 16 bucket series per child
 # would multiply the most expensive metric without helping outcome segmentation.
-# Initialize the complete bounded product so healthy-but-idle exporters expose
-# zeros instead of making an idle process indistinguishable from a missing one.
-# Zero-initialize journey×client_kind with app_build=unknown only. Expanding
-# the app_build axis would multiply series by every historical client build.
-for _journey in CLIENT_JOURNEYS:
-    for _client_kind in CLIENT_KINDS:
-        OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey, client_kind=_client_kind, app_build='unknown')
-        for _outcome in CLIENT_JOURNEY_OUTCOMES:
-            OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
-                journey=_journey,
-                client_kind=_client_kind,
-                app_build='unknown',
-                outcome=_outcome,
-            )
-        for _issue_class in CLIENT_JOURNEY_ISSUE_CLASSES:
-            OMI_CLIENT_JOURNEY_ISSUES_TOTAL.labels(
-                journey=_journey,
-                client_kind=_client_kind,
-                app_build='unknown',
-                issue_class=_issue_class,
-            )
-    for _outcome in CLIENT_JOURNEY_OUTCOMES:
-        OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(journey=_journey, outcome=_outcome)
+# Emit these children only when a journey occurs. The dashboard queries use
+# rate/increase, and no alert relies on an idle child being present. An idle
+# scrape is distinguished from a failed scrape by the scrape target's `up`.
 
 # The gauges below report one GLOBAL Firestore-derived quantity, and every
 # replica publishes the same value. Aggregate them with max(), never sum(): a
@@ -884,6 +865,12 @@ OMI_STT_PROVIDER_CONNECT_TOTAL = Counter(
     ['provider', 'outcome', 'error_class'],
 )
 
+OMI_LIVE_STT_OPEN_STREAMS = Gauge(
+    'omi_live_stt_open_streams',
+    'Currently open provider sockets serving live STT, by bounded provider',
+    ['provider'],
+)
+
 # Deployment-marked retired providers (intentionally unfunded legs). Budget and
 # leg-error alerts subtract these so a provider that is dead on purpose cannot
 # page forever. Populated from STT_RETIRED_PROVIDERS (utils/stt/stream_close.py).
@@ -919,6 +906,12 @@ OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
     'omi_listen_audio_outcome_total',
     'Per-session listen audio outcomes by bounded transcription source, outcome, and client platform',
     ['transcription_source', 'outcome', 'client_platform'],
+)
+
+OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL = Counter(
+    'omi_listen_audio_decode_failures_total',
+    'Undecodable /v4/listen audio frames by bounded declared codec and client platform',
+    ['codec', 'client_platform'],
 )
 
 OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
