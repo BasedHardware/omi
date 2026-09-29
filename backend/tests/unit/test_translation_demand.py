@@ -7,14 +7,32 @@ from config.translation import (
 from utils.translation_demand import DemandPolicy, TranslationDemand
 
 
-def test_defaults_preserve_legacy_and_require_explicit_spend_limits():
+def test_defaults_ship_on_demand_on_with_kill_switches_to_legacy():
+    # Owner decision 2026-09-29: default ON at merge; flags are kill switches.
     config = resolve_ondemand_config({})
-    assert not config.gate_enabled and not config.onopen_enabled and not config.gemini_enabled
-    assert not config.admits('any-uid') and not config.spend_configured
+    assert config.gate_enabled and config.onopen_enabled and config.gemini_enabled
+    assert config.lease_v1_enabled and not config.shadow_enabled
+    assert config.admits('any-uid') and config.spend_configured
+    assert config.cohort_percent == 100
+    assert config.uid_daily_chars > 0 and config.global_daily_chars > 0
     assert resolve_translation_profile({}).policy_version == 'legacy'
     assert viewed_translation_profile(resolve_translation_profile({}), config).providers == (
         TranslationProvider.gemini,
     )
+
+
+def test_kill_switches_restore_exact_legacy_defaults():
+    config = resolve_ondemand_config(
+        {
+            'TRANSLATION_DEMAND_GATE_ENABLED': 'false',
+            'TRANSLATION_DEMAND_LEASE_V1_ENABLED': 'false',
+            'TRANSLATION_ONDEMAND_GEMINI_ENABLED': 'false',
+            'TRANSLATION_ONOPEN_ENABLED': 'false',
+            'TRANSLATION_ONDEMAND_COHORT_PERCENT': '0',
+        }
+    )
+    assert not config.gate_enabled and not config.onopen_enabled and not config.gemini_enabled
+    assert not config.admits('any-uid')
 
 
 def test_unversioned_state_stales_to_legacy_and_renewal_does_not_change_generation():

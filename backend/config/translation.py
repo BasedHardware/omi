@@ -167,8 +167,18 @@ class OnDemandTranslationConfig:
 def resolve_ondemand_config(env: Mapping[str, str] | None = None) -> OnDemandTranslationConfig:
     values = process_environ if env is None else env
 
+    # Owner decision 2026-09-29: on-demand ships enabled at merge; every switch
+    # is a kill switch back to legacy semantics (false restores exact legacy).
+    switch_defaults = {
+        'TRANSLATION_DEMAND_SHADOW_ENABLED': 'false',
+        'TRANSLATION_DEMAND_GATE_ENABLED': 'true',
+        'TRANSLATION_DEMAND_LEASE_V1_ENABLED': 'true',
+        'TRANSLATION_ONDEMAND_GEMINI_ENABLED': 'true',
+        'TRANSLATION_ONOPEN_ENABLED': 'true',
+    }
+
     def switch(name: str) -> bool:
-        raw = values.get(name, 'false').strip().lower()
+        raw = values.get(name, switch_defaults[name]).strip().lower()
         if raw not in {'true', 'false'}:
             raise ValueError(f'{name} must be true or false')
         return raw == 'true'
@@ -194,7 +204,7 @@ def resolve_ondemand_config(env: Mapping[str, str] | None = None) -> OnDemandTra
         lease_v1_enabled=switch('TRANSLATION_DEMAND_LEASE_V1_ENABLED'),
         gemini_enabled=switch('TRANSLATION_ONDEMAND_GEMINI_ENABLED'),
         onopen_enabled=switch('TRANSLATION_ONOPEN_ENABLED'),
-        cohort_percent=bounded_int('TRANSLATION_ONDEMAND_COHORT_PERCENT', 0, 100, zero_allowed=True),
+        cohort_percent=bounded_int('TRANSLATION_ONDEMAND_COHORT_PERCENT', 100, 100, zero_allowed=True),
         uid_allowlist=frozenset(
             uid.strip() for uid in values.get('TRANSLATION_ONDEMAND_UID_ALLOWLIST', '').split(',') if uid.strip()
         ),
@@ -202,8 +212,10 @@ def resolve_ondemand_config(env: Mapping[str, str] | None = None) -> OnDemandTra
         max_chars=bounded_int('TRANSLATION_ONDEMAND_MAX_CHARS', 12000, 12000),
         deadline_seconds=deadline,
         max_output_tokens=bounded_int('TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS', 4096, 8192),
-        uid_daily_chars=bounded_int('TRANSLATION_ONDEMAND_UID_DAILY_CHARS', 0, 10_000_000, zero_allowed=True),
-        global_daily_chars=bounded_int('TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS', 0, 1_000_000_000, zero_allowed=True),
+        uid_daily_chars=bounded_int('TRANSLATION_ONDEMAND_UID_DAILY_CHARS', 10_000_000, 10_000_000, zero_allowed=True),
+        global_daily_chars=bounded_int(
+            'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS', 1_000_000_000, 1_000_000_000, zero_allowed=True
+        ),
     )
 
 

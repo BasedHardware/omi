@@ -1,9 +1,13 @@
 # On-demand transcript translation
 
 Translation remains display-only. The original `transcript_segments[].text` is the
-input to summaries, memory, and vector processing. All new switches default off;
-existing listen translation and ordinary conversation detail reads keep their
-previous behavior until an admitted UID and the relevant switch are enabled.
+input to summaries, memory, and vector processing. Per the owner decision of
+2026-09-29 the on-demand behavior ships ENABLED at merge (demand gate, lease-v1,
+Gemini viewed lane, and on-open default on; cohort 100; bounded daily char
+budgets), with every switch retained as a kill switch back to legacy semantics:
+setting `TRANSLATION_DEMAND_GATE_ENABLED=false` restores exact legacy live
+translation. Clients that never report visibility state keep legacy behavior
+through the compatibility matrix regardless of these defaults.
 
 ## Live listen admission
 
@@ -60,11 +64,12 @@ exact source, merge one target language, and store encrypted private provenance.
 They leave raw text, speaker/timing fields, client projections, and processing
 jobs untouched. A legacy result cannot replace a valid viewed result.
 
-Rollout: default-off deployment, shadow measurement, internal UIDs, then 5%,
-25%, and 100% of the eligible cohort with observation at each step. To restore
-legacy live behavior disable `TRANSLATION_DEMAND_GATE_ENABLED`; to stop opt-in
-detail generation also disable `TRANSLATION_ONOPEN_ENABLED`. Env changes on a
-fleet require rolling propagation. Stored translations remain readable.
+Rollout: default-ON at merge per the owner decision of 2026-09-29. The retained
+cohort machinery is a containment instrument: if post-deploy signals require
+staging exposure, lower `TRANSLATION_ONDEMAND_COHORT_PERCENT` below 100. To
+restore legacy live behavior disable `TRANSLATION_DEMAND_GATE_ENABLED`; to stop
+opt-in detail generation also disable `TRANSLATION_ONOPEN_ENABLED`. Env changes
+on a fleet require rolling propagation. Stored translations remain readable.
 
 Current Flutter and macOS clients send visibility changes but do not renew a
 lease or request `include_translations`. Sustained lease behavior and the

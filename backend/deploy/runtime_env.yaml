@@ -18,19 +18,19 @@ environments:
             value: 'false'
             category: rollout
           TRANSLATION_DEMAND_GATE_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           TRANSLATION_ONDEMAND_GEMINI_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           TRANSLATION_ONOPEN_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           TRANSLATION_ONDEMAND_COHORT_PERCENT:
-            value: '0'
+            value: '100'
             category: rollout
           TRANSLATION_ONDEMAND_UID_ALLOWLIST:
             value: ''
@@ -48,10 +48,10 @@ environments:
             value: '4096'
             category: rollout
           TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
-            value: '0'
+            value: '10000000'
             category: rollout
           TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
-            value: '0'
+            value: '1000000000'
             category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
@@ -737,19 +737,19 @@ environments:
               value: 'false'
               category: rollout
             TRANSLATION_DEMAND_GATE_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             TRANSLATION_ONDEMAND_GEMINI_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             TRANSLATION_ONOPEN_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             TRANSLATION_ONDEMAND_COHORT_PERCENT:
-              value: '0'
+              value: '100'
               category: rollout
             TRANSLATION_ONDEMAND_UID_ALLOWLIST:
               value: ''
@@ -767,10 +767,10 @@ environments:
               value: '4096'
               category: rollout
             TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
-              value: '0'
+              value: '10000000'
               category: rollout
             TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
-              value: '0'
+              value: '1000000000'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
@@ -1825,19 +1825,19 @@ environments:
             value: 'false'
             category: rollout
           TRANSLATION_DEMAND_GATE_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           TRANSLATION_ONDEMAND_GEMINI_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           TRANSLATION_ONOPEN_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           TRANSLATION_ONDEMAND_COHORT_PERCENT:
-            value: '0'
+            value: '100'
             category: rollout
           TRANSLATION_ONDEMAND_UID_ALLOWLIST:
             value: ''
@@ -1855,10 +1855,10 @@ environments:
             value: '4096'
             category: rollout
           TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
-            value: '0'
+            value: '10000000'
             category: rollout
           TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
-            value: '0'
+            value: '1000000000'
             category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
@@ -2444,19 +2444,19 @@ environments:
               value: 'false'
               category: rollout
             TRANSLATION_DEMAND_GATE_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             TRANSLATION_ONDEMAND_GEMINI_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             TRANSLATION_ONOPEN_ENABLED:
-              value: 'false'
+              value: 'true'
               category: rollout
             TRANSLATION_ONDEMAND_COHORT_PERCENT:
-              value: '0'
+              value: '100'
               category: rollout
             TRANSLATION_ONDEMAND_UID_ALLOWLIST:
               value: ''
@@ -2474,10 +2474,10 @@ environments:
               value: '4096'
               category: rollout
             TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
-              value: '0'
+              value: '10000000'
               category: rollout
             TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
-              value: '0'
+              value: '1000000000'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout

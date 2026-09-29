@@ -295,15 +295,15 @@ env:
   - name: TRANSLATION_DEMAND_SHADOW_ENABLED
     value: "false"
   - name: TRANSLATION_DEMAND_GATE_ENABLED
-    value: "false"
+    value: "true"
   - name: TRANSLATION_DEMAND_LEASE_V1_ENABLED
-    value: "false"
+    value: "true"
   - name: TRANSLATION_ONDEMAND_GEMINI_ENABLED
-    value: "false"
+    value: "true"
   - name: TRANSLATION_ONOPEN_ENABLED
-    value: "false"
+    value: "true"
   - name: TRANSLATION_ONDEMAND_COHORT_PERCENT
-    value: "0"
+    value: "100"
   - name: TRANSLATION_ONDEMAND_UID_ALLOWLIST
     value: ""
   - name: TRANSLATION_ONDEMAND_MAX_SEGMENTS
@@ -315,9 +315,9 @@ env:
   - name: TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS
     value: "4096"
   - name: TRANSLATION_ONDEMAND_UID_DAILY_CHARS
-    value: "0"
+    value: "10000000"
   - name: TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS
-    value: "0"
+    value: "1000000000"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
