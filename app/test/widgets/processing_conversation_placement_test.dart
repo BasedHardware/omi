@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/http/api/goals.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
-import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
-import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
@@ -23,7 +20,6 @@ Future<void> pumpPage(WidgetTester tester, ConversationProvider provider) async 
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final screen = await buildTypedConversationScreen(provider);
-  SharedPreferencesUtil().showGoalTrackerEnabled = true;
   final goals = GoalsProvider(
       goalsFetcher: () async => [
             Goal.fromJson({'id': 'goal', 'title': 'Read a book'})
@@ -46,7 +42,7 @@ ServerConversation completed(String id, {DateTime? createdAt, DateTime? finished
 void main() {
   setUp(() => VisibilityDetectorController.instance.updateInterval = Duration.zero);
 
-  testWidgets('Process Now appears below Goals and list controls, above existing conversations', (tester) async {
+  testWidgets('Process Now appears at the top of Home, above existing conversations', (tester) async {
     final provider = ConversationProvider(isSignedIn: () => false);
     addTearDown(provider.dispose);
     await pumpPage(tester, provider);
@@ -56,21 +52,17 @@ void main() {
 
     final processing = find.byType(ProcessingConversationWidget);
     expect(processing, findsOneWidget);
-    expect(tester.getBottomLeft(find.byType(GoalsWidget)).dy, lessThan(tester.getTopLeft(processing).dy));
-    expect(tester.getBottomLeft(find.text('Conversations')).dy, lessThan(tester.getTopLeft(processing).dy));
-    expect(tester.getBottomLeft(find.byType(FolderTabs)).dy, lessThanOrEqualTo(tester.getTopLeft(processing).dy));
     expect(tester.getBottomLeft(processing).dy, lessThan(tester.getTopLeft(find.byType(ConversationListItem)).dy));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('processing-only account has a list heading and no contradictory empty state', (tester) async {
+  testWidgets('processing-only account has no contradictory empty state', (tester) async {
     final provider = ConversationProvider(isSignedIn: () => false);
     addTearDown(provider.dispose);
     await pumpPage(tester, provider);
     provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
     await tester.pump();
 
-    expect(find.text('Conversations'), findsOneWidget);
     expect(find.byType(ProcessingConversationWidget), findsOneWidget);
     expect(find.byType(EmptyConversationsWidget), findsNothing);
     expect(find.byType(SliverFillRemaining), findsNothing);

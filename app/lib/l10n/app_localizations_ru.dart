@@ -11538,4 +11538,24 @@ class AppLocalizationsRu extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Показать всех людей ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Привет, $name, спрашивай о чём угодно';
+  }
+
+  @override
+  String get activity => 'Действия';
+
+  @override
+  String get places => 'Места';
+
+  @override
+  String get recaps => 'Итоги';
+
+  @override
+  String get recent => 'Недавние';
+
+  @override
+  String get searchPartialFailure => 'Не удалось загрузить некоторые результаты';
 }

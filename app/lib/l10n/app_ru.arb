@@ -3661,5 +3661,11 @@
     "feedbackReasonRecordingOther": "Другое",
     "searchPeople": "Поиск людей",
     "addQueryAsNewPerson": "Добавить «{query}» как нового человека",
-    "showAllPeople": "Показать всех людей ({count})"
+    "showAllPeople": "Показать всех людей ({count})",
+    "chatGreeting": "Привет, {name}, спрашивай о чём угодно",
+    "activity": "Действия",
+    "places": "Места",
+    "recaps": "Итоги",
+    "recent": "Недавние",
+    "searchPartialFailure": "Не удалось загрузить некоторые результаты"
 }

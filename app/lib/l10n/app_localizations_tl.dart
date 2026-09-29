@@ -11600,4 +11600,24 @@ class AppLocalizationsTl extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Ipakita ang lahat ng $count na tao';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hi $name, magtanong ng kahit ano';
+  }
+
+  @override
+  String get activity => 'Aktibidad';
+
+  @override
+  String get places => 'Mga lugar';
+
+  @override
+  String get recaps => 'Mga buod';
+
+  @override
+  String get recent => 'Kamakailan';
+
+  @override
+  String get searchPartialFailure => 'Hindi ma-load ang ilang resulta';
 }

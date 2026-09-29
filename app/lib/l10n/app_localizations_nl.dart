@@ -11536,4 +11536,24 @@ class AppLocalizationsNl extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Alle $count personen weergeven';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hoi $name, vraag maar raak';
+  }
+
+  @override
+  String get activity => 'Activiteit';
+
+  @override
+  String get places => 'Plaatsen';
+
+  @override
+  String get recaps => 'Samenvattingen';
+
+  @override
+  String get recent => 'Recent';
+
+  @override
+  String get searchPartialFailure => 'Sommige resultaten konden niet worden geladen';
 }

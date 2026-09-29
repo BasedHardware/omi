@@ -11508,4 +11508,24 @@ class AppLocalizationsMr extends AppLocalizations {
   String showAllPeople(int count) {
     return 'सर्व $count लोक दाखवा';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'नमस्कार $name, काहीही विचारा';
+  }
+
+  @override
+  String get activity => 'क्रियाकलाप';
+
+  @override
+  String get places => 'ठिकाणे';
+
+  @override
+  String get recaps => 'सारांश';
+
+  @override
+  String get recent => 'अलीकडील';
+
+  @override
+  String get searchPartialFailure => 'काही परिणाम लोड होऊ शकले नाहीत';
 }

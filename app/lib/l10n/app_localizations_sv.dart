@@ -11508,4 +11508,24 @@ class AppLocalizationsSv extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Visa alla $count personer';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hej $name, fråga vad du vill';
+  }
+
+  @override
+  String get activity => 'Aktivitet';
+
+  @override
+  String get places => 'Platser';
+
+  @override
+  String get recaps => 'Sammanfattningar';
+
+  @override
+  String get recent => 'Senaste';
+
+  @override
+  String get searchPartialFailure => 'Vissa resultat kunde inte läsas in';
 }

@@ -37,9 +37,10 @@ There are exactly two ways out, and they mean different things.
 - Push with `routeToPage(context, page)`, or `omiPageRoute(builder)` when you need a `Route`
   (`pushReplacement`). Never `PageRouteBuilder` for a push: it has no iOS back swipe
   (`page-route-builder`).
-- **Chat is a normal pushed page everywhere** (D1): no `fullscreenDialog`, leading
-  `OmiBackButton`, from every entry point (home chat bar, mic, deep link, app detail, quick
-  action, "Ask Omi").
+- **Chat is one sheet everywhere** (D1, revised 2026-09-29): `openChatSheet(context, ChatPage(...))`
+  (`lib/pages/chat/chat_route.dart`) rises over a blurred, dimmed page, carries an
+  `OmiCloseButton`, and closes on the X, a swipe down on its header, or system back — from every
+  entry point (home chat bar, mic, deep link, app detail, quick action, "Ask Omi").
 - **Conversation detail has no body-wide horizontal swipe to another conversation** (D2).
   Transcript / Summary tabs are swipeable where that does not fight a row's `Dismissible`. No
   prev/next controls replace it.
@@ -143,7 +144,7 @@ One policy, and never neither:
 | progress | `OmiFeedback.progress(context, msg)` | until replaced (≤ 1 min) | ongoing work, replaced by its result |
 
 - Neutral surface with a small coloured status icon; never a red or green slab (white on red fails
-  contrast). Floating, above the home tab bar and chat bar.
+  contrast). Floating, above Home's chat bar.
 - Code without a `BuildContext` uses `AppSnackbar` (same toasts on the global navigator).
 - An informational toast has no "OK" action.
 

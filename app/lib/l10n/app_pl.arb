@@ -3661,5 +3661,11 @@
     "feedbackReasonRecordingOther": "Coś innego",
     "searchPeople": "Szukaj osób",
     "addQueryAsNewPerson": "Dodaj „{query}” jako nową osobę",
-    "showAllPeople": "Pokaż wszystkie osoby ({count})"
+    "showAllPeople": "Pokaż wszystkie osoby ({count})",
+    "chatGreeting": "Cześć {name}, zapytaj o cokolwiek",
+    "activity": "Aktywność",
+    "places": "Miejsca",
+    "recaps": "Podsumowania",
+    "recent": "Ostatnie",
+    "searchPartialFailure": "Nie udało się wczytać niektórych wyników"
 }

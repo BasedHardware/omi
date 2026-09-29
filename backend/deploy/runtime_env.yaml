@@ -109,6 +109,9 @@ environments:
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
             category: rollout
+          SONIOX_CONTEXT_TERMS:
+            value: 'false'
+            category: rollout
           STT_LEARNED_LANGUAGE_PROFILE:
             value: 'true'
             category: rollout
@@ -1829,6 +1832,9 @@ environments:
             category: rollout
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
+            category: rollout
+          SONIOX_CONTEXT_TERMS:
+            value: 'false'
             category: rollout
           STT_LEARNED_LANGUAGE_PROFILE:
             value: 'false'

@@ -15,6 +15,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
@@ -32,7 +33,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/share_sheet.dart';
-import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/widgets/home_bottom_bar.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'conversation_detail_provider.dart';
@@ -906,15 +907,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           OmiButton.toolbar(
             key: const Key('conversation_ask_omi'),
             label: l10n.askOmi,
-            // The bottom nav's two-bubbles glyph (FontAwesome comments, regular), so Ask Omi reads as
-            // the same place as the Chat tab.
+            // The two-bubbles glyph (FontAwesome comments, regular) that marks Ask Omi everywhere.
             leading: const FaIcon(kAskOmiGlyph),
             size: OmiButtonSize.compact,
             onPressed: () {
               HapticFeedback.mediumImpact();
               trackConversationAction(ConversationActionAction.askOmi, ConversationActionSurface.topBar);
               final convo = provider.conversation;
-              routeToPage(
+              openChatSheet(
                 context,
                 ChatPage(
                   initialChatContext:

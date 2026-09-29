@@ -11495,4 +11495,24 @@ class AppLocalizationsFa extends AppLocalizations {
   String showAllPeople(int count) {
     return 'نمایش همه افراد ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'سلام $name، هر چه می‌خواهی بپرس';
+  }
+
+  @override
+  String get activity => 'فعالیت';
+
+  @override
+  String get places => 'مکان‌ها';
+
+  @override
+  String get recaps => 'خلاصه‌ها';
+
+  @override
+  String get recent => 'اخیر';
+
+  @override
+  String get searchPartialFailure => 'برخی نتایج بارگیری نشد';
 }

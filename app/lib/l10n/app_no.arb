@@ -3626,5 +3626,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Søk etter personer",
     "addQueryAsNewPerson": "Legg til \"{query}\" som en ny person",
-    "showAllPeople": "Vis alle {count} personer"
+    "showAllPeople": "Vis alle {count} personer",
+    "chatGreeting": "Hei {name}, spør om hva som helst",
+    "activity": "Aktivitet",
+    "places": "Steder",
+    "recaps": "Oppsummeringer",
+    "recent": "Nylige",
+    "searchPartialFailure": "Noen resultater kunne ikke lastes inn"
 }

@@ -11543,4 +11543,24 @@ class AppLocalizationsBg extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Показване на всички хора ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Здравей, $name, питай каквото искаш';
+  }
+
+  @override
+  String get activity => 'Активност';
+
+  @override
+  String get places => 'Места';
+
+  @override
+  String get recaps => 'Обобщения';
+
+  @override
+  String get recent => 'Скорошни';
+
+  @override
+  String get searchPartialFailure => 'Някои резултати не можаха да се заредят';
 }
