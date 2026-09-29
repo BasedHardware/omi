@@ -195,9 +195,9 @@ def daily_summary_schedule_defaults(user_data: Mapping[str, Any]) -> Dict[str, A
     included. Empty dict when both fields are already on the document.
     """
     patch: Dict[str, Any] = {}
-    if 'daily_summary_enabled' not in user_data:
+    if not isinstance(user_data.get('daily_summary_enabled'), bool):
         patch['daily_summary_enabled'] = DEFAULT_DAILY_SUMMARY_ENABLED
-    if 'daily_summary_hour_local' not in user_data:
+    if not isinstance(h := user_data.get('daily_summary_hour_local'), (int, float)) or isinstance(h, bool):
         patch['daily_summary_hour_local'] = DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
     return patch
 
@@ -208,7 +208,7 @@ def get_daily_summary_hour_local(uid: str) -> int | None:
     if getattr(user_ref, "exists", False):
         user_data = _typed_doc(user_ref)
         value = user_data.get('daily_summary_hour_local')
-        return int(value) if isinstance(value, (int, float)) else None
+        return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
     return None
 
 
@@ -241,7 +241,7 @@ def get_daily_summary_enabled(uid: str) -> bool:
     user_ref = db.collection('users').document(uid).get()
     if getattr(user_ref, "exists", False):
         user_data = _typed_doc(user_ref)
-        return bool(user_data.get('daily_summary_enabled', True))
+        return DEFAULT_DAILY_SUMMARY_ENABLED if (val := user_data.get('daily_summary_enabled')) is None else bool(val)
     return True
 
 
