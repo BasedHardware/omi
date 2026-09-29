@@ -3,7 +3,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from models.advice import Advice
 from models.shared import StatusResponse
@@ -63,6 +63,25 @@ def _log_database_failure(action: str, uid: str, error: Exception) -> None:
     logger.error(f'advice {action} failed uid={uid}: {sanitize(str(error))}', exc_info=True)
 
 
+def _safe_advice_responses(items: list[dict], uid: str) -> list[Advice]:
+    """Build validated Advice objects from raw records, dropping any malformed or legacy
+    rows so a single bad document cannot 500 the whole list endpoint (mirrors the defensive
+    deserialization pattern in calendar_meetings and action_items)."""
+    valid: list[Advice] = []
+    for item in items:
+        try:
+            valid.append(Advice.model_validate(item))
+        except ValidationError as exc:
+            advice_id = item.get('id') if isinstance(item, dict) else None
+            logger.warning(
+                'Skipping malformed advice item for uid=%s id=%s: %s',
+                uid,
+                advice_id,
+                type(exc).__name__,
+            )
+    return valid
+
+
 # ============================================================================
 # ENDPOINTS
 # ============================================================================
@@ -103,7 +122,7 @@ def get_advice(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     try:
-        return advice_db.get_advice(
+        raw_items = advice_db.get_advice(
             uid, limit=limit, offset=offset, category=category, include_dismissed=include_dismissed
         )
     except HTTPException:
@@ -111,6 +130,7 @@ def get_advice(
     except Exception as e:
         _log_database_failure('list', uid, e)
         raise HTTPException(status_code=500, detail='Failed to load advice')
+    return _safe_advice_responses(raw_items, uid)
 
 
 @router.patch('/v1/advice/{advice_id}', tags=['advice'], response_model=Advice)
@@ -131,7 +151,16 @@ def update_advice(
         raise HTTPException(status_code=500, detail='Failed to update advice')
     if result is None:
         raise HTTPException(status_code=404, detail='Advice not found')
-    return result
+    try:
+        return Advice.model_validate(result)
+    except ValidationError as exc:
+        logger.warning(
+            'Malformed advice item after update for uid=%s id=%s: %s',
+            uid,
+            advice_id,
+            type(exc).__name__,
+        )
+        raise HTTPException(status_code=404, detail='Advice not found')
 
 
 @router.delete('/v1/advice/{advice_id}', tags=['advice'], response_model=StatusResponse)
