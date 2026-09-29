@@ -21032,6 +21032,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Voice Recognition'**
   String get voiceRecognitionSettings;
+
+  /// Home button that opens AI chat, shown without an icon
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Anything'**
+  String get askAnythingButton;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

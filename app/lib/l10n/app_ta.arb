@@ -11200,5 +11200,6 @@
     "peopleCount": "{count, plural, =1{1 நபர்} other{{count} நபர்கள்}}",
     "noMatchingPeople": "பொருந்தும் நபர்கள் இல்லை",
     "deselectAll": "அனைத்தையும் தேர்வுநீக்கு",
-    "voiceRecognitionSettings": "குரல் அடையாளம்"
+    "voiceRecognitionSettings": "குரல் அடையாளம்",
+    "askAnythingButton": "எதையும் கேளுங்கள்"
 }

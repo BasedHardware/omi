@@ -11590,4 +11590,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Pengecaman Suara';
+
+  @override
+  String get askAnythingButton => 'Tanya apa sahaja';
 }

@@ -3675,5 +3675,6 @@
     "peopleCount": "{count, plural, =1{1 osoba} other{Osoby: {count}}}",
     "noMatchingPeople": "Brak pasujących osób",
     "deselectAll": "Odznacz wszystko",
-    "voiceRecognitionSettings": "Rozpoznawanie głosu"
+    "voiceRecognitionSettings": "Rozpoznawanie głosu",
+    "askAnythingButton": "Zapytaj o cokolwiek"
 }

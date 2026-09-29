@@ -3675,5 +3675,6 @@
     "peopleCount": "{count, plural, =1{1 человек} other{Людей: {count}}}",
     "noMatchingPeople": "Нет подходящих людей",
     "deselectAll": "Снять выбор",
-    "voiceRecognitionSettings": "Распознавание голоса"
+    "voiceRecognitionSettings": "Распознавание голоса",
+    "askAnythingButton": "Спросите что угодно"
 }

@@ -11200,5 +11200,6 @@
     "peopleCount": "{count, plural, =1{1 особа} other{Особа: {count}}}",
     "noMatchingPeople": "Нема одговарајућих особа",
     "deselectAll": "Поништи избор свих",
-    "voiceRecognitionSettings": "Препознавање гласа"
+    "voiceRecognitionSettings": "Препознавање гласа",
+    "askAnythingButton": "Питај шта год"
 }

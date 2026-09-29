@@ -11489,4 +11489,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'التعرف على الصوت';
+
+  @override
+  String get askAnythingButton => 'اسأل أي شيء';
 }

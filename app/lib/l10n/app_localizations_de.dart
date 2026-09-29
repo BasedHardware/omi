@@ -11653,4 +11653,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Stimmerkennung';
+
+  @override
+  String get askAnythingButton => 'Frag irgendetwas';
 }

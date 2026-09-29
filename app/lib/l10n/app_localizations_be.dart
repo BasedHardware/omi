@@ -11589,4 +11589,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Распазнаванне голасу';
+
+  @override
+  String get askAnythingButton => 'Запытайцеся чаго-небудзь';
 }

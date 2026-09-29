@@ -3682,5 +3682,6 @@
     "peopleCount": "{count, plural, =1{1 person} other{{count} personer}}",
     "noMatchingPeople": "Ingen matchende personer",
     "deselectAll": "Fravælg alle",
-    "voiceRecognitionSettings": "Stemmegenkendelse"
+    "voiceRecognitionSettings": "Stemmegenkendelse",
+    "askAnythingButton": "Spørg om hvad som helst"
 }

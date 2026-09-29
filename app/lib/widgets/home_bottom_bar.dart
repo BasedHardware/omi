@@ -78,9 +78,9 @@ class HomeChatBarBackdrop extends StatelessWidget {
   }
 }
 
-/// Home's Ask Omi button, left of the record button in the floating row. The same pill, height and
-/// border as the record button, so the pair reads as one set; the glyph and label say what a tap
-/// does. Voice lives in the chat composer, so the button has no mic of its own.
+/// Home's text-only Ask Anything button, left of the record button in the floating row. The same
+/// pill, height and border as the record button, so the pair reads as one set. Voice lives in the
+/// chat composer.
 class HomeAskOmiButton extends StatelessWidget {
   const HomeAskOmiButton({super.key, required this.onTap});
 
@@ -88,7 +88,7 @@ class HomeAskOmiButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = context.l10n.askOmi;
+    final label = context.l10n.askAnythingButton;
     return Semantics(
       container: true,
       button: true,
@@ -107,19 +107,14 @@ class HomeAskOmiButton extends StatelessWidget {
             border: Border.all(color: OmiColors.border, width: 1),
           ),
           child: ExcludeSemantics(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                FaIcon(kAskOmiGlyph, size: 16, color: OmiColors.textPrimary),
-                const SizedBox(width: OmiSpacing.xs),
-                Flexible(
-                  child: Text(
-                    label,
-                    style: OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            child: Center(
+              child: Text(
+                label,
+                style: OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         ),

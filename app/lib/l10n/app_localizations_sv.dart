@@ -11568,4 +11568,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Röstigenkänning';
+
+  @override
+  String get askAnythingButton => 'Fråga vad som helst';
 }

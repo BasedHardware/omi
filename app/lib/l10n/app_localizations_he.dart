@@ -11468,4 +11468,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'זיהוי קול';
+
+  @override
+  String get askAnythingButton => 'שאל כל דבר';
 }

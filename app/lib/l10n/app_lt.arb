@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 asmuo} other{Asmenų: {count}}}",
     "noMatchingPeople": "Atitinkančių asmenų nėra",
     "deselectAll": "Atžymėti viską",
-    "voiceRecognitionSettings": "Balso atpažinimas"
+    "voiceRecognitionSettings": "Balso atpažinimas",
+    "askAnythingButton": "Klauskite bet ko"
 }

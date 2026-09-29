@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 人} other{{count} 人}}",
     "noMatchingPeople": "没有匹配的人",
     "deselectAll": "取消全选",
-    "voiceRecognitionSettings": "声音识别"
+    "voiceRecognitionSettings": "声音识别",
+    "askAnythingButton": "随便问问"
 }

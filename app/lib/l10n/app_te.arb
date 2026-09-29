@@ -11200,5 +11200,6 @@
     "peopleCount": "{count, plural, =1{1 వ్యక్తి} other{{count} మంది}}",
     "noMatchingPeople": "సరిపోలే వ్యక్తులు లేరు",
     "deselectAll": "అన్నింటి ఎంపిక తీసివేయి",
-    "voiceRecognitionSettings": "వాయిస్ గుర్తింపు"
+    "voiceRecognitionSettings": "వాయిస్ గుర్తింపు",
+    "askAnythingButton": "ఏదైనా అడగండి"
 }

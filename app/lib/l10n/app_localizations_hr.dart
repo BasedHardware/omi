@@ -11595,4 +11595,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Prepoznavanje glasa';
+
+  @override
+  String get askAnythingButton => 'Pitaj bilo što';
 }

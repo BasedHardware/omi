@@ -11584,4 +11584,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Balss atpazīšana';
+
+  @override
+  String get askAnythingButton => 'Jautājiet jebko';
 }

@@ -3675,5 +3675,6 @@
     "peopleCount": "{count, plural, =1{1 orang} other{{count} orang}}",
     "noMatchingPeople": "Tidak Ada Orang yang Cocok",
     "deselectAll": "Batalkan Semua",
-    "voiceRecognitionSettings": "Pengenalan Suara"
+    "voiceRecognitionSettings": "Pengenalan Suara",
+    "askAnythingButton": "Tanyakan apa saja"
 }

@@ -11570,4 +11570,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'آواز کی شناخت';
+
+  @override
+  String get askAnythingButton => 'کچھ بھی پوچھیں';
 }

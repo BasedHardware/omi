@@ -13748,5 +13748,9 @@
     "voiceRecognitionSettings": "Voice Recognition",
     "@voiceRecognitionSettings": {
         "description": "Section header above the voice-learning switches on the People page"
+    },
+    "askAnythingButton": "Ask Anything",
+    "@askAnythingButton": {
+        "description": "Home button that opens AI chat, shown without an icon"
     }
 }

@@ -11368,4 +11368,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => '音声認識';
+
+  @override
+  String get askAnythingButton => '何でも聞いてください';
 }

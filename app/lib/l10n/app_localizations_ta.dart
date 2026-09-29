@@ -11637,4 +11637,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'குரல் அடையாளம்';
+
+  @override
+  String get askAnythingButton => 'எதையும் கேளுங்கள்';
 }

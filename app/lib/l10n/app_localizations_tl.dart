@@ -11660,4 +11660,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Pagkilala sa Boses';
+
+  @override
+  String get askAnythingButton => 'Tanungin ang kahit ano';
 }

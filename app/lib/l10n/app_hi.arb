@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 व्यक्ति} other{{count} लोग}}",
     "noMatchingPeople": "कोई मेल खाता व्यक्ति नहीं",
     "deselectAll": "सभी अचयनित करें",
-    "voiceRecognitionSettings": "आवाज़ पहचान"
+    "voiceRecognitionSettings": "आवाज़ पहचान",
+    "askAnythingButton": "कुछ भी पूछें"
 }

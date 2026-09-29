@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 persoon} other{{count} personen}}",
     "noMatchingPeople": "Geen Overeenkomende Personen",
     "deselectAll": "Alles Deselecteren",
-    "voiceRecognitionSettings": "Stemherkenning"
+    "voiceRecognitionSettings": "Stemherkenning",
+    "askAnythingButton": "Vraag wat je wilt"
 }

@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 person} other{{count} personer}}",
     "noMatchingPeople": "Inga matchande personer",
     "deselectAll": "Avmarkera alla",
-    "voiceRecognitionSettings": "Röstigenkänning"
+    "voiceRecognitionSettings": "Röstigenkänning",
+    "askAnythingButton": "Fråga vad som helst"
 }

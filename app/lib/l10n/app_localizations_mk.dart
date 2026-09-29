@@ -11621,4 +11621,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Препознавање глас';
+
+  @override
+  String get askAnythingButton => 'Праши било што';
 }

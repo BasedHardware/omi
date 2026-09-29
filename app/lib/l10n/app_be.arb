@@ -11200,5 +11200,6 @@
     "peopleCount": "{count, plural, =1{1 чалавек} other{Людзей: {count}}}",
     "noMatchingPeople": "Няма адпаведных людзей",
     "deselectAll": "Зняць выбар з усіх",
-    "voiceRecognitionSettings": "Распазнаванне голасу"
+    "voiceRecognitionSettings": "Распазнаванне голасу",
+    "askAnythingButton": "Запытайцеся чаго-небудзь"
 }

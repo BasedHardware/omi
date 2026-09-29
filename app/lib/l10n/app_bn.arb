@@ -11200,5 +11200,6 @@
     "peopleCount": "{count, plural, =1{১ জন} other{{count} জন}}",
     "noMatchingPeople": "মিলে যাওয়া কেউ নেই",
     "deselectAll": "সব বাদ দিন",
-    "voiceRecognitionSettings": "ভয়েস শনাক্তকরণ"
+    "voiceRecognitionSettings": "ভয়েস শনাক্তকরণ",
+    "askAnythingButton": "যেকোনো কিছু জিজ্ঞাসা করুন"
 }

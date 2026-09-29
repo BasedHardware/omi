@@ -11347,4 +11347,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => '声音识别';
+
+  @override
+  String get askAnythingButton => '随便问问';
 }

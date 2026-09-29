@@ -11570,4 +11570,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Pengenalan Suara';
+
+  @override
+  String get askAnythingButton => 'Tanyakan apa saja';
 }

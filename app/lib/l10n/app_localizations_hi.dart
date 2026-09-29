@@ -11539,4 +11539,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'आवाज़ पहचान';
+
+  @override
+  String get askAnythingButton => 'कुछ भी पूछें';
 }

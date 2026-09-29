@@ -11580,4 +11580,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Розпізнавання голосу';
+
+  @override
+  String get askAnythingButton => 'Запитайте що завгодно';
 }

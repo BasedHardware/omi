@@ -11626,4 +11626,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Reconeixement de veu';
+
+  @override
+  String get askAnythingButton => 'Pregunta qualsevol cosa';
 }

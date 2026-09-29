@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 henkilö} other{{count} henkilöä}}",
     "noMatchingPeople": "Ei vastaavia henkilöitä",
     "deselectAll": "Poista valinnat",
-    "voiceRecognitionSettings": "Äänentunnistus"
+    "voiceRecognitionSettings": "Äänentunnistus",
+    "askAnythingButton": "Kysy mitä tahansa"
 }

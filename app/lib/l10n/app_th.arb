@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 คน} other{{count} คน}}",
     "noMatchingPeople": "ไม่พบบุคคลที่ตรงกัน",
     "deselectAll": "ยกเลิกการเลือกทั้งหมด",
-    "voiceRecognitionSettings": "การจดจำเสียง"
+    "voiceRecognitionSettings": "การจดจำเสียง",
+    "askAnythingButton": "ถามอะไรก็ได้"
 }

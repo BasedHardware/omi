@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 osoba} other{Počet osob: {count}}}",
     "noMatchingPeople": "Žádné odpovídající osoby",
     "deselectAll": "Zrušit výběr",
-    "voiceRecognitionSettings": "Rozpoznávání hlasu"
+    "voiceRecognitionSettings": "Rozpoznávání hlasu",
+    "askAnythingButton": "Zeptejte se na cokoliv"
 }

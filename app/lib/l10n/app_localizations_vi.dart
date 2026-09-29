@@ -11554,4 +11554,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Nhận dạng giọng nói';
+
+  @override
+  String get askAnythingButton => 'Hỏi bất cứ điều gì';
 }

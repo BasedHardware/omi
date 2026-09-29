@@ -11557,4 +11557,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Rozpoznávání hlasu';
+
+  @override
+  String get askAnythingButton => 'Zeptejte se na cokoliv';
 }

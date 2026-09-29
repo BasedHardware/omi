@@ -11562,4 +11562,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Äänentunnistus';
+
+  @override
+  String get askAnythingButton => 'Kysy mitä tahansa';
 }

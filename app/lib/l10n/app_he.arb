@@ -11200,5 +11200,6 @@
     "peopleCount": "{count, plural, =1{אדם אחד} other{{count} אנשים}}",
     "noMatchingPeople": "אין אנשים תואמים",
     "deselectAll": "בטל בחירת הכל",
-    "voiceRecognitionSettings": "זיהוי קול"
+    "voiceRecognitionSettings": "זיהוי קול",
+    "askAnythingButton": "שאל כל דבר"
 }

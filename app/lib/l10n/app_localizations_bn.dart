@@ -11559,4 +11559,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'ভয়েস শনাক্তকরণ';
+
+  @override
+  String get askAnythingButton => 'যেকোনো কিছু জিজ্ঞাসা করুন';
 }

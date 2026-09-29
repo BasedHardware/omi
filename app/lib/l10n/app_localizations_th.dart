@@ -11493,4 +11493,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'การจดจำเสียง';
+
+  @override
+  String get askAnythingButton => 'ถามอะไรก็ได้';
 }

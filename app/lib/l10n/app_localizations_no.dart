@@ -11559,4 +11559,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Stemmegjenkjenning';
+
+  @override
+  String get askAnythingButton => 'Spør om hva som helst';
 }

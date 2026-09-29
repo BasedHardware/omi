@@ -11595,4 +11595,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Stemherkenning';
+
+  @override
+  String get askAnythingButton => 'Vraag wat je wilt';
 }

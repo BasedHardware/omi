@@ -11200,5 +11200,6 @@
     "peopleCount": "{count, plural, =1{۱ نفر} other{{count} نفر}}",
     "noMatchingPeople": "فردی مطابق یافت نشد",
     "deselectAll": "لغو انتخاب همه",
-    "voiceRecognitionSettings": "تشخیص صدا"
+    "voiceRecognitionSettings": "تشخیص صدا",
+    "askAnythingButton": "هر چیزی بپرسید"
 }

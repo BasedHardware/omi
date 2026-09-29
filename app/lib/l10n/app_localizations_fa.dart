@@ -11555,4 +11555,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'تشخیص صدا';
+
+  @override
+  String get askAnythingButton => 'هر چیزی بپرسید';
 }

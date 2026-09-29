@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 persona} other{Personas: {count}}}",
     "noMatchingPeople": "Nav atbilstošu personu",
     "deselectAll": "Noņemt visu atlasi",
-    "voiceRecognitionSettings": "Balss atpazīšana"
+    "voiceRecognitionSettings": "Balss atpazīšana",
+    "askAnythingButton": "Jautājiet jebko"
 }

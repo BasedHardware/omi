@@ -11607,4 +11607,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'వాయిస్ గుర్తింపు';
+
+  @override
+  String get askAnythingButton => 'ఏదైనా అడగండి';
 }

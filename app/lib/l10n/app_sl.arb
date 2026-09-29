@@ -11200,5 +11200,6 @@
     "peopleCount": "{count, plural, =1{1 oseba} other{Oseb: {count}}}",
     "noMatchingPeople": "Ni ujemajočih se oseb",
     "deselectAll": "Prekliči izbor vseh",
-    "voiceRecognitionSettings": "Prepoznavanje glasu"
+    "voiceRecognitionSettings": "Prepoznavanje glasu",
+    "askAnythingButton": "Vprašaj kaj koli"
 }

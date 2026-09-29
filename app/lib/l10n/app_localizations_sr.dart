@@ -11573,4 +11573,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Препознавање гласа';
+
+  @override
+  String get askAnythingButton => 'Питај шта год';
 }

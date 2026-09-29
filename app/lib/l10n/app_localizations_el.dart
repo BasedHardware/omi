@@ -11637,4 +11637,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Αναγνώριση Φωνής';
+
+  @override
+  String get askAnythingButton => 'Ρωτήστε οτιδήποτε';
 }

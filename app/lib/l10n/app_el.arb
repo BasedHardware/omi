@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 άτομο} other{{count} άτομα}}",
     "noMatchingPeople": "Δεν Βρέθηκαν Άτομα",
     "deselectAll": "Αποεπιλογή Όλων",
-    "voiceRecognitionSettings": "Αναγνώριση Φωνής"
+    "voiceRecognitionSettings": "Αναγνώριση Φωνής",
+    "askAnythingButton": "Ρωτήστε οτιδήποτε"
 }

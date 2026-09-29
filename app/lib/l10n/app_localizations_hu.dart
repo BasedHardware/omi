@@ -11603,4 +11603,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Hangfelismerés';
+
+  @override
+  String get askAnythingButton => 'Kérdezz bármit';
 }

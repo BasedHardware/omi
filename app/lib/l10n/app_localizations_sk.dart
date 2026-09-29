@@ -11550,4 +11550,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Rozpoznávanie hlasu';
+
+  @override
+  String get askAnythingButton => 'Spýtajte sa na čokoľvek';
 }

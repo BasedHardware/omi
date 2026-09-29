@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 inimene} other{{count} inimest}}",
     "noMatchingPeople": "Sobivaid inimesi pole",
     "deselectAll": "Tühista kõik valikud",
-    "voiceRecognitionSettings": "Häältuvastus"
+    "voiceRecognitionSettings": "Häältuvastus",
+    "askAnythingButton": "Küsi mida tahes"
 }

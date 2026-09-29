@@ -11200,5 +11200,6 @@
     "peopleCount": "{count, plural, =1{1 личност} other{Луѓе: {count}}}",
     "noMatchingPeople": "Нема соодветни луѓе",
     "deselectAll": "Поништи ги сите",
-    "voiceRecognitionSettings": "Препознавање глас"
+    "voiceRecognitionSettings": "Препознавање глас",
+    "askAnythingButton": "Праши било што"
 }

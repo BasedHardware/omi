@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1명} other{{count}명}}",
     "noMatchingPeople": "일치하는 사람 없음",
     "deselectAll": "모두 선택 해제",
-    "voiceRecognitionSettings": "음성 인식"
+    "voiceRecognitionSettings": "음성 인식",
+    "askAnythingButton": "무엇이든 물어보세요"
 }

@@ -11613,4 +11613,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Recunoaștere vocală';
+
+  @override
+  String get askAnythingButton => 'Întreabă orice';
 }

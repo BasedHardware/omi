@@ -11200,5 +11200,6 @@
     "peopleCount": "{count, plural, =1{1 ವ್ಯಕ್ತಿ} other{{count} ಜನರು}}",
     "noMatchingPeople": "ಹೊಂದಿಕೆಯಾಗುವ ಜನರಿಲ್ಲ",
     "deselectAll": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ರದ್ದುಮಾಡಿ",
-    "voiceRecognitionSettings": "ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ"
+    "voiceRecognitionSettings": "ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ",
+    "askAnythingButton": "ಯಾವುದೇ ವಿಷಯ ಕೇಳಿ"
 }

@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 người} other{{count} người}}",
     "noMatchingPeople": "Không có người phù hợp",
     "deselectAll": "Bỏ chọn tất cả",
-    "voiceRecognitionSettings": "Nhận dạng giọng nói"
+    "voiceRecognitionSettings": "Nhận dạng giọng nói",
+    "askAnythingButton": "Hỏi bất cứ điều gì"
 }

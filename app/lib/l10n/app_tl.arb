@@ -11200,5 +11200,6 @@
     "peopleCount": "{count, plural, =1{1 tao} other{{count} tao}}",
     "noMatchingPeople": "Walang Tugmang Tao",
     "deselectAll": "Alisin ang Lahat ng Pili",
-    "voiceRecognitionSettings": "Pagkilala sa Boses"
+    "voiceRecognitionSettings": "Pagkilala sa Boses",
+    "askAnythingButton": "Tanungin ang kahit ano"
 }

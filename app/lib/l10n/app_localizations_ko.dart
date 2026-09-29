@@ -11372,4 +11372,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => '음성 인식';
+
+  @override
+  String get askAnythingButton => '무엇이든 물어보세요';
 }

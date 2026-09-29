@@ -3640,5 +3640,6 @@
     "peopleCount": "{count, plural, =1{1 orang} other{{count} orang}}",
     "noMatchingPeople": "Tiada Orang yang Sepadan",
     "deselectAll": "Nyahpilih Semua",
-    "voiceRecognitionSettings": "Pengecaman Suara"
+    "voiceRecognitionSettings": "Pengecaman Suara",
+    "askAnythingButton": "Tanya apa sahaja"
 }

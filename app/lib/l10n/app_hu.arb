@@ -3736,5 +3736,6 @@
     "peopleCount": "{count, plural, =1{1 személy} other{{count} személy}}",
     "noMatchingPeople": "Nincs egyező személy",
     "deselectAll": "Kijelölés megszüntetése",
-    "voiceRecognitionSettings": "Hangfelismerés"
+    "voiceRecognitionSettings": "Hangfelismerés",
+    "askAnythingButton": "Kérdezz bármit"
 }

@@ -11200,5 +11200,6 @@
     "peopleCount": "{count, plural, =1{1 شخص} other{{count} افراد}}",
     "noMatchingPeople": "کوئی مماثل شخص نہیں",
     "deselectAll": "سب کا انتخاب ختم کریں",
-    "voiceRecognitionSettings": "آواز کی شناخت"
+    "voiceRecognitionSettings": "آواز کی شناخت",
+    "askAnythingButton": "کچھ بھی پوچھیں"
 }

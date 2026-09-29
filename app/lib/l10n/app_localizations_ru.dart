@@ -11598,4 +11598,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Распознавание голоса';
+
+  @override
+  String get askAnythingButton => 'Спросите что угодно';
 }

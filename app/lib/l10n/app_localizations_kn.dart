@@ -11595,4 +11595,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ';
+
+  @override
+  String get askAnythingButton => 'ಯಾವುದೇ ವಿಷಯ ಕೇಳಿ';
 }

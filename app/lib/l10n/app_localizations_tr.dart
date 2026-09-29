@@ -11571,4 +11571,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Ses Tanıma';
+
+  @override
+  String get askAnythingButton => 'Her şeyi sor';
 }

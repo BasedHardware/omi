@@ -11545,4 +11545,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Stemmegenkendelse';
+
+  @override
+  String get askAnythingButton => 'Spørg om hvad som helst';
 }
