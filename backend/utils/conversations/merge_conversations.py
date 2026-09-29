@@ -134,6 +134,7 @@ def validate_merge_compatibility(
 
     Rejection criteria (hard failures):
     - Less than 2 conversations
+    - Duplicate conversations
     - Any conversation is a soft-deleted tombstone
     - Any conversation is locked
     - Any conversation is not completed (processing/merging/in_progress)
@@ -143,6 +144,12 @@ def validate_merge_compatibility(
     """
     if len(conversations) < 2:
         return False, "At least 2 conversations required to merge", None
+
+    conv_ids = [conv.get("id") for conv in conversations if conv.get("id")]
+    if len(conv_ids) != len(set(conv_ids)):
+        return False, "Cannot merge duplicate conversations.", None
+    if len(set(conv_ids)) < 2:
+        return False, "At least 2 distinct conversations required to merge.", None
 
     # Check none are soft-deleted. A soft-deleted tombstone is invisible to the
     # user, so merging it resurrects deleted content into a new visible
@@ -228,6 +235,12 @@ def perform_merge_async(
 
         if len(conversations) < 2:
             logger.error(f"Merge failed: Not enough conversations found for uid={uid}")
+            _handle_merge_failure(uid, conversation_ids)
+            return
+
+        unique_conv_ids = {conv.get("id") for conv in conversations if conv.get("id")}
+        if len(unique_conv_ids) < 2 or len(conversations) != len(unique_conv_ids):
+            logger.error(f"Merge failed: Duplicate or insufficient unique conversations found for uid={uid}")
             _handle_merge_failure(uid, conversation_ids)
             return
 

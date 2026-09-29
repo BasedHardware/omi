@@ -2156,6 +2156,8 @@ def merge_conversations(
     # Validate minimum number of conversations
     if len(request.conversation_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 conversations required to merge")
+    if len(request.conversation_ids) != len(set(request.conversation_ids)):
+        raise HTTPException(status_code=400, detail="Cannot merge duplicate conversations.")
 
     # Fetch all conversations
     conversations = []
