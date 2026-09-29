@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -8,7 +10,9 @@ import 'package:omi/widgets/omi_map_preview.dart';
 class DailySummaryCard extends StatelessWidget {
   static const double width = 260;
   static const double height = 160;
-  static const double mapHeight = 84;
+  static const double mapHeight = 76;
+
+  static TextStyle get _headlineStyle => OmiType.subhead.copyWith(fontWeight: FontWeight.w600, height: 1.3);
   static const double radius = 20;
 
   const DailySummaryCard({
@@ -86,14 +90,28 @@ class DailySummaryCard extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 6),
-                        Flexible(
-                          child: Text(
-                            summary.headline,
-                            style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600, height: 1.3),
-                            maxLines: hasMap ? 2 : 3,
-                            overflow: TextOverflow.ellipsis,
+                        if (hasMap)
+                          // Above the map the band is short: whole lines only (at most two), so large
+                          // text ends on an ellipsis instead of clipping through a line.
+                          Expanded(
+                            child: LayoutBuilder(builder: (context, box) {
+                              final line = MediaQuery.textScalerOf(context).scale(_headlineStyle.fontSize!) *
+                                  _headlineStyle.height!;
+                              final lines = math.min(2, (box.maxHeight / line).floor());
+                              if (lines < 1) return const SizedBox.shrink();
+                              return Text(summary.headline,
+                                  style: _headlineStyle, maxLines: lines, overflow: TextOverflow.ellipsis);
+                            }),
+                          )
+                        else
+                          Flexible(
+                            child: Text(
+                              summary.headline,
+                              style: _headlineStyle,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
                         if (!hasMap && summary.overview.trim().isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Expanded(
