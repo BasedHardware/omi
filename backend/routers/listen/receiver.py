@@ -924,6 +924,7 @@ class ListenReceiver(ReplayFilterMixin):
                     sample_rate,
                     self.host.stt_language,
                     profile=self.host.language_profile,
+                    keywords=keywords,
                 )
             # Soniox identifies language itself, so no language gate on the fallbacks;
             # they inherit the same chain a Modulate primary uses.
@@ -948,6 +949,7 @@ class ListenReceiver(ReplayFilterMixin):
                     sample_rate,
                     self.host.stt_language,
                     profile=self.host.language_profile,
+                    keywords=keywords,
                 ),
                 connect_modulate=(
                     (

@@ -1,11 +1,12 @@
 """Normalize evidenced Omi variants (1590 Omi, 293 OMI, 235 omi, 142 Omie, 15 omie, 8 Omies/omies, 1 OMIs, 3 spelled letters); ambiguous forms need provider-side biasing, not text rewriting."""
 
 import re
+import unicodedata
 from typing import Any
 
 _SPELLED_LETTERS = re.compile(r"o\.?\s+m\.?\s+i", re.IGNORECASE)
 _BRAND_TERM = re.compile(
-    r"(?<![\w./@#-])(?:o\.?\s+m\.?\s+i|omies|omie(?:['’]s)?|omis|omi(?:['’]s)?)(?![\w/@_-]|\.(?=\w)|-(?=\w))",
+    r"(?<![\w./@#?&=+-])(?:o\.?\s+m\.?\s+i|omies|omie(?:['’]s)?|omis|omi(?:['’]s)?)(?![\w/@?&=+_-]|\.(?=\w)|-(?=\w))",
     re.IGNORECASE,
 )
 
@@ -16,6 +17,13 @@ def normalize_brand_terms(text: str) -> str:
         return text
 
     def replace(match: re.Match[str]) -> str:
+        # Combining marks are not ``\w`` in Python's regex engine. Treat them
+        # as part of the surrounding Unicode word so we do not rewrite a
+        # prefix of a decomposed non-brand spelling.
+        if (match.start() and unicodedata.category(text[match.start() - 1]).startswith('M')) or (
+            match.end() < len(text) and unicodedata.category(text[match.end()]).startswith('M')
+        ):
+            return match.group(0)
         token = match.group(0)
         if _SPELLED_LETTERS.fullmatch(token):
             return 'Omi'
