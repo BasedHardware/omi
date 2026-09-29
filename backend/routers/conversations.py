@@ -1221,6 +1221,7 @@ def patch_conversation_summary(
 def patch_conversation_segment_text(
     conversation_id: str, data: UpdateSegmentTextRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
+    _get_valid_conversation_by_id(uid, conversation_id)
     result = conversations_db.update_conversation_segment_text(uid, conversation_id, data.segment_id, data.text)
     if result == 'not_found':
         raise HTTPException(status_code=404, detail="Conversation not found")
