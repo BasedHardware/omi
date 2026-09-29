@@ -11555,4 +11555,24 @@ class AppLocalizationsHu extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Az összes ($count) személy megjelenítése';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Szia $name, kérdezz bármit';
+  }
+
+  @override
+  String get activity => 'Tevékenység';
+
+  @override
+  String get places => 'Helyek';
+
+  @override
+  String get recaps => 'Összefoglalók';
+
+  @override
+  String get recent => 'Legutóbbiak';
+
+  @override
+  String get searchPartialFailure => 'Néhány találatot nem sikerült betölteni';
 }

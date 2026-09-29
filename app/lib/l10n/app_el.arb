@@ -3630,5 +3630,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Αναζήτηση ατόμων",
     "addQueryAsNewPerson": "Προσθήκη του «{query}» ως νέο άτομο",
-    "showAllPeople": "Εμφάνιση όλων των ατόμων ({count})"
+    "showAllPeople": "Εμφάνιση όλων των ατόμων ({count})",
+    "chatGreeting": "Γεια σου {name}, ρώτα ό,τι θέλεις",
+    "activity": "Δραστηριότητα",
+    "places": "Μέρη",
+    "recaps": "Ανασκοπήσεις",
+    "recent": "Πρόσφατα",
+    "searchPartialFailure": "Ορισμένα αποτελέσματα δεν φορτώθηκαν"
 }

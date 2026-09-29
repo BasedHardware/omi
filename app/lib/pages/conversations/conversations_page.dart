@@ -9,23 +9,14 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/conversations/conversation_map_page.dart';
-import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
-import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/widgets/pending_transcriptions_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/pages/phone_calls/active_call_banner.dart';
-import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
-import 'package:omi/pages/conversations/widgets/search_widget.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/models/local_recording.dart';
-import 'package:omi/providers/folder_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_presentation.dart';
@@ -34,13 +25,12 @@ import 'package:omi/pages/conversations/capture_gaps_controller.dart';
 import 'package:omi/pages/conversations/widgets/capture_gap_list_item.dart';
 import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
-import 'package:omi/pages/conversations/widgets/date_filter_chip.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/other/temp.dart';
-import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/widgets/home_bottom_bar.dart';
 
 enum _ConversationListRowKind {
   topSpacer,
@@ -252,13 +242,19 @@ List<_ConversationListRow> _buildConversationListRows({
   return rows;
 }
 
+/// Home: the live capture row, the Daily Recaps row, then every conversation, newest first, loading
+/// more as it scrolls. Search, folders, starred and places live in the search overlay the header's
+/// search button opens, so this list is never filtered in place.
 class ConversationsPage extends StatefulWidget {
-  const ConversationsPage({super.key, this.requestInitialLoad = true});
+  const ConversationsPage({super.key, this.requestInitialLoad = true, this.loadRecaps});
 
   /// Production stays true. Widget tests that already call
   /// [ConversationProvider.getInitialConversations] inside `runAsync` pass
   /// false so initState does not queue loopback I/O on the fake-async clock.
   final bool requestInitialLoad;
+
+  /// Injectable for tests and the visual audit; defaults to the recaps endpoint.
+  final RecentRecapsLoader? loadRecaps;
 
   @override
   State<ConversationsPage> createState() => _ConversationsPageState();
@@ -267,18 +263,11 @@ class ConversationsPage extends StatefulWidget {
 class _ConversationsPageState extends State<ConversationsPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
+  final GlobalKey<HomeDailyRecapsState> _recapsKey = GlobalKey<HomeDailyRecapsState>();
   String? _loadMoreFilterKey;
   String? _lastLoadMoreRequestKey;
   bool _isBootstrapping = true;
   final CaptureGapsController _captureGaps = CaptureGapsController();
-
-  void _refreshGoals() {}
-
-  // Public method to trigger goal creation from outside
-  void addGoal() {
-    _goalsWidgetKey.currentState?.addGoal();
-  }
 
   @override
   bool get wantKeepAlive => true;
@@ -307,26 +296,24 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
       // Capture gaps depend on the loaded date span; refresh once it exists.
       _scheduleDeferred(() => _refreshCaptureGapsIfNeeded(context.read<ConversationProvider>()));
-
-      // Load folders for folder tabs
-      final folderProvider = context.read<FolderProvider>();
-      if (folderProvider.folders.isEmpty) {
-        _scheduleDeferred(folderProvider.loadFolders);
-      }
     });
   }
 
+  /// Deferred work still waiting to start; cancelled on dispose so Home leaves no timer behind.
+  final List<Timer> _deferred = [];
+
   void _scheduleDeferred(Future<void> Function() operation) {
-    unawaited(
-      Future<void>.delayed(const Duration(milliseconds: 200), () async {
-        if (!mounted) return;
-        try {
-          await operation();
-        } catch (error, stackTrace) {
-          Logger.error('Deferred conversations-page work failed: $error\n$stackTrace');
-        }
-      }),
-    );
+    late final Timer timer;
+    timer = Timer(const Duration(milliseconds: 200), () async {
+      _deferred.remove(timer);
+      if (!mounted) return;
+      try {
+        await operation();
+      } catch (error, stackTrace) {
+        Logger.error('Deferred conversations-page work failed: $error\n$stackTrace');
+      }
+    });
+    _deferred.add(timer);
   }
 
   /// The capture-gap group only belongs in the unfiltered default view; the
@@ -416,6 +403,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void dispose() {
+    for (final timer in _deferred) {
+      timer.cancel();
+    }
     _scrollController.dispose();
     super.dispose();
   }
@@ -567,13 +557,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             HapticFeedback.mediumImpact();
             _lastLoadMoreRequestKey = null;
             Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
-            // Refresh goals widget
-            _goalsWidgetKey.currentState?.refresh();
-            _refreshGoals();
             await Future.wait([
               convoProvider.getInitialConversations(),
-              Provider.of<FolderProvider>(context, listen: false).loadFolders(),
               Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
+              if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
             ]);
             // Pull-to-refresh is the explicit user request for honest data.
             _captureGaps.invalidate();
@@ -585,121 +572,20 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              // Header widgets (unchanged)
+              // The live capture row: recording, a call, or a conversation being captured.
+              const SliverToBoxAdapter(child: ConversationCaptureWidget(showsCall: true)),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
-              const SliverToBoxAdapter(child: ActiveCallBanner()),
               const SliverToBoxAdapter(child: SpeakerTagPromptCard()),
               // Local recordings waiting to be uploaded for transcription.
               const SliverToBoxAdapter(child: PendingTranscriptionsBanner()),
               const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
-
-              // Search bar
-              Selector<HomeProvider, bool>(
-                selector: (_, homeProvider) => homeProvider.showConvoSearchBar,
-                builder: (context, showConvoSearchBar, _) {
-                  bool shouldShowSearchBar = showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
-                  if (!shouldShowSearchBar) {
-                    return const SliverToBoxAdapter(child: SizedBox.shrink());
-                  }
-                  return const SliverToBoxAdapter(
-                    child: Column(children: [SizedBox(height: 12), SearchWidget(), SizedBox(height: 12)]),
-                  );
-                },
+              SliverToBoxAdapter(
+                child: widget.loadRecaps == null
+                    ? HomeDailyRecaps(key: _recapsKey)
+                    : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
               ),
-              const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
-
-              // Today's Tasks and Goals widgets - hide when showing daily recaps, search bar is active, or calendar filter is active
-              Selector<HomeProvider, bool>(
-                selector: (_, homeProvider) => homeProvider.showConvoSearchBar,
-                builder: (context, showConvoSearchBar, _) {
-                  final isSearchActive = showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
-                  final hasCalendarFilter = convoProvider.selectedStartDate != null;
-                  final prefs = SharedPreferencesUtil();
-                  if (isSearchActive || hasCalendarFilter) {
-                    return const SliverToBoxAdapter(child: SizedBox.shrink());
-                  }
-                  final showGoals = prefs.showGoalTrackerEnabled;
-                  if (!showGoals) {
-                    return const SliverToBoxAdapter(child: SizedBox.shrink());
-                  }
-                  return SliverToBoxAdapter(
-                    child: Column(
-                      children: [
-                        if (showGoals)
-                          RepaintBoundary(
-                            child: GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-
-              // One date filter, shown as a removable chip (hub audit #23).
-              const SliverToBoxAdapter(child: ConversationDateFilterChip()),
-
-              // Section header. Hidden entirely when the user has zero
-              // non-discarded conversations — those users get the
-              // empty-state hero below instead. Daily Recaps is its own page.
-              // A pending Process Now row still counts: it lands in this list.
-              if (_nonDiscardedConversationCount(convoProvider) > 0 ||
-                  hasProcessingConversations ||
-                  isShowingConversationSkeleton ||
-                  _hasActiveFilter(convoProvider))
-                SliverToBoxAdapter(
-                  child: Builder(
-                    builder: (context) => Padding(
-                      padding: const EdgeInsets.only(left: 24, right: 16, top: 16, bottom: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Semantics(
-                            header: true,
-                            child: Text(context.l10n.conversations, style: OmiType.headline),
-                          ),
-                          OmiIconButton(
-                            key: const Key('conversation_map_button'),
-                            label: context.l10n.conversationMap,
-                            icon: const Icon(Icons.map_outlined),
-                            onPressed: () => routeToPage(
-                              context,
-                              ConversationMapPage(conversations: convoProvider.displayedConversations),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-              // Folder tabs - hide when the user has no conversations yet
-              // (matches the title). Keep chips visible whenever a filter is
-              // active so the user can always clear it, even when the
-              // filtered result is empty. A pending Process Now row counts as
-              // having conversations.
-              if (_nonDiscardedConversationCount(convoProvider) > 0 ||
-                  hasProcessingConversations ||
-                  isShowingConversationSkeleton ||
-                  _hasActiveFilter(convoProvider))
-                Consumer<FolderProvider>(
-                  builder: (context, folderProvider, _) {
-                    return SliverToBoxAdapter(
-                      child: FolderTabs(
-                        folders: folderProvider.folders,
-                        selectedFolderId: convoProvider.selectedFolderId,
-                        onFolderSelected: (folderId) {
-                          convoProvider.filterByFolder(folderId);
-                        },
-                        showStarredOnly: convoProvider.showStarredOnly,
-                        onStarredToggle: convoProvider.toggleStarredFilter,
-                      ),
-                    );
-                  },
-                ),
-              // Process Now belongs to the Conversations list, below Goals and
-              // its heading/filters, where the completed conversation will land.
+              // Process Now belongs to the list, above the day where the completed conversation lands.
               if (hasProcessingConversations) getProcessingConversationsWidget(snapshot.processingConversations),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
@@ -787,13 +673,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     }
                   }),
                 ),
-              // Clears the nav bar, or the taller merge action bar that covers it in
+              // Clears the floating chat bar, or the taller merge action bar that replaces it in
               // selection mode; both sit on top of the same system inset.
               SliverToBoxAdapter(
                 child: SizedBox(
                   height: convoProvider.isSelectionModeActive
-                      ? 160 + bottomNavBarReservedInset(context)
-                      : bottomNavBarClearance(context),
+                      ? 160 + homeBottomInset(context)
+                      : homeChatBarClearance(context),
                 ),
               ),
             ],

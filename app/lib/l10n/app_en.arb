@@ -13693,5 +13693,34 @@
                 "type": "int"
             }
         }
+    },
+    "chatGreeting": "Hi {name}, ask anything",
+    "@chatGreeting": {
+        "description": "Greeting at the top of an empty chat; name is the user's first name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "activity": "Activity",
+    "@activity": {
+        "description": "Title of the sheet listing the steps Omi took to answer a chat message"
+    },
+    "places": "Places",
+    "@places": {
+        "description": "Search tile that opens conversations on a map"
+    },
+    "recaps": "Recaps",
+    "@recaps": {
+        "description": "Search tile and result section for daily recaps"
+    },
+    "recent": "Recent",
+    "@recent": {
+        "description": "Heading above recent search queries"
+    },
+    "searchPartialFailure": "Some results couldn't load",
+    "@searchPartialFailure": {
+        "description": "Shown under global search results when one kind of result (conversations, recaps, tasks or memories) failed to load"
     }
 }

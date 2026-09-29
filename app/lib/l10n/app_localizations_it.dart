@@ -11576,4 +11576,24 @@ class AppLocalizationsIt extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Mostra tutte le $count persone';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Ciao $name, chiedi qualsiasi cosa';
+  }
+
+  @override
+  String get activity => 'Attività';
+
+  @override
+  String get places => 'Luoghi';
+
+  @override
+  String get recaps => 'Riepiloghi';
+
+  @override
+  String get recent => 'Recenti';
+
+  @override
+  String get searchPartialFailure => 'Impossibile caricare alcuni risultati';
 }

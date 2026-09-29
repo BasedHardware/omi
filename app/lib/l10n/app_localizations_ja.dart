@@ -11320,4 +11320,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String showAllPeople(int count) {
     return 'すべての人物（$count）を表示';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'こんにちは、$nameさん。何でも聞いてください';
+  }
+
+  @override
+  String get activity => 'アクティビティ';
+
+  @override
+  String get places => '場所';
+
+  @override
+  String get recaps => 'まとめ';
+
+  @override
+  String get recent => '最近';
+
+  @override
+  String get searchPartialFailure => '一部の結果を読み込めませんでした';
 }

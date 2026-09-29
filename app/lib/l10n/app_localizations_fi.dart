@@ -11514,4 +11514,24 @@ class AppLocalizationsFi extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Näytä kaikki ($count) henkilöä';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hei $name, kysy mitä vain';
+  }
+
+  @override
+  String get activity => 'Toiminta';
+
+  @override
+  String get places => 'Paikat';
+
+  @override
+  String get recaps => 'Yhteenvedot';
+
+  @override
+  String get recent => 'Viimeisimmät';
+
+  @override
+  String get searchPartialFailure => 'Joitakin tuloksia ei voitu ladata';
 }

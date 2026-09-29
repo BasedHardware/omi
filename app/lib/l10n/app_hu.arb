@@ -3726,5 +3726,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Személyek keresése",
     "addQueryAsNewPerson": "„{query}” hozzáadása új személyként",
-    "showAllPeople": "Az összes ({count}) személy megjelenítése"
+    "showAllPeople": "Az összes ({count}) személy megjelenítése",
+    "chatGreeting": "Szia {name}, kérdezz bármit",
+    "activity": "Tevékenység",
+    "places": "Helyek",
+    "recaps": "Összefoglalók",
+    "recent": "Legutóbbiak",
+    "searchPartialFailure": "Néhány találatot nem sikerült betölteni"
 }

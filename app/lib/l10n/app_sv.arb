@@ -3630,5 +3630,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Sök personer",
     "addQueryAsNewPerson": "Lägg till \"{query}\" som en ny person",
-    "showAllPeople": "Visa alla {count} personer"
+    "showAllPeople": "Visa alla {count} personer",
+    "chatGreeting": "Hej {name}, fråga vad du vill",
+    "activity": "Aktivitet",
+    "places": "Platser",
+    "recaps": "Sammanfattningar",
+    "recent": "Senaste",
+    "searchPartialFailure": "Vissa resultat kunde inte läsas in"
 }

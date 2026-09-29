@@ -3630,5 +3630,11 @@
     "feedbackReasonRecordingOther": "기타",
     "searchPeople": "사람 검색",
     "addQueryAsNewPerson": "\"{query}\"을(를) 새 사람으로 추가",
-    "showAllPeople": "모두 {count}명 표시"
+    "showAllPeople": "모두 {count}명 표시",
+    "chatGreeting": "안녕하세요 {name}님, 무엇이든 물어보세요",
+    "activity": "활동",
+    "places": "장소",
+    "recaps": "요약",
+    "recent": "최근",
+    "searchPartialFailure": "일부 결과를 불러오지 못했습니다"
 }

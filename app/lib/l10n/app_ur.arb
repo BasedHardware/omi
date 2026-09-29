@@ -11190,5 +11190,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "لوگوں کو تلاش کریں",
     "addQueryAsNewPerson": "\"{query}\" کو نیے شخص کے طور پر شامل کریں",
-    "showAllPeople": "تمام ({count}) افراد دکھائیں"
+    "showAllPeople": "تمام ({count}) افراد دکھائیں",
+    "chatGreeting": "ہیلو {name}، کچھ بھی پوچھیں",
+    "activity": "سرگرمی",
+    "places": "مقامات",
+    "recaps": "خلاصے",
+    "recent": "حالیہ",
+    "searchPartialFailure": "کچھ نتائج لوڈ نہیں ہو سکے"
 }
