@@ -33,10 +33,7 @@ def test_get_apple_health_steps_tool_sanitized(mock_corrupt_apple_health, caplog
 
     assert "secret_token_key" not in res
     assert "/internal/path/to/db" not in res
-    assert (
-        res
-        == "An error occurred while retrieving Apple Health step data. Please try again later."
-    )
+    assert res == "An error occurred while retrieving Apple Health step data. Please try again later."
     assert "secret_token_key" in caplog.text
 
 
@@ -46,10 +43,7 @@ def test_get_apple_health_sleep_tool_sanitized(mock_corrupt_apple_health, caplog
 
     assert "secret_token_key" not in res
     assert "/internal/path/to/db" not in res
-    assert (
-        res
-        == "An error occurred while retrieving Apple Health sleep data. Please try again later."
-    )
+    assert res == "An error occurred while retrieving Apple Health sleep data. Please try again later."
     assert "secret_token_key" in caplog.text
 
 
@@ -59,10 +53,7 @@ def test_get_apple_health_heart_rate_tool_sanitized(mock_corrupt_apple_health, c
 
     assert "secret_token_key" not in res
     assert "/internal/path/to/db" not in res
-    assert (
-        res
-        == "An error occurred while retrieving Apple Health heart rate data. Please try again later."
-    )
+    assert res == "An error occurred while retrieving Apple Health heart rate data. Please try again later."
     assert "secret_token_key" in caplog.text
 
 
@@ -72,25 +63,17 @@ def test_get_apple_health_workouts_tool_sanitized(mock_corrupt_apple_health, cap
 
     assert "secret_token_key" not in res
     assert "/internal/path/to/db" not in res
-    assert (
-        res
-        == "An error occurred while retrieving Apple Health workout data. Please try again later."
-    )
+    assert res == "An error occurred while retrieving Apple Health workout data. Please try again later."
     assert "secret_token_key" in caplog.text
 
 
-def test_get_apple_health_workout_tool_alias_sanitized(
-    mock_corrupt_apple_health, caplog
-):
+def test_get_apple_health_workout_tool_alias_sanitized(mock_corrupt_apple_health, caplog):
     with caplog.at_level("ERROR"):
         res = apple_health_tools.get_apple_health_workout_tool.func()
 
     assert "secret_token_key" not in res
     assert "/internal/path/to/db" not in res
-    assert (
-        res
-        == "An error occurred while retrieving Apple Health workout data. Please try again later."
-    )
+    assert res == "An error occurred while retrieving Apple Health workout data. Please try again later."
     assert "secret_token_key" in caplog.text
 
 
@@ -100,8 +83,5 @@ def test_get_apple_health_summary_tool_sanitized(mock_corrupt_apple_health, capl
 
     assert "secret_token_key" not in res
     assert "/internal/path/to/db" not in res
-    assert (
-        res
-        == "An error occurred while retrieving Apple Health summary data. Please try again later."
-    )
+    assert res == "An error occurred while retrieving Apple Health summary data. Please try again later."
     assert "secret_token_key" in caplog.text

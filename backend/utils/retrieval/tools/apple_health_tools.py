@@ -346,7 +346,7 @@ def get_apple_health_workouts_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_workout_tool: {e}", exc_info=True)
+        logger.error(f"Error in get_apple_health_workouts_tool: {e}", exc_info=True)
         return "An error occurred while retrieving Apple Health workout data. Please try again later."
 
 
