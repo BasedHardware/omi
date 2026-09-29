@@ -363,6 +363,8 @@ env:
     value: "6"
   - name: STT_CIRCUIT_HALF_OPEN_PROBES
     value: "1"
+  - name: STT_SHED_CONNECT_FAILURES
+    value: "3"
   - name: SONIOX_CIRCUIT_FAILURE_THRESHOLD
     value: "3"
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
