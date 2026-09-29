@@ -1180,7 +1180,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   onTap: provider.isSelectionMode ? null : () => _toggleCompleted(provider, item),
                   child: SizedBox(
                     width: 44,
-                    height: 48,
+                    height: 44,
                     child: Center(child: TaskCompletionMark(completed: item.completed)),
                   ),
                 ),
@@ -1188,7 +1188,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               // Task text
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,

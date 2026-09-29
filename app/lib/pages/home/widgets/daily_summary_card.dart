@@ -7,8 +7,8 @@ import 'package:omi/widgets/omi_map_preview.dart';
 
 class DailySummaryCard extends StatelessWidget {
   static const double width = 260;
-  static const double height = 180;
-  static const double mapHeight = 96;
+  static const double height = 160;
+  static const double mapHeight = 84;
   static const double radius = 20;
 
   const DailySummaryCard({
