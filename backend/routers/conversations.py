@@ -2052,7 +2052,9 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
     for app_id in conversation.suggested_summarization_apps:
         app_data = get_available_app_by_id_with_reviews(app_id, uid)
         if app_data:
-            app = App(**app_data)
+            app = App.deserialize_safe(app_data)
+            if not app:
+                continue
             # Add user-specific data
             app.is_user_paid = get_is_user_paid_app(app.id, uid)
 
