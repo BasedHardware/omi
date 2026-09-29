@@ -11564,4 +11564,16 @@ class AppLocalizationsTa extends AppLocalizations {
   String showAllPeople(int count) {
     return 'அனைத்து ($count) நபர்களையும் காட்டு';
   }
+
+  @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get singleTapAction => 'Single Tap Action';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
+  String get tripleTapAction => 'Triple Tap Action';
 }

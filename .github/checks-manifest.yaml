@@ -1295,6 +1295,11 @@ checks:
     triggers: [".github/workflows/desktop_promote_prod.yml", ".github/scripts/check_desktop_backend_drift.py", ".github/scripts/test_check_desktop_backend_drift.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "drift script must treat missing health SHAs as unknown and keep --strict off the promotion path"
+  - id: firmware-tap-sequence-tests
+    command: ["bash", "omi/firmware/common/test/tap_sequence/run.sh"]
+    triggers: ["omi/firmware/common/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "progressive multi-tap recogniser shared by CV1 and DevKit decides when the taps characteristic emits TAP/END counts; host-tested so timing and wraparound contracts do not require hardware"
   - id: hume-ai-create-memory-route-tests
     command: ["python3", "plugins/hume-ai/test_create_omi_memory_route.py"]
     triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]

@@ -11477,4 +11477,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Zobraziť všetky osoby ($count)';
   }
+
+  @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get singleTapAction => 'Single Tap Action';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
+  String get tripleTapAction => 'Triple Tap Action';
 }

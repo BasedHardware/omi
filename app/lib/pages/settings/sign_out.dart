@@ -27,6 +27,8 @@ const Set<String> kPreferencesKeptOnSignOut = {
   'deviceOnboardingCompleted',
   'lastKnownFirmwareVersion',
   'doubleTapAction',
+  'singleTapAction',
+  'tripleTapAction',
   'omiButtonActionsEnabled',
   'companionAssociationPrompted',
   'autoSyncOfflineRecordings',
