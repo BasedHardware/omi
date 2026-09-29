@@ -130,6 +130,11 @@ def assign_in_transaction(
     # never allow an absorbed chunk to resurrect its user-deleted survivor.
     own_id, own_anchor = resolve(incoming['id'])
     target = load(target_id) if target_id else None
+    if target and target.get('deleted') and (target.get('smart_merge') or {}).get('role') == 'donor':
+        # A live conversation folded into its predecessor (database/smart_merge.py)
+        # redirects its late repair audio to the survivor; temporal fallback would
+        # recreate the donor as a duplicate row. A deleted survivor supersedes it.
+        target_id, target = resolve(target_id)
     target_hint = target_id
     if target and not target.get('deleted'):
         # Explicit capture proof is authoritative even before live STT produced

@@ -16,6 +16,7 @@ import pytest
 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.sync.assignment import assign_in_transaction, needs_fragment_review
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -465,3 +466,51 @@ def test_unlabeled_explicit_target_excludes_labeled_donor_extent(donor_start, ta
     assert result['started_at'] == chunk('expected', min(target_start, 1120))['started_at']
     assert result['finished_at'] == chunk('expected', max(target_start, 1120))['finished_at']
     assert store.rows[('users', 'u', 'conversations', 'donor')] == before
+
+
+def _smart_merge_pair(store):
+    """A live survivor 'p' that absorbed live 'n' (database/smart_merge.py), as stored."""
+    survivor = chunk('p', 1000, text='We should head out for dinner soon.')
+    survivor['transcript_segments'].append(
+        {'start': 600.0, 'end': 609.5, 'text': 'The pasta place is still open.', 'speaker_id': 1, 'is_user': False}
+    )
+    survivor['finished_at'] = datetime.fromtimestamp(1609.5, timezone.utc)
+    donor = chunk('n', 1600, text='The pasta place is still open.')
+    donor.update(
+        deleted=True,
+        discarded=True,
+        sync_merged_into='p',
+        sync_content_revision=1,
+        smart_merge={'role': 'donor', 'survivor_id': 'p'},
+    )
+    store.rows[('users', 'u', 'conversations', 'p')] = survivor
+    store.rows[('users', 'u', 'conversations', 'n')] = donor
+
+
+def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
+    store = StrictFirestore()
+    _smart_merge_pair(store)
+    repeat = chunk('wal-repeat', 1600, text='The pasta place is still open.')
+    result, created, survivors = intake(store, repeat, target_id='n')
+    assert result['id'] == 'p' and not created and not survivors  # same speech, deduplicated
+    assert result['sync_live_target'] is True
+    fresh = chunk('wal-new', 1620, text='Let us order the mushroom one.')
+    result, created, survivors = intake(store, fresh, target_id='n')
+    assert result['id'] == 'p' and not created and len(survivors) == 1
+    assert ('users', 'u', 'conversations', 'wal-new') not in store.rows
+
+
+def test_repair_audio_for_a_donor_whose_survivor_was_deleted_is_superseded():
+    store = StrictFirestore()
+    _smart_merge_pair(store)
+    store.rows[('users', 'u', 'conversations', 'p')]['deleted'] = True
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('wal-late', 1620), target_id='n')
+
+
+def test_sync_bridge_donor_targets_still_fall_back_to_temporal_assignment():
+    store = StrictFirestore()
+    _smart_merge_pair(store)
+    store.rows[('users', 'u', 'conversations', 'n')].pop('smart_merge')
+    result, created, _ = intake(store, chunk('wal-other', 1620), target_id='n')
+    assert created and result['id'] == 'wal-other'
