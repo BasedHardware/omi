@@ -27,11 +27,13 @@ Setting `free_plan.monthly_call_limit` to 0 makes the feature behave as
 paid-only (same as before this config existed).
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
 import time
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, List, Optional, cast
 
 from config.plan_catalog import (
     CATALOG_REVISION,
@@ -57,6 +59,16 @@ _OVERLAY_TELEMETRY_MAX_ENTRIES = 32
 _reported_overlays: dict[tuple[str, tuple[str, ...], bool, str], float] = {}
 
 
+def _clean_iso2_country(code: Any) -> Optional[str]:
+    """Validate and normalize a 2-letter uppercase ISO country code."""
+    if not isinstance(code, str):
+        return None
+    cleaned = code.strip().upper()
+    if len(cleaned) == 2 and cleaned.isalpha():
+        return cleaned
+    return None
+
+
 def _profile_default(name: str) -> Dict[str, Any]:
     profile = PHONE_CALL_PROFILE_DEFAULTS[name]
 
@@ -75,24 +87,63 @@ _DEFAULT_FREE_PLAN = _profile_default('free')
 _DEFAULT_PAID_PLAN = _profile_default('paid')
 
 
-def _fetch_config() -> Dict[str, Any]:
-    doc = db.collection("phone_call_config").document("default").get()
-    if not getattr(doc, "exists", False):
+def _fetch_config(*, firestore_client: Any = None) -> Dict[str, Any]:
+    """Fetch phone call config document from Firestore with fallback error boundary."""
+    client = firestore_client or db
+    try:
+        doc = client.collection("phone_call_config").document("default").get()
+        if not getattr(doc, "exists", False):
+            return {}
+        raw: object = doc.to_dict()
+        return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+    except Exception as e:
+        _LOGGER.warning("Failed to fetch phone_call_config from Firestore: %s", e)
         return {}
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
-def _get_config() -> Dict[str, Any]:
-    fetched = get_memory_cache().get_or_fetch(_CACHE_KEY, _fetch_config, ttl=_CACHE_TTL_SECONDS)
-    return cast(Dict[str, Any], fetched) if isinstance(fetched, dict) else {}
+def _get_config(*, firestore_client: Any = None) -> Dict[str, Any]:
+    """Fetch cached configuration or read directly when explicit client is passed."""
+    if firestore_client is not None:
+        return _fetch_config(firestore_client=firestore_client)
+
+    try:
+        fetched = get_memory_cache().get_or_fetch(
+            _CACHE_KEY,
+            lambda: _fetch_config(firestore_client=None),
+            ttl=_CACHE_TTL_SECONDS,
+        )
+        return cast(Dict[str, Any], fetched) if isinstance(fetched, dict) else {}
+    except Exception as e:
+        _LOGGER.warning("Cache access error for phone_call_config: %s", e)
+        return _fetch_config(firestore_client=None)
+
+
+def invalidate_phone_call_config_cache() -> None:
+    """Invalidate memory cache for phone call configuration."""
+    try:
+        get_memory_cache().delete(_CACHE_KEY)
+    except Exception as e:
+        _LOGGER.warning("Failed to invalidate phone_call_config cache: %s", e)
 
 
 def _phone_call_profile_for_plan(plan: PlanType | str | None) -> str:
     """Resolve phone-call membership from the catalog, with Basic as fallback."""
+    if plan is None:
+        candidate: PlanType | str = PlanType.basic
+    elif isinstance(plan, PlanType):
+        candidate = plan
+    elif isinstance(plan, str):
+        normalized = plan.strip().lower()
+        try:
+            candidate = PlanType(normalized)
+        except (ValueError, KeyError):
+            candidate = normalized
+    else:
+        candidate = PlanType.basic
+
     try:
-        candidate = PlanType.basic if plan is None else PlanType(plan)
-        profile = get_plan_definition(candidate).get('phone_calls_profile')
+        resolved_plan = PlanType(candidate) if not isinstance(candidate, PlanType) else candidate
+        profile = get_plan_definition(resolved_plan).get('phone_calls_profile')
     except (TypeError, ValueError, KeyError):
         profile = 'free'
     return profile if profile in PHONE_CALL_PROFILE_DEFAULTS else 'free'
@@ -121,10 +172,34 @@ def _merge_defaults(override: Optional[Dict[str, Any]], defaults: Dict[str, Any]
 
 
 def _declared_override(override: object, defaults: Dict[str, Any]) -> Dict[str, Any]:
-    """Return only known Firestore fields that are declared for this overlay."""
+    """Return only known Firestore fields that are declared for this overlay with sanitized values."""
     if not isinstance(override, dict):
         return {}
-    return {key: override[key] for key in defaults if key in override}
+    sanitized: Dict[str, Any] = {}
+    for key in defaults:
+        if key not in override:
+            continue
+        val = override[key]
+        if key in ("monthly_call_limit", "max_duration_seconds"):
+            if val is None:
+                sanitized[key] = None
+            elif isinstance(val, int):
+                sanitized[key] = max(0, val)
+            elif isinstance(val, float) and val.is_integer():
+                sanitized[key] = max(0, int(val))
+        elif key == "allowed_countries":
+            if isinstance(val, list):
+                countries: List[str] = []
+                for item in val:
+                    code = _clean_iso2_country(item)
+                    if code and code not in countries:
+                        countries.append(code)
+                sanitized[key] = countries
+            elif val is None:
+                sanitized[key] = []
+        else:
+            sanitized[key] = val
+    return sanitized
 
 
 def _ignored_override_fields(override: object, defaults: Dict[str, Any]) -> tuple[str, ...]:
@@ -234,14 +309,19 @@ def _effective_config(profile: str, raw_config: Dict[str, Any]) -> Dict[str, Any
     return effective
 
 
-def get_free_plan_config() -> Dict[str, Any]:
-    return _effective_config('free', _get_config())
+def get_free_plan_config(*, firestore_client: Any = None) -> Dict[str, Any]:
+    """Return effective phone-call configuration for the free plan."""
+    return _effective_config('free', _get_config(firestore_client=firestore_client))
 
 
-def get_paid_plan_config() -> Dict[str, Any]:
-    return _effective_config('paid', _get_config())
+def get_paid_plan_config(*, firestore_client: Any = None) -> Dict[str, Any]:
+    """Return effective phone-call configuration for paid plans."""
+    return _effective_config('paid', _get_config(firestore_client=firestore_client))
 
 
-def get_config_for_plan(plan: PlanType | str | None) -> Dict[str, Any]:
+def get_config_for_plan(plan: PlanType | str | None, *, firestore_client: Any = None) -> Dict[str, Any]:
     """Resolve config using the catalog's phone-call profile for ``plan``."""
-    return _effective_config(_phone_call_profile_for_plan(plan), _get_config())
+    return _effective_config(
+        _phone_call_profile_for_plan(plan),
+        _get_config(firestore_client=firestore_client),
+    )
