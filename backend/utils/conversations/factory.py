@@ -13,10 +13,8 @@ def deserialize_conversation(data: Union[Conversation, Mapping[str, Any]]) -> Co
     Construction goes through Conversation(**data) so __init__ side-effects
     (plugins_results sync, processing_memory_id sync) are preserved.
     """
-    if isinstance(data, Conversation):
-        return data
     if not isinstance(data, Mapping):
-        raise TypeError(f"Expected Conversation or Mapping, got {type(data).__name__}")
+        return data
     return Conversation(**data)
 
 
@@ -33,17 +31,18 @@ def deserialize_conversations(
     """
     results: List[Conversation] = []
     for item in items:
+        if not isinstance(item, (Conversation, Mapping)):
+            continue
         try:
-            results.append(deserialize_conversation(item))
+            conv = deserialize_conversation(item)
+            if isinstance(conv, Conversation):
+                results.append(conv)
         except Exception as exc:  # noqa: BLE001 - one bad record must not break the batch
             if on_error is not None:
                 on_error(item, exc)
             else:
-                logger.warning(
-                    f"Skipping malformed conversation record during batch deserialization: {exc}"
-                )
+                logger.warning(f"Skipping malformed conversation record during batch deserialization: {exc}")
     return results
 
 
 deserialize_conversations_safe = deserialize_conversations
-

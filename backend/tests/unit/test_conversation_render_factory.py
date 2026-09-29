@@ -143,7 +143,6 @@ class TestFactory:
         assert result[0] is conv
 
 
-
 class TestRender:
     def test_basic_render(self):
         conv = _make_conversation()
