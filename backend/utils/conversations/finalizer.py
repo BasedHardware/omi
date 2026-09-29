@@ -10,6 +10,8 @@ import logging
 import os
 from enum import Enum
 
+from fastapi import HTTPException
+
 from database import conversations as conversations_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.redis_db import get_cached_user_geolocation
@@ -31,7 +33,12 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.jit_rollout import JITDecisionStage
 from utils.log_sanitizer import sanitize_pii
-from utils.observability.finalization import classify_finalization_failure, record_finalization_failure
+from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
+from utils.observability.finalization import (
+    classify_finalization_failure,
+    finalization_diagnostic_id,
+    record_finalization_failure,
+)
 from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
@@ -127,6 +134,7 @@ async def finalize_persisted_conversation(
             return ConversationFinalizationDisposition.fenced
         conversation.status = ConversationStatus.processing
 
+    stage = 'geolocation'
     try:
         # A location persisted with the recording session or WAL is the
         # canonical start-time snapshot. Redis remains only a compatibility
@@ -154,6 +162,7 @@ async def finalize_persisted_conversation(
         resolved_language = language or getattr(conversation, 'language', None) or 'en'
         # Admission only schedules a bounded shadow job. It never awaits audio,
         # STT or metric persistence and cannot alter this processing input.
+        stage = 'processing'
         if conversation.status != ConversationStatus.completed:
             _maybe_start_shadow(uid, conversation)
         persistence: dict[str, bool] = {'owned': True}
@@ -198,6 +207,7 @@ async def finalize_persisted_conversation(
         # precede every derived effect (calendar, usage/app, vector,
         # action/goal, audio, webhook, memory) so a losing finalizer produces
         # zero canonical side effects (#10468 r5).
+        stage = 'fanout_claim'
         fanout = await run_blocking(
             db_executor,
             lifecycle_service.claim_finalization_fanout,
@@ -205,6 +215,7 @@ async def finalize_persisted_conversation(
             dispatch_generation,
             lease_epoch,
         )
+        stage = 'duplicate_capture'
         if fanout['status'] in {'claimed', 'completed'}:
             await run_blocking(db_executor, link_duplicate_captures, uid, conversation)
         if fanout['status'] == 'completed':
@@ -230,6 +241,7 @@ async def finalize_persisted_conversation(
         # receipt, keyframes, and arrival intent are not derived intelligence
         # (§1.7) and must still run so a free-tier desktop meeting wakes Chat.
         skip_derived_effects = derived_disposition[0] == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+        stage = 'derived_effects'
         if skip_derived_effects:
             logger.info(
                 'persisted conversation finalization terminal with no derived effects uid=%s conversation=%s',
@@ -242,7 +254,9 @@ async def finalize_persisted_conversation(
             # A finalization job owns a durable lease. Keep canonical memory
             # extraction inside that lease so a temporary fail-closed gate
             # leaves the job retryable instead of dropping the source.
+            stage = 'memory_extraction'
             await run_blocking(postprocess_executor, extract_memories, uid, conversation)
+        stage = 'integrations'
         if not skip_derived_effects:
             await trigger_external_integrations(
                 uid,
@@ -255,6 +269,7 @@ async def finalize_persisted_conversation(
         # durable fanout projection completed. Desktop waits on that projection
         # before waking Chat; ordering the marker first closes the small window
         # where a completed projection existed without a notes-ready intent.
+        stage = 'meeting_receipt'
         await run_blocking(
             db_executor,
             record_and_persist_finalized_meeting_receipt,
@@ -264,6 +279,7 @@ async def finalize_persisted_conversation(
         )
         # This is a metadata-only durable outbox write. Pixels remain local and
         # an offline desktop can satisfy it on a later screen-sync recovery.
+        stage = 'keyframes'
         if not getattr(conversation, 'discarded', False):
             decision = await resolve_frame_request_authority(
                 uid,
@@ -286,6 +302,7 @@ async def finalize_persisted_conversation(
                         device_id=device_id,
                         account_generation=decision.account_generation,
                     )
+        stage = 'capture_arrival'
         source = getattr(conversation, 'source', None)
         source_value = getattr(source, 'value', source)
         if source_value == 'omi' and not getattr(conversation, 'discarded', False):
@@ -301,6 +318,7 @@ async def finalize_persisted_conversation(
                     sanitize_pii(uid),
                     type(error).__name__,
                 )
+        stage = 'fanout_completion'
         fanout_completed = await run_blocking(
             db_executor,
             lifecycle_service.complete_finalization_fanout,
@@ -315,7 +333,18 @@ async def finalize_persisted_conversation(
         # Provider and validation exceptions can contain transcript excerpts.
         # Collapse them onto a closed operational vocabulary before emitting a
         # metric or log; never include the exception message or user identity.
-        reason = classify_finalization_failure(error)
+        # _get_structured wraps provider/parser errors in a safe HTTPException.
+        # Its cause retains the original class, but neither message nor
+        # traceback is safe to emit because either can contain transcript text.
+        source_error = (
+            error.__cause__
+            if isinstance(error, HTTPException)
+            and error.status_code == 500
+            and error.detail == GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
+            and isinstance(error.__cause__, Exception)
+            else error
+        )
+        reason = classify_finalization_failure(source_error)
         record_finalization_failure(reason)
         # WARNING, not ERROR: this fires on every failed attempt, including
         # attempts of conversations that later succeed on retry. The
@@ -327,7 +356,13 @@ async def finalize_persisted_conversation(
         # operators for self-healing traffic (2026-09-06: 5-7/30min bursts
         # against ~210-255 healthy processing/30min).
         logger.warning(
-            'persisted conversation finalization failed failure=processing_failed reason=%s',
+            'persisted conversation finalization failed failure=processing_failed reason=%s '
+            'stage=%s exception_type=%s job_hash=%s conversation_hash=%s dispatch_generation=%s',
             reason.value,
+            stage,
+            type(source_error).__name__,
+            finalization_diagnostic_id(finalization_job_id),
+            finalization_diagnostic_id(conversation_id),
+            dispatch_generation,
         )
         raise ConversationFinalizationError('processing_failed') from error

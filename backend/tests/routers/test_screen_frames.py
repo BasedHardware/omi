@@ -193,6 +193,42 @@ class TestUnknownConversationIs404:
         assert exc_info.value.status_code == 404
 
 
+class TestCaptureWindowVerification:
+    def test_trusted_transcript_window_rejects_early_lifecycle_frame_and_accepts_speech_frame(self):
+        started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        conversation = _conversation(
+            started_at=started_at,
+            finished_at=started_at + timedelta(minutes=16, seconds=34),
+            transcript_segments=[{"text": "speech", "start": 14 * 60 + 39, "end": 16 * 60 + 34}],
+            external_data={"from_segments_client_session_id": "desktop-session"},
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            screen_frames_mod._validate_capture_window(
+                conversation, [_candidate(captured_at=started_at + timedelta(minutes=1))]
+            )
+        assert exc_info.value.detail["code"] == "captured_at_outside_conversation_window"
+
+        fingerprint = screen_frames_mod._validate_capture_window(
+            conversation, [_candidate(captured_at=started_at + timedelta(minutes=15))]
+        )
+        assert fingerprint == "meeting-content-v1:1767226479000:1767226594000"
+
+    def test_inconsistent_legacy_listen_window_keeps_old_client_fallback(self):
+        started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        conversation = _conversation(
+            started_at=started_at,
+            finished_at=started_at + timedelta(minutes=16, seconds=34),
+            transcript_segments=[{"text": "speech", "start": 0, "end": 109}],
+        )
+
+        fingerprint = screen_frames_mod._validate_capture_window(
+            conversation, [_candidate(captured_at=started_at + timedelta(minutes=1))]
+        )
+
+        assert fingerprint == screen_frames_mod.LEGACY_LIFECYCLE_FINGERPRINT
+
+
 class TestSettingsRoutes:
     def test_get_reads_from_users_db(self, _stub_admission_dependencies):
         _fake_conversations_db, fake_users_db, _fake_redis_db = _stub_admission_dependencies

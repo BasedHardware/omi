@@ -8,22 +8,27 @@ execution required by SwiftPM's shared build-directory lock. This is the Rung-0
 guard from #9843: every downstream strictness claim depends on knowing which
 compiler the flags run against.
 
-The pinned Xcode version/build/app path are read from desktop/macos/ci/xcode-pin.json
-(the single source of truth); this test fails if the workflow, the canonical
-runner script, or the two Codemagic desktop Swift workflows drift from that file.
+Required Xcode 26.6 version/build/app path are read from
+desktop/macos/ci/xcode-pin.json. This test also locks the intentional Xcode 27
+advisory and Codemagic release split so required CI never depends on preview
+runner capacity while shipping Siri metadata remains mandatory.
 """
 
 from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/desktop-swift-ci.yml"
+MOBILE_WORKFLOW_PATH = REPO_ROOT / ".github/workflows/mobile-app-checks.yml"
 RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/run-swift-ci.sh"
 SUITE_RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/swift-test-suites.sh"
 PRE_PUSH_PATH = REPO_ROOT / "scripts/pre-push"
@@ -41,16 +46,16 @@ assert _PLANNER_SPEC and _PLANNER_SPEC.loader
 planner = importlib.util.module_from_spec(_PLANNER_SPEC)
 _PLANNER_SPEC.loader.exec_module(planner)
 
-# Single source of truth: desktop/macos/ci/xcode-pin.json. Every consumer
-# (run-swift-ci.sh, desktop-swift-ci.yml, codemagic.yaml desktop workflows)
-# is asserted against these values; none of them may carry their own literal.
+# Required CI toolchain source of truth. Codemagic release and advisory Xcode
+# 27 are independently asserted below.
 PIN = json.loads(PIN_PATH.read_text(encoding="utf-8"))
 EXPECTED_XCODE_VERSION = PIN["version"]
 EXPECTED_XCODE_BUILD = PIN["build"]
 EXPECTED_XCODE_APP = PIN["app_path"]
 EXPECTED_XCODE_CACHE_TOKEN = "xcode" + EXPECTED_XCODE_VERSION.replace(".", "")
 CODEMAGIC_DESKTOP_WORKFLOWS = ["omi-desktop-swift-release", "omi-desktop-swift-preview"]
-JOBS = ["changes", "desktop-swift-verify", "desktop-swift", "desktop-swift-release-compile"]
+CODEMAGIC_IOS_WORKFLOWS = ["ios-internal-auto", "ios-prod-testflight", "ios-prod-patch"]
+JOBS = ["changes", "desktop-swift-verify", "desktop-swift", "desktop-swift-release-compile", "post-merge-failure-issue"]
 MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
 # Hosted macOS budgets are per-job: the consolidated verify lane needs a longer
 # cold-runner ceiling than the narrower release-compile job.
@@ -271,6 +276,13 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("name: Desktop Swift Build & Tests", self.jobs["desktop-swift"])
         self.assertIn("name: Desktop Swift Release Compile", self.jobs["desktop-swift-release-compile"])
 
+    def test_deferred_fork_aggregate_is_neutral_only_when_heavy_jobs_skip(self):
+        gate = self.jobs["desktop-swift"]
+        self.assertIn("::notice title=Heavy CI deferred::", gate)
+        self.assertIn("Deferred Desktop Swift verification must be skipped", gate)
+        self.assertIn("Deferred Desktop Swift release compile must be skipped", gate)
+        self.assertIn('exit 0', gate)
+
     def test_notification_boundary_runs_targeted_release_regression(self):
         job = self.jobs["desktop-swift-release-compile"]
         for path in (
@@ -288,14 +300,16 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("UserNotificationCallbackBridgeTests/", _runner_text())
 
     def test_release_test_phase_is_forwarded_and_gates_the_existing_job(self):
-        """Static workflow contract; executable runner/selector tests own behavior."""
+        """The selected release job can build tests without waking on ordinary PRs."""
         self.assertIn(
             "should_release_test_compile: ${{ steps.changed.outputs.should_release_test_compile }}",
             self.jobs["changes"],
         )
-        for job_id in ("desktop-swift", "desktop-swift-release-compile"):
-            self.assertIn("needs.changes.outputs.should_release_test_compile == 'true'", self.jobs[job_id])
+        self.assertNotIn("should_release_test_compile", self.jobs["desktop-swift"])
         release = self.jobs["desktop-swift-release-compile"]
+        self.assertIn("needs.changes.outputs.should_release_compile == 'true'", release)
+        self.assertNotIn("|| needs.changes.outputs.should_release_test_compile", release)
+        self.assertIn("needs.changes.outputs.should_release_test_compile == 'true'", release)
         self.assertIn('if [ "$BUILD_RELEASE_TESTS" = true ]; then', release)
         self.assertRegex(release, r"--release-test-compile\s+else\s+./scripts/run-swift-ci.sh --release-compile")
 
@@ -310,12 +324,11 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("STATIC_REQUIRED", gate)
         self.assertIn("TESTS_REQUIRED", gate)
         self.assertIn("RELEASE_REQUIRED", gate)
+        self.assertIn("RELEASE_REQUIRED: ${{ needs.changes.outputs.should_release_compile }}", gate)
         self.assertIn('test "$VERIFY_RESULT" = success', gate)
         self.assertIn('test "$VERIFY_RESULT" = skipped', gate)
-        # The release lane (WMO compile + UserNotifications release regression)
-        # reports through the Release Compile job; the required check must fail
-        # closed on it so release-only breaks cannot merge on a green debug
-        # lane (#11373/#11374).
+        # Selected release-specific PRs still require this lane; ordinary PRs
+        # require only the debug/static verdict.
         self.assertIn('test "$RELEASE_RESULT" = success', gate)
         self.assertIn('test "$RELEASE_RESULT" = skipped', gate)
 
@@ -415,7 +428,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
     def test_pin_file_is_the_only_toolchain_literal(self):
         """One source of truth: the pin file, its derived consumers, and nothing else."""
         self.assertEqual(EXPECTED_XCODE_APP, f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app")
-        self.assertRegex(EXPECTED_XCODE_BUILD, r"^[0-9A-F]+$")
+        self.assertRegex(EXPECTED_XCODE_BUILD, r"^[0-9A-Fa-f]+$")
         workflow = _workflow_text()
         self.assertNotIn("xcode164", workflow)
         self.assertIn(EXPECTED_XCODE_CACHE_TOKEN, workflow)
@@ -436,7 +449,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertNotIn("runs-on: macos-15", _workflow_text())
 
     def test_codemagic_desktop_workflows_match_the_pin(self):
-        """Codemagic desktop Swift release/preview must build with the pinned Xcode."""
+        """Release uses Xcode 27 even though required CI uses the stable Xcode 26.6 pin."""
         text = CODEMAGIC_PATH.read_text(encoding="utf-8")
         for workflow_id in CODEMAGIC_DESKTOP_WORKFLOWS:
             with self.subTest(workflow=workflow_id):
@@ -446,11 +459,134 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
                 self.assertIsNotNone(match, f"{workflow_id} must declare an xcode: version")
                 self.assertEqual(
                     match.group(1),
-                    EXPECTED_XCODE_VERSION,
-                    f"{workflow_id} xcode must equal the pin (string compare)",
+                    "27.0",
+                    f"{workflow_id} must ship Siri using Xcode 27.0",
                 )
                 self.assertNotIn("xcode: latest", body)
                 self.assertNotIn("xcode: edge", body)
+
+    def test_mobile_ios_compile_and_ship_workflows_match_the_pin(self):
+        """Required iOS CI uses stable Xcode 26.6; TestFlight uses Xcode 27."""
+        mobile = MOBILE_WORKFLOW_PATH.read_text(encoding="utf-8")
+        compile_job = _job_text(mobile, "ios-compile-check")
+        self.assertIn("runs-on: macos-26", compile_job)
+        self.assertIn("desktop/macos/scripts/run-swift-ci.sh --select-toolchain", compile_job)
+        self.assertIn("Prove stable iOS compiler emits no Siri metadata", compile_job)
+        self.assertIn("Metadata.appintents/extract.actionsdata", compile_job)
+
+        codemagic = CODEMAGIC_PATH.read_text(encoding="utf-8")
+        for workflow_id in CODEMAGIC_IOS_WORKFLOWS:
+            with self.subTest(workflow=workflow_id):
+                body = _job_text(codemagic, workflow_id)
+                self.assertIn("instance_type: mac_mini_m2", body)
+                self.assertRegex(body, r"(?m)^\s+xcode:\s*27\.0\s*$")
+
+    def test_optional_siri_lane_uses_xcode_27_without_gating_team_ci(self):
+        text = _workflow_text()
+        advisory = _job_text(text, "desktop-siri-xcode27-advisory")
+        self.assertIn("runs-on: xcode-27", advisory)
+        self.assertIn("continue-on-error: true", advisory)
+        self.assertIn("timeout-minutes:", advisory)
+        self.assertIn("SiriIntentServiceTests", advisory)
+        self.assertIn("Metadata.appintents", advisory)
+        self.assertNotIn("desktop-siri-xcode27-advisory", self.jobs["desktop-swift"])
+
+    def test_both_toolchains_prove_the_metadata_boundary(self):
+        release = self.jobs["desktop-swift-release-compile"]
+        advisory = _job_text(_workflow_text(), "desktop-siri-xcode27-advisory")
+        embed = (REPO_ROOT / "desktop/macos/scripts/embed-app-intents-metadata.sh").read_text()
+        self.assertIn("--expect-absent", release)
+        self.assertIn('"SiriIntegration/SiriIntents.swift" not in', release)
+        self.assertIn("--expect-absent", embed)
+        self.assertIn("-emit-const-values", _runner_text())
+        self.assertIn("Metadata.appintents", advisory)
+        self.assertIn("Siri release metadata requires Xcode 27.0", embed)
+        self.assertNotRegex(embed, r"\brg\b", "release metadata script must run on stock macos-26")
+
+    def test_stable_metadata_check_does_not_invoke_unsupported_processor(self):
+        """Xcode 26.6 proves absence from its compiled source graph and bundle."""
+        embed = (REPO_ROOT / "desktop/macos/scripts/embed-app-intents-metadata.sh").read_text()
+        stable = embed.index('if [[ "$mode" = --expect-absent ]]')
+        processor = embed.index("xcrun appintentsmetadataprocessor")
+        self.assertLess(stable, processor)
+        self.assertIn("swift package --package-path", embed[stable:processor])
+        self.assertIn("SiriIntegration/SiriIntents.swift", embed[stable:processor])
+        self.assertIn("Metadata.appintents", embed[stable:processor])
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "Desktop"
+            bundle = root / "Omi.app"
+            (bundle / "Contents/Resources").mkdir(parents=True)
+            (package / ".build").mkdir(parents=True)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            marker = root / "processor-called"
+            xcrun = fake_bin / "xcrun"
+            xcrun.write_text(
+                '#!/bin/sh\n'
+                'if [ "$1 $2" = "swift package" ]; then cat "$SIRI_TEST_PACKAGE_DESCRIPTION"; exit 0; fi\n'
+                'touch "$SIRI_TEST_PROCESSOR_MARKER"; exit 99\n',
+                encoding="utf-8",
+            )
+            xcrun.chmod(0o755)
+            description = root / "package.json"
+            environment = os.environ | {
+                "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                "SIRI_TEST_PACKAGE_DESCRIPTION": str(description),
+                "SIRI_TEST_PROCESSOR_MARKER": str(marker),
+            }
+            command = [
+                "bash", str(REPO_ROOT / "desktop/macos/scripts/embed-app-intents-metadata.sh"),
+                str(package), str(bundle), "Release", "arm64", "--expect-absent",
+            ]
+            description.write_text(json.dumps({"targets": [{"name": "Omi Computer", "sources": []}]}))
+            result = subprocess.run(command, env=environment, text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("no Metadata.appintents", result.stdout)
+            self.assertFalse(marker.exists(), "stable check invoked the unsupported metadata processor")
+
+            description.write_text(json.dumps({"targets": [{
+                "name": "Omi Computer", "sources": ["SiriIntegration/SiriIntents.swift"],
+            }]}))
+            result = subprocess.run(command, env=environment, text=True, capture_output=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unexpectedly includes", result.stderr)
+
+    def test_mobile_27_only_sources_compile_out_on_required_ci(self):
+        root = REPO_ROOT / "app/ios/Runner/SiriIntegration"
+        for name in ("SiriBridge", "SiriDebugProbe", "SiriEntities", "SiriIntents", "SiriSession"):
+            with self.subTest(source=name):
+                self.assertTrue((root / f"{name}.swift").read_text().startswith("#if compiler(>=6.4)\n"))
+        snapshot = (root / "SiriSnapshotStore.swift").read_text()
+        compiler_gate = snapshot.index("#if compiler(>=6.4)")
+        snapshot_store = snapshot.index("final class SiriSnapshotStore")
+        self.assertLess(compiler_gate, snapshot_store)
+        self.assertIn("#endif", snapshot[snapshot_store:])
+        bridge = (root / "SiriBridge.swift").read_text()
+        self.assertIn("#else\nimport Flutter", bridge)
+        self.assertIn("final class SiriBridge: SiriIndexApi", bridge.split("#else", 1)[1])
+
+    def test_desktop_package_excludes_27_only_sources_under_stable_compiler(self):
+        manifest = (REPO_ROOT / "desktop/macos/Desktop/Package.swift").read_text()
+        self.assertIn("#if compiler(>=6.4)", manifest)
+        for name in ("SiriDevProbe", "SiriDonations", "SiriEntities", "SiriIndexHooks",
+                     "SiriIndexLifecycle", "SiriIndexer", "SiriIntents", "SiriNavigation",
+                     "SiriViewAnnotations", "SiriIntentService", "SiriMemoryCacheWriter"):
+            with self.subTest(source=name):
+                self.assertIn(f'SiriIntegration/{name}.swift', manifest)
+        self.assertIn('SiriIntentServiceTests.swift', manifest)
+        self.assertIn('siriSourceExclusions', manifest)
+
+    def test_release_stages_each_arch_before_swiftpm_reuses_the_products_directory(self):
+        """Xcode 27 puts both --triple builds under one Products/Release directory."""
+        release = _job_text(CODEMAGIC_PATH.read_text(encoding="utf-8"), "omi-desktop-swift-release")
+        self.assertIn("--show-bin-path", release)
+        self.assertIn('cp "$ARM64_PATH" "/tmp/OmiComputer-arm64"', release)
+        self.assertIn('cp "$X86_64_PATH" "/tmp/OmiComputer-x86_64"', release)
+        self.assertIn('SWIFT_BUILD_DIR="${SWIFT_RELEASE_PRODUCTS_DIR:', release)
+        self.assertNotIn("Desktop/.build/arm64-apple-macosx/release", release)
+        self.assertNotIn("Desktop/.build/x86_64-apple-macosx/release", release)
 
     def test_canonical_runner_exports_the_selected_toolchain_for_ci_steps(self):
         runner = _runner_text()
@@ -649,12 +785,12 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("cut -f1 | tr '\\n' ' '", suite_runner)
 
     def test_release_compile_is_reserved_off_ordinary_prs(self):
-        """One hosted Mac per ordinary PR; pushes and package edits compile release.
+        """One hosted Mac per ordinary PR; pushes and release inputs compile release.
 
         The predictor owns this asymmetry; pin it here because the required
         aggregate check and the release planner both consume the job's verdict.
         """
-        source_probe = ["desktop/macos/Desktop/Sources/OmiApp.swift"]
+        source_probe = ["desktop/macos/Desktop/Sources/Chat/ChatProvider.swift"]
         self.assertFalse(resolve_impact(source_probe, event="pull_request").includes("desktop-swift-release-compile"))
         self.assertTrue(resolve_impact(source_probe, event="push").includes("desktop-swift-release-compile"))
         self.assertTrue(
@@ -667,6 +803,16 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
                 self.assertTrue(
                     resolve_impact(["backend/database/users.py"], event=event).includes("desktop-swift-release-compile")
                 )
+
+    def test_main_and_nightly_release_failures_have_one_issue_owner(self):
+        issue_job = self.jobs["post-merge-failure-issue"]
+        self.assertIn("github.event_name == 'push' || github.event_name == 'schedule'", issue_job)
+        self.assertIn("needs: [changes, desktop-swift-release-compile]", issue_job)
+        self.assertIn("issues: write", issue_job)
+        self.assertIn('title="CI post-merge failure: Desktop Swift Release Compile"', issue_job)
+        self.assertIn("gh issue list", issue_job)
+        self.assertIn("gh issue edit", issue_job)
+        self.assertIn("gh issue create", issue_job)
 
     # --- changed-file gate assertions --------------------------------------
 

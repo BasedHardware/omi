@@ -230,7 +230,7 @@ class _PreviewCard extends StatelessWidget {
     return Container(
       key: const Key('voice_reply_preview_card'),
       padding: const EdgeInsets.all(OmiSpacing.sm),
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Row(
         children: [
           Semantics(
@@ -335,7 +335,7 @@ class _ModeCard extends StatelessWidget {
                       duration: OmiMotion.of(context).quick,
                       width: selected ? 10 : 0,
                       height: selected ? 10 : 0,
-                      decoration: const BoxDecoration(shape: BoxShape.circle, color: OmiColors.onAccent),
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: OmiColors.onAccent),
                     ),
                   ),
                   const SizedBox(width: OmiSpacing.sm),

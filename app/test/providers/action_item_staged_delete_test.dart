@@ -53,7 +53,7 @@ void main() {
     final (p, calls) = await provider();
 
     p.stageDeleteActionItem(p.actionItems[1]);
-    expect(p.undoStagedDelete('b'), isTrue);
+    expect(await p.undoStagedDelete('b'), isTrue);
 
     expect(p.actionItems.map((i) => i.id), ['a', 'b', 'c']);
     expect(await p.commitStagedDelete('b'), isFalse, reason: 'an undone delete has nothing to commit');
@@ -68,7 +68,7 @@ void main() {
 
     expect(calls, ['b']);
     expect(p.actionItems.map((i) => i.id), ['a', 'c']);
-    expect(p.undoStagedDelete('b'), isFalse, reason: 'a committed delete cannot be undone');
+    expect(await p.undoStagedDelete('b'), isFalse, reason: 'a committed delete cannot be undone');
   });
 
   test('a rejected commit brings the task back', () async {

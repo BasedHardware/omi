@@ -64,7 +64,7 @@ Future<OmiButtonAction?> showButtonActionSheet(
                 key: Key('button_action_${gesture.name}_${action.name}'),
                 title: optionLabel(action),
                 showChevron: false,
-                trailing: action == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+                trailing: action == current ? Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
                 onTap: () => Navigator.of(sheetContext).pop(action),
               ),
             ),

@@ -11248,7 +11248,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get openCall => 'কল খুলুন';
 
   @override
-  String get captureRecoveryBanner => 'পেন্ডেন্টের অডিও অ্যাপে পৌঁছাচ্ছে না — মেরামত করতে ট্যাপ করুন';
+  String get captureRecoveryBanner => 'Omi অডিও পাঠাচ্ছে না — আবার সংযোগ করতে ট্যাপ করুন';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11417,4 +11417,97 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'চেহারা';
+
+  @override
+  String get appearanceSystem => 'সিস্টেম';
+
+  @override
+  String get appearanceLight => 'হালকা';
+
+  @override
+  String get appearanceDark => 'গাঢ়';
+
+  @override
+  String get chatDiscardRecording => 'বাতিল করুন';
+
+  @override
+  String get voiceQuestionNoSpeech => 'শুনতে পাইনি — আবার চেষ্টা করুন';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'মানুষ খুঁজুন';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\"-কে নতুন ব্যক্তি হিসেবে যোগ করুন';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'সমস্ত ($count) জনকে দেখান';
+  }
 }

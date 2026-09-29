@@ -532,6 +532,27 @@ class ProviderEpochTranslator:
         self._send_owners: List[Tuple[int, int, Optional[str]]] = []
         self._only_send_owner: Optional[str] = None
         self._send_owner_ambiguous = False
+        # Set only for a same-provider replay epoch. Clock-only sessions keep
+        # provider-native timestamps normally, but a fresh socket restarts its
+        # timestamp axis at zero; replayed segments must use their original
+        # capture positions instead.
+        self.replay_origin_sample: Optional[int] = None
+
+    def stitch_replayed_timestamps(self, segments: Sequence[Dict[str, Any]]) -> None:
+        """Place replay-epoch segments on the original capture-relative axis.
+
+        ``translate`` has already attached the capture span for each segment.
+        For clock-only persistence, projecting that span to seconds avoids a
+        fresh provider socket moving visible timestamps back to zero.
+        """
+        if self._project_times or self.replay_origin_sample is None:
+            return
+        for segment in segments:
+            start = segment.get('_capture_start_sample')
+            end = segment.get('_capture_end_sample')
+            if isinstance(start, int) and isinstance(end, int) and end >= start:
+                segment['start'] = start / self.provider_sample_rate
+                segment['end'] = end / self.provider_sample_rate
 
     def set_validation_callback(self, callback: Callable[[str, Optional[Tuple[int, int]]], None]) -> None:
         self._on_validation = callback

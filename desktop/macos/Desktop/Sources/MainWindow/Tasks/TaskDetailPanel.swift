@@ -366,10 +366,17 @@ struct TaskDetailPanel: View {
       defer { isCopyingLink = false }
       do {
         let response = try await APIClient.shared.shareTasks(taskIds: [task.id])
+        let url = DesktopBackendEnvironment.tagShareURL(response.url)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(response.url, forType: .string)
-        copyStatus = "Link copied"
+        if pasteboard.setString(url, forType: .string) {
+          copyStatus = "Link copied"
+          if let sid = DesktopBackendEnvironment.shareID(from: url) {
+            AnalyticsManager.shared.shareAction(category: "task", properties: ["share_id": sid, "target_app": "copy"])
+          }
+        } else {
+          copyStatus = "Copy failed"
+        }
       } catch {
         copyStatus = "Copy failed"
         log("Failed to get task share link: \(error)")

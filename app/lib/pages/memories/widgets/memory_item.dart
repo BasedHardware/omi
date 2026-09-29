@@ -64,7 +64,7 @@ class MemoryItem extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.fromLTRB(18, 18, 16, 18),
         decoration: BoxDecoration(
-          color: highlighted ? OmiColors.surface3 : AppStyles.backgroundSecondary,
+          color: highlighted ? OmiColors.surface3 : OmiColors.surface1,
           borderRadius: OmiRadius.xlAll,
           boxShadow: [
             BoxShadow(
@@ -93,15 +93,15 @@ class MemoryItem extends StatelessWidget {
                                 _ledgerIcon(memory),
                                 size: 15,
                                 color: memory.isHistoricalKnowledgeLedgerRow
-                                    ? AppStyles.textTertiary
-                                    : AppStyles.textPrimary,
+                                    ? OmiColors.textPrimary.withValues(alpha: 0.6)
+                                    : OmiColors.textPrimary,
                               ),
                             ),
                           ],
                           Expanded(
                             child: Text(
                               memory.content.decodeString,
-                              style: AppStyles.body,
+                              style: OmiType.subhead.copyWith(height: 1.4),
                             ),
                           ),
                           if (editable)
@@ -232,7 +232,7 @@ class MemoryItem extends StatelessWidget {
       onDismissed: (direction) => _delete(context),
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: OmiColors.danger,
           borderRadius: OmiRadius.xlAll,
         ),

@@ -10,6 +10,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
@@ -42,6 +43,7 @@ import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
@@ -72,6 +74,8 @@ import 'package:omi/backend/schema/message_event.dart'
         PhotoDescribedEvent,
         FreemiumThresholdReachedEvent,
         SegmentsDeletedEvent;
+
+enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
 class CaptureController extends ChangeNotifier
     with MessageNotifierMixin
@@ -110,6 +114,12 @@ class CaptureController extends ChangeNotifier
   late final NativeBatchGeolocationPreferenceFence _phoneBatchGeolocationPreference =
       NativeBatchGeolocationPreferenceFence(writer: _writePhoneBatchGeolocationPreference);
   final RecordingLifecycleTelemetry _recordingTelemetry;
+  String? _sourceCaptureRoot;
+
+  String? get _captureEvidenceRoot {
+    if (!const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE')) return null;
+    return _sourceCaptureRoot ??= const Uuid().v4();
+  }
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -367,9 +377,13 @@ class CaptureController extends ChangeNotifier
         _recordingTelemetry.observeAudio(bytes.length);
         final frames = _activeSource?.processBytes(bytes) ?? [];
         for (final frame in frames) {
-          _wal.getSyncs().phone.onFrameCaptured(frame);
+          final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
           if (_socket?.state == SocketServiceState.connected) {
-            _socket?.send(frame.payload);
+            if (positioned.captureRoot != null) {
+              _socket?.sendEvidenceFrame(positioned);
+            } else {
+              _socket?.send(frame.payload);
+            }
             _recordingTelemetry.observeSent(frame.payload.length);
             _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
           }
@@ -652,7 +666,9 @@ class CaptureController extends ChangeNotifier
   // Legacy firmware starts a hold-to-talk question with 3 and ends it with 5.
   // Current firmware also sends 5 right after every tap gesture, so only a
   // session that a hold started may be ended by a release.
-  bool _voiceSessionEndsOnRelease = false;
+  _VoiceCommandTrigger? _voiceCommandTrigger;
+  DateTime? _lastVoiceCommandAutoSubmitAt;
+  static const Duration _voiceCommandAutoSubmitGrace = Duration(seconds: 2);
   List<List<int>> _commandBytes = [];
   int _voiceCommandSubmissionGeneration = 0;
   bool _voiceCommandStartedDuringOnboarding = false;
@@ -791,6 +807,7 @@ class CaptureController extends ChangeNotifier
   bool _deviceIdentityStale(int? revision) => revision != null && _deviceIdentityRevision != revision;
 
   void _rollCaptureSession(String identity) {
+    _sourceCaptureRoot = null;
     _sessionOwner?.replaceSession(identity);
   }
 
@@ -1419,26 +1436,46 @@ class CaptureController extends ChangeNotifier
     return device?.type == DeviceType.omi;
   }
 
+  void _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason reason) {
+    Logger.warning('Pendant voice question dropped: ${reason.wireName}');
+    const TypedEvents().emit(PendantVoiceQuestionDropped(reason: reason));
+  }
+
   Future<void> _processVoiceCommandBytes(
     String deviceId,
     List<List<int>> data, {
     bool allowWhenDisabled = false,
   }) async {
     final submissionGeneration = _voiceCommandSubmissionGeneration;
-    if (_omiButtonActionsDisabled && !allowWhenDisabled) return;
+    if (_omiButtonActionsDisabled && !allowWhenDisabled) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.actionsDisabled);
+      return;
+    }
     if (data.isEmpty) {
-      Logger.debug("voice frames is empty");
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.emptyFrames);
       return;
     }
 
     if (_recordingDevice == null) {
-      Logger.debug("Recording device is null, cannot process voice command");
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.noDevice);
       return;
     }
 
-    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    if (submissionGeneration != _voiceCommandSubmissionGeneration) return;
-    if (_omiButtonActionsDisabled && !allowWhenDisabled) return;
+    late final BleAudioCodec codec;
+    try {
+      codec = await _getAudioCodec(_recordingDevice!.id);
+    } catch (_) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.codecLookupFailed);
+      return;
+    }
+    if (submissionGeneration != _voiceCommandSubmissionGeneration) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.cancelled);
+      return;
+    }
+    if (_omiButtonActionsDisabled && !allowWhenDisabled) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.actionsDisabled);
+      return;
+    }
     await externalActions.sendVoiceMessageStreamToServer(
       data,
       onFirstChunkRecived: () {
@@ -1448,7 +1485,14 @@ class CaptureController extends ChangeNotifier
       // Device-button voice → speak the reply aloud (BG/lock-screen safe).
       // Gated by _preferences.voiceResponseEnabled inside the service.
       playResponseAudio: true,
+      onNoSpeech: () => _playVoiceQuestionFailureHaptic(deviceId),
     );
+  }
+
+  Future<void> _playVoiceQuestionFailureHaptic(String deviceId) async {
+    if (!await _playSpeakerHaptic(deviceId, 1)) return;
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    await _playSpeakerHaptic(deviceId, 1);
   }
 
   @visibleForTesting
@@ -1462,17 +1506,18 @@ class CaptureController extends ChangeNotifier
     _voiceCommandTimeoutTimer = _scheduling.once(const Duration(seconds: 15), () {
       debugPrint("Voice command timeout - auto-ending session after 15s");
       if (_voiceCommandSession != null) {
-        _endVoiceCommandSession(deviceId);
+        _endVoiceCommandSession(deviceId, autoSubmitted: true);
       }
     });
   }
 
   // End voice command session and process the collected audio
-  void _endVoiceCommandSession(String deviceId) {
+  void _endVoiceCommandSession(String deviceId, {bool autoSubmitted = false}) {
     _voiceCommandTimeoutTimer?.cancel();
     _voiceCommandTimeoutTimer = null;
     _voiceCommandSession = null;
-    _voiceSessionEndsOnRelease = false;
+    _voiceCommandTrigger = null;
+    _lastVoiceCommandAutoSubmitAt = autoSubmitted ? _now() : null;
 
     // The started-during-onboarding exemption only holds while the tutorial is
     // still active: if onboarding exited (dispose/skip/complete), the session
@@ -1486,13 +1531,16 @@ class CaptureController extends ChangeNotifier
   }
 
   void cancelActiveVoiceSession() {
+    if (_voiceCommandSession != null) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.cancelled);
+    }
     _voiceCommandSubmissionGeneration++;
     _voiceCommandTimeoutTimer?.cancel();
     _voiceCommandTimeoutTimer = null;
     _voiceCommandSession = null;
+    _voiceCommandTrigger = null;
 
     _voiceCommandStartedDuringOnboarding = false;
-    _voiceSessionEndsOnRelease = false;
     _commandBytes = [];
   }
 
@@ -1514,8 +1562,8 @@ class CaptureController extends ChangeNotifier
   }
 
   @visibleForTesting
-  void endVoiceCommandSessionForTesting(String deviceId) {
-    _endVoiceCommandSession(deviceId);
+  void endVoiceCommandSessionForTesting(String deviceId, {bool autoSubmitted = false}) {
+    _endVoiceCommandSession(deviceId, autoSubmitted: autoSubmitted);
   }
 
   void _startVoiceQuestionSession(String deviceId, {required bool endsOnRelease}) {
@@ -1524,8 +1572,9 @@ class CaptureController extends ChangeNotifier
     if (OmiVoicePlaybackService.instance.isSpeaking) {
       OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.newVoiceQuery);
     }
-    _voiceCommandSession = DateTime.now();
-    _voiceSessionEndsOnRelease = endsOnRelease;
+    _lastVoiceCommandAutoSubmitAt = null;
+    _voiceCommandSession = _now();
+    _voiceCommandTrigger = endsOnRelease ? _VoiceCommandTrigger.legacyLongPress : _VoiceCommandTrigger.toggle;
     _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
     _commandBytes = [];
     _startVoiceCommandTimeout(deviceId);
@@ -1535,6 +1584,11 @@ class CaptureController extends ChangeNotifier
   // Ask-a-question toggle: one gesture starts listening, the same gesture sends.
   void _toggleVoiceQuestionSession(String deviceId, {OmiButtonGesture? gesture}) {
     if (_voiceCommandSession == null) {
+      final autoSubmittedAt = _lastVoiceCommandAutoSubmitAt;
+      if (autoSubmittedAt != null && _now().difference(autoSubmittedAt) <= _voiceCommandAutoSubmitGrace) {
+        _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.autoEndGrace);
+        return;
+      }
       debugPrint("Starting voice question session");
       if (gesture != null) _trackButtonAction(gesture, 'ask_question_start');
       _startVoiceQuestionSession(deviceId, endsOnRelease: false);
@@ -1618,7 +1672,10 @@ class CaptureController extends ChangeNotifier
 
     // Omi button actions are disabled by the user: skip remapped handling but
     // onboarding (handled above) still receives button events regardless.
-    if (_omiButtonActionsDisabled) return;
+    if (_omiButtonActionsDisabled && deviceOnboardingProvider?.isOnboardingActive != true) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.actionsDisabled);
+      return;
+    }
 
     final gesture = OmiButtonGesture.fromButtonState(buttonState);
     if (gesture != null) {
@@ -1632,7 +1689,9 @@ class CaptureController extends ChangeNotifier
       _startVoiceQuestionSession(deviceId, endsOnRelease: true);
       return;
     }
-    if (buttonState == OmiButtonState.release && _voiceCommandSession != null && _voiceSessionEndsOnRelease) {
+    if (buttonState == OmiButtonState.release &&
+        _voiceCommandSession != null &&
+        _voiceCommandTrigger == _VoiceCommandTrigger.legacyLongPress) {
       debugPrint("Legacy: Release detected - ending voice command");
       _endVoiceCommandSession(deviceId);
     }
@@ -1646,8 +1705,11 @@ class CaptureController extends ChangeNotifier
         deviceId,
         onButtonReceived: (List<int> value) {
           final snapshot = List<int>.from(value);
-          if (snapshot.isEmpty || snapshot.length < 4) return;
-          var buttonState = ByteData.view(
+          if (snapshot.length < 4) {
+            _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.invalidButtonPayload);
+            return;
+          }
+          final buttonState = ByteData.view(
             Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
           ).getUint32(0);
           handleDeviceButtonState(deviceId, buttonState);
@@ -1704,16 +1766,22 @@ class CaptureController extends ChangeNotifier
 
         // Process bytes through audio source and feed to WAL
         final frames = _activeSource?.processBytes(snapshot) ?? [];
+        WalFrame? positionedFrame;
         if (_isWalSupported) {
           for (final frame in frames) {
-            _wal.getSyncs().phone.onFrameCaptured(frame);
+            final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
+            if (frames.length == 1) positionedFrame = positioned;
           }
         }
 
         // Send WS
         if (_socket?.state == SocketServiceState.connected) {
           final socketPayload = _activeSource?.getSocketPayload(snapshot) ?? snapshot;
-          _socket?.send(socketPayload);
+          if (positionedFrame?.captureRoot != null && positionedFrame!.payload.length == socketPayload.length) {
+            _socket?.sendEvidenceFrame(positionedFrame);
+          } else {
+            _socket?.send(socketPayload);
+          }
 
           final wedgeSession = _wedgeSession;
           if (wedgeSession != null && wedgeSession.handle >= 0 && identical(wedgeSession.socket, _socket)) {
@@ -2301,6 +2369,7 @@ class CaptureController extends ChangeNotifier
     // Drain any tail from the preceding phone session before replacing its
     // location. A stale session snapshot must never be applied to a later WAL.
     await _wal.getSyncs().phone.finalizeCurrentSession();
+    _bindSafetyWalRecordingSession();
     _rollCaptureSession('phone');
     _clearSessionLocation();
     // Mode is fixed for the whole session at start. On iOS and Android the phone
@@ -2343,10 +2412,14 @@ class CaptureController extends ChangeNotifier
           final frames = _activeSource?.processBytes(bytes) ?? [];
 
           for (final frame in frames) {
-            _wal.getSyncs().phone.onFrameCaptured(frame);
+            final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
 
             if (_socket?.state == SocketServiceState.connected) {
-              _socket?.send(frame.payload);
+              if (positioned.captureRoot != null) {
+                _socket?.sendEvidenceFrame(positioned);
+              } else {
+                _socket?.send(frame.payload);
+              }
               _recordingTelemetry.observeSent(frame.payload.length);
               _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
             }
@@ -2643,6 +2716,7 @@ class CaptureController extends ChangeNotifier
     // snapshot; otherwise those frames could be flushed under the next session's
     // location.
     await _wal.getSyncs().phone.finalizeCurrentSession();
+    _bindSafetyWalRecordingSession();
     _rollCaptureSession(_recordingDevice?.id ?? 'device');
     _sessionTransportInterrupted = false;
     _clearSessionLocation();
@@ -3194,6 +3268,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> forceProcessingCurrentConversation() async {
     final sessionStart = _sessionStartSeconds;
+    final recordingSessionId = activeRecordingId;
 
     final phoneSync = _wal.getSyncs().phone;
     // Show the Conversations-tab skeleton before the WAL drain. Awaiting
@@ -3215,6 +3290,9 @@ class CaptureController extends ChangeNotifier
         onCreated: _processConversationCreated,
       );
       if (sessionStart > 0 && conversationId != null) {
+        if (phoneSync is LocalWalSyncImpl) {
+          phoneSync.prepareConversationStamp(recordingSessionId);
+        }
         await phoneSync.stampConversationId(sessionStart, conversationId);
         _autoSyncSessionWals();
       }
@@ -3223,14 +3301,27 @@ class CaptureController extends ChangeNotifier
 
   /// Force-drain tail buffer and stamp all session WALs with conversation ID.
   /// Called from synchronous onMessageEventReceived — fire-and-forget async.
+  void _bindSafetyWalRecordingSession() {
+    final phone = _wal.getSyncs().phone;
+    // Test doubles implement a narrower phone sync. Production phone storage
+    // is [LocalWalSyncImpl], which copies this id onto each new safety WAL.
+    if (phone is! LocalWalSyncImpl) return;
+    phone.setActiveRecordingSessionId(activeRecordingId);
+  }
+
   Future<void> _finalizeAndStampSession(int sessionStartSeconds, String conversationId) async {
     final ownerToken = _sessionOwner?.token;
     final locationGeneration = _sessionGeolocationGeneration;
+    // Capture before the flush. A device update can roll the session while
+    // finalize awaits disk, and the rolled session must not cancel this stamp.
+    final recordingSessionId = activeRecordingId;
     try {
       final phoneSync = _wal.getSyncs().phone;
       await phoneSync.finalizeCurrentSession();
-      if (!_captureSessionIsCurrent(ownerToken)) return;
       if (sessionStartSeconds > 0) {
+        if (phoneSync is LocalWalSyncImpl) {
+          phoneSync.prepareConversationStamp(recordingSessionId);
+        }
         await phoneSync.stampConversationId(sessionStartSeconds, conversationId);
       }
     } catch (e) {
@@ -3537,9 +3628,13 @@ class CaptureController extends ChangeNotifier
   /// Writes the phone source's buffered tail to the WAL and, when connected, the socket.
   void _flushPhoneFrames() {
     for (final frame in _activeSource?.flush() ?? const []) {
-      _wal.getSyncs().phone.onFrameCaptured(frame);
+      final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
       if (_socket?.state == SocketServiceState.connected) {
-        _socket?.send(frame.payload);
+        if (positioned.captureRoot != null) {
+          _socket?.sendEvidenceFrame(positioned);
+        } else {
+          _socket?.send(frame.payload);
+        }
         _recordingTelemetry.observeSent(frame.payload.length);
         _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
       }

@@ -225,6 +225,15 @@ async def test_multilingual_portuguese_connect_sends_two_hints_and_keeps_identif
 
 
 @pytest.mark.asyncio
+async def test_learned_portuguese_hints_english_primary_connect(monkeypatch):
+    monkeypatch.setenv('STT_LEARNED_LANGUAGE_PROFILE', 'true')
+    profile = LiveLanguageProfile.create('en', multi=True, uid='test-user', learned_sessions=[{'pt': 7, 'en': 3}] * 3)
+    config = await _sent_config('multi', profile)
+    assert config['language_hints'] == ['pt', 'en']
+    assert config['enable_language_identification'] is True
+
+
+@pytest.mark.asyncio
 async def test_multilingual_hint_flag_restores_no_hint(monkeypatch):
     monkeypatch.setenv('STT_MULTI_LANGUAGE_HINTS', 'false')
     profile = LiveLanguageProfile.create('pt', multi=True, uid='test-user')

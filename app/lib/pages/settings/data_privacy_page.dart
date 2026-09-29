@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +11,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -21,10 +24,31 @@ class DataPrivacyPage extends StatefulWidget {
 }
 
 class _DataPrivacyPageState extends State<DataPrivacyPage> {
+  bool _siriEnabled = true;
+  int _siriRevision = 0;
+
+  Future<void> _loadSiriSetting() async {
+    final revision = _siriRevision;
+    try {
+      final enabled = await SiriIntegration.instance.isEnabled();
+      if (mounted && revision == _siriRevision) setState(() => _siriEnabled = enabled);
+    } catch (_) {/* Keep the default until native state is available. */}
+  }
+
+  void _setSiriEnabled(bool enabled) {
+    final revision = ++_siriRevision;
+    final previous = _siriEnabled;
+    setState(() => _siriEnabled = enabled);
+    unawaited(SiriIntegration.instance.setEnabled(enabled).catchError((Object _) {
+      if (mounted && revision == _siriRevision) setState(() => _siriEnabled = previous);
+    }));
+  }
+
   @override
   void initState() {
     super.initState();
     PlatformManager.instance.analytics.dataPrivacyPageOpened();
+    if (Platform.isIOS) _loadSiriSetting();
   }
 
   Widget _buildEncryptionBanner(BuildContext context) {
@@ -41,8 +65,8 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
           Container(
             width: 40,
             height: 40,
-            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-            child: const Icon(Icons.lock_outline, color: OmiColors.textPrimary, size: 20),
+            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+            child: Icon(Icons.lock_outline, color: OmiColors.textPrimary, size: 20),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -53,7 +77,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                   TextSpan(text: '${context.l10n.dataEncryptedBanner} '),
                   TextSpan(
                     text: context.l10n.learnMore,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OmiColors.textPrimary,
                       decoration: TextDecoration.underline,
                       decorationColor: OmiColors.textPrimary,
@@ -123,6 +147,18 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                 padding: const EdgeInsets.all(OmiSpacing.md),
                 children: [
                   _buildEncryptionBanner(context),
+                  if (Platform.isIOS) ...[
+                    const SizedBox(height: OmiSpacing.xxl),
+                    Container(
+                      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                      child: SwitchListTile(
+                        title: Text(context.l10n.siriIndexSetting),
+                        subtitle: Text(context.l10n.siriIndexSettingDescription),
+                        value: _siriEnabled,
+                        onChanged: _setSiriEnabled,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: OmiSpacing.xxl),
                   Consumer<AppProvider>(
                     builder: (context, appProvider, child) {
@@ -135,7 +171,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                           children: [
                             OmiSectionHeader(context.l10n.appAccess, subtitle: context.l10n.appAccessDesc),
                             Container(
-                              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
                               child: OmiEmptyState(icon: Icons.apps_outlined, title: context.l10n.noAppsExternalAccess),
                             ),
                           ],

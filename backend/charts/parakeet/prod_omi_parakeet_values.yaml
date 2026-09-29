@@ -94,8 +94,9 @@ env:
         key: ENCRYPTION_SECRET
   - name: PARAKEET_MODEL
     value: "nvidia/parakeet-tdt-0.6b-v3"
-  - name: PARAKEET_STREAM_MODEL
-    value: "nvidia/parakeet-rnnt-1.1b"
+  # No PARAKEET_STREAM_MODEL in prod: /v3/stream (PTT) serves VAD utterances with
+  # the TDT model above. Prod has run this way since the 2026-07-23 fatal-CUDA
+  # mitigation removed RNNT by hand; loading RNNT here is a separate rollout.
   - name: PARAKEET_INFERENCE_MODE
     value: "nemo"
   - name: PARAKEET_MAX_SPEECH_S

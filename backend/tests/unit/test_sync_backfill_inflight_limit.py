@@ -1,4 +1,4 @@
-"""Per-uid backfill in-flight slot: default-on guard over the existing NX key.
+"""Retired Redis slot primitive, retained for older v1 and rollback callers.
 
 ``SYNC_BACKFILL_INFLIGHT_LIMIT`` defaults enabled (only ``false`` disables) and
 independently of the legacy ``SYNC_BACKFILL_ADMISSION_LIMITS`` daily caps. One
@@ -8,17 +8,9 @@ owner-token release, and the daily-cap gate staying on its own flag.
 
 from __future__ import annotations
 
-import asyncio
-import json
-from types import SimpleNamespace
-from unittest.mock import MagicMock
-
 import pytest
 
-import routers.sync as sync_router
-from database.sync_jobs import SyncLedgerFenceMode
 from utils.sync import backfill
-from utils.sync.lanes import CaptureTimeTrust, SyncLane, SyncLaneDecision
 
 
 class _FakeRedis:
@@ -49,6 +41,7 @@ class _FakeRedis:
 @pytest.fixture
 def fake_redis(monkeypatch):
     fake = _FakeRedis()
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setattr(backfill, 'redis_client', fake)
     return fake
 
@@ -112,80 +105,3 @@ def test_daily_speech_caps_stay_on_the_legacy_flag(fake_redis, monkeypatch):
 def test_slot_key_uses_the_existing_inflight_name_and_ttl(fake_redis):
     backfill.try_acquire_backfill_slot('u1', 'job-a')
     assert fake_redis.store == {'sync_backfill:inflight:u1': 'job-a'}
-
-
-def _v2_endpoint_harness(monkeypatch, *, slot_result=True, slot_error=None):
-    """Bring the v2 endpoint up to the backfill admission boundary with fakes.
-
-    Everything before the slot claim is stubbed; ``_retrieve_file_paths_v2`` is
-    a spy so a refused admission can prove no audio bytes were ever consumed —
-    which is what keeps the client WAL un-acknowledged and retryable.
-    """
-    monkeypatch.setattr(
-        sync_router,
-        'get_sync_ledger_fence_mode',
-        MagicMock(return_value=SyncLedgerFenceMode.LEGACY),
-    )
-    monkeypatch.setattr(
-        sync_router,
-        'resolve_client_device',
-        MagicMock(return_value=MagicMock(client_device_id=None, platform=None)),
-    )
-    monkeypatch.setattr(sync_router, 'geolocation_from_private_header', lambda _header: None)
-    monkeypatch.setattr(sync_router, 'verify_capture_manifest', MagicMock(return_value=None))
-    monkeypatch.setattr(
-        sync_router,
-        'classify_sync_lane',
-        MagicMock(
-            return_value=SyncLaneDecision(
-                lane=SyncLane.BACKFILL,
-                trust=CaptureTimeTrust.LEGACY,
-                reason='aged_capture',
-                oldest_capture_at=None,
-                newest_capture_at=None,
-                maximum_age_seconds=None,
-            )
-        ),
-    )
-    monkeypatch.setattr(sync_router, 'has_transcription_credits', MagicMock(return_value=True))
-    monkeypatch.setattr(sync_router, 'is_cloud_tasks_dispatch_enabled', MagicMock(return_value=False))
-    monkeypatch.setattr(sync_router, 'has_byok_keys', MagicMock(return_value=False))
-    slot_mock = MagicMock(side_effect=slot_error) if slot_error is not None else MagicMock(return_value=slot_result)
-    monkeypatch.setattr(sync_router, 'try_acquire_backfill_slot', slot_mock)
-    file_read = MagicMock(return_value=[])
-    monkeypatch.setattr(sync_router, '_retrieve_file_paths_v2', file_read)
-
-    async def passthrough(_executor, fn, *args, **kwargs):
-        return fn(*args, **kwargs)
-
-    monkeypatch.setattr(sync_router, 'run_blocking', passthrough)
-    files = [SimpleNamespace(filename='1700000000-clip-1.opus')]
-    return files, file_read
-
-
-def test_v2_429_before_any_file_read_keeps_wal(monkeypatch):
-    files, file_read = _v2_endpoint_harness(monkeypatch, slot_result=False)
-
-    resp = asyncio.run(sync_router.sync_local_files_v2(files=files, uid='u1'))
-
-    assert resp.status_code == 429
-    assert resp.headers['retry-after'] == '60'
-    assert resp.headers['x-omi-rate-limit-reason'] == 'backfill_paced'
-    body = json.loads(resp.body)
-    assert body == {
-        'code': 'backfill_paced',
-        'detail': 'Another historical recovery job is still in flight; local audio was not consumed.',
-    }
-    file_read.assert_not_called()
-
-
-def test_v2_redis_failure_is_503_before_any_file_read(monkeypatch):
-    files, file_read = _v2_endpoint_harness(monkeypatch, slot_error=ConnectionError('redis down'))
-
-    resp = asyncio.run(sync_router.sync_local_files_v2(files=files, uid='u1'))
-
-    assert resp.status_code == 503
-    assert resp.headers['x-omi-rate-limit-reason'] == 'backfill_capacity'
-    body = json.loads(resp.body)
-    assert body['code'] == 'backfill_capacity'
-    file_read.assert_not_called()

@@ -123,6 +123,7 @@ WHERE app_namespace = :app_namespace AND build_number = :build_number
     'Live Transcript Card Clicked',
     'Apple Reminders Sync Completed',
     'Wrapped Generation Completed',
-    'Voice Reply Playback'
+    'Voice Reply Playback',
+    'Pendant Voice Question Dropped'
   )
 GROUP BY event ORDER BY event;

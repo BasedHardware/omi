@@ -20493,10 +20493,10 @@ abstract class AppLocalizations {
   /// **'Open call'**
   String get openCall;
 
-  /// Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings
+  /// Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings
   ///
   /// In en, this message translates to:
-  /// **'Pendant audio is not reaching the app — tap to repair'**
+  /// **'Omi isn\'t sending audio — tap to reconnect'**
   String get captureRecoveryBanner;
 
   /// No description provided for @phoneRecordingBlockedByPendantBatch.
@@ -20798,6 +20798,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Chat this month'**
   String get usageChatThisMonth;
+
+  /// No description provided for @appearance.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get appearance;
+
+  /// No description provided for @appearanceSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get appearanceSystem;
+
+  /// No description provided for @appearanceLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get appearanceLight;
+
+  /// No description provided for @appearanceDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get appearanceDark;
+
+  /// Discard the current chat voice recording without transcription
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get chatDiscardRecording;
+
+  /// Shown in chat when a pendant voice question contains no detectable speech.
+  ///
+  /// In en, this message translates to:
+  /// **'Didn\'t catch that — try again'**
+  String get voiceQuestionNoSpeech;
+
+  /// No description provided for @siriIndexSetting.
+  ///
+  /// In en, this message translates to:
+  /// **'Use Omi with Siri & Apple Intelligence'**
+  String get siriIndexSetting;
+
+  /// No description provided for @siriIndexSettingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.'**
+  String get siriIndexSettingDescription;
+
+  /// Device diagnostics support upload
+  ///
+  /// In en, this message translates to:
+  /// **'Send to support'**
+  String get sendToSupport;
+
+  /// Device diagnostics support upload
+  ///
+  /// In en, this message translates to:
+  /// **'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.'**
+  String get deviceDiagnosticsUploadDescription;
+
+  /// Device diagnostics support upload
+  ///
+  /// In en, this message translates to:
+  /// **'Support ticket code'**
+  String get deviceDiagnosticsTicket;
+
+  /// Device diagnostics support upload
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send diagnostics to support. Please try again.'**
+  String get deviceDiagnosticsUploadFailed;
+
+  /// Button on the summary/recording feedback prompt that opens the quick feedback sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Give feedback'**
+  String get feedbackGiveFeedback;
+
+  /// Chip in the feedback sheet for a positive answer; submits helpful feedback.
+  ///
+  /// In en, this message translates to:
+  /// **'All good'**
+  String get feedbackAllGood;
+
+  /// Secondary row in the feedback sheet that opens the support chat.
+  ///
+  /// In en, this message translates to:
+  /// **'More detail? Chat with us'**
+  String get feedbackChatWithUs;
+
+  /// Quick reason chip: the summary was inaccurate.
+  ///
+  /// In en, this message translates to:
+  /// **'Inaccurate'**
+  String get feedbackReasonSummaryInaccurate;
+
+  /// Quick reason chip: the summary was incomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Incomplete'**
+  String get feedbackReasonSummaryIncomplete;
+
+  /// Quick reason chip: the summary was not relevant.
+  ///
+  /// In en, this message translates to:
+  /// **'Not relevant'**
+  String get feedbackReasonSummaryIrrelevant;
+
+  /// Quick reason chip: the summary mixed up context.
+  ///
+  /// In en, this message translates to:
+  /// **'Wrong context'**
+  String get feedbackReasonSummaryWrongContext;
+
+  /// Quick reason chip: some other summary problem.
+  ///
+  /// In en, this message translates to:
+  /// **'Something else'**
+  String get feedbackReasonSummaryOther;
+
+  /// Quick reason chip: the recording is missing audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing audio'**
+  String get feedbackReasonRecordingMissingAudio;
+
+  /// Quick reason chip: the transcription was poor.
+  ///
+  /// In en, this message translates to:
+  /// **'Poor transcription'**
+  String get feedbackReasonRecordingPoorTranscription;
+
+  /// Quick reason chip: the speaker attribution was wrong.
+  ///
+  /// In en, this message translates to:
+  /// **'Wrong speaker'**
+  String get feedbackReasonRecordingWrongSpeaker;
+
+  /// Quick reason chip: processing was delayed or stuck.
+  ///
+  /// In en, this message translates to:
+  /// **'Delayed or stuck'**
+  String get feedbackReasonRecordingDelayedOrStuck;
+
+  /// Quick reason chip: the recording was fragmented or duplicated.
+  ///
+  /// In en, this message translates to:
+  /// **'Fragmented or duplicated'**
+  String get feedbackReasonRecordingFragmentedOrDuplicated;
+
+  /// Quick reason chip: some other recording problem.
+  ///
+  /// In en, this message translates to:
+  /// **'Something else'**
+  String get feedbackReasonRecordingOther;
+
+  /// Hint for the person search field in the tag-speaker sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Search people'**
+  String get searchPeople;
+
+  /// Row shown in the tag-speaker sheet when no existing person matches the search query
+  ///
+  /// In en, this message translates to:
+  /// **'Add \"{query}\" as a new person'**
+  String addQueryAsNewPerson(String query);
+
+  /// Expander chip in the tag-speaker sheet that reveals the capped person grid
+  ///
+  /// In en, this message translates to:
+  /// **'Show all {count} people'**
+  String showAllPeople(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

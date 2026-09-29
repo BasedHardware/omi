@@ -158,6 +158,19 @@ void main() {
       expect(provider.endConversationCalls, 1);
     });
 
+    test('remapped ask-question gesture respects the auto-submit grace period', () async {
+      final provider = await providerWith({
+        'tripleTapAction': OmiButtonAction.askQuestion.storedValue,
+      });
+      provider.handleDeviceButtonState(_deviceId, OmiButtonState.tripleTap);
+      expect(provider.isVoiceQuestionSessionActive, isTrue);
+      provider.endVoiceCommandSessionForTesting(_deviceId, autoSubmitted: true);
+      expect(provider.isVoiceQuestionSessionActive, isFalse);
+
+      provider.handleDeviceButtonState(_deviceId, OmiButtonState.tripleTap);
+      expect(provider.isVoiceQuestionSessionActive, isFalse);
+    });
+
     test('"do nothing" swallows the gesture', () async {
       final provider = await providerWith({'singleTapAction': OmiButtonAction.none.storedValue});
 
