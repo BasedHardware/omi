@@ -19,6 +19,7 @@ from models.product_memory import (
     MemoryTier,
 )
 
+
 class MemoryExtractionError(RuntimeError):
     """A strict memory extraction failed before producing a valid batch.
 
