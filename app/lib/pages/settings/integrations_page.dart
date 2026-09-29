@@ -444,13 +444,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     );
   }
 
-  Widget _sectionTitle(String text) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.xxs),
-      child: Semantics(header: true, child: Text(text, style: OmiType.headline)),
-    );
-  }
-
   /// Connected services first, then the whole app catalog (it was the Apps tab until 2026-09-29).
   @override
   Widget build(BuildContext context) {
@@ -464,7 +457,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         bottom: false,
         child: ExploreInstallPage(
           leadingSlivers: [
-            SliverToBoxAdapter(child: _sectionTitle(context.l10n.connected)),
+            const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.sm)),
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
               sliver: SliverList.list(

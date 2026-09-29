@@ -200,14 +200,14 @@ class _MoveOption extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
         color: OmiColors.surface3,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: OmiRadius.mdAll,
         border: Border.all(color: OmiColors.surface3, width: 1),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: OmiRadius.mdAll,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
@@ -217,7 +217,7 @@ class _MoveOption extends StatelessWidget {
                   height: 40,
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: OmiRadius.smAll,
                   ),
                   child: Center(child: FaIcon(folderIconToFa(icon), size: 18, color: color)),
                 ),
@@ -228,11 +228,7 @@ class _MoveOption extends StatelessWidget {
                     children: [
                       Text(
                         name,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: OmiColors.textPrimary,
-                        ),
+                        style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
                       ),
                       if (description != null && description!.isNotEmpty)
                         Padding(
@@ -243,7 +239,7 @@ class _MoveOption extends StatelessWidget {
                               description!,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 12, color: OmiColors.textTertiary),
+                              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                             ),
                           ),
                         ),

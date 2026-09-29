@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/pages/chat/chat_route.dart';
@@ -102,8 +103,9 @@ final chatScenarios = <AuditScenario>[
     id: 'chat-sheet',
     title: 'Ask Omi rising over Home',
     page: 'lib/pages/chat/chat_route.dart (ChatSheetTransition)',
-    state: 'The rise at 70% of its run over a stand-in Home list; empty chat',
+    state: 'The rise at 70% of its run over a stand-in Home list; empty chat; signed in as Alex',
     run: (a) async {
+      SharedPreferencesUtil().givenName = 'Alex';
       await a.pump(
         Stack(children: [
           Positioned.fill(

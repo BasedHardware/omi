@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
+import 'package:omi/services/dev_controls/addressability_catalog.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
 
@@ -54,11 +55,11 @@ void main() {
       provider.setIndex(index);
     });
 
-    await tester.tap(find.byKey(const ValueKey('home_tab_Tasks')));
+    await tester.tap(find.byKey(OmiKeys.homeTabTasks));
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('home_tab_Tasks')));
+    await tester.tap(find.byKey(OmiKeys.homeTabTasks));
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('home_tab_Home')));
+    await tester.tap(find.byKey(OmiKeys.homeTabHome));
     await tester.pump();
 
     expect(taps, [(HomeProvider.tasksTab, false), (HomeProvider.tasksTab, true), (HomeProvider.homeTab, false)]);

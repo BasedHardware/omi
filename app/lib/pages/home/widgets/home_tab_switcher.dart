@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/services/dev_controls/addressability_catalog.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -25,9 +26,13 @@ class HomeTabSwitcher extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.sm, OmiSpacing.xxs),
       child: Row(
         children: [
-          _tab(context, selected, HomeProvider.homeTab, l10n.home, 'Home'),
+          // Conversations live in Home now, so the catalogued Conversations control is the Home tab.
+          KeyedSubtree(
+            key: OmiKeys.homeTabConversations,
+            child: _tab(context, selected, HomeProvider.homeTab, l10n.home, 'Home', OmiKeys.homeTabHome),
+          ),
           const SizedBox(width: OmiSpacing.md),
-          _tab(context, selected, HomeProvider.tasksTab, l10n.tasks, 'Tasks'),
+          _tab(context, selected, HomeProvider.tasksTab, l10n.tasks, 'Tasks', OmiKeys.homeTabTasks),
           const Spacer(),
           if (trailing != null) trailing!,
         ],
@@ -36,7 +41,7 @@ class HomeTabSwitcher extends StatelessWidget {
   }
 
   /// [analyticsName] is the stable event name; [label] is what the reader sees and hears.
-  Widget _tab(BuildContext context, int selected, int index, String label, String analyticsName) {
+  Widget _tab(BuildContext context, int selected, int index, String label, String analyticsName, Key key) {
     final isSelected = selected == index;
     return Semantics(
       button: true,
@@ -44,7 +49,7 @@ class HomeTabSwitcher extends StatelessWidget {
       label: label,
       excludeSemantics: true,
       child: GestureDetector(
-        key: ValueKey('home_tab_$analyticsName'),
+        key: key,
         behavior: HitTestBehavior.opaque,
         onTap: () {
           onTabTap(index, isSelected);

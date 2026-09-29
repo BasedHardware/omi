@@ -47,7 +47,8 @@ final settingsPagesScenarios = <AuditScenario>[
                 Goal.fromJson({'id': 'g2', 'title': 'Run 100 km', 'current_value': 12, 'target_value': 100}),
               ]);
       await a.tester.runAsync(goals.init);
-      await a.pump(const GoalsPage(), scaffold: false, providers: [ChangeNotifierProvider<GoalsProvider>.value(value: goals)]);
+      await a.pump(const GoalsPage(),
+          scaffold: false, providers: [ChangeNotifierProvider<GoalsProvider>.value(value: goals)]);
       await a.shot('Open Settings › Goals');
     },
   ),

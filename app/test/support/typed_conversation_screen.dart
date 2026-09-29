@@ -44,6 +44,12 @@ class _InertDeviceProvider extends ChangeNotifier implements DeviceProvider {
   bool get isConnected => false;
 
   @override
+  BtDevice? get connectedDevice => null;
+
+  @override
+  bool get isConnecting => false;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

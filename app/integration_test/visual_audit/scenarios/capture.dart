@@ -314,7 +314,9 @@ final captureScenarios = <AuditScenario>[
           date: '${today.subtract(const Duration(days: 1)).toIso8601String().substring(0, 10)}',
           createdAt: today,
           headline: 'Rewrite, equity, and product polish dominated',
-          overview: '',
+          overview: 'Most of the day went to the v5 rewrite plan and a long equity conversation, '
+              'with a late push on the mobile polish list.',
+          dayEmoji: '🛠️',
           stats: DayStats(totalConversations: 6, actionItemsCount: 2),
         ),
         DailySummary(

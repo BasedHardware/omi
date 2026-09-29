@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
 
 class DailySummaryCard extends StatelessWidget {
@@ -62,23 +63,56 @@ class DailySummaryCard extends StatelessWidget {
                   right: 0,
                   bottom: hasMap ? mapHeight : 0,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
-                    child: Text(
-                      summary.headline,
-                      style: OmiType.subhead.copyWith(height: 1.35),
-                      maxLines: hasMap ? 3 : 5,
-                      overflow: TextOverflow.ellipsis,
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Eyebrow: the day, so the headline can carry the story.
+                        Row(
+                          children: [
+                            if (summary.dayEmoji.isNotEmpty) ...[
+                              Text(summary.dayEmoji, style: OmiType.footnote),
+                              const SizedBox(width: 6),
+                            ],
+                            Flexible(
+                              child: Text(
+                                dateLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: OmiType.footnote
+                                    .copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          summary.headline,
+                          style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600, height: 1.3),
+                          maxLines: hasMap ? 2 : 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (!hasMap && summary.overview.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Expanded(
+                            child: Text(
+                              summary.overview.trim(),
+                              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35),
+                              overflow: TextOverflow.fade,
+                            ),
+                          ),
+                        ] else if (!hasMap) ...[
+                          const Spacer(),
+                          if (_statsLine(context) case final stats?)
+                            Text(
+                              stats,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                            ),
+                        ],
+                      ],
                     ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 10,
-                  right: 10,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration:
-                        BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: OmiRadius.pillAll),
-                    child: Text(dateLabel, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
                   ),
                 ),
               ],
@@ -87,6 +121,16 @@ class DailySummaryCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// "6 conversations · 2 tasks" for a recap with nothing else to show below its headline.
+  String? _statsLine(BuildContext context) {
+    final l10n = context.l10n;
+    final parts = [
+      if (summary.stats.totalConversations > 0) l10n.conversationCount(summary.stats.totalConversations),
+      if (summary.stats.actionItemsCount > 0) l10n.taskCount(summary.stats.actionItemsCount),
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 
   static const BorderRadius _cardRadius = BorderRadius.all(Radius.circular(radius));

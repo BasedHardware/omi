@@ -179,7 +179,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           children: [
             _row(SettingsDestination.memories,
                 key: 'settings_row_memories', icon: FontAwesomeIcons.brain, title: l10n.memories),
-            _row(SettingsDestination.goals, key: 'settings_row_goals', icon: FontAwesomeIcons.bullseye, title: l10n.goals),
+            _row(SettingsDestination.goals,
+                key: 'settings_row_goals', icon: FontAwesomeIcons.bullseye, title: l10n.goals),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),

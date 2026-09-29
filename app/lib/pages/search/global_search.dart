@@ -81,8 +81,8 @@ class SearchDropRoute<T> extends PageRoute<T> {
       builder(context);
 
   @override
-  Widget buildTransitions(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation,
-      Widget child) {
+  Widget buildTransitions(
+      BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
     return SearchDropTransition(animation: animation, child: child);
   }
 }
@@ -475,7 +475,8 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     ];
     return ListView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, MediaQuery.paddingOf(context).bottom + 24),
+      padding:
+          EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, MediaQuery.paddingOf(context).bottom + 24),
       children: [
         GridView.count(
           crossAxisCount: 2,
@@ -732,7 +733,7 @@ class _Emoji extends StatelessWidget {
       height: 30,
       alignment: Alignment.center,
       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
-      child: Text(emoji.isEmpty ? '·' : emoji, style: const TextStyle(fontSize: 15)),
+      child: Text(emoji.isEmpty ? '·' : emoji, style: OmiType.subhead),
     );
   }
 }

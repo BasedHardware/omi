@@ -332,6 +332,7 @@ class MemoryMindMapPreview extends StatelessWidget {
                     child: IgnorePointer(
                       child: MemoryGraphPage(
                         embedded: true,
+                        preview: true,
                         showAppBar: false,
                         showShareButton: false,
                         trackOpenEvent: false,

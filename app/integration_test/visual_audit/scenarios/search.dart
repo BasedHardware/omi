@@ -26,7 +26,10 @@ ServerConversation _conversation(String id, String title, String emoji, DateTime
       'structured': {'title': title, 'overview': '', 'emoji': emoji, 'category': 'work'},
       'status': 'completed',
       'transcript_segments': [],
-      if (snippet != null) 'match_snippets': [{'text': snippet}],
+      if (snippet != null)
+        'match_snippets': [
+          {'text': snippet}
+        ],
     });
 
 /// Canned search results; counts on every tile.
@@ -81,7 +84,7 @@ class AuditSearchSource extends GlobalSearchSource {
 
   @override
   Future<List<ActionItemWithMetadata>> tasks(String query) async => [
-        ActionItemWithMetadata(id: 't1', description: 'Send the Bluetooth logs to firmware', completed: false),
+        const ActionItemWithMetadata(id: 't1', description: 'Send the Bluetooth logs to firmware', completed: false),
       ];
 
   @override
@@ -125,11 +128,11 @@ final searchScenarios = <AuditScenario>[
     state: 'The drop at 55% of its run, over a plain page',
     run: (a) async {
       await a.pump(
-        Stack(children: [
-          const Positioned.fill(child: ColoredBox(color: Color(0xFFF2F2F7))),
+        const Stack(children: [
+          Positioned.fill(child: ColoredBox(color: Color(0xFFF2F2F7))),
           SearchDropTransition(
-            animation: const AlwaysStoppedAnimation(0.55),
-            child: GlobalSearchPage(source: const AuditSearchSource()),
+            animation: AlwaysStoppedAnimation(0.55),
+            child: GlobalSearchPage(source: AuditSearchSource()),
           ),
         ]),
         scaffold: false,
