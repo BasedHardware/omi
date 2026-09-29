@@ -986,7 +986,7 @@ def retrieve_memory_context_params(
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     user_name = get_user_name(uid, use_default=False)
     transcript = TranscriptSegment.segments_as_string(
@@ -1023,7 +1023,7 @@ def obtain_emotional_message(
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     transcript = TranscriptSegment.segments_as_string(
         transcript_segments, include_timestamps=False, user_name=user_name, people=people
@@ -1401,7 +1401,7 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     prompt = f'''
     {user_name} is having a conversation.
@@ -1441,7 +1441,7 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     transcript = TranscriptSegment.segments_as_string(segments, people=people, user_name=user_name)
     # TODO: tweak with different type of requests, like this, or roast, or praise or emotional, etc.
