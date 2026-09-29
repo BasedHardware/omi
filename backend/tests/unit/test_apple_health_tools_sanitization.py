@@ -30,8 +30,8 @@ def _setup_stubs(failing: bool = True):
 
     mock_integration_base = _module(
         "utils.retrieval.tools.integration_base",
-        resolve_config_uid=lambda c: ("test-uid-123", None),
-        get_integration_checked=lambda uid, provider: (mock_integ, None),
+        resolve_config_uid=lambda *args, **kwargs: ("test-uid-123", None),
+        get_integration_checked=lambda *args, **kwargs: (mock_integ, None),
     )
     mock_users_db = _module(
         "database.users",
