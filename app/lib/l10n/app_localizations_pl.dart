@@ -11258,7 +11258,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get openCall => 'Otwórz połączenie';
 
   @override
-  String get captureRecoveryBanner => 'Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić';
+  String get captureRecoveryBanner => 'Omi nie wysyła dźwięku — dotknij, aby połączyć ponownie';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11467,4 +11467,79 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Przekaż opinię';
+
+  @override
+  String get feedbackAllGood => 'Wszystko OK';
+
+  @override
+  String get feedbackChatWithUs => 'Więcej szczegółów? Napisz do nas';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Nieprawidłowe';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Niekompletne';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Nieistotne';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Zły kontekst';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Coś innego';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Brak audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Słaba transkrypcja';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Zła osoba mówiąca';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Opóźnione lub zacięte';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmentaryczne lub zduplikowane';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Coś innego';
+
+  @override
+  String get searchPeople => 'Szukaj osób';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Dodaj „$query” jako nową osobę';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Pokaż wszystkie osoby ($count)';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Cześć $name, zapytaj o cokolwiek';
+  }
+
+  @override
+  String get activity => 'Aktywność';
+
+  @override
+  String get places => 'Miejsca';
+
+  @override
+  String get recaps => 'Podsumowania';
+
+  @override
+  String get recent => 'Ostatnie';
+
+  @override
+  String get searchPartialFailure => 'Nie udało się wczytać niektórych wyników';
 }

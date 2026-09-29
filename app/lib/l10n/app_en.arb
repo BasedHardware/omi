@@ -13332,9 +13332,9 @@
     "@openCall": {
         "description": "Accessibility hint on the live card during a call; tapping opens the call screen."
     },
-    "captureRecoveryBanner": "Pendant audio is not reaching the app — tap to repair",
+    "captureRecoveryBanner": "Omi isn't sending audio — tap to reconnect",
     "@captureRecoveryBanner": {
-        "description": "Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings"
+        "description": "Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings"
     },
     "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later on your pendant before recording with your phone.",
     "captureNotTranscribing": "Not transcribing",
@@ -13583,5 +13583,112 @@
     "deviceDiagnosticsUploadFailed": "Could not send diagnostics to support. Please try again.",
     "@deviceDiagnosticsUploadFailed": {
         "description": "Device diagnostics support upload"
+    },
+    "feedbackGiveFeedback": "Give feedback",
+    "@feedbackGiveFeedback": {
+        "description": "Button on the summary/recording feedback prompt that opens the quick feedback sheet."
+    },
+    "feedbackAllGood": "All good",
+    "@feedbackAllGood": {
+        "description": "Chip in the feedback sheet for a positive answer; submits helpful feedback."
+    },
+    "feedbackChatWithUs": "More detail? Chat with us",
+    "@feedbackChatWithUs": {
+        "description": "Secondary row in the feedback sheet that opens the support chat."
+    },
+    "feedbackReasonSummaryInaccurate": "Inaccurate",
+    "@feedbackReasonSummaryInaccurate": {
+        "description": "Quick reason chip: the summary was inaccurate."
+    },
+    "feedbackReasonSummaryIncomplete": "Incomplete",
+    "@feedbackReasonSummaryIncomplete": {
+        "description": "Quick reason chip: the summary was incomplete."
+    },
+    "feedbackReasonSummaryIrrelevant": "Not relevant",
+    "@feedbackReasonSummaryIrrelevant": {
+        "description": "Quick reason chip: the summary was not relevant."
+    },
+    "feedbackReasonSummaryWrongContext": "Wrong context",
+    "@feedbackReasonSummaryWrongContext": {
+        "description": "Quick reason chip: the summary mixed up context."
+    },
+    "feedbackReasonSummaryOther": "Something else",
+    "@feedbackReasonSummaryOther": {
+        "description": "Quick reason chip: some other summary problem."
+    },
+    "feedbackReasonRecordingMissingAudio": "Missing audio",
+    "@feedbackReasonRecordingMissingAudio": {
+        "description": "Quick reason chip: the recording is missing audio."
+    },
+    "feedbackReasonRecordingPoorTranscription": "Poor transcription",
+    "@feedbackReasonRecordingPoorTranscription": {
+        "description": "Quick reason chip: the transcription was poor."
+    },
+    "feedbackReasonRecordingWrongSpeaker": "Wrong speaker",
+    "@feedbackReasonRecordingWrongSpeaker": {
+        "description": "Quick reason chip: the speaker attribution was wrong."
+    },
+    "feedbackReasonRecordingDelayedOrStuck": "Delayed or stuck",
+    "@feedbackReasonRecordingDelayedOrStuck": {
+        "description": "Quick reason chip: processing was delayed or stuck."
+    },
+    "feedbackReasonRecordingFragmentedOrDuplicated": "Fragmented or duplicated",
+    "@feedbackReasonRecordingFragmentedOrDuplicated": {
+        "description": "Quick reason chip: the recording was fragmented or duplicated."
+    },
+    "feedbackReasonRecordingOther": "Something else",
+    "@feedbackReasonRecordingOther": {
+        "description": "Quick reason chip: some other recording problem."
+    },
+    "searchPeople": "Search people",
+    "@searchPeople": {
+        "description": "Hint for the person search field in the tag-speaker sheet"
+    },
+    "addQueryAsNewPerson": "Add \"{query}\" as a new person",
+    "@addQueryAsNewPerson": {
+        "description": "Row shown in the tag-speaker sheet when no existing person matches the search query",
+        "placeholders": {
+            "query": {
+                "type": "String"
+            }
+        }
+    },
+    "showAllPeople": "Show all {count} people",
+    "@showAllPeople": {
+        "description": "Expander chip in the tag-speaker sheet that reveals the capped person grid",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "chatGreeting": "Hi {name}, ask anything",
+    "@chatGreeting": {
+        "description": "Greeting at the top of an empty chat; name is the user's first name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "activity": "Activity",
+    "@activity": {
+        "description": "Title of the sheet listing the steps Omi took to answer a chat message"
+    },
+    "places": "Places",
+    "@places": {
+        "description": "Search tile that opens conversations on a map"
+    },
+    "recaps": "Recaps",
+    "@recaps": {
+        "description": "Search tile and result section for daily recaps"
+    },
+    "recent": "Recent",
+    "@recent": {
+        "description": "Heading above recent search queries"
+    },
+    "searchPartialFailure": "Some results couldn't load",
+    "@searchPartialFailure": {
+        "description": "Shown under global search results when one kind of result (conversations, recaps, tasks or memories) failed to load"
     }
 }

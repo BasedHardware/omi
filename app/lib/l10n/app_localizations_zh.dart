@@ -11019,7 +11019,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openCall => '打开通话';
 
   @override
-  String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
+  String get captureRecoveryBanner => 'Omi 未发送音频 — 轻点以重新连接';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '在用手机录音之前，请先停止吊坠上的“稍后转录”。';
@@ -11220,4 +11220,79 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => '提供反馈';
+
+  @override
+  String get feedbackAllGood => '一切正常';
+
+  @override
+  String get feedbackChatWithUs => '想补充细节？和我们聊聊';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => '不准确';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => '不完整';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => '不相关';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => '语境不对';
+
+  @override
+  String get feedbackReasonSummaryOther => '其他问题';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => '缺少音频';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => '转写质量差';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => '说话人错误';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => '延迟或卡住';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => '断断续续或重复';
+
+  @override
+  String get feedbackReasonRecordingOther => '其他问题';
+
+  @override
+  String get searchPeople => '搜索人员';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '将“$query”添加为新人员';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return '显示全部 $count 人';
+  }
+
+  @override
+  String chatGreeting(String name) {
+    return '你好，$name，随便问吧';
+  }
+
+  @override
+  String get activity => '活动';
+
+  @override
+  String get places => '地点';
+
+  @override
+  String get recaps => '回顾';
+
+  @override
+  String get recent => '最近';
+
+  @override
+  String get searchPartialFailure => '部分结果无法加载';
 }

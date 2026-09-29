@@ -10,12 +10,13 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Set, cast
 
 import database.goals as goals_db
-import database.memories as memories_db
 import database.conversations as conversations_db
 import database.chat as chat_db
+from database._client import db as firestore_db
 from database.vector_db import query_vectors as vector_search
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import track_usage, Features
+from utils.memory.memory_service import MemoryService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
     # 4. User memories/facts
     memory_context = ""
     try:
-        memories = memories_db.get_memories(uid, limit=30, offset=0)
+        memories = [m.dict() for m in MemoryService(db_client=firestore_db).read(uid, limit=30, offset=0)]
         memory_texts = [
             m.get('content', '')[:150] for m in memories[:15] if m.get('content') and not m.get('is_locked')
         ]
@@ -110,7 +111,7 @@ def suggest_goal(uid: str) -> Dict[str, Any]:
     """Generate an AI-suggested goal based on user's memories and conversations."""
     try:
         # Get user's memories for context
-        memories = memories_db.get_memories(uid, limit=100, offset=0)
+        memories = [m.dict() for m in MemoryService(db_client=firestore_db).read(uid, limit=100, offset=0)]
 
         if not memories:
             # Default suggestion when no memories

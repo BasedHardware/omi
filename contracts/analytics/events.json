@@ -1841,7 +1841,8 @@
             "lifecycle_changed",
             "availability_error",
             "unavailable",
-            "request_error"
+            "request_error",
+            "recent_bad_experience"
           ]
         }
       },
@@ -2563,6 +2564,22 @@
       "consumers": [
         "siri-intents"
       ],
+      "correlation": null
+    },
+    {
+      "id": "siriAskOmiPerformed",
+      "wire_name": "Siri Ask Omi Performed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "platform": {"type": "enum", "wire_name": "platform", "values": ["macos", "ios"]},
+        "outcome": {"type": "enum", "wire_name": "outcome", "values": ["ok", "auth", "network", "rate_limited", "quota", "server", "cancelled"]},
+        "latencyMs": {"type": "int", "wire_name": "latency_ms"},
+        "invokedVia": {"type": "enum", "wire_name": "invoked_via", "values": ["siri", "shortcuts", "spotlight", "unknown"]}
+      },
+      "consumers": ["siri-intents"],
       "correlation": null
     },
     {

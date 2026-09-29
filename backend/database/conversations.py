@@ -1091,6 +1091,22 @@ def get_conversations_count(
     return matching
 
 
+def count_conversations_with_geolocation(uid: str, *, firestore_client: Any = None) -> int:
+    """Approximate count of the user's conversations that carry a geolocation.
+
+    Single-field ``geolocation.latitude != null`` aggregation, served by
+    Firestore's automatic single-field index. Adding ``discarded == False``
+    would combine an inequality with an equality and need a composite index
+    that is not declared, so discarded conversations (including redirect
+    tombstones, which are stamped ``discarded=True``) are included in this count.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
+    query = conversations_ref.where(filter=FieldFilter('geolocation.latitude', '!=', None))
+    result = query.count().get()
+    return int(result[0][0].value or 0)
+
+
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 def get_conversations_without_photos(
     uid: str,
@@ -2939,14 +2955,18 @@ def store_model_segments_result(uid: str, conversation_id: str, model_name: str,
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     segments_ref = conversation_ref.collection(model_name)
     batch = db.batch()
-    for i, segment in enumerate(segments):
+    count = 0
+    for segment in segments:
         segment_id = str(uuid.uuid4())
         segment_ref = segments_ref.document(segment_id)
         batch.set(segment_ref, segment.model_dump())
-        if i >= 400:
+        count += 1
+        if count >= 400:
             batch.commit()
             batch = db.batch()
-    batch.commit()
+            count = 0
+    if count > 0:
+        batch.commit()
 
 
 def store_model_emotion_predictions_result(
@@ -2975,7 +2995,8 @@ def store_model_emotion_predictions_result(
             batch.commit()
             batch = db.batch()
             count = 0
-    batch.commit()
+    if count > 0:
+        batch.commit()
 
 
 def get_conversation_transcripts_by_model(uid: str, conversation_id: str):

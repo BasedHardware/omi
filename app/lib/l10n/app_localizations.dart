@@ -20445,10 +20445,10 @@ abstract class AppLocalizations {
   /// **'Open call'**
   String get openCall;
 
-  /// Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings
+  /// Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings
   ///
   /// In en, this message translates to:
-  /// **'Pendant audio is not reaching the app — tap to repair'**
+  /// **'Omi isn\'t sending audio — tap to reconnect'**
   String get captureRecoveryBanner;
 
   /// No description provided for @phoneRecordingBlockedByPendantBatch.
@@ -20822,6 +20822,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not send diagnostics to support. Please try again.'**
   String get deviceDiagnosticsUploadFailed;
+
+  /// Button on the summary/recording feedback prompt that opens the quick feedback sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Give feedback'**
+  String get feedbackGiveFeedback;
+
+  /// Chip in the feedback sheet for a positive answer; submits helpful feedback.
+  ///
+  /// In en, this message translates to:
+  /// **'All good'**
+  String get feedbackAllGood;
+
+  /// Secondary row in the feedback sheet that opens the support chat.
+  ///
+  /// In en, this message translates to:
+  /// **'More detail? Chat with us'**
+  String get feedbackChatWithUs;
+
+  /// Quick reason chip: the summary was inaccurate.
+  ///
+  /// In en, this message translates to:
+  /// **'Inaccurate'**
+  String get feedbackReasonSummaryInaccurate;
+
+  /// Quick reason chip: the summary was incomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Incomplete'**
+  String get feedbackReasonSummaryIncomplete;
+
+  /// Quick reason chip: the summary was not relevant.
+  ///
+  /// In en, this message translates to:
+  /// **'Not relevant'**
+  String get feedbackReasonSummaryIrrelevant;
+
+  /// Quick reason chip: the summary mixed up context.
+  ///
+  /// In en, this message translates to:
+  /// **'Wrong context'**
+  String get feedbackReasonSummaryWrongContext;
+
+  /// Quick reason chip: some other summary problem.
+  ///
+  /// In en, this message translates to:
+  /// **'Something else'**
+  String get feedbackReasonSummaryOther;
+
+  /// Quick reason chip: the recording is missing audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing audio'**
+  String get feedbackReasonRecordingMissingAudio;
+
+  /// Quick reason chip: the transcription was poor.
+  ///
+  /// In en, this message translates to:
+  /// **'Poor transcription'**
+  String get feedbackReasonRecordingPoorTranscription;
+
+  /// Quick reason chip: the speaker attribution was wrong.
+  ///
+  /// In en, this message translates to:
+  /// **'Wrong speaker'**
+  String get feedbackReasonRecordingWrongSpeaker;
+
+  /// Quick reason chip: processing was delayed or stuck.
+  ///
+  /// In en, this message translates to:
+  /// **'Delayed or stuck'**
+  String get feedbackReasonRecordingDelayedOrStuck;
+
+  /// Quick reason chip: the recording was fragmented or duplicated.
+  ///
+  /// In en, this message translates to:
+  /// **'Fragmented or duplicated'**
+  String get feedbackReasonRecordingFragmentedOrDuplicated;
+
+  /// Quick reason chip: some other recording problem.
+  ///
+  /// In en, this message translates to:
+  /// **'Something else'**
+  String get feedbackReasonRecordingOther;
+
+  /// Hint for the person search field in the tag-speaker sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Search people'**
+  String get searchPeople;
+
+  /// Row shown in the tag-speaker sheet when no existing person matches the search query
+  ///
+  /// In en, this message translates to:
+  /// **'Add \"{query}\" as a new person'**
+  String addQueryAsNewPerson(String query);
+
+  /// Expander chip in the tag-speaker sheet that reveals the capped person grid
+  ///
+  /// In en, this message translates to:
+  /// **'Show all {count} people'**
+  String showAllPeople(int count);
+
+  /// Greeting at the top of an empty chat; name is the user's first name
+  ///
+  /// In en, this message translates to:
+  /// **'Hi {name}, ask anything'**
+  String chatGreeting(String name);
+
+  /// Title of the sheet listing the steps Omi took to answer a chat message
+  ///
+  /// In en, this message translates to:
+  /// **'Activity'**
+  String get activity;
+
+  /// Search tile that opens conversations on a map
+  ///
+  /// In en, this message translates to:
+  /// **'Places'**
+  String get places;
+
+  /// Search tile and result section for daily recaps
+  ///
+  /// In en, this message translates to:
+  /// **'Recaps'**
+  String get recaps;
+
+  /// Heading above recent search queries
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get recent;
+
+  /// Shown under global search results when one kind of result (conversations, recaps, tasks or memories) failed to load
+  ///
+  /// In en, this message translates to:
+  /// **'Some results couldn\'t load'**
+  String get searchPartialFailure;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

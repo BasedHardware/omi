@@ -205,3 +205,6 @@ def test_frame_retention_workflow_uses_the_shared_scheduler_reconciler():
 
     assert "scheduler_reconcile.py" in workflow
     assert "--check" in workflow
+    assert "--apply --jobs \"$SCHEDULER_JOB\"" in workflow
+    assert "FRAME_REQUEST_RETENTION_SCHEDULER_SERVICE_ACCOUNT" in workflow
+    assert "gcloud run jobs add-iam-policy-binding \"$SERVICE\"" in workflow

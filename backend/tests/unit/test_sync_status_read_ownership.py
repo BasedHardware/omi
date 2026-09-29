@@ -16,6 +16,12 @@ import database.sync_jobs as sync_jobs
 import routers.sync as sync_router
 
 
+@pytest.fixture(autouse=True)
+def legacy_production_keys(monkeypatch):
+    # These ownership tests seed the existing production Redis key names.
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+
+
 @pytest.fixture
 def status_client(monkeypatch):
     redis = fakeredis.FakeRedis()

@@ -6,6 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
+import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/home/page.dart';
@@ -66,7 +69,7 @@ void main() {
   testWidgets('system back on another tab returns to the Home tab first (D6)', (tester) async {
     await _pumpHomePage(tester);
     final home = tester.element(find.byType(HomePage)).read<HomeProvider>();
-    home.setIndex(2);
+    home.setIndex(HomeProvider.tasksTab);
     await tester.pump();
 
     final handled = await tester.binding.handlePopRoute();
@@ -147,6 +150,12 @@ List<SingleChildWidget> _homeProviders() {
     ChangeNotifierProvider(create: (_) => MemoriesProvider()),
     ChangeNotifierProvider(create: (_) => PeopleProvider()),
     ChangeNotifierProvider(create: (_) => LocaleProvider()),
+    // Home embeds the conversation list; its speaker-tag card fetches through this seam, so no I/O.
+    ChangeNotifierProvider(
+      create: (_) => SpeakerTagPromptsProvider(
+        fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse()),
+      ),
+    ),
   ];
 }
 

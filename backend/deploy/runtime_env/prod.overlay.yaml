@@ -8,14 +8,28 @@ overlay:
   gke:
     backend-listen:
       env:
+        LISTEN_RECONNECT_BUDGET_PER_MIN:
+          value: '6'
+          category: reliability
         # 2026-09-26 incident: with the code-fixed order, a Modulate breaker opening sent
         # new sessions to Deepgram (402 since 09-14) and then streaming Parakeet (no ready
         # frame, 0 connects since 08-26), so they got no transcript. The configured order
-        # (STT_SERVICE_MODELS) puts Soniox second. Parakeet window allocation stays 0.
+        # The allocated windowed TDT cohort precedes the unchanged vendor order;
+        # otherwise Soniox is second after Modulate. Canary allocation is 1%.
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
+        PARAKEET_WINDOW_ALLOCATION_PERCENT:
+          value: '1'
+        PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+          value: '2'
+        STT_SERVICE_MODELS:
+          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:
           value: 'false'
+        STT_ROUTING_MODE:
+          value: shadow
+        SONIOX_MONTHLY_CEILING_USD:
+          value: '10000'
         # 2026-09-28: learn each user's expected languages from observed output. About 75% of
         # English-default sessions are mostly another language (largely Indic).
         STT_LEARNED_LANGUAGE_PROFILE:
@@ -204,7 +218,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,soniox,dg-nova-3,parakeet
+          value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -371,6 +385,9 @@ overlay:
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
+            value: 'true'
+            category: rollout
+          LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED:
             value: 'true'
             category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:

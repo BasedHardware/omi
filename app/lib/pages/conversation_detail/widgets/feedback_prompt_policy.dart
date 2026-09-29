@@ -45,7 +45,9 @@ class FeedbackPromptPolicy {
     }
   }
 
-  static final FeedbackPromptPolicy instance = FeedbackPromptPolicy();
+  /// Replacement point for tests, mirroring [ProductTelemetry.instance]: the
+  /// serial queue must not carry a future across a test's fake-async zone.
+  static FeedbackPromptPolicy instance = FeedbackPromptPolicy();
 
   static const double defaultSampleFraction = 0.25;
   static const Duration cooldown = Duration(days: 7);

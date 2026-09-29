@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 import os
 from collections import deque
+from typing import Any
 
 from utils.stt.live_metrics import RECONNECT, REPLAY_SECONDS
 
@@ -19,8 +20,9 @@ def enabled() -> bool:
 
 
 class ResilientAudio:
-    def __init__(self, sample_rate: int) -> None:
+    def __init__(self, sample_rate: int, *, ring_seconds: int = RING_SECONDS) -> None:
         self.sample_rate = sample_rate
+        self.ring_seconds = ring_seconds
         self._chunks: deque[tuple[int, bytes]] = deque()
         self._end_sample = 0
         self.finalized_sample = 0
@@ -31,6 +33,12 @@ class ResilientAudio:
     @property
     def buffered_bytes(self) -> int:
         return sum(len(data) for _, data in self._chunks)
+
+    def would_overflow(self, data: bytes, start_sample: int | None) -> bool:
+        if start_sample is None or not data:
+            return False
+        first = self._chunks[0][0] if self._chunks else start_sample
+        return start_sample + len(data) // 2 - first > self.ring_seconds * self.sample_rate
 
     def append(self, data: bytes, start_sample: int | None) -> None:
         if start_sample is None or not data:
@@ -44,7 +52,7 @@ class ResilientAudio:
         self._trim()
 
     def _trim(self) -> None:
-        first = max(self.finalized_sample, self._end_sample - RING_SECONDS * self.sample_rate)
+        first = max(self.finalized_sample, self._end_sample - self.ring_seconds * self.sample_rate)
         while self._chunks and self._chunks[0][0] + len(self._chunks[0][1]) // 2 <= first:
             self._chunks.popleft()
         if self._chunks and self._chunks[0][0] < first:
@@ -77,3 +85,94 @@ class ResilientAudio:
 
     def close(self) -> None:
         self._chunks.clear()
+
+
+def filter_replayed_segments(
+    segments: list[dict[str, Any]],
+    provider: str | None,
+    *,
+    soniox: ResilientAudio | None,
+    window: ResilientAudio | None,
+    window_model: bool,
+    cutoff: int,
+) -> list[dict[str, Any]]:
+    if provider == 'parakeet' and window is not None and window_model:
+        for segment in segments:
+            end = segment.get('_capture_end_sample')
+            if isinstance(end, int):
+                window.finalize_through(end)
+    if soniox is None or provider != 'soniox':
+        return segments
+    kept = []
+    for segment in segments:
+        end = segment.get('_capture_end_sample')
+        if isinstance(end, int) and end <= cutoff:
+            continue
+        if isinstance(end, int):
+            soniox.finalize_through(end)
+        kept.append(segment)
+    return kept
+
+
+class ReplayFilterMixin:
+    host: Any
+
+    def _window_ring(self) -> ResilientAudio | None:
+        return (
+            getattr(self, '_window_replay_audio', None)
+            if getattr(self.host, 'stt_model', None) == 'parakeet-window'
+            else None
+        )
+
+    def _filter_replayed_segments(self, segments: list[dict[str, Any]], provider: str | None) -> list[dict[str, Any]]:
+        return filter_replayed_segments(
+            segments,
+            provider,
+            soniox=getattr(self, '_resilient_audio', None),
+            window=getattr(self, '_window_replay_audio', None),
+            window_model=getattr(self.host, 'stt_model', None) == 'parakeet-window',
+            cutoff=getattr(self, '_replay_cutoff_sample', 0),
+        )
+
+
+def socket_is_finishing(socket: Any) -> bool:
+    """Read the teardown latch through managed and legacy wrappers."""
+    seen: set[int] = set()
+    pending = [socket]
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        try:
+            if getattr(current, '_finishing', False):
+                return True
+            pending.extend((getattr(current, '_conn', None), getattr(current, 'raw', None)))
+        except Exception:
+            continue
+    return False
+
+
+def replay_chunks(
+    socket: Any,
+    chunks: tuple[tuple[int, bytes], ...],
+    *,
+    source: ResilientAudio | None,
+    provider: str,
+    soniox: ResilientAudio | None,
+) -> int | None:
+    """Return the first rejected sample, or None when the snapshot was accepted."""
+    if source is None:
+        return None
+    accepted_chunks: list[tuple[int, bytes]] = []
+    for start, data in chunks:
+        replay_send = getattr(socket, 'replay_send', None)
+        accepted = replay_send(data, start) if callable(replay_send) else socket.send(data, start_sample=start)
+        if not accepted:
+            return start
+        accepted_chunks.append((start, data))
+        source.record_replay(provider, len(data) // 2)
+    if soniox is not None:
+        for start, data in accepted_chunks:
+            soniox.append(data, start)
+    return None

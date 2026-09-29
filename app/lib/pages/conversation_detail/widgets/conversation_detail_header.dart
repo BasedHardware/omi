@@ -75,7 +75,9 @@ class ConversationDetailHeader extends StatelessWidget {
                       recordings: recordings,
                       onTap: () {
                         trackConversationAction(
-                            ConversationActionAction.recordingsOpen, ConversationActionSurface.detailBody);
+                          ConversationActionAction.recordingsOpen,
+                          ConversationActionSurface.detailBody,
+                        );
                         onOpenRecordings(recordings);
                       },
                     ),
@@ -93,7 +95,7 @@ class ConversationDetailHeader extends StatelessWidget {
 
   Widget _titleRow(BuildContext context, ConversationDetailProvider provider, ServerConversation conversation) {
     final titleStyle = OmiType.title3.copyWith(height: 1.25);
-    // The title is one line, so the emoji centres on it.
+    // The title field grows from one to two lines; centre the emoji against its current height.
     return Row(
       children: [
         if (!conversation.discarded) ...[
@@ -252,10 +254,7 @@ class _HeaderChip extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (trailing == true) ...[
-            const SizedBox(width: 2),
-            Icon(Icons.keyboard_arrow_down, size: 16, color: color),
-          ],
+          if (trailing == true) ...[const SizedBox(width: 2), Icon(Icons.keyboard_arrow_down, size: 16, color: color)],
         ],
       ),
     );

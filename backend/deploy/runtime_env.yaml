@@ -88,8 +88,29 @@ environments:
           STT_RESILIENT_RECONNECT:
             value: 'false'
             category: rollout
+          STT_ROUTING_MODE:
+            value: shadow
+            category: rollout
+          STT_ROUTING_REDIS_TIMEOUT_SECONDS:
+            value: '0.075'
+            category: rollout
+          STT_ROUTING_PROBE_PERCENT:
+            value: '2'
+            category: rollout
+          STT_NO_TEXT_SECONDS:
+            value: '30'
+            category: rollout
+          SONIOX_MONTHLY_CEILING_USD:
+            value: '0'
+            category: rollout
+          SONIOX_ESTIMATED_USD_PER_HOUR:
+            value: '0.07537'
+            category: rollout
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
+            category: rollout
+          SONIOX_CONTEXT_TERMS:
+            value: 'false'
             category: rollout
           STT_LEARNED_LANGUAGE_PROFILE:
             value: 'true'
@@ -98,7 +119,7 @@ environments:
             value: '100'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '100'
+            value: '1'
             category: rollout
           PARAKEET_WINDOW_MAX_SESSIONS:
             value: '1'
@@ -115,6 +136,12 @@ environments:
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
             value: '24'
             category: rollout
+          PARAKEET_BATCH_PRESSURE_POOL_HOST:
+            value: dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local
+            category: service_discovery
+          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+            value: '1'
+            category: rollout
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
             value: '1800'
             category: rollout
@@ -128,7 +155,7 @@ environments:
             value: '30'
             category: rollout
           STT_SERVICE_MODELS:
-            value: parakeet-window,soniox
+            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -172,6 +199,9 @@ environments:
             value: http://diarizer.omiapi.com:80
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
+            category: reliability
+          LISTEN_RECONNECT_BUDGET_PER_MIN:
+            value: '6'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: gateway
@@ -1782,8 +1812,29 @@ environments:
           STT_RESILIENT_RECONNECT:
             value: 'false'
             category: rollout
+          STT_ROUTING_MODE:
+            value: shadow
+            category: rollout
+          STT_ROUTING_REDIS_TIMEOUT_SECONDS:
+            value: '0.075'
+            category: rollout
+          STT_ROUTING_PROBE_PERCENT:
+            value: '2'
+            category: rollout
+          STT_NO_TEXT_SECONDS:
+            value: '30'
+            category: rollout
+          SONIOX_MONTHLY_CEILING_USD:
+            value: '10000'
+            category: rollout
+          SONIOX_ESTIMATED_USD_PER_HOUR:
+            value: '0.07537'
+            category: rollout
           STT_MULTI_LANGUAGE_HINTS:
             value: 'true'
+            category: rollout
+          SONIOX_CONTEXT_TERMS:
+            value: 'false'
             category: rollout
           STT_LEARNED_LANGUAGE_PROFILE:
             value: 'true'
@@ -1792,7 +1843,7 @@ environments:
             value: '50'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '0'
+            value: '1'
             category: rollout
           PARAKEET_WINDOW_MAX_SESSIONS:
             value: '1'
@@ -1809,6 +1860,12 @@ environments:
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
             value: '24'
             category: rollout
+          PARAKEET_BATCH_PRESSURE_POOL_HOST:
+            value: prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local
+            category: service_discovery
+          PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+            value: '2'
+            category: rollout
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
             value: '1800'
             category: rollout
@@ -1822,7 +1879,7 @@ environments:
             value: '30'
             category: rollout
           STT_SERVICE_MODELS:
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
             category: stt_policy
           CONVERSATION_SUMMARIZED_APP_IDS:
             config_map:
@@ -1866,6 +1923,9 @@ environments:
             value: http://diarizer.omi.me:80
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
+            category: reliability
+          LISTEN_RECONNECT_BUDGET_PER_MIN:
+            value: '6'
             category: reliability
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'off'
@@ -2125,7 +2185,7 @@ environments:
             value: parakeet,modulate-velma-2
           STT_SERVICE_MODELS:
             source: literal
-            value: modulate-velma-2,soniox,dg-nova-3,parakeet
+            value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
           TYPESENSE_HOST:
             source: environment
           TWILIO_ACCOUNT_SID:
@@ -2592,6 +2652,9 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
+              value: 'true'
+              category: rollout
+            LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED:
               value: 'true'
               category: rollout
             OMI_CUSTOMER_DATA_PROJECT:

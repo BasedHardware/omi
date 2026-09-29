@@ -2,6 +2,48 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.418",
+      "date": "2026-09-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.417",
+      "date": "2026-09-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.416",
+      "date": "2026-09-28",
+      "changes": [
+        "Ask Omi questions with Siri and continue in the desktop chat"
+      ]
+    },
+    {
+      "version": "0.12.415",
+      "date": "2026-09-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.414",
+      "date": "2026-09-28",
+      "changes": [
+        "Fixed Rewind video encoding in macOS releases built with Xcode 27"
+      ]
+    },
+    {
+      "version": "0.12.413",
+      "date": "2026-09-28",
+      "changes": [
+        "Fixed repeated recording restarts when a microphone briefly alternates between silence and live audio"
+      ]
+    },
+    {
       "version": "0.12.412",
       "date": "2026-09-28",
       "changes": [

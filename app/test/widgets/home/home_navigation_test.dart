@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/http/api/memories.dart' show GetMemoriesResult;
 import 'package:omi/backend/schema/memory.dart';
@@ -25,6 +26,14 @@ void main() {
       expect(link.query['share'], '1');
     });
 
+    test('preserves reserved characters in an encoded Siri chat draft', () {
+      final link = HomeDeepLink.parse(
+        '/chat?draft=What%20is%20A%26B%20%3D%20C%2BD%20%23100%25%3F%20%F0%9F%98%80',
+      )!;
+      expect(link.alias, 'chat');
+      expect(link.query['draft'], 'What is A&B = C+D #100%? 😀');
+    });
+
     test('accepts a route without a leading slash and ignores empty segments', () {
       final link = HomeDeepLink.parse('apps//xyz')!;
       expect(link.alias, 'apps');
@@ -38,14 +47,15 @@ void main() {
     });
 
     test('selects the parent tab before the page', () {
-      expect(HomeDeepLink.parse('/conversations')!.tabIndex, 1, reason: 'the Latest widget with nothing yet');
-      expect(HomeDeepLink.parse('/action-items')!.tabIndex, 2);
-      expect(HomeDeepLink.parse('/apps/xyz')!.tabIndex, 3);
-      expect(HomeDeepLink.parse('/memories')!.tabIndex, 0);
-      expect(HomeDeepLink.parse('/conversation/abc')!.tabIndex, 1);
-      expect(HomeDeepLink.parse('/memory/m-1')!.tabIndex, 0);
-      expect(HomeDeepLink.parse('/task/t-1')!.tabIndex, 2);
-      expect(HomeDeepLink.parse('/search?q=meeting')!.tabIndex, 1);
+      // Two pages now: conversations, memories and search open over Home; tasks over Tasks.
+      expect(HomeDeepLink.parse('/conversations')!.tabIndex, HomeProvider.homeTab);
+      expect(HomeDeepLink.parse('/action-items')!.tabIndex, HomeProvider.tasksTab);
+      expect(HomeDeepLink.parse('/apps/xyz')!.tabIndex, isNull, reason: 'the app catalog is not a tab any more');
+      expect(HomeDeepLink.parse('/memories')!.tabIndex, HomeProvider.homeTab);
+      expect(HomeDeepLink.parse('/conversation/abc')!.tabIndex, HomeProvider.homeTab);
+      expect(HomeDeepLink.parse('/memory/m-1')!.tabIndex, HomeProvider.homeTab);
+      expect(HomeDeepLink.parse('/task/t-1')!.tabIndex, HomeProvider.tasksTab);
+      expect(HomeDeepLink.parse('/search?q=meeting')!.tabIndex, HomeProvider.homeTab);
     });
   });
 

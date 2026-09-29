@@ -88,7 +88,7 @@
       "root": "omi.conversations.root",
       "reach": {
         "kind": "tab",
-        "tab": 1
+        "tab": 0
       },
       "fixture": "conversation-one",
       "auth": "signed_in",
@@ -130,7 +130,7 @@
       "root": "omi.tasks.root",
       "reach": {
         "kind": "tab",
-        "tab": 2
+        "tab": 1
       },
       "fixture": "identity-empty",
       "auth": "signed_in",
@@ -284,7 +284,7 @@
     "home": [
       {
         "key": "omi.home.tab_home",
-        "source": "app/lib/widgets/bottom_nav_bar.dart",
+        "source": "app/lib/pages/home/widgets/home_tab_switcher.dart",
         "scope": "shell",
         "label_en": "Home",
         "role": "button",
@@ -293,7 +293,7 @@
       },
       {
         "key": "omi.home.tab_conversations",
-        "source": "app/lib/widgets/bottom_nav_bar.dart",
+        "source": "app/lib/pages/home/widgets/home_tab_switcher.dart",
         "scope": "shell",
         "label_en": "Conversations",
         "role": "button",
@@ -302,7 +302,7 @@
       },
       {
         "key": "omi.home.tab_tasks",
-        "source": "app/lib/widgets/bottom_nav_bar.dart",
+        "source": "app/lib/pages/home/widgets/home_tab_switcher.dart",
         "scope": "shell",
         "label_en": "Tasks",
         "role": "button",

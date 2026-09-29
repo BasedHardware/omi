@@ -903,6 +903,14 @@ def get_people(uid: str):
     return result
 
 
+def count_people(uid: str, *, firestore_client: Any = None) -> int:
+    """Server-side count of the user's people (speaker profiles) collection."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    people_ref = client.collection('users').document(uid).collection('people')
+    result = people_ref.count().get()
+    return int(result[0][0].value or 0)
+
+
 def get_person_by_name(uid: str, name: str):
     people_ref = db.collection('users').document(uid).collection('people')
     query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)

@@ -73,7 +73,6 @@
   "app/lib/pages/conversations/widgets/processing_capture.dart": 7,
   "app/lib/pages/conversations/widgets/recording_list_item.dart": 2,
   "app/lib/pages/conversations/widgets/search_widget.dart": 4,
-  "app/lib/pages/conversations/widgets/speaker_filter_sheet.dart": 1,
   "app/lib/pages/conversations/widgets/status_action_pill.dart": 1,
   "app/lib/pages/conversations/widgets/sync_error_card.dart": 1,
   "app/lib/pages/conversations/widgets/synced_conversation_list_item.dart": 2,

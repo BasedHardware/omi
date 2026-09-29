@@ -160,6 +160,7 @@ async def test_connect_rate_limit_uses_short_selection_failure_not_account_bench
     class Circuit:
         account_failures = 0
         selection_failures = 0
+        state = 'closed'
 
         def allow_request(self, **kwargs):
             return True
@@ -239,6 +240,9 @@ def test_managed_socket_gauge_tracks_physical_close_not_death_latch():
     socket._dead = False
     socket._pending_selection = None
     socket._open_gauge_released = False
+    socket._first_speech_at = None
+    socket._speech_ms_for_health = 0
+    socket._transcript_outcome = None
     socket.service = STTService.soniox
 
     assert socket.is_connection_dead
