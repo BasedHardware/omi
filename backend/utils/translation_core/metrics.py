@@ -29,8 +29,13 @@ class TranslationMetrics(Protocol):
 
     def decision(self, target_language: str, decision: str, reason: str) -> None: ...
 
+    def demand(self, state: str, mode: str, platform: str) -> None: ...
+
 
 class NoopTranslationMetrics:
+    def demand(self, state: str, mode: str, platform: str) -> None:
+        return None
+
     def cache(self, layer: str, result: str) -> None:
         return None
 
@@ -107,6 +112,21 @@ class PrometheusTranslationMetrics:
             'Translations skipped',
             ['target_lang', 'reason'],
         )
+        self._demand = _counter(
+            'omi_translation_demand_reports_total',
+            'Socket-local transcript visibility reports and expiry decisions',
+            ['state', 'mode', 'platform'],
+        )
+
+    def demand(self, state: str, mode: str, platform: str) -> None:
+        state_label = (
+            state
+            if state in {'legacy_unknown', 'legacy_stale', 'viewed', 'hidden', 'lease_expired', 'closed'}
+            else 'other'
+        )
+        mode_label = mode if mode in {'shadow', 'enforced'} else 'other'
+        platform_label = platform if platform in {'ios', 'android', 'macos', 'web', 'unknown'} else 'other'
+        self._demand.labels(state=state_label, mode=mode_label, platform=platform_label).inc()
 
     def cache(self, layer: str, result: str) -> None:
         self._cache_ops.labels(layer=_bounded(layer), result=_bounded(result)).inc()
@@ -213,6 +233,13 @@ def _bounded_reason(value: str) -> str:
             'uncertain',
             'eligible',
             'output_guard',
+            'no_demand',
+            'budget_denied',
+            'duplicate_suppressed',
+            'redis_unavailable',
+            'oversized',
+            'stale_result',
+            'lease_lost',
         }
         else 'other'
     )

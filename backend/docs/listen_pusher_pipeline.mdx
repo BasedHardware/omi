@@ -1689,3 +1689,10 @@ semantic guarantee; either flag can be disabled independently for recall rollbac
 decisions; `omi_translation_skip_total` counts skip, defer and rejection reasons. Neither
 counter measures shown badges or fleet correctness. No user text enters labels or logs.
 Historical translations, client rendering, STT routing and billing are unchanged.
+
+The backend-only [on-demand translation contract](translation-on-demand.md)
+adds socket-local `client_state` demand with an optional renewable lease,
+source-fenced display materialization, and an explicit bounded detail-read
+request. Per the owner decision of 2026-09-29 these switches ship enabled
+(default on) with kill switches back to legacy behavior. Current clients send
+visibility edges but do not renew a lease or opt into detail translation.

@@ -369,3 +369,6 @@ tests/unit/test_selfheal_recovery.py::test_recovery_minimum_structure_raises_bef
 # First await of terminate_live_stt_session pays the lazy provider/telemetry import; measured 0.16-0.57s CPU
 # locally under full-suite load (2026-09-28, flaked pre-push on main-based branches), <0.30s when warm.
 tests/unit/test_live_stt_failure.py::test_terminal_live_failure_still_closes_when_status_delivery_fails
+# First test of the file amortizes the coordinator/translation import graph into its call;
+# measured 0.49s CPU in the pre-push isolated-file runner (2026-09-29), <0.3s when warm.
+tests/unit/test_translation_coordinator_demand.py::test_demand_hidden_during_reservation_blocks_dispatch
