@@ -159,6 +159,11 @@ checks:
     triggers: ["backend/utils/retrieval/tools/file_tools.py", "backend/tests/unit/test_file_tools_sanitization.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "File search chat tools must safely handle config and session errors without leaking internal tracebacks or exception strings"
+  - id: screen-activity-batch-resilience-tests
+    command: ["python3", "backend/tests/unit/test_screen_activity_batch_resilience.py"]
+    triggers: ["backend/database/screen_activity.py", "backend/tests/unit/test_screen_activity_batch_resilience.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Deduplicate documents in screen activity batch commits to prevent Firestore 400 contention errors, enforce 499-op commit chunking, and validate uid inputs"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
