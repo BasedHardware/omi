@@ -813,11 +813,12 @@ def get_default_conversation_summarized_apps() -> List[App]:
     redis_app_ids = redis_db.get_conversation_summary_app_ids()
 
     if redis_app_ids:
-        # Use apps from Redis
+        # Use apps from Redis. A malformed/legacy stored app doc must be skipped, not fail the
+        # whole conversation's processing (same class as the chat/app fetch guards).
         for app_id in redis_app_ids:
-            app_data = get_app_by_id_db(app_id.strip())
-            if app_data:
-                default_apps.append(App(**app_data))
+            app = App.deserialize_safe(get_app_by_id_db(app_id.strip()))
+            if app:
+                default_apps.append(app)
     else:
         # Fallback to environment variable for backward compatibility
         env_app_ids = os.getenv(
@@ -825,9 +826,9 @@ def get_default_conversation_summarized_apps() -> List[App]:
         ).split(',')
 
         for app_id in env_app_ids:
-            app_data = get_app_by_id_db(app_id.strip())
-            if app_data:
-                default_apps.append(App(**app_data))
+            app = App.deserialize_safe(get_app_by_id_db(app_id.strip()))
+            if app:
+                default_apps.append(app)
 
     return default_apps
 
