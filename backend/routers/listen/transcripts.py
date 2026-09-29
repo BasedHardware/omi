@@ -118,6 +118,7 @@ class TranscriptProcessor:
                 realtime_interpreter=getattr(getattr(host, 'request', None), 'source', None) == 'phone_call',
                 uid=host.request.uid,
                 demand=getattr(getattr(host, 'receiver', None), 'translation_demand', None),
+                spawn_task=getattr(host, 'spawn', None),
             )
         self._flush_failures = 0
         self._flush_backoff_until = 0.0
@@ -575,8 +576,11 @@ class TranscriptProcessor:
     async def _translate(self, segments: List[TranscriptSegment], conversation_id: str, removed: List[str]) -> None:
         if self.translation_coordinator:
             await self.translation_coordinator.observe(segments, removed, conversation_id)
-            if self._last_translation_demand_conversation != conversation_id:
-                await self.on_translation_demand_changed()
+            if (
+                self._last_translation_demand_conversation != conversation_id
+                and self.translation_coordinator._admission() == DemandPolicy.viewed  # type: ignore[reportPrivateUsage]
+            ):
+                self.host.spawn(self.on_translation_demand_changed(), name='translation_demand_conversation')
 
     async def on_translation_demand_changed(self) -> None:
         coordinator = self.translation_coordinator
@@ -605,13 +609,28 @@ class TranscriptProcessor:
         conversation = await self.cache.get(conversation_id, force_refresh=True)
         if not conversation:
             return
-        # Bound each reconciliation; subsequent transcript changes enter the ordinary live path.
-        segments = [
-            TranscriptSegment(**raw)
-            for raw in conversation.get('transcript_segments', [])[-config.max_segments :]
-            if isinstance(raw, dict) and raw.get('id')
-        ]
-        await coordinator.observe(segments, [], conversation_id)
+        # Install newest persisted speech first, then page older history while
+        # this socket still holds the same fresh visibility generation.
+        raw_segments = conversation.get('transcript_segments', [])
+        for end in range(len(raw_segments), 0, -config.max_segments):
+            current = resolve_ondemand_config()
+            if (
+                not current.gate_enabled
+                or demand.snapshot(lease_v1_enabled=current.lease_v1_enabled).policy != DemandPolicy.viewed
+                or demand.snapshot(lease_v1_enabled=current.lease_v1_enabled).generation != snapshot.generation
+                or self.host.state.current_conversation_id != conversation_id
+            ):
+                return
+            page = raw_segments[max(0, end - config.max_segments) : end]
+            segments = [TranscriptSegment(**raw) for raw in page if isinstance(raw, dict) and raw.get('id')]
+            await coordinator.observe(segments, [], conversation_id)
+            pending = coordinator._batch_task  # type: ignore[reportPrivateUsage]
+            if pending is not None:
+                try:
+                    await pending
+                except asyncio.CancelledError:
+                    # A newer live delta superseded this timer; it owns the next dispatch.
+                    await coordinator.wait_inflight()
 
     async def _deliver_segments(self, client_segments: List[Dict[str, Any]]) -> bool:
         """Push live segments to the client without letting a gone client kill the loop.
