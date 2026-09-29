@@ -76,7 +76,8 @@ and background processing.
   a visible completed conversation; provider and parser errors still retry.
 - `smart_merge.py` folds a finished pendant conversation into the immediately
   preceding one of the same device partition when Jev says it is the same
-  occasion (`CONVERSATION_SMART_MERGE_MODE=off|shadow|merge`, default off). The
+  occasion (`CONVERSATION_SMART_MERGE_MODE=off|shadow|merge`, default `merge`; `off`
+  is the kill switch and an unrecognized value also means `off`). The
   finalizer calls it behind the fanout claim and before any derived effect;
   `CAPTURE_END` only. `smart_merge_policy.py` holds the pure gates and absorb
   payloads, `smart_merge_state.py` the benchmark question and state (A is always
