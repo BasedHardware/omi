@@ -11182,5 +11182,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Maghanap ng mga tao",
     "addQueryAsNewPerson": "Idagdag ang \"{query}\" bilang bagong tao",
-    "showAllPeople": "Ipakita ang lahat ng {count} na tao"
+    "showAllPeople": "Ipakita ang lahat ng {count} na tao",
+    "chatGreeting": "Hi {name}, magtanong ng kahit ano",
+    "activity": "Aktibidad",
+    "places": "Mga lugar",
+    "recaps": "Mga buod",
+    "recent": "Kamakailan",
+    "searchPartialFailure": "Hindi ma-load ang ilang resulta"
 }

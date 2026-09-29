@@ -11466,4 +11466,24 @@ class AppLocalizationsHi extends AppLocalizations {
   String showAllPeople(int count) {
     return 'सभी $count लोग दिखाएँ';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'नमस्ते $name, कुछ भी पूछें';
+  }
+
+  @override
+  String get activity => 'गतिविधि';
+
+  @override
+  String get places => 'स्थान';
+
+  @override
+  String get recaps => 'सारांश';
+
+  @override
+  String get recent => 'हाल के';
+
+  @override
+  String get searchPartialFailure => 'कुछ परिणाम लोड नहीं हो सके';
 }

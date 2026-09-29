@@ -3622,5 +3622,11 @@
     "feedbackReasonRecordingOther": "Vấn đề khác",
     "searchPeople": "Tìm kiếm người",
     "addQueryAsNewPerson": "Thêm \"{query}\" như một người mới",
-    "showAllPeople": "Hiển thị tất cả {count} người"
+    "showAllPeople": "Hiển thị tất cả {count} người",
+    "chatGreeting": "Chào {name}, hỏi bất cứ điều gì",
+    "activity": "Hoạt động",
+    "places": "Địa điểm",
+    "recaps": "Tóm tắt",
+    "recent": "Gần đây",
+    "searchPartialFailure": "Không thể tải một số kết quả"
 }

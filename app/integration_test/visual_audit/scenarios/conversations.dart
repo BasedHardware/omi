@@ -48,7 +48,7 @@ final conversationsScenarios = <AuditScenario>[
     title: 'Conversations list, row menu and swipe to delete',
     page: _page,
     state: 'Three conversations on one day: a titled one, an untitled one and a discarded one; discarded shown',
-    prefs: {'showGoalTrackerEnabled': false, 'showDiscardedMemories': true},
+    prefs: {'showDiscardedMemories': true},
     run: (a) async {
       final items = [
         auditConversation('a', title: 'Design catch-up with Alex'),
@@ -81,7 +81,6 @@ final conversationsScenarios = <AuditScenario>[
     title: 'Grouped capture row, its Recordings/Separate menu and the Separate confirmation',
     page: _page,
     state: 'One conversation recorded by two sources (desktop and pendant) collapsed into one capture group',
-    prefs: {'showGoalTrackerEnabled': false},
     run: (a) async {
       final grouped = auditConversation('grouped-a', title: 'Standup with the team', captureGroup: _twoSourceGroup);
       await a.pump(const ConversationsPage(requestInitialLoad: false), providers: _listProviders([grouped]));

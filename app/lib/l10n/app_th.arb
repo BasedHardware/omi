@@ -3622,5 +3622,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "ค้นหาบุคคล",
     "addQueryAsNewPerson": "เพิ่ม \"{query}\" เป็นบุคคลใหม่",
-    "showAllPeople": "แสดงทั้งหมด {count} คน"
+    "showAllPeople": "แสดงทั้งหมด {count} คน",
+    "chatGreeting": "สวัสดี {name} ถามอะไรก็ได้",
+    "activity": "กิจกรรม",
+    "places": "สถานที่",
+    "recaps": "สรุป",
+    "recent": "ล่าสุด",
+    "searchPartialFailure": "โหลดผลลัพธ์บางส่วนไม่ได้"
 }

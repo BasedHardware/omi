@@ -73,6 +73,7 @@ from routers import (
     knowledge_graph,
     wrapped,
     folders,
+    search,
     goals,
     workstreams,
     announcements,
@@ -268,6 +269,7 @@ app.include_router(developer.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)
 app.include_router(folders.router)
+app.include_router(search.router)
 app.include_router(knowledge_graph.router)
 app.include_router(goals.router)
 app.include_router(workstreams.router)
