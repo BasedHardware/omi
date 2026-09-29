@@ -277,10 +277,10 @@ def new_memories_extractor(
 
     person_ids = list(set([s.person_id for s in segments if s.person_id]))
     people = Person.deserialize_many_safe(users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
-    content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=people)
+    user_segments = [s for s in segments if s.is_user] if any(s.is_user for s in segments) else segments
+    content = TranscriptSegment.segments_as_string(user_segments, user_name=user_name, people=people)
     if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
-    # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
     try:
         language_instruction = _get_language_instruction(uid, language)
         parser = PydanticOutputParser(pydantic_object=HighRecallMemories if high_recall else Memories)
