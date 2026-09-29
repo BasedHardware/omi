@@ -23,6 +23,7 @@ from llm_gateway.gateway.providers import (
 from llm_gateway.gateway.schemas import ProviderRef
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 
+
 def test_fake_success_response():
     ref = ProviderRef(provider='fake', model='fake-model')
     resp = fake_success_response(ref)
@@ -32,16 +33,19 @@ def test_fake_success_response():
     resp_custom = fake_success_response(ref, content="custom")
     assert resp_custom['choices'][0]['message']['content'] == "custom"
 
+
 def test_default_fake_response():
     ref = ProviderRef(provider='fake', model='fake-model')
     resp = _default_fake_response(ref)
     assert resp['model'] == 'fake-model'
+
 
 def test_parse_retry_after_seconds():
     assert parse_retry_after_seconds(None) is None
     assert parse_retry_after_seconds("abc") is None
     assert parse_retry_after_seconds(" 10 ") == 10.0
     assert parse_retry_after_seconds("1.5") is None
+
 
 def test_raise_for_status():
     with pytest.raises(ProviderFailure) as exc:
@@ -76,6 +80,7 @@ def test_raise_for_status():
     assert exc.value.failure_class == FailureClass.CAPABILITY_MISMATCH
     assert exc.value.provider_rejection == ProviderRejection.UNSUPPORTED_TOOLS
 
+
 def test_provider_rejection():
     # Test valid JSON without mapping
     assert _provider_rejection(b'[]') == ProviderRejection.OTHER_4XX
@@ -84,20 +89,33 @@ def test_provider_rejection():
     assert _provider_rejection(b'invalid') == ProviderRejection.OTHER_4XX
 
     # Test context_length_exceeded
-    assert _provider_rejection(b'{"error": {"code": "context_length_exceeded"}}') == ProviderRejection.CONTEXT_LENGTH_EXCEEDED
+    assert (
+        _provider_rejection(b'{"error": {"code": "context_length_exceeded"}}')
+        == ProviderRejection.CONTEXT_LENGTH_EXCEEDED
+    )
 
     # Test model_not_found
     assert _provider_rejection(b'{"error": {"code": "model_not_found"}}') == ProviderRejection.MODEL_NOT_FOUND
 
     # Test unsupported parameter
-    assert _provider_rejection(b'{"error": {"code": "unsupported_parameter", "param": "tools"}}') == ProviderRejection.UNSUPPORTED_TOOLS
-    assert _provider_rejection(b'{"error": {"code": "unsupported_parameter", "param": "unknown"}}') == ProviderRejection.UNSUPPORTED_OTHER
+    assert (
+        _provider_rejection(b'{"error": {"code": "unsupported_parameter", "param": "tools"}}')
+        == ProviderRejection.UNSUPPORTED_TOOLS
+    )
+    assert (
+        _provider_rejection(b'{"error": {"code": "unsupported_parameter", "param": "unknown"}}')
+        == ProviderRejection.UNSUPPORTED_OTHER
+    )
 
     # Test invalid parameter
-    assert _provider_rejection(b'{"error": {"code": "invalid_parameter", "param": "temperature"}}') == ProviderRejection.INVALID_TEMPERATURE
+    assert (
+        _provider_rejection(b'{"error": {"code": "invalid_parameter", "param": "temperature"}}')
+        == ProviderRejection.INVALID_TEMPERATURE
+    )
 
     # Test invalid request error type
     assert _provider_rejection(b'{"error": {"type": "invalid_request_error"}}') == ProviderRejection.INVALID_REQUEST
+
 
 def test_provider_error_message(monkeypatch):
     monkeypatch.setenv("LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS", "true")
@@ -108,6 +126,7 @@ def test_provider_error_message(monkeypatch):
     monkeypatch.setenv("LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS", "false")
     msg2 = _provider_error_message(400, b'some error')
     assert msg2 == "provider request failed"
+
 
 def test_parse_limited_json_response():
     assert _parse_limited_json_response(b'{"key": "value"}') == {"key": "value"}
@@ -120,50 +139,40 @@ def test_parse_limited_json_response():
         _parse_limited_json_response(b'[]')
     assert exc.value.failure_class == FailureClass.PROVIDER_5XX_OMI_PAID
 
+
 def test_validate_chat_completion_response_shape():
-    _validate_chat_completion_response_shape({
-        'object': 'chat.completion',
-        'id': '123',
-        'model': 'test-model',
-        'choices': [
-            {'message': {'role': 'assistant'}}
-        ]
-    })
+    _validate_chat_completion_response_shape(
+        {
+            'object': 'chat.completion',
+            'id': '123',
+            'model': 'test-model',
+            'choices': [{'message': {'role': 'assistant'}}],
+        }
+    )
 
     with pytest.raises(ProviderFailure):
         _validate_chat_completion_response_shape({'object': 'other'})
 
     with pytest.raises(ProviderFailure):
-        _validate_chat_completion_response_shape({
-            'object': 'chat.completion',
-            'id': '',
-            'model': 'test',
-            'choices': [{'message': {'role': 'assistant'}}]
-        })
+        _validate_chat_completion_response_shape(
+            {'object': 'chat.completion', 'id': '', 'model': 'test', 'choices': [{'message': {'role': 'assistant'}}]}
+        )
 
     with pytest.raises(ProviderFailure):
-        _validate_chat_completion_response_shape({
-            'object': 'chat.completion',
-            'id': '1',
-            'model': '',
-            'choices': [{'message': {'role': 'assistant'}}]
-        })
+        _validate_chat_completion_response_shape(
+            {'object': 'chat.completion', 'id': '1', 'model': '', 'choices': [{'message': {'role': 'assistant'}}]}
+        )
 
     with pytest.raises(ProviderFailure):
-        _validate_chat_completion_response_shape({
-            'object': 'chat.completion',
-            'id': '1',
-            'model': 'test',
-            'choices': []
-        })
+        _validate_chat_completion_response_shape(
+            {'object': 'chat.completion', 'id': '1', 'model': 'test', 'choices': []}
+        )
 
     with pytest.raises(ProviderFailure):
-        _validate_chat_completion_response_shape({
-            'object': 'chat.completion',
-            'id': '1',
-            'model': 'test',
-            'choices': [{'message': {'role': 'user'}}]
-        })
+        _validate_chat_completion_response_shape(
+            {'object': 'chat.completion', 'id': '1', 'model': 'test', 'choices': [{'message': {'role': 'user'}}]}
+        )
+
 
 def test_configured_max_response_bytes(monkeypatch):
     monkeypatch.delenv("OPENAI_MAX_RESPONSE_BYTES", raising=False)
@@ -179,6 +188,7 @@ def test_configured_max_response_bytes(monkeypatch):
     monkeypatch.setenv("OPENAI_MAX_RESPONSE_BYTES", "invalid")
     with pytest.raises(ProviderFailure):
         _configured_max_response_bytes()
+
 
 @pytest.mark.asyncio
 async def test_fake_chat_completion_provider():
@@ -202,10 +212,18 @@ async def test_fake_chat_completion_provider():
     assert provider.calls[0].request == req
     assert provider.calls[0].timeout_ms == 1000
 
+
 @pytest.mark.asyncio
 async def test_fake_chat_completion_provider_with_outcomes():
     # Test success outcome
-    outcomes = [{'id': 'test-1', 'object': 'chat.completion', 'model': 'm', 'choices': [{'message': {'role': 'assistant', 'content': 'hi'}, 'finish_reason': 'stop'}]}]
+    outcomes = [
+        {
+            'id': 'test-1',
+            'object': 'chat.completion',
+            'model': 'm',
+            'choices': [{'message': {'role': 'assistant', 'content': 'hi'}, 'finish_reason': 'stop'}],
+        }
+    ]
     provider = FakeChatCompletionProvider(outcomes=outcomes)
 
     req = {'messages': []}
