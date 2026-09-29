@@ -1404,7 +1404,16 @@ def reply_to_review(app_id: str, data: ReplyToReviewRequest, uid: str = Depends(
 
 
 @router.get('/v1/apps/{app_id}/reviews', tags=['v1'], response_model=List[AppReview])
-def app_reviews(app_id: str):
+def app_reviews(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
+    app = _safe_app_from_dict(app)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+    if not app.approved and app.uid != uid:
+        raise HTTPException(status_code=404, detail='App not found')
+    if app.private is not None:
+        if app.private and app.uid != uid:
+            raise HTTPException(status_code=403, detail='You are not authorized to view this app')
     reviews = get_app_reviews(app_id)
     reviews = [details for details in reviews.values() if details.get('review')]
     return reviews
