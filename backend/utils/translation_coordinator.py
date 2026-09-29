@@ -562,7 +562,7 @@ class TranslationCoordinator:
                 or self.demand is None
                 or self.demand.snapshot(lease_v1_enabled=current_config.lease_v1_enabled).policy != DemandPolicy.viewed
             ):
-                release_translation(reservation, 0)
+                await run_blocking(db_executor, release_translation, reservation, 0)
                 self._decision_metrics.decision(self.target_language, 'defer', 'no_demand')
                 return
 
