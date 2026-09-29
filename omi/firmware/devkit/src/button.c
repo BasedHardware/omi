@@ -211,11 +211,11 @@ void check_button_level(struct k_work *work_item)
             if (btn_last_tap_time > 0 &&
                 (current_time - btn_last_tap_time) * BUTTON_CHECK_INTERVAL < DOUBLE_TAP_WINDOW) {
                 btn_tap_count++;
-                if (btn_tap_count >= 2) {
+                if (btn_tap_count >= 3) {
                     event = BUTTON_EVENT_TRIPLE_TAP;
                     btn_last_tap_time = 0;
                     btn_tap_count = 0;
-                } else {
+                } else if (btn_tap_count == 2) {
                     event = BUTTON_EVENT_DOUBLE_TAP;
                     btn_last_tap_time = current_time;
                 }
@@ -226,12 +226,16 @@ void check_button_level(struct k_work *work_item)
         }
     }
 
-    // Check for single tap
+    // Check for single tap or window timeout
     if (btn_state == BUTTON_RELEASED && !btn_is_pressed) {
         uint32_t press_duration = (btn_release_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL;
         if (press_duration < TAP_THRESHOLD && btn_last_tap_time > 0 &&
             (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL > TAP_THRESHOLD && btn_tap_count == 1) {
             event = BUTTON_EVENT_SINGLE_TAP;
+            btn_last_tap_time = 0;
+            btn_tap_count = 0;
+        } else if (btn_last_tap_time > 0 &&
+                   (current_time - btn_last_tap_time) * BUTTON_CHECK_INTERVAL >= DOUBLE_TAP_WINDOW) {
             btn_last_tap_time = 0;
             btn_tap_count = 0;
         } else if ((current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL > TAP_THRESHOLD) {
