@@ -369,6 +369,33 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.MULTILINE,
     )
+    # These fixtures exercise unrelated gateway and secret failures, so include
+    # the default-off translation bindings declared for the serving backend.
+    translation_defaults = {
+        'TRANSLATION_DEMAND_SHADOW_ENABLED': 'false',
+        'TRANSLATION_DEMAND_GATE_ENABLED': 'false',
+        'TRANSLATION_DEMAND_LEASE_V1_ENABLED': 'false',
+        'TRANSLATION_ONDEMAND_GEMINI_ENABLED': 'false',
+        'TRANSLATION_ONOPEN_ENABLED': 'false',
+        'TRANSLATION_ONDEMAND_COHORT_PERCENT': '0',
+        'TRANSLATION_ONDEMAND_UID_ALLOWLIST': '',
+        'TRANSLATION_ONDEMAND_MAX_SEGMENTS': '50',
+        'TRANSLATION_ONDEMAND_MAX_CHARS': '12000',
+        'TRANSLATION_ONDEMAND_DEADLINE_SECONDS': '3',
+        'TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS': '4096',
+        'TRANSLATION_ONDEMAND_UID_DAILY_CHARS': '0',
+        'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS': '0',
+    }
+    entries = ',\n'.join(
+        '        ' + json.dumps({'name': name, 'value': value}) for name, value in translation_defaults.items()
+    )
+    payload = re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        lambda match: match.group(1) + '\n' + entries + ',',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
     return with_backend_integration_events_secret(payload)
 
 

@@ -52,6 +52,25 @@ REQUIRED_IDENTICAL_LITERALS = (
 # Explained listen-only residuals. New listen-only keys fail until added here
 # *or* declared on pusher. Do not copy secret refs onto pusher from this list
 # without an ExternalSecret inventory (#12298).
+_TRANSLATION_LISTEN_ONLY = frozenset(
+    {
+        # Visibility belongs to authenticated listen sockets and opt-in detail
+        # reads; pusher hosts neither transport and must not admit this spend.
+        'TRANSLATION_DEMAND_SHADOW_ENABLED',
+        'TRANSLATION_DEMAND_GATE_ENABLED',
+        'TRANSLATION_DEMAND_LEASE_V1_ENABLED',
+        'TRANSLATION_ONDEMAND_GEMINI_ENABLED',
+        'TRANSLATION_ONOPEN_ENABLED',
+        'TRANSLATION_ONDEMAND_COHORT_PERCENT',
+        'TRANSLATION_ONDEMAND_UID_ALLOWLIST',
+        'TRANSLATION_ONDEMAND_MAX_SEGMENTS',
+        'TRANSLATION_ONDEMAND_MAX_CHARS',
+        'TRANSLATION_ONDEMAND_DEADLINE_SECONDS',
+        'TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS',
+        'TRANSLATION_ONDEMAND_UID_DAILY_CHARS',
+        'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS',
+    }
+)
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
@@ -148,7 +167,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "WAKE_WORD_ADJUDICATION_ENABLED",
             "X_OAUTH_CLIENT_SECRET",
         }
-    ),
+    )
+    | _TRANSLATION_LISTEN_ONLY,
     "prod": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
@@ -239,7 +259,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "WAKE_WORD_ADJUDICATION_ENABLED",
             "X_OAUTH_CLIENT_SECRET",
         }
-    ),
+    )
+    | _TRANSLATION_LISTEN_ONLY,
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
