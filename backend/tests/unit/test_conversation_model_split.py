@@ -792,10 +792,15 @@ class TestPhase4RuntimeBehavior:
 
             trends_db_mod.save_trends('conv-123', trends)
 
-            # Verify the string ID was used in the ArrayUnion call
-            mock_doc_ref.update.assert_called()
-            call_args = mock_doc_ref.update.call_args[0][0]
-            assert 'memory_ids' in call_args
+            # Verify the string ID was used in the ArrayUnion call via atomic merge set
+            topic_set_calls = [
+                call[0][0]
+                for call in mock_doc_ref.set.call_args_list
+                if call[0] and isinstance(call[0][0], dict) and 'memory_ids' in call[0][0]
+            ]
+            assert len(topic_set_calls) > 0
+            mem_ids = topic_set_calls[0]['memory_ids']
+            assert list(getattr(mem_ids, 'values', mem_ids)) == ['conv-123']
         finally:
             if saved is None:
                 sys.modules.pop('database._client', None)
