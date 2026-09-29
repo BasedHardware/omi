@@ -910,6 +910,22 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
+  /// Serial values that identify no unit: the firmware's DIS fallback string
+  /// and common unset markers. Hashing one of these would merge every unit
+  /// that reports it into a single analytics hardware_id.
+  static const Set<String> _placeholderSerials = {'unknown', 'none', 'n/a', 'na', 'null', 'default'};
+
+  /// Parses a DIS Serial Number String read, returning null when it is empty,
+  /// a placeholder, or a run of a single repeated character (e.g. all zeros).
+  @visibleForTesting
+  static String? parseSerialNumber(List<int> value) {
+    if (value.isEmpty) return null;
+    final serial = String.fromCharCodes(value).replaceAll('\u0000', '').trim();
+    if (serial.isEmpty || _placeholderSerials.contains(serial.toLowerCase())) return null;
+    if (serial.split('').toSet().length == 1) return null;
+    return serial;
+  }
+
   /// Get device information from Omi device
   Future<Map<String, String>> getDeviceInfo() async {
     Map<String, String> deviceInfo = {};
@@ -965,6 +981,22 @@ class OmiDeviceConnection extends DeviceConnection {
         }
       } catch (e) {
         Logger.debug('OmiDeviceConnection: Error reading manufacturer name: $e');
+      }
+
+      // Read serial number (0x2A25). CV1 firmware that exposes the per-unit
+      // hardware ID serves it here; older firmware has no such characteristic
+      // and the transport returns an empty read, leaving serialNumber unset.
+      try {
+        final serialValue = await transport.readCharacteristic(
+          deviceInformationServiceUuid,
+          serialNumberCharacteristicUuid,
+        );
+        final serial = parseSerialNumber(serialValue);
+        if (serial != null) {
+          deviceInfo['serialNumber'] = serial;
+        }
+      } catch (e) {
+        Logger.debug('OmiDeviceConnection: Error reading serial number: $e');
       }
 
       // Check if device has image streaming capability (for OpenGlass/OmiGlass detection)
