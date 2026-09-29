@@ -670,7 +670,9 @@ class TestSearchConversationsTextMalformedPerson:
             return types.SimpleNamespace(**kwargs)
 
         with patch.object(conversations_svc, 'Person', side_effect=fake_person):
-            result = conversations_svc.search_conversations_text(uid="test-uid", query="test query", include_transcript=True)
+            result = conversations_svc.search_conversations_text(
+                uid="test-uid", query="test query", include_transcript=True
+            )
 
         assert "Error" not in result
         assert "Found 1 conversations" in result
