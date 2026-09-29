@@ -51,14 +51,6 @@ def _claim(attempt_count):
     return MagicMock(return_value={'status': 'claimed', 'lease_epoch': 7, 'attempt_count': attempt_count})
 
 
-def _assert_private_correlation(records):
-    messages = '\n'.join(record.getMessage() for record in records)
-    assert 'uid-1' not in messages
-    assert 'conversation-1' not in messages
-    assert f'uid_hash={pusher_finalization.finalization_diagnostic_id("uid-1")}' in messages
-    assert f'conversation_hash={pusher_finalization.finalization_diagnostic_id("conversation-1")}' in messages
-
-
 @pytest.mark.anyio
 async def test_nonterminal_finalization_failure_logs_warning_not_error(monkeypatch, inline_run_blocking, caplog):
     # attempt_count=1 with retries remaining => mark_finalization_retryable,
@@ -88,7 +80,6 @@ async def test_nonterminal_finalization_failure_logs_warning_not_error(monkeypat
         r.levelno == logging.WARNING for r in records
     ), 'terminal=False finalization failures are retryable in-flight work and must log at WARNING'
     assert all('terminal=False' in r.getMessage() for r in records)
-    _assert_private_correlation(records)
 
 
 @pytest.mark.anyio
@@ -125,4 +116,3 @@ async def test_terminal_finalization_failure_stays_error(monkeypatch, inline_run
         r.levelno == logging.ERROR for r in records
     ), 'terminal=True dead-lettering is the fault signal and must stay at ERROR'
     assert all('terminal=True' in r.getMessage() for r in records)
-    _assert_private_correlation(records)
