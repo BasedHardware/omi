@@ -26,6 +26,8 @@ from utils.stt.pre_recorded import _segments_as_objects
         ('It is called O m I.', 'It is called Omi.'),
         ('o m i', 'Omi'),
         ('I love omi.', 'I love Omi.'),
+        ('Did you ask omi? What is OMI?', 'Did you ask Omi? What is Omi?'),
+        ('omi & me, omi+ai', 'Omi & me, omi+ai'),
         ('omi.me app.omi.me omi.dmg', 'omi.me app.omi.me omi.dmg'),
         ('https://omi.me @omi user@omi.me', 'https://omi.me @omi user@omi.me'),
         ('https://example.com/search?q=omi&omi=1', 'https://example.com/search?q=omi&omi=1'),

@@ -6,7 +6,7 @@ from typing import Any
 
 _SPELLED_LETTERS = re.compile(r"o\.?\s+m\.?\s+i", re.IGNORECASE)
 _BRAND_TERM = re.compile(
-    r"(?<![\w./@#?&=+-])(?:o\.?\s+m\.?\s+i|omies|omie(?:['’]s)?|omis|omi(?:['’]s)?)(?![\w/@?&=+_-]|\.(?=\w)|-(?=\w))",
+    r"(?<![\w./@#?&=+-])(?:o\.?\s+m\.?\s+i|omies|omie(?:['’]s)?|omis|omi(?:['’]s)?)(?![\w/@_]|[.?&=+-](?=\w))",
     re.IGNORECASE,
 )
 
