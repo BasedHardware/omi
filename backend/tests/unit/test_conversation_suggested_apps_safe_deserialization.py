@@ -5,6 +5,7 @@ Prevents HTTP 500 when legacy or malformed apps exist in suggested_summarization
 
 import os
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 os.environ.setdefault(
@@ -24,8 +25,12 @@ def mock_conversation():
 
 
 def test_suggested_apps_skips_malformed_app_records(monkeypatch, mock_conversation):
-    monkeypatch.setattr(conv_router, "_get_valid_conversation_by_id", lambda uid, cid: {"id": cid})
-    monkeypatch.setattr(conv_router, "deserialize_conversation", lambda data: mock_conversation)
+    monkeypatch.setattr(
+        conv_router, "_get_valid_conversation_by_id", lambda uid, cid: {"id": cid}
+    )
+    monkeypatch.setattr(
+        conv_router, "deserialize_conversation", lambda data: mock_conversation
+    )
 
     valid_app_dict = {
         "id": "app_valid",
@@ -49,8 +54,13 @@ def test_suggested_apps_skips_malformed_app_records(monkeypatch, mock_conversati
             return dict(malformed_app_dict)
         return None
 
-    with patch("utils.apps.get_available_app_by_id_with_reviews", side_effect=mock_get_available_app), \
-         patch("utils.apps.get_is_user_paid_app", return_value=False):
+    with (
+        patch(
+            "utils.apps.get_available_app_by_id_with_reviews",
+            side_effect=mock_get_available_app,
+        ),
+        patch("utils.apps.get_is_user_paid_app", return_value=False),
+    ):
         res = conv_router.get_conversation_suggested_apps("conv_123", uid="test_uid")
 
     assert res["conversation_id"] == "conv_123"
