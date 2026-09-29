@@ -87,10 +87,28 @@ SYNC_EXCEPTION_CLASSES = frozenset(
         'DestructiveOperationInProgress',
         'PrerecordedSTTConfigurationError',
         'SyncAssignmentSuperseded',
+        'SyncAssignmentConflict',
+        'FirestoreContentionExhausted',
         'SyncConversationPersistenceFenced',
         'SyncJobRunLeaseLost',
         'TranscriptionFailure',
         'OtherException',
+    }
+)
+
+# Only these bounded, data-shape exception types can identify a repeatable
+# persistence failure. Transport, contention, assignment conflicts, and
+# catch-all exception classes must never count against content.
+SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS = frozenset(
+    {
+        'AssertionError',
+        'AttributeError',
+        'IndexError',
+        'JSONDecodeError',
+        'KeyError',
+        'TypeError',
+        'UnicodeDecodeError',
+        'ValueError',
     }
 )
 

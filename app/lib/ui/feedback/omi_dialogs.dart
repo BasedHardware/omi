@@ -20,7 +20,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// destructive one in [omiDialogDangerColor].
 
 /// Destructive action colour on Material dialogs (iOS dark-mode systemRed; legible on every dark surface).
-const Color omiDialogDangerColor = OmiColors.danger;
+Color get omiDialogDangerColor => OmiColors.danger;
 
 /// One button in an [OmiAlertDialog].
 class OmiDialogAction {
@@ -96,7 +96,9 @@ class OmiAlertDialog extends StatelessWidget {
             style: TextButton.styleFrom(
               foregroundColor: action.isDestructive
                   ? omiDialogDangerColor
-                  : (action.isDefault ? Colors.white : Colors.white.withValues(alpha: 0.78)),
+                  : (OmiColors.active == OmiPalette.light
+                      ? OmiColors.textPrimary
+                      : (action.isDefault ? Colors.white : Colors.white.withValues(alpha: 0.78))),
               minimumSize: const Size(64, 44),
             ),
             child: Text(

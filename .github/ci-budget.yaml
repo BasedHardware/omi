@@ -1,0 +1,5122 @@
+{
+  "caps": {
+    "internal_time_to_signal_minutes": 46,
+    "pr_linux_minutes_per_day": 11900,
+    "pr_macos_minutes_per_day": 1600
+  },
+  "caps_rationale": "Ratchet: post-#19593 budgeted totals (10799 Linux, 1437 macOS min/day, 41 min critical path) + 10% headroom. Lower after each weekly re-seed; raising needs a rationale change.",
+  "jobs": {
+    "backend-checks.yml/changes": {
+      "budget_p50_minutes": 2,
+      "display_name": "Detect Changes",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 211,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-checks.yml/static-contracts": {
+      "budget_p50_minutes": 3,
+      "display_name": "Static Contracts",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 9,
+      "if": "needs.changes.outputs.has_backend_runtime_env == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-emulator-proofs.yml/emulator-proofs": {
+      "budget_p50_minutes": 3,
+      "display_name": "Backend emulator proofs",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 18,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-hermetic-e2e.yml/hermetic-e2e": {
+      "budget_p50_minutes": 3,
+      "display_name": "Hermetic Backend E2E",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 61,
+      "if": "needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "scope",
+      "owner": "CI maintainers",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-hermetic-e2e.yml/listen-pusher-stack-gauntlet": {
+      "budget_p50_minutes": 11,
+      "display_name": "Listen Pusher Stack Gauntlet",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 18,
+      "if": "needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true' && needs.scope.outputs.run_listen == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "scope",
+      "owner": "CI maintainers",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-hermetic-e2e.yml/merge-gate": {
+      "budget_p50_minutes": 1,
+      "display_name": "Backend Hermetic Merge Gate",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 206,
+      "if": "${{ !cancelled() }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "scope",
+        "hermetic-e2e",
+        "listen-pusher-stack-gauntlet",
+        "sync-cloud-tasks-stack-gauntlet"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-hermetic-e2e.yml/post-merge-failure-issues": {
+      "budget_p50_minutes": 5,
+      "display_name": "Post-merge hermetic failure issues",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "scope",
+        "hermetic-e2e",
+        "listen-pusher-stack-gauntlet",
+        "sync-cloud-tasks-stack-gauntlet",
+        "replay-harness-phase0a-gauntlet"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-hermetic-e2e.yml/replay-harness-phase0a-gauntlet": {
+      "budget_p50_minutes": 3,
+      "display_name": "Replay Harness Phase 0A Feasibility (advisory)",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 1,
+      "if": "needs.scope.outputs.applies == 'true' && (github.event_name == 'push' || github.event_name == 'schedule')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "scope",
+      "owner": "CI maintainers",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-hermetic-e2e.yml/scope": {
+      "budget_p50_minutes": 1,
+      "display_name": "Detect Hermetic Backend Scope",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 211,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-hermetic-e2e.yml/sync-cloud-tasks-stack-gauntlet": {
+      "budget_p50_minutes": 5,
+      "display_name": "Sync Cloud Tasks Stack Gauntlet",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 12,
+      "if": "needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true' && needs.scope.outputs.run_sync == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "scope",
+      "owner": "CI maintainers",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-unit-tests.yml/backend-unit-guardrails": {
+      "budget_p50_minutes": 3,
+      "display_name": "Backend unit guardrails",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 65,
+      "if": "needs.ci-tier.outputs.full_ci == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "ci-tier",
+      "owner": "CI maintainers",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-unit-tests.yml/backend-unit-shard": {
+      "budget_p50_minutes": 9,
+      "display_name": "Backend unit shard ${{ matrix.shard }}/4",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 107,
+      "if": null,
+      "matrix": {
+        "shard": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ]
+      },
+      "matrix_size": 4,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 4
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-unit-tests.yml/backend-unit-suite": {
+      "budget_p50_minutes": 1,
+      "display_name": "Backend unit suite",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 105,
+      "if": "${{ always() && !cancelled() }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "ci-tier",
+        "backend-unit-shard",
+        "backend-unit-guardrails"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-unit-tests.yml/ci-tier": {
+      "budget_p50_minutes": 1,
+      "display_name": "Resolve CI Tier",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 107,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "New in #19593: one label read; 2026-09-28 PR run took 23s",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "ci-budget-audit.yml/audit": {
+      "budget_p50_minutes": 15,
+      "display_name": "audit",
+      "expected_runs_class": "weekly-scheduled",
+      "expected_runs_per_day": 0.14285714285714285,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "One weekly 15-minute bounded audit; no PR-event runner minutes.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop-backend-contracts.yml/contracts": {
+      "budget_p50_minutes": 1,
+      "display_name": "contracts",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 31,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop-backend-contracts.yml/desktop-core-e2e-t0": {
+      "budget_p50_minutes": 1,
+      "display_name": "desktop-core-e2e-t0",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 31,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop-checks.yml/agent-runtime": {
+      "budget_p50_minutes": 3,
+      "display_name": "Agent Runtime",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 10,
+      "if": "needs.changes.outputs.has_desktop_agent_runtime == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop-checks.yml/changes": {
+      "budget_p50_minutes": 2,
+      "display_name": "Detect Changes",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 211,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop-swift-ci.yml/changes": {
+      "budget_p50_minutes": 2,
+      "display_name": "Detect Desktop Swift Changes",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 211,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop-swift-ci.yml/desktop-siri-xcode27-advisory": {
+      "budget_p50_minutes": 5,
+      "display_name": "Desktop Siri Xcode 27 Advisory",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "macos",
+      "runner_counts": {
+        "macos": 1
+      },
+      "runs_on": "xcode-27"
+    },
+    "desktop-swift-ci.yml/desktop-swift": {
+      "budget_p50_minutes": 1,
+      "display_name": "Desktop Swift Build & Tests",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 29,
+      "if": "${{ always() && needs.changes.outputs.should_run == 'true' }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "changes",
+        "desktop-swift-verify",
+        "desktop-swift-release-compile"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop-swift-ci.yml/desktop-swift-release-compile": {
+      "budget_p50_minutes": 34,
+      "display_name": "Desktop Swift Release Compile",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 4,
+      "if": "${{ needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.should_release_compile == 'true' }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "reusable": null,
+      "runner": "macos",
+      "runner_counts": {
+        "macos": 1
+      },
+      "runs_on": "macos-26"
+    },
+    "desktop-swift-ci.yml/desktop-swift-verify": {
+      "budget_p50_minutes": 28,
+      "display_name": "Desktop Swift Static & Test Contracts",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 30,
+      "if": "${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "macos",
+      "runner_counts": {
+        "macos": 1
+      },
+      "runs_on": "macos-26"
+    },
+    "desktop-swift-ci.yml/post-merge-failure-issue": {
+      "budget_p50_minutes": 5,
+      "display_name": "Post-merge Desktop Swift Release Compile failure issue",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "changes",
+        "desktop-swift-release-compile"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop-windows-ci.yml/build-linux": {
+      "budget_p50_minutes": 9,
+      "display_name": "Linux package \u00b7 helper smoke",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 4,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop-windows-ci.yml/build-windows": {
+      "budget_p50_minutes": 8,
+      "display_name": "Windows build smoke",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 4,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "windows",
+      "runner_counts": {
+        "windows": 1
+      },
+      "runs_on": "windows-latest"
+    },
+    "desktop-windows-ci.yml/checks": {
+      "budget_p50_minutes": 7,
+      "display_name": "Typecheck \u00b7 Lint \u00b7 Test",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 4,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_auto_release.yml/plan-and-tag": {
+      "budget_p50_minutes": 5,
+      "display_name": "plan-and-tag",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_backend_auto_dev.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_backend_prod.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_backend_recover_prod.yml/recover": {
+      "budget_p50_minutes": 5,
+      "display_name": "recover",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_beta_admission_control.yml/control-beta-admission": {
+      "budget_p50_minutes": 5,
+      "display_name": "control-beta-admission",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_breakglass_credential_preflight.yml/preflight": {
+      "budget_p50_minutes": 5,
+      "display_name": "preflight",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_breakglass_rollout_beta.yml/rollout": {
+      "budget_p50_minutes": 5,
+      "display_name": "rollout",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_codemagic_failure_recovery.yml/recovery-capsule": {
+      "budget_p50_minutes": 5,
+      "display_name": "Agent recovery capsule",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.repository == 'BasedHardware/omi' && (github.event_name == 'workflow_dispatch' ||\n (github.event.check_run.name == 'Release OMI Desktop (Swift)' &&\n  github.event.check_run.status == 'completed' &&\n  github.event.check_run.conclusion == 'failure' &&\n  github.event.check_run.app.slug == 'codemagic-ci-cd' &&\n  startsWith(github.event.check_run.details_url, 'https://codemagic.io/app/66c95e6ec76853c447b8bcbb/build/')))",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_promote_beta.yml/promote": {
+      "budget_p50_minutes": 5,
+      "display_name": "promote",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_promote_prod.yml/promote": {
+      "budget_p50_minutes": 5,
+      "display_name": "promote",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_publish_preview.yml/publish": {
+      "budget_p50_minutes": 5,
+      "display_name": "Build and publish approved preview",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "resolve",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_publish_preview.yml/resolve": {
+      "budget_p50_minutes": 5,
+      "display_name": "Resolve canonical preview ref",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_recover_beta.yml/retry-beta-promotion": {
+      "budget_p50_minutes": 5,
+      "display_name": "retry-beta-promotion",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "validate-recovery",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": "./.github/workflows/desktop_promote_beta.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "desktop_recover_beta.yml/validate-recovery": {
+      "budget_p50_minutes": 5,
+      "display_name": "validate-recovery",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_release_doctor.yml/beta-freshness": {
+      "budget_p50_minutes": 5,
+      "display_name": "beta-freshness",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_release_doctor.yml/proactive-health": {
+      "budget_p50_minutes": 5,
+      "display_name": "proactive-health",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.event_name == 'schedule'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_rollback_beta.yml/rollback": {
+      "budget_p50_minutes": 5,
+      "display_name": "rollback",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "desktop_windows_release.yml/build-and-publish": {
+      "budget_p50_minutes": 5,
+      "display_name": "build-and-publish",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "needs.plan-and-tag.outputs.should_release == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "plan-and-tag"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "windows",
+      "runner_counts": {
+        "windows": 1
+      },
+      "runs_on": "windows-latest"
+    },
+    "desktop_windows_release.yml/plan-and-tag": {
+      "budget_p50_minutes": 5,
+      "display_name": "plan-and-tag",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'chore(windows): release v')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "firmware_release.yml/build-cv1": {
+      "budget_p50_minutes": 5,
+      "display_name": "Omi CV1 (nRF5340)",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_admin.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "needs.scope.outputs.applies == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "scope",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_admin.yml/scope": {
+      "budget_p50_minutes": 5,
+      "display_name": "Decide admin deployment scope",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_app.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "always() && github.ref == 'refs/heads/main' && github.event.inputs.mode == 'deploy' && needs.validate-production-boundary.result == 'success' && needs.firestore_readiness.result == 'success' && (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "validate-production-boundary",
+        "firestore_readiness",
+        "record_break_glass"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend.yml/firestore_readiness": {
+      "budget_p50_minutes": 5,
+      "display_name": "firestore_readiness",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.ref == 'refs/heads/main' && github.event.inputs.mode == 'deploy'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "validate-production-boundary",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend.yml/record_break_glass": {
+      "budget_p50_minutes": 5,
+      "display_name": "record_break_glass",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "${{ needs.firestore_readiness.outputs.break_glass == 'true' }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "firestore_readiness",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend.yml/repair-traffic": {
+      "budget_p50_minutes": 5,
+      "display_name": "repair-traffic",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.ref == 'refs/heads/main' && github.event.inputs.mode == 'repair-traffic-only'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend.yml/validate-production-boundary": {
+      "budget_p50_minutes": 5,
+      "display_name": "validate-production-boundary",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.event.inputs.mode == 'deploy'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend_auto_dev.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "firestore_readiness",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend_auto_dev.yml/firestore_readiness": {
+      "budget_p50_minutes": 5,
+      "display_name": "firestore_readiness",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "needs.scope.outputs.applies == 'true' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "scope",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend_auto_dev.yml/scope": {
+      "budget_p50_minutes": 5,
+      "display_name": "Decide backend deployment scope",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend_listen_helm.yml/helm-upgrade": {
+      "budget_p50_minutes": 5,
+      "display_name": "helm-upgrade",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend_pusher.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend_pusher_auto_deploy.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_cloud_run_metrics_egress.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.ref == 'refs/heads/main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_cloud_run_metrics_egress.yml/provision-live-alerts": {
+      "budget_p50_minutes": 5,
+      "display_name": "provision-live-alerts",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "github.ref == 'refs/heads/main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_daily_memory_sweep_job.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_daily_memory_sweep_job_auto_dev.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_day3_reengagement_email_job.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_day3_reengagement_email_job_auto_dev.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_diarizer.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/apply_field_exemptions": {
+      "budget_p50_minutes": 5,
+      "display_name": "apply_field_exemptions",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'field-exemptions' && github.event.inputs.environment == 'prod'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/reconcile_composite_indexes": {
+      "budget_p50_minutes": 5,
+      "display_name": "reconcile_composite_indexes",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event.inputs.operation == 'composite-indexes')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/reconcile_development_composite_indexes": {
+      "budget_p50_minutes": 5,
+      "display_name": "reconcile_development_composite_indexes",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.ref == 'refs/heads/main' && github.event_name == 'push'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/reject_nonprod_field_exemptions": {
+      "budget_p50_minutes": 5,
+      "display_name": "reject_nonprod_field_exemptions",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'field-exemptions' && github.event.inputs.environment != 'prod'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_frame_request_retention_job.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_frontend.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_llm_gateway.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_llm_gateway.yml/record_break_glass": {
+      "budget_p50_minutes": 5,
+      "display_name": "record_break_glass",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "${{ needs.deploy.outputs.break_glass == 'true' }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "deploy",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_memory_maintenance_job.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_memory_maintenance_job_auto_dev.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_models.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_nllb_translation.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_notifications_job.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_parakeet.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_personas.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_plugins.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_scheduler_reconcile.yml/reconcile": {
+      "budget_p50_minutes": 5,
+      "display_name": "reconcile",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_storage_lifecycle.yml/apply": {
+      "budget_p50_minutes": 5,
+      "display_name": "apply",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "guardrail-baseline-pulse.yml/pulse": {
+      "budget_p50_minutes": 5,
+      "display_name": "pulse",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_cloud_run.yml/admit": {
+      "budget_p50_minutes": 5,
+      "display_name": "Admit exact proven main source",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_cloud_run.yml/build": {
+      "budget_p50_minutes": 5,
+      "display_name": "Build immutable isolated QA images",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "admit",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_cloud_run.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "Deploy gates-closed isolated QA resources",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "admit",
+        "build",
+        "provision"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_cloud_run.yml/execute": {
+      "budget_p50_minutes": 5,
+      "display_name": "Execute explicit drain after durable-proof admission",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "inputs.run_once == true",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "admit",
+        "provision",
+        "deploy",
+        "verify"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_cloud_run.yml/provision": {
+      "budget_p50_minutes": 5,
+      "display_name": "Provision only named development QA dependencies",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "admit",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_cloud_run.yml/verify": {
+      "budget_p50_minutes": 5,
+      "display_name": "Verify exact QA resources and readiness candidate",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "admit",
+        "build",
+        "provision",
+        "deploy"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_manual_operator.yml/operate": {
+      "budget_p50_minutes": 5,
+      "display_name": "Run isolated JIT QA operator",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "${{ github.ref == 'refs/heads/main' }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_typesense_projection.yml/admit": {
+      "budget_p50_minutes": 5,
+      "display_name": "Admit exact proven main source",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_typesense_projection.yml/bootstrap": {
+      "budget_p50_minutes": 5,
+      "display_name": "Bootstrap an intentionally unready Typesense service",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "${{ inputs.mode == 'bootstrap' }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "admit",
+        "deploy"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_typesense_projection.yml/build": {
+      "budget_p50_minutes": 5,
+      "display_name": "Build immutable Typesense and projection runner images",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "admit",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_typesense_projection.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "Deploy one bounded ephemeral Typesense service",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "admit",
+        "build",
+        "provision"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_typesense_projection.yml/provision": {
+      "budget_p50_minutes": 5,
+      "display_name": "Verify named QA Firestore and provision dedicated key metadata",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "admit",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "jit_qa_typesense_projection.yml/rehydrate": {
+      "budget_p50_minutes": 5,
+      "display_name": "Rehydrate and prove real current-ledger keyword retrieval",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "${{ inputs.mode == 'prove' }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "admit",
+        "build",
+        "deploy"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "main.yml/sync": {
+      "budget_p50_minutes": 5,
+      "display_name": "sync",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/analyze-and-test": {
+      "budget_p50_minutes": 17,
+      "display_name": "Dart Analyze & Tests",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 25,
+      "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_dart == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/android-compile-smoke": {
+      "budget_p50_minutes": 13,
+      "display_name": "Android Compile Smoke",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 8,
+      "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/android-unit-tests": {
+      "budget_p50_minutes": 7,
+      "display_name": "Android JVM Unit Tests",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 8,
+      "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/changes": {
+      "budget_p50_minutes": 1,
+      "display_name": "Detect Changes",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 216,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/dart-tests-kiritimati": {
+      "budget_p50_minutes": 25,
+      "display_name": "Dart Tests (Pacific/Kiritimati)",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 1,
+      "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_dart == 'true')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/generated-files": {
+      "budget_p50_minutes": 4,
+      "display_name": "Generated Files",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 21,
+      "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_flutter_generated == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/ios-compile-check": {
+      "budget_p50_minutes": 19,
+      "display_name": "iOS Compile Check",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 24,
+      "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_ios_compile == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "macos",
+      "runner_counts": {
+        "macos": 1
+      },
+      "runs_on": "macos-26"
+    },
+    "mobile-app-checks.yml/journeys-hermetic": {
+      "budget_p50_minutes": 9,
+      "display_name": "Seeded Journeys (hermetic)",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 5,
+      "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_journeys == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_journeys_pr == 'true')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/mobile-release-eligibility": {
+      "budget_p50_minutes": 1,
+      "display_name": "Mobile Release Eligibility",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 216,
+      "if": "${{ always() }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "changes",
+        "generated-files",
+        "analyze-and-test",
+        "journeys-hermetic",
+        "android-compile-smoke",
+        "android-unit-tests",
+        "ios-compile-check",
+        "dart-tests-kiritimati"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/post-merge-failure-issues": {
+      "budget_p50_minutes": 5,
+      "display_name": "Post-merge mobile failure issues",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "changes",
+        "journeys-hermetic",
+        "android-compile-smoke",
+        "android-unit-tests",
+        "dart-tests-kiritimati"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile_internal_build.yml/dispatch": {
+      "budget_p50_minutes": 5,
+      "display_name": "dispatch",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "onboarding_figma_sync.yml/publish": {
+      "budget_p50_minutes": 5,
+      "display_name": "publish",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "macos",
+      "runner_counts": {
+        "macos": 1
+      },
+      "runs_on": "macos-15"
+    },
+    "openapi-contract.yml/openapi-contract": {
+      "budget_p50_minutes": 3,
+      "display_name": "Public Developer API contract",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 115,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "opentofu-development-wif-pilot-validate.yml/validate-development-pilot": {
+      "budget_p50_minutes": 5,
+      "display_name": "validate-development-pilot",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "opentofu-development-wif-pilot.yml/read-only-plan": {
+      "budget_p50_minutes": 5,
+      "display_name": "read-only-plan",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "opentofu-foundation-validate.yml/validate-no-mutation-slice": {
+      "budget_p50_minutes": 5,
+      "display_name": "validate-no-mutation-slice",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "pr-declined-comment.yml/comment-on-declined-pr": {
+      "budget_p50_minutes": 5,
+      "display_name": "comment-on-declined-pr",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "github.event.pull_request.merged == false",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "public-build-config-preflight.yml/preflight": {
+      "budget_p50_minutes": 1,
+      "display_name": "${{ matrix.environment }} configuration",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 8,
+      "if": null,
+      "matrix": {
+        "environment": [
+          "development",
+          "prod"
+        ]
+      },
+      "matrix_size": 2,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 2
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "publish_omi_cli.yml/build": {
+      "budget_p50_minutes": 5,
+      "display_name": "Build & verify",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "publish_omi_cli.yml/publish": {
+      "budget_p50_minutes": 5,
+      "display_name": "Publish to PyPI (Trusted Publishing)",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": "startsWith(github.ref, 'refs/tags/omi-cli-v')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "build",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "python-cli-ci.yml/ci-tier": {
+      "budget_p50_minutes": 1,
+      "display_name": "Resolve CI Tier",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 66,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "New in #19593: one label read; 2026-09-28 PR run took 23s",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "python-cli-ci.yml/tests": {
+      "budget_p50_minutes": 3,
+      "display_name": "${{ matrix.label }}",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 50,
+      "if": null,
+      "matrix": {
+        "include": [
+          {
+            "label": "Linux / Python 3.10",
+            "os": "ubuntu-latest",
+            "python-version": "3.10"
+          },
+          {
+            "label": "Linux / Python 3.12",
+            "os": "ubuntu-latest",
+            "python-version": "3.12"
+          }
+        ]
+      },
+      "matrix_size": 2,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "dynamic",
+      "runner_counts": {
+        "linux": 2
+      },
+      "runs_on": "${{ matrix.os }}"
+    },
+    "python-cli-ci.yml/windows-acl": {
+      "budget_p50_minutes": 5,
+      "display_name": "Windows ACL / Python 3.12",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "needs.ci-tier.outputs.full_ci == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "ci-tier",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "windows",
+      "runner_counts": {
+        "windows": 1
+      },
+      "runs_on": "windows-latest"
+    },
+    "release-eligibility.yml/release-eligibility": {
+      "budget_p50_minutes": 5,
+      "display_name": "Release Eligibility",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "repo-checks.yml/changes": {
+      "budget_p50_minutes": 2,
+      "display_name": "Detect Changes",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 211,
+      "if": "github.event_name != 'pull_request' || !contains(fromJSON('[\"edited\", \"labeled\", \"unlabeled\"]'), github.event.action)",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "repo-checks.yml/formatting": {
+      "budget_p50_minutes": 2,
+      "display_name": "Formatting",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 127,
+      "if": "needs.changes.outputs.has_format == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "repo-checks.yml/hygiene": {
+      "budget_p50_minutes": 3,
+      "display_name": "Hygiene",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 210,
+      "if": "github.event_name != 'pull_request' || !contains(fromJSON('[\"edited\", \"labeled\", \"unlabeled\"]'), github.event.action)",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "repo-checks.yml/metadata-preflight": {
+      "budget_p50_minutes": 2,
+      "display_name": "PR Metadata Preflight",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 225,
+      "if": "github.event_name == 'pull_request' && contains(fromJSON('[\"edited\", \"labeled\", \"unlabeled\"]'), github.event.action)",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "repo-hygiene.yml/failure-class-retirement": {
+      "budget_p50_minutes": 5,
+      "display_name": "Failure-class retirement",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "runtime_image_contracts.yml/image-smoke": {
+      "budget_p50_minutes": 5,
+      "display_name": "image-smoke",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "github.event_name == 'workflow_dispatch'",
+      "matrix": "${{ fromJSON(needs.source-closure.outputs.matrix) }}",
+      "matrix_size": 1,
+      "needs": "source-closure",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "runtime_image_contracts.yml/source-closure": {
+      "budget_p50_minutes": 2,
+      "display_name": "source-closure",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 108,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "sdk-cpp.yml/cpp": {
+      "budget_p50_minutes": 5,
+      "display_name": "cpp",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "sdk-rust.yml/rust": {
+      "budget_p50_minutes": 5,
+      "display_name": "rust",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "sync-docs.yml/sync-docs": {
+      "budget_p50_minutes": 5,
+      "display_name": "sync-docs",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "sync_ledger_fence_cutover.yml/activate": {
+      "budget_p50_minutes": 5,
+      "display_name": "activate",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "stage",
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "sync_ledger_fence_cutover.yml/stage": {
+      "budget_p50_minutes": 5,
+      "display_name": "stage",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "task-recommendation-live-eval.yml/live-eval": {
+      "budget_p50_minutes": 5,
+      "display_name": "Versioned ranking fixture eval",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "web-checks.yml/build": {
+      "budget_p50_minutes": 1,
+      "display_name": "Build",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 13,
+      "if": "needs.changes.outputs.has_web_build == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "web-checks.yml/changes": {
+      "budget_p50_minutes": 1,
+      "display_name": "Detect Changes",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 211,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "web-checks.yml/frontend-lint": {
+      "budget_p50_minutes": 2,
+      "display_name": "Frontend Lint",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 4,
+      "if": "needs.changes.outputs.has_web_lint == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "windows-preflight-portability.yml/portability": {
+      "budget_p50_minutes": 1,
+      "display_name": "Native Windows process and launcher contracts",
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 11,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "reusable": null,
+      "runner": "windows",
+      "runner_counts": {
+        "windows": 1
+      },
+      "runs_on": "windows-latest"
+    }
+  },
+  "schema": 1,
+  "seed": "2026-09-26 one-day PR sample; refresh and re-seed after lane/ci-diet merges",
+  "workflows": {
+    "backend-checks.yml": {
+      "name": "Backend Checks",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "branches": "main"
+        },
+        "push": {
+          "branches": "main"
+        }
+      }
+    },
+    "backend-emulator-proofs.yml": {
+      "name": "Backend Emulator Proofs",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "backend/utils/memory/**",
+            "backend/database/**",
+            "backend/models/memory_apply.py",
+            "backend/models/daily_sweep_dispatch.py",
+            "backend/utils/llm/memories.py",
+            "backend/models/product_memory.py",
+            "backend/scripts/*_emulator_test.py",
+            "backend/scripts/run-emulator-proofs.sh",
+            "backend/pylock.toml",
+            "firebase.json",
+            "firestore.rules",
+            ".github/workflows/backend-emulator-proofs.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/utils/memory/**",
+            "backend/database/**",
+            "backend/models/memory_apply.py",
+            "backend/models/daily_sweep_dispatch.py",
+            "backend/utils/llm/memories.py",
+            "backend/models/product_memory.py",
+            "backend/scripts/*_emulator_test.py",
+            "backend/scripts/run-emulator-proofs.sh",
+            "backend/pylock.toml",
+            "firebase.json",
+            "firestore.rules",
+            ".github/workflows/backend-emulator-proofs.yml"
+          ]
+        }
+      }
+    },
+    "backend-hermetic-e2e.yml": {
+      "name": "Backend Hermetic E2E",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "merge_group": {
+          "types": [
+            "checks_requested"
+          ]
+        },
+        "pull_request": {
+          "branches": "main"
+        },
+        "push": {
+          "branches": "main"
+        },
+        "schedule": [
+          {
+            "cron": "53 4 * * *"
+          }
+        ],
+        "workflow_dispatch": ""
+      }
+    },
+    "backend-unit-tests.yml": {
+      "name": "Backend Unit Tests",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            ".gitignore",
+            "backend/**",
+            "package.json",
+            "package-lock.json",
+            "config/deployment-setting-classification.json",
+            "firestore.indexes.json",
+            ".github/actions/detect-changes/**",
+            ".github/actions/ci-tier/**",
+            ".github/actions/deploy-backend-stack/**",
+            ".github/actions/sync-backfill-lifecycle/**",
+            ".github/actions/release-eligibility/action.yml",
+            ".github/actions/transcription-release-candidate-probe/**",
+            ".github/workflows/backend-checks.yml",
+            ".github/workflows/backend-hermetic-e2e.yml",
+            ".github/workflows/backend-unit-tests.yml",
+            ".github/workflows/desktop-checks.yml",
+            ".github/workflows/desktop-swift-ci.yml",
+            ".github/workflows/desktop_backend_auto_dev.yml",
+            ".github/workflows/desktop_backend_prod.yml",
+            ".github/workflows/repo-checks.yml",
+            ".github/workflows/release-eligibility.yml",
+            ".github/workflows/desktop_promote_beta.yml",
+            ".github/workflows/desktop_rollback_beta.yml",
+            ".github/workflows/desktop_breakglass_rollout_beta.yml",
+            ".github/workflows/desktop_beta_admission_control.yml",
+            ".github/workflows/desktop_promote_prod.yml",
+            ".github/workflows/gcp_backend.yml",
+            ".github/workflows/gcp_backend_auto_dev.yml",
+            ".github/workflows/gcp_cloud_run_metrics_egress.yml",
+            ".github/workflows/gcp_firestore_indexes.yml",
+            ".github/workflows/gcp_backend*.yml",
+            ".github/workflows/gcp_llm_gateway.yml",
+            ".github/workflows/gcp_memory_maintenance_job.yml",
+            ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
+            ".github/workflows/gcp_notifications_job.yml",
+            ".github/scripts/check_backend_deploy_source_admission.py",
+            ".github/scripts/verify_auto_backend_release_admission.py",
+            ".github/scripts/verify_backend_release_admission.py",
+            ".github/scripts/verify_release_eligibility.py",
+            ".github/workflows/sync_ledger_fence_cutover.yml",
+            "scripts/changed-files",
+            "scripts/install-git-hooks.sh",
+            "scripts/pre-push",
+            "scripts/pre-push-singleflight",
+            "scripts/dev-harness/dev_harness/jit_vertex_gateway.py",
+            "scripts/voice-provider-probe.sh"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            ".gitignore",
+            "backend/**",
+            "package.json",
+            "package-lock.json",
+            "config/deployment-setting-classification.json",
+            "firestore.indexes.json",
+            ".github/actions/detect-changes/**",
+            ".github/actions/ci-tier/**",
+            ".github/actions/deploy-backend-stack/**",
+            ".github/actions/sync-backfill-lifecycle/**",
+            ".github/actions/release-eligibility/action.yml",
+            ".github/actions/transcription-release-candidate-probe/**",
+            ".github/workflows/backend-checks.yml",
+            ".github/workflows/backend-hermetic-e2e.yml",
+            ".github/workflows/backend-unit-tests.yml",
+            ".github/workflows/desktop-checks.yml",
+            ".github/workflows/desktop-swift-ci.yml",
+            ".github/workflows/desktop_backend_auto_dev.yml",
+            ".github/workflows/desktop_backend_prod.yml",
+            ".github/workflows/repo-checks.yml",
+            ".github/workflows/release-eligibility.yml",
+            ".github/workflows/desktop_promote_beta.yml",
+            ".github/workflows/desktop_rollback_beta.yml",
+            ".github/workflows/desktop_breakglass_rollout_beta.yml",
+            ".github/workflows/desktop_beta_admission_control.yml",
+            ".github/workflows/desktop_promote_prod.yml",
+            ".github/workflows/gcp_backend.yml",
+            ".github/workflows/gcp_backend_auto_dev.yml",
+            ".github/workflows/gcp_cloud_run_metrics_egress.yml",
+            ".github/workflows/gcp_firestore_indexes.yml",
+            ".github/workflows/gcp_backend*.yml",
+            ".github/workflows/gcp_llm_gateway.yml",
+            ".github/workflows/gcp_memory_maintenance_job.yml",
+            ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
+            ".github/workflows/gcp_notifications_job.yml",
+            ".github/scripts/check_backend_deploy_source_admission.py",
+            ".github/scripts/verify_auto_backend_release_admission.py",
+            ".github/scripts/verify_backend_release_admission.py",
+            ".github/scripts/verify_release_eligibility.py",
+            ".github/workflows/sync_ledger_fence_cutover.yml",
+            "scripts/changed-files",
+            "scripts/install-git-hooks.sh",
+            "scripts/pre-push",
+            "scripts/pre-push-singleflight",
+            "scripts/dev-harness/dev_harness/jit_vertex_gateway.py",
+            "scripts/voice-provider-probe.sh"
+          ]
+        },
+        "workflow_dispatch": ""
+      }
+    },
+    "ci-budget-audit.yml": {
+      "name": "Weekly CI Budget Audit",
+      "owner": "CI maintainers",
+      "rationale": "Weekly bounded audit makes runtime drift visible after merge; manual dispatch supports repair verification.",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "13 7 * * 1"
+          }
+        ],
+        "workflow_dispatch": ""
+      }
+    },
+    "desktop-backend-contracts.yml": {
+      "name": "Desktop Backend Contracts",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            ".github/workflows/desktop-backend-contracts.yml",
+            "backend/testing/contracts/**",
+            "backend/database/conversations.py",
+            "backend/database/helpers.py",
+            "backend/database/memories.py",
+            "backend/models/**",
+            "backend/test.sh",
+            "backend/utils/encryption.py",
+            "contract_tests/**",
+            "desktop/macos/scripts/desktop-core-harness.sh",
+            "desktop/macos/scripts/desktop-flow-lint.py",
+            "desktop/macos/scripts/desktop_flow_contract.py",
+            "desktop/macos/e2e/**",
+            "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift",
+            "desktop/macos/Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift",
+            "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift",
+            "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",
+            "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
+            "desktop/macos/Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift"
+          ]
+        }
+      }
+    },
+    "desktop-checks.yml": {
+      "name": "Desktop Checks",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "branches": "main"
+        },
+        "push": {
+          "branches": "main"
+        }
+      }
+    },
+    "desktop-swift-ci.yml": {
+      "name": "Desktop Swift CI",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "branches": "main"
+        },
+        "push": {
+          "branches": "main"
+        },
+        "schedule": [
+          {
+            "cron": "17 5 * * *"
+          }
+        ],
+        "workflow_dispatch": ""
+      }
+    },
+    "desktop-windows-ci.yml": {
+      "name": "Desktop Windows CI",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "desktop/windows/**",
+            ".github/workflows/desktop-windows-ci.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "desktop/windows/**",
+            ".github/workflows/desktop-windows-ci.yml"
+          ]
+        }
+      }
+    },
+    "desktop_auto_release.yml": {
+      "name": "Build Desktop Release Candidate",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "7 * * * *"
+          }
+        ],
+        "workflow_dispatch": ""
+      }
+    },
+    "desktop_backend_auto_dev.yml": {
+      "name": "Auto Deploy Desktop Backend to Development",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/Dockerfile.desktop_backend",
+            "backend/**/*.py",
+            "backend/deploy/cloud_run_gmp_sidecar.yaml",
+            "backend/pylock.runtime.toml",
+            "backend/runtime_images.json",
+            ".github/workflows/desktop_backend_auto_dev.yml",
+            ".github/scripts/desktop_backend_candidate_probe.py",
+            ".github/scripts/verify_desktop_backend_image_lineage.py",
+            ".github/scripts/extract_single_cloud_run_traffic_revision.py",
+            "backend/scripts/resolve_cloud_run_tagged_url.py",
+            "backend/scripts/wait_cloud_run_candidate_readiness.py",
+            "backend/scripts/firebase_release_probe_token.py",
+            "scripts/voice-provider-probe.sh"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "candidate_only": {
+              "default": "false",
+              "description": "Build a zero-traffic candidate without running acceptance or changing traffic",
+              "required": "false",
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "desktop_backend_prod.yml": {
+      "name": "Deploy Desktop Backend to Production",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "break_glass_confirm": {
+              "default": "",
+              "description": "Type deploy-without-proof when skip_eligibility_proof is set",
+              "required": "false"
+            },
+            "break_glass_reason": {
+              "default": "",
+              "description": "Why the eligibility proof is unavailable",
+              "required": "false"
+            },
+            "confirm": {
+              "description": "Type deploy-desktop-backend-prod",
+              "required": "true"
+            },
+            "reason": {
+              "description": "Operator reason for this production deployment",
+              "required": "true"
+            },
+            "release_sha": {
+              "description": "Exact merged main SHA with a successful first-attempt Release Eligibility proof",
+              "required": "true"
+            },
+            "skip_eligibility_proof": {
+              "default": "false",
+              "description": "Break-glass: deploy a merged main SHA without Release Eligibility proof",
+              "required": "false",
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "desktop_backend_recover_prod.yml": {
+      "name": "Recover Production Desktop Backend Traffic",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "confirm": {
+              "description": "Type recover-desktop-backend-prod",
+              "required": "true"
+            },
+            "reason": {
+              "description": "Incident reason for restoring this revision",
+              "required": "true"
+            },
+            "revision": {
+              "description": "Exact retained desktop-backend Cloud Run revision to restore",
+              "required": "true"
+            }
+          }
+        }
+      }
+    },
+    "desktop_beta_admission_control.yml": {
+      "name": "Control Desktop Beta Admission",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "confirm": {
+              "description": "Type ENABLE BETA AUTOMATION or DISABLE BETA AUTOMATION",
+              "required": "true",
+              "type": "string"
+            },
+            "operation": {
+              "description": "Enable or disable signed desktop Beta promotion",
+              "options": [
+                "enable",
+                "disable"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "reason": {
+              "description": "Auditable reason for changing the Beta admission fence",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "desktop_breakglass_credential_preflight.yml": {
+      "name": "Preflight Emergency Desktop Beta Credentials",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "release_tag": {
+              "description": "Exact immutable vX.Y.Z+BUILD-macos candidate to authenticate read-only",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "desktop_breakglass_rollout_beta.yml": {
+      "name": "Roll Out Emergency Desktop Beta",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "current_release_id": {
+              "description": "Exact broken macOS Beta tag currently served",
+              "required": "true",
+              "type": "string"
+            },
+            "expected_generation": {
+              "description": "Exact current macos-beta pointer generation",
+              "required": "true",
+              "type": "string"
+            },
+            "incident_url": {
+              "description": "Omi GitHub issue or discussion documenting the incident",
+              "required": "true",
+              "type": "string"
+            },
+            "normal_path_unavailable": {
+              "description": "Why normal Beta promotion cannot recover in time",
+              "required": "true",
+              "type": "string"
+            },
+            "reason": {
+              "description": "Observed failure and emergency rollout reason",
+              "required": "true",
+              "type": "string"
+            },
+            "target_release_id": {
+              "description": "Exact higher immutable emergency macOS tag",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "desktop_codemagic_failure_recovery.yml": {
+      "name": "Desktop Release Recovery Required",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "check_run": {
+          "types": [
+            "completed"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "build_id": {
+              "description": "Exact failed Codemagic build ID",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "desktop_promote_beta.yml": {
+      "name": "Promote Signed Desktop Candidate",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_call": {
+          "inputs": {
+            "release_tag": {
+              "description": "Signed v*-macos candidate tag to promote to Beta",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "desktop_promote_prod.yml": {
+      "name": "Promote Desktop Beta to Stable",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "confirm": {
+              "description": "Type promote-stable to advance the stable pointer",
+              "required": "true",
+              "type": "string"
+            },
+            "release_tag": {
+              "description": "Current beta v*-macos release tag",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "desktop_publish_preview.yml": {
+      "name": "Publish Desktop Preview",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "backend_mode": {
+              "default": "production_compatible",
+              "description": "API compatibility declaration for this preview",
+              "options": [
+                "production_compatible",
+                "preview_backend"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "desktop_api_url": {
+              "default": "",
+              "description": "Required only for preview_backend; HTTPS Desktop API URL",
+              "required": "false",
+              "type": "string"
+            },
+            "python_api_url": {
+              "default": "",
+              "description": "Required only for preview_backend; HTTPS Python API URL",
+              "required": "false",
+              "type": "string"
+            },
+            "source_ref": {
+              "description": "Canonical preview branch, exactly preview/<slug>",
+              "required": "true",
+              "type": "string"
+            },
+            "tester_notes": {
+              "default": "",
+              "description": "Optional tester-facing notes for this preview",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "desktop_recover_beta.yml": {
+      "name": "Retry Desktop Beta Promotion",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "confirm": {
+              "description": "Type recover-beta to retry this exact candidate",
+              "required": "true",
+              "type": "string"
+            },
+            "reason": {
+              "description": "Why automatic Beta promotion needs recovery",
+              "required": "true",
+              "type": "string"
+            },
+            "release_tag": {
+              "description": "Exact signed v*-macos candidate tag to retry on Beta",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "desktop_release_doctor.yml": {
+      "name": "Desktop Release Doctor",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "23 * * * *"
+          }
+        ],
+        "workflow_dispatch": ""
+      }
+    },
+    "desktop_rollback_beta.yml": {
+      "name": "Roll Back Broken Desktop Beta",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "current_release_id": {
+              "description": "Exact broken macOS Beta tag currently served",
+              "required": "true",
+              "type": "string"
+            },
+            "expected_generation": {
+              "description": "Exact current macos-beta pointer generation",
+              "required": "true",
+              "type": "string"
+            },
+            "incident_url": {
+              "description": "Omi GitHub issue or discussion documenting the incident",
+              "required": "true",
+              "type": "string"
+            },
+            "reason": {
+              "description": "Observed failure and containment reason",
+              "required": "true",
+              "type": "string"
+            },
+            "target_release_id": {
+              "description": "Exact retained known-good macOS tag",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "desktop_windows_release.yml": {
+      "name": "Auto Release Desktop (Windows) on Main",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "bypass_update_feed_probe_reason": {
+              "description": "Emergency only: supply a tracking-issue URL or reason AND the literal phrase I ACKNOWLEDGE THE ROUTE IS REQUIRED to skip the probe. Empty or any other text = probe runs.",
+              "required": "false",
+              "type": "string"
+            },
+            "next_version": {
+              "description": "Optional explicit version to tag (for example, 1.2.0)",
+              "required": "false",
+              "type": "string"
+            },
+            "release_mode": {
+              "default": "release_now",
+              "description": "Release behavior",
+              "options": [
+                "release_now",
+                "force_release"
+              ],
+              "required": "false",
+              "type": "choice"
+            }
+          }
+        }
+      }
+    },
+    "firmware_release.yml": {
+      "name": "Firmware Build & Release (Omi CV1)",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "changelog": {
+              "default": "Bug fixes and improvements",
+              "description": "Pipe-separated changelog e.g. \"Fixed audio|Battery improvements\"",
+              "required": "false",
+              "type": "string"
+            },
+            "minimum_app_version": {
+              "default": "",
+              "description": "minimum_app_version e.g. 1.0.74 (blank = omit)",
+              "required": "false",
+              "type": "string"
+            },
+            "minimum_app_version_code": {
+              "default": "",
+              "description": "minimum_app_version_code e.g. 438 (blank = omit)",
+              "required": "false",
+              "type": "string"
+            },
+            "minimum_firmware_required": {
+              "default": "",
+              "description": "minimum_firmware_required e.g. 3.0.6 (blank = omit)",
+              "required": "false",
+              "type": "string"
+            },
+            "ota_update_steps": {
+              "default": "battery,internet",
+              "description": "Comma-separated OTA prerequisites e.g. battery,internet (blank = omit)",
+              "required": "false",
+              "type": "string"
+            },
+            "publish": {
+              "default": "",
+              "description": "Type \"publish\" to create the GitHub Release. Anything else = build-only (artifacts uploaded to the run, no release).",
+              "required": "false",
+              "type": "string"
+            },
+            "version": {
+              "default": "",
+              "description": "Version override e.g. 3.0.20 (blank = read CONFIG_BT_DIS_FW_REV_STR from omi.conf)",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "gcp_admin.yml": {
+      "name": "Deploy Admin Dashboard to Cloud Run",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main",
+            "development"
+          ],
+          "paths": [
+            "web/admin/**",
+            "config/public-build-*.json",
+            ".github/workflows/gcp_admin.yml",
+            ".github/scripts/check_admin_deploy_scope.py",
+            ".github/actions/deploy-public-build/**",
+            ".github/actions/prepare-public-build/**",
+            ".github/actions/public-build-candidate-promotion/**",
+            ".github/scripts/preflight_public_build_config.py",
+            ".github/scripts/preflight_public_build_runtime.py",
+            ".github/scripts/smoke_public_build_browser.py"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "environment": {
+              "default": "prod",
+              "description": "Environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "false",
+              "type": "choice"
+            }
+          }
+        }
+      }
+    },
+    "gcp_app.yml": {
+      "name": "Deploy App to Cloud Run",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main",
+            "development"
+          ],
+          "paths": [
+            "web/app/**",
+            "config/public-build-*.json",
+            ".github/actions/deploy-public-build/**",
+            ".github/actions/prepare-public-build/**",
+            ".github/actions/public-build-candidate-promotion/**",
+            ".github/scripts/preflight_public_build_config.py",
+            ".github/scripts/preflight_public_build_runtime.py",
+            ".github/scripts/smoke_public_build_browser.py"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "environment": {
+              "default": "prod",
+              "description": "Environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "false",
+              "type": "choice"
+            }
+          }
+        }
+      }
+    },
+    "gcp_backend.yml": {
+      "name": "Deploy Backend to Cloud RUN",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "break_glass_confirm": {
+              "default": "",
+              "description": "Type deploy-without-proof when skip_eligibility_proof is set",
+              "required": "false"
+            },
+            "break_glass_reason": {
+              "default": "",
+              "description": "Why the eligibility proof is unavailable (required with skip_eligibility_proof)",
+              "required": "false"
+            },
+            "deploy_gateway": {
+              "default": "false",
+              "description": "Development only: deploy the LLM gateway binary with the backend stack (requires deploy_targets=all)",
+              "required": "true",
+              "type": "boolean"
+            },
+            "deploy_targets": {
+              "default": "cloud-run-only",
+              "description": "Deploy all backend surfaces or Cloud Run only",
+              "options": [
+                "all",
+                "cloud-run-only"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "mode": {
+              "default": "deploy",
+              "description": "Workflow mode",
+              "options": [
+                "deploy",
+                "repair-traffic-only"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_sha": {
+              "default": "",
+              "description": "Exact main SHA with a successful Release Eligibility proof (deploy mode only)",
+              "required": "false"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
+            },
+            "skip_eligibility_proof": {
+              "default": "false",
+              "description": "Break-glass: deploy without a Release Eligibility proof (still requires a merged main SHA)",
+              "required": "false",
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "gcp_backend_auto_dev.yml": {
+      "name": "Auto Deploy Backend to Development",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_run": {
+          "branches": [
+            "main"
+          ],
+          "types": [
+            "completed"
+          ],
+          "workflows": [
+            "Release Eligibility"
+          ]
+        }
+      }
+    },
+    "gcp_backend_listen_helm.yml": {
+      "name": "Upgrade Backend Listen Helm Chart",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/charts/backend-listen/**",
+            "backend/charts/backend-secrets/**"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "allow_direct_model_exception": {
+              "default": "chart-default",
+              "description": "Optional OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION override (chart-default = values file)",
+              "options": [
+                "chart-default",
+                "true",
+                "false"
+              ],
+              "required": "false",
+              "type": "choice"
+            },
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true"
+            },
+            "chat_agent_route": {
+              "default": "chart-default",
+              "description": "Optional OMI_LLM_CHAT_AGENT_ROUTE override (chart-default = values file; direct = off Luna chat)",
+              "options": [
+                "chart-default",
+                "direct",
+                "gateway"
+              ],
+              "required": "false",
+              "type": "choice"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "gateway_feature_mode": {
+              "default": "chart-default",
+              "description": "Optional OMI_LLM_GATEWAY_FEATURE_MODE override (chart-default = values file; disabled = off)",
+              "options": [
+                "chart-default",
+                "disabled",
+                "gateway"
+              ],
+              "required": "false",
+              "type": "choice"
+            },
+            "helm_revision": {
+              "default": "",
+              "description": "Helm revision to roll back to (blank = previous). See the Helm history step output.",
+              "required": "false"
+            },
+            "image_tag": {
+              "default": "",
+              "description": "Short-SHA image to deploy (blank keeps the running image). Prod requires an ancestor of main.",
+              "required": "false"
+            },
+            "mode": {
+              "default": "deploy",
+              "description": "deploy applies the chart; rollback restores an earlier Helm revision",
+              "options": [
+                "deploy",
+                "rollback"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "stt_service_models": {
+              "default": "",
+              "description": "Optional STT_SERVICE_MODELS override (blank = chart values file)",
+              "required": "false",
+              "type": "string"
+            },
+            "translation_service_models": {
+              "default": "",
+              "description": "Optional TRANSLATION_SERVICE_MODELS override (blank = chart values file)",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "gcp_backend_pusher.yml": {
+      "name": "Deploy Backend Pusher to GKE",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true"
+            },
+            "break_glass_confirm": {
+              "default": "",
+              "description": "Type skip-live-capacity-gate when skip_live_capacity_gate is set",
+              "required": "false"
+            },
+            "break_glass_reason": {
+              "default": "",
+              "description": "Why the live capacity gate is unavailable (required with skip_live_capacity_gate)",
+              "required": "false"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "pusher_dev_qualification_run_id": {
+              "default": "",
+              "description": "Production Pusher only: successful gcp_backend_pusher_auto_deploy.yml run ID that qualified the digest",
+              "required": "false"
+            },
+            "pusher_image_digest": {
+              "default": "",
+              "description": "Production Pusher only: exact digest from a successful automatic development qualification",
+              "required": "false"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
+            },
+            "service": {
+              "default": "pusher",
+              "description": "Service to deploy",
+              "required": "false"
+            },
+            "skip_live_capacity_gate": {
+              "default": "false",
+              "description": "Break-glass: deploy without the live surge-capacity gate (still requires a merged main SHA and immutable digest)",
+              "required": "false",
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "gcp_backend_pusher_auto_deploy.yml": {
+      "name": "Auto Deploy Backend Pusher to GKE (Development)",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/config/**",
+            "backend/database/**",
+            "backend/models/**",
+            "backend/routers/**",
+            "backend/services/**",
+            "backend/testing/parity_pack_v0/**",
+            "backend/utils/**",
+            "backend/pusher/**",
+            "backend/charts/pusher/**",
+            ".dockerignore",
+            "backend/scripts/verify_pusher_source_closure.py",
+            "backend/scripts/verify_pusher_live_deployment_gate.py",
+            "backend/scripts/verify_pusher_dev_observability.py",
+            "backend/scripts/verify_pusher_promotion_evidence.py",
+            "backend/scripts/pusher_release_receipt.py",
+            "backend/scripts/pusher_semantic_probe.py",
+            "backend/scripts/pusher_prod_canary.py",
+            "backend/scripts/verify_pusher_live_alert_route.py",
+            "backend/scripts/runtime_env_capability_contracts.py",
+            "backend/scripts/runtime_env_validation/**",
+            "backend/scripts/validate-backend-runtime-env.py",
+            "backend/deploy/runtime_env/**",
+            "backend/scripts/firebase_release_probe_token.py",
+            "backend/testing/release_fixtures/transcription-release-probe.json",
+            "backend/testing/release_fixtures/transcription-release-probe.wav",
+            ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
+            ".github/workflows/gcp_backend_pusher.yml"
+          ]
+        }
+      }
+    },
+    "gcp_cloud_run_metrics_egress.yml": {
+      "name": "Deploy Cloud Run Metrics Egress",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml",
+            "backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml",
+            "backend/charts/monitoring/alerts/live-stt.json",
+            "backend/charts/monitoring/live-alert-gate.json",
+            ".github/workflows/gcp_cloud_run_metrics_egress.yml"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "environment": {
+              "default": "development",
+              "description": "Select the monitoring environment to deploy",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            }
+          }
+        }
+      }
+    },
+    "gcp_daily_memory_sweep_job.yml": {
+      "name": "Deploy Daily Memory Sweep Job to Cloud RUN",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_sha": {
+              "description": "Exact merged-main SHA with a successful Release Eligibility proof",
+              "required": "true",
+              "type": "string"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "gcp_daily_memory_sweep_job_auto_dev.yml": {
+      "name": "Auto Deploy Daily Memory Sweep Job to Development",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_run": {
+          "branches": [
+            "main"
+          ],
+          "types": [
+            "completed"
+          ],
+          "workflows": [
+            "Release Eligibility"
+          ]
+        }
+      }
+    },
+    "gcp_day3_reengagement_email_job.yml": {
+      "name": "Deploy Day 3 Re-engagement Email Job to Cloud RUN",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_sha": {
+              "description": "Exact merged-main SHA with a successful Release Eligibility proof",
+              "required": "true",
+              "type": "string"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "gcp_day3_reengagement_email_job_auto_dev.yml": {
+      "name": "Auto Deploy Day 3 Re-engagement Email Job to Development",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_run": {
+          "branches": [
+            "main"
+          ],
+          "types": [
+            "completed"
+          ],
+          "workflows": [
+            "Release Eligibility"
+          ]
+        }
+      }
+    },
+    "gcp_diarizer.yml": {
+      "name": "Deploy Diarizer to GKE",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "gcp_firestore_indexes.yml": {
+      "name": "Reconcile Firestore Indexes",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "firestore.indexes.json",
+            "backend/scripts/reconcile_firestore_field_exemptions.py",
+            ".github/workflows/gcp_firestore_indexes.yml"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "confirmation": {
+              "description": "Type APPLY_FIRESTORE_INDEXES or APPLY_FIRESTORE_FIELD_EXEMPTIONS for the selected operation",
+              "required": "true",
+              "type": "string"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the Firestore environment to reconcile",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "operation": {
+              "default": "composite-indexes",
+              "description": "Choose the schema operation; field exemptions must target prod",
+              "options": [
+                "composite-indexes",
+                "field-exemptions"
+              ],
+              "required": "true",
+              "type": "choice"
+            }
+          }
+        }
+      }
+    },
+    "gcp_frame_request_retention_job.yml": {
+      "name": "Deploy Frame Request Retention Job to Cloud Run",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "environment": {
+              "default": "development",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_sha": {
+              "default": "",
+              "description": "Exact current main SHA with a successful first-attempt Release Eligibility proof",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "gcp_frontend.yml": {
+      "name": "Deploy Frontend to Cloud Run",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main",
+            "development"
+          ],
+          "paths": [
+            "web/frontend/**",
+            "config/public-build-*.json",
+            ".github/actions/deploy-public-build/**",
+            ".github/actions/prepare-public-build/**",
+            ".github/actions/public-build-candidate-promotion/**",
+            ".github/scripts/preflight_public_build_config.py",
+            ".github/scripts/preflight_public_build_runtime.py",
+            ".github/scripts/smoke_public_build_browser.py"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "environment": {
+              "default": "prod",
+              "description": "Environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "false",
+              "type": "choice"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "gcp_llm_gateway.yml": {
+      "name": "Deploy LLM Gateway to GKE",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true"
+            },
+            "break_glass_confirm": {
+              "default": "",
+              "description": "Type deploy-without-proof when skip_eligibility_proof is set",
+              "required": "false"
+            },
+            "break_glass_reason": {
+              "default": "",
+              "description": "Why the eligibility proof is unavailable (required with skip_eligibility_proof)",
+              "required": "false"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_sha": {
+              "default": "",
+              "description": "Production only: exact main SHA with a successful first-attempt Release Eligibility proof",
+              "required": "false"
+            },
+            "skip_eligibility_proof": {
+              "default": "false",
+              "description": "Break-glass: deploy without a Release Eligibility proof (still requires a merged main SHA)",
+              "required": "false",
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "gcp_memory_maintenance_job.yml": {
+      "name": "Deploy Memory Maintenance Job to Cloud RUN",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true",
+              "type": "string"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "gcp_memory_maintenance_job_auto_dev.yml": {
+      "name": "Auto Deploy Memory Maintenance Job to Development",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/**",
+            ".github/workflows/gcp_memory_maintenance_job.yml",
+            ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml"
+          ]
+        }
+      }
+    },
+    "gcp_models.yml": {
+      "name": "Deploy Speech Models to GKE",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "gcp_nllb_translation.yml": {
+      "name": "Deploy NLLB Translation to GKE",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "gcp_notifications_job.yml": {
+      "name": "Deploy Notifications Job to Cloud RUN",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true",
+              "type": "string"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "gcp_parakeet.yml": {
+      "name": "Deploy Parakeet ASR to GKE",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "gcp_personas.yml": {
+      "name": "Deploy Personas to Cloud Run",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main",
+            "development"
+          ],
+          "paths": [
+            "web/personas-open-source/**",
+            "config/public-build-*.json",
+            ".github/actions/deploy-public-build/**",
+            ".github/actions/prepare-public-build/**",
+            ".github/actions/public-build-candidate-promotion/**",
+            ".github/scripts/preflight_public_build_config.py",
+            ".github/scripts/preflight_public_build_runtime.py",
+            ".github/scripts/smoke_public_build_browser.py"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "environment": {
+              "default": "prod",
+              "description": "Environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "false",
+              "type": "choice"
+            }
+          }
+        }
+      }
+    },
+    "gcp_plugins.yml": {
+      "name": "Deploy Plugins to Cloud RUN",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "branch": {
+              "default": "main",
+              "description": "Branch to deploy from",
+              "required": "true"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Select the environment to deploy to",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_version": {
+              "default": "",
+              "description": "Release version (optional)",
+              "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "gcp_scheduler_reconcile.yml": {
+      "name": "Reconcile Cloud Scheduler",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "environment": {
+              "description": "Environment to inspect",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "operation": {
+              "default": "check",
+              "description": "Prod is read-only; development can be reconciled",
+              "options": [
+                "check",
+                "reconcile"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "production_confirmation": {
+              "description": "For an approved production reconcile, type APPLY_PROD_SCHEDULER",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "gcp_storage_lifecycle.yml": {
+      "name": "Apply Cloud Storage lifecycle (private-cloud-sync)",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/deploy/storage-lifecycle/**",
+            "backend/scripts/validate_storage_lifecycle.py",
+            ".github/workflows/gcp_storage_lifecycle.yml"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "confirmation": {
+              "default": "",
+              "description": "Type APPLY_STORAGE_LIFECYCLE_PROD for prod",
+              "required": "false",
+              "type": "string"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Bucket environment to reconcile",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "lifecycle_variant": {
+              "default": "apply",
+              "description": "apply = checked-in lifecycle; rollback = pre-change rules only",
+              "options": [
+                "apply",
+                "rollback"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "release_sha": {
+              "default": "",
+              "description": "Exact current main SHA (prod only)",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "guardrail-baseline-pulse.yml": {
+      "name": "Guardrail baseline pulse",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "0 15 * * 1"
+          }
+        ],
+        "workflow_dispatch": ""
+      }
+    },
+    "jit_qa_cloud_run.yml": {
+      "name": "JIT isolated QA Cloud Run plane",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "confirmation": {
+              "default": "",
+              "description": "Type RUN_ONCE to admit the drain execution",
+              "required": "false",
+              "type": "string"
+            },
+            "release_sha": {
+              "description": "Immutable main ancestor SHA with a successful first-attempt Release Eligibility proof",
+              "required": "true",
+              "type": "string"
+            },
+            "run_once": {
+              "default": "false",
+              "description": "Run the bounded ledger drain after deployment",
+              "required": "true",
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "jit_qa_manual_operator.yml": {
+      "name": "Operate isolated JIT QA data plane",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "confirmation": {
+              "description": "Use ENABLE_QA_API, APPLY_JIT_QA_INDEXES, PREPARE_QA, DRAIN_VERIFY_QA, SWEEP_VERIFY_QA, SWEEP_REPAIR_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations",
+              "required": "false",
+              "type": "string"
+            },
+            "invocation_id": {
+              "default": "",
+              "description": "Tombstoned daily-sweep model invocation id to repair (sweep-repair only)",
+              "required": "false",
+              "type": "string"
+            },
+            "operation": {
+              "description": "Named QA operation to run",
+              "options": [
+                "bootstrap",
+                "ensure-infrastructure-api",
+                "indexes-plan",
+                "indexes-apply",
+                "prepare",
+                "inspect",
+                "drain-verify",
+                "sweep-verify",
+                "sweep-repair",
+                "rollback",
+                "rollforward"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "repair_attestation_confirmation": {
+              "default": "",
+              "description": "Optional human assertion ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED; never infer from absent accounting",
+              "required": "false",
+              "type": "string"
+            },
+            "repair_attestation_reference": {
+              "default": "",
+              "description": "Content-free reference to independently reviewed claim evidence (required with repair attestation)",
+              "required": "false",
+              "type": "string"
+            },
+            "resume_execution": {
+              "default": "",
+              "description": "Existing first drain execution to resume after a bounded launcher timeout",
+              "required": "false",
+              "type": "string"
+            },
+            "run_id": {
+              "description": "Lowercase synthetic fixture namespace (for example qa-proof-20260905)",
+              "required": "false",
+              "type": "string"
+            },
+            "source_sha": {
+              "description": "Immutable deployed QA source SHA with first-attempt Release Eligibility proof",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "jit_qa_typesense_projection.yml": {
+      "name": "JIT QA Typesense lexical projection",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "mode": {
+              "default": "prove",
+              "description": "Bootstrap an intentionally unready service, or rehydrate and prove current-ledger retrieval",
+              "options": [
+                "bootstrap",
+                "prove"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "query": {
+              "description": "A real lexical term present in an active QA ledger row; never use a fabricated response",
+              "required": "false",
+              "type": "string"
+            },
+            "release_sha": {
+              "description": "Immutable main ancestor SHA with a successful first-attempt Release Eligibility proof",
+              "required": "true",
+              "type": "string"
+            },
+            "run_id": {
+              "description": "Lowercase namespaced projection run identifier",
+              "required": "true",
+              "type": "string"
+            },
+            "typesense_base_image": {
+              "default": "docker.io/typesense/typesense@sha256:5c12af89130b8ee0be11541321ba8a3a7c7a538d7c6cd95e0409dc2d75ca6455",
+              "description": "Reviewed docker.io/typesense/typesense image pinned by sha256 digest (27.1)",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "main.yml": {
+      "name": "GitHub Issue Sync",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "issues": {
+          "types": [
+            "opened",
+            "labeled"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "excludeClosed": {
+              "default": "true",
+              "description": "Exclude closed issues in the sync.",
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "mobile-app-checks.yml": {
+      "name": "Mobile App Checks",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": "",
+        "push": {
+          "branches": "main"
+        },
+        "schedule": [
+          {
+            "cron": "41 4 * * *"
+          }
+        ]
+      }
+    },
+    "mobile_internal_build.yml": {
+      "name": "Mobile internal builds",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "app/**"
+          ]
+        },
+        "schedule": [
+          {
+            "cron": "0 */3 * * *"
+          }
+        ],
+        "workflow_dispatch": ""
+      }
+    },
+    "onboarding_figma_sync.yml": {
+      "name": "Sync macOS onboarding to Figma source",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": ""
+      }
+    },
+    "openapi-contract.yml": {
+      "name": "OpenAPI Contract",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "backend/**",
+            "docs/api-reference/openapi.json",
+            "docs/api-reference/app-client-openapi.json",
+            "docs/api-reference/integration-public-openapi.json",
+            "app/lib/backend/http/api/**",
+            "app/lib/backend/schema/**",
+            "app/lib/backend/schema/gen/**",
+            "app/lib/models/announcement.dart",
+            "app/lib/models/subscription.dart",
+            "app/lib/models/user_usage.dart",
+            "desktop/windows/src/renderer/src/lib/omiApi.generated.ts",
+            "web/app/src/lib/omiApi.generated.ts",
+            "web/admin/lib/services/omi-api/omiApi.generated.ts",
+            "web/personas-open-source/src/lib/omiApi.generated.ts",
+            "docs/docs.json",
+            ".github/workflows/openapi-contract.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/**",
+            "docs/api-reference/openapi.json",
+            "docs/api-reference/app-client-openapi.json",
+            "docs/api-reference/integration-public-openapi.json",
+            "app/lib/backend/http/api/**",
+            "app/lib/backend/schema/**",
+            "app/lib/backend/schema/gen/**",
+            "app/lib/models/announcement.dart",
+            "app/lib/models/subscription.dart",
+            "app/lib/models/user_usage.dart",
+            "desktop/windows/src/renderer/src/lib/omiApi.generated.ts",
+            "web/app/src/lib/omiApi.generated.ts",
+            "web/admin/lib/services/omi-api/omiApi.generated.ts",
+            "web/personas-open-source/src/lib/omiApi.generated.ts",
+            "docs/docs.json",
+            ".github/workflows/openapi-contract.yml"
+          ]
+        },
+        "workflow_dispatch": ""
+      }
+    },
+    "opentofu-development-wif-pilot-validate.yml": {
+      "name": "OpenTofu Development WIF Pilot Validation",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            ".github/scripts/check_opentofu_development_wif_pilot.py",
+            ".github/scripts/test_check_opentofu_development_wif_pilot.py",
+            ".github/workflows/opentofu-development-wif-pilot.yml",
+            ".github/workflows/opentofu-development-wif-pilot-validate.yml",
+            "infrastructure/opentofu/pilots/development-wif-plan/**",
+            "infrastructure/opentofu/probes/development-project-read/**"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            ".github/scripts/check_opentofu_development_wif_pilot.py",
+            ".github/scripts/test_check_opentofu_development_wif_pilot.py",
+            ".github/workflows/opentofu-development-wif-pilot.yml",
+            ".github/workflows/opentofu-development-wif-pilot-validate.yml",
+            "infrastructure/opentofu/pilots/development-wif-plan/**",
+            "infrastructure/opentofu/probes/development-project-read/**"
+          ]
+        }
+      }
+    },
+    "opentofu-development-wif-pilot.yml": {
+      "name": "OpenTofu Development WIF Pilot",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": ""
+      }
+    },
+    "opentofu-foundation-validate.yml": {
+      "name": "OpenTofu Foundation Validation",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            ".github/scripts/check_opentofu_foundation.py",
+            ".github/scripts/test_check_opentofu_foundation.py",
+            ".github/workflows/opentofu-foundation-validate.yml",
+            "infrastructure/opentofu/**"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            ".github/scripts/check_opentofu_foundation.py",
+            ".github/scripts/test_check_opentofu_foundation.py",
+            ".github/workflows/opentofu-foundation-validate.yml",
+            "infrastructure/opentofu/**"
+          ]
+        }
+      }
+    },
+    "pr-declined-comment.yml": {
+      "name": "PR Declined Comment",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request_target": {
+          "types": [
+            "closed"
+          ]
+        }
+      }
+    },
+    "public-build-config-preflight.yml": {
+      "name": "Public Build Configuration Preflight",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            ".github/workflows/gcp_admin.yml",
+            ".github/workflows/gcp_app.yml",
+            ".github/workflows/gcp_frontend.yml",
+            ".github/workflows/gcp_personas.yml",
+            ".github/workflows/public-build-config-preflight.yml",
+            ".github/actions/deploy-public-build/**",
+            ".github/actions/prepare-public-build/**",
+            ".github/actions/public-build-candidate-promotion/**",
+            ".github/scripts/check_public_build_contract.py",
+            ".github/scripts/preflight_public_build_config.py",
+            ".github/scripts/preflight_public_build_runtime.py",
+            ".github/scripts/smoke_public_build_browser.py",
+            ".github/scripts/test_check_public_build_contract.py",
+            "config/public-build-contract.json",
+            "config/public-build-values.json",
+            "config/deployment-setting-classification.json",
+            "web/admin/Dockerfile",
+            "web/app/Dockerfile",
+            "web/frontend/Dockerfile",
+            "web/personas-open-source/Dockerfile",
+            "web/admin/components/public-build-canary.tsx",
+            "web/app/src/components/public-build-canary.tsx",
+            "web/frontend/src/components/public-build-canary.tsx",
+            "web/personas-open-source/src/components/public-build-canary.tsx"
+          ]
+        },
+        "workflow_dispatch": ""
+      }
+    },
+    "publish_omi_cli.yml": {
+      "name": "Publish omi-cli to PyPI",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "tags": [
+            "omi-cli-v*"
+          ]
+        },
+        "workflow_dispatch": {
+          "inputs": {
+            "reason": {
+              "default": "manual dry-run",
+              "description": "Note for this dry-run build (no publish happens).",
+              "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "python-cli-ci.yml": {
+      "name": "Python CLI",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "sdks/python-cli/**",
+            ".github/actions/ci-tier/**",
+            ".github/workflows/python-cli-ci.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "sdks/python-cli/**",
+            ".github/actions/ci-tier/**",
+            ".github/workflows/python-cli-ci.yml"
+          ]
+        }
+      }
+    },
+    "release-eligibility.yml": {
+      "name": "Release Eligibility",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ]
+        },
+        "workflow_dispatch": ""
+      }
+    },
+    "repo-checks.yml": {
+      "name": "Repo Checks",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "branches": "main",
+          "types": [
+            "opened",
+            "synchronize",
+            "reopened",
+            "edited",
+            "labeled",
+            "unlabeled"
+          ]
+        },
+        "push": {
+          "branches": "main"
+        }
+      }
+    },
+    "repo-hygiene.yml": {
+      "name": "Repo Hygiene",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "0 9 * * 1"
+          }
+        ],
+        "workflow_dispatch": {
+          "inputs": {
+            "since": {
+              "default": "14d",
+              "description": "Quiet period before a failure class may be retired (e.g. 14d)",
+              "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "runtime_image_contracts.yml": {
+      "name": "Runtime Image Contracts",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "backend/**",
+            "plugins/**",
+            "Makefile",
+            ".github/workflows/runtime_image_contracts.yml",
+            ".github/workflows/desktop_backend_auto_dev.yml",
+            ".github/workflows/gcp_*.yml"
+          ]
+        },
+        "workflow_dispatch": ""
+      }
+    },
+    "sdk-cpp.yml": {
+      "name": "C++ Device SDK",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "sdks/device/cpp/**",
+            ".github/workflows/sdk-cpp.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "sdks/device/cpp/**",
+            ".github/workflows/sdk-cpp.yml"
+          ]
+        }
+      }
+    },
+    "sdk-rust.yml": {
+      "name": "Rust SDK",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "sdks/rust/**",
+            ".github/workflows/sdk-rust.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "sdks/rust/**",
+            ".github/workflows/sdk-rust.yml"
+          ]
+        }
+      }
+    },
+    "sync-docs.yml": {
+      "name": "Sync Mintlify Docs back to Github",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "docs/**.mdx"
+          ]
+        },
+        "workflow_dispatch": ""
+      }
+    },
+    "sync_ledger_fence_cutover.yml": {
+      "name": "Sync ledger fence cutover",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "candidate_image": {
+              "description": "Exact immutable backend image digest (gcr.io/...@sha256:<64 hex>)",
+              "required": "true",
+              "type": "string"
+            },
+            "confirm": {
+              "description": "Type cutover-sync-ledger-fence",
+              "required": "true",
+              "type": "string"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Protected Cloud Run environment to cut over",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            }
+          }
+        }
+      }
+    },
+    "task-recommendation-live-eval.yml": {
+      "name": "What Matters Now Live Eval",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "workflow_dispatch": ""
+      }
+    },
+    "web-checks.yml": {
+      "name": "Web Checks",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "branches": "main"
+        },
+        "push": {
+          "branches": "main"
+        }
+      }
+    },
+    "windows-preflight-portability.yml": {
+      "name": "Windows Preflight Portability",
+      "owner": "CI maintainers",
+      "rationale": "Initial workflow inventory",
+      "triggers": {
+        "pull_request": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            ".github/checks-manifest.yaml",
+            ".github/scripts/preflight_runner.py",
+            ".github/scripts/pr_preflight.py",
+            ".github/scripts/run_checks.py",
+            ".github/scripts/test_preflight_runner.py",
+            ".github/scripts/test_run_checks.py",
+            ".github/workflows/windows-preflight-portability.yml",
+            "backend/.python-version",
+            "scripts/pre-push",
+            "scripts/pre-push-singleflight",
+            "scripts/pr-preflight",
+            "scripts/test-pre-push-worktree-fallback.sh"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            ".github/checks-manifest.yaml",
+            ".github/scripts/preflight_runner.py",
+            ".github/scripts/pr_preflight.py",
+            ".github/scripts/run_checks.py",
+            ".github/scripts/test_preflight_runner.py",
+            ".github/scripts/test_run_checks.py",
+            ".github/workflows/windows-preflight-portability.yml",
+            "backend/.python-version",
+            "scripts/pre-push",
+            "scripts/pre-push-singleflight",
+            "scripts/pr-preflight",
+            "scripts/test-pre-push-worktree-fallback.sh"
+          ]
+        }
+      }
+    }
+  }
+}

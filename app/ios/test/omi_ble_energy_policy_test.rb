@@ -18,19 +18,6 @@ class OmiBleEnergyPolicyTest < Minitest::Test
         @main
         struct OmiBleEnergyPolicyTestHarness {
             static func main() {
-                precondition(!OmiBleEnergyPolicy.shouldPollRssi(
-                    diagnosticsEnabled: false,
-                    peripheralConnected: true
-                ))
-                precondition(!OmiBleEnergyPolicy.shouldPollRssi(
-                    diagnosticsEnabled: true,
-                    peripheralConnected: false
-                ))
-                precondition(OmiBleEnergyPolicy.shouldPollRssi(
-                    diagnosticsEnabled: true,
-                    peripheralConnected: true
-                ))
-
                 let minute: Int64 = 60_000
                 precondition(OmiBleEnergyPolicy.shouldPersistBatteryReading(
                     previousLevel: nil,
@@ -38,7 +25,7 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                     level: 80,
                     nowMs: 0
                 ))
-                precondition(!OmiBleEnergyPolicy.shouldPersistBatteryReading(
+                precondition(OmiBleEnergyPolicy.shouldPersistBatteryReading(
                     previousLevel: 80,
                     previousTimestampMs: 0,
                     level: 79,
@@ -62,8 +49,8 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                 precondition(OmiBleEnergyPolicy.shouldPersistBatteryReading(
                     previousLevel: 80,
                     previousTimestampMs: 0,
-                    level: 79,
-                    nowMs: 15 * minute
+                    level: 80,
+                    nowMs: 60 * minute
                 ))
                 precondition(OmiBleEnergyPolicy.shouldPersistBatteryReading(
                     previousLevel: 20,
@@ -71,6 +58,49 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                     level: 19,
                     nowMs: minute
                 ))
+                let suiteName = "omi-ble-plist-\(UUID().uuidString)"
+                let defaults = UserDefaults(suiteName: suiteName)!
+                defer { defaults.removePersistentDomain(forName: suiteName) }
+                for charging in [true, false, nil] as [Bool?] {
+                    let entry = OmiBleEnergyPolicy.batteryHistoryEntry(timestampMs: 123, level: 80, charging: charging)
+                    precondition(entry["charging"] as? Bool == charging)
+                    precondition(entry.keys.contains("charging") == (charging != nil))
+                    let history = [entry]
+                    precondition((try? PropertyListSerialization.data(fromPropertyList: history, format: .binary, options: 0)) != nil)
+                    defaults.set(history, forKey: "battery_history_test")
+                    precondition((defaults.array(forKey: "battery_history_test") as? [[String: Any]])?.count == 1)
+                }
+                precondition(OmiBleFirmwareDiagnostics.parse(Data(repeating: 0, count: 24), timestampMs: 1) == nil)
+                precondition(OmiBleFirmwareDiagnostics.parse(Data(repeating: 0, count: 25), timestampMs: 1) == nil)
+                var diagnostic = Data(repeating: 0, count: 30)
+                diagnostic[0] = 1
+                diagnostic[1] = 0x11 // RESET_PIN | RESET_WATCHDOG
+                diagnostic[5] = 42
+                diagnostic[9] = 0x34
+                diagnostic[10] = 0x12
+                diagnostic[11] = 1
+                let parsed = OmiBleFirmwareDiagnostics.parse(diagnostic, timestampMs: 123)!
+                precondition(parsed["version"] as? Int == 1)
+                precondition(parsed["reset_cause_names"] as? [String] == ["RESET_PIN", "RESET_WATCHDOG"])
+                precondition(parsed["uptime_s"] as? UInt32 == 42)
+                precondition(parsed["battery_mv"] as? NSNumber == 0x1234)
+                precondition(parsed["charging"] as? NSNumber == true)
+                precondition((try? PropertyListSerialization.data(fromPropertyList: [parsed], format: .binary, options: 0)) != nil)
+                var unknown = Data(repeating: 0xff, count: 25)
+                unknown[0] = 1
+                let unknownParsed = OmiBleFirmwareDiagnostics.parse(unknown, timestampMs: 456)!
+                for key in ["reset_cause_raw", "battery_mv", "charging", "mic_overrun_count", "ble_tx_drop_count", "storage_error_count"] {
+                    precondition(unknownParsed[key] == nil)
+                }
+                precondition((try? PropertyListSerialization.data(fromPropertyList: [unknownParsed], format: .binary, options: 0)) != nil)
+                defaults.set([unknownParsed], forKey: "ble_diagnostics_firmware_test")
+                precondition((defaults.array(forKey: "ble_diagnostics_firmware_test") as? [[String: Any]])?.count == 1)
+                precondition(OmiBleRssiDiagnostics.trend(samples: [], nowMs: 100_000) == "gap")
+                precondition(OmiBleRssiDiagnostics.trend(samples: [(99_000, -55)], nowMs: 100_000) == "unknown")
+                let samples: [(ts: Int64, rssi: Int64)] = [(90_000, -55), (99_000, -72)]
+                precondition(OmiBleRssiDiagnostics.trend(samples: samples, nowMs: 100_000) == "fading")
+                precondition(OmiBleRssiDiagnostics.ageMs(samples: samples, nowMs: 100_000) == 1_000)
+                precondition(OmiBleRssiDiagnostics.ageMs(samples: [], nowMs: 100_000) == -1)
             }
         }
       SWIFT

@@ -5,15 +5,18 @@ from __future__ import annotations
 import asyncio
 import math
 import os
+import socket
 import threading
 import time
 from collections import deque
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Callable, cast
 
 import httpx
 import numpy as np
 
+from utils.executors import start_background_task
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.observability.fallback import record_fallback
 from utils.stt import streaming as st
@@ -25,9 +28,13 @@ from utils.stt.live_metrics import (
     WINDOW_DECODER_LOOPS,
     WINDOW_EMISSION_DROPS,
     WINDOW_FORCED_CUTS,
+    WINDOW_FIRST_TEXT,
     WINDOW_HEAD_RECOVERIES,
     WINDOW_LATENCY,
     WINDOW_POSTS,
+    WINDOW_PRESSURE_REFRESH,
+    WINDOW_PRESSURE_REFUSAL,
+    WINDOW_SESSION_OUTCOME,
 )
 from utils.stt.streaming import ParakeetConnectionError, ParakeetStreamingSocket, _pcm16_to_wav_bytes  # type: ignore[reportPrivateUsage]  # shared WAV encoder
 from utils.stt.window_anchor import (
@@ -219,6 +226,139 @@ class WindowAdmission:
 admission = WindowAdmission()
 
 
+class BatchPressure:
+    """Poll the shared GPU batch queue off the session-start path."""
+
+    REFRESH_SECONDS = 5.0
+    STALE_SECONDS = 15.0
+    MAX_REPLICAS = 8
+    MAX_PENDING = 4
+    MAX_OLDEST_SECONDS = 1.0
+
+    def __init__(self) -> None:
+        self._task: asyncio.Task[None] | None = None
+        self._observed_at = 0.0
+        self._busy = False
+
+    def start_from_env(self) -> None:
+        """Start one poller only on processes configured to serve window sessions."""
+        if os.getenv('STT_CONNECT_ORDER_FROM_CONFIG', 'false').lower() != 'true':
+            return
+        try:
+            allocation = float(os.getenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0'))
+            min_replicas = int(os.getenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2'))
+        except ValueError:
+            return
+        pool_host = os.getenv('PARAKEET_BATCH_PRESSURE_POOL_HOST', '')
+        if not math.isfinite(allocation) or allocation <= 0 or not pool_host or min_replicas < 1:
+            return
+        self.start(pool_host, min_replicas)
+
+    def start(self, pool_host: str, min_replicas: int) -> None:
+        loop = asyncio.get_running_loop()
+        if self._task is not None and not self._task.done():
+            if self._task.get_loop() is not loop:
+                raise RuntimeError('Batch pressure poller belongs to another running event loop')
+            return
+        self._observed_at = 0.0
+        self._busy = False
+        self._task = start_background_task(self._refresh_forever(pool_host, min_replicas), name='window_batch_pressure')
+
+    async def stop(self) -> None:
+        task = self._task
+        if task is not None:
+            if task.get_loop() is not asyncio.get_running_loop():
+                raise RuntimeError('Batch pressure poller must stop on its owning event loop')
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+        self._task = None
+        self._observed_at = 0.0
+        self._busy = False
+
+    async def _refresh_forever(self, pool_host: str, min_replicas: int) -> None:
+        while True:
+            try:
+                limits = httpx.Limits(
+                    max_connections=self.MAX_REPLICAS,
+                    max_keepalive_connections=self.MAX_REPLICAS,
+                    keepalive_expiry=30.0,
+                )
+                async with httpx.AsyncClient(timeout=1.0, trust_env=False, limits=limits) as client:
+                    while True:
+                        try:
+                            await self._refresh(pool_host, min_replicas, client)
+                        except Exception:
+                            # Even an unexpected refresh fault invalidates the sample, then retries.
+                            self._observed_at = 0.0
+                            WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable').inc()
+                        await asyncio.sleep(self.REFRESH_SECONDS)
+            except Exception:
+                # Client construction/closure can also fail; retry with a fresh client.
+                self._observed_at = 0.0
+                WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable').inc()
+                await asyncio.sleep(self.REFRESH_SECONDS)
+
+    def allows(self, pool_host: str, min_replicas: int) -> bool:
+        if not pool_host or min_replicas < 1:
+            WINDOW_PRESSURE_REFUSAL.labels(reason='unconfigured').inc()
+            return False
+        now = time.monotonic()
+        # Every listen process stands down when pool telemetry is missing/stale.
+        if self._observed_at <= 0:
+            WINDOW_PRESSURE_REFUSAL.labels(reason='missing').inc()
+            return False
+        if now - self._observed_at > self.STALE_SECONDS:
+            WINDOW_PRESSURE_REFUSAL.labels(reason='stale').inc()
+            return False
+        if self._busy:
+            WINDOW_PRESSURE_REFUSAL.labels(reason='pressure').inc()
+            return False
+        return True
+
+    async def _refresh(self, pool_host: str, min_replicas: int, client: httpx.AsyncClient) -> None:
+        try:
+            if not pool_host or min_replicas < 1:
+                raise ValueError('Parakeet batch pool discovery is not configured')
+            addresses = await asyncio.wait_for(
+                asyncio.get_running_loop().getaddrinfo(pool_host, 8080, family=socket.AF_INET, type=socket.SOCK_STREAM),
+                timeout=1.0,
+            )
+            ips = {address[4][0] for address in addresses}
+            if len(ips) > self.MAX_REPLICAS:
+                raise ValueError('Parakeet batch pool has more replicas than the poll cap')
+            if len(ips) < min_replicas:
+                raise ValueError('Parakeet batch pool has fewer ready replicas than expected')
+            responses = await asyncio.gather(*(client.get(f'http://{ip}:8080/batch/metrics') for ip in ips))
+            pending_total = 0.0
+            oldest_max = 0.0
+            for response in responses:
+                response.raise_for_status()
+                metrics = response.json()
+                pending = metrics['pending_requests']
+                oldest = metrics['oldest_pending_seconds']
+                if any(
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(value)
+                    or value < 0
+                    for value in (pending, oldest)
+                ):
+                    raise ValueError('Invalid Parakeet batch pressure sample')
+                pending_total += pending
+                oldest_max = max(oldest_max, oldest)
+            self._busy = pending_total >= self.MAX_PENDING or oldest_max >= self.MAX_OLDEST_SECONDS
+            self._observed_at = time.monotonic()
+            WINDOW_PRESSURE_REFRESH.labels(outcome='pressure' if self._busy else 'healthy').inc()
+        except Exception:
+            # A failed replica query invalidates the fleet sample; admission stays local and nonblocking.
+            self._observed_at = 0.0
+            WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable').inc()
+
+
+batch_pressure = BatchPressure()
+
+
 class WindowedParakeetSocket(ParakeetStreamingSocket):
     """One in-flight POST, sentence-anchored growing windows, no retries.
 
@@ -239,6 +379,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._release = release
         self._health_success: Callable[[], None] = lambda: None
         self._health_close: Callable[[], None] = lambda: None
+        self._first_speech_at: float | None = None
+        self._first_text_recorded = False
         self._wake = asyncio.Event()
         self._pause_requested = False
         self._idle_flushed = False
@@ -281,6 +423,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._dead = True
             self._dead_reason = 'cancelled' if task.cancelled() else 'connection_lost'
         self._health_close()
+        if self._first_speech_at is not None:
+            WINDOW_SESSION_OUTCOME.labels(outcome='text' if self._first_text_recorded else 'no_text').inc()
         self._release()
 
     def mark_speech(self) -> None:
@@ -300,6 +444,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._shed_capacity()
             return False
         if self._next_send_speech and data:
+            if self._first_speech_at is None:
+                self._first_speech_at = time.monotonic()
             end = self._received_bytes + len(data)
             if self._speech_spans and self._speech_spans[-1][1] == self._received_bytes:
                 start, _ = self._speech_spans.pop()
@@ -463,6 +609,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             WINDOW_FORCED_CUTS.inc()
         emitted, beyond_window = await self._materialize(decision.emit, job.pcm, job.start, job.duration)
         if emitted and not self._dead:
+            if not self._first_text_recorded and any(str(item.get('text', '')).strip() for item in emitted):
+                self._first_text_recorded = True
+                if self._first_speech_at is not None:
+                    WINDOW_FIRST_TEXT.observe(max(0.0, time.monotonic() - self._first_speech_at))
             # Snapshot the emission boundary in this socket's stream seconds
             # BEFORE the callback: downstream rewrites start/end in place onto
             # other clocks (the epoch translator projects wall-epoch seconds,
@@ -686,6 +836,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     return await get_stt_client().post(
                         self._url,
                         files={'file': ('audio.wav', wav, 'audio/wav')},
+                        headers={'X-Omi-STT-Surface': 'live-window'},
                     )
         except (TimeoutError, httpx.TimeoutException):
             if not acquired:
@@ -809,6 +960,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
 
 def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate: int) -> WindowedParakeetSocket:
+    try:
+        min_replicas = int(os.getenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2'))
+    except ValueError:
+        min_replicas = 0
+    if not batch_pressure.allows(
+        os.getenv('PARAKEET_BATCH_PRESSURE_POOL_HOST', ''),
+        min_replicas,
+    ):
+        WINDOW_ADMISSION.labels(outcome='batch_pressure').inc()
+        raise ParakeetConnectionError('capacity_full')
     release = admission.acquire()
     try:
         socket = WindowedParakeetSocket(callback, os.environ['HOSTED_PARAKEET_API_URL'], sample_rate, release)

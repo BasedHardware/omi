@@ -11258,20 +11258,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get openCall => 'ಕರೆ ತೆರೆಯಿರಿ';
 
   @override
-  String get secondDevice => 'ಎರಡನೇ ಸಾಧನ';
-
-  @override
-  String get pairSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಜೋಡಿಸಿ';
-
-  @override
-  String get pairSecondDeviceDescription =>
-      'ಫೋಟೋಗಳು ಮತ್ತು ಆಡಿಯೊ ಒಂದೇ ಸಂವಾದಕ್ಕೆ ಹೋಗಲು ನಿಮ್ಮ Omi ಜೊತೆಗೆ OmiGlass ಅನ್ನು ಸಂಪರ್ಕಿಸಿ.';
-
-  @override
-  String get forgetSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಮರೆತುಬಿಡಿ';
-
-  @override
-  String get captureRecoveryBanner => 'ಪೆಂಡೆಂಟ್‌ನ ಆಡಿಯೊ ಆ್ಯಪ್‌ಗೆ ತಲುಪುತ್ತಿಲ್ಲ — ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
+  String get captureRecoveryBanner => 'Omi ಆಡಿಯೊ ಕಳುಹಿಸುತ್ತಿಲ್ಲ — ಮರುಸಂಪರ್ಕಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11442,4 +11429,110 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'ಗೋಚರತೆ';
+
+  @override
+  String get appearanceSystem => 'ಸಿಸ್ಟಮ್';
+
+  @override
+  String get appearanceLight => 'ಬೆಳಕು';
+
+  @override
+  String get appearanceDark => 'ಕತ್ತಲೆ';
+
+  @override
+  String get chatDiscardRecording => 'ತ್ಯಜಿಸಿ';
+
+  @override
+  String get voiceQuestionNoSpeech => 'ಕೇಳಿಸಲಿಲ್ಲ — ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'ಜನರನ್ನು ಹುಡುಕಿ';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" ಅವರನ್ನು ಹೊಸ ವ್ಯಕ್ತಿಯಾಗಿ ಸೇರಿಸಿ';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'ಎಲ್ಲಾ ($count) ಜನರನ್ನು ತೋರಿಸಿ';
+  }
+
+  @override
+  String get secondDevice => 'ಎರಡನೇ ಸಾಧನ';
+
+  @override
+  String get pairSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಜೋಡಿಸಿ';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'ಫೋಟೋಗಳು ಮತ್ತು ಆಡಿಯೊ ಒಂದೇ ಸಂವಾದಕ್ಕೆ ಹೋಗಲು ನಿಮ್ಮ Omi ಜೊತೆಗೆ OmiGlass ಅನ್ನು ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
+  String get forgetSecondDevice => 'ಎರಡನೇ ಸಾಧನವನ್ನು ಮರೆತುಬಿಡಿ';
 }

@@ -1,18 +1,13 @@
 /// The moments at which a reading surface may ask the operating system for a
-/// review. The caller is responsible for calling [recordEngagement] only after
-/// valid reading content has loaded.
-enum AppReviewMoment {
-  dailySummaryRead,
-  conversationRead,
-}
+/// review. The caller admits only loaded, valid reading content.
+enum AppReviewMoment { dailySummaryRead, conversationRead }
 
 /// Closed decisions emitted by the review opportunity telemetry.
 enum AppReviewDecision {
   eligible,
   notIosOrAndroid,
   storageError,
-  notFamiliar,
-  migrationCooldown,
+  recentBadExperience,
   cooldown,
   budgetExhausted,
   versionAlreadyAttempted,
@@ -36,8 +31,7 @@ extension AppReviewDecisionName on AppReviewDecision {
         AppReviewDecision.eligible => 'eligible',
         AppReviewDecision.notIosOrAndroid => 'not_ios_or_android',
         AppReviewDecision.storageError => 'storage_error',
-        AppReviewDecision.notFamiliar => 'not_familiar',
-        AppReviewDecision.migrationCooldown => 'migration_cooldown',
+        AppReviewDecision.recentBadExperience => 'recent_bad_experience',
         AppReviewDecision.cooldown => 'cooldown',
         AppReviewDecision.budgetExhausted => 'budget_exhausted',
         AppReviewDecision.versionAlreadyAttempted => 'version_already_attempted',
@@ -56,9 +50,8 @@ extension AppReviewDecisionName on AppReviewDecision {
 /// limits prevent us from repeatedly entering that system prompt path and give
 /// us a stable surface for future telemetry-informed tuning.
 abstract final class AppReviewPolicy {
-  static const int minimumReadingDays = 3;
-  static const Duration minimumElapsedSinceFirstReading = Duration(days: 7);
-  static const Duration requestCooldown = Duration(days: 120);
+  static const Duration requestCooldown = Duration(days: 30);
+  static const Duration badExperienceWindow = Duration(days: 3);
   static const Duration rollingAttemptWindow = Duration(days: 365);
   static const int maximumAttemptsInWindow = 3;
 
@@ -67,19 +60,14 @@ abstract final class AppReviewPolicy {
   /// unbounded preference value if a future caller misbehaves.
   static const int maximumStoredAttempts = 64;
 
-  /// Distinct day keys are enough to establish familiarity; raw reading data
-  /// must never enter this state.
-  static const int maximumStoredReadingDays = 32;
-
   static AppReviewDecision evaluate({
     required String platform,
     required String appVersion,
     required DateTime now,
-    required DateTime? firstSeen,
-    required int distinctReadingDays,
     required Iterable<AppReviewAttempt> attempts,
-    required DateTime? migratedAt,
+    required Iterable<DateTime> badExperiences,
     required bool attemptedThisSession,
+    Duration cooldown = requestCooldown,
   }) {
     if (platform != 'ios' && platform != 'android') {
       return AppReviewDecision.notIosOrAndroid;
@@ -87,13 +75,8 @@ abstract final class AppReviewPolicy {
     if (attemptedThisSession) {
       return AppReviewDecision.sessionAlreadyAttempted;
     }
-    if (migratedAt != null && now.difference(migratedAt) < requestCooldown) {
-      return AppReviewDecision.migrationCooldown;
-    }
-    if (firstSeen == null ||
-        distinctReadingDays < minimumReadingDays ||
-        now.difference(firstSeen) < minimumElapsedSinceFirstReading) {
-      return AppReviewDecision.notFamiliar;
+    if (badExperiences.any((at) => now.difference(at) < badExperienceWindow)) {
+      return AppReviewDecision.recentBadExperience;
     }
     if (appVersion.isEmpty) {
       return AppReviewDecision.storageError;
@@ -110,7 +93,7 @@ abstract final class AppReviewPolicy {
     }
 
     final latestAttempt = attemptList.isEmpty ? null : attemptList.reduce((a, b) => a.at.isAfter(b.at) ? a : b);
-    if (latestAttempt != null && now.difference(latestAttempt.at) < requestCooldown) {
+    if (latestAttempt != null && now.difference(latestAttempt.at) < cooldown) {
       return AppReviewDecision.cooldown;
     }
     return AppReviewDecision.eligible;

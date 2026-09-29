@@ -144,7 +144,6 @@ class TestConversationsToSqlite(unittest.TestCase):
         self.assertEqual(loaded, 2)
         self.assertEqual(total, 2)
 
-
     def test_path_traversal_rejected(self):
         """Paths containing '..' must be rejected before any DB is opened."""
         json_file = self.dir_path / "conversations.json"
@@ -174,6 +173,48 @@ class TestConversationsToSqlite(unittest.TestCase):
             load(str(not_a_db), [str(json_file)])
 
         self.assertEqual(not_a_db.read_bytes(), original)
+
+    def test_single_conversation_object_import(self):
+        """A single exported conversation object must be loaded cleanly into SQLite."""
+        single_conv = {
+            "id": "conv_single",
+            "source": "phone_microphone",
+            "started_at": "2026-09-20T10:00:00Z",
+            "created_at": "2026-09-20T10:01:00Z",
+            "updated_at": "2026-09-20T10:05:00Z",
+            "structured": {
+                "title": "One-on-one sync",
+                "category": "work",
+            },
+        }
+        json_file = self.dir_path / "single_conversation.json"
+        json_file.write_text(json.dumps(single_conv), encoding="utf-8")
+
+        loaded, added, total = load(str(self.db_path), [str(json_file)])
+        self.assertEqual(loaded, 1)
+        self.assertEqual(added, 1)
+        self.assertEqual(total, 1)
+
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT title, category FROM conversations WHERE id = 'conv_single'")
+            row = cursor.fetchone()
+            self.assertEqual(row, ("One-on-one sync", "work"))
+        finally:
+            conn.close()
+
+    def test_empty_wrapper_import(self):
+        """Empty wrapper envelopes (conversations/items/data) must load 0 rows without raising ValueError."""
+        for key in ("conversations", "items", "data"):
+            db_path = self.dir_path / f"empty_{key}.sqlite"
+            json_file = self.dir_path / f"empty_{key}.json"
+            json_file.write_text(json.dumps({key: []}), encoding="utf-8")
+
+            loaded, added, total = load(str(db_path), [str(json_file)])
+            self.assertEqual(loaded, 0)
+            self.assertEqual(added, 0)
+            self.assertEqual(total, 0)
 
 
 if __name__ == "__main__":

@@ -22,18 +22,124 @@ final class MeetingScreenshotsTests: XCTestCase {
     var didSelect = false
     let store = MeetingScreenshotsStore(
       featureEnabled: { false },
-      selectCandidates: { _, _ in
+      selectCandidates: { _ in
         didSelect = true
         return MeetingFrameSelector.Outcome()
       })
 
     store.load(
       conversationID: "conversation",
-      start: Date(timeIntervalSince1970: 100),
-      end: Date(timeIntervalSince1970: 200))
+      selectionWindow: MeetingScreenshotSelectionWindow(
+        start: Date(timeIntervalSince1970: 100),
+        end: Date(timeIntervalSince1970: 200)))
 
     XCTAssertEqual(store.phase, .disabled)
     XCTAssertFalse(didSelect, "the disabled path must not touch Rewind or start adjudication")
+  }
+
+  @MainActor
+  func testUntrustedWindowFailsClosedBeforeFetchOrSelection() {
+    var didSelect = false
+    let store = MeetingScreenshotsStore(
+      selectCandidates: { _ in
+        didSelect = true
+        return MeetingFrameSelector.Outcome()
+      },
+      fetchPersistedSet: { _ in
+        XCTFail("an untrusted window must not fetch persisted screenshots")
+        return .empty
+      })
+
+    store.load(conversationID: "untrusted-\(UUID().uuidString)", selectionWindow: nil)
+
+    XCTAssertEqual(store.phase, .noCapture)
+    XCTAssertFalse(didSelect)
+  }
+
+  @MainActor
+  func testChangedSelectionFingerprintDoesNotReuseOldAdjudication() async {
+    var didSelect = false
+    let window = MeetingScreenshotSelectionWindow(
+      start: Date(timeIntervalSince1970: 100),
+      end: Date(timeIntervalSince1970: 200))
+    let oldSet = ConversationScreenFrameSet(
+      revision: 1,
+      banner: nil,
+      strip: [],
+      adjudicatedAt: Date(),
+      selectionFingerprint: "meeting-lifecycle-v0:0:300000")
+    let store = MeetingScreenshotsStore(
+      selectCandidates: { _ in
+        didSelect = true
+        return MeetingFrameSelector.Outcome()
+      },
+      fetchPersistedSet: { _ in oldSet })
+
+    store.load(
+      conversationID: "changed-policy-\(UUID().uuidString)",
+      selectionWindow: window)
+    for _ in 0..<100 where !didSelect {
+      await Task.yield()
+    }
+
+    XCTAssertTrue(didSelect, "an adjudication from a different window policy must be re-selected")
+    XCTAssertEqual(store.phase, .noCapture)
+  }
+
+  func testTrustedTranscriptWindowRejectsPoisonedLifecycleFrames() async throws {
+    let lifecycleStart = Date(timeIntervalSince1970: 10_000)
+    let speechStart = 14 * 60 + 39.0
+    let speechEnd = 16 * 60 + 34.0
+
+    // A rollover at t0+12m can leave legacy transcript offsets restarted at zero while the
+    // lifecycle still points at t0. With no independent origin, that disagreement fails closed.
+    XCTAssertNil(
+      MeetingScreenshotSelectionWindow.resolve(
+        startedAt: lifecycleStart,
+        finishedAt: lifecycleStart.addingTimeInterval(speechEnd),
+        segmentSpans: [(0, 109)],
+        hasTrustedOrigin: false))
+
+    let trusted = MeetingScreenshotSelectionWindow.resolve(
+      startedAt: lifecycleStart,
+      finishedAt: lifecycleStart.addingTimeInterval(speechEnd),
+      segmentSpans: [(speechStart, speechEnd)],
+      hasTrustedOrigin: true)
+    let window = try XCTUnwrap(trusted)
+    let frames = [
+      candidate(id: 1, timestamp: lifecycleStart.addingTimeInterval(60), windowTitle: "unrelated"),
+      candidate(id: 2, timestamp: lifecycleStart.addingTimeInterval(15 * 60), windowTitle: "speech"),
+    ]
+
+    let outcome = await MeetingFrameSelector.selectCandidates(
+      frames,
+      from: window.start,
+      to: window.end,
+      perceptualHash: { _ in nil })
+
+    XCTAssertEqual(window.start, lifecycleStart.addingTimeInterval(speechStart))
+    XCTAssertEqual(window.end, lifecycleStart.addingTimeInterval(speechEnd))
+    XCTAssertEqual(outcome.framesInWindow, 1)
+    XCTAssertEqual(outcome.candidates.map(\.id), [2])
+  }
+
+  func testLegacyTranscriptWindowAllowsSTTLatencyUpToSixtySeconds() throws {
+    let lifecycleStart = Date(timeIntervalSince1970: 20_000)
+    let transcriptEnd = 10 * 60.0
+
+    let withinTolerance = MeetingScreenshotSelectionWindow.resolve(
+      startedAt: lifecycleStart,
+      finishedAt: lifecycleStart.addingTimeInterval(transcriptEnd - 60),
+      segmentSpans: [(0, transcriptEnd)],
+      hasTrustedOrigin: false)
+    XCTAssertEqual(withinTolerance?.end, lifecycleStart.addingTimeInterval(transcriptEnd))
+
+    let outsideTolerance = MeetingScreenshotSelectionWindow.resolve(
+      startedAt: lifecycleStart,
+      finishedAt: lifecycleStart.addingTimeInterval(transcriptEnd - 61),
+      segmentSpans: [(0, transcriptEnd)],
+      hasTrustedOrigin: false)
+    XCTAssertNil(outsideTolerance)
   }
 
   func testSelectorWindowIsInclusiveAndRejectsInvalidWindows() async {

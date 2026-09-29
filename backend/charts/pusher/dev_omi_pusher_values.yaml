@@ -200,6 +200,12 @@ env:
     value: "true"
   - name: MEMORY_OWNER_JEV_FLIP_ENABLED
     value: "true"
+  - name: CAPTURE_JEV_SHADOW_ENABLED
+    value: "true"
+  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: CAPTURE_JEV_SHADOW_PERCENT
+    value: "0"
   - name: MEMORY_BELIEF_MODEL_ENABLED
     value: "true"
   - name: MEMORY_BELIEF_AUTOMATION_PAUSED

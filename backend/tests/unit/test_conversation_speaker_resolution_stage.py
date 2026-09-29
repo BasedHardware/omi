@@ -17,6 +17,11 @@ STARTED = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
 VOICES = np.eye(8, 64)
 
 
+@pytest.fixture(autouse=True)
+def empty_manual_receipt(monkeypatch):
+    monkeypatch.setattr(stage.conversations_db, 'get_manual_speaker_receipt', lambda uid, cid: {})
+
+
 def _conversation(plan, *, seconds=4.0, pcs=True, scopes=None):
     segments = [
         TranscriptSegment(
@@ -118,6 +123,20 @@ def test_fragmented_conversation_is_rewritten_to_one_id_per_voice(env, monkeypat
     assert sorted(resolution.participant_speaker_ids) == sorted(next(iter(i)) for i in ids_by_voice.values())
 
 
+def test_two_sync_batches_with_no_audio_withdraw_automatic_owner_claims():
+    conversation = _conversation([0, 1], pcs=False, scopes=['sync:batch-a', 'sync:batch-b'])
+    for segment in conversation.transcript_segments:
+        segment.is_user = True
+        segment.speaker_identity_status = 'user'
+        segment.speaker_match_source = 'sync_embedding'
+
+    stage.resolve_speakers_for_processing('u', conversation)
+
+    assert conversation.speaker_resolution.status == 'unavailable'
+    assert all(not segment.is_user for segment in conversation.transcript_segments)
+    assert all(segment.speaker_identity_status == 'ambiguous' for segment in conversation.transcript_segments)
+
+
 def test_cache_means_a_growing_conversation_embeds_each_segment_once(env, monkeypatch):
     store, diarizer = env
     plan = [0, 1] * 6
@@ -161,6 +180,62 @@ def test_receipt_keeps_the_labeled_id_on_the_whole_voice(env, monkeypatch):
     stage.resolve_speakers_for_processing('u1', conversation)
 
     assert {s.speaker_id for s, v in zip(conversation.transcript_segments, plan) if v == 0} == {4}
+
+
+def test_manual_name_reaches_prompt_after_earlier_unlabeled_fragments_join_its_voice(env, monkeypatch):
+    plan = [0] * 6
+    _install_audio(monkeypatch, plan)
+    receipt = {'speakers': {'4': {'generation': 1, 'person_id': 'nick', 'is_user': False}}}
+    monkeypatch.setattr(stage.conversations_db, 'get_manual_speaker_receipt', lambda uid, cid: receipt)
+    monkeypatch.setattr(stage.users_db, 'get_user_speaker_embedding', lambda uid: list(VOICES[0]))
+    conversation = _conversation(plan)
+
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert {segment.speaker_id for segment in conversation.transcript_segments} == {4}
+    assert all(segment.person_id == 'nick' and not segment.is_user for segment in conversation.transcript_segments)
+    assert all(segment.speaker_match_source is None for segment in conversation.transcript_segments)
+
+
+def test_manual_receipt_is_applied_before_prompt_without_audio_or_resolution(env, monkeypatch):
+    receipt = {'speakers': {'0': {'generation': 2, 'person_id': 'nick', 'is_user': False}}}
+    monkeypatch.setattr(stage.conversations_db, 'get_manual_speaker_receipt', lambda uid, cid: receipt)
+    conversation = _conversation([0], pcs=False)
+    conversation.transcript_segments[0].is_user = True
+    conversation.transcript_segments[0].speaker_match_source = 'sync_embedding'
+
+    assert stage.resolve_speakers_for_processing('u1', conversation) is True
+
+    segment = conversation.transcript_segments[0]
+    assert segment.person_id == 'nick'
+    assert not segment.is_user
+    assert segment.speaker_match_source is None
+
+
+def test_receipt_acknowledgement_requires_a_successful_read_and_application(env, monkeypatch):
+    conversation = _conversation([0], pcs=False)
+    assert stage.resolve_speakers_for_processing('u1', conversation) is True  # Confirmed empty.
+
+    def fail_read(uid, conversation_id):
+        raise RuntimeError('receipt store unavailable')
+
+    monkeypatch.setattr(stage.conversations_db, 'get_manual_speaker_receipt', fail_read)
+    assert stage.resolve_speakers_for_processing('u1', conversation) is False
+
+    monkeypatch.setattr(
+        stage.conversations_db,
+        'get_manual_speaker_receipt',
+        lambda uid, cid: {'speakers': {'0': {'generation': 1, 'person_id': 'nick', 'is_user': False}}},
+    )
+    assert stage.resolve_speakers_for_processing('u1', conversation) is True
+    assert conversation.transcript_segments[0].person_id == 'nick'
+
+    monkeypatch.setattr(
+        stage.conversations_db,
+        'get_manual_speaker_receipt',
+        lambda uid, cid: {'segments': {'retired-segment': {'generation': 1, 'person_id': 'lost', 'is_user': False}}},
+    )
+    assert stage.resolve_speakers_for_processing('u1', conversation) is False
 
 
 def test_without_stored_audio_fragmented_ids_are_marked_uncountable(env, monkeypatch):
@@ -283,6 +358,19 @@ def test_live_scopes_are_not_resolved_until_their_audio_timeline_is_trusted(env,
     assert [s.speaker_id for s in conversation.transcript_segments] == [0, 1, 2, 3]
 
 
+def test_legacy_sync_donor_scope_does_not_block_conversation_resolution(env, monkeypatch):
+    plan = [0, 1] * 6
+    _install_audio(monkeypatch, plan)
+    scopes = [f'sync:job-{i}' for i in range(len(plan))]
+    scopes[0] = 'legacy-conversation:donor:0'
+    conversation = _conversation(plan, scopes=scopes)
+
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert conversation.speaker_resolution.status == 'resolved'
+    assert len({s.speaker_id for s in conversation.transcript_segments}) == 2
+
+
 def test_a_resolved_conversation_that_grew_by_sync_resolves_again(env, monkeypatch):
     plan = [0, 1] * 6
     _install_audio(monkeypatch, plan)
@@ -316,3 +404,27 @@ def test_a_run_cut_short_reports_uncountable_then_resumes_to_resolved(env, monke
     assert diarizer.calls == len(plan)
     assert conversation.speaker_resolution.status == 'resolved'
     assert len({s.speaker_id for s in conversation.transcript_segments}) == 2
+
+
+@pytest.mark.parametrize('distances,expected', [((0.40, 0.45), []), ((0.40, 0.63), [0]), ((0.631, 0.645), [])])
+def test_resolution_replaces_capture_owner_guesses_with_joint_evidence(env, monkeypatch, distances, expected):
+    plan = [0, 1] * 10
+    _install_audio(monkeypatch, plan)
+    conversation = _conversation(plan)
+    for segment in conversation.transcript_segments:
+        segment.is_user = True
+        segment.speaker_identity_status = 'user'
+        segment.speaker_match_source = 'sync_embedding'
+    vectors = np.zeros_like(VOICES)
+    for i, d in enumerate(distances):
+        vectors[i, :2] = [1 - d, (-1) ** i * np.sqrt(1 - (1 - d) ** 2)]
+    monkeypatch.setattr(__import__(__name__, fromlist=['VOICES']), 'VOICES', vectors)
+    monkeypatch.setattr(stage.users_db, 'get_user_speaker_embedding', lambda uid: np.eye(1, 64)[0].tolist())
+    stage.resolve_speakers_for_processing('u1', conversation)
+    assert len({s.speaker_id for s in conversation.transcript_segments}) == 2
+    assert {v for s, v in zip(conversation.transcript_segments, plan) if s.is_user} == set(expected)
+    if distances == (0.40, 0.45):
+        assert all(s.speaker_identity_status == 'ambiguous' for s in conversation.transcript_segments)
+    # Persistence/client projection retains unnamed voices and the evidence state.
+    restored = Conversation(**conversation.model_dump())
+    assert [s.is_user for s in restored.transcript_segments] == [s.is_user for s in conversation.transcript_segments]

@@ -33,6 +33,25 @@ RULE_UIDS = (
     "omi-journey-scrape-missing",
     "omi-journey-capture-fail",
 )
+LIVE_STT_IMPORT_UIDS = (
+    "omi-stt-account-state",
+    "omi-stt-window-overflow",
+    "omi-stt-window-saturated",
+    "omi-stt-window-post-errors",
+    "omi-stt-leg-error-rate",
+    "omi-live-transcription-success-low",
+    "omi-soniox-rate-limited",
+    "omi-stt-single-leg-risk",
+    "omi-soniox-budget-exhausted",
+    "omi-modulate-failing-soniox",
+    "omi-stt-window-no-text",
+    "omi-stt-window-first-text",
+    "omi-stt-batch-queue-depth",
+    "omi-stt-batch-queue-latency",
+    "omi-stt-sync-prerecorded-errors",
+)
+LIVE_STT_PENDING_UIDS = ("omi-soniox-runway-70", "omi-soniox-runway-90")
+TELEGRAM_RECEIVER = "Omi - Services Alerting (Telegram)"
 REQUIRED_METRICS = {
     "omi_capture_finalization_failures_total",
     "omi_journey_accepted_total",
@@ -94,6 +113,79 @@ def _request_json(base_url: str, path: str, token: str, *, size_limit: int = SIN
         return json.loads(body)
     except json.JSONDecodeError as exc:
         raise AlertRouteError(f"Grafana API returned invalid JSON for {path}") from exc
+
+
+def _write_rule(base_url: str, uid: str, rule: dict[str, Any], token: str, *, exists: bool) -> None:
+    method = "PUT" if exists else "POST"
+    path = f"{ALERT_RULE_LIST_PATH}/{urllib.parse.quote(uid, safe='')}" if exists else ALERT_RULE_LIST_PATH
+    request = urllib.request.Request(
+        base_url.rstrip("/") + path,
+        data=json.dumps(rule, separators=(",", ":")).encode("utf-8"),
+        method=method,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            response.read(SINGLE_RULE_SIZE_LIMIT + 1)
+    except urllib.error.HTTPError as exc:
+        raise AlertRouteError(f"Grafana API request failed for {path}: HTTP {exc.code} {exc.reason}") from exc
+    except urllib.error.URLError as exc:
+        raise AlertRouteError(f"Grafana API request failed for {path}: URLError {exc.reason}") from exc
+    except OSError as exc:
+        raise AlertRouteError(f"Grafana API request failed for {path}: {type(exc).__name__}") from exc
+
+
+def load_live_stt_import_rules() -> dict[str, dict[str, Any]]:
+    loaded: object = json.loads((ALERT_SOURCES / "live-stt.json").read_text(encoding="utf-8"))
+    if not isinstance(loaded, list):
+        raise AlertRouteError("committed live-STT alert file is not a list")
+    by_uid: dict[str, dict[str, Any]] = {}
+    for item in loaded:
+        if not isinstance(item, dict):
+            raise AlertRouteError("committed live-STT alert file contains a non-object rule")
+        uid = item.get("uid")
+        if not isinstance(uid, str) or not uid or uid in by_uid:
+            raise AlertRouteError("committed live-STT alert file contains a missing or duplicate uid")
+        by_uid[uid] = item
+    if set(by_uid) != set(LIVE_STT_IMPORT_UIDS) | set(LIVE_STT_PENDING_UIDS):
+        raise AlertRouteError("committed live-STT rules do not match the import allowlist and pending set")
+    rules = {uid: by_uid[uid] for uid in LIVE_STT_IMPORT_UIDS}
+    for uid, rule in rules.items():
+        labels = rule.get("labels")
+        if not isinstance(labels, dict) or labels.get("alert_identity") != uid:
+            raise AlertRouteError(f"live-STT alert {uid} has an invalid alert_identity label")
+        if _receiver(rule) != TELEGRAM_RECEIVER:
+            raise AlertRouteError(f"live-STT alert {uid} does not route to the verified Telegram receiver")
+    return rules
+
+
+def _has_telegram_receiver(contact_points: Any, receiver: str) -> bool:
+    return isinstance(contact_points, list) and any(
+        isinstance(point, dict)
+        and point.get("name") == receiver
+        and str(point.get("type", "")).lower() == "telegram"
+        and point.get("disableResolveMessage") is not True
+        for point in contact_points
+    )
+
+
+def _run_live_stt_import(grafana_url: str, token: str) -> list[str]:
+    rules = load_live_stt_import_rules()
+    live = index_live_rules(
+        _request_json(grafana_url, ALERT_RULE_LIST_PATH, token, size_limit=FLEET_LIST_SIZE_LIMIT),
+        path=ALERT_RULE_LIST_PATH,
+    )
+    contacts = _request_json(grafana_url, "/api/v1/provisioning/contact-points", token)
+    if not _has_telegram_receiver(contacts, TELEGRAM_RECEIVER):
+        return ["verified Telegram alert receiver is missing or resolve notifications are disabled"]
+    for uid, rule in rules.items():
+        _write_rule(grafana_url, uid, rule, token, exists=uid in live)
+        print(f"UPSERTED live-STT alert {uid}")
+    return []
 
 
 def _committed_rules() -> dict[str, dict[str, Any]]:
@@ -378,15 +470,22 @@ def _run_pusher_gate(grafana_url: str, token: str, phase: str, attempts: int) ->
     return failures
 
 
-def _run_fleet_coverage(grafana_url: str, token: str, attempts: int, fail_on: str) -> tuple[list[str], list[str]]:
+def _run_fleet_coverage(
+    grafana_url: str, token: str, attempts: int, fail_on: str, *, alert_set: str = "all"
+) -> tuple[list[str], list[str]]:
     committed = load_all_committed_rules()
     gated_uids = load_gated_uids(committed)
+    if alert_set == "live-stt":
+        committed = {uid: committed[uid] for uid in LIVE_STT_IMPORT_UIDS}
+        gated_uids = tuple(uid for uid in gated_uids if uid in committed)
     coverage: FleetCoverage | None = None
     last_error: str | None = None
     for attempt in range(attempts):
         try:
             payload = _request_json(grafana_url, ALERT_RULE_LIST_PATH, token, size_limit=FLEET_LIST_SIZE_LIMIT)
             live_by_uid = index_live_rules(payload, path=ALERT_RULE_LIST_PATH)
+            if alert_set == "live-stt":
+                live_by_uid = {uid: rule for uid, rule in live_by_uid.items() if uid in committed}
             coverage = classify_fleet_coverage(committed, live_by_uid)
             last_error = None
             break
@@ -406,7 +505,8 @@ def main() -> int:
     parser.add_argument("--grafana-url", required=True)
     parser.add_argument("--token-file", type=Path, required=True)
     parser.add_argument("--phase", choices=("prepublish", "postrollout"))
-    parser.add_argument("--mode", choices=("pusher", "fleet"), default="pusher")
+    parser.add_argument("--mode", choices=("pusher", "fleet", "import"), default="pusher")
+    parser.add_argument("--alert-set", choices=("all", "live-stt"), default="all")
     parser.add_argument("--fail-on", choices=("none", "gated", "all"))
     parser.add_argument("--attempts", type=int, default=1)
     args = parser.parse_args()
@@ -417,6 +517,12 @@ def main() -> int:
         print("FAIL: pusher mode requires --phase")
         return 1
     if args.mode == "pusher" and args.fail_on is not None:
+        print("FAIL: --fail-on is only valid with --mode fleet")
+        return 1
+    if args.mode != "fleet" and args.alert_set != "all":
+        print("FAIL: --alert-set is only valid with --mode fleet")
+        return 1
+    if args.mode == "import" and args.fail_on is not None:
         print("FAIL: --fail-on is only valid with --mode fleet")
         return 1
     fail_on = "none" if args.mode == "fleet" and args.fail_on is None else args.fail_on
@@ -430,10 +536,14 @@ def main() -> int:
             if phase is None:
                 raise AlertRouteError("pusher mode requires --phase")
             failures = _run_pusher_gate(args.grafana_url, token, phase, args.attempts)
+        elif args.mode == "import":
+            failures = _run_live_stt_import(args.grafana_url, token)
         else:
             if fail_on is None:
                 raise AlertRouteError("fleet mode requires --fail-on none, gated, or all")
-            failures, report_lines = _run_fleet_coverage(args.grafana_url, token, args.attempts, fail_on)
+            failures, report_lines = _run_fleet_coverage(
+                args.grafana_url, token, args.attempts, fail_on, alert_set=args.alert_set
+            )
     except (AlertRouteError, OSError, json.JSONDecodeError) as exc:
         failures = [str(exc)]
     for line in report_lines:
@@ -446,6 +556,8 @@ def main() -> int:
         print(
             "OK: live finalization outcome rules, telemetry sources, datasource, and Telegram routes match the contract."
         )
+    elif args.mode == "import":
+        print("OK: allowlisted live-STT alert rules were upserted and Telegram routing was verified.")
     else:
         print("OK: fleet Grafana coverage report completed.")
     return 0

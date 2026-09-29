@@ -49,15 +49,24 @@ export function AddTeamMemberDialog({
         body: JSON.stringify({ email: normalizedEmail }),
       });
 
+      const data = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
         throw new Error(data.error || "Failed to add person");
       }
 
       await onMemberAdded();
       toast({
-        title: "Person added",
-        description: `${normalizedEmail} now has admin dashboard access.`,
+        title:
+          data.emailSent === false
+            ? "Added, but the invite email failed to send"
+            : "Person added",
+        description:
+          data.emailSent === false
+            ? `${normalizedEmail} now has admin dashboard access. Tell them to sign in with Google using this email.`
+            : data.provisioned
+            ? `${normalizedEmail} now has admin dashboard access. We emailed them to sign in with Google using this email.`
+            : `${normalizedEmail} now has admin dashboard access. We emailed them the sign-in details.`,
       });
       close();
     } catch (error) {
@@ -86,8 +95,8 @@ export function AddTeamMemberDialog({
           <DialogHeader>
             <DialogTitle>Add new person</DialogTitle>
             <DialogDescription>
-              Grant admin dashboard access to an existing Omi user. They must
-              have signed in to Omi at least once.
+              Grant admin dashboard access by email. They sign in with Google
+              using this address. An Omi account is not required first.
             </DialogDescription>
           </DialogHeader>
 

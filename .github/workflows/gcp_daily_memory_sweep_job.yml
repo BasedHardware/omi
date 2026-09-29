@@ -204,18 +204,22 @@ jobs:
             --image "$ledger_image"
 
       - name: Recheck admitted main before image publication
+        id: superseded_before_image_publication
         env:
           ADMITTED_SHA: ${{ steps.admitted_source.outputs.admitted_sha }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           current_main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
-          [[ "$current_main_sha" == "$ADMITTED_SHA" ]] || {
-            echo "ERROR: main advanced after source admission; refusing stale image publication." >&2
-            exit 1
-          }
+          if [[ "$current_main_sha" != "$ADMITTED_SHA" ]]; then
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Superseded::main advanced to ${current_main_sha}; a newer run deploys it"
+            echo "Superseded: main advanced to ${current_main_sha}; a newer run deploys it" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
       - name: Push verified runtime image
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' }}
         run: |
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
@@ -223,6 +227,7 @@ jobs:
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.LEDGER_DRAIN_SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
 
       - name: Probe memory L2 gateway lane from the Cloud Run VPC
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' }}
         run: |
           bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
             --project "${{ vars.GCP_PROJECT_ID }}" \
@@ -236,18 +241,23 @@ jobs:
             --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Recheck admitted main before Cloud Run deployment
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' }}
+        id: superseded_before_deployment
         env:
           ADMITTED_SHA: ${{ steps.admitted_source.outputs.admitted_sha }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           current_main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
-          [[ "$current_main_sha" == "$ADMITTED_SHA" ]] || {
-            echo "ERROR: main advanced after image publication; refusing stale Cloud Run deployment." >&2
-            exit 1
-          }
+          if [[ "$current_main_sha" != "$ADMITTED_SHA" ]]; then
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Superseded::main advanced to ${current_main_sha}; a newer run deploys it"
+            echo "Superseded: main advanced to ${current_main_sha}; a newer run deploys it" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
       - name: Render maintenance runtime env from the gated gateway endpoint
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         id: runtime-env
         env:
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
@@ -258,10 +268,12 @@ jobs:
           python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} --job knowledge-ledger-drain-job >> "$GITHUB_OUTPUT"
 
       - name: Validate backend runtime env before deploy
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows
 
       - name: Deploy to Cloud Run
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v3
         with:
@@ -274,6 +286,7 @@ jobs:
           secrets: ${{ steps.runtime-env.outputs.daily_memory_sweep_job_secrets }}
 
       - name: Deploy independent ledger drain to Cloud Run
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         id: deploy-ledger-drain
         uses: google-github-actions/deploy-cloudrun@v3
         with:
@@ -286,6 +299,7 @@ jobs:
           secrets: ${{ steps.runtime-env.outputs.knowledge_ledger_drain_job_secrets }}
 
       - name: Authorize ledger drain Scheduler invocations
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         run: |
           gcloud run jobs add-iam-policy-binding "$LEDGER_DRAIN_SERVICE" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
@@ -294,53 +308,28 @@ jobs:
             --role="roles/run.invoker" \
             --quiet
 
-      - name: Provision hourly Scheduler trigger from admitted source
+      - name: Reconcile declared Scheduler triggers
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
+        env:
+          SCHEDULER_ENVIRONMENT: ${{ vars.ENV == 'prod' && 'prod' || 'dev' }}
         run: |
-          python3 backend/scripts/provision_daily_memory_sweep_scheduler.py \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" \
-            --scheduler-job "$SCHEDULER_JOB" \
-            --cloud-run-job "$SERVICE" \
-            --service-account "$SCHEDULER_SERVICE_ACCOUNT"
-          python3 backend/scripts/provision_daily_memory_sweep_scheduler.py \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" \
-            --scheduler-job "$LEDGER_DRAIN_SCHEDULER_JOB" \
-            --cloud-run-job "$LEDGER_DRAIN_SERVICE" \
-            --service-account "$SCHEDULER_SERVICE_ACCOUNT"
-
-      - name: Validate hourly Scheduler trigger
-        run: |
-          scheduler_state_file=$(mktemp)
-          ledger_scheduler_state_file=$(mktemp)
-          trap 'rm -f "$scheduler_state_file" "$ledger_scheduler_state_file"' EXIT
-          gcloud scheduler jobs describe "$SCHEDULER_JOB" \
-            --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" \
-            --format=json > "$scheduler_state_file"
-          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
-            --state-file "$scheduler_state_file" \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" \
-            --scheduler-job "$SCHEDULER_JOB" \
-            --cloud-run-job "$SERVICE"
-          gcloud scheduler jobs describe "$LEDGER_DRAIN_SCHEDULER_JOB" \
-            --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" \
-            --format=json > "$ledger_scheduler_state_file"
-          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
-            --state-file "$ledger_scheduler_state_file" \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" \
-            --scheduler-job "$LEDGER_DRAIN_SCHEDULER_JOB" \
-            --cloud-run-job "$LEDGER_DRAIN_SERVICE"
+          python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+          if [[ "$SCHEDULER_ENVIRONMENT" == dev ]]; then
+            python3 backend/scripts/scheduler_reconcile.py \
+              --environment dev --project "${{ vars.GCP_PROJECT_ID }}" \
+              --apply --jobs "$SCHEDULER_JOB" "$LEDGER_DRAIN_SCHEDULER_JOB"
+            python3 backend/scripts/scheduler_reconcile.py \
+              --environment dev --project "${{ vars.GCP_PROJECT_ID }}" --check \
+              --jobs "$SCHEDULER_JOB" "$LEDGER_DRAIN_SCHEDULER_JOB"
+          fi
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         run: echo ${{ steps.deploy.outputs.url }}
 
       - name: Generate deployment summary
-        if: always() && github.event.inputs.environment == 'prod'
+        if: ${{ (always() && github.event.inputs.environment == 'prod') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         uses: ./.github/actions/deployment-summary
         with:
           environment: ${{ github.event.inputs.environment }}
@@ -349,7 +338,7 @@ jobs:
           service: ${{ env.SERVICE }}
 
       - name: Notify deployment status on Telegram
-        if: always() && github.event.inputs.environment == 'prod'
+        if: ${{ (always() && github.event.inputs.environment == 'prod') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         uses: ./.github/actions/deployment-notifier
         with:
           environment: ${{ github.event.inputs.environment }}

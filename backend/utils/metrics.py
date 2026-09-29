@@ -4,13 +4,25 @@ import threading
 from typing import Any
 
 from fastapi import Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest, start_http_server
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    disable_created_metrics,
+    generate_latest,
+    start_http_server,
+)
 
-from utils.journey_metrics_contract import (
-    CLIENT_JOURNEY_ISSUE_CLASSES,
-    CLIENT_JOURNEY_OUTCOMES,
-    CLIENT_JOURNEYS,
-    CLIENT_KINDS,
+# All backend, backend-listen, and pusher metrics endpoints import this module.
+# The pinned prometheus_client (0.21.1) otherwise exports a second _created
+# series for every Counter and Histogram child, including idle zero children.
+disable_created_metrics()
+
+OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
+    'omi_listen_stt_unavailable_total',
+    'Listen sessions rejected before STT setup because providers or reconnect budget are unavailable',
+    ['reason'],
 )
 
 OMI_PRODUCT_EVENT_TOTAL = Counter(
@@ -105,6 +117,12 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
 # conversation id, or any transcript/audio content. mode=legacy|v2;
 # segments outcome=mapped|rejected|recovered|unplaced|straddled|late_owner_dropped;
 # coverage outcome is the 3.4 vocabulary covered|missing|pending_upload|no_audio|unsupported.
+OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL = Counter(
+    'omi_capture_evidence_envelopes_total',
+    'S1 metadata attempts on existing writes, by fixed ingest path and coverage status.',
+    ['path', 'status'],
+)
+
 OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL = Counter(
     'omi_audio_timeline_segments_total',
     'Live transcript segments by audio-timeline mapping outcome',
@@ -209,12 +227,6 @@ OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL = Counter(
 )
 for _mode in ('legacy', 'v2'):
     for _provider in AUDIO_TIMELINE_PROVIDERS:
-        for _send_path in AUDIO_TIMELINE_SEND_PATHS:
-            OMI_AUDIO_TIMELINE_MAPPED_TOTAL.labels(mode=_mode, provider=_provider, send_path=_send_path)
-            for _reason in AUDIO_TIMELINE_REJECT_REASONS:
-                OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(
-                    mode=_mode, reason=_reason, provider=_provider, send_path=_send_path
-                )
         OMI_AUDIO_TIMELINE_CALLBACK_ERRORS_TOTAL.labels(mode=_mode, provider=_provider)
     for _outcome in (
         'mapped',
@@ -414,7 +426,7 @@ def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str
 # decision, never a user; every non-success outcome means the caller kept its
 # safe default.
 JEV_DECISION_LABELS = {
-    'lane': frozenset({'conversation_relevance', 'memory_owner'}),
+    'lane': frozenset({'conversation_relevance', 'memory_owner', 'capture_same_scene', 'capture_resummary'}),
     'outcome': frozenset({'success', 'unconfigured', 'timeout', 'transport_error', 'http_error', 'malformed'}),
 }
 
@@ -430,6 +442,33 @@ JEV_DECISION_LATENCY_SECONDS = Histogram(
     'Wall time of one Jev question including its single retry, by product lane and outcome.',
     ['lane', 'outcome'],
     buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5, 7.5),
+)
+
+# Static labels only. The durable, per-pair evidence lives in structured logs.
+CAPTURE_JEV_SHADOW_CALLS = Counter(
+    'omi_capture_jev_shadow_calls_total', 'Completed capture shadow questions.', ['decision', 'outcome']
+)
+CAPTURE_JEV_SHADOW_SKIPS = Counter(
+    'omi_capture_jev_shadow_skips_total',
+    'Capture shadow questions skipped before a model answer.',
+    ['decision', 'reason'],
+)
+CAPTURE_JEV_SHADOW_LATENCY = Histogram(
+    'omi_capture_jev_shadow_latency_seconds',
+    'End-to-end shadow question latency.',
+    ['decision'],
+    buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5),
+)
+CAPTURE_JEV_SHADOW_SCORE = Histogram(
+    'omi_capture_jev_shadow_score',
+    'Jev noul score for capture questions.',
+    ['decision'],
+    buckets=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.675, 0.7, 0.725, 0.8, 0.9, 1),
+)
+CAPTURE_JEV_SHADOW_AGREEMENT = Counter(
+    'omi_capture_jev_shadow_agreement_total',
+    'Shipped rule versus Jev same-scene matrix.',
+    ['category', 'agreement'],
 )
 
 # Capture-time owner re-attribution (process_conversation, MEMORY_OWNER_JEV_FLIP_ENABLED).
@@ -468,7 +507,8 @@ def record_memory_owner_jev(outcome: str) -> None:
 OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_client_journey_accepted_total',
     (
-        'Accepted client-segmented product journeys by bounded journey, client kind, and app build. '
+        'Accepted client-segmented product journeys by bounded journey and client kind. '
+        'app_build is a constant compatibility label, not a client-supplied build. '
         'Counters are per-pod; alert queries must sum() across job=backend-listen-metrics.'
     ),
     ['journey', 'client_kind', 'app_build'],
@@ -499,29 +539,9 @@ OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
 # This is a separate, versioned contract from the legacy omi_journey_* family
 # above. Keep client_kind off the histogram: its 16 bucket series per child
 # would multiply the most expensive metric without helping outcome segmentation.
-# Initialize the complete bounded product so healthy-but-idle exporters expose
-# zeros instead of making an idle process indistinguishable from a missing one.
-# Zero-initialize journey×client_kind with app_build=unknown only. Expanding
-# the app_build axis would multiply series by every historical client build.
-for _journey in CLIENT_JOURNEYS:
-    for _client_kind in CLIENT_KINDS:
-        OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey, client_kind=_client_kind, app_build='unknown')
-        for _outcome in CLIENT_JOURNEY_OUTCOMES:
-            OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
-                journey=_journey,
-                client_kind=_client_kind,
-                app_build='unknown',
-                outcome=_outcome,
-            )
-        for _issue_class in CLIENT_JOURNEY_ISSUE_CLASSES:
-            OMI_CLIENT_JOURNEY_ISSUES_TOTAL.labels(
-                journey=_journey,
-                client_kind=_client_kind,
-                app_build='unknown',
-                issue_class=_issue_class,
-            )
-    for _outcome in CLIENT_JOURNEY_OUTCOMES:
-        OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(journey=_journey, outcome=_outcome)
+# Emit these children only when a journey occurs. The dashboard queries use
+# rate/increase, and no alert relies on an idle child being present. An idle
+# scrape is distinguished from a failed scrape by the scrape target's `up`.
 
 # The gauges below report one GLOBAL Firestore-derived quantity, and every
 # replica publishes the same value. Aggregate them with max(), never sum(): a
@@ -851,6 +871,12 @@ OMI_STT_PROVIDER_CONNECT_TOTAL = Counter(
     ['provider', 'outcome', 'error_class'],
 )
 
+OMI_LIVE_STT_OPEN_STREAMS = Gauge(
+    'omi_live_stt_open_streams',
+    'Currently open provider sockets serving live STT, by bounded provider',
+    ['provider'],
+)
+
 # Deployment-marked retired providers (intentionally unfunded legs). Budget and
 # leg-error alerts subtract these so a provider that is dead on purpose cannot
 # page forever. Populated from STT_RETIRED_PROVIDERS (utils/stt/stream_close.py).
@@ -861,12 +887,12 @@ OMI_STT_PROVIDER_RETIRED = Gauge(
 )
 
 # /v4/listen funnel for sources the client cannot self-report (phone_call today):
-# accepted socket -> first decoded audio -> transcript delivery. Sources and outcomes
-# are closed enums; no user, call, or session identifiers appear as labels.
+# STT-admitted session -> first decoded audio -> transcript delivery. Provider-
+# unavailable and reconnect-budget rejections are excluded. Labels are bounded.
 OMI_LISTEN_ACCEPTED_TOTAL = Counter(
     'omi_listen_accepted_total',
     (
-        'Accepted /v4/listen sessions by bounded transcription source, client platform, and app build. '
+        'STT-admitted /v4/listen sessions by bounded transcription source, client platform, and app build. '
         'WebSocket accept paths omit app_build (unknown). Counters are per-pod; alert queries must '
         'sum() across job=backend-listen-metrics.'
     ),
@@ -886,6 +912,12 @@ OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
     'omi_listen_audio_outcome_total',
     'Per-session listen audio outcomes by bounded transcription source, outcome, and client platform',
     ['transcription_source', 'outcome', 'client_platform'],
+)
+
+OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL = Counter(
+    'omi_listen_audio_decode_failures_total',
+    'Undecodable /v4/listen audio frames by bounded declared codec and client platform',
+    ['codec', 'client_platform'],
 )
 
 OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(

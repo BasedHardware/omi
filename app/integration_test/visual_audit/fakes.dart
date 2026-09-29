@@ -19,6 +19,7 @@ import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -82,6 +83,7 @@ List<SingleChildWidget> defaultAuditProviders() => [
       ChangeNotifierProvider(create: (_) => CaptureProvider()),
       ChangeNotifierProvider(create: (_) => UserProvider()),
       ChangeNotifierProvider(create: (_) => LocaleProvider()),
+      ChangeNotifierProvider(create: (_) => AppearanceProvider()),
       ChangeNotifierProvider<PhoneCallProvider>(create: (_) => InertPhoneCallProvider()),
       ChangeNotifierProvider<LocalRecordingsProvider>(create: (_) => InertLocalRecordingsProvider()),
       ChangeNotifierProvider<SyncProvider>(create: (_) => InertSyncProvider()),
