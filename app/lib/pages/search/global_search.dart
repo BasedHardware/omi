@@ -837,7 +837,7 @@ class _PartialNotice extends StatelessWidget {
     return Semantics(
       liveRegion: true,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.xs, 0),
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
         child: Row(
           children: [
             Icon(Icons.error_outline_rounded, size: 16, color: OmiColors.textTertiary),

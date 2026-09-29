@@ -37,7 +37,7 @@ void main() {
   test('overview accepts an empty response object', () async {
     final result = await getSearchOverview(send: (_) async => http.Response('{}', 200));
     final overview = (result as ApiSuccess<SearchOverview>).data;
-    expect(overview.starred, 0);
+    expect(overview.starred, isNull, reason: 'an absent count shows no number, never a false 0');
     expect(overview.folders, isEmpty);
   });
 
