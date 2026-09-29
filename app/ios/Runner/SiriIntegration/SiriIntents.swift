@@ -116,8 +116,13 @@ struct OpenOmiChatIntent: AppIntent {
     static var isDiscoverable = false
     static var openAppWhenRun = true
     @Parameter(title: "Draft") var draft: String?
+    @Parameter(title: "Draft submission was attempted") var draftWasAttempted: Bool?
     @Parameter(title: "Owner") var ownerUID: String?
     @Parameter(title: "Owner generation") var ownerGeneration: String?
+
+    static func shouldAutoSend(draft: String?, wasAttempted: Bool?) -> Bool {
+        !cleanedSiriQuestion(draft ?? "").isEmpty && wasAttempted != true
+    }
 
     static func route(draft: String?) throws -> String {
         guard let draft else { return "omi://chat" }
@@ -152,6 +157,11 @@ struct OpenOmiChatIntent: AppIntent {
             outcome = "ok"
             return .result()
         }
+        guard Self.shouldAutoSend(draft: draft, wasAttempted: draftWasAttempted) else {
+            SiriBridge.shared.navigate(try Self.route(draft: question))
+            outcome = "ok"
+            return .result()
+        }
         do {
             _ = try await OmiNativeAPI().ask(question: question, owner: config)
             SiriBridge.shared.navigate(try Self.route(draft: nil))
@@ -165,6 +175,19 @@ struct OpenOmiChatIntent: AppIntent {
             SiriBridge.shared.navigate(try Self.route(draft: question))
         }
         return .result()
+    }
+}
+
+/// Parameterless Siri target for opening the chat. The hidden continuation
+/// above keeps its draft parameter out of Siri's question matching surface.
+@available(iOS 16.0, *)
+struct OpenOmiChatActionIntent: AppIntent {
+    static var title: LocalizedStringResource = "Open Omi chat"
+    static var description = IntentDescription("Open Omi chat to view or continue a conversation.")
+    static var openAppWhenRun = true
+
+    func perform() async throws -> some IntentResult {
+        try await OpenOmiChatIntent().perform()
     }
 }
 
@@ -186,6 +209,13 @@ struct AskOmiIntent: AppIntent {
     )
     var question: String
 
+    static func fallbackOpenChat(_ openChat: OpenOmiChatIntent, question: String,
+                                 didAttemptChatPost: Bool) -> OpenOmiChatIntent {
+        openChat.draft = question
+        openChat.draftWasAttempted = didAttemptChatPost
+        return openChat
+    }
+
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let started = Date()
         var outcome = "server"
@@ -199,6 +229,7 @@ struct AskOmiIntent: AppIntent {
         let lower = value.lowercased()
         let memoryPrefix = lower.hasPrefix("to remember ") ? "to remember " :
             (lower.hasPrefix("remember ") ? "remember " : "")
+        var didAttemptChatPost = false
         do {
             guard let owner = SiriSession.shared.currentConfig() else { throw SiriSession.Failure.auth }
             try SiriSession.shared.validateOwner(owner)
@@ -216,6 +247,7 @@ struct AskOmiIntent: AppIntent {
                 outcome = "ok"
                 return .result(opensIntent: openChat, dialog: "Saved to Omi")
             }
+            didAttemptChatPost = true
             let answer = try await OmiNativeAPI().ask(question: value, owner: owner)
             outcome = "ok"
             return .result(opensIntent: openChat,
@@ -228,16 +260,17 @@ struct AskOmiIntent: AppIntent {
             if !memoryPrefix.isEmpty {
                 return .result(opensIntent: openChat, dialog: "I couldn't reach Omi, so nothing was saved.")
             }
-            openChat.draft = value
-            return .result(opensIntent: openChat,
-                           dialog: "Omi couldn't finish the answer here. Open Omi to ask in chat.")
+            return .result(opensIntent: Self.fallbackOpenChat(openChat, question: value,
+                                                             didAttemptChatPost: didAttemptChatPost),
+                           dialog: "Omi couldn't confirm the answer. Open Omi chat to check before trying again.")
         } catch {
             outcome = SiriTelemetry.outcome(error)
             if !memoryPrefix.isEmpty {
                 return .result(opensIntent: openChat, dialog: "Omi couldn't save that right now.")
             }
-            openChat.draft = value
-            return .result(opensIntent: openChat, dialog: "Omi couldn't answer right now. Open Omi and try again.")
+            return .result(opensIntent: Self.fallbackOpenChat(openChat, question: value,
+                                                             didAttemptChatPost: didAttemptChatPost),
+                           dialog: "Omi couldn't confirm the answer. Open Omi chat to check before trying again.")
         }
     }
 
@@ -590,6 +623,10 @@ struct OmiAppShortcuts: AppShortcutsProvider {
             "I have a question for \(.applicationName)",
             "Ask \(.applicationName) to do something"
         ], shortTitle: "Ask Omi", systemImageName: "bubble.left.and.text.bubble.right")
+        AppShortcut(intent: OpenOmiChatActionIntent(), phrases: [
+            "Open \(.applicationName) chat",
+            "Open chat in \(.applicationName)"
+        ], shortTitle: "Open Omi chat", systemImageName: "bubble.left.and.bubble.right")
         AppShortcut(intent: RememberIntent(), phrases: [
             "Remember something in \(.applicationName)",
             "Tell \(.applicationName) to remember",

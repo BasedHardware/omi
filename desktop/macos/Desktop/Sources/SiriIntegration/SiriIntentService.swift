@@ -134,6 +134,10 @@ enum SiriIntentService {
     return value
   }
 
+  static func attemptedAnswerResult(_ answer: String?) -> SiriAskResult {
+    answer.map(SiriAskResult.answered) ?? .pending
+  }
+
   /// Use the canonical main-chat provider so Siri's turn belongs to the same
   /// journal and answer timeline as a typed Ask Omi turn.
   @MainActor
@@ -146,7 +150,9 @@ enum SiriIntentService {
     if let answerWriter {
       let answer = try await answerWriter(question)
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw SiriFailure.cancelled }
-      return answer.map(SiriAskResult.answered) ?? .draft
+      // The writer ran. A missing response may follow an accepted send, so
+      // opening chat must never cause an automatic second send.
+      return attemptedAnswerResult(answer)
     }
     guard let provider = ChatProvider.mainInstance, provider.canAcceptSend else {
       return .draft
@@ -167,7 +173,7 @@ enum SiriIntentService {
     let answer = await iterator.next() ?? nil
     timeout.cancel()
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw SiriFailure.cancelled }
-    return answer.map(SiriAskResult.answered) ?? .pending
+    return attemptedAnswerResult(answer)
   }
 
   static func remember(_ input: String) async throws -> ServerMemory {

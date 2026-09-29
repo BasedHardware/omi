@@ -1590,7 +1590,8 @@ enum SiriIntentPerformedIntent {
   completeTask("complete_task"),
   createTask("create_task"),
   startListening("start_listening"),
-  stopListening("stop_listening");
+  stopListening("stop_listening"),
+  openChat("open_chat");
   const SiriIntentPerformedIntent(this.wireName);
   final String wireName;
 }
