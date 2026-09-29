@@ -501,6 +501,17 @@ def test_backend_hermetic_fork_deferral_stays_neutral_and_requires_skipped_jobs(
     assert '[[ "$SYNC_CLOUD_TASKS_RESULT" == "$sync_required" ]]' in gate
 
 
+def test_python_cli_fork_deferral_uses_the_standard_notice():
+    # #19729 standardized the heavy-CI deferral surface across the ci-tier workflows;
+    # python-cli-ci kept the pre-refactor summary line with no annotation.
+    repo = BACKEND_DIR.parent
+    workflow = (repo / ".github/workflows/python-cli-ci.yml").read_text(encoding="utf-8")
+
+    assert "::notice title=Heavy CI deferred::$notice" in workflow
+    assert 'echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"' in workflow
+    assert "deferred: fork PR — a maintainer adds label ci:full, then Re-run all jobs" not in workflow
+
+
 def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_parallel():
     repo = BACKEND_DIR.parent
     mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")

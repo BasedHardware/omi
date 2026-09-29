@@ -35,7 +35,9 @@ jobs:
       - name: Explain deferred Windows coverage
         if: steps.resolve.outputs.full_ci != 'true'
         run: |
-          echo 'deferred: fork PR — a maintainer adds label ci:full, then Re-run all jobs' >> "$GITHUB_STEP_SUMMARY"
+          notice='fork PR — a maintainer adds label ci:full, then Re-run all jobs'
+          echo "::notice title=Heavy CI deferred::$notice"
+          echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"
 
   tests:
     name: ${{ matrix.label }}
