@@ -15,11 +15,12 @@ overlay:
         # new sessions to Deepgram (402 since 09-14) and then streaming Parakeet (no ready
         # frame, 0 connects since 08-26), so they got no transcript. The configured order
         # The allocated windowed TDT cohort precedes the unchanged vendor order;
-        # otherwise Soniox is second after Modulate. Canary allocation is 1%.
+        # otherwise Soniox is second after Modulate. Canary allocation follows the
+        # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29).
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
-          value: '1'
+          value: '5'
         PARAKEET_WINDOW_MAX_SESSIONS:
           value: '8'
         PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:

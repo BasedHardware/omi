@@ -11,7 +11,7 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | Environment variable | Code default | Dev listen | Prod listen |
 |---|---|---|---|
 | `STT_CONNECT_ORDER_FROM_CONFIG` | `false` | `true` | `true` |
-| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `1` |
+| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | `0` | `1` | `5` |
 | `PARAKEET_WINDOW_MAX_SESSIONS` | `1` | `1` | `8` |
 | `PARAKEET_BATCH_PRESSURE_POOL_HOST` | empty (stand down) | `dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local` | `prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local` |
 | `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` | `2` | `1` | `3` |
@@ -62,7 +62,7 @@ server rollout, a replica missing either field invalidates the fleet sample, so
 listen sends allocated sessions to the vendor chain. Unmarked HTTP requests
 remain in the backfill lane; only the window client's explicit
 `X-Omi-STT-Surface: live-window` header enters the live lane. Soniox stays on
-the fallback chain. Keep allocation at 1% for this code release; a later
+the fallback chain. Keep the merged 5% allocation for this code release; a later
 configuration rollout advances it only after the gates below pass.
 
 The headless Service selects ready Parakeet pods. Each listen process polls
@@ -86,7 +86,7 @@ live work inside the GPU worker. An inference already running cannot be
 preempted, so a long historical recording can still affect a live POST; the
 live queue-wait and POST p95 gates must catch this before a ramp step.
 
-During the 1% bake, compare `omi_stt_window_canary_transcript_outcome_total`
+At each bake, compare `omi_stt_window_canary_transcript_outcome_total`
 `arm=window` with `arm=control`: the rate of `transcribed / (transcribed +
 no_transcript)` must not drop for the allocated arm. The 95% fleet SLO is shown
 on the Backend-listen dashboard; a separate page fires below 90% with its
@@ -113,7 +113,7 @@ rules treat missing telemetry as Alerting and use the existing Telegram route.
 The page action is **Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0**
 in the prod chart and runtime overlay, then recompose the runtime environment.
 
-After the 1% bake, advance allocation to **5%, 25%, 50%, then 100%** of
+After the merged 5% bake, advance allocation to **25%, 50%, then 100%** of
 eligible sessions within roughly 24 hours, with an observation gate between
 each step. Require live POST p95 below ~2 s, no first-text p50 regression from
 the measured 7.5 s, stable transcript-success and no-text ratios against the
@@ -125,7 +125,7 @@ Do not advance on missing telemetry. Change allocation in both the prod listen
 chart and prod runtime overlay, then recompose the runtime environment.
 Rollback sets allocation to `0` in those sources; that removes the window
 leg while leaving Soniox available. This PR does not deploy or change the
-existing 1% allocation.
+existing 5% allocation.
 
 ## Why windows are sentence-anchored
 
