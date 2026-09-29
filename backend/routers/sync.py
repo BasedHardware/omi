@@ -158,8 +158,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import SyncLane, classify_sync_lane
-from utils.sync import uid_sequencer
-from utils.sync import backfill_cutover
+from utils.sync import backfill_cutover, stage as sync_stage, uid_sequencer
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 logger = logging.getLogger(__name__)
@@ -169,7 +168,7 @@ AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
-router = APIRouter(route_class=MultipartMaxPartSizeRoute)
+router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(sync_stage.require_http_stage)])
 
 
 class SyncLocalFilesResultResponse(BaseModel):
@@ -1750,7 +1749,6 @@ async def _maintain_uid_sequencer_lease(
             return
 
 
-# response_model omitted: the OIDC worker/sweeper are not app API surfaces.
 @router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
 async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
@@ -1778,17 +1776,20 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Persisted sequencer epochs survive the kill switch; old tasks keep their legacy path."""
-    if await run_blocking(db_executor, get_sync_ledger_fence_mode) is SyncLedgerFenceMode.STANDBY:
+    if await run_blocking(db_executor, uid_sequencer.production_fence_mode) is SyncLedgerFenceMode.STANDBY:
         return JSONResponse(status_code=503, content={'status': 'cutover_standby'})
     try:
         payload = await request.json()
     except Exception:
         return await _run_sync_job_body(request, task_retry_count)
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
+    if uid_sequencer.foreign_delivery(payload):
+        return JSONResponse(status_code=200, content={'status': 'foreign_stage'})
     if epoch is None:
         if (
             isinstance(payload, dict)
             and payload.get('lane') == SyncLane.BACKFILL.value
+            and uid_sequencer.production_stage()
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
@@ -1822,8 +1823,6 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                         backfill_cutover.uid_hash(payload['uid']),
                     )
             if legacy_job and legacy_job.get('status') == 'queued' and (sequencer_on or owner or pending):
-                # Polling's direct-task stale detector must stop once the
-                # durable UID registry owns a waiting legacy task.
                 marked = await run_blocking(
                     db_executor, update_sync_job, payload['job_id'], {'dispatch_mode': 'sequenced'}
                 )

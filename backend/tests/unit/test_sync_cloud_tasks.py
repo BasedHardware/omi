@@ -32,6 +32,12 @@ import pytest
 BACKEND_DIR = os.path.join(os.path.dirname(__file__), '..', '..')
 
 
+@pytest.fixture(autouse=True)
+def legacy_production_keys(monkeypatch):
+    # This suite asserts the existing production Redis key contract.
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+
+
 async def _passthrough_async_resolve_geolocation(geolocation):
     """Identity stub for utils.conversations.location: the real resolver returns its input on a miss."""
     return geolocation
@@ -452,6 +458,7 @@ class TestFencedJobMutations:
             'completed_at': 200.0,
             'error': 'upstream unavailable',
             'reason_code': 'upstream_error',
+            'failure_stage': 'prod',
             'retry_after': 30,
             'updated_at': 200.0,
         }
@@ -1371,6 +1378,14 @@ def _load_sync_router_for_fast_path():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     module.uid_sequencer.enabled = MagicMock(return_value=False)
+    module.uid_sequencer.production_fence_mode = MagicMock(
+        side_effect=lambda: module.get_sync_ledger_fence_mode() if module.uid_sequencer.production_stage() else None
+    )
+    module.uid_sequencer.foreign_delivery = MagicMock(
+        side_effect=lambda payload: not module.uid_sequencer.production_stage()
+        and isinstance(payload, dict)
+        and (payload.get('sequencer_epoch') is not None or payload.get('lane') == 'backfill')
+    )
 
     async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -3147,6 +3162,53 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
         assert migrated_from_pending.status_code == 200
         assert module.sync_backfill_sequencer.register_job.call_count == 3
         module._run_sync_job_body.assert_awaited_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'payload',
+    [
+        {'uid': 'test-uid', 'job_id': 'job-1', 'lane': 'backfill', 'sequencer_epoch': 3},
+        {'uid': 'test-uid', 'job_id': 'job-1', 'lane': 'backfill'},
+    ],
+    ids=['sequenced', 'legacy-backfill'],
+)
+async def test_dev_sync_job_route_acks_before_shared_state_access(payload):
+    module, saved_modules, mock_sync_jobs, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value=payload)
+    module.uid_sequencer.production_stage = MagicMock(return_value=False)
+    module.get_sync_ledger_fence_mode = MagicMock()
+    module._run_sync_job_body = AsyncMock()
+    module.get_raw_sync_job = MagicMock()
+    module.try_acquire_job_run_lock = MagicMock()
+    module.sync_backfill_sequencer.reset_mock()
+    module.backfill_cutover.reset_mock()
+    mock_sync_jobs.reset_mock()
+    redis_client = sys.modules['database.redis_db'].r
+    redis_client.reset_mock()
+    try:
+        assert any(dep.dependency is module.sync_stage.require_http_stage for dep in module.router.dependencies)
+        route = next(route for route in module.router.routes if route.path == '/v2/sync-jobs/run')
+        response = await route.endpoint(request, task_retry_count=0)
+        assert response.status_code == 200
+        assert response.body == b'{"status":"foreign_stage"}'
+        module.get_sync_ledger_fence_mode.assert_not_called()
+        module.get_raw_sync_job.assert_not_called()
+        module.try_acquire_job_run_lock.assert_not_called()
+        module._run_sync_job_body.assert_not_awaited()
+        assert module.sync_backfill_sequencer.mock_calls == []
+        assert module.backfill_cutover.mock_calls == []
+        assert mock_sync_jobs.mock_calls == []
+        assert redis_client.mock_calls == []  # No sync_backfill:uid_sequencer:* writes.
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

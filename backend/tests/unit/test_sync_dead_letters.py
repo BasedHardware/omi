@@ -87,6 +87,7 @@ class _FakeFirestore:
 
 @pytest.fixture(autouse=True)
 def _transactional_passthrough(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setattr(ledger.firestore, 'transactional', lambda function: function)
 
 
@@ -112,6 +113,7 @@ def test_pending_record_has_exact_bounded_schema(firestore):
     assert doc['lane'] == 'backfill'
     assert doc['status'] == 'pending'
     assert doc['failure_code'] == 'stt_failed'
+    assert doc['failure_stage'] == 'prod'
     assert doc['attempt_count'] == 1
     assert 'created_at' in doc
     assert 'dead_lettered_at' not in doc

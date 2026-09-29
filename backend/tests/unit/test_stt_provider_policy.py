@@ -87,9 +87,12 @@ def test_parakeet_capability_tracks_the_model_selected_for_each_surface():
 def test_parakeet_chart_models_match_the_capability_policy(values_path: Path):
     """A model deployment swap must update the policy before routing can change (#10009)."""
     assert _chart_env_value(values_path, 'PARAKEET_MODEL') == PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED]
-    assert (
-        _chart_env_value(values_path, 'PARAKEET_STREAM_MODEL') == PARAKEET_MODEL_BY_SURFACE[STTServingSurface.STREAMING]
-    )
+    stream_model = _chart_env_value(values_path, 'PARAKEET_STREAM_MODEL')
+    if values_path.name.startswith('prod_'):
+        # Prod serves /v3/stream with VAD + the TDT model; RNNT is not loaded there.
+        assert stream_model is None
+    else:
+        assert stream_model == PARAKEET_MODEL_BY_SURFACE[STTServingSurface.STREAMING]
     assert PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PTT] == PARAKEET_MODEL_BY_SURFACE[STTServingSurface.STREAMING]
 
 

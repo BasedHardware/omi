@@ -17,9 +17,10 @@ enum SiriDebugProbe {
     private static func classicShortcutAvailability() -> Bool {
         let shortcuts = OmiAppShortcuts.appShortcuts
         _ = RememberIntent()
+        _ = AskOmiIntent()
         _ = StartOmiListeningIntent()
         _ = StopOmiListeningIntent()
-        return shortcuts.count == 3 && !RememberIntent.openAppWhenRun &&
+        return shortcuts.count == 4 && !RememberIntent.openAppWhenRun && !AskOmiIntent.openAppWhenRun &&
             StartOmiListeningIntent.openAppWhenRun && StopOmiListeningIntent.openAppWhenRun
     }
 
@@ -51,6 +52,17 @@ enum SiriDebugProbe {
             let unavailableSession = SiriSession(defaults: nil)
             let unavailableFailsSafe = unavailableSession.currentConfig() == nil
             NSLog("[SiriProbe] missingSessionSuiteUnavailable=%@", unavailableFailsSafe ? "PASS" : "FAIL")
+            let terminal = "done: " + Data("{\"text\":\"The answer\"}".utf8).base64EncodedString()
+            let answerValid = (try? OmiNativeAPI.terminalChatAnswer(terminal)) == "The answer"
+            let partialIgnored = (try? OmiNativeAPI.terminalChatAnswer("data: partial")) == nil
+            let emptyRejected = (try? OmiNativeAPI.terminalChatAnswer("done: e30=")) == nil
+            NSLog("[SiriProbe] askOmiTerminalAnswer=%@",
+                  answerValid && partialIgnored && emptyRejected ? "PASS" : "FAIL")
+            let reservedDraft = "What is A&B = C+D #100%? 😀"
+            let encodedRoute = try? OpenOmiChatIntent.route(draft: reservedDraft)
+            let decodedDraft = encodedRoute.flatMap { URLComponents(string: $0)?.queryItems?.first?.value }
+            NSLog("[SiriProbe] askOmiDraftEncoding=%@",
+                  decodedDraft == reservedDraft && encodedRoute?.contains("%2B") == true ? "PASS" : "FAIL")
             let production = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12")
             let development = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12.development")
             let productionKeys = [production.ownerKey, production.pendingWipeOwnersKey,

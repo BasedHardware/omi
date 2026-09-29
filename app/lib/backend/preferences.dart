@@ -525,9 +525,11 @@ class SharedPreferencesUtil {
         final parsed = BtDevice.fromJson(decoded);
         if (parsed.id.isNotEmpty) return parsed;
       }
-      Logger.debug(PhysicalQualification.enabled
-          ? 'Stored device is not a JSON object: ${decoded.runtimeType}'
-          : 'Stored device is not a JSON object');
+      Logger.debug(
+        PhysicalQualification.enabled
+            ? 'Stored device is not a JSON object: ${decoded.runtimeType}'
+            : 'Stored device is not a JSON object',
+      );
     } catch (e) {
       Logger.debug(PhysicalQualification.enabled ? 'Error decoding stored device: $e' : 'Error decoding stored device');
     }

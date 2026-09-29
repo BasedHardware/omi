@@ -141,4 +141,9 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | voiceReplyPlayback | Voice Reply Playback | outcome, skip_reason, mode, output_route, chunks_requested, chunks_played, chunks_dropped, fallback_reason, first_audio_latency_ms, interrupt_source | active | mobile-instrumentation-presence |
 | pendantVoiceQuestionDropped | Pendant Voice Question Dropped | reason | active | mobile-instrumentation-presence |
 | siriIntentPerformed | Siri Intent Performed | intent, platform, outcome, latency_ms, invoked_via | active | siri-intents |
+| siriAskOmiPerformed | Siri Ask Omi Performed | platform, outcome, latency_ms, invoked_via | active | siri-intents |
 | siriIndexRebuilt | Siri Index Rebuilt | platform, entity_counts, duration_ms, outcome | active | siri-index-health |
+
+## App Review Opportunity decisions
+
+`eligible`, `not_ios_or_android`, `storage_error`, `not_familiar`, `migration_cooldown`, `cooldown`, `budget_exhausted`, `version_already_attempted`, `session_already_attempted`, `lifecycle_not_appropriate`, `lifecycle_changed`, `availability_error`, `unavailable`, `request_error`, `recent_bad_experience`

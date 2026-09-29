@@ -117,6 +117,7 @@ class _Firestore:
 @pytest.fixture
 def db(monkeypatch):
     client = _Firestore()
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'off')
     monkeypatch.setenv('SYNC_CONTENT_ID_SECRET', 'test-secret')
     monkeypatch.setattr(backfill_cutover, 'r', fakeredis.FakeRedis())
@@ -131,6 +132,50 @@ def db(monkeypatch):
     monkeypatch.setattr(registry.firestore, 'transactional', transactional)
     monkeypatch.setattr(registry, 'get_firestore_client', lambda: client)
     return client
+
+
+def test_nonprod_delivery_guard_is_pure_before_any_redis_read(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setattr(
+        uid_sequencer, 'get_sync_ledger_fence_mode', MagicMock(side_effect=AssertionError('Redis read'))
+    )
+    assert uid_sequencer.production_fence_mode() is None
+    assert uid_sequencer.foreign_delivery({'lane': 'backfill', 'job_id': 'legacy'})
+    assert uid_sequencer.foreign_delivery({'lane': 'fresh', 'sequencer_epoch': 3})
+    assert not uid_sequencer.foreign_delivery({'lane': 'fresh'})
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    assert not uid_sequencer.foreign_delivery({'lane': 'backfill', 'sequencer_epoch': 3})
+
+
+def test_dev_cannot_read_or_claim_production_registry(db, monkeypatch):
+    _register('shared-user', 'prod-job', 0, db=db)
+    before = copy.deepcopy(db.docs)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    assert not registry.enabled()
+    assert not uid_sequencer.kick('shared-user')
+    assert uid_sequencer.sweep() == {'disabled': 1}
+    for operation in (
+        lambda: registry.get_owner('shared-user', firestore_client=db),
+        lambda: registry.has_pending('shared-user', firestore_client=db),
+        lambda: registry.claim_next('shared-user', firestore_client=db),
+        lambda: registry.begin_job('shared-user', 'prod-job', 1, firestore_client=db),
+        lambda: registry.finish_job('shared-user', 'prod-job', 1, 'failed', firestore_client=db),
+    ):
+        with pytest.raises(RuntimeError, match='production-only'):
+            operation()
+    assert db.docs == before
+
+
+def test_dev_cutover_keys_cannot_stall_prod_and_missing_mode_is_inert(db, monkeypatch):
+    backfill_cutover.note_direct_admission('shared-user', 'prod-direct')
+    assert backfill_cutover.quiet_remaining('shared-user')[0] > 0
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    assert backfill_cutover.quiet_remaining('shared-user') == (0, '')
+    backfill_cutover.note_direct_admission('shared-user', 'dev-direct')
+    assert backfill_cutover.quiet_remaining('shared-user')[1] == 'dev-direct'
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    assert backfill_cutover.quiet_remaining('shared-user')[1] == 'prod-direct'
+    assert backfill_cutover.quiet_remaining('another-user') == (0, '')
 
 
 NOW = datetime(2026, 9, 27, 0, 0, tzinfo=timezone.utc)
@@ -230,7 +275,7 @@ def test_sweeper_replaces_lost_dispatch_then_releases_terminal_job(db, monkeypat
     dispatched = []
     monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
     monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
-    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: {'status': 'queued'})
+    monkeypatch.setattr(uid_sequencer, 'get_raw_sync_job', lambda _job_id: {'status': 'queued'})
     monkeypatch.setattr(backfill_cutover, 'quiet_remaining', lambda _uid: (0, ''))
     expired = NOW + timedelta(minutes=6)
     owner = registry.get_owner('a', firestore_client=db)
@@ -271,9 +316,10 @@ def test_burst_admission_only_writes_append_only_pending_documents(db):
     assert len(db.docs) == 100
 
 
-def test_cutover_guard_blocks_first_on_dispatch_and_off_on_again(db, monkeypatch):
+def test_cutover_guard_honors_existing_deadline_and_per_uid_direct_work(db, monkeypatch):
     monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
     monkeypatch.setattr(backfill_cutover.time, 'time', lambda: NOW.timestamp())
+    backfill_cutover.r.set(backfill_cutover.LEGACY_QUIET_KEY, int(NOW.timestamp()) + 1800)
     _register('heavy', 'sequenced', 0, db=db)
     dispatched = []
     wakes = []
@@ -300,7 +346,7 @@ def test_pending_sweep_rotates_heavy_uid_and_reaches_light_uid(db, monkeypatch):
     calls = []
     monkeypatch.setattr(uid_sequencer, 'kick', lambda uid: calls.append(uid) or False)
     monkeypatch.setattr(registry, 'due_owners', lambda **_kwargs: [])
-    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda _job_id: None)
+    monkeypatch.setattr(uid_sequencer, 'get_raw_sync_job', lambda _job_id: None)
     monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda _job_id: False)
     # The first bounded page is dominated by the heavy UID. Deferred entries
     # leave the next page available to another UID on the next Scheduler tick.

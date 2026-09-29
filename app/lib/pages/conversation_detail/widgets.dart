@@ -597,10 +597,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                   ],
                 ),
               ),
-              SizedBox(
-                width: 42,
-                child: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 20),
-              ),
+              SizedBox(width: 42, child: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 20)),
             ],
           ),
         ),
