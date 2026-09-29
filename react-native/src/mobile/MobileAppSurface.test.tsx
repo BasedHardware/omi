@@ -8,14 +8,9 @@ jest.mock('../ui/OmiAvatar', () => ({
   OmiAvatar: (props: object) =>
     require('react').createElement('OmiAvatar', props),
 }));
-jest.mock('react-native-svg', () => ({
-  __esModule: true,
-  default: 'Svg',
-  Defs: 'Defs',
-  LinearGradient: 'LinearGradient',
-  Rect: 'Rect',
-  Stop: 'Stop',
-}));
+// react-native-svg itself is covered by the jest moduleNameMapper shim
+// (test/react-native-svg.js), which stands up every element as a host
+// component under the custom react-native mock below.
 
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');

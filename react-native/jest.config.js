@@ -6,6 +6,7 @@ module.exports = {
     '^@omi-core/ratified-contracts/(.*)$':
       '<rootDir>/../packages/contracts/ratified/dist/$1.js',
     '^react-native-webrtc$': '<rootDir>/test/react-native-webrtc.js',
+    '^react-native-svg$': '<rootDir>/test/react-native-svg.js',
   },
   preset: 'react-native',
   transformIgnorePatterns: [
