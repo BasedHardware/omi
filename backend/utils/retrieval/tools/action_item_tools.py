@@ -216,7 +216,7 @@ def get_action_items_tool(
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
             logger.info(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
-            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
+            return "Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone."
 
     if end_date:
         try:
@@ -226,7 +226,7 @@ def get_action_items_tool(
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
             logger.info(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
-            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+            return "Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone."
 
     # Parse due_at dates if provided
     due_start_dt = None
@@ -242,7 +242,7 @@ def get_action_items_tool(
                 f"📅 Parsed due_start_date '{due_start_date}' as {due_start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}"
             )
         except ValueError as e:
-            return f"Error: Invalid due_start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_start_date} - {str(e)}"
+            return "Error: Invalid due_start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone."
 
     if due_end_date:
         try:
@@ -252,7 +252,7 @@ def get_action_items_tool(
                 return f"Error: due_end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {due_end_date}"
             logger.info(f"📅 Parsed due_end_date '{due_end_date}' as {due_end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
-            return f"Error: Invalid due_end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_end_date} - {str(e)}"
+            return "Error: Invalid due_end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone."
 
     # Get action items
     action_items: List[Dict[str, Any]] = []
@@ -458,7 +458,7 @@ def create_action_item_tool(
                 )
             action_item_data['due_at'] = due_dt
         except ValueError as e:
-            return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at} - {str(e)}"
+            return "Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone."
     else:
         # A task the user never dated has no due date. Inventing now+24h put it in
         # neither the overdue nor the due-today bucket any reader uses, so
@@ -625,7 +625,7 @@ def update_action_item_tool(
             update_data['due_at'] = due_dt
             changes.append(f"due date set to {due_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
-            return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at} - {str(e)}"
+            return "Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone."
 
     if not update_data:
         return "No changes specified. Please provide at least one field to update (completed, description, or due_at)."
