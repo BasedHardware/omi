@@ -172,11 +172,13 @@ async def test_three_failed_connects_shed_all_open_breakers_with_retry_after(mon
 @pytest.mark.asyncio
 async def test_all_local_benches_with_fleet_healthy_do_not_shed(monkeypatch):
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+    monkeypatch.setattr(live_chain.health, 'has_fresh_fleet_snapshot', lambda: True)
     monkeypatch.setattr(
         live_chain.health,
         'cached_snapshot',
         lambda _providers, _language: {'soniox': live_health.ProviderState(score=0.9, samples=20)},
     )
+    live_chain._recent_connect_failures.extend((time.monotonic(), 'modulate') for _ in range(3))
     st._modulate_circuit.record_account_failure(600)
     st._soniox_circuit.record_serve_failure()
     primary, tail = AsyncMock(return_value=socket()), AsyncMock(return_value=socket())
@@ -191,6 +193,38 @@ async def test_all_local_benches_with_fleet_healthy_do_not_shed(monkeypatch):
     assert selected == st.STTService.soniox
     primary.assert_not_awaited()
     tail.assert_awaited_once()
+    assert not live_chain._recent_connect_failures
+
+
+@pytest.mark.asyncio
+async def test_all_local_benches_with_fresh_fleet_outage_shed_without_connect_evidence(monkeypatch):
+    monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
+    monkeypatch.setattr(live_chain.health, 'has_fresh_fleet_snapshot', lambda: True)
+    monkeypatch.setattr(
+        live_chain.health,
+        'cached_snapshot',
+        lambda providers, _language: {
+            provider: live_health.ProviderState(bench='selection', bench_until=time.time() + 120)
+            for provider in providers
+        },
+    )
+    st._modulate_circuit.record_serve_failure()
+    st._soniox_circuit.record_serve_failure()
+    primary, tail = AsyncMock(return_value=socket()), AsyncMock(return_value=socket())
+
+    with pytest.raises(live_chain.ProviderChainUnavailable) as raised:
+        await live_chain.connect_configured_chain(
+            primary_service=st.STTService.modulate,
+            connect_primary=primary,
+            callbacks={st.STTService.soniox: tail},
+            failed=set(),
+            models=['modulate-velma-2', 'soniox'],
+            routing_uid='test',
+        )
+
+    assert raised.value.retry_after >= 120
+    primary.assert_not_awaited()
+    tail.assert_not_awaited()
     assert not live_chain._recent_connect_failures
 
 

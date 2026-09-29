@@ -137,8 +137,21 @@ async def connect_configured_chain(
             confirmed_failures = len(_recent_connect_failures) >= threshold and all(
                 provider in eligible_names for _, provider in list(_recent_connect_failures)[-threshold:]
             )
-        if all_benched and confirmed_failures:
+        fleet_snapshot_fresh = health.has_fresh_fleet_snapshot()
+        fleet_has_healthy_provider = fleet_snapshot_fresh and any(
+            (state := fleet_states.get(service.value)) is not None
+            and not state.excluded
+            and state.samples > 0
+            and state.score > 0.5
+            for service in eligible
+        )
+        fleet_confirms_outage = fleet_snapshot_fresh and all(
+            fleet_states.get(service.value) is not None and fleet_states[service.value].excluded for service in eligible
+        )
+        if all_benched and not fleet_has_healthy_provider and (fleet_confirms_outage or confirmed_failures):
             waits = [circuit.account_cooldown_seconds_remaining for circuit in circuits if circuit.state == 'open']
+            if fleet_confirms_outage:
+                waits.extend(max(0.0, fleet_states[service.value].bench_until - time.time()) for service in eligible)
             retry_after = max(5, int(max(waits, default=0) + 0.999))
             raise ProviderChainUnavailable(retry_after)
     origin = primary_service.value
