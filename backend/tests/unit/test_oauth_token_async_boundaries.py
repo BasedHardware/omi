@@ -182,7 +182,8 @@ def test_oauth_token_verification_keeps_the_event_loop_responsive() -> None:
 
 def test_oauth_token_preserves_invalid_token_status() -> None:
     with _loaded_oauth_router() as (oauth, firebase_auth, _apps_db):
-        firebase_auth.verify_id_token = lambda _token: (_ for _ in ()).throw(_InvalidIdTokenError('invalid'))
+        sensitive_detail = 'malformed token jwt segment: secret-token-signature'
+        firebase_auth.verify_id_token = lambda _token: (_ for _ in ()).throw(_InvalidIdTokenError(sensitive_detail))
 
         with pytest.raises(HTTPException) as exc:
             asyncio.run(
@@ -195,7 +196,28 @@ def test_oauth_token_preserves_invalid_token_status() -> None:
             )
 
         assert exc.value.status_code == 401
-        assert 'Invalid Firebase ID token' in exc.value.detail
+        assert exc.value.detail == 'Invalid Firebase ID token'
+        assert sensitive_detail not in exc.value.detail
+
+
+def test_oauth_token_sanitizes_unexpected_verification_error() -> None:
+    with _loaded_oauth_router() as (oauth, firebase_auth, _apps_db):
+        sensitive_detail = 'connection refused: https://10.0.0.1:8080/auth cluster internal'
+        firebase_auth.verify_id_token = lambda _token: (_ for _ in ()).throw(RuntimeError(sensitive_detail))
+
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(
+                oauth.oauth_token(
+                    firebase_id_token='bad',
+                    app_id='app-1',
+                    csrf_token='matching-csrf-token',
+                    oauth_csrf_cookie='matching-csrf-token',
+                )
+            )
+
+        assert exc.value.status_code == 401
+        assert exc.value.detail == 'Error verifying Firebase ID token'
+        assert sensitive_detail not in exc.value.detail
 
 
 def test_oauth_token_rejects_non_qa_uid_before_account_work(monkeypatch: pytest.MonkeyPatch) -> None:
