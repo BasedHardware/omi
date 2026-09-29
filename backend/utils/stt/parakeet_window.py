@@ -458,7 +458,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._pump_task.add_done_callback(self._on_pump_done)
 
     def _on_pump_done(self, task: asyncio.Task[None]) -> None:
-        if not self._closed:
+        if not self._closed and not self._dead:
             self._dead = True
             self._dead_reason = 'cancelled' if task.cancelled() else 'connection_lost'
         try:
@@ -656,8 +656,11 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     await self._wake.wait()
                     self._wake.clear()
         except asyncio.CancelledError:
-            self._dead = True
-            self._dead_reason = 'cancelled'
+            # A deadline can cancel an in-flight POST through finish(). Preserve
+            # that first failure so session telemetry matches the replay reason.
+            if not self._dead:
+                self._dead = True
+                self._dead_reason = 'cancelled'
             raise
         except Exception:
             # Bounded reason only: never include audio, text or HTTP bodies in logs.

@@ -630,6 +630,7 @@ async def test_cancellation_before_pump_start_and_during_drain_release(monkeypat
     await asyncio.gather(sock._pump_task, return_exceptions=True)
     assert window.admission.active == 0
     assert sock.is_connection_dead
+    assert sock.death_reason == 'cancelled'
     sock = window.connect_window(lambda _: None, 16000)
     started = asyncio.Event()
 
@@ -904,6 +905,127 @@ async def test_no_first_text_bounds_fail_over_once_and_replay_all_capture(monkey
         == before_fallback + 1
     )
     assert [segment['text'] for segment in base.emitted] == ['replacement']
+    await actual._drain_stt_sockets()
+
+
+class RacingTextClient:
+    def __init__(self, *, propagate_cancel: bool = False):
+        self.started = asyncio.Event()
+        self.cancelled = asyncio.Event()
+        self.release = asyncio.Event()
+        self.propagate_cancel = propagate_cancel
+        self.requests = []
+
+    async def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        self.started.set()
+        try:
+            await self.release.wait()
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            await self.release.wait()
+            if self.propagate_cancel:
+                raise
+        return httpx.Response(
+            200,
+            json={'segments': [{'text': 'Done.', 'start': 0.0, 'end': 4.0}]},
+            request=httpx.Request('POST', url),
+        )
+
+
+async def _receiver_with_racing_window(monkeypatch, client):
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '30')
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    base = receiver()
+    host = base.host
+    host.request.sample_rate = 16000
+    host.request.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    host.state.stt_terminal_failure = False
+    host.client_device_context = SimpleNamespace(platform='ios')
+    host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
+    host.spawn = lambda coro, **kw: coro.close()
+    actual = ListenReceiver(host, [], {})
+    monkeypatch.setattr(actual, '_run_on_listen_loop', lambda callback, segments: callback(segments))
+    replayed = []
+    callbacks = []
+
+    async def tail(callback, *args, **kwargs):
+        callbacks.append(callback)
+        return SimpleNamespace(
+            is_connection_dead=False,
+            send=lambda data: replayed.append(data) or True,
+            finalize=lambda: None,
+            finish=lambda: None,
+        )
+
+    monkeypatch.setattr(st, 'process_audio_soniox', tail)
+    assert await actual.initialize_stt()
+    previous = actual.stt_socket
+    pcm = b'\x01\x00' * 16000 * 6
+    actual.capture_timeline.accept(pcm, window.time.time(), window.time.monotonic())
+    assert previous.send(pcm, start_sample=0)
+    actual._window_ring().append(pcm, 0)
+    await asyncio.wait_for(client.started.wait(), timeout=2)
+    assert previous.raw._first_text_timer is not None
+    return actual, base, previous, pcm, replayed, callbacks
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('propagate_cancel', [False, True])
+async def test_deadline_during_post_replays_once_without_late_text(monkeypatch, propagate_cancel):
+    client = RacingTextClient(propagate_cancel=propagate_cancel)
+    actual, base, previous, pcm, replayed, callbacks = await _receiver_with_racing_window(monkeypatch, client)
+    before_outcome = WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='first_text_deadline')._value.get()
+    fallback = OMI_FALLBACK_TOTAL.labels(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='first_text_deadline',
+        outcome='recovered',
+    )
+    before_fallback = fallback._value.get()
+    previous.raw._expire_first_text()
+    await asyncio.wait_for(client.cancelled.wait(), timeout=2)
+    client.release.set()  # the POST completes with text after the deadline, or propagates cancellation
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert previous.death_reason == 'first_text_deadline'
+    assert previous.typed_death_reason == 'first_text_deadline'
+    assert base.emitted == []
+    assert (
+        WINDOW_SESSION_OUTCOME.labels(outcome='no_text', reason='first_text_deadline')._value.get()
+        == before_outcome + 1
+    )
+    assert await actual._failover_stt_socket()
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    assert b''.join(replayed) == pcm
+    assert actual._pending_live_failover.reason == 'first_text_deadline'
+    callbacks[0]([{'speaker': 'speaker_0', 'text': 'Done.', 'start': 0, 'end': 4}])
+    assert [segment['text'] for segment in base.emitted] == ['Done.']
+    assert fallback._value.get() == before_fallback + 1
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_text_post_just_before_deadline_disarms_failover(monkeypatch):
+    client = RacingTextClient()
+    actual, base, previous, _pcm, replayed, callbacks = await _receiver_with_racing_window(monkeypatch, client)
+    client.release.set()
+    for _ in range(100):
+        if base.emitted:
+            break
+        await _REAL_SLEEP(0)
+    assert [segment['text'] for segment in base.emitted] == ['Done.']
+    assert previous.raw._first_text_recorded
+    assert previous.raw._first_text_timer is None
+    previous.raw._expire_first_text()  # stale scheduled callback cannot fail a session with text
+    assert not previous.is_connection_dead
+    assert await actual._failover_stt_socket()
+    assert actual.stt_socket is previous
+    assert replayed == []
+    assert callbacks == []
+    assert len(client.requests) == 1
     await actual._drain_stt_sockets()
 
 
