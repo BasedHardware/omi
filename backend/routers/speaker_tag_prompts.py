@@ -90,13 +90,13 @@ def answer_speaker_tag_prompt(
         return service.apply_answer(uid, data, schedule=background_tasks.add_task)
     except service.TagPromptInvalid as error:
         logger.warning(f"Invalid speaker tag prompt answer for user {uid}: {sanitize(str(error))}")
-        raise HTTPException(status_code=400, detail=sanitize(str(error))) from error
+        raise HTTPException(status_code=400, detail="Invalid speaker tag prompt answer") from error
     except service.TagPromptForbidden as error:
         logger.warning(f"Forbidden speaker tag prompt access for user {uid}: {sanitize(str(error))}")
-        raise HTTPException(status_code=402, detail=sanitize(str(error))) from error
+        raise HTTPException(status_code=402, detail="A paid plan is required to perform this action.") from error
     except LookupError as error:
         logger.warning(f"Speaker tag prompt lookup failed for user {uid}: {sanitize(str(error))}")
-        raise HTTPException(status_code=404, detail=sanitize(str(error))) from error
+        raise HTTPException(status_code=404, detail="Person or conversation not found") from error
     except PermissionError as error:
         logger.warning(f"Paid plan required for user {uid}: {sanitize(str(error))}")
         raise HTTPException(
@@ -105,7 +105,7 @@ def answer_speaker_tag_prompt(
         ) from error
     except ValueError as error:
         logger.warning(f"Conflict answering speaker tag prompt for user {uid}: {sanitize(str(error))}")
-        raise HTTPException(status_code=409, detail=sanitize(str(error))) from error
+        raise HTTPException(status_code=409, detail="Conflicting speaker tag prompt answer") from error
     except Exception as exc:
         logger.error(
             f"Unexpected error answering speaker tag prompt for user {uid}: {sanitize(str(exc))}",
