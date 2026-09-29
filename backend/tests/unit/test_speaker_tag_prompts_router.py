@@ -47,13 +47,17 @@ def test_answer_maps_entitlement_and_validation_errors(monkeypatch):
         raise router_module.service.TagPromptForbidden('paid')
 
     monkeypatch.setattr(router_module.service, 'apply_answer', forbidden)
-    assert client.post('/v1/speaker-tag-prompts/answer', json=_answer_body()).status_code == 402
+    res_forbidden = client.post('/v1/speaker-tag-prompts/answer', json=_answer_body())
+    assert res_forbidden.status_code == 402
+    assert res_forbidden.json()['detail'] == 'A paid plan is required to perform this action.'
 
     def missing(*args, **kwargs):
         raise LookupError('Person not found')
 
     monkeypatch.setattr(router_module.service, 'apply_answer', missing)
-    assert client.post('/v1/speaker-tag-prompts/answer', json=_answer_body()).status_code == 404
+    res_missing = client.post('/v1/speaker-tag-prompts/answer', json=_answer_body())
+    assert res_missing.status_code == 404
+    assert res_missing.json()['detail'] == 'Person or conversation not found'
     assert client.post('/v1/speaker-tag-prompts/answer', json=_answer_body(extra='x')).status_code == 422
 
 
@@ -189,10 +193,7 @@ def test_answer_sanitizes_pii_and_tokens_in_error(monkeypatch):
     monkeypatch.setattr(router_module.service, 'apply_answer', invalid_with_token)
     res = client.post('/v1/speaker-tag-prompts/answer', json=_answer_body())
     assert res.status_code == 400
-    detail = res.json()['detail']
-    assert 'tok_secret123456789' not in detail
-    assert 'alice@example.com' not in detail
-    assert 'example.com' in detail
+    assert res.json()['detail'] == 'Invalid speaker tag prompt answer'
 
 
 def test_answer_unhandled_exception_masks_internal_error(monkeypatch):
