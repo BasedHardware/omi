@@ -188,7 +188,7 @@ jobs:
           fi
 
       - name: Push verified runtime image
-        if: ${{ (steps.superseded_before_image_publication.outputs.superseded != 'true') && steps.superseded_before_image_publication.outputs.superseded != 'true' }}
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' }}
         run: |
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
@@ -210,7 +210,7 @@ jobs:
           fi
 
       - name: Render runtime env
-        if: ${{ (steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         id: runtime-env
         env:
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
@@ -219,12 +219,12 @@ jobs:
           python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} --job day3-reengagement-email-job >> "$GITHUB_OUTPUT"
 
       - name: Validate backend runtime env before deploy
-        if: ${{ (steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows
 
       - name: Deploy to Cloud Run
-        if: ${{ (steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v3
         with:
@@ -237,7 +237,7 @@ jobs:
           secrets: ${{ steps.runtime-env.outputs.day3_reengagement_email_job_secrets }}
 
       - name: Reconcile declared Scheduler trigger
-        if: ${{ (steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         run: |
           python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
           python3 backend/scripts/scheduler_reconcile.py \
@@ -249,11 +249,11 @@ jobs:
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
-        if: ${{ (steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
+        if: ${{ steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         run: echo ${{ steps.deploy.outputs.url }}
 
       - name: Generate deployment summary
-        if: ${{ ((always() && github.event.inputs.environment == 'prod') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
+        if: ${{ (always() && github.event.inputs.environment == 'prod') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         uses: ./.github/actions/deployment-summary
         with:
           environment: ${{ github.event.inputs.environment }}
@@ -262,7 +262,7 @@ jobs:
           service: ${{ env.SERVICE }}
 
       - name: Notify deployment status on Telegram
-        if: ${{ ((always() && github.event.inputs.environment == 'prod') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
+        if: ${{ (always() && github.event.inputs.environment == 'prod') && steps.superseded_before_image_publication.outputs.superseded != 'true' && steps.superseded_before_deployment.outputs.superseded != 'true' }}
         uses: ./.github/actions/deployment-notifier
         with:
           environment: ${{ github.event.inputs.environment }}
