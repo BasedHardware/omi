@@ -3950,7 +3950,7 @@ export interface SearchConversationsResponse {
 
 export interface SearchOverviewFolder {
   color?: string;
-  count?: number;
+  count?: number | null;
   icon?: string;
   id: string;
   name: string;
@@ -3958,11 +3958,11 @@ export interface SearchOverviewFolder {
 
 export interface SearchOverviewResponse {
   folders?: Array<SearchOverviewFolder>;
-  memories?: number;
-  people?: number;
-  places?: number;
-  recaps?: number;
-  starred?: number;
+  memories?: number | null;
+  people?: number | null;
+  places?: number | null;
+  recaps?: number | null;
+  starred?: number | null;
 }
 
 export interface SearchRequest {

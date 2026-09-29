@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from functools import partial
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import APIRouter, Depends
 
@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _count_or_zero(uid: str, field: str, count: Callable[[], int]) -> int:
-    """Run one count aggregation; a failure is logged and reported as 0."""
+def _count_or_none(uid: str, field: str, count: Callable[[], int]) -> Optional[int]:
+    """Run one count aggregation; a failure is logged and reported as None (the tile shows no number)."""
     try:
         return int(count())
     except Exception as e:
@@ -32,11 +32,11 @@ def _count_or_zero(uid: str, field: str, count: Callable[[], int]) -> int:
         record_fallback(
             component='firestore_read',
             from_mode='count',
-            to_mode='zero',
+            to_mode='none',
             reason='other',
             outcome='degraded',
         )
-        return 0
+        return None
 
 
 def _list_folders(uid: str) -> List[Dict[str, Any]]:
@@ -65,7 +65,7 @@ async def get_search_overview(uid: str = Depends(auth.get_current_user_uid)) -> 
     Counts for the global-search tiles shown before the user types.
 
     Every count is a Firestore server-side aggregation and fails independently
-    (reported as 0). Semantics:
+    (reported as null, so the tile shows no number rather than a false 0). Semantics:
 
     - `starred`: starred, non-discarded, non-deleted conversations (same count as
       `GET /v1/conversations/count?starred=true`).
@@ -82,7 +82,7 @@ async def get_search_overview(uid: str = Depends(auth.get_current_user_uid)) -> 
     folders = await run_blocking(db_executor, _list_folders, uid)
 
     def count(field: str, fn: Callable[..., int], *args: Any, **kwargs: Any):
-        return run_blocking(db_executor, _count_or_zero, uid, field, partial(fn, uid, *args, **kwargs))
+        return run_blocking(db_executor, _count_or_none, uid, field, partial(fn, uid, *args, **kwargs))
 
     starred, recaps, memories, people, places, *per_folder = await asyncio.gather(
         count('starred', conversations_db.get_conversations_count, starred=True),

@@ -24342,7 +24342,7 @@
         "type": "object"
       },
       "SearchOverviewFolder": {
-        "description": "One conversation folder with its non-discarded conversation count.",
+        "description": "One conversation folder with its non-discarded conversation count (null when it could not be counted).",
         "properties": {
           "color": {
             "default": "#6B7280",
@@ -24350,9 +24350,15 @@
             "type": "string"
           },
           "count": {
-            "default": 0,
-            "title": "Count",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
           },
           "icon": {
             "default": "folder",
@@ -24376,7 +24382,7 @@
         "type": "object"
       },
       "SearchOverviewResponse": {
-        "description": "Counts behind the global-search tiles shown before the user types.\n\nEvery count is decoration: a failed aggregation reports 0 instead of\nfailing the response.",
+        "description": "Counts behind the global-search tiles shown before the user types.\n\nEvery count is decoration: a failed aggregation reports null (never a\nfalse 0) instead of failing the response.",
         "properties": {
           "folders": {
             "items": {
@@ -24386,29 +24392,59 @@
             "type": "array"
           },
           "memories": {
-            "default": 0,
-            "title": "Memories",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memories"
           },
           "people": {
-            "default": 0,
-            "title": "People",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "People"
           },
           "places": {
-            "default": 0,
-            "title": "Places",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Places"
           },
           "recaps": {
-            "default": 0,
-            "title": "Recaps",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recaps"
           },
           "starred": {
-            "default": 0,
-            "title": "Starred",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starred"
           }
         },
         "title": "SearchOverviewResponse",
@@ -57216,7 +57252,7 @@
     },
     "/v1/search/overview": {
       "get": {
-        "description": "Counts for the global-search tiles shown before the user types.\n\nEvery count is a Firestore server-side aggregation and fails independently\n(reported as 0). Semantics:\n\n- `starred`: starred, non-discarded, non-deleted conversations (same count as\n  `GET /v1/conversations/count?starred=true`).\n- `folders`: the user's folders in display order, each with its non-discarded,\n  non-deleted conversation count.\n- `recaps`: stored daily summaries.\n- `memories`: approximation of the default memories list — active canonical\n  memory items (Archive tier included), or the legacy collection when the\n  account has no canonical items. See `count_default_visible_memories`.\n- `people`: the people (speaker profiles) collection.\n- `places`: conversations with a geolocation, discarded ones included (an\n  exact non-discarded filter would need an undeclared composite index).",
+        "description": "Counts for the global-search tiles shown before the user types.\n\nEvery count is a Firestore server-side aggregation and fails independently\n(reported as null, so the tile shows no number rather than a false 0). Semantics:\n\n- `starred`: starred, non-discarded, non-deleted conversations (same count as\n  `GET /v1/conversations/count?starred=true`).\n- `folders`: the user's folders in display order, each with its non-discarded,\n  non-deleted conversation count.\n- `recaps`: stored daily summaries.\n- `memories`: approximation of the default memories list — active canonical\n  memory items (Archive tier included), or the legacy collection when the\n  account has no canonical items. See `count_default_visible_memories`.\n- `people`: the people (speaker profiles) collection.\n- `places`: conversations with a geolocation, discarded ones included (an\n  exact non-discarded filter would need an undeclared composite index).",
         "operationId": "get_search_overview_v1_search_overview_get",
         "parameters": [
           {

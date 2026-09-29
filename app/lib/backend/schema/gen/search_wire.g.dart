@@ -4,14 +4,14 @@
 
 class GeneratedSearchOverviewFolder {
   final String color;
-  final int count;
+  final int? count;
   final String icon;
   final String id;
   final String name;
 
   const GeneratedSearchOverviewFolder({
     this.color = "#6B7280",
-    this.count = 0,
+    this.count,
     this.icon = "folder",
     required this.id,
     required this.name,
@@ -20,7 +20,7 @@ class GeneratedSearchOverviewFolder {
   factory GeneratedSearchOverviewFolder.fromJson(Map<String, dynamic> json) {
     return GeneratedSearchOverviewFolder(
       color: _required(_readFieldValue<String>(_readField(json, const ["color"]), "color", _readString, requiredField: false, nullable: false, defaultValue: "#6B7280"), "color"),
-      count: _required(_readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "count"),
+      count: _readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: false, nullable: true),
       icon: _required(_readFieldValue<String>(_readField(json, const ["icon"]), "icon", _readString, requiredField: false, nullable: false, defaultValue: "folder"), "icon"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
@@ -40,29 +40,29 @@ class GeneratedSearchOverviewFolder {
 
 class GeneratedSearchOverviewResponse {
   final List<GeneratedSearchOverviewFolder>? folders;
-  final int memories;
-  final int people;
-  final int places;
-  final int recaps;
-  final int starred;
+  final int? memories;
+  final int? people;
+  final int? places;
+  final int? recaps;
+  final int? starred;
 
   const GeneratedSearchOverviewResponse({
     this.folders,
-    this.memories = 0,
-    this.people = 0,
-    this.places = 0,
-    this.recaps = 0,
-    this.starred = 0,
+    this.memories,
+    this.people,
+    this.places,
+    this.recaps,
+    this.starred,
   });
 
   factory GeneratedSearchOverviewResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSearchOverviewResponse(
       folders: _readFieldValue<List<GeneratedSearchOverviewFolder>>(_readField(json, const ["folders"]), "folders", (value) => _readObjectList(value, GeneratedSearchOverviewFolder.fromJson), requiredField: false, nullable: true),
-      memories: _required(_readFieldValue<int>(_readField(json, const ["memories"]), "memories", _readInt, requiredField: false, nullable: false, defaultValue: 0), "memories"),
-      people: _required(_readFieldValue<int>(_readField(json, const ["people"]), "people", _readInt, requiredField: false, nullable: false, defaultValue: 0), "people"),
-      places: _required(_readFieldValue<int>(_readField(json, const ["places"]), "places", _readInt, requiredField: false, nullable: false, defaultValue: 0), "places"),
-      recaps: _required(_readFieldValue<int>(_readField(json, const ["recaps"]), "recaps", _readInt, requiredField: false, nullable: false, defaultValue: 0), "recaps"),
-      starred: _required(_readFieldValue<int>(_readField(json, const ["starred"]), "starred", _readInt, requiredField: false, nullable: false, defaultValue: 0), "starred"),
+      memories: _readFieldValue<int>(_readField(json, const ["memories"]), "memories", _readInt, requiredField: false, nullable: true),
+      people: _readFieldValue<int>(_readField(json, const ["people"]), "people", _readInt, requiredField: false, nullable: true),
+      places: _readFieldValue<int>(_readField(json, const ["places"]), "places", _readInt, requiredField: false, nullable: true),
+      recaps: _readFieldValue<int>(_readField(json, const ["recaps"]), "recaps", _readInt, requiredField: false, nullable: true),
+      starred: _readFieldValue<int>(_readField(json, const ["starred"]), "starred", _readInt, requiredField: false, nullable: true),
     );
   }
 

@@ -199,12 +199,13 @@ def test_one_failing_count_does_not_fail_the_others():
 
     assert response.status_code == 200
     body = response.json()
-    assert body['memories'] == 0
+    # A failed count is null, never a false 0: the app then shows the tile without a number.
+    assert body['memories'] is None
     assert body['starred'] == 4
     assert body['people'] == 5
     assert body['places'] == 11
     assert body['recaps'] == 30
-    assert [(f['id'], f['count']) for f in body['folders']] == [('f-work', 0), ('f-personal', 2)]
+    assert [(f['id'], f['count']) for f in body['folders']] == [('f-work', None), ('f-personal', 2)]
 
 
 def test_folder_read_failure_returns_empty_folders_and_other_counts():
