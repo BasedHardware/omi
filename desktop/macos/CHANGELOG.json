@@ -1,7 +1,5 @@
 {
-  "unreleased": [
-    "Fixed \"Summarize with an app\" being unreachable on a conversation that has no summary yet"
-  ],
+  "unreleased": [],
   "releases": [
     {
       "version": "0.12.420",
