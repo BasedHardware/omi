@@ -11499,4 +11499,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get recent => 'Hiljutised';
+
+  @override
+  String get searchPartialFailure => 'Mõnda tulemust ei õnnestunud laadida';
 }

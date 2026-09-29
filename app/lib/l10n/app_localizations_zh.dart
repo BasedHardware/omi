@@ -11292,4 +11292,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recent => '最近';
+
+  @override
+  String get searchPartialFailure => '部分结果无法加载';
 }

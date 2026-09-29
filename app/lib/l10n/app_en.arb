@@ -13686,5 +13686,9 @@
     "recent": "Recent",
     "@recent": {
         "description": "Heading above recent search queries"
+    },
+    "searchPartialFailure": "Some results couldn't load",
+    "@searchPartialFailure": {
+        "description": "Shown under global search results when one kind of result (conversations, recaps, tasks or memories) failed to load"
     }
 }

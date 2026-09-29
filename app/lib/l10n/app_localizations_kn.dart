@@ -11539,4 +11539,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get recent => 'ಇತ್ತೀಚಿನ';
+
+  @override
+  String get searchPartialFailure => 'ಕೆಲವು ಫಲಿತಾಂಶಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
 }

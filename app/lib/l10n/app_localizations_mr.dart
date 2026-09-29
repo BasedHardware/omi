@@ -11511,4 +11511,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get recent => 'अलीकडील';
+
+  @override
+  String get searchPartialFailure => 'काही परिणाम लोड होऊ शकले नाहीत';
 }

@@ -11437,4 +11437,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get recent => 'ล่าสุด';
+
+  @override
+  String get searchPartialFailure => 'โหลดผลลัพธ์บางส่วนไม่ได้';
 }

@@ -43,22 +43,26 @@ class HomeTabSwitcher extends StatelessWidget {
   /// [analyticsName] is the stable event name; [label] is what the reader sees and hears.
   Widget _tab(BuildContext context, int selected, int index, String label, String analyticsName, Key key) {
     final isSelected = selected == index;
+    void select() {
+      onTabTap(index, isSelected);
+      primaryFocus?.unfocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        HapticFeedback.selectionClick();
+        PlatformManager.instance.analytics.bottomNavigationTabClicked(analyticsName);
+      });
+    }
+
+    // excludeSemantics hides the detector's own tap action, so the node carries it explicitly.
     return Semantics(
       button: true,
       selected: isSelected,
       label: label,
       excludeSemantics: true,
+      onTap: select,
       child: GestureDetector(
         key: key,
         behavior: HitTestBehavior.opaque,
-        onTap: () {
-          onTabTap(index, isSelected);
-          primaryFocus?.unfocus();
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            HapticFeedback.selectionClick();
-            PlatformManager.instance.analytics.bottomNavigationTabClicked(analyticsName);
-          });
-        },
+        onTap: select,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
           child: Align(

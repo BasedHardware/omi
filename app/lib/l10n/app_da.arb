@@ -3669,5 +3669,6 @@
     "activity": "Aktivitet",
     "places": "Steder",
     "recaps": "Opsummeringer",
-    "recent": "Seneste"
+    "recent": "Seneste",
+    "searchPartialFailure": "Nogle resultater kunne ikke indlæses"
 }

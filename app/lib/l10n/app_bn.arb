@@ -11187,5 +11187,6 @@
     "activity": "কার্যকলাপ",
     "places": "স্থান",
     "recaps": "সারাংশ",
-    "recent": "সাম্প্রতিক"
+    "recent": "সাম্প্রতিক",
+    "searchPartialFailure": "কিছু ফলাফল লোড করা যায়নি"
 }

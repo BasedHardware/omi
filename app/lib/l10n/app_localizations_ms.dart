@@ -11534,4 +11534,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get recent => 'Terkini';
+
+  @override
+  String get searchPartialFailure => 'Sesetengah hasil tidak dapat dimuatkan';
 }

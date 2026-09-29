@@ -11503,4 +11503,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get recent => 'Nylige';
+
+  @override
+  String get searchPartialFailure => 'Noen resultater kunne ikke lastes inn';
 }

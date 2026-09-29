@@ -11515,4 +11515,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get recent => 'Son aramalar';
+
+  @override
+  String get searchPartialFailure => 'Bazı sonuçlar yüklenemedi';
 }

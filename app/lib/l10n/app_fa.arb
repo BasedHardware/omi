@@ -11187,5 +11187,6 @@
     "activity": "فعالیت",
     "places": "مکان‌ها",
     "recaps": "خلاصه‌ها",
-    "recent": "اخیر"
+    "recent": "اخیر",
+    "searchPartialFailure": "برخی نتایج بارگیری نشد"
 }

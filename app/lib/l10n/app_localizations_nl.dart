@@ -11539,4 +11539,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get recent => 'Recent';
+
+  @override
+  String get searchPartialFailure => 'Sommige resultaten konden niet worden geladen';
 }

@@ -229,6 +229,12 @@ SCHEMA_GROUPS = {
         'schemas': (
             'SearchOverviewFolder',
             'SearchOverviewResponse',
+            'ProductMemorySearchItem',
+            'MemorySearchPolicyPayload',
+            'MemoryGlobalReadGateObservability',
+            'ReadRolloutCapabilities',
+            'ProductRolloutObservability',
+            'ProductMemorySearchResponse',
         ),
     },
     'imports_integrations': {

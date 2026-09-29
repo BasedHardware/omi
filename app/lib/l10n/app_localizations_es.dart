@@ -11537,4 +11537,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get recent => 'Recientes';
+
+  @override
+  String get searchPartialFailure => 'No se pudieron cargar algunos resultados';
 }

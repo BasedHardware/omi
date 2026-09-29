@@ -3627,5 +3627,6 @@
     "activity": "Actividad",
     "places": "Lugares",
     "recaps": "Resúmenes",
-    "recent": "Recientes"
+    "recent": "Recientes",
+    "searchPartialFailure": "No se pudieron cargar algunos resultados"
 }

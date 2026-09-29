@@ -52,6 +52,7 @@ INTEGRATION_PUBLIC_PATHS = (
     '/v2/integrations/{app_id}/tasks',
 )
 APP_CLIENT_PREFIXES = (
+    '/memory/search',
     '/v1/account/cutover',
     '/v1/action-items',
     '/v1/agent',

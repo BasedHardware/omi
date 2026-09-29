@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/search.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -34,12 +36,15 @@ ServerConversation _conversation(String id, String title, String emoji, DateTime
 
 /// Canned search results; counts on every tile.
 class AuditSearchSource extends GlobalSearchSource {
-  const AuditSearchSource();
+  const AuditSearchSource({this.failTasks = false});
+
+  /// Task search answers 503, as when one backend dependency is down.
+  final bool failTasks;
 
   static final _now = DateTime(2026, 9, 29, 10, 12);
 
   @override
-  Future<SearchOverview?> overview() async => const SearchOverview(
+  Future<ApiResult<SearchOverview>> overview() async => const ApiSuccess(SearchOverview(
         starred: 12,
         folders: [
           SearchFolderCount(id: 'work', name: 'Work', icon: 'briefcase', color: '#3B82F6', count: 148),
@@ -49,17 +54,18 @@ class AuditSearchSource extends GlobalSearchSource {
         memories: 312,
         people: 18,
         places: 27,
-      );
+      ));
 
   @override
-  Future<List<ServerConversation>> conversations(String query, {String? speakerId}) async => [
+  Future<ConversationSearchResult> conversations(String query, {String? speakerId}) async =>
+      ConversationSearchResult(currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success, items: [
         _conversation('c1', 'Device Connection Troubleshooting', '🔧', _now.subtract(const Duration(hours: 1)),
             snippet: 'It should show the bluetooth connection level'),
         _conversation('c2', 'Firmware update planning', '🛠️', _now.subtract(const Duration(days: 5)),
             snippet: 'Bluetooth reconnect after the OTA'),
         _conversation('c3', 'Weekly sync', '📅', _now.subtract(const Duration(days: 7)),
             snippet: 'BLE battery drain numbers'),
-      ];
+      ]);
 
   @override
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) async => [
@@ -70,7 +76,7 @@ class AuditSearchSource extends GlobalSearchSource {
       ];
 
   @override
-  Future<List<DailySummary>> recaps(String query) async => [
+  Future<ApiResult<List<DailySummary>>> recaps(String query) async => ApiSuccess([
         DailySummary(
           id: 'r1',
           date: '2026-09-28',
@@ -80,16 +86,18 @@ class AuditSearchSource extends GlobalSearchSource {
           dayEmoji: '🎤',
           stats: DayStats(totalConversations: 6, actionItemsCount: 2),
         ),
-      ];
+      ]);
 
   @override
-  Future<List<ActionItemWithMetadata>> tasks(String query) async => [
-        const ActionItemWithMetadata(id: 't1', description: 'Send the Bluetooth logs to firmware', completed: false),
-      ];
+  Future<ApiResult<List<ActionItemWithMetadata>>> tasks(String query) async => failTasks
+      ? const ApiFailure(ApiProblem(ApiProblemKind.server, statusCode: 503))
+      : const ApiSuccess([
+          ActionItemWithMetadata(id: 't1', description: 'Send the Bluetooth logs to firmware', completed: false),
+        ]);
 
   @override
-  Future<List<MemorySearchHit>> memories(String query) async =>
-      const [MemorySearchHit(id: 'm1', content: 'Prefers the pendant over the phone mic for long meetings')];
+  Future<ApiResult<List<MemorySearchHit>>> memories(String query) async => const ApiSuccess(
+      [MemorySearchHit(id: 'm1', content: 'Prefers the pendant over the phone mic for long meetings')]);
 
   @override
   Future<List<Person>> people() async => [
@@ -98,9 +106,9 @@ class AuditSearchSource extends GlobalSearchSource {
       ];
 }
 
-Future<void> _pumpSearch(AuditRun a, {String? query}) async {
+Future<void> _pumpSearch(AuditRun a, {String? query, AuditSearchSource source = const AuditSearchSource()}) async {
   await a.pump(
-    GlobalSearchPage(initialQuery: query, source: const AuditSearchSource()),
+    GlobalSearchPage(initialQuery: query, source: source),
     scaffold: false,
     providers: [ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[]))],
   );
@@ -150,6 +158,17 @@ final searchScenarios = <AuditScenario>[
       await _pumpSearch(a, query: 'bluetooth');
       expect(find.text('Device Connection Troubleshooting'), findsOneWidget);
       await a.shot('Type "bluetooth"');
+    },
+  ),
+  AuditScenario(
+    id: 'search-partial',
+    title: 'Search results when one kind fails to load',
+    page: _page,
+    state: '"bluetooth" typed; task search answers 503, the rest succeed',
+    run: (a) async {
+      await _pumpSearch(a, query: 'bluetooth', source: const AuditSearchSource(failTasks: true));
+      expect(find.byKey(const ValueKey('search_partial_retry')), findsOneWidget);
+      await a.shot('Type "bluetooth" while task search is down');
     },
   ),
   AuditScenario(

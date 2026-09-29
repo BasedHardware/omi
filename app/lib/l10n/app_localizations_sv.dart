@@ -11512,4 +11512,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get recent => 'Senaste';
+
+  @override
+  String get searchPartialFailure => 'Vissa resultat kunde inte läsas in';
 }

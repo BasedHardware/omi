@@ -11604,4 +11604,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get recent => 'Kamakailan';
+
+  @override
+  String get searchPartialFailure => 'Hindi ma-load ang ilang resulta';
 }

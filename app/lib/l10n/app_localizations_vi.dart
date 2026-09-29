@@ -11498,4 +11498,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get recent => 'Gần đây';
+
+  @override
+  String get searchPartialFailure => 'Không thể tải một số kết quả';
 }

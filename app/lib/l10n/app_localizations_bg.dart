@@ -11546,4 +11546,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get recent => 'Скорошни';
+
+  @override
+  String get searchPartialFailure => 'Някои резултати не можаха да се заредят';
 }

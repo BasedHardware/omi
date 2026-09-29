@@ -3627,5 +3627,6 @@
     "activity": "النشاط",
     "places": "الأماكن",
     "recaps": "الملخصات",
-    "recent": "الأخيرة"
+    "recent": "الأخيرة",
+    "searchPartialFailure": "تعذّر تحميل بعض النتائج"
 }

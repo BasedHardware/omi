@@ -11542,4 +11542,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get recent => 'Недавние';
+
+  @override
+  String get searchPartialFailure => 'Не удалось загрузить некоторые результаты';
 }

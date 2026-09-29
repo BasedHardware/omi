@@ -11539,4 +11539,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get recent => 'Nedavno';
+
+  @override
+  String get searchPartialFailure => 'Neki rezultati nisu se mogli učitati';
 }

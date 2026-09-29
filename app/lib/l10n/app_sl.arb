@@ -11187,5 +11187,6 @@
     "activity": "Dejavnost",
     "places": "Kraji",
     "recaps": "Povzetki",
-    "recent": "Nedavno"
+    "recent": "Nedavno",
+    "searchPartialFailure": "Nekaterih rezultatov ni bilo mogoče naložiti"
 }

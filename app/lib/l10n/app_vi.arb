@@ -3627,5 +3627,6 @@
     "activity": "Hoạt động",
     "places": "Địa điểm",
     "recaps": "Tóm tắt",
-    "recent": "Gần đây"
+    "recent": "Gần đây",
+    "searchPartialFailure": "Không thể tải một số kết quả"
 }

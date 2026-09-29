@@ -11521,4 +11521,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get recent => 'Naujausi';
+
+  @override
+  String get searchPartialFailure => 'Kai kurių rezultatų nepavyko įkelti';
 }

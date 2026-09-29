@@ -3627,5 +3627,6 @@
     "activity": "Activitate",
     "places": "Locuri",
     "recaps": "Rezumate",
-    "recent": "Recente"
+    "recent": "Recente",
+    "searchPartialFailure": "Unele rezultate nu au putut fi încărcate"
 }

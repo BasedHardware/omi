@@ -11483,4 +11483,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get recent => 'हाल के';
+
+  @override
+  String get searchPartialFailure => 'कुछ परिणाम लोड नहीं हो सके';
 }

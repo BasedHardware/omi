@@ -11499,4 +11499,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get recent => 'اخیر';
+
+  @override
+  String get searchPartialFailure => 'برخی نتایج بارگیری نشد';
 }

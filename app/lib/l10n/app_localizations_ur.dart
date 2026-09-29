@@ -11514,4 +11514,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get recent => 'حالیہ';
+
+  @override
+  String get searchPartialFailure => 'کچھ نتائج لوڈ نہیں ہو سکے';
 }

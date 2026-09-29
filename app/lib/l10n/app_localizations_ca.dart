@@ -11570,4 +11570,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get recent => 'Recents';
+
+  @override
+  String get searchPartialFailure => 'No s\'han pogut carregar alguns resultats';
 }

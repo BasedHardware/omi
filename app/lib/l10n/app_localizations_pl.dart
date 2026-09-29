@@ -11539,4 +11539,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get recent => 'Ostatnie';
+
+  @override
+  String get searchPartialFailure => 'Nie udało się wczytać niektórych wyników';
 }

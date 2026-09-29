@@ -20954,6 +20954,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recent'**
   String get recent;
+
+  /// Shown under global search results when one kind of result (conversations, recaps, tasks or memories) failed to load
+  ///
+  /// In en, this message translates to:
+  /// **'Some results couldn\'t load'**
+  String get searchPartialFailure;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

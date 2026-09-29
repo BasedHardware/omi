@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -616,22 +618,25 @@ class _EmptySearchSource extends GlobalSearchSource {
   const _EmptySearchSource();
 
   @override
-  Future<SearchOverview?> overview() async => null;
+  Future<ApiResult<SearchOverview>> overview() async =>
+      const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
 
   @override
-  Future<List<ServerConversation>> conversations(String query, {String? speakerId}) async => const [];
+  Future<ConversationSearchResult> conversations(String query, {String? speakerId}) async =>
+      const ConversationSearchResult(
+          items: [], currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
 
   @override
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) async => const [];
 
   @override
-  Future<List<DailySummary>> recaps(String query) async => const [];
+  Future<ApiResult<List<DailySummary>>> recaps(String query) async => const ApiSuccess([]);
 
   @override
-  Future<List<ActionItemWithMetadata>> tasks(String query) async => const [];
+  Future<ApiResult<List<ActionItemWithMetadata>>> tasks(String query) async => const ApiSuccess([]);
 
   @override
-  Future<List<MemorySearchHit>> memories(String query) async => const [];
+  Future<ApiResult<List<MemorySearchHit>>> memories(String query) async => const ApiSuccess([]);
 
   @override
   Future<List<Person>> people() async => const [];

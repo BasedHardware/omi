@@ -3662,5 +3662,6 @@
     "activity": "Aktywność",
     "places": "Miejsca",
     "recaps": "Podsumowania",
-    "recent": "Ostatnie"
+    "recent": "Ostatnie",
+    "searchPartialFailure": "Nie udało się wczytać niektórych wyników"
 }

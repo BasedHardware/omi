@@ -3627,5 +3627,6 @@
     "activity": "Aktivität",
     "places": "Orte",
     "recaps": "Rückblicke",
-    "recent": "Zuletzt"
+    "recent": "Zuletzt",
+    "searchPartialFailure": "Einige Ergebnisse konnten nicht geladen werden"
 }

@@ -3627,5 +3627,6 @@
     "activity": "Aktivitet",
     "places": "Platser",
     "recaps": "Sammanfattningar",
-    "recent": "Senaste"
+    "recent": "Senaste",
+    "searchPartialFailure": "Vissa resultat kunde inte läsas in"
 }

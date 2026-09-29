@@ -11187,5 +11187,6 @@
     "activity": "Aktibidad",
     "places": "Mga lugar",
     "recaps": "Mga buod",
-    "recent": "Kamakailan"
+    "recent": "Kamakailan",
+    "searchPartialFailure": "Hindi ma-load ang ilang resulta"
 }

@@ -11187,5 +11187,6 @@
     "activity": "פעילות",
     "places": "מקומות",
     "recaps": "סיכומים",
-    "recent": "אחרונים"
+    "recent": "אחרונים",
+    "searchPartialFailure": "לא ניתן היה לטעון חלק מהתוצאות"
 }

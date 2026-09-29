@@ -3627,5 +3627,6 @@
     "activity": "Toiminta",
     "places": "Paikat",
     "recaps": "Yhteenvedot",
-    "recent": "Viimeisimmät"
+    "recent": "Viimeisimmät",
+    "searchPartialFailure": "Joitakin tuloksia ei voitu ladata"
 }

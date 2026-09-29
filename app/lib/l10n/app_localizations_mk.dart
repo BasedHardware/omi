@@ -11565,4 +11565,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get recent => 'Неодамнешни';
+
+  @override
+  String get searchPartialFailure => 'Некои резултати не можеа да се вчитаат';
 }

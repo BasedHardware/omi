@@ -11187,5 +11187,6 @@
     "activity": "Aktivnost",
     "places": "Mjesta",
     "recaps": "Sažeci",
-    "recent": "Nedavno"
+    "recent": "Nedavno",
+    "searchPartialFailure": "Neki rezultati nisu se mogli učitati"
 }

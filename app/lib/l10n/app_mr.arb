@@ -11187,5 +11187,6 @@
     "activity": "क्रियाकलाप",
     "places": "ठिकाणे",
     "recaps": "सारांश",
-    "recent": "अलीकडील"
+    "recent": "अलीकडील",
+    "searchPartialFailure": "काही परिणाम लोड होऊ शकले नाहीत"
 }

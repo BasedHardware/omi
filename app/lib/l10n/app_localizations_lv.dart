@@ -11528,4 +11528,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get recent => 'Nesenie';
+
+  @override
+  String get searchPartialFailure => 'Dažus rezultātus neizdevās ielādēt';
 }

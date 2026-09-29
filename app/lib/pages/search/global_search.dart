@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/utils/logger.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/search.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -117,12 +119,12 @@ class SearchDropTransition extends StatelessWidget {
 abstract class GlobalSearchSource {
   const GlobalSearchSource();
 
-  Future<SearchOverview?> overview();
-  Future<List<ServerConversation>> conversations(String query, {String? speakerId});
+  Future<ApiResult<SearchOverview>> overview();
+  Future<ConversationSearchResult> conversations(String query, {String? speakerId});
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false});
-  Future<List<DailySummary>> recaps(String query);
-  Future<List<ActionItemWithMetadata>> tasks(String query);
-  Future<List<MemorySearchHit>> memories(String query);
+  Future<ApiResult<List<DailySummary>>> recaps(String query);
+  Future<ApiResult<List<ActionItemWithMetadata>>> tasks(String query);
+  Future<ApiResult<List<MemorySearchHit>>> memories(String query);
   Future<List<Person>> people();
 }
 
@@ -130,24 +132,24 @@ class ApiGlobalSearchSource extends GlobalSearchSource {
   const ApiGlobalSearchSource();
 
   @override
-  Future<SearchOverview?> overview() => getSearchOverview();
+  Future<ApiResult<SearchOverview>> overview() => getSearchOverview();
 
   @override
-  Future<List<ServerConversation>> conversations(String query, {String? speakerId}) async =>
-      (await searchConversationsServerResult(query, limit: 20, includeDiscarded: false, speakerId: speakerId)).items;
+  Future<ConversationSearchResult> conversations(String query, {String? speakerId}) =>
+      searchConversationsServerResult(query, limit: 20, includeDiscarded: false, speakerId: speakerId);
 
   @override
   Future<List<ServerConversation>> conversationsIn({String? folderId, bool starred = false}) =>
       getConversations(limit: 50, folderId: folderId, starred: starred ? true : null);
 
   @override
-  Future<List<DailySummary>> recaps(String query) => searchDailySummaries(query);
+  Future<ApiResult<List<DailySummary>>> recaps(String query) => searchDailySummaries(query);
 
   @override
-  Future<List<ActionItemWithMetadata>> tasks(String query) => searchActionItems(query);
+  Future<ApiResult<List<ActionItemWithMetadata>>> tasks(String query) => searchActionItems(query);
 
   @override
-  Future<List<MemorySearchHit>> memories(String query) => searchMemories(query);
+  Future<ApiResult<List<MemorySearchHit>>> memories(String query) => searchMemories(query);
 
   @override
   Future<List<Person>> people() async => await getAllPeople(includeSpeechSamples: false) ?? const [];
@@ -159,12 +161,16 @@ class _Results {
     this.recaps = const [],
     this.tasks = const [],
     this.memories = const [],
+    this.partial = false,
   });
 
   final List<ServerConversation> conversations;
   final List<DailySummary> recaps;
   final List<ActionItemWithMetadata> tasks;
   final List<MemorySearchHit> memories;
+
+  /// At least one kind of result failed to load, so what is shown (or its absence) is incomplete.
+  final bool partial;
 
   bool get isEmpty => conversations.isEmpty && recaps.isEmpty && tasks.isEmpty && memories.isEmpty;
 }
@@ -234,8 +240,13 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
   }
 
   Future<void> _loadOverview() async {
-    final overview = await widget.source.overview();
-    if (mounted && overview != null) setState(() => _overview = overview);
+    switch (await widget.source.overview()) {
+      case ApiSuccess(:final data):
+        if (mounted) setState(() => _overview = data);
+      case ApiFailure(:final problem):
+        // Counts are decoration (an older backend has no overview route): the tiles stay, unnumbered.
+        Logger.debug('Search overview unavailable: ${problem.kind}');
+    }
   }
 
   void _onChanged(String value) {
@@ -257,20 +268,34 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     final generation = ++_generation;
     setState(() => _searching = true);
     final source = widget.source;
-    final found = await Future.wait<Object>([
-      source.conversations(query).catchError((_) => <ServerConversation>[]),
-      source.recaps(query).catchError((_) => <DailySummary>[]),
-      source.tasks(query).catchError((_) => <ActionItemWithMetadata>[]),
-      source.memories(query).catchError((_) => <MemorySearchHit>[]),
-    ]);
+    var partial = false;
+    // A failed kind contributes no rows and marks the results incomplete; it is never shown as "none".
+    List<T> rows<T>(ApiResult<List<T>> result) {
+      switch (result) {
+        case ApiSuccess(:final data):
+          return data;
+        case ApiFailure():
+          partial = true;
+          return <T>[];
+      }
+    }
+
+    final (conversations, recaps, tasks, memories) = await (
+      source.conversations(query),
+      source.recaps(query),
+      source.tasks(query),
+      source.memories(query),
+    ).wait;
     if (!mounted || generation != _generation) return;
+    if (conversations.outcome != ConversationSearchResultOutcome.success) partial = true;
     setState(() {
       _searching = false;
       _results = _Results(
-        conversations: found[0] as List<ServerConversation>,
-        recaps: found[1] as List<DailySummary>,
-        tasks: found[2] as List<ActionItemWithMetadata>,
-        memories: found[3] as List<MemorySearchHit>,
+        conversations: conversations.items,
+        recaps: rows(recaps),
+        tasks: rows(tasks),
+        memories: rows(memories),
+        partial: partial,
       );
     });
   }
@@ -309,7 +334,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
       return;
     }
     final conversations = await (scope.person != null
-            ? source.conversations('', speakerId: scope.person!.id)
+            ? source.conversations('', speakerId: scope.person!.id).then((result) => result.items)
             : source.conversationsIn(folderId: scope.folderId, starred: scope.starred))
         .catchError((_) => <ServerConversation>[]);
     if (!mounted || generation != _generation) return;
@@ -508,6 +533,9 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
     if (_searching && r.isEmpty) {
       return const Center(child: OmiSpinner());
     }
+    if (r.isEmpty && r.partial) {
+      return OmiErrorState(message: l10n.searchPartialFailure, onRetry: () => _run(_query.text.trim()));
+    }
     if (r.isEmpty) {
       return OmiEmptyState(icon: Icons.search_off_rounded, title: l10n.noResultsFound);
     }
@@ -517,6 +545,7 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
       padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + 24),
       children: [
         if (_searching) const LinearProgressIndicator(minHeight: 1),
+        if (r.partial) _PartialNotice(onRetry: () => _run(_query.text.trim())),
         if (r.recaps.isNotEmpty) ...[
           _SectionLabel(l10n.recaps),
           for (final recap in r.recaps)
@@ -790,6 +819,39 @@ class _Row extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A quiet line above incomplete results: one kind failed to load; retry runs the search again.
+class _PartialNotice extends StatelessWidget {
+  const _PartialNotice({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Semantics(
+      liveRegion: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.xs, 0),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, size: 16, color: OmiColors.textTertiary),
+            const SizedBox(width: OmiSpacing.xs),
+            Expanded(
+              child: Text(l10n.searchPartialFailure, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+            ),
+            OmiButton.secondary(
+              key: const ValueKey('search_partial_retry'),
+              label: l10n.tryAgain,
+              size: OmiButtonSize.compact,
+              onPressed: onRetry,
+            ),
+          ],
         ),
       ),
     );

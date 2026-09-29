@@ -11313,4 +11313,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get recent => '最近';
+
+  @override
+  String get searchPartialFailure => '一部の結果を読み込めませんでした';
 }

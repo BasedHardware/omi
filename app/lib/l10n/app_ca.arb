@@ -3627,5 +3627,6 @@
     "activity": "Activitat",
     "places": "Llocs",
     "recaps": "Resums",
-    "recent": "Recents"
+    "recent": "Recents",
+    "searchPartialFailure": "No s'han pogut carregar alguns resultats"
 }

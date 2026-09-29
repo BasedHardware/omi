@@ -11187,5 +11187,6 @@
     "activity": "سرگرمی",
     "places": "مقامات",
     "recaps": "خلاصے",
-    "recent": "حالیہ"
+    "recent": "حالیہ",
+    "searchPartialFailure": "کچھ نتائج لوڈ نہیں ہو سکے"
 }

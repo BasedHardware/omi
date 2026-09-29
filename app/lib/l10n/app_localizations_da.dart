@@ -11489,4 +11489,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get recent => 'Seneste';
+
+  @override
+  String get searchPartialFailure => 'Nogle resultater kunne ikke indlæses';
 }

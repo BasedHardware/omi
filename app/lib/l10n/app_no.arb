@@ -3627,5 +3627,6 @@
     "activity": "Aktivitet",
     "places": "Steder",
     "recaps": "Oppsummeringer",
-    "recent": "Nylige"
+    "recent": "Nylige",
+    "searchPartialFailure": "Noen resultater kunne ikke lastes inn"
 }

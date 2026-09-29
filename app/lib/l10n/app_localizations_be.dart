@@ -11533,4 +11533,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get recent => 'Нядаўнія';
+
+  @override
+  String get searchPartialFailure => 'Не ўдалося загрузіць некаторыя вынікі';
 }

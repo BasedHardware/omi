@@ -11503,4 +11503,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get recent => 'সাম্প্রতিক';
+
+  @override
+  String get searchPartialFailure => 'কিছু ফলাফল লোড করা যায়নি';
 }

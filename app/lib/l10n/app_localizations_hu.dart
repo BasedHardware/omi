@@ -11547,4 +11547,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get recent => 'Legutóbbiak';
+
+  @override
+  String get searchPartialFailure => 'Néhány találatot nem sikerült betölteni';
 }

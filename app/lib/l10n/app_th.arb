@@ -3627,5 +3627,6 @@
     "activity": "กิจกรรม",
     "places": "สถานที่",
     "recaps": "สรุป",
-    "recent": "ล่าสุด"
+    "recent": "ล่าสุด",
+    "searchPartialFailure": "โหลดผลลัพธ์บางส่วนไม่ได้"
 }

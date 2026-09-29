@@ -100,7 +100,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the sheet is Account, Plan, Referral, the groups and Feedback, in order, and every row is keyed',
+  testWidgets('the sheet is Account, Plan, Referral, the groups, Memories, Goals and Feedback, in order, keyed',
       (tester) async {
     await pumpSheet(tester);
     final rows = _rowsOnScreen(tester);
@@ -113,6 +113,8 @@ void main() {
       'settings_group_notifications',
       'settings_group_integrations',
       'settings_group_privacy',
+      'settings_row_memories',
+      'settings_row_goals',
       'settings_group_help',
       'settings_row_feedback', // where Intercom is supported (the host test is)
       'settings_group_developer',
@@ -128,6 +130,8 @@ void main() {
       en.notificationsAndDisplay,
       en.integrations,
       en.dataAndPrivacy,
+      en.memories,
+      en.goals,
       en.helpAndAbout,
       en.feedbackBug,
       en.developerSettings,

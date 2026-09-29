@@ -11412,4 +11412,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get recent => 'אחרונים';
+
+  @override
+  String get searchPartialFailure => 'לא ניתן היה לטעון חלק מהתוצאות';
 }

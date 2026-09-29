@@ -3627,5 +3627,6 @@
     "activity": "アクティビティ",
     "places": "場所",
     "recaps": "まとめ",
-    "recent": "最近"
+    "recent": "最近",
+    "searchPartialFailure": "一部の結果を読み込めませんでした"
 }

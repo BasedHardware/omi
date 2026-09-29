@@ -11506,4 +11506,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get recent => 'Viimeisimmät';
+
+  @override
+  String get searchPartialFailure => 'Joitakin tuloksia ei voitu ladata';
 }

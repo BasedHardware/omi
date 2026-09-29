@@ -3723,5 +3723,6 @@
     "activity": "Tevékenység",
     "places": "Helyek",
     "recaps": "Összefoglalók",
-    "recent": "Legutóbbiak"
+    "recent": "Legutóbbiak",
+    "searchPartialFailure": "Néhány találatot nem sikerült betölteni"
 }

@@ -3627,5 +3627,6 @@
     "activity": "गतिविधि",
     "places": "स्थान",
     "recaps": "सारांश",
-    "recent": "हाल के"
+    "recent": "हाल के",
+    "searchPartialFailure": "कुछ परिणाम लोड नहीं हो सके"
 }

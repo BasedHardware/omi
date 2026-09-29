@@ -11581,4 +11581,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get recent => 'சமீபத்தியவை';
+
+  @override
+  String get searchPartialFailure => 'சில முடிவுகளை ஏற்ற முடியவில்லை';
 }

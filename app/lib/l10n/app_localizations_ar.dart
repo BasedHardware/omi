@@ -11433,4 +11433,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get recent => 'الأخيرة';
+
+  @override
+  String get searchPartialFailure => 'تعذّر تحميل بعض النتائج';
 }

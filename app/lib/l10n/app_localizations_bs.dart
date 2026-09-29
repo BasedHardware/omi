@@ -11533,4 +11533,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get recent => 'Nedavno';
+
+  @override
+  String get searchPartialFailure => 'Neki rezultati se nisu mogli učitati';
 }

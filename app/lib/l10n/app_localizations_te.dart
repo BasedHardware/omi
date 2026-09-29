@@ -11551,4 +11551,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get recent => 'ఇటీవలివి';
+
+  @override
+  String get searchPartialFailure => 'కొన్ని ఫలితాలను లోడ్ చేయలేకపోయాం';
 }

@@ -11524,4 +11524,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get recent => 'Нещодавні';
+
+  @override
+  String get searchPartialFailure => 'Не вдалося завантажити деякі результати';
 }

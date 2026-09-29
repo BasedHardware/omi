@@ -11581,4 +11581,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get recent => 'Πρόσφατα';
+
+  @override
+  String get searchPartialFailure => 'Ορισμένα αποτελέσματα δεν φορτώθηκαν';
 }

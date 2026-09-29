@@ -61,36 +61,42 @@ class ChatStarters extends StatelessWidget {
           ),
         const Spacer(flex: 3),
         if (isConnected)
-          SizedBox(
-            height: kOmiMinTapTarget,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
-              itemCount: prompts.length,
-              separatorBuilder: (_, __) => const SizedBox(width: OmiSpacing.xs),
-              itemBuilder: (context, index) {
-                final kind = prompts[index];
-                final prompt = l10n.chatStarterPrompt(kind);
-                return Center(
-                  child: Semantics(
+          // A wrap, not a scroller: two starters sit on one row, and under large text the second
+          // moves to its own line instead of hiding off screen.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
+            child: Wrap(
+              spacing: OmiSpacing.xs,
+              children: [
+                for (final kind in prompts)
+                  Semantics(
                     button: true,
                     child: GestureDetector(
                       key: ValueKey('chat_starter_$kind'),
                       behavior: HitTestBehavior.opaque,
-                      onTap: () => onSelected(prompt),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                        decoration: BoxDecoration(
-                          color: OmiColors.surface1,
-                          borderRadius: OmiRadius.pillAll,
-                          border: Border.all(color: OmiColors.border),
+                      onTap: () => onSelected(l10n.chatStarterPrompt(kind)),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+                        child: Align(
+                          widthFactor: 1,
+                          heightFactor: 1,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                            decoration: BoxDecoration(
+                              color: OmiColors.surface1,
+                              borderRadius: OmiRadius.pillAll,
+                              border: Border.all(color: OmiColors.border),
+                            ),
+                            child: Text(
+                              l10n.chatStarterPrompt(kind),
+                              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                            ),
+                          ),
                         ),
-                        child: Text(prompt, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                       ),
                     ),
                   ),
-                );
-              },
+              ],
             ),
           ),
         const SizedBox(height: OmiSpacing.xs),

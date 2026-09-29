@@ -299,17 +299,21 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     });
   }
 
+  /// Deferred work still waiting to start; cancelled on dispose so Home leaves no timer behind.
+  final List<Timer> _deferred = [];
+
   void _scheduleDeferred(Future<void> Function() operation) {
-    unawaited(
-      Future<void>.delayed(const Duration(milliseconds: 200), () async {
-        if (!mounted) return;
-        try {
-          await operation();
-        } catch (error, stackTrace) {
-          Logger.error('Deferred conversations-page work failed: $error\n$stackTrace');
-        }
-      }),
-    );
+    late final Timer timer;
+    timer = Timer(const Duration(milliseconds: 200), () async {
+      _deferred.remove(timer);
+      if (!mounted) return;
+      try {
+        await operation();
+      } catch (error, stackTrace) {
+        Logger.error('Deferred conversations-page work failed: $error\n$stackTrace');
+      }
+    });
+    _deferred.add(timer);
   }
 
   /// The capture-gap group only belongs in the unfiltered default view; the
@@ -399,6 +403,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void dispose() {
+    for (final timer in _deferred) {
+      timer.cancel();
+    }
     _scrollController.dispose();
     super.dispose();
   }

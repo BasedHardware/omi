@@ -11514,4 +11514,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get recent => 'Terbaru';
+
+  @override
+  String get searchPartialFailure => 'Beberapa hasil tidak dapat dimuat';
 }

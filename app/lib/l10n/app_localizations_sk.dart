@@ -11494,4 +11494,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get recent => 'Nedávne';
+
+  @override
+  String get searchPartialFailure => 'Niektoré výsledky sa nepodarilo načítať';
 }

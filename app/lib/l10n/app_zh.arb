@@ -3627,5 +3627,6 @@
     "activity": "活动",
     "places": "地点",
     "recaps": "回顾",
-    "recent": "最近"
+    "recent": "最近",
+    "searchPartialFailure": "部分结果无法加载"
 }

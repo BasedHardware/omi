@@ -11557,4 +11557,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get recent => 'Recente';
+
+  @override
+  String get searchPartialFailure => 'Unele rezultate nu au putut fi încărcate';
 }

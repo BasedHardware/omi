@@ -11317,4 +11317,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get recent => '최근';
+
+  @override
+  String get searchPartialFailure => '일부 결과를 불러오지 못했습니다';
 }

@@ -3627,5 +3627,6 @@
     "activity": "활동",
     "places": "장소",
     "recaps": "요약",
-    "recent": "최근"
+    "recent": "최근",
+    "searchPartialFailure": "일부 결과를 불러오지 못했습니다"
 }
