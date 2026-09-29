@@ -62,10 +62,10 @@ from utils.stt.live_failure import (
 from utils.stt.live_chain import ProviderChainUnavailable
 from config.stt_provider_policy import provider_for_service
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
-from utils.stt.live_metrics import RECONNECT
+from utils.stt.live_metrics import RECONNECT, WINDOW_REPLAY_SAFE_TRIMS
 from utils.stt.brand_terms import normalize_brand_segments
 from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
-from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
+from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled, window_replay_action
 from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
@@ -1535,10 +1535,8 @@ class ListenReceiver(ReplayFilterMixin):
             outbound_audio = bytes(buffer)
             outbound_start_sample = self._stt_buffer_start_sample
             window_ring = self._window_ring()
-            if window_ring is not None and window_ring.would_overflow(outbound_audio, outbound_start_sample):
-                raw = getattr(self.stt_socket, 'raw', None)
-                if raw is not None:
-                    raw.fail('capacity_full')
+            ring_action = window_replay_action(window_ring, self.stt_socket, outbound_audio, outbound_start_sample)
+            if ring_action == 'failover':
                 if await self._failover_stt_socket():
                     continue
                 return
@@ -1557,6 +1555,8 @@ class ListenReceiver(ReplayFilterMixin):
                     self._resilient_audio.append(outbound_audio, outbound_start_sample)
                 if (ring := self._window_ring()) is not None:
                     ring.append(outbound_audio, outbound_start_sample)
+                    if ring_action == 'trim':
+                        WINDOW_REPLAY_SAFE_TRIMS.inc()
                 self._capture('capture_outbound_stt', outbound_audio)
                 self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
                 self._stt_buffer_start_sample = None

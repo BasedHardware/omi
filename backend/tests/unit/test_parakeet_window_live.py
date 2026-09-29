@@ -618,6 +618,7 @@ async def test_one_post_in_flight_buffer_bounded_and_cancel_releases(monkeypatch
     assert len(calls) == 1
     assert sock.is_connection_dead
     assert sock.death_reason == 'capacity_full'
+    assert sock.typed_death_reason == 'capacity_full'
     assert st._parakeet_circuit.state == 'open'
     assert window.admission.active == 0
     await asyncio.gather(sock._pump_task, return_exceptions=True)
@@ -1063,6 +1064,44 @@ async def test_empty_post_without_speech_does_not_advance_streak(monkeypatch):
     assert not sock.is_connection_dead
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_long_vad_silence_does_not_replace_healthy_window_leg(monkeypatch):
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    fallback = AsyncMock(side_effect=AssertionError('silent window must not select Soniox'))
+    monkeypatch.setattr(st, 'process_audio_soniox', fallback)
+    base = receiver()
+    host = base.host
+    host.request.sample_rate = 16000
+    host.request.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    host.state.stt_terminal_failure = False
+    host.state.fair_use_dg_budget_exhausted = False
+    host.state.fair_use_track_dg_usage = False
+    host.state.dg_usage_ms_pending = 0
+    host.client_device_context = SimpleNamespace(platform='ios')
+    host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
+    host.spawn = lambda coro, **kw: coro.close()
+    actual = ListenReceiver(host, [], {})
+    assert await actual.initialize_stt()
+    previous = actual.stt_socket
+    ring = actual._window_ring()
+    ring.ring_seconds = 3
+    one_second = bytes(16000 * 2)
+    for second in range(5):
+        actual.capture_timeline.accept(one_second, window.time.time(), window.time.monotonic())
+        actual._stt_buffer_start_sample = second * 16000
+        await actual._flush_stt_buffer(bytearray(one_second), force=True)
+    assert actual.stt_socket is previous
+    assert not previous.is_connection_dead
+    assert not previous.raw.has_untranscribed_speech()
+    assert ring.buffered_bytes == 3 * len(one_second)
+    assert ring.snapshot()[0][0] == 2 * 16000
+    assert client.requests == []
+    fallback.assert_not_awaited()
+    await actual._drain_stt_sockets()
+    assert previous.raw.death_reason is None  # normal teardown never becomes connection_lost
 
 
 @pytest.mark.asyncio

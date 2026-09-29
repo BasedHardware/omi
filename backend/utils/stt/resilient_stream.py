@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 import os
 from collections import deque
-from typing import Any
+from typing import Any, Literal
 
 from utils.stt.live_metrics import RECONNECT, REPLAY_SECONDS
 
@@ -85,6 +85,25 @@ class ResilientAudio:
 
     def close(self) -> None:
         self._chunks.clear()
+
+
+def window_replay_action(
+    ring: ResilientAudio | None, socket: Any, data: bytes, start_sample: int | None
+) -> Literal['append', 'trim', 'failover']:
+    """Reserve replay space before send; trim only when no admitted speech awaits text."""
+    if ring is None or not ring.would_overflow(data, start_sample):
+        return 'append'
+    raw = getattr(socket, 'raw', None)
+    has_untranscribed_speech = getattr(raw, 'has_untranscribed_speech', None)
+    if (
+        callable(has_untranscribed_speech)
+        and not has_untranscribed_speech()
+        and len(data) <= ring.ring_seconds * ring.sample_rate * 2
+    ):
+        return 'trim'
+    if raw is not None:
+        raw.fail('capacity_full')
+    return 'failover'
 
 
 def filter_replayed_segments(
