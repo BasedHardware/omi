@@ -138,8 +138,8 @@ def get_apple_health_steps_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_steps_tool: {e}")
-        return f"Error retrieving step data: {str(e)}"
+        logger.error(f"Error in get_apple_health_steps_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while retrieving step data. Please try again later."
 
 
 @tool
@@ -204,8 +204,8 @@ def get_apple_health_sleep_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_sleep_tool: {e}")
-        return f"Error retrieving sleep data: {str(e)}"
+        logger.error(f"Error in get_apple_health_sleep_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while retrieving sleep data. Please try again later."
 
 
 @tool
@@ -264,8 +264,8 @@ def get_apple_health_heart_rate_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_heart_rate_tool: {e}")
-        return f"Error retrieving heart rate data: {str(e)}"
+        logger.error(f"Error in get_apple_health_heart_rate_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while retrieving heart rate data. Please try again later."
 
 
 @tool
@@ -346,8 +346,8 @@ def get_apple_health_workouts_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_workouts_tool: {e}")
-        return f"Error retrieving workout data: {str(e)}"
+        logger.error(f"Error in get_apple_health_workouts_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while retrieving workout data. Please try again later."
 
 
 @tool
@@ -463,5 +463,5 @@ def get_apple_health_summary_tool(
         return result.strip()
 
     except Exception as e:
-        logger.error(f"Error in get_apple_health_summary_tool: {e}")
-        return f"Error retrieving health summary: {str(e)}"
+        logger.error(f"Error in get_apple_health_summary_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while retrieving health summary. Please try again later."
