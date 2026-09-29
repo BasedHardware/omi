@@ -231,6 +231,7 @@ class BatchPressure:
 
     REFRESH_SECONDS = 5.0
     STALE_SECONDS = 15.0
+    MAX_REPLICAS = 8
     MAX_PENDING = 4
     MAX_OLDEST_SECONDS = 1.0
 
@@ -278,12 +279,25 @@ class BatchPressure:
     async def _refresh_forever(self, pool_host: str, min_replicas: int) -> None:
         while True:
             try:
-                await self._refresh(pool_host, min_replicas)
+                limits = httpx.Limits(
+                    max_connections=self.MAX_REPLICAS,
+                    max_keepalive_connections=self.MAX_REPLICAS,
+                    keepalive_expiry=30.0,
+                )
+                async with httpx.AsyncClient(timeout=1.0, trust_env=False, limits=limits) as client:
+                    while True:
+                        try:
+                            await self._refresh(pool_host, min_replicas, client)
+                        except Exception:
+                            # Even an unexpected refresh fault invalidates the sample, then retries.
+                            self._observed_at = 0.0
+                            WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable').inc()
+                        await asyncio.sleep(self.REFRESH_SECONDS)
             except Exception:
-                # Even an unexpected refresh fault invalidates the sample, then retries.
+                # Client construction/closure can also fail; retry with a fresh client.
                 self._observed_at = 0.0
                 WINDOW_PRESSURE_REFRESH.labels(outcome='unavailable').inc()
-            await asyncio.sleep(self.REFRESH_SECONDS)
+                await asyncio.sleep(self.REFRESH_SECONDS)
 
     def allows(self, pool_host: str, min_replicas: int) -> bool:
         if not pool_host or min_replicas < 1:
@@ -302,7 +316,7 @@ class BatchPressure:
             return False
         return True
 
-    async def _refresh(self, pool_host: str, min_replicas: int) -> None:
+    async def _refresh(self, pool_host: str, min_replicas: int, client: httpx.AsyncClient) -> None:
         try:
             if not pool_host or min_replicas < 1:
                 raise ValueError('Parakeet batch pool discovery is not configured')
@@ -311,10 +325,11 @@ class BatchPressure:
                 timeout=1.0,
             )
             ips = {address[4][0] for address in addresses}
+            if len(ips) > self.MAX_REPLICAS:
+                raise ValueError('Parakeet batch pool has more replicas than the poll cap')
             if len(ips) < min_replicas:
                 raise ValueError('Parakeet batch pool has fewer ready replicas than expected')
-            async with httpx.AsyncClient(timeout=1.0, trust_env=False) as client:
-                responses = await asyncio.gather(*(client.get(f'http://{ip}:8080/batch/metrics') for ip in ips))
+            responses = await asyncio.gather(*(client.get(f'http://{ip}:8080/batch/metrics') for ip in ips))
             pending_total = 0.0
             oldest_max = 0.0
             for response in responses:
