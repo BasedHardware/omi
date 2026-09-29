@@ -147,6 +147,13 @@ def _safe_action_item_responses(items, *, uid: str = '', context: str = '') -> L
     return responses
 
 
+def _raise_if_unservable(uid: str, item: dict) -> None:
+    """404 a mutation that would leave an item the response model cannot serve (the lists skip it), before
+    anything is written, instead of writing to it and then failing the response with a 500."""
+    if not _safe_action_item_responses([item], uid=uid, context='mutation'):
+        raise HTTPException(status_code=404, detail="Action item not found")
+
+
 def _wake_task_changes(uid: str, task_ids: List[str], mutation_key: object) -> None:
     """Notify proactive Chat-first after the route's persistence has committed."""
 
@@ -704,6 +711,9 @@ def update_action_item(
         update_data['completed_at'] = datetime.now(timezone.utc)
     elif 'completed' in update_data or 'status' in update_data:
         update_data['completed_at'] = None
+    # Check the item as this update would leave it: one that stays malformed is left untouched, while an
+    # update that supplies the bad field (e.g. a description over a null one) still repairs it.
+    _raise_if_unservable(uid, {**existing_item, **update_data})
 
     # Update the action item
     try:
@@ -771,6 +781,9 @@ def toggle_action_item_completion(
     existing_item = _get_valid_action_item(uid, action_item_id)
     if not existing_item:
         raise HTTPException(status_code=404, detail="Action item not found")
+    # The toggle only writes the completion fields, so an item malformed elsewhere is refused before the write.
+    toggled = {'completed': completed, 'status': 'completed' if completed else 'active'}
+    _raise_if_unservable(uid, {**existing_item, **toggled})
 
     # Update completion status
     success = action_items_db.mark_action_item_completed(uid, action_item_id, completed)
