@@ -52,6 +52,7 @@ backend/tests/unit/test_import_jobs_malformed.py
 backend/tests/unit/test_integration_malformed_records.py
 backend/tests/unit/test_llm_provider_plugin_structure.py
 backend/tests/unit/test_lock_bypass_fixes.py
+backend/tests/unit/test_mcp_action_items_people_poison.py
 backend/tests/unit/test_mcp_action_item_writes.py
 backend/tests/unit/test_mcp_client_tool_result.py
 backend/tests/unit/test_mcp_conversations_poison.py

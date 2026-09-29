@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 from utils.executors import postprocess_executor
 from utils.mcp_data import end_of_day_utc, parse_date_only_utc
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from fastapi.routing import APIRoute
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 import database.users as users_db
 from database._client import db
@@ -700,6 +700,20 @@ class SimpleActionItem(BaseModel):
     deleted: Optional[bool] = None
 
 
+def _validate_simple_action_items(items: Sequence[Any], uid: str) -> List[SimpleActionItem]:
+    """Validate each action item individually so one malformed row cannot 500 the whole page."""
+    valid_items: List[SimpleActionItem] = []
+    for item in items:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        try:
+            valid_items.append(SimpleActionItem.model_validate(item))
+        except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
+            logger.warning(f"Skipping malformed action item {item.get('id', 'unknown')} for uid {uid}: {e}")
+            continue
+    return valid_items
+
+
 @router.get("/v1/mcp/action-items", response_model=List[SimpleActionItem], tags=["mcp"])
 def get_action_items(
     response: Response,
@@ -736,7 +750,7 @@ def get_action_items(
         except ToolExecutionError as e:
             raise _http_error_from_tool_error(e)
         _next_cursor_header(response, next_cursor)
-        return items
+        return _validate_simple_action_items(items, uid)
 
     try:
         items, next_cursor = mcp_action_item_handlers.action_items_list_page_core(
@@ -752,7 +766,7 @@ def get_action_items(
     except ToolExecutionError as e:
         raise _http_error_from_tool_error(e)
     _next_cursor_header(response, next_cursor)
-    return items
+    return _validate_simple_action_items(items, uid)
 
 
 class McpCreateActionItem(BaseModel):
@@ -805,7 +819,8 @@ def search_action_items(
 ):
     logger.info(f"search_action_items {uid} limit={limit}")
     result = _call_action_item_handler("search_action_items", uid, {"query": query, "limit": limit})
-    return result["action_items"]
+    action_items = result.get("action_items") if isinstance(result, dict) else []
+    return _validate_simple_action_items(action_items or [], uid)
 
 
 @router.post("/v1/mcp/action-items", response_model=SimpleActionItem, tags=["mcp"])
@@ -930,7 +945,18 @@ def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
     # cleaning via utils.mcp_data.clean_person, unwrapped to the REST list.
     spec = spec_for_tool("get_people")
     assert spec is not None
-    return spec.handler(uid, {}, None)["people"]
+    result = spec.handler(uid, {}, None)
+    raw_people = result.get("people", []) if isinstance(result, dict) else []
+    valid_people: List[SimplePerson] = []
+    for person in raw_people:
+        if not isinstance(person, dict) or not person.get("id"):
+            continue
+        try:
+            valid_people.append(SimplePerson.model_validate(person))
+        except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
+            logger.warning(f"Skipping malformed person {person.get('id', 'unknown')} for uid {uid}: {e}")
+            continue
+    return valid_people
 
 
 # ---------------------------------------------------------------------------
