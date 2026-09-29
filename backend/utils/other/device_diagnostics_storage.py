@@ -12,7 +12,7 @@ from utils.other import storage
 logger = logging.getLogger(__name__)
 
 
-def save_bundle(uid: str, bundle: bytes) -> str:
+def save_bundle(uid: Any, bundle: Any) -> str:
     if not isinstance(uid, str):
         raise ValueError("uid must be a string")
     clean_uid = uid.strip()
@@ -33,7 +33,7 @@ def save_bundle(uid: str, bundle: bytes) -> str:
     return ticket
 
 
-def read_bundle(ticket: str) -> dict[str, Any] | None:
+def read_bundle(ticket: Any) -> dict[str, Any] | None:
     if not isinstance(ticket, str):
         return None
     clean_ticket = ticket.strip().upper()

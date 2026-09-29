@@ -211,7 +211,7 @@ def test_storage_save_bundle_invalid_uid():
 
 def test_storage_save_bundle_invalid_bundle_type():
     with pytest.raises(TypeError, match='bundle must be bytes'):
-        device_diagnostics_storage.save_bundle('valid-uid', 'not-bytes')  # type: ignore
+        device_diagnostics_storage.save_bundle('valid-uid', 'not-bytes')
 
 
 def test_storage_save_bundle_success(monkeypatch):

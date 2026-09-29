@@ -89,7 +89,7 @@ def _admin_key(
 
 
 @router.post('/v1/mobile/device-diagnostics', response_model=DiagnosticsReceipt, status_code=201)
-async def upload_device_diagnostics(payload: DiagnosticsUpload, uid: str = Depends(upload_uid)) -> DiagnosticsReceipt:
+async def upload_device_diagnostics(payload: DiagnosticsUpload, uid: Any = Depends(upload_uid)) -> DiagnosticsReceipt:
     clean_uid = uid.strip() if isinstance(uid, str) else ''
     if not clean_uid:
         raise HTTPException(status_code=401, detail='Authentication required')
@@ -119,7 +119,7 @@ async def upload_device_diagnostics(payload: DiagnosticsUpload, uid: str = Depen
 
 
 @router.get('/v1/admin/device-diagnostics/{ticket}', response_model=DiagnosticsBundle, tags=['admin'])
-async def read_device_diagnostics(ticket: str, admin: str = Depends(_admin_key)) -> DiagnosticsBundle:
+async def read_device_diagnostics(ticket: Any, admin: str = Depends(_admin_key)) -> DiagnosticsBundle:
     clean_ticket = ticket.strip().upper() if isinstance(ticket, str) else ''
     if not TICKET_PATTERN.fullmatch(clean_ticket):
         raise HTTPException(status_code=404, detail='Ticket not found')
