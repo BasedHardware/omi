@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from services import conversation_selfheal as sweep
+from services import conversation_finalization as finalization_service
 from utils.conversations.lifecycle import FinalizationDispatchUnavailable
 from utils.conversations.processing_trigger import ProcessingTrigger
 
@@ -22,6 +23,41 @@ NOW = datetime(2026, 7, 20, tzinfo=timezone.utc)
 STALE = NOW - timedelta(hours=3)
 FRESH = NOW - timedelta(hours=1)
 ANCIENT = NOW - timedelta(hours=20)
+
+
+def test_api_reconciler_runs_the_fenced_selfheal_primitive_in_heal_mode(monkeypatch):
+    calls = []
+    monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(
+        finalization_service,
+        'run_selfheal_tick',
+        lambda **kwargs: calls.append(kwargs) or {'enqueued': 1, 'verified': 0, 'errors': 0},
+    )
+
+    result = finalization_service.reconcile_stale_in_progress_conversations(firestore_client='db')
+
+    assert result['enqueued'] == 1
+    assert calls == [
+        {
+            'firestore_client': 'db',
+            'mode': 'heal',
+            'dry_run': False,
+            'use_configured_uid_allowlist': False,
+            'wedge_runner': finalization_service._skip_capture_wedge,
+        }
+    ]
+
+
+def test_api_reconciler_is_inert_without_durable_dispatch(monkeypatch):
+    monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: False)
+    called = []
+    monkeypatch.setattr(finalization_service, 'run_selfheal_tick', lambda **kwargs: called.append(kwargs))
+
+    result = finalization_service.reconcile_stale_in_progress_conversations()
+
+    assert result['mode'] == 'off'
+    assert result['enqueued'] == 0
+    assert called == []
 
 
 def _row(uid: str, conversation_id: str, data: dict) -> dict:
@@ -213,6 +249,17 @@ def test_heal_respects_uid_allowlist(capsys):
     assert [e['uid'] for e in allowlist_skips] == ['u2']
 
 
+def test_always_on_gc_ignores_the_optional_rollout_allowlist(monkeypatch):
+    monkeypatch.setenv('SELFHEAL_UID_ALLOWLIST', 'some-other-user')
+    rows = [_row('u1', 'c1', _eligible_data())]
+    state, kwargs = _harness(rows, mode='heal', use_configured_uid_allowlist=False)
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['enqueued'] == 1
+    assert [call['uid'] for call in state['finalization_calls']] == ['u1']
+
+
 def test_detect_ignores_uid_allowlist_for_stats():
     rows = [_row('u1', 'c1', _eligible_data())]
     state, kwargs = _harness(rows, mode='detect', uid_allowlist=frozenset({'nobody'}))
@@ -330,6 +377,53 @@ def test_pending_verification_tolerates_benign_growth(capsys):
     counters = sweep.run_selfheal_tick(**kwargs)
 
     assert counters['verified'] == 1
+
+
+def test_pending_verification_accepts_explicit_recovery_discard_with_preserved_content(capsys):
+    state, kwargs = _harness([], mode='detect')
+    _pending_completed_job(state, audio_ids=['a1'])
+    state['conversations']['c1'] = _completed_conversation(
+        structured={'title': ''},
+        discarded=True,
+        relevance_decision={'trigger': 'server_recovery', 'verdict': 'discard'},
+        audio_files=[{'id': 'a1'}],
+    )
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['verified'] == 1
+    assert counters['refused'] == 0
+
+
+@pytest.mark.parametrize(
+    'overrides',
+    [
+        {'discarded': False},
+        {'relevance_decision': {'trigger': 'capture_end', 'verdict': 'discard'}},
+        {'relevance_decision': {'trigger': 'server_recovery', 'verdict': 'keep'}},
+        {'transcript_segments': ''},
+        {'audio_files': []},
+    ],
+)
+def test_pending_verification_refuses_unproven_or_shrunk_recovery_discard(overrides):
+    state, kwargs = _harness([], mode='detect')
+    _pending_completed_job(state, audio_ids=['a1'])
+    state['conversations']['c1'] = _completed_conversation(
+        **(
+            {
+                'structured': {'title': ''},
+                'discarded': True,
+                'relevance_decision': {'trigger': 'server_recovery', 'verdict': 'discard'},
+                'audio_files': [{'id': 'a1'}],
+            }
+            | overrides
+        )
+    )
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['verified'] == 0
+    assert counters['refused'] == 1
 
 
 def test_pending_verification_compressed_raw_bytes_compare_equal(capsys):

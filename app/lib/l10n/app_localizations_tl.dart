@@ -2523,12 +2523,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detailed na mga diagnostic messages';
 
   @override
-  String get autoCreateSpeakers => 'Awtomatikong Lumikha ng Speakers';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Awtomatikong lumikha kapag ang pangalan ay natuklasan';
-
-  @override
   String get followUpQuestions => 'Follow-up Questions';
 
   @override
@@ -11283,9 +11277,6 @@ class AppLocalizationsTl extends AppLocalizations {
       'Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Hindi available ang transcript · naka-save sa device';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Mga transcript na naghihintay $pending/$total';
   }
@@ -11343,5 +11334,270 @@ class AppLocalizationsTl extends AppLocalizations {
   String get openCall => 'Buksan ang tawag';
 
   @override
-  String get captureRecoveryBanner => 'Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin';
+  String get captureRecoveryBanner => 'Hindi nagpapadala ng audio ang Omi — i-tap para muling kumonekta';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Itigil ang Transcribe Later sa iyong pendant bago mag-record gamit ang telepono.';
+
+  @override
+  String get captureNotTranscribing => 'Hindi nagta-transcribe';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Na-save ang audio, ita-transcribe mamaya';
+
+  @override
+  String get captureStillRecording => 'Nagre-record pa rin';
+
+  @override
+  String get captureMicInUseElsewhere => 'Ginagamit ng ibang app ang mic';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Kinuha ng isang tawag o ibang app ang mikropono, kaya hindi nakakarinig ang Omi ngayon. Kusang magpapatuloy ang Omi kapag malaya na ang mikropono. Ligtas ang lahat ng na-record bago nito.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Hindi maabot ang iyong custom na speech-to-text na serbisyo. Itinatabi ng Omi ang audio sa teleponong ito at ipapadala kapag bumalik ang serbisyo. Walang mawawala.';
+
+  @override
+  String get captureStarting => 'Nagsisimula…';
+
+  @override
+  String get capturePhoneStorageFull => 'Puno na ang storage ng telepono';
+
+  @override
+  String get captureStorageAlmostFull => 'Halos puno na ang storage';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name at iba pa';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Pakinggan ang mga sagot ni Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample =>
+      'Nakuha ko. Magsisimula ang susunod mong meeting sa loob ng dalawampung minuto.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Handa Ka Na';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'I-tap ang isang row para suriin o baguhin ito.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Kapag nagtanong ka gamit ang button, mababasa ng Omi ang sagot nito nang malakas.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Pakinggan ang iyong huling sagot';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Pinapatugtog ang iyong huling sagot...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Sa pamamagitan ng $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Sa pamamagitan ng speaker ng telepono';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Sa pamamagitan ng kasalukuyang output ng audio';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Mananatili sa screen ang mga sagot. Walang sinasabi.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Pribado. Nagsasalita lamang sa pamamagitan ng AirPods, Bluetooth o wired headphones.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Ginagamit ang speaker ng telepono kapag walang nakakonektang headphone.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi mananatiling tahimik. Lumalabas pa rin ang mga sagot sa app.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device konektado. Omi ang magsasalita dito.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Walang nakakonektang headphone. Omi mananatiling tahimik hanggang sa kumonekta ka ng ilan.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Nagpe-play sa pamamagitan ng $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Tumutugtog nang malakas sa pamamagitan ng speaker ng telepono.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Maaari mo itong baguhin anumang oras sa $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'I-replay ang tour na ito anumang oras sa $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Mga headphone';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutes';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Mga Gawain';
+
+  @override
+  String get usageMonth => 'Sa Buwan Na Ito';
+
+  @override
+  String get usageYear => 'Sa Taong Ito';
+
+  @override
+  String get usageAll => 'Lahat ng Panahon';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Hitsura';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Maliwanag';
+
+  @override
+  String get appearanceDark => 'Madilim';
+
+  @override
+  String get chatDiscardRecording => 'Itapon';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Hindi ko narinig iyon — subukan ulit';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Maghanap ng mga tao';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Idagdag ang \"$query\" bilang bagong tao';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Ipakita ang lahat ng $count na tao';
+  }
 }

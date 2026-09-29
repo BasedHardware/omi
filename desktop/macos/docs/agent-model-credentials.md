@@ -26,3 +26,17 @@ AuthRefreshResilienceTests.testLongLivedModelRequestsRecoverAfterExpiryAndOfflin
 The static check-agent-credentials.py tripwire is registered in both manifest lanes.
 The chat-fault-5xx flow covers the new request credential source in the existing
 com.omi.omi-fault bundle; it is not evidence that a live app flow was exercised.
+
+## Provider-scoped chat quota
+
+Forwarding a key does not mean every feature can use that provider. Desktop typed
+chat currently supports Anthropic BYOK. Gemini, OpenAI, OpenRouter, or Deepgram
+keys alone must not display unlimited desktop chat or bypass its managed quota.
+The usage-quota endpoint and desktop send gate share
+`DESKTOP_CHAT_BYOK_PROVIDER` and require an enrolled, request-validated key for
+that provider, using the customer Firestore client for both. Settings describe
+custom keys as covering supported features, not as an unlimited subscription.
+
+Coverage: `backend/tests/routers/test_users.py` compares the real display and
+enforcement paths below and at the free cap, and checks validated request headers
+through the HTTP middleware. No live customer account or provider call is needed.

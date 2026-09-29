@@ -22,6 +22,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
 import 'package:omi/services/audio_download_service.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -252,6 +253,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   @override
   void initState() {
     super.initState();
+    unawaited(
+        SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id));
+    unawaited(SiriIntegration.instance.donateUiAction('conversation', widget.conversation.id));
 
     // The supplied conversation can be a list projection whose app results
     // are hydrated after the first frame. Start on Summary, then select the
@@ -384,6 +388,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
   @override
   void dispose() {
+    unawaited(SiriIntegration.instance.setCurrentScreen("", null));
     _cancelOwnedTimers();
     _separation.dispose();
     _controller?.dispose();
@@ -765,7 +770,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         }
         provider.updateVisibilityLocally(ConversationVisibility.shared);
       }
-      PlatformManager.instance.analytics.conversationShared(conversation: conversation, shareMethod: 'url_share');
       final origin = shareSheetOrigin(_shareButtonKey);
       // The sheet is up once the call is made; the button stops spinning while it is shown.
       final result = shareConversationLink(conversation, sharePositionOrigin: origin);
@@ -881,7 +885,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       PullDownMenuItem(
         title: l10n.deleteConversation,
         isDestructive: true,
-        iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
+        iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
         onTap: () => _handleMenuSelection(context, 'delete', provider),
       ),
     ];

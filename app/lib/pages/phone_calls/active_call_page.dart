@@ -582,7 +582,7 @@ class _DtmfKey extends StatelessWidget {
         child: Container(
           width: 72,
           height: 72,
-          decoration: const BoxDecoration(shape: BoxShape.circle, color: OmiColors.surface2),
+          decoration: BoxDecoration(shape: BoxShape.circle, color: OmiColors.surface2),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -701,9 +701,8 @@ class _AudioRouteSheet extends StatelessWidget {
               child: OmiSettingsRow(
                 leading: Icon(_iconForType(route.type)),
                 title: route.name,
-                trailing: selectedRoute?.id == route.id
-                    ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20)
-                    : null,
+                trailing:
+                    selectedRoute?.id == route.id ? Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
                 showChevron: false,
                 onTap: () => onRouteSelected(route),
               ),

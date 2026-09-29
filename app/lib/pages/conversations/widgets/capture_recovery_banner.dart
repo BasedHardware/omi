@@ -20,6 +20,7 @@ class CaptureRecoveryBanner extends StatelessWidget {
       builder: (context, _) {
         final episode = wedge.visiblePrompt;
         if (episode == null) return const SizedBox.shrink();
+        final isTransferRecovery = episode.trigger == CaptureWedgeMonitor.triggerStorageAtRisk;
         if (TickerMode.valuesOf(context).enabled) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (context.mounted) wedge.markPromptShown();
@@ -33,7 +34,11 @@ class CaptureRecoveryBanner extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               onTap: () {
                 wedge.onRecoveryActioned(surface: 'banner');
-                unawaited(HomeNavigation.openRoute('/settings/device'));
+                if (isTransferRecovery) {
+                  wedge.retryVisibleEpisode();
+                } else {
+                  unawaited(HomeNavigation.openRoute('/settings/device'));
+                }
               },
               child: Container(
                 key: const Key('capture_recovery_banner'),
@@ -45,15 +50,17 @@ class CaptureRecoveryBanner extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.warning_amber_rounded, size: 16, color: OmiColors.warning),
+                    Icon(Icons.warning_amber_rounded, size: 16, color: OmiColors.warning),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        context.l10n.captureRecoveryBanner,
+                        episode.trigger == CaptureWedgeMonitor.triggerStorageAtRisk
+                            ? '${context.l10n.phoneStorage}: ${context.l10n.recordingsNotSynced}'
+                            : context.l10n.captureRecoveryBanner,
                         style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                       ),
                     ),
-                    const Icon(Icons.chevron_right, size: 16, color: OmiColors.textTertiary),
+                    Icon(Icons.chevron_right, size: 16, color: OmiColors.textTertiary),
                   ],
                 ),
               ),

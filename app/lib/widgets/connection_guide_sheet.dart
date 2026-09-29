@@ -184,7 +184,7 @@ class ConnectionGuideSheet extends StatelessWidget {
                 if (product.localImagePath != null)
                   Image.asset(product.localImagePath!, width: 80, height: 80, fit: BoxFit.contain)
                 else
-                  const SizedBox(width: 80, height: 80, child: Icon(Icons.devices, color: OmiColors.textTertiary)),
+                  SizedBox(width: 80, height: 80, child: Icon(Icons.devices, color: OmiColors.textTertiary)),
                 const SizedBox(height: OmiSpacing.sm),
                 Text(
                   product.name,

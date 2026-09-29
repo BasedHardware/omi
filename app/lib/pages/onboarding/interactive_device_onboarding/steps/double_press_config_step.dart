@@ -94,7 +94,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
             ],
           ),
           bottomAction: provider.doublePressCount > 0 && !provider.showSingleTapHint
-              ? OnboardingContinueButton(label: context.l10n.deviceOnboardingFinish, onPressed: widget.onComplete)
+              ? OnboardingContinueButton(onPressed: widget.onComplete)
               : null,
         );
       },

@@ -96,6 +96,7 @@ class MessageServiceStatusEvent(MessageEvent):
     provider: Optional[str] = None
     retryable: Optional[bool] = None
     reason: Optional[str] = None
+    retry_after: Optional[int] = None
 
     def to_json(self):
         # The outcome fields are an additive terminal-failure contract, not

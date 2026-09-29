@@ -167,12 +167,12 @@ class _AnnouncementImage extends StatelessWidget {
       placeholder: (context, url) => Container(
         height: 180,
         color: OmiColors.surface2,
-        child: const Center(child: OmiSpinner(color: OmiColors.textSecondary)),
+        child: Center(child: OmiSpinner(color: OmiColors.textSecondary)),
       ),
       errorWidget: (context, url, error) => Container(
         height: 180,
         color: OmiColors.surface2,
-        child: const Icon(Icons.campaign_outlined, color: OmiColors.textTertiary, size: 48),
+        child: Icon(Icons.campaign_outlined, color: OmiColors.textTertiary, size: 48),
       ),
     );
   }

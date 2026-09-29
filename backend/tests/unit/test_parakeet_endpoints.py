@@ -183,6 +183,8 @@ class TestBatchMetricsEndpoint:
         data = resp.json()
         assert data["total_requests"] == 10
         assert data["total_batches"] == 3
+        assert data["pending_requests"] == 0
+        assert data["oldest_pending_seconds"] == 0
 
     def test_batch_metrics_without_engine(self):
         app, mod, _, _ = _make_app_with_mocks(nim_mode=True)
@@ -190,6 +192,20 @@ class TestBatchMetricsEndpoint:
         resp = client.get("/batch/metrics")
         assert resp.status_code == 200
         assert resp.json() == {}
+
+
+def test_live_window_marker_excludes_request_from_prerecorded_error_metric():
+    app, mod, _, _ = _make_app_with_mocks(gpu_ready=False)
+    client = TestClient(app, raise_server_exceptions=False)
+    before = mod.PRERECORDED_REQUESTS.labels(status='error')._value.get()
+    response = client.post(
+        '/v1/transcribe', files={'file': ('a.wav', b'abc')}, headers={'X-Omi-STT-Surface': 'live-window'}
+    )
+    assert response.status_code == 503
+    assert mod.PRERECORDED_REQUESTS.labels(status='error')._value.get() == before
+    response = client.post('/v1/transcribe', files={'file': ('a.wav', b'abc')})
+    assert response.status_code == 503
+    assert mod.PRERECORDED_REQUESTS.labels(status='error')._value.get() == before + 1
 
 
 class TestStreamAdmissionEndpoint:

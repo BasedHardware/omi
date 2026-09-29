@@ -31,6 +31,17 @@ environment_shared:
             key: TWILIO_TWIML_APP_SID
         USE_VERTEX_AI:
           value: 'true'
+        TTS_PROVIDER:
+          value: gemini
+          category: rollout
+        GEMINI_API_KEY:
+          secret:
+            name: '{env}-omi-backend-secrets'
+            key: GEMINI_API_KEY
+        ELEVENLABS_API_KEY:
+          secret:
+            name: '{env}-omi-backend-secrets'
+            key: ELEVENLABS_API_KEY
         STT_PRERECORDED_MODEL:
           value: parakeet,modulate-velma-2
           category: stt_policy
@@ -67,6 +78,36 @@ environment_shared:
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'false'
           category: rollout
+        STT_RESILIENT_RECONNECT:
+          value: 'false'
+          category: rollout
+        STT_ROUTING_MODE:
+          value: 'off'
+          category: rollout
+        STT_ROUTING_REDIS_TIMEOUT_SECONDS:
+          value: '0.075'
+          category: rollout
+        STT_ROUTING_PROBE_PERCENT:
+          value: '2'
+          category: rollout
+        STT_NO_TEXT_SECONDS:
+          value: '30'
+          category: rollout
+        SONIOX_MONTHLY_CEILING_USD:
+          value: '0'
+          category: rollout
+        SONIOX_ESTIMATED_USD_PER_HOUR:
+          value: '0.07537'
+          category: rollout
+        STT_MULTI_LANGUAGE_HINTS:
+          value: 'true'
+          category: rollout
+        STT_LEARNED_LANGUAGE_PROFILE:
+          value: 'false'
+          category: rollout
+        STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
+          value: '0'
+          category: rollout
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
           value: '0'
           category: rollout
@@ -84,6 +125,12 @@ environment_shared:
           category: rollout
         PARAKEET_WINDOW_MAX_CONTEXT_SECONDS:
           value: '24'
+          category: rollout
+        PARAKEET_BATCH_PRESSURE_POOL_HOST:
+          value: '{env}-omi-parakeet-headless.{env}-omi-backend.svc.cluster.local'
+          category: service_discovery
+        PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
+          value: '1'
           category: rollout
         STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
           value: '1800'
@@ -137,6 +184,9 @@ environment_shared:
           category: service_discovery
         LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
           value: '900'
+          category: reliability
+        LISTEN_RECONNECT_BUDGET_PER_MIN:
+          value: '6'
           category: reliability
         PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
           value: 'off'
@@ -329,6 +379,9 @@ environment_shared:
         category: rollout
       USE_VERTEX_AI:
         value: 'true'
+      TTS_PROVIDER:
+        value: gemini
+        category: rollout
       GOOGLE_CLOUD_PROJECT:
         value: '{compute_project}'
       GCP_LOCATION:
@@ -340,6 +393,9 @@ environment_shared:
         value: 'true'
         category: rollout
     secrets:
+      GEMINI_API_KEY:
+        secret: GEMINI_API_KEY
+        version: latest
       METRICS_SECRET:
         secret: METRICS_SECRET
         version: latest
@@ -530,6 +586,16 @@ environment_shared:
             provisional: true
             value: 'true'
             category: rollout
+          # 9e6b55b re-armed a one-job-per-uid backfill slot that 429s uploads
+          # (37% of sync uploads refused). Worker sequencing paces per UID.
+          SYNC_BACKFILL_INFLIGHT_LIMIT:
+            provisional: true
+            value: 'false'
+            category: rollout
+          SYNC_BACKFILL_UID_SEQUENCER:
+            provisional: true
+            value: 'on'
+            category: rollout
           USE_VERTEX_AI:
             value: 'true'
           STT_PRERECORDED_MODEL:
@@ -651,6 +717,16 @@ environment_shared:
           SYNC_BACKFILL_ENABLED:
             provisional: true
             value: 'true'
+            category: rollout
+          # 9e6b55b re-armed a one-job-per-uid backfill slot that 429s uploads
+          # (37% of sync uploads refused). Worker sequencing paces per UID.
+          SYNC_BACKFILL_INFLIGHT_LIMIT:
+            provisional: true
+            value: 'false'
+            category: rollout
+          SYNC_BACKFILL_UID_SEQUENCER:
+            provisional: true
+            value: 'on'
             category: rollout
           USE_VERTEX_AI:
             value: 'true'

@@ -11,6 +11,11 @@ on:
 env:
   SERVICE: memory-maintenance-job
   SCHEDULER_JOB: memory-maintenance-hourly
+  # The account this workflow's hourly trigger invokes as. Not otherwise stated
+  # in-repo, so it follows the convention every sibling trigger in this
+  # family uses; set MEMORY_MAINTENANCE_SCHEDULER_SERVICE_ACCOUNT to override
+  # without editing this file.
+  SCHEDULER_SERVICE_ACCOUNT: ${{ vars.MEMORY_MAINTENANCE_SCHEDULER_SERVICE_ACCOUNT || format('memory-maintenance-scheduler@{0}.iam.gserviceaccount.com', vars.GCP_PROJECT_ID) }}
   REGION: us-central1
 
 # Share the lock with manual development deploys of this Cloud Run job.
@@ -144,20 +149,14 @@ jobs:
           env_vars: ${{ steps.runtime-env.outputs.memory_maintenance_job_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.memory_maintenance_job_secrets }}
 
-      - name: Validate hourly Scheduler trigger
+      - name: Reconcile declared Scheduler trigger
         run: |
-          scheduler_state_file=$(mktemp)
-          trap 'rm -f "$scheduler_state_file"' EXIT
-          gcloud scheduler jobs describe "$SCHEDULER_JOB" \
-            --location="$REGION" \
-            --project="${{ vars.GCP_PROJECT_ID }}" \
-            --format=json > "$scheduler_state_file"
-          python3 backend/scripts/validate_memory_maintenance_scheduler.py \
-            --state-file "$scheduler_state_file" \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" \
-            --scheduler-job "$SCHEDULER_JOB" \
-            --cloud-run-job "$SERVICE"
+          python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
+          python3 backend/scripts/scheduler_reconcile.py \
+            --environment dev --project "${{ vars.GCP_PROJECT_ID }}" \
+            --apply --jobs "$SCHEDULER_JOB"
+          python3 backend/scripts/scheduler_reconcile.py \
+            --environment dev --project "${{ vars.GCP_PROJECT_ID }}" --check --jobs "$SCHEDULER_JOB"
 
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}

@@ -2513,12 +2513,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get detailedDiagnosticMessages => 'ವಿವರವಾದ ರೋಗನಿರ್ಣಯ ಸಂದೇಶಗಳು';
 
   @override
-  String get autoCreateSpeakers => 'ವಕ್ತೃ ಸ್ವಯಂ ರಚನೆ';
-
-  @override
-  String get autoCreateWhenNameDetected => 'ಹೆಸರು ಕಂಡುಬಂದಾಗ ಸ್ವಯಂ ರಚಿಸಿ';
-
-  @override
   String get followUpQuestions => 'ಫಾಲೋ-ಅಪ್ ಪ್ರಶ್ನೆಗಳು';
 
   @override
@@ -11220,9 +11214,6 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ, ಧ್ವನಿಮುದ್ರಣ ಸಾಧನದಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ ಮತ್ತು ನಂತರ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'ಲಿಪ್ಯಂತರ ಲಭ್ಯವಿಲ್ಲ · ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತಿದೆ';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು $pending/$total';
   }
@@ -11280,5 +11271,268 @@ class AppLocalizationsKn extends AppLocalizations {
   String get openCall => 'ಕರೆ ತೆರೆಯಿರಿ';
 
   @override
-  String get captureRecoveryBanner => 'ಪೆಂಡೆಂಟ್‌ನ ಆಡಿಯೊ ಆ್ಯಪ್‌ಗೆ ತಲುಪುತ್ತಿಲ್ಲ — ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
+  String get captureRecoveryBanner => 'Omi ಆಡಿಯೊ ಕಳುಹಿಸುತ್ತಿಲ್ಲ — ಮರುಸಂಪರ್ಕಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'ನಿಮ್ಮ ಫೋನ್‌ನಿಂದ ರೆಕಾರ್ಡ್ ಮಾಡುವ ಮೊದಲು ನಿಮ್ಮ ಪೆಂಡಂಟ್‌ನಲ್ಲಿ Transcribe Later ನಿಲ್ಲಿಸಿ.';
+
+  @override
+  String get captureNotTranscribing => 'ಪ್ರತಿಲೇಖನ ಆಗುತ್ತಿಲ್ಲ';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ನಂತರ ಪ್ರತಿಲೇಖನ';
+
+  @override
+  String get captureStillRecording => 'ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ';
+
+  @override
+  String get captureMicInUseElsewhere => 'ಮೈಕ್ ಅನ್ನು ಬೇರೆ ಆ್ಯಪ್ ಬಳಸುತ್ತಿದೆ';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'ಒಂದು ಕರೆ ಅಥವಾ ಬೇರೆ ಆ್ಯಪ್ ಮೈಕ್ರೊಫೋನ್ ಅನ್ನು ತೆಗೆದುಕೊಂಡಿದೆ, ಆದ್ದರಿಂದ Omi ಈಗ ಕೇಳಲು ಸಾಧ್ಯವಿಲ್ಲ. ಮೈಕ್ರೊಫೋನ್ ಮುಕ್ತವಾದಾಗ Omi ತಾನಾಗಿಯೇ ಮುಂದುವರಿಯುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'ನಿಮ್ಮ ಕಸ್ಟಮ್ ಸ್ಪೀಚ್-ಟು-ಟೆಕ್ಸ್ಟ್ ಸೇವೆಯನ್ನು ತಲುಪಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ. Omi ಆಡಿಯೋವನ್ನು ಈ ಫೋನ್‌ನಲ್ಲಿ ಇರಿಸಿಕೊಂಡು ಸೇವೆ ಮರಳಿದಾಗ ಕಳುಹಿಸುತ್ತದೆ. ಏನೂ ಕಳೆದುಹೋಗುವುದಿಲ್ಲ.';
+
+  @override
+  String get captureStarting => 'ಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get capturePhoneStorageFull => 'ಫೋನ್ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ';
+
+  @override
+  String get captureStorageAlmostFull => 'ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ತುಂಬಿದೆ';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ. ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ಮತ್ತು ಇತರರು';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Omi ಉತ್ತರಗಳನ್ನು ಕೇಳಿ';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'ಅರ್ಥವಾಯಿತು. ನಿಮ್ಮ ಮುಂದಿನ ಸಭೆ ಇಪ್ಪತ್ತು ನಿಮಿಷಗಳಲ್ಲಿ ಪ್ರಾರಂಭವಾಗುತ್ತದೆ.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'ಎಲ್ಲವೂ ಸಿದ್ಧವಾಗಿದೆ';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'ಪರಿಶೀಲಿಸಲು ಅಥವಾ ಬದಲಾಯಿಸಲು ಸಾಲನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'ನೀವು ಬಟನ್‌ನೊಂದಿಗೆ ಕೇಳಿದಾಗ, Omi ಅದರ ಉತ್ತರವನ್ನು ಜೋರಾಗಿ ಓದಬಹುದು.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'ನಿಮ್ಮ ಕೊನೆಯ ಉತ್ತರವನ್ನು ಕೇಳಿ';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'ನಿಮ್ಮ ಕೊನೆಯ ಉತ್ತರವನ್ನು ಪ್ಲೇ ಮಾಡಲಾಗುತ್ತಿದೆ...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device ಮೂಲಕ';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'ಫೋನ್ ಸ್ಪೀಕರ್ ಮೂಲಕ';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'ಪ್ರಸ್ತುತ ಆಡಿಯೊ ಔಟ್‌ಪುಟ್ ಮೂಲಕ';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'ಉತ್ತರಗಳು ಪರದೆಯ ಮೇಲೆ ಉಳಿಯುತ್ತವೆ. ಏನೂ ಮಾತನಾಡುವುದಿಲ್ಲ.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'ಖಾಸಗಿ. AirPods, Bluetooth ಅಥವಾ ವೈರ್ಡ್ ಹೆಡ್‌ಫೋನ್‌ಗಳ ಮೂಲಕ ಮಾತ್ರ ಮಾತನಾಡುತ್ತದೆ.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'ಯಾವುದೇ ಹೆಡ್‌ಫೋನ್‌ಗಳನ್ನು ಸಂಪರ್ಕಿಸದಿದ್ದಾಗ ಫೋನ್ ಸ್ಪೀಕರ್ ಅನ್ನು ಬಳಸುತ್ತದೆ.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff =>
+      'Omi ಮೌನವಾಗಿ ಉಳಿಯುತ್ತದೆ. ಉತ್ತರಗಳು ಇನ್ನೂ ಅಪ್ಲಿಕೇಶನ್‌ನಲ್ಲಿ ಗೋಚರಿಸುತ್ತವೆ.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device ಸಂಪರ್ಕಿಸಲಾಗಿದೆ. Omi ಇಲ್ಲಿ ಮಾತನಾಡುತ್ತಾರೆ.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'ಯಾವುದೇ ಹೆಡ್‌ಫೋನ್‌ಗಳು ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲ. ನೀವು ಕೆಲವನ್ನು ಸಂಪರ್ಕಿಸುವವರೆಗೆ Omi ಮೌನವಾಗಿರುತ್ತದೆ.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '$device ಮೂಲಕ ಆಡುತ್ತದೆ.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'ಫೋನ್ ಸ್ಪೀಕರ್ ಮೂಲಕ ಜೋರಾಗಿ ನುಡಿಸುತ್ತದೆ.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'ನೀವು ಇದನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ $settings › $voiceResponse ರಲ್ಲಿ ಬದಲಾಯಿಸಬಹುದು';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return '$settings › $deviceSettings › $deviceTutorial ರಲ್ಲಿ ಈ ಪ್ರವಾಸವನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ ರಿಪ್ಲೇ ಮಾಡಿ';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'ಹೆಡ್‌ಫೋನ್‌ಗಳು';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'ನಿಮಿಷಗಳು';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'ಕಾರ್ಯಗಳು';
+
+  @override
+  String get usageMonth => 'ಈ ತಿಂಗಳು';
+
+  @override
+  String get usageYear => 'ಈ ವರ್ಷ';
+
+  @override
+  String get usageAll => 'ಎಲ್ಲಾ ಸಮಯ';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'ಗೋಚರತೆ';
+
+  @override
+  String get appearanceSystem => 'ಸಿಸ್ಟಮ್';
+
+  @override
+  String get appearanceLight => 'ಬೆಳಕು';
+
+  @override
+  String get appearanceDark => 'ಕತ್ತಲೆ';
+
+  @override
+  String get chatDiscardRecording => 'ತ್ಯಜಿಸಿ';
+
+  @override
+  String get voiceQuestionNoSpeech => 'ಕೇಳಿಸಲಿಲ್ಲ — ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'ಜನರನ್ನು ಹುಡುಕಿ';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '\"$query\" ಅವರನ್ನು ಹೊಸ ವ್ಯಕ್ತಿಯಾಗಿ ಸೇರಿಸಿ';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'ಎಲ್ಲಾ ($count) ಜನರನ್ನು ತೋರಿಸಿ';
+  }
 }

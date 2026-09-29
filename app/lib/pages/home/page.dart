@@ -25,6 +25,7 @@ import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/home/home_content.dart';
+import 'package:omi/pages/home/home_widgets_publisher.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/apps/add_mcp_server_page.dart';
@@ -498,6 +499,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _checkForAnnouncements();
     _registerAutoSyncCallback();
     _initQuickActions();
+    _startHomeWidgets();
     // Toasts float above the tab bar (and the chat bar on Home) while this shell is the visible route.
     OmiFeedback.bottomClearance = (ctx) {
       final onHome = ctx.read<HomeProvider>().selectedIndex == 0;
@@ -640,6 +642,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           syncProvider.syncWals(trigger: WakeTrigger.deviceConnected);
         }
       };
+    });
+  }
+
+  /// The iOS Home Screen widgets (Devices, Up next, Latest) follow what this Home shows.
+  HomeWidgetsPublisher? _homeWidgets;
+
+  void _startHomeWidgets() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _homeWidgets != null) return;
+      _homeWidgets = HomeWidgetsPublisher(
+        devices: context.read<DeviceProvider>(),
+        tasks: context.read<ActionItemsProvider>(),
+        conversations: context.read<ConversationProvider>(),
+        l10n: () => context.l10n,
+      )..start();
     });
   }
 
@@ -809,6 +826,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   }
                                 },
                               ),
+                              if (home.selectedIndex == 0) const HomeChatBarBackdrop(),
                               if (home.selectedIndex == 0)
                                 Positioned(
                                   left: 16,
@@ -899,8 +917,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       width: 42,
                       height: 42,
                       alignment: Alignment.center,
-                      decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                      child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
+                      decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+                      child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
                     ),
                   ),
                 ),
@@ -986,7 +1004,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         HeaderCircleButton(
                           semanticLabel: context.l10n.search,
                           color: homeProvider.showConvoSearchBar ? OmiColors.surface3 : OmiColors.surface1,
-                          icon: const Icon(Icons.search, size: 18, color: OmiColors.textSecondary),
+                          icon: Icon(Icons.search, size: 18, color: OmiColors.textSecondary),
                           onTap: () {
                             OmiHaptics.light();
                             homeProvider.toggleConvoSearchBar();
@@ -997,7 +1015,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         HeaderCircleButton(
                           semanticLabel: context.l10n.filters,
                           color: OmiColors.surface3,
-                          icon: const FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: OmiColors.textPrimary),
+                          icon: FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: OmiColors.textPrimary),
                           onTap: () async {
                             OmiHaptics.selection();
                             await showConversationDateRangePicker(context);
@@ -1019,7 +1037,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       // Export button
                       HeaderCircleButton(
                         semanticLabel: context.l10n.exportButton,
-                        icon: const FaIcon(
+                        icon: FaIcon(
                           FontAwesomeIcons.arrowUpFromBracket,
                           size: 16,
                           color: OmiColors.textSecondary,
@@ -1075,7 +1093,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     ],
                     buttonBuilder: (context, showMenu) => HeaderCircleButton(
                       semanticLabel: context.l10n.createAnApp,
-                      icon: const Icon(Icons.add, size: 18, color: OmiColors.textSecondary),
+                      icon: Icon(Icons.add, size: 18, color: OmiColors.textSecondary),
                       onTap: () {
                         OmiHaptics.selection();
                         showMenu();
@@ -1087,7 +1105,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               // Settings button - always visible
               HeaderCircleButton(
                 semanticLabel: context.l10n.settings,
-                icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+                icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
                 onTap: () {
                   OmiHaptics.selection();
                   PlatformManager.instance.analytics.pageOpened('Settings');
@@ -1138,6 +1156,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _captureProviderForQuickActions?.removeListener(_onDeviceStateChangedForQuickActions);
     _captureProviderForQuickActions = null;
     QuickActionsService.instance.reset();
+    _homeWidgets?.dispose();
     // Clean up freemium handler
     _freemiumHandler.dispose();
     // Remove foreground task callback to prevent memory leak
@@ -1170,7 +1189,7 @@ class _TabLoadingSkeleton extends StatelessWidget {
             child: Container(
               height: index == 0 ? 34 : 76,
               width: double.infinity,
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             ),
           ),
         ),

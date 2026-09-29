@@ -52,6 +52,8 @@ class MainActivity: FlutterActivity() {
         PhoneMicController.instance.bindFlutterApi(PhoneMicFlutterApi(flutterEngine.dartExecutor.binaryMessenger))
         PhoneMicHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, PhoneMicHostApiImpl(PhoneMicController.instance))
         SyncTransferPlugin.register(flutterEngine, this)
+        TtsMp3DecoderPlugin.register(flutterEngine)
+        TtsPcmPlayerPlugin.register(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_BLE_TRANSCRIPT_CHANNEL).setMethodCallHandler {
             call, result ->
             if (call.method == "drain") {
@@ -135,6 +137,7 @@ class MainActivity: FlutterActivity() {
     override fun onResume() {
         super.onResume()
         OmiBleManager.isAppForeground = true
+        OmiBleForegroundService.instance?.recordPermissionStates()
     }
 
     override fun onPause() {
@@ -161,8 +164,15 @@ class MainActivity: FlutterActivity() {
             // Background Mode and Transcribe Later both need the foreground service to keep
             // the device connected/capturing after a task close. With both off (default),
             // tear it down so the device disconnects when the app is closed.
-            if (!OmiBleForegroundService.isPersistentModeEnabled(this)) {
+            val bleServiceMustPersist = OmiBleForegroundService.isPersistentModeEnabled(this)
+            if (!bleServiceMustPersist) {
                 OmiBleForegroundService.stopService(this)
+            }
+            if (DeviceDiagnosticsLifecyclePolicy.shouldMarkRunClosed(isFinishing, bleServiceMustPersist)) {
+                getSharedPreferences("ble_diagnostics", MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("run_open", false)
+                    .apply()
             }
         }
         super.onDestroy()

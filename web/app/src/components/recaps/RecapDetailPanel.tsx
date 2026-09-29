@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from '@tschk/moonshine-next/navigation';
 import { motion } from 'framer-motion';
 import {
+  ArrowLeft,
   Calendar,
   Sparkles,
   CheckSquare,
@@ -20,8 +21,8 @@ import dynamic from '@tschk/moonshine-next/dynamic';
 const LocationMap = dynamic(() => import('./sections/LocationMap'), {
   ssr: false,
   loading: () => (
-    <div className="h-full bg-bg-tertiary animate-pulse flex items-center justify-center">
-      <MapPin className="w-8 h-8 text-text-quaternary" />
+    <div className="flex h-full animate-pulse items-center justify-center bg-bg-tertiary">
+      <MapPin className="h-8 w-8 text-text-quaternary" />
     </div>
   ),
 });
@@ -188,11 +189,11 @@ function JourneyTimeline({
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-white/[0.04]">
-        <h4 className="text-sm font-medium text-text-primary flex items-center gap-2">
-          <Clock className="w-4 h-4 text-white" />
+      <div className="border-b border-white/[0.04] p-4">
+        <h4 className="flex items-center gap-2 text-sm font-medium text-text-primary">
+          <Clock className="h-4 w-4 text-white" />
           Your Journey
         </h4>
       </div>
@@ -202,11 +203,11 @@ function JourneyTimeline({
         {loading ? (
           <div className="space-y-3">
             {[...Array(Math.min(sortedLocations.length, 5))].map((_, i) => (
-              <div key={i} className="flex gap-3 animate-pulse">
-                <div className="w-8 h-8 bg-bg-tertiary rounded-full" />
+              <div key={i} className="flex animate-pulse gap-3">
+                <div className="h-8 w-8 rounded-full bg-bg-tertiary" />
                 <div className="flex-1 space-y-1">
-                  <div className="h-3 bg-bg-tertiary rounded w-16" />
-                  <div className="h-4 bg-bg-tertiary rounded w-32" />
+                  <div className="h-3 w-16 rounded bg-bg-tertiary" />
+                  <div className="h-4 w-32 rounded bg-bg-tertiary" />
                 </div>
               </div>
             ))}
@@ -214,7 +215,7 @@ function JourneyTimeline({
         ) : (
           <div className="relative">
             {/* Vertical line connecting all items */}
-            <div className="absolute left-4 top-4 bottom-4 w-px bg-white/20" />
+            <div className="absolute bottom-4 left-4 top-4 w-px bg-white/20" />
 
             <div className="space-y-4">
               {sortedLocations.map((loc, idx) => {
@@ -235,7 +236,7 @@ function JourneyTimeline({
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: isProgressiveMode ? 0 : idx * 0.05 }}
                     className={cn(
-                      'relative flex items-start gap-3 group',
+                      'group relative flex items-start gap-3',
                       onLocationClick && 'cursor-pointer',
                     )}
                     onClick={() => onLocationClick?.(idx)}
@@ -243,9 +244,9 @@ function JourneyTimeline({
                     {/* Numbered marker */}
                     <div
                       className={cn(
-                        'relative z-10 w-8 h-8 rounded-full flex items-center justify-center text-bg-primary text-xs font-semibold transition-all',
+                        'relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-bg-primary transition-all',
                         isCurrent
-                          ? 'bg-white shadow-lg ring-2 ring-white/50 scale-110'
+                          ? 'scale-110 bg-white shadow-lg ring-2 ring-white/50'
                           : 'bg-white shadow-md',
                         isPast && !isCurrent && 'opacity-60',
                       )}
@@ -277,17 +278,17 @@ function JourneyTimeline({
                         {formatJourneyTime(loc.time)}
                       </p>
                       {/* Title */}
-                      <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="mt-0.5 flex items-center gap-1.5">
                         <span className="text-sm">{display.emoji}</span>
                         <p
                           className={cn(
                             'text-sm',
                             isCurrent
-                              ? 'text-text-primary font-medium'
+                              ? 'font-medium text-text-primary'
                               : 'text-text-secondary',
                             loc.conversation_id &&
                               onConversationClick &&
-                              'group-hover:text-white transition-colors',
+                              'transition-colors group-hover:text-white',
                           )}
                         >
                           {display.title}
@@ -409,9 +410,9 @@ export function RecapDetailPanel({
   // Loading state
   if (loading) {
     return (
-      <div className="h-full flex flex-col bg-bg-secondary">
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-white animate-spin" />
+      <div className="flex h-full flex-col bg-bg-secondary">
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-white" />
         </div>
       </div>
     );
@@ -420,8 +421,8 @@ export function RecapDetailPanel({
   // No recap found
   if (!recap) {
     return (
-      <div className="h-full flex flex-col bg-bg-secondary">
-        <div className="flex-1 flex items-center justify-center">
+      <div className="flex h-full flex-col bg-bg-secondary">
+        <div className="flex flex-1 items-center justify-center">
           <p className="text-text-tertiary">Recap not found</p>
         </div>
       </div>
@@ -437,21 +438,32 @@ export function RecapDetailPanel({
   const hasLocations = recap.locations && recap.locations.length > 0;
 
   return (
-    <div className="h-full flex bg-bg-secondary overflow-hidden">
+    <div className="flex h-full overflow-hidden bg-bg-secondary">
       {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Header - always visible */}
-        <div className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary z-10">
-          <div className="p-6">
+        <div className="z-10 flex-shrink-0 border-b border-bg-tertiary bg-bg-secondary">
+          <div className="p-4 lg:p-6">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-4">
+                {/* Back button (mobile only). Below `lg` the pane covers the
+                    whole screen, so without this the list is unreachable. */}
+                {onBack && (
+                  <button
+                    onClick={onBack}
+                    className="-ml-2 rounded-lg p-2 transition-colors hover:bg-bg-tertiary lg:hidden"
+                    aria-label="Back to list"
+                  >
+                    <ArrowLeft className="h-5 w-5 text-text-secondary" />
+                  </button>
+                )}
                 {/* Day emoji */}
-                <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center text-3xl">
+                <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-white/20 to-white/5 text-3xl">
                   {recap.day_emoji || '📅'}
                 </div>
                 <div>
                   {/* Headline */}
-                  <h2 className="text-xl font-semibold text-text-primary mb-1">
+                  <h2 className="mb-1 text-xl font-semibold text-text-primary">
                     {recap.headline || 'Daily Recap'}
                   </h2>
                   {/* Date */}
@@ -463,9 +475,9 @@ export function RecapDetailPanel({
             </div>
 
             {/* Quick stats row */}
-            <div className="flex items-center gap-4 mt-4">
+            <div className="mt-4 flex items-center gap-4">
               <div className="flex items-center gap-1.5 text-text-secondary">
-                <MessageSquare className="w-4 h-4" />
+                <MessageSquare className="h-4 w-4" />
                 <span className="text-sm font-medium">
                   {recap.stats.total_conversations}
                 </span>
@@ -473,7 +485,7 @@ export function RecapDetailPanel({
               </div>
               {recap.stats.total_duration_minutes > 0 && (
                 <div className="flex items-center gap-1.5 text-text-secondary">
-                  <Clock className="w-4 h-4" />
+                  <Clock className="h-4 w-4" />
                   <span className="text-sm font-medium">
                     {formatDuration(recap.stats.total_duration_minutes)}
                   </span>
@@ -482,7 +494,7 @@ export function RecapDetailPanel({
               )}
               {recap.stats.action_items_count > 0 && (
                 <div className="flex items-center gap-1.5 text-text-secondary">
-                  <CheckSquare className="w-4 h-4" />
+                  <CheckSquare className="h-4 w-4" />
                   <span className="text-sm font-medium">
                     {recap.stats.action_items_count}
                   </span>
@@ -493,11 +505,11 @@ export function RecapDetailPanel({
 
             {/* Tab switcher - only show if locations exist */}
             {hasLocations && (
-              <div className="flex items-center gap-1 mt-4 p-1 bg-bg-tertiary/50 rounded-lg w-fit">
+              <div className="mt-4 flex w-fit items-center gap-1 rounded-lg bg-bg-tertiary/50 p-1">
                 <button
                   onClick={() => setActiveTab('recap')}
                   className={cn(
-                    'px-4 py-1.5 text-sm font-medium rounded-md transition-all',
+                    'rounded-md px-4 py-1.5 text-sm font-medium transition-all',
                     activeTab === 'recap'
                       ? 'bg-bg-secondary text-text-primary shadow-sm'
                       : 'text-text-tertiary hover:text-text-secondary',
@@ -512,13 +524,13 @@ export function RecapDetailPanel({
                     setJourneyPlaying(false);
                   }}
                   className={cn(
-                    'px-4 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-1.5',
+                    'flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all',
                     activeTab === 'journey'
                       ? 'bg-bg-secondary text-text-primary shadow-sm'
                       : 'text-text-tertiary hover:text-text-secondary',
                   )}
                 >
-                  <MapPin className="w-3.5 h-3.5" />
+                  <MapPin className="h-3.5 w-3.5" />
                   Journey
                 </button>
               </div>
@@ -528,24 +540,24 @@ export function RecapDetailPanel({
 
         {/* Recap Tab Content - scrollable */}
         {activeTab === 'recap' && (
-          <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          <div className="flex-1 space-y-8 overflow-y-auto p-6">
             {/* Combined Overview + Map section (when both exist) */}
             {recap.overview && hasLocations && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2 }}
-                className="noise-overlay rounded-xl overflow-hidden"
+                className="noise-overlay overflow-hidden rounded-xl"
               >
-                <div className="grid grid-cols-2 min-h-[280px]">
+                <div className="grid min-h-[280px] grid-cols-2">
                   {/* Left: Overview text */}
                   <div className="p-5 pt-4">
-                    <p className="text-sm text-text-secondary leading-relaxed">
+                    <p className="text-sm leading-relaxed text-text-secondary">
                       {recap.overview}
                     </p>
                   </div>
                   {/* Right: Map */}
-                  <div className="relative overflow-hidden group">
+                  <div className="group relative overflow-hidden">
                     <LocationsSection
                       locations={recap.locations}
                       onConversationClick={handleConversationClick}
@@ -556,10 +568,10 @@ export function RecapDetailPanel({
                     {/* Expand button - switches to Journey tab */}
                     <button
                       onClick={() => setActiveTab('journey')}
-                      className="absolute top-3 right-3 p-2 rounded-lg bg-bg-tertiary/80 backdrop-blur-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-all opacity-0 group-hover:opacity-100"
+                      className="absolute right-3 top-3 rounded-lg bg-bg-tertiary/80 p-2 text-text-secondary opacity-0 backdrop-blur-sm transition-all hover:bg-bg-tertiary hover:text-text-primary group-hover:opacity-100"
                       title="View full journey"
                     >
-                      <Maximize2 className="w-4 h-4" />
+                      <Maximize2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
@@ -571,12 +583,12 @@ export function RecapDetailPanel({
               <Section title="Overview" icon={Calendar}>
                 <div
                   className={cn(
-                    'noise-overlay p-4 rounded-xl',
+                    'noise-overlay rounded-xl p-4',
                     'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
                     'border border-white/[0.04]',
                   )}
                 >
-                  <p className="text-sm text-text-secondary leading-relaxed">
+                  <p className="text-sm leading-relaxed text-text-secondary">
                     {recap.overview}
                   </p>
                 </div>
@@ -629,9 +641,9 @@ export function RecapDetailPanel({
 
         {/* Journey Tab Content */}
         {activeTab === 'journey' && hasLocations && (
-          <div className="flex-1 flex min-h-0 overflow-hidden">
+          <div className="flex min-h-0 flex-1 overflow-hidden">
             {/* Map area - fixed, no scroll */}
-            <div className="flex-1 min-w-0 relative h-full">
+            <div className="relative h-full min-w-0 flex-1">
               <LocationMap
                 locations={recap.locations}
                 height="100%"
@@ -645,7 +657,7 @@ export function RecapDetailPanel({
             </div>
 
             {/* Journey Timeline Sidebar - scrollable */}
-            <div className="w-80 border-l border-white/[0.04] bg-bg-tertiary/30 flex flex-col h-full overflow-hidden">
+            <div className="flex h-full w-80 flex-col overflow-hidden border-l border-white/[0.04] bg-bg-tertiary/30">
               <JourneyTimeline
                 locations={recap.locations}
                 onConversationClick={handleConversationClick}
@@ -686,8 +698,8 @@ function Section({ title, icon: Icon, children }: SectionProps) {
       transition={{ duration: 0.2 }}
     >
       {/* Section header */}
-      <div className="flex items-center gap-2 mb-3">
-        <Icon className="w-5 h-5 text-white" />
+      <div className="mb-3 flex items-center gap-2">
+        <Icon className="h-5 w-5 text-white" />
         <h3 className="text-base font-semibold text-text-primary">{title}</h3>
       </div>
       {/* Section content */}
@@ -699,20 +711,20 @@ function Section({ title, icon: Icon, children }: SectionProps) {
 // Skeleton for loading state
 export function RecapDetailPanelSkeleton() {
   return (
-    <div className="h-full flex flex-col bg-bg-secondary">
-      <div className="p-6 border-b border-bg-tertiary">
+    <div className="flex h-full flex-col bg-bg-secondary">
+      <div className="border-b border-bg-tertiary p-6">
         <div className="flex items-start gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-bg-tertiary animate-pulse" />
+          <div className="h-14 w-14 animate-pulse rounded-2xl bg-bg-tertiary" />
           <div className="flex-1 space-y-2">
-            <div className="h-6 w-64 bg-bg-tertiary rounded animate-pulse" />
-            <div className="h-4 w-40 bg-bg-tertiary rounded animate-pulse" />
+            <div className="h-6 w-64 animate-pulse rounded bg-bg-tertiary" />
+            <div className="h-4 w-40 animate-pulse rounded bg-bg-tertiary" />
           </div>
         </div>
       </div>
-      <div className="flex-1 p-6 space-y-6">
-        <div className="h-24 bg-bg-tertiary rounded-xl animate-pulse" />
-        <div className="h-32 bg-bg-tertiary rounded-xl animate-pulse" />
-        <div className="h-48 bg-bg-tertiary rounded-xl animate-pulse" />
+      <div className="flex-1 space-y-6 p-6">
+        <div className="h-24 animate-pulse rounded-xl bg-bg-tertiary" />
+        <div className="h-32 animate-pulse rounded-xl bg-bg-tertiary" />
+        <div className="h-48 animate-pulse rounded-xl bg-bg-tertiary" />
       </div>
     </div>
   );

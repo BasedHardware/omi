@@ -203,6 +203,7 @@ enum ConversationReconciliationPolicy {
       discarded: serverConversation.discarded,
       deleted: serverConversation.deleted,
       isLocked: serverConversation.isLocked,
+      visibility: serverConversation.visibility,
       starred: mutation.starred ?? serverConversation.starred,
       folderId: mutation.hasFolderIdMutation ? mutation.folderId : serverConversation.folderId,
       inputDeviceName: serverConversation.inputDeviceName,

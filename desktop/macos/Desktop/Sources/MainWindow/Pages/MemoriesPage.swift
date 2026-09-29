@@ -1681,12 +1681,12 @@ class MemoriesViewModel: ObservableObject {
       logError("Failed to load more memories", error: error)
     }
   }
-
   func createMemory() async {
     guard !newMemoryText.isEmpty else { return }
-
     do {
-      _ = try await APIClient.shared.createMemory(content: newMemoryText, category: .manual)
+      let saved = try await APIClient.shared.createMemory(content: newMemoryText, category: .manual)
+      let cached = (try? await MemoryStorage.shared.syncServerMemory(saved)) != nil
+      if cached, #available(macOS 27, *) { SiriDonations.memoryCreated(saved.id) }
       showingAddMemory = false
       newMemoryText = ""
       await loadMemories()
@@ -1694,7 +1694,6 @@ class MemoriesViewModel: ObservableObject {
       logError("Failed to create memory", error: error)
     }
   }
-
   /// Records the owner's keep/reject verdict for a memory.
   ///
   /// Rejecting hides the memory from default reads server-side and drops it from the
@@ -2048,6 +2047,7 @@ class MemoriesViewModel: ObservableObject {
     // production. This presents the real sheet with the real draft text.
     registry.register(
       name: "memories_open_add_sheet",
+      effects: [.localState],
       summary: "Present the Add Memory sheet, optionally pre-filled with draft text",
       params: ["text"]
     ) { [weak self] params in
@@ -2061,6 +2061,7 @@ class MemoriesViewModel: ObservableObject {
     }
     registry.register(
       name: "memories_search",
+      effects: [.localState, .networkOrModel],
       summary: "Set memories search query and return filtered result count",
       params: ["query"]
     ) { [weak self] params in
@@ -2089,6 +2090,7 @@ class MemoriesViewModel: ObservableObject {
 
     registry.register(
       name: "memories_set_tag_filter",
+      effects: [.localState],
       summary: "Set memory tag/category filters and return filtered count",
       params: ["tags"]
     ) { [weak self] params in
@@ -2124,6 +2126,7 @@ class MemoriesViewModel: ObservableObject {
 
     registry.register(
       name: "toggle_memory_visibility",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Toggle a memory's public/private visibility via the real API path",
       params: ["id", "marker"]
     ) { [weak self] params in
@@ -3355,6 +3358,7 @@ struct MemoryDetailPanel: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .accessibilityIdentifier("memory_detail_panel_body")
+    .siriMemoryIdentifier(memory.id)
   }
 
   // MARK: Header

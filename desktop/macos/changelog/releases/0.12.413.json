@@ -1,0 +1,7 @@
+{
+  "version": "0.12.413",
+  "date": "2026-09-28",
+  "changes": [
+    "Fixed repeated recording restarts when a microphone briefly alternates between silence and live audio"
+  ]
+}

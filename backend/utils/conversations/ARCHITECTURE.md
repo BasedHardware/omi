@@ -45,7 +45,10 @@ and background processing.
   A passive memory may be attributed to the account owner only when the
   transcript identifies exactly one owner speaker cluster, keyed by
   `(speaker_id_scope, speaker_id)` so merged conversations cannot collapse
-  distinct sources. Segment `is_user` labels and model-authored `about=user`
+  distinct sources. Speaker resolution (`speaker_resolution.py`, run by
+  `process_conversation` before summarization) rewrites resolved segments to
+  one `conversation:{id}` scope with one id per voice, so the owner is one
+  cluster instead of one per capture chunk. Segment `is_user` labels and model-authored `about=user`
   cannot override that evidence, including for quote promotion. Legacy
   transcripts without cluster IDs fail closed: a `TranscriptSegment` that
   only materialized `speaker_id` from the SPEAKER_00 default is not
@@ -67,7 +70,10 @@ and background processing.
 - `finalizer.py` is the durable handoff boundary for a persisted conversation.
   A caller must have already acquired a finalization-job lease before invoking
   it; it loads the conversation, performs enrichment through the postprocess
-  bulkhead, and runs external integrations.
+  bulkhead, and runs external integrations. For `SERVER_RECOVERY`, a minimal
+  structure is a typed failure before persistence. The flagged Cloud Tasks
+  worker closes that job on its first occurrence, retaining the transcript as
+  a visible completed conversation; provider and parser errors still retry.
 - `duplicate_capture.py` owns the advisory cross-source overlap policy (#3244).
   After durable finalization, it links the shorter completed capture using
   `external_data.duplicate_capture_of` plus structured overlap evidence. The

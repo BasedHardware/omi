@@ -970,7 +970,7 @@ def test_no_mint_at_zero_remaining_on_a_hard_capped_plan_byok_or_not(monkeypatch
     """The hub hands out Omi's key; a user's Anthropic BYOK must not buy a managed OpenAI session past the cap."""
     monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *_a, **_k: False)
     monkeypatch.setattr(subscription.users_db, 'is_byok_active', lambda *_a, **_k: byok_active)
-    monkeypatch.setattr(subscription, '_request_has_byok_provider', lambda *_a, **_k: True)
+    monkeypatch.setattr(subscription, 'request_has_byok_provider', lambda *_a, **_k: True)
     monkeypatch.setattr(subscription, 'get_customer_firestore_client', lambda: object())
     monkeypatch.setattr(
         subscription,
