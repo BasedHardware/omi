@@ -296,6 +296,10 @@ export function DesktopApp({
   const [confettiFalling, setConfettiFalling] = useState(false);
   const [mode, setMode] = useState<OmnibarMode>('Ask');
   const [recallQuery, setRecallQuery] = useState('');
+  // The omnibar doubles as the Settings fuzzy-search field while Settings is
+  // open; the query lives here so it survives chrome re-renders and clears on
+  // every route change away.
+  const [settingsQuery, setSettingsQuery] = useState('');
   const [chatSubmission, setChatSubmission] = useState(0);
   const openChat = () => {
     setMode('Ask');
@@ -319,6 +323,9 @@ export function DesktopApp({
       return;
     }
     setChatOpen(false);
+    if (next !== 'Settings') {
+      setSettingsQuery('');
+    }
     setRoute(next);
     if (next === 'Rewind') {
       setMode('Search');
@@ -503,6 +510,8 @@ export function DesktopApp({
           }}
           onStop={onStop}
           route={route}
+          settingsQuery={settingsQuery}
+          onSettingsQueryChange={setSettingsQuery}
           inlineCard={
             inlineAnswerOpen && !chatOpen ? (
               <InlineAskCard
@@ -542,6 +551,8 @@ export function DesktopApp({
                   ambient={ambient}
                   capture={capture}
                   deviceContent={deviceContent}
+                  query={settingsQuery}
+                  onQueryChange={setSettingsQuery}
                   onSignIn={onSignIn}
                   onSignOut={onSignOut}
                   onUiVersionChange={setUiVersion}

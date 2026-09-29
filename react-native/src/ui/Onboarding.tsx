@@ -1132,8 +1132,10 @@ const createStyles = (desktopTokens: DesktopTokens) =>
     desktopTitle: {color: desktopTokens.color.ink},
     desktopCopy: {color: desktopTokens.color.inkMuted},
     desktopUnreachable: {color: desktopTokens.color.red},
-    desktopButton: {backgroundColor: desktopTokens.color.dark},
-    desktopButtonLabel: {color: desktopTokens.color.white},
-    desktopChip: {backgroundColor: desktopTokens.color.dark},
-    desktopChipLabel: {color: desktopTokens.color.white},
+    // Ink-filled controls (mirrors the settings action button): the old
+    // `dark` surface + white label pair went invisible in light mode.
+    desktopButton: {backgroundColor: desktopTokens.color.ink},
+    desktopButtonLabel: {color: desktopTokens.color.dark},
+    desktopChip: {backgroundColor: desktopTokens.color.ink},
+    desktopChipLabel: {color: desktopTokens.color.dark},
   });

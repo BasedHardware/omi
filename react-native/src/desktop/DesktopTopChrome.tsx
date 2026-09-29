@@ -71,6 +71,10 @@ type Props = {
   onDraftChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
+  // Settings mode: while route === 'Settings' the omnibar morphs into a fuzzy
+  // settings search — these carry its query instead of the chat draft.
+  settingsQuery?: string;
+  onSettingsQueryChange?: (value: string) => void;
   chatNotice: string | null;
   // Small inline answer card pinned under the omnibar, like the mobile app's
   // reply bubble. Rendered by the app shell; the chrome only places it.
@@ -93,6 +97,8 @@ export function DesktopChrome({
   onDraftChange,
   onSend,
   onStop,
+  settingsQuery = '',
+  onSettingsQueryChange,
   onNavigate,
   route,
   filter,
@@ -111,6 +117,9 @@ export function DesktopChrome({
   const reduceMotion = useReduceMotion();
   const canStop = mode === 'Ask' && activeGenerationId !== null;
   const sending = mode === 'Ask' && chatBusy && !canStop;
+  // In Settings the chrome morphs: the omnibar becomes a fuzzy settings
+  // search, the filter row hides, and the gear flips into an exit button.
+  const inSettings = route === 'Settings';
 
   // Sliding selection pill for the omnibar mode switcher.
   const [modeFrames, setModeFrames] = useState<
@@ -292,117 +301,151 @@ export function DesktopChrome({
           <DesktopTrafficLights />
         </View>
         <View style={styles.omnibar}>
-          <View style={styles.modes}>
-            <Animated.View
-              pointerEvents="none"
-              style={{
-                position: 'absolute',
-                top: 4,
-                bottom: 4,
-                left: 0,
-                borderRadius: 10,
-                backgroundColor: token.color.glassSelected,
-                transform: [{translateX: modePillX}],
-                width: modePillW,
-                opacity: modePillOpacity,
-              }}
+          {inSettings ? (
+            <MaterialIcon
+              name="search"
+              size={18}
+              color={token.color.inkMuted}
             />
-            {(['Ask', 'Search'] as const).map(value => {
-              const iconName = value === 'Ask' ? 'chat_bubble' : 'search';
-              return (
-                <FocusPressable
-                  key={value}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Use ${value} mode`}
-                  accessibilityState={{selected: mode === value}}
-                  onLayout={event => {
-                    const {x, width} = event.nativeEvent.layout;
-                    setModeFrames(current => ({
-                      ...current,
-                      [value]: {x, width},
-                    }));
-                  }}
-                  onPress={() => onModeChange?.(value)}
-                  style={styles.modeButton}>
-                  <MaterialIcon
-                    name={iconName}
-                    size={15}
-                    color={
-                      mode === value ? token.color.ink : token.color.inkMuted
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.modeText,
-                      mode === value && styles.modeTextActive,
+          ) : (
+            <View style={styles.modes}>
+              <Animated.View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  top: 4,
+                  bottom: 4,
+                  left: 0,
+                  borderRadius: 10,
+                  backgroundColor: token.color.glassSelected,
+                  transform: [{translateX: modePillX}],
+                  width: modePillW,
+                  opacity: modePillOpacity,
+                }}
+              />
+              {(['Ask', 'Search'] as const).map(value => {
+                const iconName = value === 'Ask' ? 'chat_bubble' : 'search';
+                return (
+                  <FocusPressable
+                    key={value}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use ${value} mode`}
+                    accessibilityState={{selected: mode === value}}
+                    onLayout={event => {
+                      const {x, width} = event.nativeEvent.layout;
+                      setModeFrames(current => ({
+                        ...current,
+                        [value]: {x, width},
+                      }));
+                    }}
+                    onPress={() => onModeChange?.(value)}
+                    style={({hovered, pressed}) => [
+                      styles.modeButton,
+                      hovered && !pressed && mode !== value && styles.modeHover,
+                      pressed && styles.pressed,
                     ]}>
-                    {value}
-                  </Text>
-                </FocusPressable>
-              );
-            })}
-          </View>
+                    <MaterialIcon
+                      name={iconName}
+                      size={16}
+                      color={
+                        mode === value ? token.color.ink : token.color.inkMuted
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.modeText,
+                        mode === value && styles.modeTextActive,
+                      ]}>
+                      {value}
+                    </Text>
+                  </FocusPressable>
+                );
+              })}
+            </View>
+          )}
           <TextInput
-            accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search Recall'}
+            accessibilityLabel={
+              inSettings
+                ? 'Search settings'
+                : mode === 'Ask'
+                ? 'Ask Omi'
+                : 'Search Recall'
+            }
             blurOnSubmit={false}
-            onChangeText={onDraftChange}
+            onChangeText={
+              inSettings ? onSettingsQueryChange ?? (() => {}) : onDraftChange
+            }
             onSubmitEditing={() => {
+              if (inSettings) {
+                return;
+              }
               if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
                 onSend();
               }
             }}
             placeholder={
-              mode === 'Search'
+              inSettings
+                ? 'Search settings…'
+                : mode === 'Search'
                 ? desktopSearchPlaceholder
                 : 'Ask about your day…'
             }
             placeholderTextColor={token.color.inkMuted}
             ref={omnibarRef}
             style={styles.omnibarInput}
-            value={draft}
+            value={inSettings ? settingsQuery : draft}
           />
-          {liveControl ? (
+          {liveControl && !inSettings ? (
             <View style={styles.liveSlot}>{liveControl}</View>
           ) : null}
-          <FocusPressable
-            accessibilityLabel={
-              canStop
-                ? 'Stop'
-                : sending
-                ? 'Sending…'
-                : mode === 'Ask'
-                ? 'Send'
-                : 'Search'
-            }
-            accessibilityRole="button"
-            disabled={mode === 'Ask' && !canStop && (chatBusy || !draft.trim())}
-            onPress={() => {
-              if (canStop) {
-                onStop();
-              } else if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
-                onSend();
+          {inSettings ? null : (
+            <FocusPressable
+              accessibilityLabel={
+                canStop
+                  ? 'Stop'
+                  : sending
+                  ? 'Sending…'
+                  : mode === 'Ask'
+                  ? 'Send'
+                  : 'Search'
               }
-            }}
-            style={({pressed}) => [
-              styles.send,
-              mode === 'Ask' &&
-                !canStop &&
-                (chatBusy || !draft.trim()) &&
-                styles.sendDisabled,
-              pressed && styles.pressed,
-            ]}>
-            {canStop ? (
-              <MaterialIcon name="stop" size={14} color={token.color.dark} />
-            ) : mode === 'Ask' ? (
-              <MaterialIcon
-                name="arrow_upward"
-                size={18}
-                color={token.color.dark}
-              />
-            ) : (
-              <MaterialIcon name="search" size={17} color={token.color.dark} />
-            )}
-          </FocusPressable>
+              accessibilityRole="button"
+              disabled={
+                mode === 'Ask' && !canStop && (chatBusy || !draft.trim())
+              }
+              onPress={() => {
+                if (canStop) {
+                  onStop();
+                } else if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
+                  onSend();
+                }
+              }}
+              style={({hovered, pressed}) => [
+                styles.send,
+                mode === 'Ask' &&
+                  !canStop &&
+                  (chatBusy || !draft.trim()) &&
+                  styles.sendDisabled,
+                hovered && !pressed && styles.sendHover,
+                pressed && styles.pressed,
+              ]}>
+              {canStop ? (
+                <MaterialIcon name="stop" size={16} color={token.color.dark} />
+              ) : mode === 'Ask' ? (
+                <MaterialIcon
+                  name="arrow_upward"
+                  size={18}
+                  color={token.color.dark}
+                />
+              ) : (
+                <MaterialIcon
+                  name="search"
+                  size={18}
+                  color={token.color.dark}
+                />
+              )}
+            </FocusPressable>
+          )}
           {inlineCard ? (
             <View pointerEvents="box-none" style={styles.inlineCardSlot}>
               {inlineCard}
@@ -429,12 +472,12 @@ export function DesktopChrome({
             <MaterialIcon
               color={captureActive ? token.color.red : token.color.ink}
               name="monitor"
-              size={17}
+              size={18}
             />
           </ShippingPressable>
         ) : null}
         <ShippingPressable
-          accessibilityLabel="Settings"
+          accessibilityLabel={inSettings ? 'Close settings' : 'Settings'}
           accessibilityRole="button"
           accessibilityState={{selected: route === 'Settings'}}
           active={route === 'Settings'}
@@ -448,7 +491,11 @@ export function DesktopChrome({
             styles.settingsButton,
             route === 'Settings' && styles.settingsButtonActive,
           ]}>
-          <MaterialIcon name="settings" color={token.color.ink} size={17} />
+          {inSettings ? (
+            <MaterialIcon name="close" color={token.color.ink} size={18} />
+          ) : (
+            <MaterialIcon name="settings" color={token.color.ink} size={18} />
+          )}
         </ShippingPressable>
       </View>
       {chatNotice === null ? null : (
@@ -459,92 +506,104 @@ export function DesktopChrome({
           {chatNotice}
         </Text>
       )}
-      <View
-        accessibilityLabel="Activity filters"
-        accessibilityRole="tablist"
-        onLayout={event => {
-          const {x, y, width, height} = event.nativeEvent.layout;
-          setFiltersBox({height, width, x, y});
-        }}
-        style={styles.filterRow}>
-        {desktopActivityFilters.map(id => {
-          const selected = id === filter;
-          return (
-            <FocusPressable
-              key={id}
-              accessibilityLabel={`Filter ${desktopFilterLabel(id)}`}
-              accessibilityRole="button"
-              accessibilityState={{selected}}
-              onLayout={event => {
-                const {x, width} = event.nativeEvent.layout;
-                setChipFrames(current => {
-                  const next = {x, width};
-                  if (
-                    current[id] !== undefined &&
-                    Math.abs(current[id]!.x - next.x) < 0.5 &&
-                    Math.abs(current[id]!.width - next.width) < 0.5
-                  ) {
-                    return current;
-                  }
-                  return {...current, [id]: next};
-                });
-              }}
-              onPress={() => onFilterChange(id)}
-              style={({pressed}) => [
-                styles.filterHit,
-                selected && styles.filterHitSelected,
-                pressed && styles.pressed,
-              ]}>
-              <MaterialIcon
-                name={filterIcons[id]}
-                size={14}
-                color={selected ? token.color.ink : token.color.inkMuted}
-              />
-              <Text
-                style={[
-                  styles.filterText,
-                  selected && styles.filterTextActive,
-                ]}>
-                {desktopFilterLabel(id)}
-              </Text>
-            </FocusPressable>
-          );
-        })}
-        <View style={styles.groupBySlot} />
+      {inSettings ? null : (
         <View
-          accessibilityLabel="Timeline grouping"
+          accessibilityLabel="Activity filters"
           accessibilityRole="tablist"
-          style={styles.groupBy}>
-          {desktopTimelineGroupings.map(value => {
-            const selected = value === groupBy;
+          onLayout={event => {
+            const {x, y, width, height} = event.nativeEvent.layout;
+            setFiltersBox({height, width, x, y});
+          }}
+          style={styles.filterRow}>
+          {desktopActivityFilters.map(id => {
+            const selected = id === filter;
             return (
               <FocusPressable
-                key={value}
-                accessibilityLabel={`Group by ${value}`}
+                key={id}
+                accessibilityLabel={`Filter ${desktopFilterLabel(id)}`}
                 accessibilityRole="button"
                 accessibilityState={{selected}}
-                onPress={() => onGroupByChange(value)}
-                style={({pressed}) => [
-                  styles.groupHit,
-                  selected && styles.groupHitSelected,
+                onLayout={event => {
+                  const {x, width} = event.nativeEvent.layout;
+                  setChipFrames(current => {
+                    const next = {x, width};
+                    if (
+                      current[id] !== undefined &&
+                      Math.abs(current[id]!.x - next.x) < 0.5 &&
+                      Math.abs(current[id]!.width - next.width) < 0.5
+                    ) {
+                      return current;
+                    }
+                    return {...current, [id]: next};
+                  });
+                }}
+                onPress={() => onFilterChange(id)}
+                style={({hovered, pressed}) => [
+                  styles.filterHit,
+                  selected && styles.filterHitSelected,
+                  hovered &&
+                    !pressed &&
+                    (selected
+                      ? styles.filterHitHoverSelected
+                      : styles.filterHitHover),
                   pressed && styles.pressed,
                 ]}>
+                <MaterialIcon
+                  name={filterIcons[id]}
+                  size={16}
+                  color={selected ? token.color.ink : token.color.inkMuted}
+                />
                 <Text
                   style={[
-                    styles.groupText,
-                    selected && styles.groupTextSelected,
+                    styles.filterText,
+                    selected && styles.filterTextActive,
                   ]}>
-                  {value === 'date'
-                    ? 'Date'
-                    : value === 'type'
-                    ? 'Type'
-                    : 'Topic'}
+                  {desktopFilterLabel(id)}
                 </Text>
               </FocusPressable>
             );
           })}
+          <View style={styles.groupBySlot} />
+          <View
+            accessibilityLabel="Timeline grouping"
+            accessibilityRole="tablist"
+            style={styles.groupBy}>
+            {desktopTimelineGroupings.map(value => {
+              const selected = value === groupBy;
+              return (
+                <FocusPressable
+                  key={value}
+                  accessibilityLabel={`Group by ${value}`}
+                  accessibilityRole="button"
+                  accessibilityState={{selected}}
+                  onPress={() => onGroupByChange(value)}
+                  style={({hovered, pressed}) => [
+                    styles.groupHit,
+                    selected && styles.groupHitSelected,
+                    hovered &&
+                      !pressed &&
+                      (selected
+                        ? styles.groupHitHoverSelected
+                        : styles.groupHitHover),
+                    pressed && styles.pressed,
+                  ]}>
+                  <Text
+                    style={[
+                      styles.groupText,
+                      selected && styles.groupTextSelected,
+                    ]}>
+                    {value === 'date'
+                      ? 'Date'
+                      : value === 'type'
+                      ? 'Type'
+                      : 'Topic'}
+                  </Text>
+                </FocusPressable>
+              );
+            })}
+          </View>
         </View>
-      </View>
+      )}
       {guideTarget !== null && guideRect !== null ? (
         <Animated.View
           accessibilityLabel="Explore guide highlight"
@@ -629,7 +688,16 @@ const createStyles = (token: DesktopTokens) =>
       justifyContent: 'center',
       borderRadius: 12,
     },
-    modeText: {fontSize: 12, color: token.color.inkMuted},
+    modeText: {
+      fontSize: 12,
+      // Explicit line box: SF's default 12 px line parks the ink ~1 px high
+      // vs the 15 px icons in the same pill (measured, shipping build).
+      lineHeight: 16,
+      color: token.color.inkMuted,
+    },
+    modeHover: {
+      backgroundColor: token.color.glassQuiet,
+    },
     modeTextActive: {color: token.color.ink},
     chrome: {
       gap: 10,
@@ -679,7 +747,6 @@ const createStyles = (token: DesktopTokens) =>
       flexDirection: 'row',
       gap: 8,
       height: desktopOmnibarHeight,
-      maxWidth: 992,
       minWidth: 220,
       paddingHorizontal: 8,
       paddingVertical: 6,
@@ -726,6 +793,10 @@ const createStyles = (token: DesktopTokens) =>
       backgroundColor: token.color.ink,
     },
     sendDisabled: {opacity: 0.3},
+    sendHover: {opacity: 0.86},
+    settingsButtonHover: {
+      backgroundColor: token.color.glassQuiet,
+    },
     settingsButton: {
       alignItems: 'center',
       backgroundColor: 'rgba(0,0,0,0)',
@@ -746,7 +817,6 @@ const createStyles = (token: DesktopTokens) =>
       flexDirection: 'row',
       gap: 6,
       height: desktopFilterRowHeight,
-      maxWidth: 992,
       width: '100%',
       alignSelf: 'center',
     },
@@ -761,6 +831,12 @@ const createStyles = (token: DesktopTokens) =>
     },
     filterHitSelected: {
       backgroundColor: token.color.glassSelected,
+    },
+    filterHitHover: {
+      backgroundColor: token.color.glassQuiet,
+    },
+    filterHitHoverSelected: {
+      backgroundColor: token.color.glassStrong,
     },
     filterText: {
       color: token.color.inkMuted,
@@ -790,6 +866,12 @@ const createStyles = (token: DesktopTokens) =>
     },
     groupHitSelected: {
       backgroundColor: token.color.glassSelected,
+    },
+    groupHitHover: {
+      backgroundColor: token.color.glassQuiet,
+    },
+    groupHitHoverSelected: {
+      backgroundColor: token.color.glassStrong,
     },
     groupText: {
       color: token.color.inkMuted,

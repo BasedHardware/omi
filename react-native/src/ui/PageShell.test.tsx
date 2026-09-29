@@ -35,6 +35,10 @@ test('static layout guard: DesktopApp keeps an even window inset around one chro
   expect(desktopChrome).toMatch(/omnibar:\s*\{/);
   expect(desktopChrome).toMatch(/omnibar:\s*\{[^}]*minWidth:\s*220/);
   expect(desktopChrome).not.toMatch(/navItem:\s*\{[^}]*borderRadius/);
-  expect(desktopChrome).toContain('accessibilityLabel="Settings"');
+  // The gear flips into an exit (X) while Settings is open; both labels must
+  // survive — the tripwire still pins the settings entry point.
+  expect(desktopChrome).toContain(
+    "accessibilityLabel={inSettings ? 'Close settings' : 'Settings'}",
+  );
   expect(desktopChrome).not.toMatch(/navTextActive:\s*\{[^}]*fontWeight/);
 });
