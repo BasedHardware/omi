@@ -16,11 +16,11 @@ overlay:
         # frame, 0 connects since 08-26), so they got no transcript. The configured order
         # The allocated windowed TDT cohort precedes the unchanged vendor order;
         # otherwise Soniox is second after Modulate. Canary allocation follows the
-        # gated ramp in docs/operational/windowed-live-stt.md (5% on 2026-09-29).
+        # gated ramp in docs/operational/windowed-live-stt.md (25% on 2026-09-29).
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'true'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
-          value: '5'
+          value: '25'
         PARAKEET_WINDOW_MAX_SESSIONS:
           value: '8'
         PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:

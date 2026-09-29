@@ -395,7 +395,7 @@ env:
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
     value: "50"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
-    value: "5"
+    value: "25"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
     value: "8"
   - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
