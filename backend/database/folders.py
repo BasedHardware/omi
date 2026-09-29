@@ -111,10 +111,35 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
+def _clean_str(val: Any) -> Optional[str]:
+    if not isinstance(val, str):
+        return None
+    s = val.strip()
+    return s if s else None
+
+
+def _clean_id_list(items: Any) -> List[str]:
+    if not isinstance(items, list):
+        return []
+    res: List[str] = []
+    seen: Set[str] = set()
+    for item in items:
+        cleaned = _clean_str(item)
+        if not cleaned or '/' in cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        res.append(cleaned)
+    return res
+
+
 def get_folders(uid: str, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
     """Get all folders for a user, sorted by order."""
+    clean_uid = _clean_str(uid)
+    if not clean_uid:
+        return []
+
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    user_ref = client.collection('users').document(uid)
+    user_ref = client.collection('users').document(clean_uid)
     folders_ref = user_ref.collection('folders')
 
     folders: List[Dict[str, Any]] = []
@@ -128,8 +153,13 @@ def get_folders(uid: str, *, firestore_client: Any = None) -> List[Dict[str, Any
 
 def get_folder(uid: str, folder_id: str) -> Optional[Dict[str, Any]]:
     """Get a specific folder by ID."""
-    user_ref = db.collection('users').document(uid)
-    folder_doc = user_ref.collection('folders').document(folder_id).get()
+    clean_uid = _clean_str(uid)
+    clean_folder_id = _clean_str(folder_id)
+    if not clean_uid or not clean_folder_id:
+        return None
+
+    user_ref = db.collection('users').document(clean_uid)
+    folder_doc = user_ref.collection('folders').document(clean_folder_id).get()
 
     if getattr(folder_doc, "exists", False):
         folder_data = _typed_doc(folder_doc)
@@ -147,7 +177,11 @@ def create_folder(
     icon: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a new custom folder for a user."""
-    user_ref = db.collection('users').document(uid)
+    clean_uid = _clean_str(uid)
+    if not clean_uid:
+        raise ValueError("uid must be a non-empty string")
+
+    user_ref = db.collection('users').document(clean_uid)
     folders_ref = user_ref.collection('folders')
 
     # Get the highest order number
@@ -178,8 +212,13 @@ def create_folder(
 
 def update_folder(uid: str, folder_id: str, update_data: Dict[str, Any]) -> bool:
     """Update a folder's metadata."""
-    user_ref = db.collection('users').document(uid)
-    folder_ref = user_ref.collection('folders').document(folder_id)
+    clean_uid = _clean_str(uid)
+    clean_folder_id = _clean_str(folder_id)
+    if not clean_uid or not clean_folder_id:
+        return False
+
+    user_ref = db.collection('users').document(clean_uid)
+    folder_ref = user_ref.collection('folders').document(clean_folder_id)
 
     # Add updated_at timestamp
     update_data['updated_at'] = datetime.now(timezone.utc)
@@ -217,16 +256,28 @@ def delete_folder(
     Delete a folder and move its conversations to another folder.
     If move_to_folder_id is not provided, moves to the default 'Other' folder.
     """
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    user_ref = client.collection('users').document(uid)
-    folder_ref = user_ref.collection('folders').document(folder_id)
+    clean_uid = _clean_str(uid)
+    clean_folder_id = _clean_str(folder_id)
+    if not clean_uid or not clean_folder_id:
+        return False
 
-    # Find target folder
-    target_folder_id: Optional[str] = move_to_folder_id
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(clean_uid)
+    folder_ref = user_ref.collection('folders').document(clean_folder_id)
+
+    # Find target folder; guard against self-targeting (repointing conversations
+    # to the folder being deleted leaves orphaned tombstones).
+    target_folder_id: Optional[str] = _clean_str(move_to_folder_id)
+    if target_folder_id == clean_folder_id:
+        target_folder_id = None
+
     if not target_folder_id:
-        # Find the default folder (usually 'Other')
-        folders = get_folders(uid, firestore_client=client)
-        default_folder = next((f for f in folders if f.get('is_default')), None)
+        # Find the default folder (usually 'Other'), skipping the folder being deleted
+        folders = get_folders(clean_uid, firestore_client=client)
+        default_folder = next(
+            (f for f in folders if f.get('is_default') and str(f.get('id', '')) != clean_folder_id),
+            None,
+        )
         if default_folder:
             target_folder_id = str(default_folder['id'])
 
@@ -236,21 +287,21 @@ def delete_folder(
     # deleted below. A stale pointer used to survive here and 500 every later
     # move of that conversation.
     conversations_ref = user_ref.collection('conversations')
-    conversations = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id)).select([]).stream()
+    conversations = conversations_ref.where(filter=FieldFilter('folder_id', '==', clean_folder_id)).select([]).stream()
 
     references: List[Any] = []
     for conv_doc in conversations:
         references.append(conv_doc.reference)
         if len(references) >= 450:
-            _rehome_folder_conversations(client, references, folder_id, target_folder_id)
+            _rehome_folder_conversations(client, references, clean_folder_id, target_folder_id)
             references = []
 
     if references:
-        _rehome_folder_conversations(client, references, folder_id, target_folder_id)
+        _rehome_folder_conversations(client, references, clean_folder_id, target_folder_id)
 
     # Update target folder count
     if target_folder_id:
-        update_folder_conversation_count(uid, target_folder_id, firestore_client=client)
+        update_folder_conversation_count(clean_uid, target_folder_id, firestore_client=client)
 
     # Delete the folder
     folder_ref.delete()
@@ -259,15 +310,31 @@ def delete_folder(
 
 def reorder_folders(uid: str, folder_ids: List[str]) -> bool:
     """Reorder folders by providing an ordered list of folder IDs."""
-    user_ref = db.collection('users').document(uid)
+    clean_uid = _clean_str(uid)
+    if not clean_uid:
+        return False
+
+    unique_folder_ids = _clean_id_list(folder_ids)
+    if not unique_folder_ids:
+        return False
+
+    user_ref = db.collection('users').document(clean_uid)
     folders_ref = user_ref.collection('folders')
 
+    now = datetime.now(timezone.utc)
     batch = db.batch()
-    for i, folder_id in enumerate(folder_ids):
+    count = 0
+    for i, folder_id in enumerate(unique_folder_ids):
         folder_ref = folders_ref.document(folder_id)
-        batch.update(folder_ref, {'order': i, 'updated_at': datetime.now(timezone.utc)})
+        batch.update(folder_ref, {'order': i, 'updated_at': now})
+        count += 1
+        if count >= 450:
+            batch.commit()
+            batch = db.batch()
+            count = 0
 
-    batch.commit()
+    if count > 0:
+        batch.commit()
     return True
 
 
@@ -345,8 +412,15 @@ def move_conversation_to_folder(
     folder_id: Optional[str],
 ) -> bool:
     """Move a conversation to a different folder."""
-    user_ref = db.collection('users').document(uid)
-    conv_ref = user_ref.collection('conversations').document(conversation_id)
+    clean_uid = _clean_str(uid)
+    clean_conv_id = _clean_str(conversation_id)
+    if not clean_uid or not clean_conv_id:
+        return False
+
+    clean_folder_id = _clean_str(folder_id)
+
+    user_ref = db.collection('users').document(clean_uid)
+    conv_ref = user_ref.collection('conversations').document(clean_conv_id)
 
     # Get the old folder_id to update counts
     conv_doc = conv_ref.get()
@@ -358,13 +432,13 @@ def move_conversation_to_folder(
     # Update the conversation's folder_id. folder_user_set marks this as an
     # explicit user decision so processing upserts preserve it even when the
     # user cleared the folder (folder_id None).
-    conv_ref.update({'folder_id': folder_id, 'folder_user_set': True})
+    conv_ref.update({'folder_id': clean_folder_id, 'folder_user_set': True})
 
     # Update folder counts
     if old_folder_id:
-        update_folder_conversation_count(uid, str(old_folder_id))
-    if folder_id:
-        update_folder_conversation_count(uid, folder_id)
+        update_folder_conversation_count(clean_uid, str(old_folder_id))
+    if clean_folder_id:
+        update_folder_conversation_count(clean_uid, clean_folder_id)
 
     return True
 
@@ -375,13 +449,19 @@ def bulk_move_conversations_to_folder(
     folder_id: str,
 ) -> int:
     """Move multiple conversations to a folder. Returns count of moved conversations."""
-    if not conversation_ids:
+    clean_uid = _clean_str(uid)
+    clean_folder_id = _clean_str(folder_id)
+    if not clean_uid or not clean_folder_id:
         return 0
 
-    user_ref = db.collection('users').document(uid)
+    unique_conv_ids = _clean_id_list(conversation_ids)
+    if not unique_conv_ids:
+        return 0
+
+    user_ref = db.collection('users').document(clean_uid)
     conversations_ref = user_ref.collection('conversations')
 
-    conv_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
+    conv_refs = [conversations_ref.document(conv_id) for conv_id in unique_conv_ids]
     conv_docs = db.get_all(conv_refs)
 
     affected_folders: Set[str] = set()
@@ -397,7 +477,7 @@ def bulk_move_conversations_to_folder(
         if old_folder_id:
             affected_folders.add(str(old_folder_id))
 
-        batch.update(conv_doc.reference, {'folder_id': folder_id, 'folder_user_set': True})
+        batch.update(conv_doc.reference, {'folder_id': clean_folder_id, 'folder_user_set': True})
         moved += 1
         count += 1
 
@@ -409,20 +489,25 @@ def bulk_move_conversations_to_folder(
     if count > 0:
         batch.commit()
 
-    affected_folders.add(folder_id)
+    affected_folders.add(clean_folder_id)
     for fid in affected_folders:
-        update_folder_conversation_count(uid, fid)
+        update_folder_conversation_count(clean_uid, fid)
 
     return moved
 
 
 def update_folder_conversation_count(uid: str, folder_id: str, *, firestore_client: Any = None) -> int:
     """Update the conversation count for a folder."""
+    clean_uid = _clean_str(uid)
+    clean_folder_id = _clean_str(folder_id)
+    if not clean_uid or not clean_folder_id:
+        return 0
+
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    user_ref = client.collection('users').document(uid)
+    user_ref = client.collection('users').document(clean_uid)
     conversations_ref = user_ref.collection('conversations')
 
-    query = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id)).where(
+    query = conversations_ref.where(filter=FieldFilter('folder_id', '==', clean_folder_id)).where(
         filter=FieldFilter('discarded', '==', False)
     )
 
@@ -430,7 +515,7 @@ def update_folder_conversation_count(uid: str, folder_id: str, *, firestore_clie
     result = count_query.get()
     count = int(result[0][0].value or 0)
 
-    folder_ref = user_ref.collection('folders').document(folder_id)
+    folder_ref = user_ref.collection('folders').document(clean_folder_id)
     try:
         folder_ref.update({'conversation_count': count})
     except NotFound:
@@ -439,7 +524,7 @@ def update_folder_conversation_count(uid: str, folder_id: str, *, firestore_clie
         # nothing to write — it must not fail the move that triggered it.
         # Callers reach here only via a conversation still pointing at a
         # deleted folder, which delete_folder no longer leaves behind.
-        logger.warning(f"folder {folder_id} no longer exists; skipping conversation_count refresh")
+        logger.warning(f"folder {clean_folder_id} no longer exists; skipping conversation_count refresh")
 
     return count
 

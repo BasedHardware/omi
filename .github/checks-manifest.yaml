@@ -159,6 +159,11 @@ checks:
     triggers: ["backend/utils/retrieval/tools/file_tools.py", "backend/tests/unit/test_file_tools_sanitization.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "File search chat tools must safely handle config and session errors without leaking internal tracebacks or exception strings"
+  - id: folders-batch-resilience-tests
+    command: ["python3", "backend/tests/unit/test_folders_batch_resilience.py"]
+    triggers: ["backend/database/folders.py", "backend/tests/unit/test_folders_batch_resilience.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Deduplicate conversation IDs in bulk move and folder IDs in reorder to prevent Firestore 400 commit contention, chunk reorder batches to 450 items, guard self-targeting deletion tombstones, and validate uid inputs"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
