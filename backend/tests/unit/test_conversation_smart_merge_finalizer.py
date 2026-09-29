@@ -99,7 +99,7 @@ async def test_incomplete_merge_is_a_retryable_finalization_failure(harness, mon
 @pytest.mark.asyncio
 async def test_flag_off_step_leaves_the_finalizer_on_its_existing_path(harness, monkeypatch):
     calls, _ = harness
-    monkeypatch.delenv('CONVERSATION_SMART_MERGE_MODE', raising=False)
+    monkeypatch.setenv('CONVERSATION_SMART_MERGE_MODE', 'off')
     with pytest.raises(finalizer.ConversationFinalizationError):
         await _finalize()
     assert calls == [
