@@ -15,9 +15,9 @@ def test_get_action_items_tool_exception_sanitized():
         "utils.retrieval.tools.action_item_tools.action_items_db.get_action_items",
         side_effect=RuntimeError(SENTINEL_ERROR),
     ):
-        res = action_item_tools.get_action_items_tool(config={"configurable": {"user_id": "test-uid-123"}})
+        res = action_item_tools.get_action_items_tool.func(config={"configurable": {"user_id": "test-uid-123"}})
     assert SENTINEL_ERROR not in res
-    assert "Error: Failed to retrieve action items." in res
+    assert res == "Error retrieving action items"
 
 
 def test_create_action_item_tool_exception_sanitized():
@@ -25,11 +25,11 @@ def test_create_action_item_tool_exception_sanitized():
         "utils.retrieval.tools.action_item_tools.action_items_db.create_action_item",
         side_effect=RuntimeError(SENTINEL_ERROR),
     ):
-        res = action_item_tools.create_action_item_tool(
+        res = action_item_tools.create_action_item_tool.func(
             description="Do dishes", config={"configurable": {"user_id": "test-uid-123"}}
         )
     assert SENTINEL_ERROR not in res
-    assert "Error: Failed to create action item." in res
+    assert res == "Error creating action item"
 
 
 def test_update_action_item_tool_exception_sanitized():
@@ -37,13 +37,13 @@ def test_update_action_item_tool_exception_sanitized():
         "utils.retrieval.tools.action_item_tools.action_items_db.update_action_item_description",
         side_effect=RuntimeError(SENTINEL_ERROR),
     ):
-        res = action_item_tools.update_action_item_tool(
+        res = action_item_tools.update_action_item_tool.func(
             action_item_id="item-123",
             description="New description",
             config={"configurable": {"user_id": "test-uid-123"}},
         )
     assert SENTINEL_ERROR not in res
-    assert "Error: Failed to update action item." in res
+    assert res == "Error updating action item"
 
 
 def test_search_memories_tool_exception_sanitized():
@@ -51,8 +51,8 @@ def test_search_memories_tool_exception_sanitized():
         "utils.retrieval.tools.memory_tools.memory_service.read",
         side_effect=RuntimeError(SENTINEL_ERROR),
     ):
-        res = memory_tools.search_memories_tool(
+        res = memory_tools.search_memories_tool.func(
             query="test query", config={"configurable": {"user_id": "test-uid-123"}}
         )
     assert SENTINEL_ERROR not in res
-    assert "Error searching memories: Failed to search memories." in res
+    assert res == "Error searching memories"
