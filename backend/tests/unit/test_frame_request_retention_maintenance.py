@@ -1,12 +1,14 @@
 import pytest
 from services.frame_request_retention import run_frame_request_retention_maintenance
 from services import frame_request_retention
-from .test_frame_request_retention_pagination import _Client
+from tests.unit.test_frame_request_retention_pagination import _Client
 from services.frame_request_retention import FrameCleanupPage
+
 
 @pytest.fixture(autouse=True)
 def _plain_firestore_transactions(monkeypatch):
     monkeypatch.setattr(frame_request_retention.firestore, "transactional", lambda function: function)
+
 
 def test_run_frame_request_retention_maintenance_invalid_limits():
     with pytest.raises(ValueError, match="maintenance limits must be positive"):
