@@ -266,7 +266,7 @@ def get_conversations_tool(
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
             logger.info(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
-            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
+            return "Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone."
 
     if end_date:
         try:
@@ -276,7 +276,7 @@ def get_conversations_tool(
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
             logger.info(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
-            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+            return "Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone."
 
     # JIT renders at most MAX_JIT_CONVERSATIONS, so do not read rows that can never
     # reach the result. The legacy path intentionally retains its existing limit.
@@ -293,38 +293,42 @@ def get_conversations_tool(
     if statuses:
         status_list = [s.strip() for s in statuses.split(',') if s.strip()]
 
-    scoped_id = (scope or {}).get("conversation_id") if scope else None
-    if scoped_id:
-        conversations_data, scoped_err = _scoped_conversation_fetch(
-            uid,
-            str(scoped_id),
-            start_dt=start_dt,
-            end_dt=end_dt,
-            include_discarded=include_discarded,
-            statuses=status_list or None,
-        )
-        if scoped_err:
-            logger.info(f"⚠️ get_conversations_tool - {scoped_err}")
-            return scoped_err
-        if offset > 0:
-            conversations_data = []
+    try:
+        scoped_id = (scope or {}).get("conversation_id") if scope else None
+        if scoped_id:
+            conversations_data, scoped_err = _scoped_conversation_fetch(
+                uid,
+                str(scoped_id),
+                start_dt=start_dt,
+                end_dt=end_dt,
+                include_discarded=include_discarded,
+                statuses=status_list or None,
+            )
+            if scoped_err:
+                logger.info(f"⚠️ get_conversations_tool - {scoped_err}")
+                return scoped_err
+            if offset > 0:
+                conversations_data = []
+            else:
+                conversations_data = conversations_data[:limit]
         else:
-            conversations_data = conversations_data[:limit]
-    else:
-        # Get conversations
-        conversations_data = conversations_db.get_conversations(
-            uid,
-            limit=limit,
-            offset=offset,
-            start_date=start_dt,
-            end_date=end_dt,
-            include_discarded=include_discarded,
-            statuses=status_list,
-        )
+            # Get conversations
+            conversations_data = conversations_db.get_conversations(
+                uid,
+                limit=limit,
+                offset=offset,
+                start_date=start_dt,
+                end_date=end_dt,
+                include_discarded=include_discarded,
+                statuses=status_list,
+            )
 
-        # Filter out locked conversations (paid plan required)
-        if conversations_data:
-            conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+            # Filter out locked conversations (paid plan required)
+            if conversations_data:
+                conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+    except Exception as e:
+        logger.error(f"❌ Unexpected error retrieving conversations: {e}", exc_info=True)
+        return "An unexpected error occurred while fetching conversations. Please try again later."
 
     # Bound how many conversations are formatted for the chat model so a wide date range cannot
     # flood its context and freeze it (#4927). Newest-first, so this keeps the most recent.
@@ -418,12 +422,8 @@ def get_conversations_tool(
         return result
 
     except Exception as e:
-        error_msg = f"Error formatting conversations: {str(e)}"
-        logger.info(f"❌ get_conversations_tool - {error_msg}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Found {len(conversations_data)} conversations but encountered an error formatting them: {str(e)}"
+        logger.error(f"❌ Unexpected error in get_conversations_tool: {e}", exc_info=True)
+        return "An unexpected error occurred while fetching conversations. Please try again later."
 
 
 @tool
