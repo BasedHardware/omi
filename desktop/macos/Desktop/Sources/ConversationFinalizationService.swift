@@ -10,6 +10,14 @@ actor ConversationFinalizationService {
   private var pendingMeetingCompletionConversationIDs = Set<String>()
   private var pendingFinalizationProjectionPolls = Set<String>()
   private var localProjectionHooks: LocalProjectionTestHooks?
+  private var isNetworkReachable: @Sendable () async -> Bool =
+    ConversationFinalizationService.systemNetworkReachability
+  private var clock: @Sendable () -> Date = { Date() }
+  private var isDeferredForOffline = false
+
+  private static let systemNetworkReachability: @Sendable () async -> Bool = {
+    await MainActor.run { NetworkReachability.shared.isOnline }
+  }
 
   private init() {}
 
@@ -23,6 +31,15 @@ actor ConversationFinalizationService {
 
   func setLocalProjectionHooksForTesting(_ hooks: LocalProjectionTestHooks?) {
     localProjectionHooks = hooks
+  }
+
+  func setNetworkReachabilityForTesting(_ probe: (@Sendable () async -> Bool)?) {
+    isNetworkReachable = probe ?? Self.systemNetworkReachability
+    isDeferredForOffline = false
+  }
+
+  func setClockForTesting(_ clock: (@Sendable () -> Date)?) {
+    self.clock = clock ?? { Date() }
   }
 
   func finalizeSession(
@@ -53,14 +70,27 @@ actor ConversationFinalizationService {
         by: { $0.id ?? -1 }
       ).compactMap { $0.value.first }
 
-      if !sessionsById.isEmpty {
-        log(
-          "ConversationFinalization: Recovering \(sessionsById.count) pending sessions (\(exhaustedLocalFallbackSessions.count) exhausted cloud sessions have local fallback data)"
-        )
+      guard !sessionsById.isEmpty else { return }
+      // Every finalization path needs the backend. Attempting while offline only burns budget and
+      // leaves the row looking broken, so wait for a network path; the backoff clock keeps running.
+      guard await isNetworkReachable() else {
+        if !isDeferredForOffline {
+          isDeferredForOffline = true
+          log("ConversationFinalization: Offline; deferring \(sessionsById.count) pending sessions")
+        }
+        return
       }
+      if isDeferredForOffline {
+        isDeferredForOffline = false
+        log("ConversationFinalization: Network available; resuming pending finalizations")
+      }
+      log(
+        "ConversationFinalization: Recovering \(sessionsById.count) pending sessions (\(exhaustedLocalFallbackSessions.count) exhausted cloud sessions have local fallback data)"
+      )
       let exhaustedLocalFallbackIds = Set(exhaustedLocalFallbackSessions.compactMap(\.id))
+      let recoveryTime = clock()
       for session in sessionsById
-      where session.isReadyForRetry() || session.status != .failed || session.retryCount >= maxRetries {
+      where Self.isDueForRecovery(session, now: recoveryTime, maxRetries: maxRetries) {
         if let sessionId = session.id, exhaustedLocalFallbackIds.contains(sessionId) {
           await finalizeExhaustedCloudSessionFromLocalSegments(session)
           continue
@@ -74,6 +104,16 @@ actor ConversationFinalizationService {
     } catch {
       logError("ConversationFinalization: Recovery failed", error: error)
     }
+  }
+
+  /// Unfinished work is always due. Failed sessions wait out their backoff, except exhausted cloud
+  /// sessions, which get their bounded local-fallback attempts on the next tick.
+  static func isDueForRecovery(_ session: TranscriptionSessionRecord, now: Date, maxRetries: Int) -> Bool {
+    guard session.status == .failed else { return true }
+    if session.isReadyForRetry(now: now) {
+      return true
+    }
+    return session.effectiveFinalizationStrategy == .cloudReconcile && session.retryCount >= maxRetries
   }
 
   private func finalizeExhaustedCloudSessionFromLocalSegments(_ session: TranscriptionSessionRecord) async {
@@ -641,27 +681,58 @@ actor ConversationFinalizationService {
   }
 
   private func markRetryableFailure(sessionId: Int64, error: Error) async {
+    let failureClass = FinalizationFailureClass.classify(error)
     let message = error.localizedDescription
     do {
       let session = try await TranscriptionStorage.shared.getSession(id: sessionId)
+      if failureClass == .offline {
+        // Release the upload claim without spending budget: no path to the backend says nothing
+        // about whether this session can finalize.
+        log("ConversationFinalization: Session \(sessionId) attempt failed offline; retry budget unchanged")
+        try await TranscriptionStorage.shared.markSessionFailed(id: sessionId, error: message)
+        return
+      }
       let retryCount = (session?.retryCount ?? 0) + 1
-      if retryCount >= maxRetries {
+      if let session, session.effectiveFinalizationStrategy == .localSegments {
+        // The local transcript is the only copy and from-segments is idempotent on
+        // client_conversation_id, so there is no exhausted state: keep retrying on the capped backoff.
+        if failureClass == .permanent {
+          if !session.hasPermanentFinalizationFailure {
+            await reportPermanentLocalUploadRejection(session: session, error: error, retryCount: retryCount)
+          }
+          try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
+          try await TranscriptionStorage.shared.markSessionFailed(
+            id: sessionId,
+            error: FinalizationRetryPolicy.permanentFailurePrefix + message
+          )
+          return
+        }
+      } else if retryCount >= maxRetries {
         // Retries are exhausted. The in-line reconciliation fallback (resolveExhaustedCloudReconciliation)
         // only runs when the final attempt returns cleanly with no match; when it fails by *throwing*
         // (backend/network error), we land here instead and would abandon the session, dropping any
         // recorded audio/transcript we still hold locally (#9083). Try to finalize from saved local
         // segments first so the recording is not lost.
-        if let session,
-          let outcome = try? await resolveExhaustedCloudReconciliation(session: session, sessionId: sessionId),
-          outcome.handled
-        {
-          log("ConversationFinalization: Recovered exhausted session \(sessionId) from local data after finalize error")
-          await postMeetingCompletionIfReady(
-            session: session,
-            reason: .retry,
-            meetingTreatmentEligible: outcome.meetingTreatmentEligible
-          )
-          return
+        if let session {
+          do {
+            let outcome = try await resolveExhaustedCloudReconciliation(session: session, sessionId: sessionId)
+            if outcome.handled {
+              log(
+                "ConversationFinalization: Recovered exhausted session \(sessionId) from local data after finalize error"
+              )
+              await postMeetingCompletionIfReady(
+                session: session,
+                reason: .retry,
+                meetingTreatmentEligible: outcome.meetingTreatmentEligible
+              )
+              return
+            }
+          } catch {
+            logError(
+              "ConversationFinalization: Local fallback for exhausted session \(sessionId) failed",
+              error: error
+            )
+          }
         }
         let segmentCount = try? await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
         let diagnostics = ReconciliationFailureDiagnostics(
@@ -688,6 +759,41 @@ actor ConversationFinalizationService {
     } catch {
       logError("ConversationFinalization: Failed to record finalization failure for session \(sessionId)", error: error)
     }
+  }
+
+  /// Reported once per transition into the rejected state; the session stays queued at the
+  /// hourly cadence so a backend fix drains it without user action.
+  private func reportPermanentLocalUploadRejection(
+    session: TranscriptionSessionRecord,
+    error: Error,
+    retryCount: Int
+  ) async {
+    let statusLabel: String
+    if case APIError.httpError(let statusCode, _) = error {
+      statusLabel = String(statusCode)
+    } else {
+      statusLabel = "unknown"
+    }
+    logError(
+      "ConversationFinalization: Backend rejected local session \(session.id ?? -1) upload (HTTP \(statusLabel)); retrying hourly",
+      error: error
+    )
+    let segmentCount: Int?
+    if let sessionId = session.id {
+      segmentCount = try? await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
+    } else {
+      segmentCount = nil
+    }
+    await AnalyticsManager.shared.conversationReconciliationFailed(
+      error: "local_upload_rejected_http_\(statusLabel)",
+      reason: "local_segments_rejected",
+      source: session.source,
+      stage: TranscriptionFinalizationStrategy.localSegments.rawValue,
+      retryCount: retryCount,
+      hasBackendId: session.backendId?.isEmpty == false,
+      hasClientConversationId: session.clientConversationId?.isEmpty == false,
+      segmentCount: segmentCount
+    )
   }
 
   static func localClientConversationId(session: TranscriptionSessionRecord, sessionId: Int64) -> String {

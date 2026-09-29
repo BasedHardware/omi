@@ -19,6 +19,8 @@ This rollout uses `/v1/transcribe`, never the RNNT `/v3/stream` path for the
 | `PARAKEET_WINDOW_DIARIZATION` | `false` | `false` | `false` |
 | `PARAKEET_WINDOW_PACE_SECONDS` | `6` | `6` | `6` |
 | `PARAKEET_WINDOW_MAX_CONTEXT_SECONDS` | `24` | `24` | `24` |
+| `PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS` | `12` | code default | `12` |
+| `PARAKEET_WINDOW_MAX_EMPTY_STREAK` | `4` | code default | `4` |
 | `STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS` | `1800` | `1800` | `1800` |
 | `STT_CIRCUIT_HALF_OPEN_PROBES` | `1` | `1` | `1` |
 | `SONIOX_CIRCUIT_FAILURE_THRESHOLD` | `3` | `3` | `3` |
@@ -195,6 +197,15 @@ continuously active sessions. This excludes HTTP/serialization and other
 listen work and is a local CPU result, not a pod RSS or production p95 measure.
 
 The 60 s cushion absorbs a catch-up burst while one POST is in flight.
+Before its first emitted text, a window leg fails at 12 seconds from the first
+VAD speech mark or after four consecutive speech-containing empty POSTs, whichever
+comes first. The timer also fires during a slow POST. The existing listen death
+monitor selects the next vendor and replays the untranscribed capture from the
+90-second ring; the failed Parakeet leg is excluded for the rest of that session.
+Once text has been emitted, these startup bounds are disarmed. No sentence anchor
+or emitted text is changed. `omi_stt_window_session_outcome_total` retains
+`outcome=text|no_text` and adds bounded `reason=none|first_text_deadline|empty_streak`;
+the matching recovered failover uses the same reason on `omi_fallback_total`.
 Growing windows re-post overlapping context. A minimum 6 s interval between
 POST starts bounds sustained requests to eight per listen pod per 6 s, with
 up to 216–320 synchronized sessions fleet-wide at the current pod count.

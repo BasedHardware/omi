@@ -26,6 +26,7 @@ class ProcessingTrigger(str, Enum):
     FIRST_OPEN = 'first_open'  # deferred enrichment when the user opens it
     USER_REPROCESS = 'user_reprocess'  # the user asked to reprocess it
     MERGE = 'merge'  # the user merged conversations into it
+    SMART_MERGE = 'smart_merge'  # a finished conversation was folded into this survivor
     SERVER_RECOVERY = 'server_recovery'
 
 
@@ -62,6 +63,9 @@ PROCESSING_MODES: Mapping[ProcessingTrigger, ProcessingMode] = MappingProxyType(
         ProcessingTrigger.FIRST_OPEN: ProcessingMode(True, False, False, _KEEP),
         ProcessingTrigger.USER_REPROCESS: ProcessingMode(True, True, True, _KEEP),
         ProcessingTrigger.MERGE: ProcessingMode(True, False, False, _KEEP),
+        # Regenerates an existing, already-kept survivor over its longer transcript:
+        # no created-side effects, and relevance must not hide the whole occasion.
+        ProcessingTrigger.SMART_MERGE: ProcessingMode(True, True, True, _KEEP),
         ProcessingTrigger.SERVER_RECOVERY: ProcessingMode(True, True, True, _KEEP),
     }
 )

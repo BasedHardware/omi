@@ -1329,10 +1329,7 @@ class ListenReceiver(ReplayFilterMixin):
         if not self.host.state.active or self.host.state.stt_terminal_failure:
             return False
 
-        # The hop we adopted last has now died without a transcript (or is
-        # about to be replaced). Settle it as a failed failover before the
-        # next provider is tried, otherwise connect-time recovered hid a
-        # 100% dead Soniox budget-exhaustion leg for 27.5h.
+        # Settle the previous hop before trying another provider; connect alone did not prove recovery.
         self._settle_pending_live_failover_failure()
 
         dead_provider = provider_for_service(self.host.stt_service)
@@ -1361,6 +1358,7 @@ class ListenReceiver(ReplayFilterMixin):
             epoch.replay_origin_sample = replay[0][0]
         self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
         hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
+        hop.reason = getattr(previous, 'typed_death_reason', None) or 'connection_lost'
         try:
             raw = await self._create_stt_socket(
                 parakeet_callback,
