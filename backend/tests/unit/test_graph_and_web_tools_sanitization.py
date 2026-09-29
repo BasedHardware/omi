@@ -29,6 +29,6 @@ def test_fetch_url_tool_exception_sanitized():
         "utils.retrieval.tools.web_tools._fetch_page",
         side_effect=RuntimeError(SENTINEL_ERROR),
     ):
-        res = asyncio.run(web_tools.fetch_url_tool.func(url="https://example.com/page"))
+        res = asyncio.run(web_tools.fetch_url_tool.coroutine(url="https://example.com/page"))
     assert SENTINEL_ERROR not in res
     assert res == "Error: Failed to fetch the URL. Please try again later."
