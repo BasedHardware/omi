@@ -11499,6 +11499,26 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'ہیلو $name، کچھ بھی پوچھیں';
+  }
+
+  @override
+  String get activity => 'سرگرمی';
+
+  @override
+  String get places => 'مقامات';
+
+  @override
+  String get recaps => 'خلاصے';
+
+  @override
+  String get recent => 'حالیہ';
+
+  @override
+  String get searchPartialFailure => 'کچھ نتائج لوڈ نہیں ہو سکے';
+
+  @override
   String get renameDevice => 'ڈیوائس کا نام بدلیں';
 
   @override

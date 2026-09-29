@@ -11484,6 +11484,26 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'سلام $name، هر چه می‌خواهی بپرس';
+  }
+
+  @override
+  String get activity => 'فعالیت';
+
+  @override
+  String get places => 'مکان‌ها';
+
+  @override
+  String get recaps => 'خلاصه‌ها';
+
+  @override
+  String get recent => 'اخیر';
+
+  @override
+  String get searchPartialFailure => 'برخی نتایج بارگیری نشد';
+
+  @override
   String get renameDevice => 'تغییر نام دستگاه';
 
   @override

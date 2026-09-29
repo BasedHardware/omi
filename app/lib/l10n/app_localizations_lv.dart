@@ -11513,6 +11513,26 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Sveiks, $name, jautā jebko';
+  }
+
+  @override
+  String get activity => 'Darbības';
+
+  @override
+  String get places => 'Vietas';
+
+  @override
+  String get recaps => 'Kopsavilkumi';
+
+  @override
+  String get recent => 'Nesenie';
+
+  @override
+  String get searchPartialFailure => 'Dažus rezultātus neizdevās ielādēt';
+
+  @override
   String get renameDevice => 'Pārdēvēt ierīci';
 
   @override

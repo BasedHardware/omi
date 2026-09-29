@@ -11542,6 +11542,26 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Salut $name, întreabă orice';
+  }
+
+  @override
+  String get activity => 'Activitate';
+
+  @override
+  String get places => 'Locuri';
+
+  @override
+  String get recaps => 'Rezumate';
+
+  @override
+  String get recent => 'Recente';
+
+  @override
+  String get searchPartialFailure => 'Unele rezultate nu au putut fi încărcate';
+
+  @override
   String get renameDevice => 'Redenumește dispozitivul';
 
   @override

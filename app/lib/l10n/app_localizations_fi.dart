@@ -11491,6 +11491,26 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'Hei $name, kysy mitä vain';
+  }
+
+  @override
+  String get activity => 'Toiminta';
+
+  @override
+  String get places => 'Paikat';
+
+  @override
+  String get recaps => 'Yhteenvedot';
+
+  @override
+  String get recent => 'Viimeisimmät';
+
+  @override
+  String get searchPartialFailure => 'Joitakin tuloksia ei voitu ladata';
+
+  @override
   String get renameDevice => 'Nimeä laite uudelleen';
 
   @override

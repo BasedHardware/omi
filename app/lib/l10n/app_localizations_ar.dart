@@ -11418,6 +11418,26 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'مرحبًا $name، اسأل أي شيء';
+  }
+
+  @override
+  String get activity => 'النشاط';
+
+  @override
+  String get places => 'الأماكن';
+
+  @override
+  String get recaps => 'الملخصات';
+
+  @override
+  String get recent => 'الأخيرة';
+
+  @override
+  String get searchPartialFailure => 'تعذّر تحميل بعض النتائج';
+
+  @override
   String get renameDevice => 'إعادة تسمية الجهاز';
 
   @override

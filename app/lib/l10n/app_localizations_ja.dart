@@ -11298,6 +11298,26 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String chatGreeting(String name) {
+    return 'こんにちは、$nameさん。何でも聞いてください';
+  }
+
+  @override
+  String get activity => 'アクティビティ';
+
+  @override
+  String get places => '場所';
+
+  @override
+  String get recaps => 'まとめ';
+
+  @override
+  String get recent => '最近';
+
+  @override
+  String get searchPartialFailure => '一部の結果を読み込めませんでした';
+
+  @override
   String get renameDevice => 'デバイス名を変更';
 
   @override
