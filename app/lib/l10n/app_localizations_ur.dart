@@ -11517,4 +11517,34 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'کچھ نتائج لوڈ نہیں ہو سکے';
+
+  @override
+  String get peopleSearchPlaceholder => 'لوگوں کو تلاش کریں';
+
+  @override
+  String get peopleNotHeardYet => 'ابھی تک نہیں سنا گیا';
+
+  @override
+  String get peopleRecent => 'حالیہ';
+
+  @override
+  String get deletePeopleMessage =>
+      'یہ ان کے آواز کے نمونے ہٹا دیتا ہے اور اسے واپس نہیں کیا جا سکتا۔ ماضی کی گفتگوؤں میں ان کے جملے بے نام مقررین بن جاتے ہیں۔';
+
+  @override
+  String get personTalkTime => 'بولنے کا وقت';
+
+  @override
+  String get personLastHeard => 'آخری بار سنا';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count لوگوں کو حذف کریں؟',
+      one: '1 شخص کو حذف کریں؟',
+    );
+    return '$_temp0';
+  }
 }

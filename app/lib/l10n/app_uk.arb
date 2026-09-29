@@ -3628,5 +3628,12 @@
     "places": "Місця",
     "recaps": "Підсумки",
     "recent": "Нещодавні",
-    "searchPartialFailure": "Не вдалося завантажити деякі результати"
+    "searchPartialFailure": "Не вдалося завантажити деякі результати",
+    "peopleSearchPlaceholder": "Пошук людей",
+    "peopleNotHeardYet": "Ще не чули",
+    "peopleRecent": "Нещодавні",
+    "deletePeopleMessage": "Це видалить зразки їхнього голосу, і скасувати це не можна. Їхні репліки в минулих розмовах стануть безіменними мовцями.",
+    "personTalkTime": "Час мовлення",
+    "personLastHeard": "Востаннє чули",
+    "deletePeopleTitle": "{count, plural, =1{Видалити 1 людину?} other{Видалити людей: {count}?}}"
 }

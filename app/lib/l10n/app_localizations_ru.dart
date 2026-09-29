@@ -11545,4 +11545,34 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Не удалось загрузить некоторые результаты';
+
+  @override
+  String get peopleSearchPlaceholder => 'Поиск людей';
+
+  @override
+  String get peopleNotHeardYet => 'Ещё не слышали';
+
+  @override
+  String get peopleRecent => 'Недавние';
+
+  @override
+  String get deletePeopleMessage =>
+      'Это удалит образцы их голоса, и отменить это нельзя. Их реплики в прошлых разговорах станут безымянными говорящими.';
+
+  @override
+  String get personTalkTime => 'Время речи';
+
+  @override
+  String get personLastHeard => 'Слышали в последний раз';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Удалить людей: $count?',
+      one: 'Удалить 1 человека?',
+    );
+    return '$_temp0';
+  }
 }

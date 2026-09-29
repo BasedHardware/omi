@@ -11542,4 +11542,34 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'ಕೆಲವು ಫಲಿತಾಂಶಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ';
+
+  @override
+  String get peopleSearchPlaceholder => 'ಜನರನ್ನು ಹುಡುಕಿ';
+
+  @override
+  String get peopleNotHeardYet => 'ಇನ್ನೂ ಕೇಳಿಲ್ಲ';
+
+  @override
+  String get peopleRecent => 'ಇತ್ತೀಚಿನ';
+
+  @override
+  String get deletePeopleMessage =>
+      'ಇದು ಅವರ ಧ್ವನಿ ಮಾದರಿಗಳನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ ಮತ್ತು ಹಿಂದಕ್ಕೆ ಪಡೆಯಲಾಗುವುದಿಲ್ಲ. ಹಿಂದಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿನ ಅವರ ಮಾತುಗಳು ಹೆಸರಿಲ್ಲದ ಮಾತನಾಡುವವರಾಗುತ್ತವೆ.';
+
+  @override
+  String get personTalkTime => 'ಮಾತನಾಡಿದ ಸಮಯ';
+
+  @override
+  String get personLastHeard => 'ಕೊನೆಯ ಬಾರಿ ಕೇಳಿದ್ದು';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಜನರನ್ನು ಅಳಿಸಬೇಕೇ?',
+      one: '1 ವ್ಯಕ್ತಿಯನ್ನು ಅಳಿಸಬೇಕೇ?',
+    );
+    return '$_temp0';
+  }
 }

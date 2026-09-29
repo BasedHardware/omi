@@ -13690,5 +13690,38 @@
     "searchPartialFailure": "Some results couldn't load",
     "@searchPartialFailure": {
         "description": "Shown under global search results when one kind of result (conversations, recaps, tasks or memories) failed to load"
+    },
+    "peopleSearchPlaceholder": "Search people",
+    "@peopleSearchPlaceholder": {
+        "description": "Search field placeholder on the People list"
+    },
+    "peopleNotHeardYet": "Not Heard Yet",
+    "@peopleNotHeardYet": {
+        "description": "Section header and row subtitle for a person with zero conversations"
+    },
+    "peopleRecent": "Recent",
+    "@peopleRecent": {
+        "description": "Section header for people heard recently"
+    },
+    "deletePeopleMessage": "This removes their voice samples and can't be undone. Their lines in past conversations become unnamed speakers.",
+    "@deletePeopleMessage": {
+        "description": "Delete people dialog body"
+    },
+    "personTalkTime": "Talk time",
+    "@personTalkTime": {
+        "description": "Stat label on a person's page: total time this person spoke"
+    },
+    "personLastHeard": "Last heard",
+    "@personLastHeard": {
+        "description": "Stat label on a person's page: most recent conversation date"
+    },
+    "deletePeopleTitle": "{count, plural, =1{Delete 1 Person?} other{Delete {count} People?}}",
+    "@deletePeopleTitle": {
+        "description": "Delete people dialog title",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

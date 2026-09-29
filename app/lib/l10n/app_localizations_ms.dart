@@ -11537,4 +11537,34 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Sesetengah hasil tidak dapat dimuatkan';
+
+  @override
+  String get peopleSearchPlaceholder => 'Cari orang';
+
+  @override
+  String get peopleNotHeardYet => 'Belum didengar';
+
+  @override
+  String get peopleRecent => 'Terkini';
+
+  @override
+  String get deletePeopleMessage =>
+      'Ini akan mengalih keluar sampel suara mereka dan tidak boleh dibuat asal. Ucapan mereka dalam perbualan lalu menjadi penutur tanpa nama.';
+
+  @override
+  String get personTalkTime => 'Masa bercakap';
+
+  @override
+  String get personLastHeard => 'Terakhir didengar';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Padam $count orang?',
+      one: 'Padam 1 orang?',
+    );
+    return '$_temp0';
+  }
 }

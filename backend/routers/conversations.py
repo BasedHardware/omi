@@ -84,6 +84,7 @@ from utils.conversations.search import (
     clamp_conversation_search_pagination,
     conversation_matches_date_range,
     conversation_matches_speaker,
+    browse_conversations_by_speaker,
     parse_exact_conversation_reference,
     search_conversations,
 )
@@ -1960,6 +1961,31 @@ def search_conversations_endpoint(
             'current_page': exact_page,
             'per_page': exact_per_page,
         }
+
+    if search_request.speaker_id and not (search_request.query or '').strip():
+        # Browsing one speaker's conversations: Typesense cannot filter by speaker, so walk Firestore
+        # (a post-filter over Typesense's first page only ever found the latest 20 conversations).
+        browse_page, browse_per_page = clamp_conversation_search_pagination(
+            search_request.page, search_request.per_page
+        )
+        include_discarded = bool(search_request.include_discarded)
+        start_dt = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) if start_timestamp is not None else None
+        end_dt = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) if end_timestamp is not None else None
+        browse_results = browse_conversations_by_speaker(
+            lambda limit, offset: conversations_db.get_conversations_without_photos(
+                uid,
+                limit=limit,
+                offset=offset,
+                include_discarded=include_discarded,
+                start_date=start_dt,
+                end_date=end_dt,
+            ),
+            search_request.speaker_id,
+            page=browse_page,
+            per_page=browse_per_page,
+        )
+        redact_conversations_for_list(browse_results['items'])
+        return browse_results
 
     try:
         search_results = search_conversations(

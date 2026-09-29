@@ -3628,5 +3628,12 @@
     "places": "Luoghi",
     "recaps": "Riepiloghi",
     "recent": "Recenti",
-    "searchPartialFailure": "Impossibile caricare alcuni risultati"
+    "searchPartialFailure": "Impossibile caricare alcuni risultati",
+    "peopleSearchPlaceholder": "Cerca persone",
+    "peopleNotHeardYet": "Non ancora ascoltato",
+    "peopleRecent": "Recenti",
+    "deletePeopleMessage": "Questo rimuove i loro campioni vocali e non può essere annullato. Le loro battute nelle conversazioni passate diventano interlocutori senza nome.",
+    "personTalkTime": "Tempo di parola",
+    "personLastHeard": "Ultimo ascolto",
+    "deletePeopleTitle": "{count, plural, =1{Eliminare 1 persona?} other{Eliminare {count} persone?}}"
 }

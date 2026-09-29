@@ -11440,4 +11440,34 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'โหลดผลลัพธ์บางส่วนไม่ได้';
+
+  @override
+  String get peopleSearchPlaceholder => 'ค้นหาบุคคล';
+
+  @override
+  String get peopleNotHeardYet => 'ยังไม่เคยได้ยิน';
+
+  @override
+  String get peopleRecent => 'ล่าสุด';
+
+  @override
+  String get deletePeopleMessage =>
+      'การดำเนินการนี้จะลบตัวอย่างเสียงของบุคคลนั้นและย้อนกลับไม่ได้ คำพูดในบทสนทนาที่ผ่านมาจะกลายเป็นผู้พูดที่ไม่มีชื่อ';
+
+  @override
+  String get personTalkTime => 'เวลาที่พูด';
+
+  @override
+  String get personLastHeard => 'ได้ยินล่าสุด';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ลบ $count คนหรือไม่?',
+      one: 'ลบ 1 คนหรือไม่?',
+    );
+    return '$_temp0';
+  }
 }

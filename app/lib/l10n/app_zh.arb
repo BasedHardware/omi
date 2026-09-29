@@ -3628,5 +3628,12 @@
     "places": "地点",
     "recaps": "回顾",
     "recent": "最近",
-    "searchPartialFailure": "部分结果无法加载"
+    "searchPartialFailure": "部分结果无法加载",
+    "peopleSearchPlaceholder": "搜索人物",
+    "peopleNotHeardYet": "尚未听过",
+    "peopleRecent": "最近",
+    "deletePeopleMessage": "这将删除他们的声音样本，且无法撤销。他们在过往对话中的发言将变为未命名的说话人。",
+    "personTalkTime": "说话时长",
+    "personLastHeard": "最近一次听到",
+    "deletePeopleTitle": "{count, plural, =1{删除 1 个人？} other{删除 {count} 个人？}}"
 }

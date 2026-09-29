@@ -3628,5 +3628,12 @@
     "places": "Tempat",
     "recaps": "Ringkasan",
     "recent": "Terkini",
-    "searchPartialFailure": "Sesetengah hasil tidak dapat dimuatkan"
+    "searchPartialFailure": "Sesetengah hasil tidak dapat dimuatkan",
+    "peopleSearchPlaceholder": "Cari orang",
+    "peopleNotHeardYet": "Belum didengar",
+    "peopleRecent": "Terkini",
+    "deletePeopleMessage": "Ini akan mengalih keluar sampel suara mereka dan tidak boleh dibuat asal. Ucapan mereka dalam perbualan lalu menjadi penutur tanpa nama.",
+    "personTalkTime": "Masa bercakap",
+    "personLastHeard": "Terakhir didengar",
+    "deletePeopleTitle": "{count, plural, =1{Padam 1 orang?} other{Padam {count} orang?}}"
 }

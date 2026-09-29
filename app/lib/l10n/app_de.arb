@@ -3628,5 +3628,12 @@
     "places": "Orte",
     "recaps": "Rückblicke",
     "recent": "Zuletzt",
-    "searchPartialFailure": "Einige Ergebnisse konnten nicht geladen werden"
+    "searchPartialFailure": "Einige Ergebnisse konnten nicht geladen werden",
+    "peopleSearchPlaceholder": "Personen suchen",
+    "peopleNotHeardYet": "Noch nicht gehört",
+    "peopleRecent": "Kürzlich",
+    "deletePeopleMessage": "Dadurch werden die Stimmproben entfernt. Das lässt sich nicht rückgängig machen. Ihre Beiträge in früheren Gesprächen werden zu unbenannten Sprechern.",
+    "personTalkTime": "Sprechzeit",
+    "personLastHeard": "Zuletzt gehört",
+    "deletePeopleTitle": "{count, plural, =1{1 Person löschen?} other{{count} Personen löschen?}}"
 }

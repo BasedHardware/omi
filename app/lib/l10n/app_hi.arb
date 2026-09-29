@@ -3628,5 +3628,12 @@
     "places": "स्थान",
     "recaps": "सारांश",
     "recent": "हाल के",
-    "searchPartialFailure": "कुछ परिणाम लोड नहीं हो सके"
+    "searchPartialFailure": "कुछ परिणाम लोड नहीं हो सके",
+    "peopleSearchPlaceholder": "लोगों को खोजें",
+    "peopleNotHeardYet": "अभी तक सुना नहीं गया",
+    "peopleRecent": "हाल के",
+    "deletePeopleMessage": "इससे उनके आवाज़ के नमूने हट जाएंगे और इसे पूर्ववत नहीं किया जा सकता। पिछली बातचीतों में उनकी बातें बिना नाम वाले वक्ता बन जाएंगी।",
+    "personTalkTime": "बोलने का समय",
+    "personLastHeard": "आखिरी बार सुना",
+    "deletePeopleTitle": "{count, plural, =1{1 व्यक्ति को हटाएं?} other{{count} लोगों को हटाएं?}}"
 }

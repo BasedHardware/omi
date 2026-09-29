@@ -3628,5 +3628,12 @@
     "places": "Steder",
     "recaps": "Oppsummeringer",
     "recent": "Nylige",
-    "searchPartialFailure": "Noen resultater kunne ikke lastes inn"
+    "searchPartialFailure": "Noen resultater kunne ikke lastes inn",
+    "peopleSearchPlaceholder": "Søk etter personer",
+    "peopleNotHeardYet": "Ikke hørt ennå",
+    "peopleRecent": "Nylige",
+    "deletePeopleMessage": "Dette fjerner stemmeprøvene deres og kan ikke angres. Replikkene deres i tidligere samtaler blir til navnløse talere.",
+    "personTalkTime": "Taletid",
+    "personLastHeard": "Sist hørt",
+    "deletePeopleTitle": "{count, plural, =1{Slette 1 person?} other{Slette {count} personer?}}"
 }

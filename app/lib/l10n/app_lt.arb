@@ -3628,5 +3628,12 @@
     "places": "Vietos",
     "recaps": "Santraukos",
     "recent": "Naujausi",
-    "searchPartialFailure": "Kai kurių rezultatų nepavyko įkelti"
+    "searchPartialFailure": "Kai kurių rezultatų nepavyko įkelti",
+    "peopleSearchPlaceholder": "Ieškoti žmonių",
+    "peopleNotHeardYet": "Dar negirdėta",
+    "peopleRecent": "Naujausi",
+    "deletePeopleMessage": "Tai pašalins jų balso pavyzdžius ir to atšaukti negalima. Jų replikos ankstesniuose pokalbiuose taps be vardo kalbėtojais.",
+    "personTalkTime": "Kalbėjimo laikas",
+    "personLastHeard": "Paskutinį kartą girdėta",
+    "deletePeopleTitle": "{count, plural, =1{Ištrinti 1 žmogų?} other{Ištrinti žmones: {count}?}}"
 }

@@ -11550,4 +11550,34 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Néhány találatot nem sikerült betölteni';
+
+  @override
+  String get peopleSearchPlaceholder => 'Személyek keresése';
+
+  @override
+  String get peopleNotHeardYet => 'Még nem hallott';
+
+  @override
+  String get peopleRecent => 'Legutóbbiak';
+
+  @override
+  String get deletePeopleMessage =>
+      'Ez eltávolítja a hangmintáikat, és nem vonható vissza. A korábbi beszélgetésekben elhangzott mondataik névtelen beszélőkké válnak.';
+
+  @override
+  String get personTalkTime => 'Beszédidő';
+
+  @override
+  String get personLastHeard => 'Utoljára hallott';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count személy törlése?',
+      one: '1 személy törlése?',
+    );
+    return '$_temp0';
+  }
 }

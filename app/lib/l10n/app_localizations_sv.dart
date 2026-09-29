@@ -11515,4 +11515,34 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Vissa resultat kunde inte läsas in';
+
+  @override
+  String get peopleSearchPlaceholder => 'Sök personer';
+
+  @override
+  String get peopleNotHeardYet => 'Inte hörd ännu';
+
+  @override
+  String get peopleRecent => 'Senaste';
+
+  @override
+  String get deletePeopleMessage =>
+      'Detta tar bort deras röstprover och kan inte ångras. Deras repliker i tidigare samtal blir namnlösa talare.';
+
+  @override
+  String get personTalkTime => 'Taltid';
+
+  @override
+  String get personLastHeard => 'Senast hörd';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ta bort $count personer?',
+      one: 'Ta bort 1 person?',
+    );
+    return '$_temp0';
+  }
 }

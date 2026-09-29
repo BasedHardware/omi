@@ -11415,4 +11415,34 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'לא ניתן היה לטעון חלק מהתוצאות';
+
+  @override
+  String get peopleSearchPlaceholder => 'חיפוש אנשים';
+
+  @override
+  String get peopleNotHeardYet => 'עוד לא נשמע';
+
+  @override
+  String get peopleRecent => 'אחרונים';
+
+  @override
+  String get deletePeopleMessage =>
+      'פעולה זו מסירה את דגימות הקול שלהם ואי אפשר לבטל אותה. הדברים שאמרו בשיחות קודמות יהפכו לדוברים ללא שם.';
+
+  @override
+  String get personTalkTime => 'זמן דיבור';
+
+  @override
+  String get personLastHeard => 'נשמע לאחרונה';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'למחוק אנשים: $count?',
+      one: 'למחוק אדם אחד?',
+    );
+    return '$_temp0';
+  }
 }

@@ -11501,4 +11501,34 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Không thể tải một số kết quả';
+
+  @override
+  String get peopleSearchPlaceholder => 'Tìm người';
+
+  @override
+  String get peopleNotHeardYet => 'Chưa nghe';
+
+  @override
+  String get peopleRecent => 'Gần đây';
+
+  @override
+  String get deletePeopleMessage =>
+      'Thao tác này sẽ xóa các mẫu giọng nói của họ và không thể hoàn tác. Lời họ nói trong các cuộc trò chuyện trước sẽ thành người nói không tên.';
+
+  @override
+  String get personTalkTime => 'Thời gian nói';
+
+  @override
+  String get personLastHeard => 'Nghe gần nhất';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Xóa $count người?',
+      one: 'Xóa 1 người?',
+    );
+    return '$_temp0';
+  }
 }

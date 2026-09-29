@@ -11,12 +11,15 @@ class PeopleProvider extends BaseProvider {
     Future<bool> Function(String, String)? renamePerson,
     Future<List<Person>?> Function()? loadPeople,
     Future<bool> Function(String, int)? deleteSample,
-  })  : _renamePerson = renamePerson ?? updatePersonName,
-        _loadPeople = loadPeople ?? getAllPeople,
+    Future<bool> Function(String)? deletePersonById,
+  })  : _deletePersonById = deletePersonById ?? deletePerson,
+        _renamePerson = renamePerson ?? updatePersonName,
+        _loadPeople = loadPeople ?? (() => getAllPeople(includeStats: true)),
         _deleteSample = deleteSample ?? deletePersonSpeechSample;
   final Future<List<Person>?> Function() _loadPeople;
   final Future<bool> Function(String, String) _renamePerson;
   final Future<bool> Function(String, int) _deleteSample;
+  final Future<bool> Function(String) _deletePersonById;
   List<Person> people = SharedPreferencesUtil().cachedPeople;
   Map<String, List<String>> samplesUrl = {};
 
@@ -34,6 +37,8 @@ class PeopleProvider extends BaseProvider {
 
   void clearUserData() {
     people = [];
+    selectedIds.clear();
+    selecting = false;
     samplesUrl = {};
     currentPlayingPersonIndex = null;
     currentPlayingIndex = null;
@@ -127,17 +132,7 @@ class PeopleProvider extends BaseProvider {
     final updated = await _renamePerson(person.id, name);
     final index = people.indexWhere((p) => p.id == person.id);
     if (updated && index != -1) {
-      people[index] = Person(
-        id: person.id,
-        name: name,
-        createdAt: person.createdAt,
-        updatedAt: DateTime.now(),
-        speechSamples: person.speechSamples,
-        speechSampleTranscripts: person.speechSampleTranscripts,
-        speechSamplesVersion: person.speechSamplesVersion,
-        colorIdx: person.colorIdx,
-        voiceReadiness: person.voiceReadiness,
-      );
+      people[index] = person.copyWith(name: name, updatedAt: DateTime.now());
       people.sort((a, b) => a.name.compareTo(b.name));
       SharedPreferencesUtil().cachedPeople = people;
     }
@@ -178,6 +173,61 @@ class PeopleProvider extends BaseProvider {
       SharedPreferencesUtil().cachedPeople = people;
       notifyListeners();
     }
+  }
+
+  // ---- Multi-select ----
+
+  final Set<String> selectedIds = {};
+  bool selecting = false;
+
+  void beginSelection([String? personId]) {
+    selecting = true;
+    selectedIds
+      ..clear()
+      ..addAll(personId == null ? const [] : [personId]);
+    notifyListeners();
+  }
+
+  void toggleSelected(String personId) {
+    if (!selectedIds.remove(personId)) selectedIds.add(personId);
+    notifyListeners();
+  }
+
+  void selectAll(Iterable<String> personIds) {
+    selectedIds.addAll(personIds);
+    notifyListeners();
+  }
+
+  void endSelection() {
+    selecting = false;
+    selectedIds.clear();
+    notifyListeners();
+  }
+
+  /// Deletes the selected people, one request each (a person's samples go with them). People whose
+  /// request fails stay in the list and selected. Returns how many were deleted.
+  Future<int> deleteSelected() => deletePeople(selectedIds.toList());
+
+  Future<int> deletePeople(List<String> personIds) async {
+    final results = await Future.wait(personIds.map((id) async {
+      try {
+        return await _deletePersonById(id);
+      } catch (e) {
+        Logger.debug('Failed to delete person $id: $e');
+        return false;
+      }
+    }));
+    final deleted = <String>{
+      for (final (i, ok) in results.indexed)
+        if (ok) personIds[i],
+    };
+    people.removeWhere((person) => deleted.contains(person.id));
+    selectedIds.removeAll(deleted);
+    if (selectedIds.isEmpty) selecting = false;
+    SharedPreferencesUtil().cachedPeople =
+        people.where((person) => !person.id.startsWith('optimistic-person:')).toList();
+    notifyListeners();
+    return deleted.length;
   }
 
   @override

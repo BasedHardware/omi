@@ -3628,5 +3628,12 @@
     "places": "Platser",
     "recaps": "Sammanfattningar",
     "recent": "Senaste",
-    "searchPartialFailure": "Vissa resultat kunde inte läsas in"
+    "searchPartialFailure": "Vissa resultat kunde inte läsas in",
+    "peopleSearchPlaceholder": "Sök personer",
+    "peopleNotHeardYet": "Inte hörd ännu",
+    "peopleRecent": "Senaste",
+    "deletePeopleMessage": "Detta tar bort deras röstprover och kan inte ångras. Deras repliker i tidigare samtal blir namnlösa talare.",
+    "personTalkTime": "Taltid",
+    "personLastHeard": "Senast hörd",
+    "deletePeopleTitle": "{count, plural, =1{Ta bort 1 person?} other{Ta bort {count} personer?}}"
 }

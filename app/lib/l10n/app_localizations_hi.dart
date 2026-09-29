@@ -11486,4 +11486,34 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'कुछ परिणाम लोड नहीं हो सके';
+
+  @override
+  String get peopleSearchPlaceholder => 'लोगों को खोजें';
+
+  @override
+  String get peopleNotHeardYet => 'अभी तक सुना नहीं गया';
+
+  @override
+  String get peopleRecent => 'हाल के';
+
+  @override
+  String get deletePeopleMessage =>
+      'इससे उनके आवाज़ के नमूने हट जाएंगे और इसे पूर्ववत नहीं किया जा सकता। पिछली बातचीतों में उनकी बातें बिना नाम वाले वक्ता बन जाएंगी।';
+
+  @override
+  String get personTalkTime => 'बोलने का समय';
+
+  @override
+  String get personLastHeard => 'आखिरी बार सुना';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count लोगों को हटाएं?',
+      one: '1 व्यक्ति को हटाएं?',
+    );
+    return '$_temp0';
+  }
 }

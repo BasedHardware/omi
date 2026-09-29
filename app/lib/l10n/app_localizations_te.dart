@@ -11554,4 +11554,34 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'కొన్ని ఫలితాలను లోడ్ చేయలేకపోయాం';
+
+  @override
+  String get peopleSearchPlaceholder => 'వ్యక్తులను వెతకండి';
+
+  @override
+  String get peopleNotHeardYet => 'ఇంకా వినలేదు';
+
+  @override
+  String get peopleRecent => 'ఇటీవలివి';
+
+  @override
+  String get deletePeopleMessage =>
+      'ఇది వారి వాయిస్ నమూనాలను తొలగిస్తుంది, దీన్ని రద్దు చేయలేరు. గత సంభాషణలలో వారి మాటలు పేరు లేని వక్తలుగా మారతాయి.';
+
+  @override
+  String get personTalkTime => 'మాట్లాడిన సమయం';
+
+  @override
+  String get personLastHeard => 'చివరిగా విన్నది';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count మంది వ్యక్తులను తొలగించాలా?',
+      one: '1 వ్యక్తిని తొలగించాలా?',
+    );
+    return '$_temp0';
+  }
 }

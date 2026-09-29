@@ -3628,5 +3628,12 @@
     "places": "Plaatsen",
     "recaps": "Samenvattingen",
     "recent": "Recent",
-    "searchPartialFailure": "Sommige resultaten konden niet worden geladen"
+    "searchPartialFailure": "Sommige resultaten konden niet worden geladen",
+    "peopleSearchPlaceholder": "Zoek mensen",
+    "peopleNotHeardYet": "Nog niet gehoord",
+    "peopleRecent": "Recent",
+    "deletePeopleMessage": "Hiermee worden hun stemsamples verwijderd. Dit kan niet ongedaan worden gemaakt. Hun uitspraken in eerdere gesprekken worden naamloze sprekers.",
+    "personTalkTime": "Spreektijd",
+    "personLastHeard": "Laatst gehoord",
+    "deletePeopleTitle": "{count, plural, =1{1 persoon verwijderen?} other{{count} personen verwijderen?}}"
 }

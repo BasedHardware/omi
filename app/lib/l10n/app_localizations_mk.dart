@@ -11568,4 +11568,34 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Некои резултати не можеа да се вчитаат';
+
+  @override
+  String get peopleSearchPlaceholder => 'Пребарај луѓе';
+
+  @override
+  String get peopleNotHeardYet => 'Сè уште не е слушнато';
+
+  @override
+  String get peopleRecent => 'Неодамнешни';
+
+  @override
+  String get deletePeopleMessage =>
+      'Ова ги отстранува нивните гласовни примероци и не може да се врати. Нивните реплики во минатите разговори стануваат безимени говорници.';
+
+  @override
+  String get personTalkTime => 'Време на говор';
+
+  @override
+  String get personLastHeard => 'Последно слушано';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Избриши $count лица?',
+      one: 'Избриши 1 лице?',
+    );
+    return '$_temp0';
+  }
 }

@@ -3628,5 +3628,12 @@
     "places": "Μέρη",
     "recaps": "Ανασκοπήσεις",
     "recent": "Πρόσφατα",
-    "searchPartialFailure": "Ορισμένα αποτελέσματα δεν φορτώθηκαν"
+    "searchPartialFailure": "Ορισμένα αποτελέσματα δεν φορτώθηκαν",
+    "peopleSearchPlaceholder": "Αναζήτηση ατόμων",
+    "peopleNotHeardYet": "Δεν έχει ακουστεί ακόμα",
+    "peopleRecent": "Πρόσφατα",
+    "deletePeopleMessage": "Αυτό αφαιρεί τα δείγματα φωνής τους και δεν μπορεί να αναιρεθεί. Οι ατάκες τους σε παλαιότερες συζητήσεις γίνονται ανώνυμοι ομιλητές.",
+    "personTalkTime": "Χρόνος ομιλίας",
+    "personLastHeard": "Τελευταία φορά",
+    "deletePeopleTitle": "{count, plural, =1{Διαγραφή 1 ατόμου;} other{Διαγραφή {count} ατόμων;}}"
 }

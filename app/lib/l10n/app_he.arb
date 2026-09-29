@@ -11188,5 +11188,12 @@
     "places": "מקומות",
     "recaps": "סיכומים",
     "recent": "אחרונים",
-    "searchPartialFailure": "לא ניתן היה לטעון חלק מהתוצאות"
+    "searchPartialFailure": "לא ניתן היה לטעון חלק מהתוצאות",
+    "peopleSearchPlaceholder": "חיפוש אנשים",
+    "peopleNotHeardYet": "עוד לא נשמע",
+    "peopleRecent": "אחרונים",
+    "deletePeopleMessage": "פעולה זו מסירה את דגימות הקול שלהם ואי אפשר לבטל אותה. הדברים שאמרו בשיחות קודמות יהפכו לדוברים ללא שם.",
+    "personTalkTime": "זמן דיבור",
+    "personLastHeard": "נשמע לאחרונה",
+    "deletePeopleTitle": "{count, plural, =1{למחוק אדם אחד?} other{למחוק אנשים: {count}?}}"
 }

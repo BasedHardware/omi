@@ -11518,4 +11518,34 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Bazı sonuçlar yüklenemedi';
+
+  @override
+  String get peopleSearchPlaceholder => 'Kişi ara';
+
+  @override
+  String get peopleNotHeardYet => 'Henüz duyulmadı';
+
+  @override
+  String get peopleRecent => 'Yakınlarda';
+
+  @override
+  String get deletePeopleMessage =>
+      'Bu, ses örneklerini kaldırır ve geri alınamaz. Geçmiş konuşmalardaki sözleri adsız konuşmacılara dönüşür.';
+
+  @override
+  String get personTalkTime => 'Konuşma süresi';
+
+  @override
+  String get personLastHeard => 'Son duyulma';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kişi silinsin mi?',
+      one: '1 kişi silinsin mi?',
+    );
+    return '$_temp0';
+  }
 }

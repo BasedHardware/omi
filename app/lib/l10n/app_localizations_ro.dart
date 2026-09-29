@@ -11560,4 +11560,34 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Unele rezultate nu au putut fi încărcate';
+
+  @override
+  String get peopleSearchPlaceholder => 'Caută persoane';
+
+  @override
+  String get peopleNotHeardYet => 'Încă neauzit';
+
+  @override
+  String get peopleRecent => 'Recente';
+
+  @override
+  String get deletePeopleMessage =>
+      'Aceasta le elimină mostrele vocale și nu poate fi anulată. Replicile lor din conversațiile trecute devin vorbitori fără nume.';
+
+  @override
+  String get personTalkTime => 'Timp de vorbire';
+
+  @override
+  String get personLastHeard => 'Ultima ascultare';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ștergi persoane: $count?',
+      one: 'Ștergi 1 persoană?',
+    );
+    return '$_temp0';
+  }
 }

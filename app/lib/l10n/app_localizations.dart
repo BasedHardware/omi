@@ -20960,6 +20960,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some results couldn\'t load'**
   String get searchPartialFailure;
+
+  /// Search field placeholder on the People list
+  ///
+  /// In en, this message translates to:
+  /// **'Search people'**
+  String get peopleSearchPlaceholder;
+
+  /// Section header and row subtitle for a person with zero conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Not Heard Yet'**
+  String get peopleNotHeardYet;
+
+  /// Section header for people heard recently
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get peopleRecent;
+
+  /// Delete people dialog body
+  ///
+  /// In en, this message translates to:
+  /// **'This removes their voice samples and can\'t be undone. Their lines in past conversations become unnamed speakers.'**
+  String get deletePeopleMessage;
+
+  /// Stat label on a person's page: total time this person spoke
+  ///
+  /// In en, this message translates to:
+  /// **'Talk time'**
+  String get personTalkTime;
+
+  /// Stat label on a person's page: most recent conversation date
+  ///
+  /// In en, this message translates to:
+  /// **'Last heard'**
+  String get personLastHeard;
+
+  /// Delete people dialog title
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Delete 1 Person?} other{Delete {count} People?}}'**
+  String deletePeopleTitle(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

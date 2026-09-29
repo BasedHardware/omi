@@ -3663,5 +3663,12 @@
     "places": "Yerler",
     "recaps": "Özetler",
     "recent": "Son aramalar",
-    "searchPartialFailure": "Bazı sonuçlar yüklenemedi"
+    "searchPartialFailure": "Bazı sonuçlar yüklenemedi",
+    "peopleSearchPlaceholder": "Kişi ara",
+    "peopleNotHeardYet": "Henüz duyulmadı",
+    "peopleRecent": "Yakınlarda",
+    "deletePeopleMessage": "Bu, ses örneklerini kaldırır ve geri alınamaz. Geçmiş konuşmalardaki sözleri adsız konuşmacılara dönüşür.",
+    "personTalkTime": "Konuşma süresi",
+    "personLastHeard": "Son duyulma",
+    "deletePeopleTitle": "{count, plural, =1{1 kişi silinsin mi?} other{{count} kişi silinsin mi?}}"
 }

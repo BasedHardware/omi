@@ -11188,5 +11188,12 @@
     "places": "স্থান",
     "recaps": "সারাংশ",
     "recent": "সাম্প্রতিক",
-    "searchPartialFailure": "কিছু ফলাফল লোড করা যায়নি"
+    "searchPartialFailure": "কিছু ফলাফল লোড করা যায়নি",
+    "peopleSearchPlaceholder": "মানুষ খুঁজুন",
+    "peopleNotHeardYet": "এখনও শোনা হয়নি",
+    "peopleRecent": "সাম্প্রতিক",
+    "deletePeopleMessage": "এটি তাদের ভয়েস স্যাম্পল সরিয়ে দেবে এবং পূর্বাবস্থায় ফেরানো যাবে না। আগের কথোপকথনে তাদের বক্তব্য নামহীন বক্তা হিসেবে থাকবে।",
+    "personTalkTime": "কথা বলার সময়",
+    "personLastHeard": "সর্বশেষ শোনা",
+    "deletePeopleTitle": "{count, plural, =1{1 জনকে মুছবেন?} other{{count} জনকে মুছবেন?}}"
 }

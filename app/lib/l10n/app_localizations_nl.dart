@@ -11542,4 +11542,34 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Sommige resultaten konden niet worden geladen';
+
+  @override
+  String get peopleSearchPlaceholder => 'Zoek mensen';
+
+  @override
+  String get peopleNotHeardYet => 'Nog niet gehoord';
+
+  @override
+  String get peopleRecent => 'Recent';
+
+  @override
+  String get deletePeopleMessage =>
+      'Hiermee worden hun stemsamples verwijderd. Dit kan niet ongedaan worden gemaakt. Hun uitspraken in eerdere gesprekken worden naamloze sprekers.';
+
+  @override
+  String get personTalkTime => 'Spreektijd';
+
+  @override
+  String get personLastHeard => 'Laatst gehoord';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personen verwijderen?',
+      one: '1 persoon verwijderen?',
+    );
+    return '$_temp0';
+  }
 }

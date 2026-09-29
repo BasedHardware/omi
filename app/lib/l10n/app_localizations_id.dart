@@ -11517,4 +11517,34 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Beberapa hasil tidak dapat dimuat';
+
+  @override
+  String get peopleSearchPlaceholder => 'Cari orang';
+
+  @override
+  String get peopleNotHeardYet => 'Belum terdengar';
+
+  @override
+  String get peopleRecent => 'Terbaru';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tindakan ini menghapus sampel suara mereka dan tidak dapat dibatalkan. Ucapan mereka di percakapan sebelumnya menjadi pembicara tanpa nama.';
+
+  @override
+  String get personTalkTime => 'Waktu bicara';
+
+  @override
+  String get personLastHeard => 'Terakhir terdengar';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hapus $count orang?',
+      one: 'Hapus 1 orang?',
+    );
+    return '$_temp0';
+  }
 }

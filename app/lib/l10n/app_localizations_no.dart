@@ -11506,4 +11506,34 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Noen resultater kunne ikke lastes inn';
+
+  @override
+  String get peopleSearchPlaceholder => 'Søk etter personer';
+
+  @override
+  String get peopleNotHeardYet => 'Ikke hørt ennå';
+
+  @override
+  String get peopleRecent => 'Nylige';
+
+  @override
+  String get deletePeopleMessage =>
+      'Dette fjerner stemmeprøvene deres og kan ikke angres. Replikkene deres i tidligere samtaler blir til navnløse talere.';
+
+  @override
+  String get personTalkTime => 'Taletid';
+
+  @override
+  String get personLastHeard => 'Sist hørt';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Slette $count personer?',
+      one: 'Slette 1 person?',
+    );
+    return '$_temp0';
+  }
 }

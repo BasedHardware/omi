@@ -3628,5 +3628,12 @@
     "places": "الأماكن",
     "recaps": "الملخصات",
     "recent": "الأخيرة",
-    "searchPartialFailure": "تعذّر تحميل بعض النتائج"
+    "searchPartialFailure": "تعذّر تحميل بعض النتائج",
+    "peopleSearchPlaceholder": "البحث عن الأشخاص",
+    "peopleNotHeardYet": "لم يُسمع بعد",
+    "peopleRecent": "الأحدث",
+    "deletePeopleMessage": "يؤدي هذا إلى إزالة عيّنات صوته ولا يمكن التراجع عنه. تصبح عباراته في المحادثات السابقة متحدثين بلا أسماء.",
+    "personTalkTime": "مدة الحديث",
+    "personLastHeard": "آخر استماع",
+    "deletePeopleTitle": "{count, plural, =1{حذف شخص واحد؟} other{حذف الأشخاص: {count}؟}}"
 }

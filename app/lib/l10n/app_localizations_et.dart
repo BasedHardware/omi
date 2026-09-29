@@ -11502,4 +11502,34 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Mõnda tulemust ei õnnestunud laadida';
+
+  @override
+  String get peopleSearchPlaceholder => 'Otsi inimesi';
+
+  @override
+  String get peopleNotHeardYet => 'Pole veel kuulnud';
+
+  @override
+  String get peopleRecent => 'Hiljutised';
+
+  @override
+  String get deletePeopleMessage =>
+      'See eemaldab nende häälenäidised ja seda ei saa tagasi võtta. Nende read varasemates vestlustes muutuvad nimetuteks kõnelejateks.';
+
+  @override
+  String get personTalkTime => 'Rääkimisaeg';
+
+  @override
+  String get personLastHeard => 'Viimati kuuldud';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kustuta $count inimest?',
+      one: 'Kustuta 1 inimene?',
+    );
+    return '$_temp0';
+  }
 }

@@ -3628,5 +3628,12 @@
     "places": "場所",
     "recaps": "まとめ",
     "recent": "最近",
-    "searchPartialFailure": "一部の結果を読み込めませんでした"
+    "searchPartialFailure": "一部の結果を読み込めませんでした",
+    "peopleSearchPlaceholder": "人を検索",
+    "peopleNotHeardYet": "まだ聞いていません",
+    "peopleRecent": "最近",
+    "deletePeopleMessage": "音声サンプルが削除され、元に戻せません。過去の会話での発言は名前のない話者になります。",
+    "personTalkTime": "発話時間",
+    "personLastHeard": "最後に聞いた日",
+    "deletePeopleTitle": "{count, plural, =1{1人を削除しますか？} other{{count}人を削除しますか？}}"
 }

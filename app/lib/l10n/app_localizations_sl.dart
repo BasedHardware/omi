@@ -11536,4 +11536,34 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Nekaterih rezultatov ni bilo mogoče naložiti';
+
+  @override
+  String get peopleSearchPlaceholder => 'Iskanje oseb';
+
+  @override
+  String get peopleNotHeardYet => 'Še ni slišano';
+
+  @override
+  String get peopleRecent => 'Nedavne';
+
+  @override
+  String get deletePeopleMessage =>
+      'S tem odstranite njihove glasovne vzorce, dejanja ni mogoče razveljaviti. Njihove izjave v preteklih pogovorih postanejo neimenovani govorci.';
+
+  @override
+  String get personTalkTime => 'Čas govorjenja';
+
+  @override
+  String get personLastHeard => 'Nazadnje slišano';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Izbrišem osebe: $count?',
+      one: 'Izbrišem 1 osebo?',
+    );
+    return '$_temp0';
+  }
 }

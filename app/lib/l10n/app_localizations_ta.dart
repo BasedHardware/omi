@@ -11584,4 +11584,34 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'சில முடிவுகளை ஏற்ற முடியவில்லை';
+
+  @override
+  String get peopleSearchPlaceholder => 'நபர்களைத் தேடு';
+
+  @override
+  String get peopleNotHeardYet => 'இன்னும் கேட்கப்படவில்லை';
+
+  @override
+  String get peopleRecent => 'சமீபத்தியவை';
+
+  @override
+  String get deletePeopleMessage =>
+      'இது அவர்களின் குரல் மாதிரிகளை நீக்கும்; இதைச் செயல்தவிர்க்க முடியாது. கடந்த உரையாடல்களில் அவர்களின் பேச்சு பெயரற்ற பேச்சாளர்களாக மாறும்.';
+
+  @override
+  String get personTalkTime => 'பேசிய நேரம்';
+
+  @override
+  String get personLastHeard => 'கடைசியாகக் கேட்டது';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count நபர்களை நீக்கவா?',
+      one: '1 நபரை நீக்கவா?',
+    );
+    return '$_temp0';
+  }
 }

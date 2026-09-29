@@ -3628,5 +3628,12 @@
     "places": "Paikat",
     "recaps": "Yhteenvedot",
     "recent": "Viimeisimmät",
-    "searchPartialFailure": "Joitakin tuloksia ei voitu ladata"
+    "searchPartialFailure": "Joitakin tuloksia ei voitu ladata",
+    "peopleSearchPlaceholder": "Etsi henkilöitä",
+    "peopleNotHeardYet": "Ei vielä kuultu",
+    "peopleRecent": "Viimeaikaiset",
+    "deletePeopleMessage": "Tämä poistaa heidän ääninäytteensä, eikä sitä voi perua. Heidän repliikkinsä aiemmissa keskusteluissa muuttuvat nimettömiksi puhujiksi.",
+    "personTalkTime": "Puheaika",
+    "personLastHeard": "Viimeksi kuultu",
+    "deletePeopleTitle": "{count, plural, =1{Poistetaanko 1 henkilö?} other{Poistetaanko {count} henkilöä?}}"
 }

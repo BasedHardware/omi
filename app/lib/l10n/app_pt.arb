@@ -3663,5 +3663,12 @@
     "places": "Lugares",
     "recaps": "Resumos",
     "recent": "Recentes",
-    "searchPartialFailure": "Não foi possível carregar alguns resultados"
+    "searchPartialFailure": "Não foi possível carregar alguns resultados",
+    "peopleSearchPlaceholder": "Pesquisar pessoas",
+    "peopleNotHeardYet": "Ainda não ouvido",
+    "peopleRecent": "Recentes",
+    "deletePeopleMessage": "Isso remove as amostras de voz e não pode ser desfeito. As falas em conversas passadas viram falantes sem nome.",
+    "personTalkTime": "Tempo de fala",
+    "personLastHeard": "Última escuta",
+    "deletePeopleTitle": "{count, plural, =1{Excluir 1 pessoa?} other{Excluir {count} pessoas?}}"
 }

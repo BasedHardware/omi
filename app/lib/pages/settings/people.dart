@@ -1,14 +1,15 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/person.dart';
-import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/pages/settings/person_detail_page.dart';
+import 'package:omi/pages/settings/person_name_dialog.dart';
 import 'package:omi/pages/settings/widgets/voice_profile_settings_section.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/functions.dart';
 
 class UserPeoplePage extends StatelessWidget {
@@ -28,6 +29,9 @@ class _UserPeoplePage extends StatefulWidget {
 }
 
 class _UserPeoplePageState extends State<_UserPeoplePage> {
+  final _search = TextEditingController();
+  String _query = '';
+
   @override
   void initState() {
     super.initState();
@@ -36,299 +40,296 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
     }.withPostFrameCallback();
   }
 
-  Widget _showPersonDialogForm(BuildContext context, formKey, nameController) {
-    return omiUsesCupertinoDialogs(context)
-        ? Material(
-            color: Colors.transparent,
-            child: Theme(
-              data: ThemeData(
-                textSelectionTheme: TextSelectionThemeData(
-                  cursorColor: OmiColors.textPrimary,
-                  selectionColor: OmiColors.textPrimary.withValues(alpha: 0.24),
-                  selectionHandleColor: OmiColors.textPrimary,
-                ),
-              ),
-              child: Form(
-                key: formKey,
-                child: CupertinoTextFormFieldRow(
-                  padding: const EdgeInsets.only(top: 16),
-                  controller: nameController,
-                  placeholder: context.l10n.name,
-                  keyboardType: TextInputType.name,
-                  textCapitalization: TextCapitalization.words,
-                  placeholderStyle: TextStyle(color: OmiColors.textTertiary),
-                  style: TextStyle(color: OmiColors.textPrimary),
-                  validator: _nameValidator(context),
-                ),
-              ),
-            ),
-          )
-        : Form(
-            key: formKey,
-            child: TextFormField(
-              controller: nameController,
-              keyboardType: TextInputType.name,
-              textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
-                labelText: context.l10n.name,
-                labelStyle: TextStyle(color: OmiColors.textPrimary),
-                focusColor: OmiColors.textPrimary,
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: OmiColors.border)),
-              ),
-              validator: _nameValidator(context),
-            ),
-          );
-  }
-
-  String? Function(String?) _nameValidator(BuildContext context) {
-    return (String? value) {
-      if (value == null || value.isEmpty) {
-        return context.l10n.pleaseEnterName;
-      }
-      if (value.length < 2 || value.length > 40) {
-        return context.l10n.nameMustBeBetweenCharacters;
-      }
-      return null;
-    };
-  }
-
-  Future<void> _showPersonDialog(BuildContext context, PeopleProvider provider, {Person? person}) async {
-    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-    if (!connectivityProvider.isConnected) {
-      ConnectivityProvider.showNoInternetDialog(context);
-      return;
-    }
-
-    final nameController = TextEditingController(text: person?.name ?? '');
-    final formKey = GlobalKey<FormState>();
-
-    await showDialog(
-      context: context,
-      builder: (dialogContext) => OmiAlertDialog(
-        title: person == null ? context.l10n.addNewPerson : context.l10n.editPerson,
-        content: _showPersonDialogForm(dialogContext, formKey, nameController),
-        actions: [
-          OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.pop(dialogContext)),
-          OmiDialogAction(
-            label: person == null ? context.l10n.add : context.l10n.save,
-            isDefault: true,
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                final text = nameController.text;
-                final name = text[0].toUpperCase() + text.substring(1);
-                if (person == null) {
-                  provider.createPersonProvider(name);
-                } else {
-                  provider.updatePersonProvider(person, name);
-                }
-                Navigator.pop(dialogContext);
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// A voice sample cannot be restored once deleted: confirm every time.
-  Future<void> _confirmDeleteSample(int peopleIdx, Person person, int sampleIdx, PeopleProvider provider) async {
-    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-    if (!connectivityProvider.isConnected) {
-      ConnectivityProvider.showNoInternetDialog(context);
-      return;
-    }
-    final confirmed = await showOmiConfirm(
-      context,
-      title: context.l10n.deleteSampleQuestion,
-      message: context.l10n.deleteSampleConfirmation(person.name),
-      confirmLabel: context.l10n.delete,
-      destructive: true,
-    );
-
-    if (confirmed) {
-      await provider.deletePersonSample(peopleIdx, sampleIdx);
-    }
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
   }
 
   /// Deleting a person removes their samples too and cannot be undone: confirm every time.
-  Future<void> _confirmDeletePerson(Person person, PeopleProvider provider) async {
-    final confirmed = await showOmiConfirm(
+  Future<bool> _confirmDelete(List<Person> people) {
+    final l10n = context.l10n;
+    return showOmiConfirm(
       context,
-      title: context.l10n.deletePersonTitle,
-      message: context.l10n.deletePersonConfirmation(person.name),
-      confirmLabel: context.l10n.delete,
+      title: people.length == 1 ? l10n.deletePersonTitle : l10n.deletePeopleTitle(people.length),
+      message: people.length == 1 ? l10n.deletePersonConfirmation(people.first.name) : l10n.deletePeopleMessage,
+      confirmLabel: l10n.delete,
       destructive: true,
     );
+  }
 
-    if (confirmed) provider.deletePersonProvider(person);
+  Future<void> _deleteSelected(PeopleProvider provider) async {
+    final selected = provider.people.where((p) => provider.selectedIds.contains(p.id)).toList();
+    if (selected.isEmpty || !await _confirmDelete(selected)) return;
+    final deleted = await provider.deleteSelected();
+    OmiHaptics.success();
+    if (mounted && deleted < selected.length) OmiFeedback.error(context, context.l10n.somethingWentWrongTryAgain);
+  }
+
+  void _openPerson(Person person) => routeToPage(context, PersonDetailPage(personId: person.id));
+
+  void _showRowMenu(Person person, PeopleProvider provider) {
+    final l10n = context.l10n;
+    showOmiRowMenu(
+      context,
+      title: person.name,
+      actions: [
+        OmiMenuAction(icon: Icons.person_outline, label: l10n.open, onSelected: () => _openPerson(person)),
+        OmiMenuAction(
+          icon: Icons.check_circle_outline,
+          label: l10n.selectOption,
+          onSelected: () => provider.beginSelection(person.id),
+        ),
+        OmiMenuAction(
+          icon: Icons.delete_outline,
+          label: l10n.delete,
+          isDestructive: true,
+          onSelected: () async {
+            if (await _confirmDelete([person])) await provider.deletePeople([person.id]);
+          },
+        ),
+      ],
+    );
+  }
+
+  /// Heard people first (newest first), then those with no conversations. Without stats (offline
+  /// cache) it is a single list by name.
+  List<Person> _visible(PeopleProvider provider) {
+    final q = _query.trim().toLowerCase();
+    final list = provider.people.where((p) => q.isEmpty || p.name.toLowerCase().contains(q)).toList();
+    list.sort((a, b) {
+      final ah = a.lastHeardAt, bh = b.lastHeardAt;
+      if (ah != null && bh != null) return bh.compareTo(ah);
+      if (ah != null) return -1;
+      if (bh != null) return 1;
+      return a.name.compareTo(b.name);
+    });
+    return list;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<PeopleProvider>(
-      builder: (context, provider, child) {
-        final l10n = context.l10n;
-        return Scaffold(
-          backgroundColor: OmiColors.surface0,
-          appBar: AppBar(
-            leading: const OmiBackButton(),
-            title: Text(l10n.people),
-            actions: [
-              if (provider.people.isNotEmpty)
-                OmiIconButton(
-                  icon: const Icon(Icons.help_outline),
-                  label: l10n.howItWorks,
-                  onPressed: () => showOmiAlert(
-                    context,
-                    title: l10n.howItWorksTitle,
-                    message: l10n.howPeopleWorks,
-                    okLabel: l10n.gotIt,
+    return PopScope(
+      canPop: !context.watch<PeopleProvider>().selecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.read<PeopleProvider>().endSelection();
+      },
+      child: Consumer<PeopleProvider>(builder: (context, provider, child) => _scaffold(context, provider)),
+    );
+  }
+
+  Widget _scaffold(BuildContext context, PeopleProvider provider) {
+    final l10n = context.l10n;
+    final people = _visible(provider);
+    final selecting = provider.selecting;
+    return Scaffold(
+      backgroundColor: OmiColors.surface0,
+      appBar: AppBar(
+        leading: selecting
+            ? OmiIconButton(icon: const Icon(Icons.close), label: l10n.cancel, onPressed: provider.endSelection)
+            : const OmiBackButton(),
+        title: Text(selecting ? l10n.selectedCount(provider.selectedIds.length) : l10n.people),
+        actions: [
+          if (selecting)
+            OmiButton.toolbar(
+              label: l10n.selectAll,
+              onPressed: () => provider.selectAll(people.map((p) => p.id)),
+            )
+          else ...[
+            if (provider.people.isNotEmpty)
+              OmiButton.toolbar(label: l10n.selectOption, onPressed: provider.beginSelection),
+            OmiIconButton(
+              icon: const Icon(Icons.add),
+              label: l10n.addPerson,
+              onPressed: () => showPersonNameDialog(context, provider),
+            ),
+          ],
+        ],
+      ),
+      bottomNavigationBar: selecting
+          ? SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(OmiSpacing.md),
+                child: OmiButton.destructive(
+                  label: l10n.delete,
+                  expand: true,
+                  onPressed: provider.selectedIds.isEmpty ? null : () => _deleteSelected(provider),
+                ),
+              ),
+            )
+          : null,
+      body: provider.loading && provider.people.isEmpty
+          ? const OmiLoadingState()
+          : provider.people.isEmpty
+              ? OmiEmptyState(
+                  icon: Icons.people_outline,
+                  title: l10n.noPeopleYet,
+                  message: l10n.createPersonHint,
+                  action: OmiButton(
+                    label: l10n.addPerson,
+                    icon: Icons.add,
+                    size: OmiButtonSize.compact,
+                    onPressed: () => showPersonNameDialog(context, provider),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: () async => provider.initialize(),
+                  child: ListView(
+                    padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + OmiSpacing.xl),
+                    children: [
+                      if (!selecting) const VoiceProfileSettingsSection(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
+                        child: OmiSearchField(
+                          placeholder: l10n.peopleSearchPlaceholder,
+                          controller: _search,
+                          onChanged: (value) => setState(() => _query = value),
+                          onCleared: () => setState(() => _query = ''),
+                        ),
+                      ),
+                      ..._rows(people, provider),
+                    ],
                   ),
                 ),
-              OmiIconButton(
-                icon: const Icon(Icons.add),
-                label: l10n.addPerson,
-                onPressed: () => _showPersonDialog(context, provider),
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              const VoiceProfileSettingsSection(),
-              Expanded(
-                child: provider.loading
-                    ? const OmiLoadingState()
-                    : provider.people.isEmpty
-                        ? OmiEmptyState(
-                            icon: Icons.people_outline,
-                            title: l10n.noPeopleYet,
-                            message: l10n.createPersonHint,
-                            action: OmiButton(
-                              label: l10n.addPerson,
-                              icon: Icons.add,
-                              size: OmiButtonSize.compact,
-                              onPressed: () {
-                                _showPersonDialog(context, provider);
-                              },
-                            ),
-                          )
-                        : ListView.separated(
-                            itemCount: provider.people.length,
-                            separatorBuilder: (context, index) => Divider(height: 1, color: OmiColors.border),
-                            itemBuilder: (context, index) {
-                              final person = provider.people[index];
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                                    title: Text(person.name, style: OmiType.body.copyWith(fontWeight: FontWeight.w500)),
-                                    subtitle: Text(
-                                      l10n.voiceRecognitionStatus(person.voiceReadiness),
-                                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                                    ),
-                                    onTap: () => _showPersonDialog(context, provider, person: person),
-                                    trailing: OmiIconButton(
-                                      icon: const Icon(Icons.delete_outline, size: 20),
-                                      label: l10n.deletePersonLabel,
-                                      color: OmiColors.textSecondary,
-                                      onPressed: () => _confirmDeletePerson(person, provider),
-                                    ),
-                                  ),
-                                  if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(left: 6, right: 16, bottom: 8),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          for (final (j, sample) in person.speechSamples!.indexed)
-                                            _SampleRow(
-                                              title: l10n.sampleNumber(j + 1),
-                                              transcript: person.speechSampleTranscripts != null &&
-                                                      j < person.speechSampleTranscripts!.length
-                                                  ? person.speechSampleTranscripts![j]
-                                                  : null,
-                                              playing: provider.currentPlayingPersonIndex == index &&
-                                                  provider.currentPlayingIndex == j &&
-                                                  provider.isPlaying,
-                                              // The row plays: a tap no longer deletes (it used to).
-                                              onPlayPause: () => provider.playPause(index, j, sample),
-                                              onDelete: () => _confirmDeleteSample(index, person, j, provider),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              );
-                            },
-                          ),
-              ),
-            ],
-          ),
-        );
-      },
     );
+  }
+
+  List<Widget> _rows(List<Person> people, PeopleProvider provider) {
+    final l10n = context.l10n;
+    final hasStats = people.any((p) => p.conversationCount != null);
+    final widgets = <Widget>[];
+    var lastGroup = '';
+    for (final person in people) {
+      if (hasStats) {
+        final group = person.lastHeardAt != null ? l10n.peopleRecent : l10n.peopleNotHeardYet;
+        if (group != lastGroup) {
+          lastGroup = group;
+          widgets.add(OmiSectionHeader(group));
+        }
+      }
+      widgets.add(
+        _PersonRow(
+          key: ValueKey(person.id),
+          person: person,
+          selecting: provider.selecting,
+          selected: provider.selectedIds.contains(person.id),
+          onTap: () => provider.selecting ? provider.toggleSelected(person.id) : _openPerson(person),
+          onLongPress: () => provider.selecting ? provider.toggleSelected(person.id) : _showRowMenu(person, provider),
+          confirmDelete: () => _confirmDelete([person]),
+          onDeleted: () => provider.deletePeople([person.id]),
+        ),
+      );
+    }
+    return widgets;
   }
 }
 
-/// One voice sample: tapping the row (or its play button) plays or pauses it; delete is the
-/// labelled trailing control, behind a confirmation.
-class _SampleRow extends StatelessWidget {
-  const _SampleRow({
-    required this.title,
-    required this.transcript,
-    required this.playing,
-    required this.onPlayPause,
-    required this.onDelete,
+class _PersonRow extends StatelessWidget {
+  const _PersonRow({
+    super.key,
+    required this.person,
+    required this.selecting,
+    required this.selected,
+    required this.onTap,
+    required this.onLongPress,
+    required this.confirmDelete,
+    required this.onDeleted,
   });
 
-  final String title;
-  final String? transcript;
-  final bool playing;
-  final VoidCallback onPlayPause;
-  final VoidCallback onDelete;
+  final Person person;
+  final bool selecting;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final Future<bool> Function() confirmDelete;
+  final VoidCallback onDeleted;
+
+  Color _voiceColor() => switch (person.voiceReadiness) {
+        'ready' => OmiColors.success,
+        'saved_sample_awaiting_embedding' => OmiColors.warning,
+        _ => OmiColors.textTertiary,
+      };
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final hasTranscript = transcript != null && transcript!.isNotEmpty;
-    return InkWell(
-      onTap: onPlayPause,
-      borderRadius: OmiRadius.mdAll,
-      child: Row(
-        children: [
-          OmiIconButton(
-            icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-            label: playing ? l10n.pausePlayback : l10n.play,
-            onPressed: onPlayPause,
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: OmiType.callout),
-                  if (hasTranscript)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        '“$transcript”',
-                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontStyle: FontStyle.italic),
-                      ),
+    final heard = person.lastHeardAt;
+    final count = person.conversationCount;
+    final subtitle = count == null
+        ? l10n.voiceRecognitionStatus(person.voiceReadiness)
+        : heard == null
+            ? l10n.peopleNotHeardYet
+            : '${l10n.conversationCount(count)} · ${OmiDateFormat.of(context).date(heard)}';
+    final row = Semantics(
+      selected: selected,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 64),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
+            child: Row(
+              children: [
+                if (selecting)
+                  Padding(
+                    padding: const EdgeInsets.only(right: OmiSpacing.sm),
+                    child: Icon(
+                      selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                      color: selected ? OmiColors.accent : OmiColors.textTertiary,
                     ),
-                ],
-              ),
+                  ),
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: OmiColors.surface2,
+                  child: Text(
+                    person.name.isEmpty ? '?' : person.name.characters.first.toUpperCase(),
+                    style: OmiType.callout.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(width: OmiSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(person.name, style: OmiType.body.copyWith(fontWeight: FontWeight.w500), maxLines: 1),
+                      Text(
+                        subtitle,
+                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                Semantics(
+                  label: l10n.voiceRecognitionStatus(person.voiceReadiness),
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(color: _voiceColor(), shape: BoxShape.circle),
+                  ),
+                ),
+                if (!selecting) Icon(Icons.chevron_right, color: OmiColors.textTertiary),
+              ],
             ),
           ),
-          OmiIconButton(
-            icon: const Icon(Icons.delete_outline, size: 20),
-            label: l10n.deleteSample,
-            color: OmiColors.textSecondary,
-            onPressed: onDelete,
-          ),
-        ],
+        ),
       ),
+    );
+    if (selecting) return row;
+    return Dismissible(
+      key: ValueKey('dismiss-${person.id}'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) => confirmDelete(),
+      onDismissed: (_) => onDeleted(),
+      background: Container(
+        color: OmiColors.danger,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: OmiSpacing.lg),
+        child: Icon(Icons.delete_outline, color: OmiColors.onAccent),
+      ),
+      child: row,
     );
   }
 }

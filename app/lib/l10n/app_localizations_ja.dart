@@ -11316,4 +11316,33 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get searchPartialFailure => '一部の結果を読み込めませんでした';
+
+  @override
+  String get peopleSearchPlaceholder => '人を検索';
+
+  @override
+  String get peopleNotHeardYet => 'まだ聞いていません';
+
+  @override
+  String get peopleRecent => '最近';
+
+  @override
+  String get deletePeopleMessage => '音声サンプルが削除され、元に戻せません。過去の会話での発言は名前のない話者になります。';
+
+  @override
+  String get personTalkTime => '発話時間';
+
+  @override
+  String get personLastHeard => '最後に聞いた日';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count人を削除しますか？',
+      one: '1人を削除しますか？',
+    );
+    return '$_temp0';
+  }
 }
