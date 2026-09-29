@@ -63,16 +63,19 @@ def _log_database_failure(action: str, uid: str, error: Exception) -> None:
     logger.error(f'advice {action} failed uid={uid}: {sanitize(str(error))}', exc_info=True)
 
 
-def _safe_advice_responses(items: list[dict], uid: str) -> list[Advice]:
+def _safe_advice_responses(items: list[Advice] | list[dict], uid: str) -> list[Advice]:
     """Build validated Advice objects from raw records, dropping any malformed or legacy
     rows so a single bad document cannot 500 the whole list endpoint (mirrors the defensive
     deserialization pattern in calendar_meetings and action_items)."""
     valid: list[Advice] = []
     for item in items:
+        if isinstance(item, Advice):
+            valid.append(item)
+            continue
         try:
             valid.append(Advice.model_validate(item))
         except ValidationError as exc:
-            advice_id = item.get('id') if isinstance(item, dict) else None
+            advice_id = item.get('id')
             logger.warning(
                 'Skipping malformed advice item for uid=%s id=%s: %s',
                 uid,
