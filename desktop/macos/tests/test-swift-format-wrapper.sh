@@ -16,7 +16,11 @@ nok() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 
 assert_contains() {
   local haystack="$1" needle="$2" label="$3"
-  if echo "$haystack" | grep -qF -- "$needle"; then
+  # Here-string, not `echo | grep -q`: grep -q exits on first match and closes
+  # the pipe, the builtin echo then dies on EPIPE, and under `set -o pipefail`
+  # the pipeline reports failure even though the needle matched. Seen live in
+  # Desktop Swift CI as "write error: Broken pipe" + a false FAIL.
+  if grep -qF -- "$needle" <<< "$haystack"; then
     ok "$label"
   else
     nok "$label (expected '$needle' in output)"
