@@ -386,6 +386,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         'TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS': '4096',
         'TRANSLATION_ONDEMAND_UID_DAILY_CHARS': '10000000',
         'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS': '1000000000',
+        'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES': '4',
     }
     entries = ',\n'.join(
         '        ' + json.dumps({'name': name, 'value': value}) for name, value in translation_defaults.items()

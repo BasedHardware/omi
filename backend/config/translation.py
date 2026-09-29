@@ -152,6 +152,7 @@ class OnDemandTranslationConfig:
     max_output_tokens: int
     uid_daily_chars: int
     global_daily_chars: int
+    max_catchup_pages: int
 
     def admits(self, uid: str) -> bool:
         if uid in self.uid_allowlist:
@@ -216,6 +217,7 @@ def resolve_ondemand_config(env: Mapping[str, str] | None = None) -> OnDemandTra
         global_daily_chars=bounded_int(
             'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS', 1_000_000_000, 1_000_000_000, zero_allowed=True
         ),
+        max_catchup_pages=bounded_int('TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES', 4, 100, zero_allowed=True),
     )
 
 

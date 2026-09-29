@@ -608,9 +608,14 @@ class TranscriptProcessor:
         if not conversation:
             return
         # Install newest persisted speech first, then page older history while
-        # this socket still holds the same fresh visibility generation.
+        # this socket still holds the same fresh visibility generation. Each
+        # pass is capped at `max_catchup_pages` pages; a still-fresh demand
+        # reschedules another capped pass, so no single task can page an
+        # unbounded recording (Luna R2).
         raw_segments = conversation.get('transcript_segments', [])
-        for end in range(len(raw_segments), 0, -config.max_segments):
+        pages_done = 0
+        end = len(raw_segments)
+        while end > 0 and pages_done < config.max_catchup_pages:
             current = resolve_ondemand_config()
             if (
                 not current.gate_enabled
@@ -620,6 +625,8 @@ class TranscriptProcessor:
             ):
                 return
             page = raw_segments[max(0, end - config.max_segments) : end]
+            end -= config.max_segments
+            pages_done += 1
             policy = 'viewed_v1' if current.gemini_enabled else 'legacy'
             segments = [
                 TranscriptSegment(**raw)
@@ -645,6 +652,11 @@ class TranscriptProcessor:
                 except asyncio.CancelledError:
                     # A newer live delta superseded this timer; it owns the next dispatch.
                     await coordinator.wait_inflight()
+        if end > 0 and pages_done >= config.max_catchup_pages:
+            # Older history remains: continue only while demand is still fresh,
+            # from the oldest unprocessed segment, again bounded.
+            self._last_translation_demand_generation = -1
+            self.host.spawn(self.on_translation_demand_changed(), name='translation_catchup_continue')
 
     async def _deliver_segments(self, client_segments: List[Dict[str, Any]]) -> bool:
         """Push live segments to the client without letting a gone client kill the loop.

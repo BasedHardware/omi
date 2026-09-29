@@ -53,6 +53,9 @@ environments:
           TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
             value: '1000000000'
             category: rollout
+          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+            value: '4'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'true'
@@ -771,6 +774,9 @@ environments:
               category: rollout
             TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
               value: '1000000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+              value: '4'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
@@ -1860,6 +1866,9 @@ environments:
           TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
             value: '1000000000'
             category: rollout
+          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+            value: '4'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'false'
@@ -2478,6 +2487,9 @@ environments:
               category: rollout
             TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
               value: '1000000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+              value: '4'
               category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout

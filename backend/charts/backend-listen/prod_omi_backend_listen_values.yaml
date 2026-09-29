@@ -458,6 +458,8 @@ env:
     value: "10000000"
   - name: TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS
     value: "1000000000"
+  - name: TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES
+    value: "4"
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:

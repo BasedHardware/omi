@@ -85,8 +85,14 @@ def translate_open_page(
     segments = conversation.get('transcript_segments')
     if not conversation_id or not isinstance(segments, list):
         return conversation, 'unavailable', None
-    revision = _revision(segments)
-    materialization_revision = _materialization_revision(conversation, segments)
+    # Selection itself must respect the request deadline (Luna R3): scanning a
+    # very long transcript for revision hashing and page selection is bounded
+    # here so total on-open work stays within the configured budget. Work past
+    # the bound continues through the signed cursor.
+    scan_deadline = clock() + config.deadline_seconds
+    scan_cap = max(config.max_segments * 8, 400)
+    revision = _revision(segments[:scan_cap])
+    materialization_revision = _materialization_revision(conversation, segments[:scan_cap])
     policy = 'viewed_v1' if config.gemini_enabled else 'legacy'
     start = 0
     stale_cursor = False
@@ -108,13 +114,17 @@ def translate_open_page(
             start = min(payload['index'], len(segments))
         else:
             stale_cursor = True
-    deadline = clock() + config.deadline_seconds
+    deadline = min(clock() + config.deadline_seconds, scan_deadline)
     selected: list[tuple[int, dict[str, Any]]] = []
     chars = 0
     next_index = len(segments)
     oversized = False
     deferred_index: int | None = None
-    for index in range(start, len(segments)):
+    scan_bounded = min(len(segments), start + scan_cap)
+    for index in range(start, scan_bounded):
+        if clock() >= deadline:
+            next_index = index
+            break
         segment = segments[index]
         if not isinstance(segment, dict) or not isinstance(segment.get('text'), str) or not segment.get('id'):
             continue
