@@ -72,7 +72,7 @@ def _safe_advice_responses(items: list[dict], uid: str) -> list[Advice]:
         try:
             valid.append(Advice.model_validate(item))
         except ValidationError as exc:
-            advice_id = item.get('id') if isinstance(item, dict) else None
+            advice_id = item.get('id')
             logger.warning(
                 'Skipping malformed advice item for uid=%s id=%s: %s',
                 uid,
