@@ -12,6 +12,8 @@ import types
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
+from fastapi import HTTPException
+
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-not-real")
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
@@ -95,6 +97,7 @@ finally:
 
 
 import unittest
+from models.folder import UpdateFolderRequest, MoveConversationRequest, BulkMoveConversationsRequest
 
 
 class TestFoldersSafeDeserialization(unittest.TestCase):
@@ -162,6 +165,145 @@ class TestFoldersSafeDeserialization(unittest.TestCase):
             result = folders_mod.get_folders(uid="test_new_user")
 
         self.assertEqual([f.id if hasattr(f, "id") else f["id"] for f in result], ["f_sys_1"])
+
+    def test_get_folder_valid(self):
+        """GET /v1/folders/{folder_id} returns a valid Folder model when doc is well-formed."""
+        now = datetime.now(timezone.utc)
+        valid_doc = {
+            "id": "f_valid",
+            "name": "Work",
+            "color": "#3B82F6",
+            "icon": "💼",
+            "created_at": now,
+            "updated_at": now,
+            "order": 0,
+        }
+        with patch.object(folders_mod.folders_db, "get_folder", return_value=valid_doc):
+            folder = folders_mod.get_folder(folder_id="f_valid", uid="test_user")
+
+        folder_id = folder["id"] if isinstance(folder, dict) else folder.id
+        folder_name = folder["name"] if isinstance(folder, dict) else folder.name
+        self.assertEqual(folder_id, "f_valid")
+        self.assertEqual(folder_name, "Work")
+
+    def test_get_folder_malformed_returns_404(self):
+        """GET /v1/folders/{folder_id} raises 404 when stored folder doc is malformed (missing required fields)."""
+        malformed_doc = {
+            "id": "f_corrupt",
+            # missing required 'name', 'created_at', 'updated_at'
+            "description": "Corrupt record",
+        }
+        with patch.object(folders_mod.folders_db, "get_folder", return_value=malformed_doc):
+            with self.assertRaises(HTTPException) as ctx:
+                folders_mod.get_folder(folder_id="f_corrupt", uid="test_user")
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail, "Folder not found")
+
+    def test_update_folder_malformed_existing_returns_404(self):
+        """PATCH /v1/folders/{folder_id} raises 404 when existing folder doc is malformed."""
+        malformed_doc = {
+            "id": "f_corrupt",
+            "description": "Corrupt record",
+        }
+        with patch.object(folders_mod.folders_db, "get_folder", return_value=malformed_doc):
+            with self.assertRaises(HTTPException) as ctx:
+                folders_mod.update_folder(
+                    folder_id="f_corrupt",
+                    request=UpdateFolderRequest(name="New Name"),
+                    uid="test_user",
+                )
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail, "Folder not found")
+
+    def test_update_folder_valid(self):
+        """PATCH /v1/folders/{folder_id} successfully updates and returns Folder model."""
+        now = datetime.now(timezone.utc)
+        initial_doc = {
+            "id": "f_valid",
+            "name": "Old Name",
+            "color": "#3B82F6",
+            "icon": "💼",
+            "created_at": now,
+            "updated_at": now,
+            "order": 0,
+        }
+        updated_doc = {
+            "id": "f_valid",
+            "name": "New Name",
+            "color": "#3B82F6",
+            "icon": "💼",
+            "created_at": now,
+            "updated_at": now,
+            "order": 0,
+        }
+        with patch.object(folders_mod.folders_db, "get_folder", side_effect=[initial_doc, updated_doc]), patch.object(
+            folders_mod.folders_db, "update_folder", return_value=None
+        ):
+            folder = folders_mod.update_folder(
+                folder_id="f_valid",
+                request=UpdateFolderRequest(name="New Name"),
+                uid="test_user",
+            )
+
+        folder_name = folder["name"] if isinstance(folder, dict) else folder.name
+        self.assertEqual(folder_name, "New Name")
+
+    def test_delete_folder_malformed_target_returns_404(self):
+        """DELETE /v1/folders/{folder_id} raises 404 if move_to_folder_id references a malformed folder."""
+        now = datetime.now(timezone.utc)
+        folder_to_delete = {
+            "id": "f_del",
+            "name": "To Delete",
+            "color": "#3B82F6",
+            "icon": "💼",
+            "created_at": now,
+            "updated_at": now,
+            "is_system": False,
+        }
+        malformed_target = {"id": "f_target_corrupt"}
+        with patch.object(folders_mod.folders_db, "get_folder", side_effect=[folder_to_delete, malformed_target]):
+            with self.assertRaises(HTTPException) as ctx:
+                folders_mod.delete_folder(
+                    folder_id="f_del",
+                    move_to_folder_id="f_target_corrupt",
+                    uid="test_user",
+                )
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail, "Target folder not found")
+
+    def test_move_conversation_malformed_folder_returns_404(self):
+        """PATCH /v1/conversations/{conv_id}/folder raises 404 if destination folder doc is malformed."""
+        valid_conv = {"id": "c1", "is_locked": False}
+        malformed_folder = {"id": "f_corrupt"}
+        with patch.object(folders_mod.conversations_db, "get_conversation", return_value=valid_conv), patch.object(
+            folders_mod.folders_db, "get_folder", return_value=malformed_folder
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                folders_mod.move_conversation_to_folder(
+                    conversation_id="c1",
+                    request=MoveConversationRequest(folder_id="f_corrupt"),
+                    uid="test_user",
+                )
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail, "Folder not found")
+
+    def test_bulk_move_malformed_folder_returns_404(self):
+        """POST /v1/folders/{folder_id}/conversations/bulk-move raises 404 if target folder doc is malformed."""
+        malformed_folder = {"id": "f_corrupt"}
+        with patch.object(folders_mod.folders_db, "get_folder", return_value=malformed_folder):
+            with self.assertRaises(HTTPException) as ctx:
+                folders_mod.bulk_move_conversations(
+                    folder_id="f_corrupt",
+                    request=BulkMoveConversationsRequest(conversation_ids=["c1", "c2"]),
+                    uid="test_user",
+                )
+
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail, "Folder not found")
 
 
 if __name__ == "__main__":

@@ -25,6 +25,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _safe_folder_from_dict(folder: Optional[dict], uid: str = '') -> Optional[dict]:
+    """Safely validate a stored folder document, returning the validated dict if valid, or None if malformed."""
+    if not isinstance(folder, dict) or not folder.get('id'):
+        return None
+    try:
+        Folder.model_validate(folder)
+        return folder
+    except ValidationError as e:
+        invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+        logger.warning(
+            f"Skipping malformed folder doc {folder.get('id', 'unknown')} for uid {uid}: "
+            f"missing/invalid fields {invalid_fields}"
+        )
+        return None
+
+
 @router.get('/v1/folders', response_model=List[Folder], tags=['folders'])
 def get_folders(uid: str = Depends(auth.get_current_user_uid)):
     """
@@ -77,7 +93,10 @@ def get_folder(folder_id: str, uid: str = Depends(auth.get_current_user_uid)):
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
-    return folder
+    valid_folder = _safe_folder_from_dict(folder, uid=uid)
+    if not valid_folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    return valid_folder
 
 
 @router.patch('/v1/folders/{folder_id}', response_model=Folder, tags=['folders'])
@@ -85,6 +104,8 @@ def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depen
     """Update folder metadata (name, description, color, icon, order)."""
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    if not _safe_folder_from_dict(folder, uid=uid):
         raise HTTPException(status_code=404, detail="Folder not found")
 
     update_data = request.model_dump(exclude_unset=True)
@@ -99,7 +120,11 @@ def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depen
     if update_data:
         folders_db.update_folder(uid, folder_id, update_data)
 
-    return folders_db.get_folder(uid, folder_id)
+    updated_folder = folders_db.get_folder(uid, folder_id)
+    valid_updated = _safe_folder_from_dict(updated_folder, uid=uid)
+    if not valid_updated:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    return valid_updated
 
 
 @router.delete('/v1/folders/{folder_id}', status_code=204, tags=['folders'])
@@ -119,7 +144,8 @@ def delete_folder(
     if move_to_folder_id:
         if move_to_folder_id == folder_id:
             raise HTTPException(status_code=400, detail="Cannot move conversations to the folder being deleted")
-        if not folders_db.get_folder(uid, move_to_folder_id):
+        target_folder = folders_db.get_folder(uid, move_to_folder_id)
+        if not target_folder or not _safe_folder_from_dict(target_folder, uid=uid):
             raise HTTPException(status_code=404, detail="Target folder not found")
 
     folders_db.delete_folder(uid, folder_id, move_to_folder_id)
@@ -182,7 +208,7 @@ def move_conversation_to_folder(
 
     if request.folder_id:
         folder = folders_db.get_folder(uid, request.folder_id)
-        if not folder:
+        if not folder or not _safe_folder_from_dict(folder, uid=uid):
             raise HTTPException(status_code=404, detail="Folder not found")
 
     folders_db.move_conversation_to_folder(uid, conversation_id, request.folder_id)
@@ -199,7 +225,7 @@ def bulk_move_conversations(
 ):
     """Move multiple conversations to a folder."""
     folder = folders_db.get_folder(uid, folder_id)
-    if not folder:
+    if not folder or not _safe_folder_from_dict(folder, uid=uid):
         raise HTTPException(status_code=404, detail="Folder not found")
 
     # Validate none of the conversations are locked
