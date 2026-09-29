@@ -8459,6 +8459,7 @@ export interface OmiApiPaths {
       responses: {
         "200": McpPersonMutationResponse;
         "401": void;
+        "404": void;
         "422": HTTPValidationError;
       };
     };

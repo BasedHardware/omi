@@ -54019,6 +54019,9 @@
           "401": {
             "$ref": "#/components/responses/Error401"
           },
+          "404": {
+            "description": "Person not found"
+          },
           "422": {
             "content": {
               "application/json": {

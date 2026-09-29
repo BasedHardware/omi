@@ -1015,6 +1015,15 @@ class TestPeople:
 
         assert actual == expected
 
+    def test_rest_dismiss_person_declares_not_found_response(self):
+        route = next(
+            route
+            for route in rest.router.routes
+            if route.path == '/v1/mcp/people/{person_id}/dismiss' and 'POST' in route.methods
+        )
+
+        assert route.responses[404]['description'] == 'Person not found'
+
     def test_people_write_descriptors_match_safety_contract(self):
         tools = {tool['name']: tool for tool in sse.MCP_TOOLS}
 

@@ -281,6 +281,24 @@ def test_cache_hit_serves_identity_with_zero_firestore_access(_fake_redis):
     assert identity["scopes"] == ["memories.read"]
 
 
+def test_opt_in_cleanup_scope_survives_token_cache_hit(_fake_redis):
+    grant, pair = _issue_token("cleanup-user", scopes=["people.cleanup"])
+    assert mcp_oauth.validate_access_token(pair["access_token"], mcp_oauth.MCP_RESOURCE_URL)["scopes"] == [
+        "people.cleanup"
+    ]
+
+    real_db = mcp_oauth.db
+    mcp_oauth.db = _FailDB()
+    try:
+        identity = mcp_oauth.validate_access_token(pair["access_token"], mcp_oauth.MCP_RESOURCE_URL)
+    finally:
+        mcp_oauth.db = real_db
+
+    assert identity["uid"] == "cleanup-user"
+    assert identity["grant_id"] == grant["id"]
+    assert identity["scopes"] == ["people.cleanup"]
+
+
 def test_cached_entry_ttl_capped_at_sixty_seconds(_fake_redis):
     grant, pair = _issue_token("ttl-user")
     mcp_oauth.validate_access_token(pair["access_token"], mcp_oauth.MCP_RESOURCE_URL)

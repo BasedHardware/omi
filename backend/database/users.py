@@ -888,12 +888,20 @@ def create_person(uid: str, data: dict):
     return data
 
 
-def get_person(uid: str, person_id: str):
+def get_person(uid: str, person_id: str, *, include_dismissed: bool = False):
+    """Return one owner-scoped person, hiding soft-dismissed records by default.
+
+    ``include_dismissed`` is reserved for complete-account export paths. Normal
+    product reads must not make dismissed people or their voice data visible.
+    """
+
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_doc = person_ref.get()
     if not person_doc.exists:
         return None
     person_data = person_doc.to_dict()
+    if not include_dismissed and person_data.get('is_dismissed') is True:
+        return None
     person_data.setdefault('id', person_doc.id)
     return person_data
 

@@ -975,6 +975,7 @@ def rename_person(
 @router.post(
     "/v1/mcp/people/{person_id}/dismiss",
     response_model=McpPersonMutationResponse,
+    responses={404: {"description": "Person not found"}},
     tags=["mcp"],
 )
 def dismiss_person(person_id: str, uid: str = Depends(get_mcp_people_cleanup_uid)):
