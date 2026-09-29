@@ -52,4 +52,20 @@ describe('adapterRegistry', () => {
     // eaten as italics (seen live: "OMIHERMESADAPTER_COMMAND").
     expect(adapterActivationError('hermes')).toContain('`OMI_HERMES_ADAPTER_COMMAND`')
   })
+
+  it('quotes the real one-line install command when the agent has one', () => {
+    // Codex and OpenClaw both have a real `npm install -g` one-liner (see
+    // shared/agentGuides.ts) — the hint should hand it over verbatim instead
+    // of just pointing at Settings, since that's the whole reason someone
+    // reads this message: the bar told them Codex isn't connected and this is
+    // the only place they're standing.
+    expect(adapterActivationError('codex')).toContain('npm install -g @openai/codex')
+    expect(adapterActivationError('openclaw')).toContain('npm install -g openclaw@latest')
+  })
+
+  it('falls back to the prose install note when there is no one-liner (Hermes)', () => {
+    const hint = adapterActivationError('hermes')
+    expect(hint).toContain('Install the Hermes CLI from its documentation.')
+    expect(hint).not.toContain('npm install')
+  })
 })
