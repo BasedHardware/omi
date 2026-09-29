@@ -530,6 +530,32 @@ CONVERSATION_SMART_MERGE_LABELS = {
     'decision': frozenset({'merge', 'keep', 'skip'}),
     'gap_bucket': frozenset({'2_5m', '5_15m', '15_30m', '30_60m', 'none'}),
 }
+CONVERSATION_SMART_MERGE_REASONS = frozenset(
+    {
+        'uid_not_allowed',
+        'not_eligible_source',
+        'not_capture_end',
+        'conversation_not_eligible',
+        'user_managed',
+        'wake_word',
+        'no_predecessor',
+        'predecessor_not_completed',
+        'predecessor_user_ended',
+        'predecessor_refresh_pending',
+        'refresh_unavailable',
+        'gap_out_of_window',
+        'too_few_words',
+        'span_cap',
+        'segment_cap',
+        'fragment_cap',
+        'jev_unavailable',
+        'jev_same',
+        'jev_different',
+        'absorbed',
+        'survivor_changed',
+        'error',
+    }
+)
 CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES = frozenset({'refreshed', 'fenced', 'lease_busy', 'failed'})
 
 CONVERSATION_SMART_MERGE_DECISION_TOTAL = Counter(
@@ -569,7 +595,7 @@ def record_conversation_smart_merge(
             name: value if value in CONVERSATION_SMART_MERGE_LABELS[name] else 'other'
             for name, value in (('mode', mode), ('decision', decision))
         }
-        labels['reason'] = reason if _RELEVANCE_REASON.match(reason) else 'other'
+        labels['reason'] = reason if reason in CONVERSATION_SMART_MERGE_REASONS else 'other'
         labels['gap_bucket'] = _smart_merge_gap_bucket(gap_seconds)
         CONVERSATION_SMART_MERGE_DECISION_TOTAL.labels(**labels).inc()
         if p_same is not None:

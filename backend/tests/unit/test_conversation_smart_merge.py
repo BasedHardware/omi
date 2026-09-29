@@ -20,6 +20,7 @@ from database.legal_holds import DestructiveOperationInProgress
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations import smart_merge
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils import metrics
 
 UID = 'user-1'
 T0 = datetime(2026, 9, 28, 23, 0, tzinfo=timezone.utc)
@@ -58,7 +59,9 @@ class World:
         self.retracted = []
         self.copied = []
         self.vectors = []
+        self.vector_error = None
         self.process_error = None
+        self.process_persisted = True
         self.retract_error = None
         self.on_ask = None
         for module in (smart_merge_db, sync_bridges, conversations_db):
@@ -77,7 +80,7 @@ class World:
         monkeypatch.setattr(smart_merge.notification_db, 'get_user_time_zone', lambda uid: 'America/New_York')
         monkeypatch.setattr(smart_merge, 'ask_jev', self.ask)
         monkeypatch.setattr(smart_merge, 'process_conversation', self.process)
-        monkeypatch.setattr(smart_merge, 'save_structured_vector', lambda uid, c: self.vectors.append(c.id))
+        monkeypatch.setattr(smart_merge, 'save_structured_vector', self.save_vector)
         monkeypatch.setattr(smart_merge, 'retract_sync_bridge_source', self.retract)
         monkeypatch.setattr(smart_merge, 'copy_sync_bridge_audio', lambda uid, s, t: self.copied.append((s, t)))
         monkeypatch.setattr(smart_merge, 'is_audio_merge_dispatch_enabled', lambda: False)
@@ -138,10 +141,14 @@ class World:
             return None
         return SimpleNamespace(noul=lambda name: answer)
 
-    def process(self, uid, language, conversation, *, trigger, persistence_observer):
+    def process(self, uid, language, conversation, *, trigger, persistence_observer, smart_merge_refresh):
         if self.process_error:
             raise self.process_error
+        if not self.process_persisted:
+            persistence_observer(False)
+            return conversation
         assert trigger is ProcessingTrigger.SMART_MERGE
+        assert smart_merge_refresh[0] == self.raw(conversation.id)['smart_merge']['revision']
         self.processed.append((conversation.id, len(conversation.transcript_segments)))
         raw = self.raw(conversation.id)
         raw['structured'] = dict(raw['structured'], title=f'refreshed {len(self.processed)}')
@@ -152,6 +159,11 @@ class World:
         if self.retract_error:
             raise self.retract_error
         self.retracted.append(cid)
+
+    def save_vector(self, uid, conversation):
+        if self.vector_error:
+            raise self.vector_error
+        self.vectors.append(conversation.id)
 
     # -- driving
     def finish(self, cid, *, mode='merge', owner='job'):
@@ -185,6 +197,17 @@ def test_uid_allowlist(monkeypatch):
     assert config.smart_merge_uid_allowed('a') and not config.smart_merge_uid_allowed('c')
     monkeypatch.setenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, '')
     assert config.smart_merge_uid_allowed('c')
+
+
+def test_metric_reason_is_bounded_to_known_values(monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        metrics.CONVERSATION_SMART_MERGE_DECISION_TOTAL,
+        'labels',
+        lambda **labels: SimpleNamespace(inc=lambda: seen.append(labels)),
+    )
+    metrics.record_conversation_smart_merge(mode='merge', decision='keep', reason='arbitrary_per_user_reason')
+    assert seen[0]['reason'] == 'other'
 
 
 @pytest.mark.asyncio
@@ -254,6 +277,31 @@ def test_jev_unavailable_fails_open_to_keep(world):
     assert not world.raw('n').get('deleted')
 
 
+@pytest.mark.parametrize('answer', [float('nan'), float('inf'), -0.1, 1.1, '0.9'])
+def test_invalid_jev_score_fails_open_without_merging(world, answer):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    world.jev_answers = [answer]
+    assert world.finish('n') is False
+    assert not world.raw('n').get('deleted')
+    assert world.raw('n')['smart_merge_decision']['p_same'] is None
+
+
+def test_merge_decision_is_durable_before_absorb(world, monkeypatch):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    real = smart_merge_db.absorb_conversation
+    calls = []
+
+    def inspect_record(*args, **kwargs):
+        calls.append(world.raw('n').get('smart_merge_decision'))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(smart_merge_db, 'absorb_conversation', inspect_record)
+    assert world.finish('n') is True
+    assert calls[0]['decision'] == 'merged'
+
+
 def test_any_decision_error_fails_open_without_a_record(world, monkeypatch):
     world.add('p', 0, 10)
     world.add('n', 15, 10)
@@ -308,6 +356,7 @@ def test_merge_at_threshold_absorbs_redirects_and_refreshes_once(world):
     assert survivor['transcript_segments'][2]['start'] == pytest.approx(15 * 60.0)
     assert survivor['sync_merged_from'] == ['n'] and survivor['finished_at'] == T0 + timedelta(minutes=25)
     assert survivor['smart_merge']['revision'] == 1 and survivor['smart_merge']['refreshed_revision'] == 1
+    assert survivor['sync_content_revision'] == 1
     assert 'refresh_lease' not in survivor['smart_merge']
     assert world.processed == [('p', 4)] and world.vectors == ['p'] and world.invalidated == [True]
     assert world.retracted == ['n'] and world.copied == [('n', 'p')]
@@ -343,6 +392,16 @@ def test_user_edit_between_decision_and_transaction_keeps_both(world):
     record = world.raw('n')['smart_merge_decision']
     assert record['decision'] == 'kept' and record['reason'] == 'user_managed'
     assert not world.raw('n').get('deleted') and world.processed == []
+
+
+def test_processor_snapshot_from_before_absorb_cannot_overwrite_survivor(world, monkeypatch):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    stale = world.get(UID, 'p')
+    assert world.finish('n') is True
+    monkeypatch.setattr(conversations_db, 'db', world.store)
+    assert conversations_db.persist_processing_result_with_lifecycle(UID, stale) is False
+    assert len(world.transcript('p')) == 4
 
 
 def test_user_deleting_the_new_conversation_mid_merge_wins(world):
@@ -396,6 +455,31 @@ def test_retry_after_partial_failure_finishes_cleanup_and_refresh_exactly_once(w
     smart_merge.finish_absorb(UID, 'n', owner='job')
     smart_merge.finish_absorb(UID, 'n', owner='job')  # duplicate delivery
     assert world.retracted == ['n'] and world.processed == [('p', 4)]
+
+
+def test_refresh_that_did_not_persist_keeps_donor_job_retryable(world):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    world.process_persisted = False
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        world.finish('n')
+    assert world.raw('p')['smart_merge']['refreshed_revision'] == 0
+    world.process_persisted = True
+    smart_merge.finish_absorb(UID, 'n', owner='job')
+    assert world.raw('p')['smart_merge']['refreshed_revision'] == 1
+
+
+def test_failed_survivor_vector_write_keeps_refresh_retryable(world):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    world.vector_error = RuntimeError('vector unavailable')
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        world.finish('n')
+    assert world.raw('p')['smart_merge']['refreshed_revision'] == 0
+    world.vector_error = None
+    smart_merge.finish_absorb(UID, 'n', owner='job')
+    assert world.vectors == ['p']
+    assert world.raw('p')['smart_merge']['refreshed_revision'] == 1
 
 
 def test_destructive_gate_defers_retraction_but_not_the_refresh(world):

@@ -21,6 +21,8 @@ from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from config.conversation_smart_merge import (
     ELIGIBLE_SOURCES,
+    LEDGER_OVERVIEW_CHARS,
+    LEDGER_TITLE_CHARS,
     MAX_FRAGMENTS,
     MAX_GAP_SECONDS,
     MAX_MERGED_SEGMENTS,
@@ -70,6 +72,7 @@ class SkipReason:
     SPAN_CAP = 'span_cap'
     SEGMENT_CAP = 'segment_cap'
     FRAGMENT_CAP = 'fragment_cap'
+    REFRESH_UNAVAILABLE = 'refresh_unavailable'
 
 
 def smart_merge_state(row: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -146,8 +149,8 @@ def fragment_of(row: Mapping[str, Any]) -> Optional[Fragment]:
         id=str(row['id']),
         started_at=started,
         finished_at=finished,
-        title=str(structured.get('title') or ''),
-        overview=str(structured.get('overview') or ''),
+        title=str(structured.get('title') or '')[:LEDGER_TITLE_CHARS],
+        overview=str(structured.get('overview') or '')[:LEDGER_OVERVIEW_CHARS],
     )
 
 
@@ -207,6 +210,8 @@ def new_conversation_skip(
         or not segments
     ):
         return SkipReason.CONVERSATION_NOT_ELIGIBLE
+    if row.get('uses_custom_stt'):
+        return SkipReason.REFRESH_UNAVAILABLE
     if user_managed(row):
         return SkipReason.USER_MANAGED
     if has_wake_word(segments):
@@ -220,6 +225,8 @@ def predecessor_status_skip(row: Mapping[str, Any]) -> Optional[str]:
         return SkipReason.PREDECESSOR_NOT_COMPLETED
     if row.get('status') != 'completed':
         return SkipReason.PREDECESSOR_NOT_COMPLETED
+    if row.get('uses_custom_stt'):
+        return SkipReason.REFRESH_UNAVAILABLE
     if user_managed(row):
         return SkipReason.USER_MANAGED
     if user_ended(row):
@@ -347,10 +354,10 @@ def absorb_payloads(
         'sync_merged_from': sorted({*(survivor.get('sync_merged_from') or []), str(donor['id'])}),
         SMART_MERGE_FIELD: state,
     }
-    # A sync-revisioned survivor fences stale processors on that revision; bump it
-    # so a processor that read the pre-absorb transcript cannot persist over it.
-    if survivor.get('sync_content_revision') is not None:
-        survivor_update['sync_content_revision'] = int(survivor['sync_content_revision']) + 1
+    # The processor's existing transcript fence is sync_content_revision. Stamp
+    # live survivors too: a processor started before this absorb must not write
+    # its old transcript or summary over the newly joined occasion.
+    survivor_update['sync_content_revision'] = int(survivor.get('sync_content_revision') or 0) + 1
     donor_update: dict[str, Any] = {
         'deleted': True,
         # Hide the redirect from discarded == False list indexes, exactly like a

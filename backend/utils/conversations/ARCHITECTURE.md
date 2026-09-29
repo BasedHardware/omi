@@ -87,7 +87,11 @@ and background processing.
   existing redirect readers and the deletion purge apply unchanged. The survivor
   is reprocessed once per merge (`ProcessingTrigger.SMART_MERGE`); an absorb
   requires `refreshed_revision == revision`, so a refresh never persists over a
-  newer append. Decisions are recorded as server-only `smart_merge_decision`.
+  newer append. The absorb also advances `sync_content_revision` to fence
+  processors that read the old transcript, and refresh persistence checks the
+  current lease owner and revision. Custom-STT rows are excluded because their
+  processing budget can refuse the required refresh. Decisions are recorded as
+  server-only `smart_merge_decision` before the absorb transaction.
   Constants and benchmark provenance live in `config/conversation_smart_merge.py`.
 - `duplicate_capture.py` owns the advisory cross-source overlap policy (#3244).
   After durable finalization, it links the shorter completed capture using

@@ -81,6 +81,7 @@ STRETCH_SUMMARY_CHARS = 400
 TRANSCRIPT_EXCERPT_CHARS = 2_500
 # A fragment is A (full summary) in the next decision, so the ledger keeps more than the stretch shows.
 LEDGER_OVERVIEW_CHARS = 4_000
+LEDGER_TITLE_CHARS = 300
 
 # Snowball guards. The benchmark scored pairs, not merged spans; it suggested a
 # 3-4 h cap without measuring one, so this takes the conservative end.

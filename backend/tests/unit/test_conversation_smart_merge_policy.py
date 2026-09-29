@@ -58,6 +58,11 @@ def test_new_conversation_exclusions():
     good = _row('n', 0, 5)
     segments = _segments()
     assert policy.new_conversation_skip(good, segments, capture_end=True) is None
+
+    assert (
+        policy.new_conversation_skip(dict(good, uses_custom_stt=True), segments, capture_end=True)
+        == 'refresh_unavailable'
+    )
     assert (
         policy.new_conversation_skip(dict(good, source='desktop'), segments, capture_end=True) == 'not_eligible_source'
     )
@@ -77,6 +82,14 @@ def test_new_conversation_exclusions():
     assert policy.new_conversation_skip(good, [], capture_end=True) == 'conversation_not_eligible'
     wake = [dict(segments[0], text='hey omi what is on my calendar')]
     assert policy.new_conversation_skip(good, wake, capture_end=True) == 'wake_word'
+
+
+def test_fragment_metadata_is_bounded_before_it_reaches_jev_or_the_ledger():
+    row = _row('n', 0, 5, structured={'title': 'T' * 10000, 'overview': 'O' * 10000})
+    fragment = policy.fragment_of(row)
+    assert fragment is not None
+    assert len(fragment.title) <= config.LEDGER_TITLE_CHARS
+    assert len(fragment.overview) <= config.LEDGER_OVERVIEW_CHARS
 
 
 @pytest.mark.parametrize(
@@ -103,6 +116,10 @@ def test_every_user_managed_exclusion_applies_to_both_sides(change):
 def test_predecessor_state_exclusions():
     survivor, s_segments, new, n_segments = _pair()
     assert policy.check_pair(survivor, s_segments, new, n_segments).reason is None
+    assert (
+        policy.check_pair(dict(survivor, uses_custom_stt=True), s_segments, new, n_segments).reason
+        == 'refresh_unavailable'
+    )
     for status in ('in_progress', 'processing', 'merging', 'failed'):
         assert policy.predecessor_status_skip(dict(survivor, status=status)) == 'predecessor_not_completed'
     assert policy.predecessor_status_skip(dict(survivor, discarded=True)) == 'predecessor_not_completed'
@@ -221,7 +238,7 @@ def test_absorb_payloads_rebase_reallocate_speakers_and_tombstone_the_donor():
     state = survivor_update['smart_merge']
     assert state['role'] == 'survivor' and state['revision'] == 1 and state['refreshed_revision'] == 0
     assert [entry['id'] for entry in state['fragments']] == ['p', 'n']
-    assert 'sync_content_revision' not in survivor_update  # a live survivor must not look like a sync row
+    assert survivor_update['sync_content_revision'] == 1  # fences pre-absorb processors
     assert donor_update == {
         'deleted': True,
         'discarded': True,

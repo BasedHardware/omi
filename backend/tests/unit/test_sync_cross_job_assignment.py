@@ -475,6 +475,7 @@ def _smart_merge_pair(store):
         {'start': 600.0, 'end': 609.5, 'text': 'The pasta place is still open.', 'speaker_id': 1, 'is_user': False}
     )
     survivor['finished_at'] = datetime.fromtimestamp(1609.5, timezone.utc)
+    survivor['smart_merge'] = {'role': 'survivor', 'revision': 1, 'refreshed_revision': 1}
     donor = chunk('n', 1600, text='The pasta place is still open.')
     donor.update(
         deleted=True,
@@ -498,6 +499,19 @@ def test_late_repair_audio_for_a_smart_merge_donor_lands_in_the_survivor():
     result, created, survivors = intake(store, fresh, target_id='n')
     assert result['id'] == 'p' and not created and len(survivors) == 1
     assert ('users', 'u', 'conversations', 'wal-new') not in store.rows
+
+
+def test_repeated_late_repair_to_revisioned_smart_survivor_deduplicates():
+    store = StrictFirestore()
+    _smart_merge_pair(store)
+    store.rows[('users', 'u', 'conversations', 'p')]['sync_content_revision'] = 1
+    first = chunk('wal-repeat-1', 1600, text='The pasta place is still open.')
+    second = chunk('wal-repeat-2', 1600, text='The pasta place is still open.')
+    result, created, survivors = intake(store, first, target_id='n')
+    assert result['id'] == 'p' and not created and not survivors
+    result, created, survivors = intake(store, second, target_id='n')
+    assert result['id'] == 'p' and not created and not survivors
+    assert result['sync_live_target'] is True
 
 
 def test_repair_audio_for_a_donor_whose_survivor_was_deleted_is_superseded():

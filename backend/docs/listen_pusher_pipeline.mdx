@@ -433,10 +433,12 @@ before this one, then the first row of the same device partition; a busy
 immediate predecessor blocks the pair instead of being skipped. Deterministic
 gates (source `omi`, recorded gap 120 s-60 min, speech gap at least 120 s, 25
 words per side, no user-managed row, no wake word, no user-ended predecessor,
-3 h span, 4,000 segments, 12 fragments) run before one Jev question on the
+no custom-STT row, 3 h span, 4,000 segments, 12 fragments) run before one Jev question on the
 `conversation_smart_merge` lane (3 s, one attempt). `p_same >= 0.35` merges;
 any error keeps both. Every answered pair stores a server-only
 `smart_merge_decision` (numbers and ids, no text) on the new conversation.
+For a merge verdict, the decision is persisted before the absorb transaction
+so a retry reuses the same score.
 
 A merge keeps the earlier conversation's id. One transaction appends the new
 transcript on the survivor's absolute timeline and turns the new row into the
@@ -449,7 +451,9 @@ survivor keeps cloud audio, and the survivor is reprocessed once per merge
 (`ProcessingTrigger.SMART_MERGE`) under a revision lease. A committed merge whose
 cleanup or refresh fails fails the finalization attempt; every retry resumes the
 donor, whatever the mode. Late repair WALs that target a donor append to its
-survivor (`utils/sync/assignment.py`).
+survivor (`utils/sync/assignment.py`). The absorb advances the survivor's
+`sync_content_revision` to fence an older processor, and the refresh write
+requires the current lease owner and revision.
 
 ## Conversation start location
 

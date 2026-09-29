@@ -56,6 +56,7 @@ _PRECEDING_FIELDS = (
     'visibility',
     'has_photos',
     'capture_group',
+    'uses_custom_stt',
     'external_data.duplicate_capture_of',
     'relevance_decision.trigger',
     SMART_MERGE_FIELD,

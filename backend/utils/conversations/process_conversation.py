@@ -2681,6 +2681,7 @@ def process_conversation(
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
     speaker_receipt_observer: Callable[[bool], None] | None = None,
+    smart_merge_refresh: tuple[int, str] | None = None,
 ) -> Conversation:
     """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
     fixes run-now, reprocess, JIT bypass, and relevance policy together.
@@ -3001,6 +3002,10 @@ def process_conversation(
         conversation.processing_state = None
     if is_initial_creation:
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
+    elif smart_merge_refresh is not None:
+        persisted = lifecycle_service.persist_processed_conversation(
+            uid, payload, smart_merge_refresh=smart_merge_refresh
+        )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
     report_persistence(persisted, completed=conversation)

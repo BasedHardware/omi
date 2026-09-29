@@ -30,7 +30,12 @@ from dataclasses import dataclass
 from datetime import datetime, tzinfo
 from typing import Any, Mapping, Optional, Sequence
 
-from config.conversation_smart_merge import LEDGER_OVERVIEW_CHARS, STRETCH_SUMMARY_CHARS, TRANSCRIPT_EXCERPT_CHARS
+from config.conversation_smart_merge import (
+    LEDGER_OVERVIEW_CHARS,
+    LEDGER_TITLE_CHARS,
+    STRETCH_SUMMARY_CHARS,
+    TRANSCRIPT_EXCERPT_CHARS,
+)
 
 QUESTION_NAME = 'decision'
 QUESTIONS: dict[str, dict[str, Any]] = {
@@ -86,7 +91,7 @@ class Fragment:
             'id': self.id,
             'started_at': self.started_at,
             'finished_at': self.finished_at,
-            'title': self.title,
+            'title': self.title[:LEDGER_TITLE_CHARS],
             'overview': self.overview[:LEDGER_OVERVIEW_CHARS],
         }
 
@@ -99,8 +104,8 @@ class Fragment:
             id=str(entry['id']),
             started_at=started,
             finished_at=finished,
-            title=str(entry.get('title') or ''),
-            overview=str(entry.get('overview') or ''),
+            title=str(entry.get('title') or '')[:LEDGER_TITLE_CHARS],
+            overview=str(entry.get('overview') or '')[:LEDGER_OVERVIEW_CHARS],
         )
 
 

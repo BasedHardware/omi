@@ -28,6 +28,7 @@ persists a transcript older than the latest absorb.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
@@ -293,9 +294,14 @@ def _decide(
         p_same = _ask(state)
         stretch_count, state_hash = len(stretch), state_sha256(state)
 
-    same = isinstance(p_same, (int, float)) and p_same >= MERGE_THRESHOLD
-    if not isinstance(p_same, (int, float)):
+    if (
+        isinstance(p_same, bool)
+        or not isinstance(p_same, (int, float))
+        or not math.isfinite(p_same)
+        or not 0.0 <= p_same <= 1.0
+    ):
         p_same = None
+    same = p_same is not None and p_same >= MERGE_THRESHOLD
     reason = 'jev_unavailable' if p_same is None else ('jev_same' if same else 'jev_different')
 
     def record(decision: str, why: str) -> dict[str, Any]:
@@ -333,7 +339,10 @@ def _decide(
             survivor_id,
         )
         return None
-    return _MergePlan(survivor_id, revision(survivor), record(MERGED, reason), check.gap_seconds)
+    merge_record = record(MERGED, reason)
+    if not reuse and not smart_merge_db.record_decision(uid, conversation_id, merge_record):
+        return None
+    return _MergePlan(survivor_id, revision(survivor), merge_record, check.gap_seconds)
 
 
 # --------------------------------------------------------------------------- absorb
@@ -475,9 +484,12 @@ def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
         row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
         if row and not row.get('deleted') and refresh_owed(row):
             record_conversation_smart_merge_refresh('lease_busy')
+            raise SmartMergeIncomplete('refresh_lease_busy')
         return
     row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
     if not row or row.get('deleted') or revision(row) != claimed:
+        if row and not row.get('deleted'):
+            raise SmartMergeIncomplete('survivor_changed_before_refresh')
         return
     conversation = deserialize_conversation(row)
     persistence = {'owned': True}
@@ -488,6 +500,7 @@ def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
             conversation,
             trigger=ProcessingTrigger.SMART_MERGE,
             persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
+            smart_merge_refresh=(claimed, owner),
         )
     except Exception:
         record_conversation_smart_merge_refresh('failed')
@@ -496,7 +509,7 @@ def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
         # Deleted, or a sync append moved the transcript on; the next decision
         # against this survivor pays the refresh it still owes.
         record_conversation_smart_merge_refresh('fenced')
-        return
+        raise SmartMergeIncomplete('refresh_not_persisted')
     try:
         # Reprocess never re-embeds; the merged occasion must be findable as a whole.
         save_structured_vector(uid, processed)
@@ -507,5 +520,9 @@ def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
             uid,
             survivor_id,
         )
+        record_conversation_smart_merge_refresh('failed')
+        raise SmartMergeIncomplete('survivor_vector_failed') from error
     if smart_merge_db.complete_survivor_refresh(uid, survivor_id, owner=owner, revision=claimed):
         record_conversation_smart_merge_refresh('refreshed')
+    else:
+        raise SmartMergeIncomplete('refresh_completion_fenced')
