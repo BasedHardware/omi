@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 
 from database._client import get_firestore_client
+from database.read_boundary import MalformedDocError, parse_payload_strict
 from models.action_item import EvidenceRef, TaskCreatePayload
 from models.candidate import CandidateCreate, SummaryTaskReference
 from models.structured import ActionItem
@@ -39,7 +40,8 @@ class SummaryTaskRow:
         return {'structured': structured}
 
     def proposal(self) -> CandidateCreate:
-        return CandidateCreate.model_validate(
+        return parse_payload_strict(
+            CandidateCreate,
             {
                 'subject_kind': 'task',
                 'proposed_action': 'create',
@@ -62,7 +64,8 @@ class SummaryTaskRow:
                         transcript_segment_ids=self.item.source_segment_ids,
                     )
                 ],
-            }
+            },
+            document_path=f'conversations/{self.conversation_id}/structured/action_items/{self.index}',
         )
 
 
@@ -89,8 +92,12 @@ def read_summary_task_row(
     if not isinstance(raw_item, dict) or raw_item.get('deleted'):
         raise SummaryTaskNotFoundError('Summary action item not found')
     try:
-        item = ActionItem.model_validate(raw_item)
-    except ValidationError as exc:
+        item = parse_payload_strict(
+            ActionItem,
+            raw_item,
+            document_path=f'conversations/{selected.conversation_id}/structured/action_items/{selected.action_item_index}',
+        )
+    except MalformedDocError as exc:
         raise SummaryTaskConflictError('Summary action item is unavailable; refresh the conversation') from exc
     if item.description != selected.expected_description:
         raise SummaryTaskConflictError('Summary action item changed; refresh the conversation')
@@ -105,6 +112,6 @@ def read_summary_task_row(
         if item.target_task_id is not None:
             TypeAdapter(StableId).validate_python(item.target_task_id)
         row.proposal()
-    except ValidationError as exc:
+    except (ValidationError, MalformedDocError) as exc:
         raise SummaryTaskConflictError('Summary action item is unavailable; refresh the conversation') from exc
     return row
