@@ -91,6 +91,25 @@ HEAD_RECOVERY_MIN_SPEECH_SECONDS = 2.0
 # with window size now set by a 15 s pace, sliding by pace would discard 15 s of
 # speech the model returned nothing for. Keep the slide at the measured 6 s.
 EMPTY_CAP_SLIDE_SECONDS = 6.0
+FIRST_TEXT_DEADLINE_SECONDS = 12.0
+MAX_EMPTY_STREAK = 4
+
+
+def _positive_float_env(name: str, default: float) -> float:
+    try:
+        value = float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return value if math.isfinite(value) and value > 0 else default
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
 
 logger = logging.getLogger(__name__)
 
@@ -390,6 +409,12 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._health_close: Callable[[], None] = lambda: None
         self._first_speech_at: float | None = None
         self._first_text_recorded = False
+        self._first_text_deadline = _positive_float_env(
+            'PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', FIRST_TEXT_DEADLINE_SECONDS
+        )
+        self._max_empty_streak = _positive_int_env('PARAKEET_WINDOW_MAX_EMPTY_STREAK', MAX_EMPTY_STREAK)
+        self._empty_streak = 0
+        self._first_text_timer: asyncio.TimerHandle | None = None
         self._session_outcome_recorded = False
         self._wake = asyncio.Event()
         self._pause_requested = False
@@ -422,6 +447,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
         self._health_success, self._health_close = on_success, on_close
 
+    @property
+    def typed_death_reason(self) -> str | None:
+        return getattr(self, '_typed_death_reason', None)
+
     def start(self) -> None:
         super().start()
         assert self._pump_task is not None
@@ -429,7 +458,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._pump_task.add_done_callback(self._on_pump_done)
 
     def _on_pump_done(self, task: asyncio.Task[None]) -> None:
-        if not self._closed:
+        if not self._closed and not self._dead:
             self._dead = True
             self._dead_reason = 'cancelled' if task.cancelled() else 'connection_lost'
         try:
@@ -452,7 +481,18 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if self._session_outcome_recorded or self._first_speech_at is None:
             return
         self._session_outcome_recorded = True
-        WINDOW_SESSION_OUTCOME.labels(outcome='text' if self._first_text_recorded else 'no_text').inc()
+        reason = self._dead_reason if self._dead_reason in {'first_text_deadline', 'empty_streak'} else 'none'
+        WINDOW_SESSION_OUTCOME.labels(outcome='text' if self._first_text_recorded else 'no_text', reason=reason).inc()
+
+    def _cancel_first_text_timer(self) -> None:
+        if self._first_text_timer is not None:
+            self._first_text_timer.cancel()
+            self._first_text_timer = None
+
+    def _expire_first_text(self) -> None:
+        self._first_text_timer = None
+        if not self._first_text_recorded and not self._closed and not self._dead:
+            self.fail('first_text_deadline')
 
     def mark_speech(self) -> None:
         self._next_send_speech = True
@@ -473,6 +513,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if self._next_send_speech and data:
             if self._first_speech_at is None:
                 self._first_speech_at = time.monotonic()
+                self._first_text_timer = asyncio.get_running_loop().call_later(
+                    self._first_text_deadline, self._expire_first_text
+                )
             end = self._received_bytes + len(data)
             if self._speech_spans and self._speech_spans[-1][1] == self._received_bytes:
                 start, _ = self._speech_spans.pop()
@@ -549,6 +592,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if self._dead:
             return
         self._dead, self._dead_reason = True, reason
+        if reason in {'first_text_deadline', 'empty_streak'}:
+            self._typed_death_reason = reason
         self.finish()
 
     def _shed_capacity(self) -> None:
@@ -557,6 +602,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
     def finish(self) -> None:
         self._closed = True
+        self._cancel_first_text_timer()
         self._buf.clear()
         self._speech_spans.clear()
         self._wake.set()
@@ -570,6 +616,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
     async def drain_and_close(self) -> None:
         self._closed = True
+        self._cancel_first_text_timer()
         self._wake.set()
         self._release()
         try:
@@ -609,8 +656,11 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     await self._wake.wait()
                     self._wake.clear()
         except asyncio.CancelledError:
-            self._dead = True
-            self._dead_reason = 'cancelled'
+            # A deadline can cancel an in-flight POST through finish(). Preserve
+            # that first failure so session telemetry matches the replay reason.
+            if not self._dead:
+                self._dead = True
+                self._dead_reason = 'cancelled'
             raise
         except Exception:
             # Bounded reason only: never include audio, text or HTTP bodies in logs.
@@ -625,6 +675,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         segments = await self._post_and_parse(job.pcm, job.duration)
         if self._dead:
             return
+        if segments:
+            self._empty_streak = 0
+        elif not self._first_text_recorded:
+            with self._lock:
+                has_speech = self._speech_bytes_locked(job.start_bytes, job.end_bytes) > 0
+            if has_speech:
+                self._empty_streak += 1
+                if self._empty_streak >= self._max_empty_streak:
+                    self.fail('empty_streak')
+                    return
         segments = await self._recover_skipped_head(job, segments)
         if self._dead:
             return
@@ -642,6 +702,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if emitted and not self._dead:
             if not self._first_text_recorded and any(str(item.get('text', '')).strip() for item in emitted):
                 self._first_text_recorded = True
+                self._cancel_first_text_timer()
                 if self._first_speech_at is not None:
                     WINDOW_FIRST_TEXT.observe(max(0.0, time.monotonic() - self._first_speech_at))
             # Snapshot the emission boundary in this socket's stream seconds

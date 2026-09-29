@@ -36,3 +36,20 @@ def test_connect_account_creation_checks_user_before_creating():
     guard_pos = endpoint.index("User not found")
     create_pos = endpoint.index("create_connect_account(uid")
     assert guard_pos < create_pos, "user-existence guard must run before Stripe account creation"
+
+
+def test_refresh_account_link_checks_ownership_before_refreshing():
+    source = _source()
+    start = source.index("def refresh_account_link_endpoint")
+    end = source.index("\ndef ", start + 1)
+    endpoint = source[start:end]
+
+    # The ownership guard and its 403 must be present in this endpoint.
+    assert "get_stripe_connect_account_id(uid)" in endpoint
+    assert "Forbidden" in endpoint
+    assert "status_code=403" in endpoint
+
+    # The guard must run BEFORE refresh_connect_account_link is called, preventing IDOR.
+    guard_pos = endpoint.index("Forbidden")
+    refresh_pos = endpoint.index("refresh_connect_account_link(account_id)")
+    assert guard_pos < refresh_pos, "account-ownership guard must run before Stripe account link refresh"

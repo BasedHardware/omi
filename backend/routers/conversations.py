@@ -519,7 +519,11 @@ def process_in_progress_conversation(
                 outcome='degraded',
                 log=logger,
             )
-            conversation.geolocation = resolve_geolocation(Geolocation(**geolocation))
+            cached_geo = Geolocation.deserialize_safe(geolocation)
+            if cached_geo:
+                conversation.geolocation = resolve_geolocation(cached_geo)
+            else:
+                logger.warning('Skipping malformed cached user geolocation for uid=%s', uid)
 
     # Winner owns ingress. The accepted projection rides the admission CAS:
     # status→processing and client_processing are one write. A later request
@@ -1198,6 +1202,7 @@ def separate_conversation_from_capture_group(conversation_id: str, uid: str = De
 def patch_conversation_summary(
     conversation_id: str, data: UpdateSummaryRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
+    _get_valid_conversation_by_id(uid, conversation_id)
     result = conversations_db.update_conversation_summary(uid, conversation_id, data.app_id, data.content)
     if result == 'not_found':
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -1218,6 +1223,7 @@ def patch_conversation_summary(
 def patch_conversation_segment_text(
     conversation_id: str, data: UpdateSegmentTextRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
+    _get_valid_conversation_by_id(uid, conversation_id)
     result = conversations_db.update_conversation_segment_text(uid, conversation_id, data.segment_id, data.text)
     if result == 'not_found':
         raise HTTPException(status_code=404, detail="Conversation not found")

@@ -70,7 +70,8 @@ def auto_mergeable(row: dict) -> bool:
     remain intact rather than exposing private donors or orphaning user edits.
     """
     return bool(row.get('sync_content_revision')) and not (
-        row.get('sync_live_target')
+        (row.get('smart_merge') or {}).get('role') == 'survivor'
+        or row.get('sync_live_target')
         or row.get('has_photos')
         or row.get('user_title')
         or row.get('starred')
@@ -130,6 +131,11 @@ def assign_in_transaction(
     # never allow an absorbed chunk to resurrect its user-deleted survivor.
     own_id, own_anchor = resolve(incoming['id'])
     target = load(target_id) if target_id else None
+    if target and target.get('deleted') and (target.get('smart_merge') or {}).get('role') == 'donor':
+        # A live conversation folded into its predecessor (database/smart_merge.py)
+        # redirects its late repair audio to the survivor; temporal fallback would
+        # recreate the donor as a duplicate row. A deleted survivor supersedes it.
+        target_id, target = resolve(target_id)
     target_hint = target_id
     if target and not target.get('deleted'):
         # Explicit capture proof is authoritative even before live STT produced
@@ -189,8 +195,9 @@ def assign_in_transaction(
     records = [decode(raw) for _, raw in sorted(matched.items())]
     result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
     result['id'] = canonical
+    smart_live_target = bool(target and (target.get('smart_merge') or {}).get('role') == 'survivor')
     result['sync_live_target'] = bool(
-        target and (target.get('sync_live_target') or not target.get('sync_content_revision'))
+        target and (target.get('sync_live_target') or smart_live_target or not target.get('sync_content_revision'))
     )
     if not result['sync_live_target']:
         result['created_at'] = extent['started_at']
@@ -224,7 +231,7 @@ def assign_in_transaction(
         origin,
         existing,
         new,
-        text_match_slop_seconds=600 if target and not target.get('sync_content_revision') else 0,
+        text_match_slop_seconds=600 if target and (smart_live_target or not target.get('sync_content_revision')) else 0,
         # A bound safety WAL can mix one duplicate with genuinely new speech.
         # Near-exact text, duration, and time are enough to drop that one line;
         # broader clock-offset matches still require the batch gate.

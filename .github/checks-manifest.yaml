@@ -159,6 +159,11 @@ checks:
     triggers: ["backend/utils/retrieval/tools/file_tools.py", "backend/tests/unit/test_file_tools_sanitization.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "File search chat tools must safely handle config and session errors without leaking internal tracebacks or exception strings"
+  - id: screen-activity-batch-resilience-tests
+    command: ["python3", "backend/tests/unit/test_screen_activity_batch_resilience.py"]
+    triggers: ["backend/database/screen_activity.py", "backend/tests/unit/test_screen_activity_batch_resilience.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Deduplicate documents in screen activity batch commits to prevent Firestore 400 contention errors, enforce 499-op commit chunking, and validate uid inputs"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
@@ -1415,6 +1420,11 @@ checks:
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "/update-list, /update-timezone, /refresh-lists and /logout returned f\"{e}\" straight to the chat tool caller on any unhandled exception instead of the type(e).__name__-only convention this file already uses elsewhere; the suite proves a raw exception message never reaches the response"
+  - id: request-validation-sync-files-sanitization-tests
+    command: ["python3", "backend/tests/unit/test_request_validation_sync_files_sanitization.py"]
+    triggers: ["backend/utils/request_validation.py", "backend/utils/sync/files.py", "backend/tests/unit/test_request_validation_sync_files_sanitization.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Multipart form validation and sync file upload endpoints must never reflect raw exception text, schema dumps, or OS paths into client-facing HTTPException responses"
   - id: mcp-date-filter-tests
     command: ["python3", "mcp/tests/test_date_filters.py"]
     triggers: ["mcp/**", ".github/checks-manifest.yaml"]
