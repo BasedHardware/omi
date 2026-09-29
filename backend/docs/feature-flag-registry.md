@@ -270,6 +270,7 @@ and an explicit empty literal renders as `''`.
 | `STT_NO_TEXT_SECONDS` | Deadline from VAD-confirmed speech to first provider text | backend | env | closed | 30 | 30 (backend-listen (chart), gke/backend-listen) | 30 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
 | `STT_ROUTING_PROBE_PERCENT` | Minimum provider recovery probe share in weighted routing | backend | env | closed | 2 | 2 (backend-listen (chart), gke/backend-listen) | 2 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
 | `STT_ROUTING_REDIS_TIMEOUT_SECONDS` | Maximum Redis wait for live routing health state | backend | env | closed | 0.075 | 0.075 (backend-listen (chart), gke/backend-listen) | 0.075 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
+| `STT_SHED_CONNECT_FAILURES` | Real consecutive live STT connect failures required before all-open circuit shedding | backend | env | closed | 3 | 3 (backend-listen (chart), gke/backend-listen) | 3 (backend-listen (chart), gke/backend-listen) | — | pending | — | dazheng |
 | `SYNC_DISPATCH_MODE` | Select sync dispatch lane | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `SYNC_LEDGER_FENCE_MODE` | Select sync ledger fence authority | backend | env | closed | env_var | env_var | env_var | — | keep | — | unowned |
 | `TYPESENSE_CONVERSATION_INDEX_WRITES` | Write conversations to Typesense index | backend | env | closed | — | — | — | — | keep | — | unowned |
