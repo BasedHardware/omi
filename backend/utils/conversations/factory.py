@@ -31,12 +31,8 @@ def deserialize_conversations(
     """
     results: List[Conversation] = []
     for item in items:
-        if not isinstance(item, (Conversation, Mapping)):
-            continue
         try:
-            conv = deserialize_conversation(item)
-            if isinstance(conv, Conversation):
-                results.append(conv)
+            results.append(deserialize_conversation(item))
         except Exception as exc:  # noqa: BLE001 - one bad record must not break the batch
             if on_error is not None:
                 on_error(item, exc)

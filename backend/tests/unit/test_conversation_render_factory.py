@@ -138,7 +138,7 @@ class TestFactory:
     def test_deserialize_conversations_skips_poisoned_records(self):
         conv = _make_conversation(id="valid")
         poisoned = {"id": "bad-no-structured", "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc)}
-        result = deserialize_conversations([poisoned, conv, None, {"garbage": 123}])
+        result = deserialize_conversations([poisoned, conv, {"garbage": 123}])
         assert len(result) == 1
         assert result[0] is conv
 

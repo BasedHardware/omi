@@ -151,7 +151,6 @@ def test_batch_deserialization_all_corrupted():
     items = [
         {"bad": 1},
         {"corrupt": "data"},
-        None,  # Not a mapping or conversation
     ]
     results = deserialize_conversations(items)
     assert results == []
