@@ -1,8 +1,9 @@
 import asyncio
+import json
 
 from config.translation import TranslationProvider
 from models.transcript_segment import TranscriptSegment
-from tests.unit.translation_test_support import FakeProvider, build_service, translations
+from tests.unit.translation_test_support import DictTranslationStore, FakeProvider, build_service, translations
 from utils.translation_coordinator import TranslationCoordinator
 from utils.translation_demand import TranslationDemand
 from utils.translation_language import TranslationNeed
@@ -127,3 +128,44 @@ def test_failed_materialization_does_not_commit_translated_prefix(monkeypatch):
         assert coordinator._segment_states['s'].assembled_translation is None
 
     asyncio.run(run())
+
+
+def test_flag_off_hidden_report_matches_legacy_result_bytes(monkeypatch):
+    flags(monkeypatch)
+    monkeypatch.setenv('TRANSLATION_DEMAND_GATE_ENABLED', 'false')
+    monkeypatch.setattr(
+        'utils.translation_coordinator.classify_translation_need', lambda *args, **kwargs: TranslationNeed.TRANSLATE
+    )
+
+    async def capture(with_hidden_report):
+        store = DictTranslationStore()
+        provider = FakeProvider(
+            TranslationProvider.nllb, [translations(('Yến spoke with the elder about 2025.', 'vi'))]
+        )
+        service, _ = build_service({TranslationProvider.nllb: provider}, store=store)
+        events = []
+
+        async def callback(*args):
+            events.append(args)
+
+        demand = TranslationDemand(lambda: 0) if with_hidden_report else None
+        if demand:
+            demand.observe({'foreground': True, 'transcript_visible': False}, lease_v1_enabled=True)
+        coordinator = TranslationCoordinator('en', service, callback, uid='u', demand=demand)
+        coordinator.language_state.source_is_plausible = lambda *args: True
+        coordinator.language_state.observe = lambda *args, **kwargs: False
+        await coordinator.observe([segment()], [], 'c')
+        coordinator._cancel_batch_timer()
+        await coordinator._flush_batch()
+        return json.dumps(
+            {
+                'events': events,
+                'provider_inputs': [call['contents'] for call in provider.calls],
+                'policy': provider.calls[0]['profile'].policy_version,
+                'positive_cache': sorted((key[0], key[1], value.text) for key, value in store.values.items()),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ).encode('utf-8')
+
+    assert asyncio.run(capture(False)) == asyncio.run(capture(True))
