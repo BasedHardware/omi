@@ -1305,11 +1305,6 @@ checks:
     triggers: ["plugins/hume-ai/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "create_omi_memory posted to /v1/integrations/{app_id}/memories, which the backend never served (404), so every emotion memory was dropped; regression pins the v2 /user/memories import route"
-  - id: guardrail-pulse-tests
-    command: ["python3", ".github/scripts/test_guardrail_pulse.py"]
-    triggers: [".github/scripts/guardrail_pulse.py", ".github/scripts/test_guardrail_pulse.py", ".github/workflows/guardrail-baseline-pulse.yml", ".github/guardrail-pulse-history.jsonl", ".github/checks-manifest.yaml"]
-    lanes: ["local", "ci"]
-    reason: "#9454 weekly baseline health pulse parsing, JSONL record, and 30-day staleness detection"
   - id: dead-code-ratchet
     command: ["python3", ".github/scripts/check_dead_code.py"]
     triggers: ["app/lib/**", "app/pubspec.yaml", "backend/**/*.py", "desktop/macos/agent/**", "desktop/windows/src/**", ".github/scripts/check_dead_code.py", ".github/scripts/dead_code/**", ".github/checks-manifest.yaml"]
@@ -1623,8 +1618,6 @@ checks:
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
-  - path: ".github/scripts/guardrail_pulse.py"
-    reason: "informational weekly baseline health pulse (#9454); unit tests gate via guardrail-pulse-tests, schedule owns --record"
   - path: ".github/scripts/check-desktop-prod-promotion-policy.py"
     reason: "release-policy full-tree check, not diff-scoped"
   - path: ".github/scripts/check-deployment-concurrency.py"
