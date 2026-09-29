@@ -486,8 +486,18 @@ jobs:
         run: |
           if [ "$FULL_CI" != true ]; then
             if [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ] || [ "$RELEASE_REQUIRED" = true ]; then
-              echo 'deferred: fork PR — a maintainer adds label ci:full, then Re-run all jobs' | tee -a "$GITHUB_STEP_SUMMARY" >&2
-              exit 1
+              notice='fork PR — a maintainer adds label ci:full, then Re-run all jobs'
+              echo "::notice title=Heavy CI deferred::$notice"
+              echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"
+              if { [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ]; } && [ "$VERIFY_RESULT" != skipped ]; then
+                echo "Deferred Desktop Swift verification must be skipped, got: $VERIFY_RESULT" >&2
+                exit 1
+              fi
+              if [ "$RELEASE_REQUIRED" = true ] && [ "$RELEASE_RESULT" != skipped ]; then
+                echo "Deferred Desktop Swift release compile must be skipped, got: $RELEASE_RESULT" >&2
+                exit 1
+              fi
+              exit 0
             fi
             echo 'Desktop Swift Build & Tests: no heavy checks selected' | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0

@@ -1230,6 +1230,11 @@ checks:
     triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/verify_auto_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/scripts/test_verify_auto_backend_release_admission.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#11979 keeps automatic development admission on merged-into-main ancestry, not main-tip equality"
+  - id: superseded-auto-deploy-workflow-contracts
+    command: ["python3", ".github/scripts/test_superseded_auto_deploys.py"]
+    triggers: [".github/workflows/gcp_daily_memory_sweep_job.yml", ".github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml", ".github/workflows/gcp_day3_reengagement_email_job.yml", ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml", ".github/scripts/test_superseded_auto_deploys.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Superseded deployment runs must report a neutral notice, and every later step must stay gated so stale images and deployments cannot run"
   - id: gcp-backend-production-boundary
     command: ["python3", ".github/scripts/check-gcp-backend-production-boundary.py"]
     triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", "backend/scripts/firebase_release_probe_token.py", "backend/scripts/transcription_capability_probe.py", ".github/scripts/check-gcp-backend-production-boundary.py", ".github/scripts/test_check_gcp_backend_production_boundary.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
