@@ -3622,5 +3622,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Otsi inimesi",
     "addQueryAsNewPerson": "Lisa \"{query}\" uue inimesena",
-    "showAllPeople": "Kuva kõik inimesed ({count})"
+    "showAllPeople": "Kuva kõik inimesed ({count})",
+    "chatGreeting": "Tere, {name}, küsi mida tahes",
+    "activity": "Tegevus",
+    "places": "Kohad",
+    "recaps": "Kokkuvõtted",
+    "recent": "Hiljutised",
+    "searchPartialFailure": "Mõnda tulemust ei õnnestunud laadida"
 }

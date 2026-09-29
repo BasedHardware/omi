@@ -1091,6 +1091,22 @@ def get_conversations_count(
     return matching
 
 
+def count_conversations_with_geolocation(uid: str, *, firestore_client: Any = None) -> int:
+    """Approximate count of the user's conversations that carry a geolocation.
+
+    Single-field ``geolocation.latitude != null`` aggregation, served by
+    Firestore's automatic single-field index. Adding ``discarded == False``
+    would combine an inequality with an equality and need a composite index
+    that is not declared, so discarded conversations (including redirect
+    tombstones, which are stamped ``discarded=True``) are included in this count.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
+    query = conversations_ref.where(filter=FieldFilter('geolocation.latitude', '!=', None))
+    result = query.count().get()
+    return int(result[0][0].value or 0)
+
+
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 def get_conversations_without_photos(
     uid: str,

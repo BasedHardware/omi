@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/widgets/daily_summary_card.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
 
@@ -117,6 +118,8 @@ void main() {
 Future<void> _pumpCard(WidgetTester tester, DailySummary summary) async {
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         backgroundColor: Colors.black,
         body: Center(

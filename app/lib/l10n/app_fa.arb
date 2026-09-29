@@ -11182,5 +11182,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "جستجوی افراد",
     "addQueryAsNewPerson": "افزودن \"{query}\" به عنوان فرد جدید",
-    "showAllPeople": "نمایش همه افراد ({count})"
+    "showAllPeople": "نمایش همه افراد ({count})",
+    "chatGreeting": "سلام {name}، هر چه می‌خواهی بپرس",
+    "activity": "فعالیت",
+    "places": "مکان‌ها",
+    "recaps": "خلاصه‌ها",
+    "recent": "اخیر",
+    "searchPartialFailure": "برخی نتایج بارگیری نشد"
 }

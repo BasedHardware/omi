@@ -3622,5 +3622,11 @@
     "feedbackReasonRecordingOther": "Iets anders",
     "searchPeople": "Personen zoeken",
     "addQueryAsNewPerson": "\"{query}\" toevoegen als nieuwe persoon",
-    "showAllPeople": "Alle {count} personen weergeven"
+    "showAllPeople": "Alle {count} personen weergeven",
+    "chatGreeting": "Hoi {name}, vraag maar raak",
+    "activity": "Activiteit",
+    "places": "Plaatsen",
+    "recaps": "Samenvattingen",
+    "recent": "Recent",
+    "searchPartialFailure": "Sommige resultaten konden niet worden geladen"
 }

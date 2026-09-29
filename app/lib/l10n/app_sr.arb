@@ -11182,5 +11182,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Претражи особе",
     "addQueryAsNewPerson": "Додај „{query}“ као нову особу",
-    "showAllPeople": "Прикажи све особе ({count})"
+    "showAllPeople": "Прикажи све особе ({count})",
+    "chatGreeting": "Здраво {name}, питај било шта",
+    "activity": "Активност",
+    "places": "Места",
+    "recaps": "Резимеи",
+    "recent": "Недавно",
+    "searchPartialFailure": "Неки резултати нису могли да се учитају"
 }

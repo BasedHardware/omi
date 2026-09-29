@@ -1,56 +1,106 @@
 import 'package:flutter/material.dart';
+
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// The empty chat: a greeting in the upper third and a row of starters just above the composer.
 /// Starters stay editable in the composer; choosing one never sends a message.
 class ChatStarters extends StatelessWidget {
   final bool hasExistingData;
   final bool isConnected;
   final ValueChanged<String> onSelected;
 
-  const ChatStarters({super.key, required this.hasExistingData, required this.isConnected, required this.onSelected});
+  /// Overrides the signed-in given name (tests and the visual audit).
+  final String? givenName;
+
+  const ChatStarters({
+    super.key,
+    required this.hasExistingData,
+    required this.isConnected,
+    required this.onSelected,
+    this.givenName,
+  });
 
   @override
   Widget build(BuildContext context) {
-    if (!isConnected) {
-      return Center(child: Text(context.l10n.noInternetConnection, textAlign: TextAlign.center));
-    }
+    final name = (givenName ?? SharedPreferencesUtil().givenName).trim();
+    final l10n = context.l10n;
     final prompts = hasExistingData ? ['activity', 'improve'] : ['capabilities', 'goal'];
-    return Center(
-        child: SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Icon(Icons.auto_awesome_outlined, size: 28, color: OmiColors.textSecondary),
-              const SizedBox(height: 16),
-              Text(context.l10n.askOmi, textAlign: TextAlign.center, style: OmiType.title3),
-              const SizedBox(height: 24),
-              for (final kind in prompts)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: OutlinedButton(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Spacer(flex: 2),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+          child: TweenAnimationBuilder<double>(
+            // The greeting settles in as the sheet lands.
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 520),
+            curve: Curves.easeOutCubic,
+            builder: (context, t, child) => Opacity(
+              opacity: t,
+              child: Transform.translate(offset: Offset(0, 8 * (1 - t)), child: child),
+            ),
+            child: Text(
+              name.isEmpty ? l10n.askAnything : l10n.chatGreeting(name),
+              key: const ValueKey('chat_greeting'),
+              textAlign: TextAlign.center,
+              style: OmiType.title2.copyWith(fontWeight: FontWeight.w500, letterSpacing: -0.3),
+            ),
+          ),
+        ),
+        if (!isConnected)
+          Padding(
+            padding: const EdgeInsets.only(top: OmiSpacing.sm),
+            child: Text(
+              l10n.noInternetConnection,
+              textAlign: TextAlign.center,
+              style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+            ),
+          ),
+        const Spacer(flex: 3),
+        if (isConnected)
+          // A wrap, not a scroller: two starters sit on one row, and under large text the second
+          // moves to its own line instead of hiding off screen.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
+            child: Wrap(
+              spacing: OmiSpacing.xs,
+              children: [
+                for (final kind in prompts)
+                  Semantics(
+                    button: true,
+                    child: GestureDetector(
                       key: ValueKey('chat_starter_$kind'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: OmiColors.textPrimary,
-                        backgroundColor: OmiColors.textPrimary.withValues(alpha: 0.04),
-                        minimumSize: const Size.fromHeight(56),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        side: BorderSide(color: OmiColors.border),
-                        shape: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => onSelected(l10n.chatStarterPrompt(kind)),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+                        child: Align(
+                          widthFactor: 1,
+                          heightFactor: 1,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                            decoration: BoxDecoration(
+                              color: OmiColors.surface1,
+                              borderRadius: OmiRadius.pillAll,
+                              border: Border.all(color: OmiColors.border),
+                            ),
+                            child: Text(
+                              l10n.chatStarterPrompt(kind),
+                              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                            ),
+                          ),
+                        ),
                       ),
-                      onPressed: () => onSelected(context.l10n.chatStarterPrompt(kind)),
-                      child: Row(children: [
-                        Expanded(child: Text(context.l10n.chatStarterPrompt(kind))),
-                        const SizedBox(width: 12),
-                        Icon(Icons.north_west, size: 18, color: OmiColors.textTertiary),
-                      ]),
-                    )),
-            ],
-          )),
-    ));
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        const SizedBox(height: OmiSpacing.xs),
+      ],
+    );
   }
 }

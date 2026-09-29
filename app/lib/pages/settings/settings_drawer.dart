@@ -174,6 +174,16 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
+        // Memories and Goals left the Home tabs (David, 2026-09-29): one tap from the sheet.
+        OmiSettingsGroup(
+          children: [
+            _row(SettingsDestination.memories,
+                key: 'settings_row_memories', icon: FontAwesomeIcons.brain, title: l10n.memories),
+            _row(SettingsDestination.goals,
+                key: 'settings_row_goals', icon: FontAwesomeIcons.bullseye, title: l10n.goals),
+          ],
+        ),
+        const SizedBox(height: OmiSpacing.xl),
         OmiSettingsGroup(
           children: [
             _row(SettingsDestination.helpGroup,

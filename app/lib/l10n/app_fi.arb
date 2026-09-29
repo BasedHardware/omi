@@ -3622,5 +3622,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Etsi ihmisiä",
     "addQueryAsNewPerson": "Lisää \"{query}\" uutena henkilönä",
-    "showAllPeople": "Näytä kaikki ({count}) henkilöä"
+    "showAllPeople": "Näytä kaikki ({count}) henkilöä",
+    "chatGreeting": "Hei {name}, kysy mitä vain",
+    "activity": "Toiminta",
+    "places": "Paikat",
+    "recaps": "Yhteenvedot",
+    "recent": "Viimeisimmät",
+    "searchPartialFailure": "Joitakin tuloksia ei voitu ladata"
 }

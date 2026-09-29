@@ -11182,5 +11182,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "நபர்களைத் தேடு",
     "addQueryAsNewPerson": "\"{query}\" ஐ புதிய நபராகச் சேர்க்கவும்",
-    "showAllPeople": "அனைத்து ({count}) நபர்களையும் காட்டு"
+    "showAllPeople": "அனைத்து ({count}) நபர்களையும் காட்டு",
+    "chatGreeting": "வணக்கம் {name}, எதையும் கேளுங்கள்",
+    "activity": "செயல்பாடு",
+    "places": "இடங்கள்",
+    "recaps": "சுருக்கங்கள்",
+    "recent": "சமீபத்தியவை",
+    "searchPartialFailure": "சில முடிவுகளை ஏற்ற முடியவில்லை"
 }
