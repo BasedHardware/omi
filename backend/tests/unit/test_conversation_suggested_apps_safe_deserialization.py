@@ -25,12 +25,8 @@ def mock_conversation():
 
 
 def test_suggested_apps_skips_malformed_app_records(monkeypatch, mock_conversation):
-    monkeypatch.setattr(
-        conv_router, "_get_valid_conversation_by_id", lambda uid, cid: {"id": cid}
-    )
-    monkeypatch.setattr(
-        conv_router, "deserialize_conversation", lambda data: mock_conversation
-    )
+    monkeypatch.setattr(conv_router, "_get_valid_conversation_by_id", lambda uid, cid: {"id": cid})
+    monkeypatch.setattr(conv_router, "deserialize_conversation", lambda data: mock_conversation)
 
     valid_app_dict = {
         "id": "app_valid",
