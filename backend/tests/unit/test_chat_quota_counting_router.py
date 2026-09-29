@@ -285,6 +285,42 @@ def test_v2_voice_messages_without_visible_message_does_not_record_quota_questio
         _cleanup(saved)
 
 
+def test_v2_voice_messages_silence_emits_typed_no_speech_frame():
+    client, module, saved = _make_chat_client()
+    try:
+        attempt = MagicMock(finished=False)
+
+        def finish(outcome):
+            attempt.finished = True
+            attempt.outcome = outcome
+
+        attempt.finish.side_effect = finish
+
+        async def silent_voice_stream(*args, **kwargs):
+            if False:
+                yield ''
+
+        with patch.object(module, 'TranscriptionAttempt', return_value=attempt):
+            with patch.object(module, 'retrieve_file_paths', return_value=['/tmp/upload.wav']):
+                with patch.object(module, 'decode_files_to_wav', return_value=['/tmp/decoded.wav']):
+                    with patch.object(module, 'process_voice_message_segment_stream', side_effect=silent_voice_stream):
+                        response = client.post(
+                            '/v2/voice-messages',
+                            files=[('files', ('test.wav', io.BytesIO(b'\x00' * 100), 'audio/wav'))],
+                            headers={'X-App-Platform': 'ios'},
+                        )
+
+        assert response.status_code == 200
+        assert response.text == (
+            'error: {"error":"no_speech","outcome":"expected_silence",'
+            '"provider":"parakeet","retryable":true,"message":"No speech was detected."}\n\n'
+        )
+        module.llm_usage_db.record_chat_quota_question.assert_not_called()
+        assert attempt.outcome == module.TranscriptionOutcome.EXPECTED_SILENCE
+    finally:
+        _cleanup(saved)
+
+
 def test_voice_message_multipart_decode_failure_is_typed_and_cleans_staged_input():
     """Corrupt upload decoding must not bypass the semantic error boundary."""
     client, module, saved = _make_chat_client()

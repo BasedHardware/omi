@@ -78,6 +78,8 @@ def speaker_id_of(segment: Mapping[str, Any]) -> int:
 
 
 def _identity(segment: Mapping[str, Any]) -> str:
+    if segment.get('speaker_identity_status') == 'ambiguous':
+        return 'none'
     if segment.get('is_user'):
         return 'user'
     if segment.get('person_id'):
@@ -219,7 +221,7 @@ def select_prompts(
             talk[segment['speaker_id']] = talk.get(segment['speaker_id'], 0.0) + max(
                 0.0, float(segment.get('end') or 0) - float(segment.get('start') or 0)
             )
-        has_owner = any(segment.get('is_user') for segment in segments)
+        has_owner = any(_identity(segment) == 'user' for segment in segments)
         labeled_here = {s['person_id'] for s in segments if s.get('person_id')}
 
         best_run: Dict[Tuple[int, str], _Run] = {}

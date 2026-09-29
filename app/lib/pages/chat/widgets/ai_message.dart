@@ -286,6 +286,20 @@ class _AIMessageState extends State<AIMessage> {
           showThinkingAfterText: widget.showThinkingAfterText,
           fetchConversation: widget.fetchConversation,
         ),
+        if (!widget.showTypingIndicator && widget.message.memoryAction != null) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.psychology_outlined, size: 14, color: OmiColors.textTertiary),
+              const SizedBox(width: 4),
+              Text(
+                widget.message.memoryAction == 'updated' ? context.l10n.memoryReviewUpdated : context.l10n.saved,
+                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }

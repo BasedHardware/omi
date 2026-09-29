@@ -50,27 +50,24 @@ struct MeetingNoteScreenshotsLayout<BeforeScreenshots: View, AfterScreenshots: V
   @ObservedObject var store: MeetingScreenshotsStore
 
   let conversation: ServerConversation
-  let date: Date
   let beforeScreenshots: BeforeScreenshots
   let afterScreenshots: AfterScreenshots
 
   init(
     store: MeetingScreenshotsStore,
     conversation: ServerConversation,
-    date: Date,
     @ViewBuilder beforeScreenshots: () -> BeforeScreenshots,
     @ViewBuilder afterScreenshots: () -> AfterScreenshots
   ) {
     self.store = store
     self.conversation = conversation
-    self.date = date
     self.beforeScreenshots = beforeScreenshots()
     self.afterScreenshots = afterScreenshots()
   }
 
   var body: some View {
     beforeScreenshots
-    MeetingNoteScreenshotStrip(store: store, conversation: conversation, date: date)
+    MeetingNoteScreenshotStrip(store: store, conversation: conversation)
     afterScreenshots
   }
 }
@@ -220,7 +217,10 @@ struct MeetingNoteHeaderInset: View {
 struct MeetingNoteScreenshotStrip: View {
   @ObservedObject var store: MeetingScreenshotsStore
   let conversation: ServerConversation
-  let date: Date
+
+  private var selectionWindow: MeetingScreenshotSelectionWindow? {
+    MeetingScreenshotSelectionWindow.resolve(conversation)
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -246,11 +246,10 @@ struct MeetingNoteScreenshotStrip: View {
         onDelete: { frame in await store.deleteFrame(frameID: frame.id) })
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .task(id: conversation.id) {
+    .task(id: "\(conversation.id):\(selectionWindow?.fingerprint ?? "untrusted")") {
       store.load(
         conversationID: conversation.id,
-        start: date,
-        end: conversation.finishedAt ?? date.addingTimeInterval(3600))
+        selectionWindow: selectionWindow)
     }
   }
 }

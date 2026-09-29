@@ -11233,7 +11233,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get openCall => 'Buka panggilan';
 
   @override
-  String get captureRecoveryBanner => 'Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki';
+  String get captureRecoveryBanner => 'Omi tidak mengirim audio — ketuk untuk menghubungkan kembali';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11416,4 +11416,85 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Gelap';
+
+  @override
+  String get chatDiscardRecording => 'Buang';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Tidak terdengar — coba lagi';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Beri masukan';
+
+  @override
+  String get feedbackAllGood => 'Semua baik-baik saja';
+
+  @override
+  String get feedbackChatWithUs => 'Ingin menambahkan detail? Ngobrol dengan kami';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Tidak akurat';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Tidak lengkap';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Tidak relevan';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Konteks salah';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Hal lain';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Audio hilang';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Transkripsi buruk';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Pembicara salah';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Tertunda atau macet';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Terfragmentasi atau terduplikasi';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Hal lain';
+
+  @override
+  String get searchPeople => 'Cari orang';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Tambahkan \"$query\" sebagai orang baru';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Tampilkan semua $count orang';
+  }
 }

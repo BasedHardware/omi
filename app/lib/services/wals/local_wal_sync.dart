@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -46,6 +47,39 @@ class WalRetentionRisk {
 /// One batch is one server-side sync job, and a job must finish inside the
 /// backend's 600s stale guard (backend/database/sync_jobs.py).
 const _syncUploadBatchLimit = 5;
+
+/// Optional S1 file-position claim. The upload remains valid when a legacy or
+/// mixed batch cannot make a single bounded claim; the server then records
+/// unknown coverage instead of inventing positions from timestamps.
+String? captureEvidenceUploadHeader(List<Wal> wals, List<File> files) {
+  if (!const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE') || wals.length != files.length || wals.isEmpty) {
+    return null;
+  }
+  final claims = <Map<String, dynamic>>[];
+  for (var i = 0; i < wals.length; i++) {
+    final wal = wals[i];
+    if (wal.captureRoot == null ||
+        wal.sourceFrameStart == null ||
+        wal.sourceClockEpoch == null ||
+        wal.totalFrames <= 0 ||
+        wal.channel != 1 ||
+        (wal.codec != BleAudioCodec.opus && wal.codec != BleAudioCodec.pcm16)) {
+      return null;
+    }
+    claims.add({
+      'name': files[i].uri.pathSegments.last,
+      'capture_root': wal.captureRoot,
+      'clock_epoch': wal.sourceClockEpoch,
+      'source_frame_start': wal.sourceFrameStart,
+      'frame_count': wal.totalFrames,
+      'rate_hz': wal.sampleRate,
+      'codec': wal.codec.name,
+      'channel': 'mono',
+    });
+  }
+  final encoded = jsonEncode({'version': 1, 'files': claims});
+  return utf8.encode(encoded).length <= 4096 ? encoded : null;
+}
 
 enum SyncJobTerminalPolicy { wait, acknowledge, retry }
 
@@ -125,9 +159,15 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
   final ordered = List<Wal>.from(pending)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
   if (ordered.isEmpty) return const [];
   final conversationId = ordered.first.conversationId;
+  final recordingSessionId = ordered.first.recordingSessionId;
   final locationKey = _walLocationBatchKey(ordered.first);
   return ordered
-      .where((wal) => wal.conversationId == conversationId && _walLocationBatchKey(wal) == locationKey)
+      .where(
+        (wal) =>
+            wal.conversationId == conversationId &&
+            wal.recordingSessionId == recordingSessionId &&
+            _walLocationBatchKey(wal) == locationKey,
+      )
       .take(_syncUploadBatchLimit)
       .toList();
 }
@@ -136,6 +176,9 @@ class LocalWalSyncImpl implements LocalWalSync {
   List<Wal> _wals = [];
 
   List<WalFrame> _frames = [];
+  String? _captureEvidenceRoot;
+  int _nextSourceFramePosition = 0;
+  int _sourceClockEpoch = 0;
   List<bool> _frameSynced = [];
 
   Timer? _chunkingTimer;
@@ -149,6 +192,20 @@ class LocalWalSyncImpl implements LocalWalSync {
   String? _deviceModel;
   Geolocation? _sessionGeolocation;
   int? _sessionGeolocationSetAt;
+  String? _activeRecordingSessionId;
+  String? _conversationStampRecordingId;
+
+  void setActiveRecordingSessionId(String? recordingSessionId) {
+    final trimmed = recordingSessionId?.trim();
+    _activeRecordingSessionId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
+
+  /// Recording id captured before a flush. [stampConversationId] keeps its
+  /// original signature so session spies do not have to learn a new argument.
+  void prepareConversationStamp(String? recordingSessionId) {
+    final trimmed = recordingSessionId?.trim();
+    _conversationStampRecordingId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
 
   bool _isCancelled = false;
 
@@ -229,6 +286,9 @@ class LocalWalSyncImpl implements LocalWalSync {
     _wals = [];
     _frames = [];
     _frameSynced = [];
+    _captureEvidenceRoot = null;
+    _nextSourceFramePosition = 0;
+    _sourceClockEpoch = 0;
   }
 
   /// Completes when _initializeWals() finishes loading WALs from disk.
@@ -416,6 +476,8 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     _framesPerSecond = codec.getFramesPerSecond();
     _codec = codec;
+    _sourceClockEpoch++;
+    _nextSourceFramePosition = 0;
   }
 
   @override
@@ -448,6 +510,17 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     var high = pivot;
     var low = 0;
+    final evidenceFrames = _frames.sublist(low, high);
+    final evidenceRoot = evidenceFrames.first.captureRoot;
+    final evidenceStart = evidenceFrames.first.sourceFramePosition;
+    final evidenceEpoch = evidenceFrames.first.sourceClockEpoch;
+    final stableEvidence = evidenceRoot != null &&
+        evidenceStart != null &&
+        evidenceEpoch != null &&
+        evidenceFrames.asMap().entries.every((entry) =>
+            entry.value.captureRoot == evidenceRoot &&
+            entry.value.sourceClockEpoch == evidenceEpoch &&
+            entry.value.sourceFramePosition == evidenceStart + entry.key);
     var chunk = _frames.sublist(low, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
     var chunkFrameCount = high - low;
@@ -485,14 +558,29 @@ class LocalWalSyncImpl implements LocalWalSync {
           totalFrames: chunkFrameCount,
           syncedFrameOffset: syncedOffset,
           ownerUid: _currentWalOwnerUid(),
+          captureRoot: stableEvidence ? evidenceRoot : null,
+          sourceFrameStart: stableEvidence ? evidenceStart : null,
+          sourceClockEpoch: stableEvidence ? evidenceEpoch : null,
           geolocation: _copyGeolocation(_sessionGeolocation),
+          recordingSessionId: _activeRecordingSessionId,
         );
         _wals.add(wal);
       } else {
         wal = _wals[walIdx];
+        final contiguousEvidence = stableEvidence &&
+            wal.captureRoot == evidenceRoot &&
+            wal.sourceClockEpoch == evidenceEpoch &&
+            wal.sourceFrameStart != null &&
+            wal.sourceFrameStart! + wal.totalFrames == evidenceStart;
+        final oldFrameCount = wal.totalFrames;
         wal.data.addAll(chunk);
         wal.storage = WalStorage.mem;
-        wal.totalFrames = chunkFrameCount;
+        wal.totalFrames = contiguousEvidence ? oldFrameCount + chunkFrameCount : chunkFrameCount;
+        if (!contiguousEvidence) {
+          wal.captureRoot = null;
+          wal.sourceFrameStart = null;
+          wal.sourceClockEpoch = null;
+        }
         wal.syncedFrameOffset = syncedOffset;
         wal.status = syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss;
         _wals[walIdx] = wal;
@@ -687,6 +775,17 @@ class LocalWalSyncImpl implements LocalWalSync {
     if (high <= 0) return;
 
     var timerEnd = _now().millisecondsSinceEpoch ~/ 1000;
+    final evidenceFrames = _frames.sublist(0, high);
+    final evidenceRoot = evidenceFrames.first.captureRoot;
+    final evidenceStart = evidenceFrames.first.sourceFramePosition;
+    final evidenceEpoch = evidenceFrames.first.sourceClockEpoch;
+    final stableEvidence = evidenceRoot != null &&
+        evidenceStart != null &&
+        evidenceEpoch != null &&
+        evidenceFrames.asMap().entries.every((entry) =>
+            entry.value.captureRoot == evidenceRoot &&
+            entry.value.sourceClockEpoch == evidenceEpoch &&
+            entry.value.sourceFramePosition == evidenceStart + entry.key);
     var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - high ~/ _framesPerSecond;
     var chunkFrameCount = high;
@@ -724,7 +823,11 @@ class LocalWalSyncImpl implements LocalWalSync {
             totalFrames: chunkFrameCount,
             syncedFrameOffset: syncedOffset,
             ownerUid: _currentWalOwnerUid(),
+            captureRoot: stableEvidence ? evidenceRoot : null,
+            sourceFrameStart: stableEvidence ? evidenceStart : null,
+            sourceClockEpoch: stableEvidence ? evidenceEpoch : null,
             geolocation: _copyGeolocation(_sessionGeolocation),
+            recordingSessionId: _activeRecordingSessionId,
           ),
         );
     }
@@ -740,15 +843,27 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   /// Stamp all session WALs with the given conversationId and persist to disk.
   /// This makes WAL→conversation linkage survive app kill.
+  ///
+  /// A WAL created for the recording passed to [prepareConversationStamp] is
+  /// stamped even when its backdated [Wal.timerStart] is earlier than
+  /// [sessionStartSeconds]. A WAL that already belongs to a different recording
+  /// is left alone, so a session roll during the flush cannot attach the next
+  /// recording to this conversation.
   Future<void> stampConversationId(int sessionStartSeconds, String conversationId) async {
     final generation = _sessionGeneration;
     final now = _now().millisecondsSinceEpoch ~/ 1000;
+    final recordingId = _conversationStampRecordingId;
+    _conversationStampRecordingId = null;
+    final matchRecording = recordingId != null && recordingId.isNotEmpty;
     int stamped = 0;
     for (final wal in _wals) {
-      if (wal.status == WalStatus.miss &&
-          wal.timerStart >= sessionStartSeconds &&
-          wal.timerStart <= now &&
-          wal.conversationId == null) {
+      if (wal.status != WalStatus.miss || wal.conversationId != null) continue;
+      final walRecording = wal.recordingSessionId;
+      final foreignRecording = walRecording != null && walRecording.isNotEmpty && walRecording != recordingId;
+      if (foreignRecording) continue;
+      final matchesRecording = matchRecording && walRecording == recordingId;
+      final inWindow = wal.timerStart >= sessionStartSeconds && wal.timerStart <= now;
+      if (matchesRecording || inWindow) {
         wal.conversationId = conversationId;
         stamped++;
       }
@@ -879,9 +994,33 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  void onFrameCaptured(WalFrame frame) {
-    _frames.add(frame);
+  WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot}) {
+    if (captureRoot != _captureEvidenceRoot) {
+      _captureEvidenceRoot = captureRoot;
+      // A restored WAL for the same root is the durable high-water mark.
+      // Never reuse an ordinal after an app restart or an index reload.
+      final prior = _wals.where((wal) => wal.captureRoot == captureRoot && wal.sourceFrameStart != null).toList();
+      if (captureRoot != null && prior.isNotEmpty) {
+        _sourceClockEpoch = prior.map((wal) => wal.sourceClockEpoch ?? 0).reduce(max);
+        _nextSourceFramePosition = prior
+            .where((wal) => wal.sourceClockEpoch == _sourceClockEpoch)
+            .map((wal) => wal.sourceFrameStart! + wal.totalFrames)
+            .reduce(max);
+      } else {
+        _nextSourceFramePosition = 0;
+        _sourceClockEpoch = 0;
+      }
+    }
+    final positioned = WalFrame(
+      payload: frame.payload,
+      syncKey: frame.syncKey,
+      captureRoot: captureRoot,
+      sourceFramePosition: captureRoot == null ? null : _nextSourceFramePosition++,
+      sourceClockEpoch: captureRoot == null ? null : _sourceClockEpoch,
+    );
+    _frames.add(positioned);
     _frameSynced.add(false);
+    return positioned;
   }
 
   @override
@@ -1054,6 +1193,11 @@ class LocalWalSyncImpl implements LocalWalSync {
         final result = await _uploadGate.upload(
           files,
           conversationId: batchWals.first.conversationId,
+          captureEvidence: captureEvidenceUploadHeader(batchWals, files),
+          recordingSessionId: batchWals.first.recordingSessionId,
+          audioStartSeconds: batchWals.map((wal) => wal.timerStart).reduce((a, b) => a < b ? a : b).toDouble(),
+          audioEndSeconds:
+              batchWals.map((wal) => wal.timerStart + wal.seconds).reduce((a, b) => a > b ? a : b).toDouble(),
           claimLiveCapture: claimLiveCapture,
           geolocation: batchWals.first.geolocation,
         );
@@ -1280,6 +1424,10 @@ class LocalWalSyncImpl implements LocalWalSync {
       final result = await _uploadGate.upload(
         [walFile],
         conversationId: walToSync.conversationId,
+        captureEvidence: captureEvidenceUploadHeader([walToSync], [walFile]),
+        recordingSessionId: walToSync.recordingSessionId,
+        audioStartSeconds: walToSync.timerStart.toDouble(),
+        audioEndSeconds: (walToSync.timerStart + walToSync.seconds).toDouble(),
         claimLiveCapture: claimLiveCapture,
         geolocation: walToSync.geolocation,
       );

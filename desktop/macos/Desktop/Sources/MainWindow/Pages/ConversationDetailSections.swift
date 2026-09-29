@@ -319,6 +319,7 @@ struct SuggestedAppCard: View {
           .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundColor(Ink.primary)
           .lineLimit(1)
+          .help(app.name)
       }
       .frame(width: 80)
       .padding(.vertical, OmiSpacing.sm)

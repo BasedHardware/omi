@@ -2,14 +2,18 @@ package com.friend.ios.ble
 
 import com.friend.ios.BleBatteryPoint
 import com.friend.ios.BleDeviceDiagnostics
+import com.friend.ios.BleDisconnectEvent
 import com.friend.ios.BleHostApi
 
 
 import android.app.Activity
+import android.content.Context
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.util.Log
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Implements the Pigeon BleHostApi interface.
@@ -134,6 +138,7 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
 
     override fun startRssiStreaming(uuid: String) {
         bleManager.isRssiStreamingEnabled = true
+        bleManager.sampleRssi(uuid)
     }
 
     override fun stopRssiStreaming(uuid: String) {
@@ -149,15 +154,55 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         if (service != null) {
             callback(Result.success(service.getDeviceDiagnostics(uuid)))
         } else {
+            val context = getActivity()?.applicationContext
+            val addr = uuid.uppercase()
+            val prefs = context?.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE)
+            val history = try { JSONArray(prefs?.getString("disconnect_history_$addr", "[]")) } catch (_: Exception) { JSONArray() }
+            val events = (0 until history.length()).mapNotNull { i -> history.optJSONObject(i) }.map { obj ->
+                BleDisconnectEvent(
+                    timestamp = obj.optLong("timestamp", 0L), reason = obj.optString("reason", "unknown"),
+                    reasonCode = obj.optLong("reasonCode", -1L), isManual = obj.optBoolean("isManual", false),
+                    eventType = obj.optString("eventType", "disconnect"), lastRssi = obj.optLong("lastRssi", 0L),
+                    connectionDurationMs = obj.optLong("connectionDurationMs", 0L), appState = obj.optString("appState", ""),
+                    timeToReconnectMs = obj.optLong("timeToReconnectMs", 0L), rssiTrend = obj.optString("rssiTrend", "")
+                )
+            }
             callback(Result.success(BleDeviceDiagnostics(
-                disconnectHistory = emptyList(),
-                reconnectionCount = 0,
+                disconnectHistory = events,
+                reconnectionCount = (prefs?.getInt("reconnect_count_$addr", 0) ?: 0).toLong(),
                 connectedAt = 0,
-                failToConnectCount = 0,
+                failToConnectCount = (prefs?.getInt("fail_to_connect_count_$addr", 0) ?: 0).toLong(),
                 nativeBackgroundBytesConsumed = 0,
                 nativeBackgroundPacketsConsumed = 0
             )))
         }
+    }
+
+    override fun getExtendedDeviceDiagnostics(uuid: String, callback: (Result<String>) -> Unit) {
+        val service = OmiBleForegroundService.instance
+        if (service != null) {
+            callback(Result.success(service.getExtendedDeviceDiagnostics(uuid)))
+            return
+        }
+        val addr = uuid.uppercase()
+        val context = getActivity()?.applicationContext
+        val prefs = context?.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE)
+        fun array(key: String): JSONArray = try { JSONArray(prefs?.getString(key, "[]")) } catch (_: Exception) { JSONArray() }
+        val battery = context?.getSharedPreferences("battery_history", Context.MODE_PRIVATE)
+        val batteryHistory = try { JSONArray(battery?.getString("battery_history_$addr", "[]")) } catch (_: Exception) { JSONArray() }
+        val samples = JSONArray()
+        bleManager.rssiHistory[addr]?.let { deque -> synchronized(deque) {
+            deque.forEach { (ts, rssi) -> samples.put(JSONObject().put("ts", ts).put("rssi", rssi)) }
+        } }
+        callback(Result.success(JSONObject()
+            .put("disconnect_history_v2", array("disconnect_history_$addr"))
+            .put("battery_history_v2", batteryHistory)
+            .put("rssi_samples", samples)
+            .put("firmware_diagnostics", array("firmware_$addr"))
+            .put("lifecycle_events", array("lifecycle"))
+            .put("ble_log", array("log_$addr"))
+            .put("counters_since", prefs?.getLong("counters_since_$addr", 0L)?.takeIf { it > 0L } ?: JSONObject.NULL)
+            .toString()))
     }
 
     // ── CompanionDeviceManager ──

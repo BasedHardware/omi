@@ -13,12 +13,13 @@ enum PersistedCaptureLaunchPolicy {
   static func shouldStartTranscription(
     intentEnabled: Bool,
     isTranscribing: Bool,
-    micPermissionAuthorized: Bool
+    micPermissionAuthorized: Bool,
+    isWaitingForMicrophone: Bool = false
   ) -> Bool {
     // Restores run on launch/reactivation/key-load/sync; without a mic grant an
     // attempted start would raise the TCC sheet (the skip-mic loop) or bounce a
     // denied alert. The intent waits for an explicit Listen/Grant action instead.
-    intentEnabled && !isTranscribing && micPermissionAuthorized
+    intentEnabled && !isTranscribing && !isWaitingForMicrophone && micPermissionAuthorized
   }
 
   static func shouldStartScreenAnalysis(intentEnabled: Bool, isMonitoring: Bool) -> Bool {
@@ -925,12 +926,23 @@ struct DesktopHomeView: View {
     if PersistedCaptureLaunchPolicy.shouldStartTranscription(
       intentEnabled: settings.audioRecordingMode != .off,
       isTranscribing: appState.isTranscribing,
-      micPermissionAuthorized: appState.hasMicrophonePermission
+      micPermissionAuthorized: appState.hasMicrophonePermission,
+      isWaitingForMicrophone: appState.isWaitingForMicrophone
     ) {
       log("DesktopHomeView: Restoring transcription from persisted intent (\(reason))")
       // Local transcription does not require remote API keys. AppState owns the
       // permission and provider checks, so it remains the single start boundary.
-      appState.startTranscription(userInitiated: false)
+      let presence = CapturePresence.current()
+      if ArmedCaptureRecoveryPolicy.shouldWaitForUpdateRelaunch(
+        isUpdateRelaunch: CaptureLaunchContext.kindForStart() == .updateRelaunch,
+        consoleActive: presence.consoleSessionActive,
+        screenLocked: presence.screenLocked,
+        displaysAsleep: presence.displaysAsleep
+      ) {
+        appState.armedMicrophoneRecovery.enter(appState: appState)
+      } else {
+        appState.startTranscription(userInitiated: false)
+      }
     }
 
     let plugin = ProactiveAssistantsPlugin.shared

@@ -223,7 +223,9 @@ def test_deploy_contract_routes_both_backfill_budget_alerts():
     )
     assert 'provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}' in composite
     assert 'for THRESHOLD in 70 90' in action
-    assert 'gcloud monitoring policies create' in action
+    assert '.github/scripts/ensure_monitoring_metric_alert_policy.py' in action
+    assert 'reconcile_sync_backfill_alert_policy.py' in action
+    assert 'verify_sync_backfill_alert_policy.py' in action
     assert '--notification-channels="$ALERT_CHANNELS"' in action
     assert 'METRIC="sync_backfill_dispatch_abort"' in action
     assert 'The request was aborted because there was no available instance' in action
@@ -236,7 +238,7 @@ def test_sync_backfill_lifecycle_alerts_on_scheduler_failure_and_missing_sweep()
     assert 'AttemptFinished' in action
     assert 'action=sweep_summary outcome=done' in action
     assert "CONDITION='absent'" in action
-    assert "DURATION='10min'" in action
+    assert "DURATION='600s'" in action
 
 
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
@@ -275,6 +277,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     # instance keeps a scale-from-zero poke from being rejected outright.
     assert '--min-instances=1' in action
     assert '--max-instances=30' in action
+    assert '--max=30' in action
     assert '--concurrency=1' in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     assert 'gcloud tasks queues create sync-backfill' in action
@@ -325,6 +328,8 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     ):
         assert run.count(flag) == 2
     assert 'sync_backfill_dispatch_abort' in abort['run']
+    assert 'THRESHOLD=30' in abort['run'] and 'WINDOW=1800s' in abort['run']
+    assert abort['run'].count('--threshold-value="$THRESHOLD" --alignment-period="$WINDOW"') == 2
 
 
 def test_cloud_run_default_service_lists_include_sync_backfill():
@@ -496,6 +501,7 @@ def test_server_manifest_allows_only_one_content_set_per_conversation(monkeypatc
 
 
 def test_backfill_reservation_maps_user_and_global_caps(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     # Admission caps are opt-in now (Cloud Tasks queue is the pacer); enable them
     # to exercise the user/global cap → reason mapping.
     monkeypatch.setenv('SYNC_BACKFILL_ADMISSION_LIMITS', 'true')

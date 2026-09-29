@@ -502,11 +502,14 @@ class _MoveOption extends StatelessWidget {
                       if (description != null && description!.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 3),
-                          child: Text(
-                            description!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 12, color: OmiColors.textTertiary),
+                          child: Tooltip(
+                            message: description!,
+                            child: Text(
+                              description!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 12, color: OmiColors.textTertiary),
+                            ),
                           ),
                         ),
                     ],

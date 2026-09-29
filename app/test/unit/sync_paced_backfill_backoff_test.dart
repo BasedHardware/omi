@@ -177,7 +177,11 @@ void main() {
             uploader: (
               files, {
               onUploadProgress,
+              captureEvidence,
               conversationId,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
               claimLiveCapture = false,
               geolocation,
             }) async {
@@ -226,7 +230,11 @@ void main() {
           uploader: (
             files, {
             onUploadProgress,
+            captureEvidence,
             conversationId,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
             claimLiveCapture = false,
             geolocation,
           }) async {
@@ -258,7 +266,11 @@ void main() {
         uploader: (
           files, {
           onUploadProgress,
+          captureEvidence,
           conversationId,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
           claimLiveCapture = false,
           geolocation,
         }) async {
@@ -326,7 +338,11 @@ void main() {
             uploader: (
               files, {
               onUploadProgress,
+              captureEvidence,
               conversationId,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
               claimLiveCapture = false,
               geolocation,
             }) async {
@@ -380,7 +396,11 @@ void main() {
             uploader: (
               files, {
               onUploadProgress,
+              captureEvidence,
               conversationId,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
               claimLiveCapture = false,
               geolocation,
             }) async {
@@ -435,7 +455,11 @@ void main() {
             uploader: (
               files, {
               onUploadProgress,
+              captureEvidence,
               conversationId,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
               claimLiveCapture = false,
               geolocation,
             }) async {

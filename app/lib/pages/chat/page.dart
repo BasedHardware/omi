@@ -47,6 +47,7 @@ import 'package:omi/widgets/bottom_nav_bar.dart';
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
   final String? autoMessage;
+  final String? initialDraft;
   final bool autoStartVoice;
   final ChatPageContext? initialChatContext;
 
@@ -54,6 +55,7 @@ class ChatPage extends StatefulWidget {
     super.key,
     this.isPivotBottom = false,
     this.autoMessage,
+    this.initialDraft,
     this.autoStartVoice = false,
     this.initialChatContext,
   });
@@ -73,6 +75,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   MessageProvider? _messageProvider;
 
   ChatScrollMode _chatScrollMode = ChatScrollMode.followingBottom;
+  bool _showLatestJump = false;
+  Timer? _latestJumpIdleTimer;
   final List<Timer> _pendingScrollTimers = [];
   final List<Timer> _ownedLifecycleTimers = [];
   bool _isProgrammaticScroll = false;
@@ -96,6 +100,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   @override
   void initState() {
     WidgetsBinding.instance.addObserver(this);
+    if (widget.initialDraft != null) textController.text = widget.initialDraft!;
     apps = prefs.appsList;
     scrollController = ScrollController();
     textFieldFocusNode = FocusNode();
@@ -196,6 +201,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     WidgetsBinding.instance.removeObserver(this);
     _messageProvider?.removeListener(_onMessageProviderChanged);
     _cancelOwnedLifecycleTimers();
+    _latestJumpIdleTimer?.cancel();
     _cancelPendingScrolls();
     textController.dispose();
     scrollController.dispose();
@@ -384,7 +390,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                 ),
                                               ),
                                             ),
-                                            if (_chatScrollMode == ChatScrollMode.freeScrolling)
+                                            if (_chatScrollMode == ChatScrollMode.freeScrolling && _showLatestJump)
                                               _buildJumpToLatestButton(),
                                           ],
                                         ),
@@ -468,8 +474,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                       // sits at the right x-position. The actual button is
                                       // rendered as a Positioned overlay below so the pill's
                                       // shadow can't bleed onto it.
-                                      if ((voiceRecorderProvider.isActive &&
-                                              voiceRecorderProvider.state == VoiceRecorderState.recording) ||
+                                      if (voiceRecorderProvider.isActive ||
                                           (!voiceRecorderProvider.isActive && shouldShowMenuButton()))
                                         const SizedBox(width: 56),
                                       // CENTER pill — text field/waveform + right-side button stays inside.
@@ -556,18 +561,27 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                               ),
                                               const SizedBox(width: 8),
                                               // Right-side button — stays INSIDE the pill.
-                                              // Send button while recording — transcribes and sends in one tap.
-                                              if (voiceRecorderProvider.isActive)
+                                              // Stop fills the draft; Send transcribes and sends.
+                                              if (voiceRecorderProvider.state == VoiceRecorderState.recording)
                                                 ChatComposerRoundButton(
+                                                  buttonKey: const ValueKey('omi.chat.voice.transcribe'),
+                                                  icon: const Icon(Icons.stop),
+                                                  label: context.l10n.stopRecording,
+                                                  onPressed: () {
+                                                    OmiHaptics.light();
+                                                    voiceRecorderProvider.processRecording();
+                                                  },
+                                                ),
+                                              if (voiceRecorderProvider.state == VoiceRecorderState.recording)
+                                                ChatComposerRoundButton(
+                                                  buttonKey: const ValueKey('omi.chat.voice.send'),
                                                   icon: const FaIcon(FontAwesomeIcons.arrowUp),
                                                   label: context.l10n.chatSendMessage,
-                                                  onPressed: voiceRecorderProvider.state == VoiceRecorderState.recording
-                                                      ? () {
-                                                          OmiHaptics.medium();
-                                                          voiceRecorderProvider.requestAutoSendOnNextTranscript();
-                                                          voiceRecorderProvider.processRecording();
-                                                        }
-                                                      : null,
+                                                  onPressed: () {
+                                                    OmiHaptics.medium();
+                                                    voiceRecorderProvider.requestAutoSendOnNextTranscript();
+                                                    voiceRecorderProvider.processRecording();
+                                                  },
                                                 ),
                                               // Microphone button — round white pill matching the send button.
                                               if (!voiceRecorderProvider.isActive &&
@@ -617,21 +631,21 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                       ),
                                     ],
                                   ),
-                                  // LEFT button — Stop (recording) or Plus (idle). Rendered AFTER
+                                  // LEFT button — Discard (voice) or Plus (idle). Rendered AFTER
                                   // the inner Row so it sits on top of the pill's shadow.
-                                  if (voiceRecorderProvider.isActive &&
-                                      voiceRecorderProvider.state == VoiceRecorderState.recording)
+                                  if (voiceRecorderProvider.isActive)
                                     Positioned(
                                       left: 0,
                                       top: 0,
                                       bottom: 0,
                                       child: Center(
                                         child: ChatComposerSideButton(
-                                          icon: const Icon(Icons.stop),
-                                          label: context.l10n.stopRecording,
+                                          key: const ValueKey('omi.chat.voice.discard'),
+                                          icon: const Icon(Icons.close),
+                                          label: context.l10n.chatDiscardRecording,
                                           onPressed: () {
                                             OmiHaptics.light();
-                                            voiceRecorderProvider.processRecording();
+                                            voiceRecorderProvider.discardRecording();
                                           },
                                         ),
                                       ),
@@ -826,12 +840,35 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       isUserOrDragScroll: isUserScroll || isDragScroll,
       atLiveEdge: ChatScrollPolicy.atLiveEdge(notification.metrics),
     );
-    if (next == null) return false;
+    if (next == null) {
+      if (_chatScrollMode == ChatScrollMode.freeScrolling && (isUserScroll || isDragScroll)) {
+        _showLatestJumpOnActivity();
+      }
+      return false;
+    }
 
     _chatScrollMode = next;
     _cancelPendingScrolls();
+    if (next == ChatScrollMode.freeScrolling) {
+      _showLatestJumpOnActivity();
+    } else {
+      _latestJumpIdleTimer?.cancel();
+      _showLatestJump = false;
+    }
     if (mounted) setState(() {});
     return false;
+  }
+
+  void _showLatestJumpOnActivity() {
+    _latestJumpIdleTimer?.cancel();
+    if (!_showLatestJump) {
+      _showLatestJump = true;
+      if (mounted) setState(() {});
+    }
+    _latestJumpIdleTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (!mounted || _chatScrollMode != ChatScrollMode.freeScrolling) return;
+      setState(() => _showLatestJump = false);
+    });
   }
 
   Widget _buildJumpToLatestButton() {
@@ -844,6 +881,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   void _resumeFollowingAndScroll({int delayMs = 0, bool animated = false}) {
     _cancelPendingScrolls();
+    _latestJumpIdleTimer?.cancel();
+    _showLatestJump = false;
     _chatScrollMode = ChatScrollMode.followingBottom;
     if (mounted) setState(() {});
     _scheduleModeAwareScroll(delayMs: delayMs, animated: animated, force: true);
