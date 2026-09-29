@@ -276,6 +276,13 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("name: Desktop Swift Build & Tests", self.jobs["desktop-swift"])
         self.assertIn("name: Desktop Swift Release Compile", self.jobs["desktop-swift-release-compile"])
 
+    def test_deferred_fork_aggregate_is_neutral_only_when_heavy_jobs_skip(self):
+        gate = self.jobs["desktop-swift"]
+        self.assertIn("::notice title=Heavy CI deferred::", gate)
+        self.assertIn("Deferred Desktop Swift verification must be skipped", gate)
+        self.assertIn("Deferred Desktop Swift release compile must be skipped", gate)
+        self.assertIn('exit 0', gate)
+
     def test_notification_boundary_runs_targeted_release_regression(self):
         job = self.jobs["desktop-swift-release-compile"]
         for path in (
@@ -552,7 +559,10 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             with self.subTest(source=name):
                 self.assertTrue((root / f"{name}.swift").read_text().startswith("#if compiler(>=6.4)\n"))
         snapshot = (root / "SiriSnapshotStore.swift").read_text()
-        self.assertIn("#if compiler(>=6.4)\nfinal class SiriSnapshotStore", snapshot)
+        compiler_gate = snapshot.index("#if compiler(>=6.4)")
+        snapshot_store = snapshot.index("final class SiriSnapshotStore")
+        self.assertLess(compiler_gate, snapshot_store)
+        self.assertIn("#endif", snapshot[snapshot_store:])
         bridge = (root / "SiriBridge.swift").read_text()
         self.assertIn("#else\nimport Flutter", bridge)
         self.assertIn("final class SiriBridge: SiriIndexApi", bridge.split("#else", 1)[1])

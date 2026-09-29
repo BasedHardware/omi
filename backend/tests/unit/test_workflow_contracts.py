@@ -316,6 +316,9 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     # unlabeled fork must report them skipped, never silently green.
     assert 'guardrails_required=success' in workflow
     assert 'if [ "$GUARDRAILS_RESULT" != "$guardrails_required" ]' in workflow
+    assert '::notice title=Heavy CI deferred::' in workflow
+    assert 'echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"' in workflow
+    assert 'guardrails_required=skipped' in workflow
     # The runner slices the deterministic selection round-robin with the
     # one-based mapping (line i runs in shard ((i - 1) % total) + 1, so
     # shard labels match the files they carry); `index` is an awk builtin,
@@ -483,6 +486,19 @@ def test_mobile_jobs_share_the_repository_flutter_toolchain_pin():
     action_count = mobile_checks.count("uses: subosito/flutter-action")
     assert action_count == mobile_checks.count(pinned)
     assert action_count >= 6
+
+
+def test_backend_hermetic_fork_deferral_stays_neutral_and_requires_skipped_jobs():
+    repo = BACKEND_DIR.parent
+    workflow = (repo / ".github/workflows/backend-hermetic-e2e.yml").read_text(encoding="utf-8")
+    gate = workflow.split("  merge-gate:\n", 1)[1].split("  post-merge-failure-issues:\n", 1)[0]
+
+    assert "::notice title=Heavy CI deferred::$notice" in gate
+    assert 'echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"' in gate
+    assert "required_result=skipped" in gate
+    assert '[[ "$HERMETIC_E2E_RESULT" == "$required_result" ]]' in gate
+    assert '[[ "$LISTEN_PUSHER_RESULT" == "$listen_required" ]]' in gate
+    assert '[[ "$SYNC_CLOUD_TASKS_RESULT" == "$sync_required" ]]' in gate
 
 
 def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_parallel():

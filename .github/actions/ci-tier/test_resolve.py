@@ -65,14 +65,25 @@ class CITierTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             env = dict(os.environ, CHANGES_RESULT="success", FULL_CI="false",
                        HAS_GENERATED="false", HAS_DART="false", HAS_JOURNEYS="false",
-                       HAS_ANDROID="false", HAS_IOS="false", GITHUB_STEP_SUMMARY=str(Path(temp) / "summary"))
+                       HAS_ANDROID="false", HAS_IOS="false",
+                       GENERATED_FILES_RESULT="skipped", ANALYZE_AND_TEST_RESULT="skipped",
+                       DART_TIMEZONE_RESULT="skipped", JOURNEYS_RESULT="skipped",
+                       ANDROID_COMPILE_RESULT="skipped",
+                       ANDROID_UNIT_RESULT="skipped", IOS_COMPILE_RESULT="skipped",
+                       GITHUB_STEP_SUMMARY=str(Path(temp) / "summary"))
             result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("no mobile heavy checks selected", result.stdout)
             env["HAS_DART"] = "true"
             result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("::notice title=Heavy CI deferred::", result.stdout)
+            self.assertIn("a maintainer adds label ci:full, then Re-run all jobs", result.stdout)
+            self.assertIn("Heavy CI deferred:", Path(env["GITHUB_STEP_SUMMARY"]).read_text())
+            env["ANALYZE_AND_TEST_RESULT"] = "success"
+            result = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 1)
-            self.assertIn("a maintainer adds label ci:full, then Re-run all jobs", result.stderr)
+            self.assertIn("must be skipped", result.stderr)
 
 
 if __name__ == "__main__":
