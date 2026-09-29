@@ -3416,7 +3416,7 @@ class FloatingControlBarManager {
       guard !orderedUniqueMessageIds.isEmpty else { return nil }
       do {
         let response = try await APIClient.shared.shareChatMessages(messageIds: orderedUniqueMessageIds)
-        return response.url
+        return DesktopBackendEnvironment.tagShareURL(response.url)
       } catch {
         log("Failed to get chat share link: \(error)")
         return nil

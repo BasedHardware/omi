@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
@@ -59,6 +60,24 @@ void main() {
       await service.send(List<int>.filled(80, 1));
 
       expect(service.binaryAudioBytesSent, 400);
+    });
+
+    test('versioned source control precedes its binary frame', () {
+      final socket = _FakeSocket();
+      final service = serviceFor(socket);
+      service.sendEvidenceFrame(WalFrame(
+        payload: [1, 2, 3],
+        syncKey: FrameSyncKey([1]),
+        captureRoot: '12345678-1234-4234-8234-123456789abc',
+        sourceFramePosition: 7,
+        sourceClockEpoch: 2,
+      ));
+      final control = jsonDecode(socket.sent.first as String) as Map<String, dynamic>;
+      expect(control['type'], 'capture_evidence_frame');
+      expect(control['version'], 1);
+      expect(control['source_frame'], 7);
+      expect(socket.sent.last, [1, 2, 3]);
+      expect(service.binaryAudioBytesSent, 3);
     });
 
     test('does not count JSON control frames', () async {

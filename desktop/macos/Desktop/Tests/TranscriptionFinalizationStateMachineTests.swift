@@ -1013,6 +1013,34 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     XCTAssertTrue(compacted.contains { $0.speaker == "MIXED" })
   }
 
+  func testS1LineageWireIsOptionalAndRetainsOriginalUnits() throws {
+    func request(_ lineage: APIClient.CaptureEvidenceLineage?) -> APIClient.CreateConversationFromSegmentsRequest {
+      .init(
+        transcript_segments: [
+          .init(
+            text: "merged", speaker: "SPEAKER_00", speaker_id: 0,
+            is_user: true, person_id: nil, start: 0, end: 2)
+        ],
+        source: "desktop", started_at: nil, finished_at: nil, language: "en",
+        client_conversation_id: "root-1", conversation_role: "ambient",
+        conversation_finalization_reason: nil, client_processing: nil,
+        captureEvidence: lineage)
+    }
+    let off = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request(nil))) as? [String: Any])
+    XCTAssertNil(off["capture_evidence"])
+
+    let lineage = APIClient.CaptureEvidenceLineage(
+      version: 1, capability: "stable_artifact", captureRoot: "root-1",
+      clockDomain: "desktop_session_ms", lineage: "complete",
+      units: [.init(id: "7", startMs: 0, endMs: 900), .init(id: "8", startMs: 900, endMs: 2000)])
+    let on = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(request(lineage))) as? [String: Any])
+    let evidence = try XCTUnwrap(on["capture_evidence"] as? [String: Any])
+    XCTAssertEqual(evidence["capture_root"] as? String, "root-1")
+    let units = try XCTUnwrap(evidence["units"] as? [[String: Any]])
+    XCTAssertEqual(units.compactMap { $0["id"] as? String }, ["7", "8"])
+    XCTAssertEqual(units.compactMap { $0["end_ms"] as? Int }, [900, 2000])
+  }
+
   func testCompactionLeavesBackendSizedUploadsUnchanged() {
     let segments = (0..<3).map { index in
       APIClient.UploadSegment(

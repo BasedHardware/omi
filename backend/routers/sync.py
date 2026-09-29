@@ -107,6 +107,8 @@ from utils.subscription import (
     resolve_transcription_allowance,
 )
 from utils.sync import playback as sync_playback
+from config.capture_evidence import capture_evidence_dark_write_enabled
+from utils.capture_evidence import parse_sync_file_claims
 from utils.sync.files import (
     decode_files_to_wav,
     detect_source_from_filenames,
@@ -157,8 +159,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import SyncLane, classify_sync_lane
-from utils.sync import uid_sequencer
-from utils.sync import backfill_cutover
+from utils.sync import backfill_cutover, stage as sync_stage, uid_sequencer
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 logger = logging.getLogger(__name__)
@@ -168,7 +169,7 @@ AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
-router = APIRouter(route_class=MultipartMaxPartSizeRoute)
+router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(sync_stage.require_http_stage)])
 
 
 class SyncLocalFilesResultResponse(BaseModel):
@@ -880,12 +881,23 @@ async def sync_local_files_v2(
     conversation_id: str = Query(
         None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
     ),
+    recording_session_id: Optional[str] = Query(
+        None,
+        description=(
+            "Client recording session id. When conversation_id is omitted and one "
+            "conversation for this user, source, and device already carries this id, "
+            "attach the audio to that conversation."
+        ),
+    ),
+    audio_start_seconds: Optional[float] = Query(None),
+    audio_end_seconds: Optional[float] = Query(None),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
     x_request_id: Optional[str] = Header(None, alias='X-Request-ID'),
     x_cloud_trace_context: Optional[str] = Header(None, alias='X-Cloud-Trace-Context'),
     x_omi_sync_capture_manifest: Optional[str] = Header(None, alias='X-Omi-Sync-Capture-Manifest'),
+    x_omi_capture_evidence: Optional[str] = Header(None, alias='X-Omi-Capture-Evidence', include_in_schema=False),
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
 ):
     """
@@ -893,6 +905,10 @@ async def sync_local_files_v2(
     immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
+    if isinstance(recording_session_id, str):
+        recording_session_id = recording_session_id.strip() or None
+    else:
+        recording_session_id = None
     sync_app_build = sanitize_app_build(x_app_version)
     ledger_fence_mode = await run_blocking(db_executor, get_sync_ledger_fence_mode)
     if ledger_fence_mode is SyncLedgerFenceMode.STANDBY:
@@ -919,6 +935,9 @@ async def sync_local_files_v2(
     geolocation = geolocation_from_private_header(x_omi_conversation_geolocation)
 
     filenames = [f.filename or '' for f in files]
+    capture_claims = (
+        parse_sync_file_claims(x_omi_capture_evidence, filenames) if capture_evidence_dark_write_enabled() else {}
+    )
     manifest_claims = verify_capture_manifest(
         x_omi_sync_capture_manifest,
         uid,
@@ -1227,9 +1246,13 @@ async def sync_local_files_v2(
                 'job_id': job_id,
                 'uid': uid,
                 'raw_blob_paths': owned_paths,
+                **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
                 'source': source.value,
                 'should_lock': should_lock,
                 'conversation_id': conversation_id,
+                'recording_session_id': recording_session_id,
+                'audio_start_seconds': audio_start_seconds,
+                'audio_end_seconds': audio_end_seconds,
                 'geolocation': geolocation.model_dump(mode='json') if geolocation else None,
                 'client_device_id': client_device_context.client_device_id,
                 'client_platform': client_device_context.platform,
@@ -1476,6 +1499,10 @@ async def sync_local_files_v2(
                             inline_run_lock_token=inline_run_lock_token,
                             content_run_bound=ledger_fence_active,
                             ledger_fence_active=ledger_fence_active,
+                            **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
+                            recording_session_id=recording_session_id,
+                            audio_start_seconds=audio_start_seconds,
+                            audio_end_seconds=audio_end_seconds,
                         ),
                         name=f'sync_pipeline:{job_id}',
                     )
@@ -1723,7 +1750,6 @@ async def _maintain_uid_sequencer_lease(
             return
 
 
-# response_model omitted: the OIDC worker/sweeper are not app API surfaces.
 @router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
 async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
@@ -1751,17 +1777,20 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Persisted sequencer epochs survive the kill switch; old tasks keep their legacy path."""
-    if await run_blocking(db_executor, get_sync_ledger_fence_mode) is SyncLedgerFenceMode.STANDBY:
+    if await run_blocking(db_executor, uid_sequencer.production_fence_mode) is SyncLedgerFenceMode.STANDBY:
         return JSONResponse(status_code=503, content={'status': 'cutover_standby'})
     try:
         payload = await request.json()
     except Exception:
         return await _run_sync_job_body(request, task_retry_count)
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
+    if uid_sequencer.foreign_delivery(payload):
+        return JSONResponse(status_code=200, content={'status': 'foreign_stage'})
     if epoch is None:
         if (
             isinstance(payload, dict)
             and payload.get('lane') == SyncLane.BACKFILL.value
+            and uid_sequencer.production_stage()
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
@@ -1795,8 +1824,6 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                         backfill_cutover.uid_hash(payload['uid']),
                     )
             if legacy_job and legacy_job.get('status') == 'queued' and (sequencer_on or owner or pending):
-                # Polling's direct-task stale detector must stop once the
-                # durable UID registry owns a waiting legacy task.
                 marked = await run_blocking(
                     db_executor, update_sync_job, payload['job_id'], {'dispatch_mode': 'sequenced'}
                 )
@@ -1886,11 +1913,25 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
         source = ConversationSource(payload.get('source') or 'omi')
         should_lock = bool(payload.get('should_lock', False))
         conversation_id = payload.get('conversation_id')
+        recording_session_id = payload.get('recording_session_id')
+        if isinstance(recording_session_id, str):
+            recording_session_id = recording_session_id.strip() or None
+        else:
+            recording_session_id = None
+        audio_start_seconds = payload.get('audio_start_seconds')
+        audio_end_seconds = payload.get('audio_end_seconds')
+        if not isinstance(audio_start_seconds, (int, float)) or isinstance(audio_start_seconds, bool):
+            audio_start_seconds = None
+        if not isinstance(audio_end_seconds, (int, float)) or isinstance(audio_end_seconds, bool):
+            audio_end_seconds = None
         geolocation = geolocation_from_private_header(
             json.dumps(payload.get('geolocation')) if payload.get('geolocation') else None
         )
         client_device_id = payload.get('client_device_id')
         client_platform = payload.get('client_platform')
+        capture_claims = payload.get('capture_evidence_claims')
+        if not isinstance(capture_claims, dict) or len(capture_claims) > 20:
+            capture_claims = {}
         sync_lane = payload.get('lane') if payload.get('lane') in ('fresh', 'backfill') else SyncLane.FRESH.value
         content_id = payload.get('content_id') if isinstance(payload.get('content_id'), str) else None
         payload_uses_fence = payload.get('ledger_fence_mode') == SyncLedgerFenceMode.ACTIVE.value
@@ -2058,6 +2099,10 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
                 run_lock_token=lock_token if ledger_fence_active else None,
                 content_run_bound=ledger_fence_active,
                 ledger_fence_active=ledger_fence_active,
+                **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
+                recording_session_id=recording_session_id,
+                audio_start_seconds=audio_start_seconds,
+                audio_end_seconds=audio_end_seconds,
             )
         except SyncConversationPersistenceFenced:
             latest_job = await run_blocking(db_executor, get_sync_job, job_id) or job

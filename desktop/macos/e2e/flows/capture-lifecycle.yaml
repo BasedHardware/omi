@@ -7,10 +7,15 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/MeetingNoteTakingNotice.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+FinishedRecordingLifecycle.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+MicrophoneCaptureArming.swift
   - desktop/macos/Desktop/Sources/AppState/ListenClientState.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+CaptureDeviceManagement.swift
   - desktop/macos/Desktop/Sources/Audio/PreferredMicrophoneReconnect.swift
   - desktop/macos/Desktop/Sources/AppState/SharedCaptureSilentMicRecoveryPolicy.swift
+  - desktop/macos/Desktop/Sources/AppState/ArmedCaptureRecoveryPolicy.swift
+  - desktop/macos/Desktop/Sources/AppState/ArmedMicrophoneRecoveryCoordinator.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+SilentMicDiagnostics.swift
+  - desktop/macos/Desktop/Sources/AppState/SilentMicDiagnostics.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
   - desktop/macos/Desktop/Sources/AppState/CaptureAttemptOutcomeTelemetry.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceBargeInPolicy.swift

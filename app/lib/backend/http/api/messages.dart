@@ -106,6 +106,9 @@ Future<List<ServerMessage>> clearChatServer({String? appId}) async {
 }
 
 ServerMessageChunk? parseMessageChunk(String line, String messageId) {
+  if (line == 'memory: saved' || line == 'memory: updated') {
+    return ServerMessageChunk(messageId, line.substring('memory: '.length), MessageChunkType.memory);
+  }
   if (line.startsWith('error: ')) {
     final message = line.substring('error: '.length).trim();
     return ServerMessageChunk(
@@ -164,8 +167,14 @@ ServerMessageChunk? parseVoiceMessageStreamChunk(String line, String messageId) 
 
       final message = payload['message'];
       if (message is! String || message.trim().isEmpty) return ServerMessageChunk.failedMessage();
+      final errorCode = payload['error'];
 
-      return ServerMessageChunk(messageId, message, MessageChunkType.error);
+      return ServerMessageChunk(
+        messageId,
+        message,
+        MessageChunkType.error,
+        errorCode: errorCode is String ? errorCode : null,
+      );
     } on FormatException {
       return ServerMessageChunk.failedMessage();
     }

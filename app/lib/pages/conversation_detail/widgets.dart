@@ -32,7 +32,7 @@ String conversationDurationLabel(ServerConversation conversation, [AppLocalizati
 
 /// The conversation title, edited in place.
 ///
-/// One line with a Done key; an empty title shows the "Untitled Conversation" placeholder. The
+/// Up to two lines with a Done key; an empty title shows the "Untitled Conversation" placeholder. The
 /// edit is saved when editing ends — Done, or tapping away — and the outcome is announced
 /// ("Saved" / an error that restores the old title). Blank or unchanged text is not saved.
 class ConversationTitleField extends StatefulWidget {
@@ -91,7 +91,8 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
     return TextField(
       keyboardType: TextInputType.text,
       textInputAction: TextInputAction.done,
-      maxLines: 1,
+      minLines: 1,
+      maxLines: 2,
       focusNode: widget.focusNode,
       controller: widget.controller,
       onSubmitted: (_) => widget.focusNode?.unfocus(),
@@ -100,6 +101,7 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
         contentPadding: EdgeInsets.zero,
         isDense: true,
         hintText: context.l10n.untitledConversation,
+        hintMaxLines: 1,
         hintStyle: widget.style.copyWith(color: OmiColors.textTertiary),
       ),
       style: widget.style,
@@ -595,10 +597,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                   ],
                 ),
               ),
-              SizedBox(
-                width: 42,
-                child: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 20),
-              ),
+              SizedBox(width: 42, child: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 20)),
             ],
           ),
         ),

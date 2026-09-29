@@ -177,7 +177,8 @@ final class JITProactivityRuntimeTests: XCTestCase {
       ambientNanoUsage: { day, _ in
         await usageReads.record(day)
         return JITAmbientNanoUsage(used: 0, lastSpentAt: nil)
-      })
+      },
+      claimAmbientNano: { _ in throw JITTriggerMirrorError.databaseUnavailable })
 
     let decision = await runtime.admission(
       authorizationSnapshot: try snapshot(),
@@ -284,7 +285,8 @@ final class JITProactivityRuntimeTests: XCTestCase {
       triggers: [],
       evaluationTime: now,
       ambientNanoUsage: { _, _ in JITAmbientNanoUsage(used: 2, lastSpentAt: now.addingTimeInterval(-600)) },
-      derivedIntent: { _, _ in match })
+      derivedIntent: { _, _ in match },
+      claimAmbientNano: { _ in throw JITTriggerMirrorError.databaseUnavailable })
     let paced = await insideSpacing.admission(
       authorizationSnapshot: try snapshot(),
       observation: .init(text: "ship the release", occurredAt: now),

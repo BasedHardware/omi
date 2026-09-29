@@ -319,13 +319,33 @@ env:
     value: "false"
   - name: STT_CONNECT_ORDER_FROM_CONFIG
     value: "true"
+  - name: STT_RESILIENT_RECONNECT
+    value: "false"
+  - name: STT_ROUTING_MODE
+    value: "shadow"
+  - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
+    value: "0.075"
+  - name: STT_ROUTING_PROBE_PERCENT
+    value: "2"
+  - name: STT_NO_TEXT_SECONDS
+    value: "30"
+  - name: SONIOX_MONTHLY_CEILING_USD
+    value: "0"
+  - name: SONIOX_ESTIMATED_USD_PER_HOUR
+    value: "0.07537"
   - name: STT_MULTI_LANGUAGE_HINTS
+    value: "true"
+  - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
     value: "100"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
-    value: "100"
+    value: "1"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
+    value: "1"
+  - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
+    value: "dev-omi-parakeet-headless.dev-omi-backend.svc.cluster.local"
+  - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
     value: "1"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
@@ -337,6 +357,8 @@ env:
     value: "24"
   - name: STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS
     value: "1800"
+  - name: LISTEN_RECONNECT_BUDGET_PER_MIN
+    value: "6"
   - name: STT_CIRCUIT_HALF_OPEN_PROBES
     value: "1"
   - name: SONIOX_CIRCUIT_FAILURE_THRESHOLD
@@ -344,7 +366,7 @@ env:
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
   - name: STT_SERVICE_MODELS
-    value: "parakeet-window,soniox"
+    value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL

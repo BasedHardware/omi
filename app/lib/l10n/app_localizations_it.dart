@@ -11286,7 +11286,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get openCall => 'Apri chiamata';
 
   @override
-  String get captureRecoveryBanner => 'L\'audio del ciondolo non arriva all\'app — tocca per riparare';
+  String get captureRecoveryBanner => 'Omi non invia audio — tocca per riconnetterti';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11471,4 +11471,85 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Scuro';
+
+  @override
+  String get chatDiscardRecording => 'Scarta';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Non ho capito — riprova';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Lascia un feedback';
+
+  @override
+  String get feedbackAllGood => 'Tutto ok';
+
+  @override
+  String get feedbackChatWithUs => 'Più dettagli? Scrivici';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Non accurato';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incompleto';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Non pertinente';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Contesto sbagliato';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Altro';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Audio mancante';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Trascrizione scadente';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Interlocutore sbagliato';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Ritardato o bloccato';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Frammentato o duplicato';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Altro';
+
+  @override
+  String get searchPeople => 'Cerca persone';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Aggiungi \"$query\" come nuova persona';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Mostra tutte le $count persone';
+  }
 }
