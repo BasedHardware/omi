@@ -1451,29 +1451,41 @@ def unlock_all_action_items(uid: str) -> None:
 # ============================================================================
 
 
-def get_daily_score(uid: str, date: Optional[str] = None, tz: tzinfo = timezone.utc) -> Dict[str, Any]:
+def get_daily_score(
+    uid: str, date: Optional[str] = None, *, firestore_client: Any = None, tz: tzinfo = timezone.utc
+) -> Dict[str, Any]:
     """Compute productivity score for a single day from action_items."""
-    if date:
-        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=tz)
-    else:
-        day = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    if not uid or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    clean_uid = uid.strip()
+
+    try:
+        day = (
+            datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=tz)
+            if date
+            else datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+        )
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"Invalid date format or range: {date}") from exc
 
     day_end = day + timedelta(days=1)
-    col = db.collection('users').document(uid).collection(action_items_collection)
+    client = firestore_client or db
+    col = client.collection('users').document(clean_uid).collection(action_items_collection)
 
     # Count tasks due today
     due_query = col.where(filter=FieldFilter('due_at', '>=', day)).where(filter=FieldFilter('due_at', '<', day_end))
-    total = 0
-    completed = 0
+    total, completed = 0, 0
     for doc in due_query.stream():
         data: Dict[str, Any] = typed_doc(doc)
         if data.get('deleted'):
             continue
         total += 1
-        if data.get('completed'):
+        if data.get('completed') is True:
             completed += 1
 
-    score = round((completed / total * 100) if total > 0 else 0)
+    total = max(0, total)
+    completed = max(0, min(total, completed))
+    score = max(0, min(100, round((completed / total * 100) if total > 0 else 0)))
     return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed_tasks': completed, 'total_tasks': total}
 
 
@@ -1487,10 +1499,18 @@ def get_scores(
       weekly — tasks due in the 7 days ending on that date
       overall — all non-deleted tasks
     """
-    if date:
-        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=tz)
-    else:
-        day = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    if not uid or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    clean_uid = uid.strip()
+
+    try:
+        day = (
+            datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=tz)
+            if date
+            else datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+        )
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"Invalid date format or range: {date}") from exc
 
     day_start = day
     day_end = day + timedelta(days=1)
@@ -1500,10 +1520,10 @@ def get_scores(
     week_start = day - timedelta(days=6)
 
     client = firestore_client or get_firestore_client()
-    col = client.collection('users').document(uid).collection(action_items_collection)
+    col = client.collection('users').document(clean_uid).collection(action_items_collection)
 
     def _score(completed: int, total: int) -> float:
-        return round((completed / total * 100) if total > 0 else 0, 1)
+        return max(0.0, min(100.0, round((completed / total * 100) if total > 0 else 0.0, 1)))
 
     def _count(query: Any) -> int:
         return int(query.count().get()[0][0].value)
@@ -1560,12 +1580,9 @@ def get_scores(
         overall_total -= 1
         overall_completed -= int(completed)
 
-    daily_total = max(0, daily_total)
-    daily_completed = max(0, daily_completed)
-    weekly_total = max(0, weekly_total)
-    weekly_completed = max(0, weekly_completed)
-    overall_total = max(0, overall_total)
-    overall_completed = max(0, overall_completed)
+    daily_total, daily_completed = max(0, daily_total), max(0, min(daily_total, daily_completed))
+    weekly_total, weekly_completed = max(0, weekly_total), max(0, min(weekly_total, weekly_completed))
+    overall_total, overall_completed = max(0, overall_total), max(0, min(overall_total, overall_completed))
 
     daily: Dict[str, Any] = {
         'score': _score(daily_completed, daily_total),
