@@ -3628,5 +3628,17 @@
     "places": "Locuri",
     "recaps": "Rezumate",
     "recent": "Recente",
-    "searchPartialFailure": "Unele rezultate nu au putut fi încărcate"
+    "searchPartialFailure": "Unele rezultate nu au putut fi încărcate",
+    "peopleSearchPlaceholder": "Caută persoane",
+    "peopleNotHeardYet": "Încă neauzit",
+    "peopleRecent": "Recente",
+    "deletePeopleMessage": "Aceasta le elimină mostrele vocale și nu poate fi anulată. Replicile lor din conversațiile trecute devin vorbitori fără nume.",
+    "personTalkTime": "Timp de vorbire",
+    "personLastHeard": "Ultima ascultare",
+    "deletePeopleTitle": "{count, plural, =1{Ștergi 1 persoană?} other{Ștergi persoane: {count}?}}",
+    "peopleFilterNeedsVoice": "Necesită voce",
+    "peopleCount": "{count, plural, =1{1 persoană} other{Persoane: {count}}}",
+    "noMatchingPeople": "Nicio persoană potrivită",
+    "deselectAll": "Deselectează tot",
+    "voiceRecognitionSettings": "Recunoaștere vocală"
 }

@@ -20960,6 +20960,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some results couldn\'t load'**
   String get searchPartialFailure;
+
+  /// Search field placeholder on the People list
+  ///
+  /// In en, this message translates to:
+  /// **'Search people'**
+  String get peopleSearchPlaceholder;
+
+  /// Section header and row subtitle for a person with zero conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Not Heard Yet'**
+  String get peopleNotHeardYet;
+
+  /// Section header for people heard recently
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get peopleRecent;
+
+  /// Delete people dialog body
+  ///
+  /// In en, this message translates to:
+  /// **'This removes their voice samples and can\'t be undone. Their lines in past conversations become unnamed speakers.'**
+  String get deletePeopleMessage;
+
+  /// Stat label on a person's page: total time this person spoke
+  ///
+  /// In en, this message translates to:
+  /// **'Talk time'**
+  String get personTalkTime;
+
+  /// Stat label on a person's page: most recent conversation date
+  ///
+  /// In en, this message translates to:
+  /// **'Last heard'**
+  String get personLastHeard;
+
+  /// Delete people dialog title
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Delete 1 Person?} other{Delete {count} People?}}'**
+  String deletePeopleTitle(int count);
+
+  /// Filter chip on the People list: people whose voice Omi has not learned yet
+  ///
+  /// In en, this message translates to:
+  /// **'Needs Voice'**
+  String get peopleFilterNeedsVoice;
+
+  /// A count of people (People list filters and summary)
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 person} other{{count} people}}'**
+  String peopleCount(int count);
+
+  /// Empty state title when the People search or filter matches nobody
+  ///
+  /// In en, this message translates to:
+  /// **'No Matching People'**
+  String get noMatchingPeople;
+
+  /// Toolbar button in select mode when every visible row is selected
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect All'**
+  String get deselectAll;
+
+  /// Section header above the voice-learning switches on the People page
+  ///
+  /// In en, this message translates to:
+  /// **'Voice Recognition'**
+  String get voiceRecognitionSettings;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

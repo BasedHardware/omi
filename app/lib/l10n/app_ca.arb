@@ -3628,5 +3628,17 @@
     "places": "Llocs",
     "recaps": "Resums",
     "recent": "Recents",
-    "searchPartialFailure": "No s'han pogut carregar alguns resultats"
+    "searchPartialFailure": "No s'han pogut carregar alguns resultats",
+    "peopleSearchPlaceholder": "Cerca persones",
+    "peopleNotHeardYet": "Encara no s'ha sentit",
+    "peopleRecent": "Recents",
+    "deletePeopleMessage": "Això elimina les seves mostres de veu i no es pot desfer. Les seves intervencions en converses anteriors passen a ser parlants sense nom.",
+    "personTalkTime": "Temps de parla",
+    "personLastHeard": "Última vegada",
+    "deletePeopleTitle": "{count, plural, =1{Eliminar 1 persona?} other{Eliminar {count} persones?}}",
+    "peopleFilterNeedsVoice": "Cal la veu",
+    "peopleCount": "{count, plural, =1{1 persona} other{{count} persones}}",
+    "noMatchingPeople": "Cap persona coincident",
+    "deselectAll": "Desselecciona-ho tot",
+    "voiceRecognitionSettings": "Reconeixement de veu"
 }

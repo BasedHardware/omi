@@ -3628,5 +3628,17 @@
     "places": "장소",
     "recaps": "요약",
     "recent": "최근",
-    "searchPartialFailure": "일부 결과를 불러오지 못했습니다"
+    "searchPartialFailure": "일부 결과를 불러오지 못했습니다",
+    "peopleSearchPlaceholder": "사람 검색",
+    "peopleNotHeardYet": "아직 듣지 못함",
+    "peopleRecent": "최근",
+    "deletePeopleMessage": "음성 샘플이 삭제되며 되돌릴 수 없습니다. 지난 대화에서 이 사람의 발언은 이름 없는 화자로 바뀝니다.",
+    "personTalkTime": "발화 시간",
+    "personLastHeard": "마지막으로 들은 날",
+    "deletePeopleTitle": "{count, plural, =1{1명을 삭제할까요?} other{{count}명을 삭제할까요?}}",
+    "peopleFilterNeedsVoice": "음성 필요",
+    "peopleCount": "{count, plural, =1{1명} other{{count}명}}",
+    "noMatchingPeople": "일치하는 사람 없음",
+    "deselectAll": "모두 선택 해제",
+    "voiceRecognitionSettings": "음성 인식"
 }

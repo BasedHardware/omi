@@ -3628,5 +3628,17 @@
     "places": "Lugares",
     "recaps": "Resúmenes",
     "recent": "Recientes",
-    "searchPartialFailure": "No se pudieron cargar algunos resultados"
+    "searchPartialFailure": "No se pudieron cargar algunos resultados",
+    "peopleSearchPlaceholder": "Buscar personas",
+    "peopleNotHeardYet": "Aún sin escuchar",
+    "peopleRecent": "Recientes",
+    "deletePeopleMessage": "Esto elimina sus muestras de voz y no se puede deshacer. Sus intervenciones en conversaciones anteriores pasan a ser hablantes sin nombre.",
+    "personTalkTime": "Tiempo de habla",
+    "personLastHeard": "Última vez",
+    "deletePeopleTitle": "{count, plural, =1{¿Eliminar 1 persona?} other{¿Eliminar {count} personas?}}",
+    "peopleFilterNeedsVoice": "Falta la voz",
+    "peopleCount": "{count, plural, =1{1 persona} other{{count} personas}}",
+    "noMatchingPeople": "No Hay Personas Coincidentes",
+    "deselectAll": "Deseleccionar Todo",
+    "voiceRecognitionSettings": "Reconocimiento de Voz"
 }

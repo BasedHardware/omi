@@ -3628,5 +3628,17 @@
     "places": "Miesta",
     "recaps": "Zhrnutia",
     "recent": "Nedávne",
-    "searchPartialFailure": "Niektoré výsledky sa nepodarilo načítať"
+    "searchPartialFailure": "Niektoré výsledky sa nepodarilo načítať",
+    "peopleSearchPlaceholder": "Hľadať ľudí",
+    "peopleNotHeardYet": "Zatiaľ nepočuté",
+    "peopleRecent": "Nedávne",
+    "deletePeopleMessage": "Tým sa odstránia ich hlasové vzorky a nedá sa to vrátiť späť. Ich repliky v minulých konverzáciách sa stanú nepomenovanými rečníkmi.",
+    "personTalkTime": "Čas rozprávania",
+    "personLastHeard": "Naposledy počuté",
+    "deletePeopleTitle": "{count, plural, =1{Odstrániť 1 osobu?} other{Odstrániť osoby: {count}?}}",
+    "peopleFilterNeedsVoice": "Chýba hlas",
+    "peopleCount": "{count, plural, =1{1 osoba} other{Počet osôb: {count}}}",
+    "noMatchingPeople": "Žiadne zodpovedajúce osoby",
+    "deselectAll": "Zrušiť výber",
+    "voiceRecognitionSettings": "Rozpoznávanie hlasu"
 }

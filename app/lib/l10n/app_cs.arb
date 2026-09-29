@@ -3628,5 +3628,17 @@
     "places": "Místa",
     "recaps": "Shrnutí",
     "recent": "Nedávné",
-    "searchPartialFailure": "Některé výsledky se nepodařilo načíst"
+    "searchPartialFailure": "Některé výsledky se nepodařilo načíst",
+    "peopleSearchPlaceholder": "Hledat lidi",
+    "peopleNotHeardYet": "Zatím neslyšeni",
+    "peopleRecent": "Nedávní",
+    "deletePeopleMessage": "Tím se odstraní jejich hlasové vzorky a nelze to vrátit zpět. Jejich repliky v minulých konverzacích se stanou nepojmenovanými mluvčími.",
+    "personTalkTime": "Doba mluvení",
+    "personLastHeard": "Naposledy slyšen",
+    "deletePeopleTitle": "{count, plural, =1{Smazat 1 člověka?} other{Smazat lidi: {count}?}}",
+    "peopleFilterNeedsVoice": "Chybí hlas",
+    "peopleCount": "{count, plural, =1{1 osoba} other{Počet osob: {count}}}",
+    "noMatchingPeople": "Žádné odpovídající osoby",
+    "deselectAll": "Zrušit výběr",
+    "voiceRecognitionSettings": "Rozpoznávání hlasu"
 }

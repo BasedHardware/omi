@@ -11188,5 +11188,17 @@
     "places": "இடங்கள்",
     "recaps": "சுருக்கங்கள்",
     "recent": "சமீபத்தியவை",
-    "searchPartialFailure": "சில முடிவுகளை ஏற்ற முடியவில்லை"
+    "searchPartialFailure": "சில முடிவுகளை ஏற்ற முடியவில்லை",
+    "peopleSearchPlaceholder": "நபர்களைத் தேடு",
+    "peopleNotHeardYet": "இன்னும் கேட்கப்படவில்லை",
+    "peopleRecent": "சமீபத்தியவை",
+    "deletePeopleMessage": "இது அவர்களின் குரல் மாதிரிகளை நீக்கும்; இதைச் செயல்தவிர்க்க முடியாது. கடந்த உரையாடல்களில் அவர்களின் பேச்சு பெயரற்ற பேச்சாளர்களாக மாறும்.",
+    "personTalkTime": "பேசிய நேரம்",
+    "personLastHeard": "கடைசியாகக் கேட்டது",
+    "deletePeopleTitle": "{count, plural, =1{1 நபரை நீக்கவா?} other{{count} நபர்களை நீக்கவா?}}",
+    "peopleFilterNeedsVoice": "குரல் தேவை",
+    "peopleCount": "{count, plural, =1{1 நபர்} other{{count} நபர்கள்}}",
+    "noMatchingPeople": "பொருந்தும் நபர்கள் இல்லை",
+    "deselectAll": "அனைத்தையும் தேர்வுநீக்கு",
+    "voiceRecognitionSettings": "குரல் அடையாளம்"
 }

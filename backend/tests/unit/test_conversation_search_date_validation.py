@@ -346,7 +346,7 @@ def test_named_speaker_is_validated_and_forwarded():
         ) as mock_search,
     ):
         client = _client()
-        resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'person-1'})
+        resp = client.post('/v1/conversations/search', json={'query': 'hello', 'speaker_id': 'person-1'})
 
     assert resp.status_code == 200
     mock_get_person.assert_called_once_with('test-uid', 'person-1')
@@ -372,7 +372,7 @@ def test_user_speaker_does_not_require_person_record():
         ) as mock_search,
     ):
         client = _client()
-        resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'user'})
+        resp = client.post('/v1/conversations/search', json={'query': 'hello', 'speaker_id': 'user'})
 
     assert resp.status_code == 200
     mock_get_person.assert_not_called()
@@ -484,7 +484,7 @@ def test_speaker_filter_is_applied_after_hydration(speaker_id, matching_segments
     assert [item['id'] for item in resp.json()['items']] == ['conv-match']
 
 
-@pytest.mark.parametrize('query', ['', 'hi'])
+@pytest.mark.parametrize('query', ['hi'])
 def test_speaker_filter_keeps_paging_while_typesense_has_more(query):
     from utils.conversations.search import conversation_matches_speaker as real_matcher
 
@@ -1022,3 +1022,30 @@ def test_finalize_conversation_is_noop_for_completed_conversation():
     remove_pointer.assert_not_called()
     process.assert_not_called()
     assert response.conversation.status == ConversationStatus.completed
+
+
+def test_speaker_browse_without_a_query_walks_firestore_past_the_latest_page():
+    # The person only appears in conversations far older than the newest 20: the Typesense first page
+    # post-filter used to return nothing for this.
+    newest = [_conversation_dict(f'new-{i}', [_segment(person_id='someone-else')]) for i in range(60)]
+    older = [_conversation_dict('old-1', [_segment(person_id='person-1')])]
+    stream = newest + older
+    from utils.conversations.search import browse_conversations_by_speaker as real_browse
+    from utils.conversations.search import conversation_matches_speaker as real_matcher
+
+    def fetch(uid, limit, offset, **kwargs):
+        return stream[offset : offset + limit]
+
+    with (
+        patch.object(conv, 'browse_conversations_by_speaker', real_browse),
+        patch('utils.conversations.search.conversation_matches_speaker', real_matcher),
+        patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}),
+        patch.object(conv, 'search_conversations') as mock_search,
+        patch.object(conv.conversations_db, 'get_conversations_without_photos', side_effect=fetch),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'person-1', 'per_page': 20})
+
+    assert resp.status_code == 200
+    assert [item['id'] for item in resp.json()['items']] == ['old-1']
+    mock_search.assert_not_called()

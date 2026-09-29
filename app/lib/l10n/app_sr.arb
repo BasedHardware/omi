@@ -11188,5 +11188,17 @@
     "places": "Места",
     "recaps": "Резимеи",
     "recent": "Недавно",
-    "searchPartialFailure": "Неки резултати нису могли да се учитају"
+    "searchPartialFailure": "Неки резултати нису могли да се учитају",
+    "peopleSearchPlaceholder": "Претражи особе",
+    "peopleNotHeardYet": "Још није чуто",
+    "peopleRecent": "Недавно",
+    "deletePeopleMessage": "Ово уклања њихове узорке гласа и не може се поништити. Њихове реплике у прошлим разговорима постају неименовани говорници.",
+    "personTalkTime": "Време говора",
+    "personLastHeard": "Последњи пут чуто",
+    "deletePeopleTitle": "{count, plural, =1{Избрисати 1 особу?} other{Избрисати особе: {count}?}}",
+    "peopleFilterNeedsVoice": "Потребан глас",
+    "peopleCount": "{count, plural, =1{1 особа} other{Особа: {count}}}",
+    "noMatchingPeople": "Нема одговарајућих особа",
+    "deselectAll": "Поништи избор свих",
+    "voiceRecognitionSettings": "Препознавање гласа"
 }

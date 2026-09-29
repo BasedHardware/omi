@@ -11536,4 +11536,57 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Не ўдалося загрузіць некаторыя вынікі';
+
+  @override
+  String get peopleSearchPlaceholder => 'Пошук людзей';
+
+  @override
+  String get peopleNotHeardYet => 'Пакуль не чутыя';
+
+  @override
+  String get peopleRecent => 'Нядаўнія';
+
+  @override
+  String get deletePeopleMessage =>
+      'Гэта выдаліць узоры іх голасу, і гэта нельга скасаваць. Іх рэплікі ў мінулых размовах стануць безыменнымі гаворцамі.';
+
+  @override
+  String get personTalkTime => 'Час размовы';
+
+  @override
+  String get personLastHeard => 'Апошні раз чутны';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Выдаліць людзей: $count?',
+      one: 'Выдаліць 1 чалавека?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Патрэбны голас';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Людзей: $count',
+      one: '1 чалавек',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Няма адпаведных людзей';
+
+  @override
+  String get deselectAll => 'Зняць выбар з усіх';
+
+  @override
+  String get voiceRecognitionSettings => 'Распазнаванне голасу';
 }

@@ -3663,5 +3663,17 @@
     "places": "Miejsca",
     "recaps": "Podsumowania",
     "recent": "Ostatnie",
-    "searchPartialFailure": "Nie udało się wczytać niektórych wyników"
+    "searchPartialFailure": "Nie udało się wczytać niektórych wyników",
+    "peopleSearchPlaceholder": "Szukaj osób",
+    "peopleNotHeardYet": "Jeszcze nie słyszano",
+    "peopleRecent": "Ostatnie",
+    "deletePeopleMessage": "Spowoduje to usunięcie próbek ich głosu i nie można tego cofnąć. Ich wypowiedzi w dawnych rozmowach staną się nienazwanymi rozmówcami.",
+    "personTalkTime": "Czas mówienia",
+    "personLastHeard": "Ostatnio słyszano",
+    "deletePeopleTitle": "{count, plural, =1{Usunąć 1 osobę?} other{Usunąć osoby: {count}?}}",
+    "peopleFilterNeedsVoice": "Brak głosu",
+    "peopleCount": "{count, plural, =1{1 osoba} other{Osoby: {count}}}",
+    "noMatchingPeople": "Brak pasujących osób",
+    "deselectAll": "Odznacz wszystko",
+    "voiceRecognitionSettings": "Rozpoznawanie głosu"
 }
