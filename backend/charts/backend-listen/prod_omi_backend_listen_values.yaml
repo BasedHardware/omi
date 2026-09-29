@@ -391,9 +391,9 @@ env:
   - name: SONIOX_CONTEXT_TERMS
     value: "false"
   - name: STT_LEARNED_LANGUAGE_PROFILE
-    value: "false"
+    value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
-    value: "25"
+    value: "50"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
     value: "5"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
