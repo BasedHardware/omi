@@ -221,6 +221,9 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.app_integrations', AutoMockModule('utils.app_integrations'))
     add('utils.conversations.location', AutoMockModule('utils.conversations.location'))
     add('utils.conversations.meeting_receipt', AutoMockModule('utils.conversations.meeting_receipt'))
+    # The finalizer's smart-merge step is off by default; its own tests drive it.
+    smart_merge = add('utils.conversations.smart_merge', AutoMockModule('utils.conversations.smart_merge'))
+    smart_merge.smart_merge_step = AsyncMock(return_value=False)
     add('utils.jit_rollout', AutoMockModule('utils.jit_rollout'))
     add('utils.log_sanitizer', AutoMockModule('utils.log_sanitizer'))
     add('utils.retrieval.frame_request_authority', AutoMockModule('utils.retrieval.frame_request_authority'))

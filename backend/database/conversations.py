@@ -725,6 +725,7 @@ def persist_processing_result_with_lifecycle(
     conversation_data: dict,
     *,
     on_first_completion: Callable[[], None] | None = None,
+    smart_merge_refresh: tuple[int, str] | None = None,
 ) -> bool:
     """Merge a processor result into its conversation.
 
@@ -771,6 +772,18 @@ def persist_processing_result_with_lifecycle(
         existing = existing_snapshot.to_dict() or {}
         if existing.get('deleted'):
             return False
+        if smart_merge_refresh is not None:
+            expected_revision, expected_owner = smart_merge_refresh
+            merge_state = existing.get('smart_merge') or {}
+            lease = merge_state.get('refresh_lease') or {}
+            until = lease.get('until')
+            if (
+                merge_state.get('revision') != expected_revision
+                or lease.get('owner') != expected_owner
+                or not isinstance(until, datetime)
+                or until <= datetime.now(timezone.utc)
+            ):
+                return False
         # A processor that read before another sync append cannot replace that
         # transcript or publish a summary derived from an obsolete revision.
         if existing.get('sync_content_revision') is not None and (

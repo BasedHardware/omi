@@ -55,6 +55,7 @@ class FirestoreReadSite(StrEnum):
     RAG_HYDRATION = 'rag_hydration'
     TRANSCRIPT_CHUNK_HYDRATION = 'transcript_chunk_hydration'
     USER_DELETION_WIPE_STATUS = 'user_deletion_wipe_status'
+    SMART_MERGE = 'smart_merge'
     UNATTRIBUTED = 'unattributed'
 
 

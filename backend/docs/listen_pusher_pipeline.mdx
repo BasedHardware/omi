@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-09-27 (S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
+> Last updated: 2026-09-29 (flag-gated same-occasion smart merge at finalization; S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -415,6 +415,45 @@ overlap measurements, never UID, document IDs, or transcript. There is no backfi
 no index migration, and no automatic clearing of historical discard flags or links.
 UI grouping, transcript merging, multi-capture chain consolidation, and link
 reconciliation after later user edits/discards remain follow-ups.
+
+
+## Same-occasion folding across a silence split (smart merge)
+
+The two-minute silence split can turn one occasion into several pendant
+conversations. `utils/conversations/smart_merge.py` runs inside
+`finalize_persisted_conversation` on both finalization hosts (pusher for the
+live handoff, backend-sync for Cloud Tasks), only for `CAPTURE_END` jobs, after
+the fanout claim is `claimed` and before duplicate-capture linking or any derived
+effect. `CONVERSATION_SMART_MERGE_MODE` selects `off` (default: one env read, no
+I/O), `shadow` (decide and record, never merge) or `merge`;
+`CONVERSATION_SMART_MERGE_UID_ALLOWLIST` optionally narrows the users.
+
+The candidate is the newest visible conversation of the same source created
+before this one, then the first row of the same device partition; a busy
+immediate predecessor blocks the pair instead of being skipped. Deterministic
+gates (source `omi`, recorded gap 120 s-60 min, speech gap at least 120 s, 25
+words per side, no user-managed row, no wake word, no user-ended predecessor,
+no custom-STT row, 3 h span, 4,000 segments, 12 fragments) run before one Jev question on the
+`conversation_smart_merge` lane (3 s, one attempt). `p_same >= 0.35` merges;
+any error keeps both. Every answered pair stores a server-only
+`smart_merge_decision` (numbers and ids, no text) on the new conversation.
+For a merge verdict, the decision is persisted before the absorb transaction
+so a retry reuses the same score.
+
+A merge keeps the earlier conversation's id. One transaction appends the new
+transcript on the survivor's absolute timeline and turns the new row into the
+sync bridge's redirect tombstone (`deleted`, `discarded`, `sync_merged_into`),
+so the listen `memory_created` event for it carries `discarded=true`, detail
+reads redirect to the survivor, and the survivor's deletion purges it. The new
+conversation's own derived effects never run; the donor's search/vector rows
+are retracted through the sync bridge seam, retained audio is copied when the
+survivor keeps cloud audio, and the survivor is reprocessed once per merge
+(`ProcessingTrigger.SMART_MERGE`) under a revision lease. A committed merge whose
+cleanup or refresh fails fails the finalization attempt; every retry resumes the
+donor, whatever the mode. Late repair WALs that target a donor append to its
+survivor (`utils/sync/assignment.py`). The absorb advances the survivor's
+`sync_content_revision` to fence an older processor, and the refresh write
+requires the current lease owner and revision.
 
 ## Conversation start location
 
