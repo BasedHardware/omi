@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// The two-bubbles glyph (FontAwesome `comments`, regular weight) that marks Ask Omi everywhere it
 /// appears, so every entry point reads as one family.
@@ -69,6 +70,56 @@ class HomeChatBarBackdrop extends StatelessWidget {
               end: Alignment.bottomCenter,
               stops: [0.0, kHomeBottomFadeHeight / height, 1.0],
               colors: [_fadeStart, OmiColors.surface0, OmiColors.surface0],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Home's Ask Omi button, left of the record button in the floating row. The same pill, height and
+/// border as the record button, so the pair reads as one set; the glyph and label say what a tap
+/// does. Voice lives in the chat composer, so the button has no mic of its own.
+class HomeAskOmiButton extends StatelessWidget {
+  const HomeAskOmiButton({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = context.l10n.askOmi;
+    return Semantics(
+      container: true,
+      button: true,
+      label: label,
+      onTap: onTap,
+      child: GestureDetector(
+        key: const ValueKey('home_ask_omi_bar'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          height: kHomeChatBarHeight,
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+          decoration: BoxDecoration(
+            color: OmiColors.surface1,
+            borderRadius: OmiRadius.pillAll,
+            border: Border.all(color: OmiColors.border, width: 1),
+          ),
+          child: ExcludeSemantics(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                FaIcon(kAskOmiGlyph, size: 16, color: OmiColors.textPrimary),
+                const SizedBox(width: OmiSpacing.xs),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: OmiType.subhead.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
