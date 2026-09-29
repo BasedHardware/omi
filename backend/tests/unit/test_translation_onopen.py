@@ -87,6 +87,66 @@ def test_oversized_segment_is_deferred_without_truncation(monkeypatch):
     assert status == 'deferred' and cursor and not service.calls
 
 
+def test_scan_cap_exhaustion_never_reports_complete(monkeypatch):
+    """Luna R2-2 regression: a transcript longer than the selection scan window
+    must not return `complete` when the scanned window itself needs no work —
+    untranslated segments remain beyond the cap and the cursor continues."""
+    configure(monkeypatch)
+    monkeypatch.setenv('TRANSLATION_ONDEMAND_MAX_SEGMENTS', '50')
+    count = 500  # > default scan cap (400)
+    detail = conversation(count)
+    service = FakeService()
+    # All segments need translation, but the page bound stops after 50; the
+    # important part is the cursor chain never claims complete before the end.
+    _, status, cursor = onopen_translation.translate_open_page('u', detail, service=service)
+    assert status == 'partial' and cursor
+    guard = 0
+    while cursor is not None:
+        detail, status, cursor = onopen_translation.translate_open_page('u', detail, cursor, service=service)
+        guard += 1
+        if status == 'complete':
+            break
+        assert guard < 20, 'cursor chain did not terminate'
+    assert status == 'complete'
+
+
+def test_clean_scan_cap_exhaustion_returns_partial_cursor_not_complete(monkeypatch):
+    """Luna R2-2 exact defect: materializations current for the scanned window,
+    but untranslated segments exist beyond the scan cap. Must return partial +
+    cursor (never complete)."""
+    configure(monkeypatch)
+    monkeypatch.setenv('TRANSLATION_ONDEMAND_MAX_SEGMENTS', '50')
+    count = 500
+    detail = conversation(count)
+
+    def current_only_within_cap(*args):
+        segment = args[2]
+        # Within the first 400 (scan cap) segments pretend materializations are
+        # current; beyond that pretend stale — selection never scans there, so
+        # the old bug reported complete while segment 450 stayed untranslated.
+        try:
+            index = int(str(segment['id'])[1:])
+        except (ValueError, TypeError, KeyError):
+            return False
+        return index < 400
+
+    monkeypatch.setattr(
+        onopen_translation.conversations_db,
+        'translation_materialization_is_current',
+        current_only_within_cap,
+    )
+    service = FakeService()
+    _, status, cursor = onopen_translation.translate_open_page('u', detail, service=service)
+    assert status == 'partial' and cursor is not None
+    import base64
+    import json as _json
+
+    padded = cursor + '=' * (-len(cursor) % 4)
+    signed = base64.urlsafe_b64decode(padded)
+    payload = _json.loads(signed[:-32])
+    assert payload['index'] == 400, 'cursor must continue at the scan bound, not the transcript end'
+
+
 def test_default_detail_route_has_no_translation_side_effect(monkeypatch):
     detail = conversation(1)
     monkeypatch.setattr(conversation_routes, '_get_valid_conversation_by_id', lambda *args, **kwargs: detail)

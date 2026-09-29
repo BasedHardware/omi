@@ -146,8 +146,16 @@ def translate_open_page(
             break
         selected.append((index, segment))
         chars += len(text)
+    else:
+        # Scan exhausted the bounded window, not the transcript (Luna R2-2):
+        # never claim completion past the scanned bound; continue via cursor.
+        next_index = scan_bounded
 
     def make_cursor(index: int) -> str:
+        # Bind the cursor to exactly the transcript prefix it covers (Luna R2-2):
+        # hashing materializations over a fixed window while commits mutate that
+        # window makes every successive cursor look stale and restarts the scan
+        # from zero — an infinite loop on transcripts longer than one page chain.
         return _encode_cursor(
             uid,
             {
@@ -155,7 +163,7 @@ def translate_open_page(
                 'target': target,
                 'revision': revision,
                 'policy': policy,
-                'materialization_revision': _materialization_revision(conversation, segments),
+                'materialization_revision': _materialization_revision(conversation, segments[:scan_cap]),
                 'index': index,
             },
         )
@@ -172,6 +180,10 @@ def translate_open_page(
         return conversation, 'deferred', make_cursor(selected[0][0])
     selected_text = [(str(segment['id']), segment['text']) for _, segment in selected]
     source_revision = hashlib.sha256(repr(selected_text).encode('utf-8')).hexdigest()
+    # The provider gets the REMAINING request budget, not a fresh full deadline
+    # (Luna R2-3): total on-open worker occupancy stays within the configured
+    # bound even after a long selection scan.
+    remaining_deadline = max(0.5, deadline - clock())
     reservation, reason = reserve_translation(
         uid,
         conversation_id,
@@ -181,7 +193,7 @@ def translate_open_page(
         chars + config.max_output_tokens * 4,
         config.uid_daily_chars,
         config.global_daily_chars,
-        provider_deadline_seconds=config.deadline_seconds,
+        provider_deadline_seconds=remaining_deadline,
     )
     if reservation is None:
         return conversation, 'deferred' if reason != 'redis_unavailable' else 'unavailable', make_cursor(selected[0][0])

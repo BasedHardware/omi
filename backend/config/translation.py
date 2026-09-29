@@ -217,7 +217,7 @@ def resolve_ondemand_config(env: Mapping[str, str] | None = None) -> OnDemandTra
         global_daily_chars=bounded_int(
             'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS', 1_000_000_000, 1_000_000_000, zero_allowed=True
         ),
-        max_catchup_pages=bounded_int('TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES', 4, 100, zero_allowed=True),
+        max_catchup_pages=bounded_int('TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES', 4, 100),
     )
 
 
