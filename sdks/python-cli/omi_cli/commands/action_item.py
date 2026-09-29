@@ -40,6 +40,11 @@ def list_action_items(
     limit: int = typer.Option(100, "--limit", min=1, max=500),
     offset: int = typer.Option(0, "--offset", min=0),
 ) -> None:
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise UsageError(
+            message="Invalid date filter range",
+            detail="--start-date cannot be after --end-date.",
+        )
     ctx = _ctx(typer_ctx)
     params: dict[str, object] = {"limit": limit, "offset": offset}
     if completed is not None:
@@ -114,7 +119,8 @@ def create_action_item(
         body["due_at"] = due_at.isoformat()
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/action-items", json_body=body)
-    ctx.renderer.success(f"Action item created: [bold]{result.get('id')}[/bold]")
+    created_id = escape(str(result.get("id") or ""))
+    ctx.renderer.success(f"Action item created: [bold]{created_id}[/bold]")
     ctx.renderer.emit(result)
 
 

@@ -121,6 +121,7 @@ def test_conversation_from_segments_rejects_invalid_unicode(config_path, respx_m
     assert "Invalid JSON" in result.stderr
     assert not respx_mock.calls
 
+
 def test_conversation_from_segments_rejects_directory(config_path, respx_mock, monkeypatch, capsys, tmp_path) -> None:
     test_dir = tmp_path / "somedir"
     test_dir.mkdir()
@@ -134,7 +135,9 @@ def test_conversation_from_segments_rejects_directory(config_path, respx_mock, m
     assert not respx_mock.calls
 
 
-def test_conversation_from_segments_rejects_unreadable_file(config_path, respx_mock, monkeypatch, capsys, tmp_path) -> None:
+def test_conversation_from_segments_rejects_unreadable_file(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
     f = tmp_path / "unreadable.json"
     f.write_text("{}")
 
@@ -149,4 +152,65 @@ def test_conversation_from_segments_rejects_unreadable_file(config_path, respx_m
     output = capsys.readouterr()
     err = json.loads(output.err)
     assert "Cannot read file" in err["error"]
+    assert not respx_mock.calls
+
+
+def test_conversation_list_rejects_inverted_date_range(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "conversation",
+            "list",
+            "--start-date",
+            "2026-10-01T00:00:00Z",
+            "--end-date",
+            "2026-09-01T00:00:00Z",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "invalid date filter range" in result.stderr.lower()
+    assert not respx_mock.calls
+
+
+def test_conversation_create_rejects_inverted_datetime_range(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "conversation",
+            "create",
+            "--text",
+            "hello",
+            "--started-at",
+            "2026-10-01T12:00:00Z",
+            "--finished-at",
+            "2026-10-01T10:00:00Z",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "invalid datetime range" in result.stderr.lower()
+    assert not respx_mock.calls
+
+
+def test_conversation_from_segments_rejects_inverted_datetime_range(
+    authed_profile, respx_mock, cli_runner, tmp_path
+) -> None:
+    f = tmp_path / "valid_segments.json"
+    f.write_text('{"transcript_segments": [{"text": "hi"}]}')
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "conversation",
+            "from-segments",
+            str(f),
+            "--started-at",
+            "2026-10-01T12:00:00Z",
+            "--finished-at",
+            "2026-10-01T10:00:00Z",
+        ],
+    )
+    assert result.exit_code == 1
+    assert "invalid datetime range" in result.stderr.lower()
     assert not respx_mock.calls
