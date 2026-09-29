@@ -784,6 +784,8 @@ def toggle_action_item_completion(
     if not existing_item:
         raise HTTPException(status_code=404, detail="Action item not found")
     # The toggle only writes the completion fields, so an item malformed elsewhere is refused before the write.
+    # Keep `toggled` in step with the payload of `action_items_db.mark_action_item_completed()` (`completed`,
+    # `completed_at`; `status` is derived from `completed` on write), or this check stops matching the write.
     toggled = {
         'completed': completed,
         'status': 'completed' if completed else 'active',
