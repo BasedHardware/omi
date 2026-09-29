@@ -5,13 +5,13 @@ Ensures invalid date format details and internal database exceptions are never l
 """
 
 from unittest.mock import patch
-from utils.retrieval.tools import screen_activity_tools, notification_settings_tools
+from utils.retrieval.tools import notification_settings_tools, screen_activity_tools
 
 SENTINEL_ERROR = "SENTINEL_INTERNAL_LEAK_PG_CONN_127_0_0_1_PWD_SECRET"
 
 
 def test_screen_activity_invalid_date_sanitization():
-    res = screen_activity_tools.get_screen_activity_tool(
+    res = screen_activity_tools.get_screen_activity_tool.func(
         start_date=f"bad-date-{SENTINEL_ERROR}",
         end_date="2026-09-28T22:00:00+00:00",
         config={"configurable": {"user_id": "test-uid-123"}},
@@ -25,7 +25,7 @@ def test_screen_activity_database_exception_sanitization():
         "utils.retrieval.tools.screen_activity_tools.screen_activity_db.get_screen_activity_summary",
         side_effect=RuntimeError(SENTINEL_ERROR),
     ):
-        res = screen_activity_tools.get_screen_activity_tool(
+        res = screen_activity_tools.get_screen_activity_tool.func(
             start_date="2026-09-28T00:00:00+00:00",
             end_date="2026-09-28T22:00:00+00:00",
             config={"configurable": {"user_id": "test-uid-123"}},
@@ -39,7 +39,7 @@ def test_notification_settings_database_exception_sanitization():
         "utils.retrieval.tools.notification_settings_tools.notification_db.get_daily_summary_enabled",
         side_effect=RuntimeError(SENTINEL_ERROR),
     ):
-        res = notification_settings_tools.manage_daily_summary_tool(
+        res = notification_settings_tools.manage_daily_summary_tool.func(
             action="get_settings",
             config={"configurable": {"user_id": "test-uid-123"}},
         )
@@ -52,7 +52,7 @@ def test_notification_settings_enable_database_exception_sanitized():
         "utils.retrieval.tools.notification_settings_tools.notification_db.set_daily_summary_enabled",
         side_effect=RuntimeError(SENTINEL_ERROR),
     ):
-        res = notification_settings_tools.manage_daily_summary_tool(
+        res = notification_settings_tools.manage_daily_summary_tool.func(
             action="enable",
             config={"configurable": {"user_id": "test-uid-123"}},
         )
