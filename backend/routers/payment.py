@@ -895,6 +895,8 @@ def cancel_subscription_endpoint(
 
             return {"status": "ok", "message": "Subscription scheduled for cancellation."}
 
+    except HTTPException:
+        raise
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error canceling subscription: {sanitize(str(e))}")
         raise HTTPException(
@@ -1631,6 +1633,8 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             "cancel_at_period_end": updated_sub_dict.get('cancel_at_period_end'),
             "current_period_end": updated_sub_dict.get('current_period_end'),
         }
+    except HTTPException:
+        raise
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error canceling app subscription: {sanitize(str(e))}")
         raise HTTPException(
