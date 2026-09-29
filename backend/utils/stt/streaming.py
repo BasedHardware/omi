@@ -32,6 +32,7 @@ from config.stt_provider_policy import (
     supports_live_multilingual_mode,
 )
 from utils.stt.live_rollout import configured_chain_enabled, window_allocation, window_language_supported
+from utils.stt.live_health import health
 from utils.stt.language_policy import LiveLanguageProfile, prefer_hintable_soniox
 from utils.async_tasks import create_named_task
 from utils.byok import get_byok_key
@@ -199,6 +200,15 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str) -> boo
         circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
     else:
         circuit.record_serve_failure()
+    health.quarantine(
+        service.value,
+        'account' if reason in ACCOUNT_REJECTION_REASONS else 'selection',
+        (
+            circuit.account_cooldown_seconds_remaining
+            if reason in ACCOUNT_REJECTION_REASONS
+            else circuit.serve_error_bench_seconds
+        ),
+    )
     # Logged AFTER the record so bench_seconds is the window just armed — an
     # outage keeps dying here from every rescue, and this is what makes the
     # escalation ladder visible in logs instead of a flat repeating record.
@@ -363,6 +373,9 @@ async def connect_stt_socket_with_fallback(
     connect_soniox: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
     failed: Optional[set[str]] = None,
     use_config: Optional[bool] = None,
+    routing_uid: Optional[str] = None,
+    routing_language: Optional[str] = None,
+    routing_pin_primary: bool = False,
 ) -> Tuple[STTSocket, STTService]:
     """Connect a serving provider; see ARCHITECTURE.md (incident history)."""
     if configured_chain_enabled() if use_config is None else use_config:
@@ -379,6 +392,9 @@ async def connect_stt_socket_with_fallback(
             },
             failed=failed if failed is not None else set(),
             models=stt_service_models,
+            routing_uid=routing_uid,
+            routing_language=routing_language,
+            routing_pin_primary=routing_pin_primary,
         )
     circuit = _circuit_for_primary(primary_service)
 

@@ -33,6 +33,7 @@ from typing import Any, Dict, Optional, Set, cast
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class, bounded_sync_phase
 from database import sync_dead_letters
 from database.redis_db import r
+from utils.sync import stage as sync_stage
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,11 @@ RUN_LOCK_RENEWAL_SAFETY_SECONDS = RUN_LOCK_HEARTBEAT_SECONDS
 
 PROCESSED_SEGMENTS_KEY_PREFIX = 'sync_job_segments:'
 ONCE_KEY_PREFIX = 'sync_job_once:'
+
+
+def _key(key: str) -> str:
+    """Keep prod's existing job and run-lease keys; isolate shared Redis in dev."""
+    return sync_stage.redis_key(key)
 
 
 class FencedSyncJobMutationOutcome(str, Enum):
@@ -162,6 +168,7 @@ def create_sync_job(
     now = time.time()
     job: Dict[str, Any] = {
         'job_id': job_id,
+        'created_stage': sync_stage.current_stage(),
         'uid': uid,
         'status': 'queued',
         'created_at': now,
@@ -192,13 +199,13 @@ def create_sync_job(
             else SyncLedgerFenceMode.LEGACY.value
         ),
     }
-    key = f'{JOB_KEY_PREFIX}{job_id}'
+    key = _key(f'{JOB_KEY_PREFIX}{job_id}')
     r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
     return job
 
 
 def delete_sync_job(job_id: str) -> None:
-    r.delete(f'{JOB_KEY_PREFIX}{job_id}')
+    r.delete(_key(f'{JOB_KEY_PREFIX}{job_id}'))
 
 
 def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
@@ -209,7 +216,7 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
     the run lease, re-read, then use the fenced finalizer. Inline work owns
     its own terminal transition, including executor leaves still in flight.
     """
-    data = r.get(f'{JOB_KEY_PREFIX}{job_id}')
+    data = r.get(_key(f'{JOB_KEY_PREFIX}{job_id}'))
     if not data:
         return None
     try:
@@ -271,7 +278,7 @@ def _as_redis_text(value: Any) -> str:
 
 def _read_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
     """Raw job doc without the stale self-heal read-side mutation."""
-    data = r.get(f'{JOB_KEY_PREFIX}{job_id}')
+    data = r.get(_key(f'{JOB_KEY_PREFIX}{job_id}'))
     if not data:
         return None
     try:
@@ -288,7 +295,7 @@ def get_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
 
 def sync_job_run_lock_present(job_id: str) -> bool:
     """Conservatively refuse a replacement dispatch while a worker still owns its run lock."""
-    return bool(r.exists(f'{RUN_LOCK_KEY_PREFIX}{job_id}'))
+    return bool(r.exists(_key(f'{RUN_LOCK_KEY_PREFIX}{job_id}')))
 
 
 def _backfill_dead_letter_pending(job_id: str, job: Optional[Dict[str, Any]], reason_code: Any) -> None:
@@ -367,7 +374,7 @@ def update_sync_job(job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, 
     ``queued``. The later protected cutover retires blind old-binary writes
     before epoch fencing is enabled.
     """
-    key = f'{JOB_KEY_PREFIX}{job_id}'
+    key = _key(f'{JOB_KEY_PREFIX}{job_id}')
     data = r.get(key)
     if not data:
         return None
@@ -496,8 +503,8 @@ def fenced_update_sync_job(
     """
     payload = dict(updates)
     payload['updated_at'] = time.time() if now is None else now
-    lock_key = f'{RUN_LOCK_KEY_PREFIX}{job_id}'
-    job_key = f'{JOB_KEY_PREFIX}{job_id}'
+    lock_key = _key(f'{RUN_LOCK_KEY_PREFIX}{job_id}')
+    job_key = _key(f'{JOB_KEY_PREFIX}{job_id}')
 
     raw_value = r.get(job_key)
     if raw_value is None:
@@ -835,6 +842,7 @@ def mark_job_failed(
             'completed_at': time.time(),
             'error': error,
             'reason_code': reason_code,
+            'failure_stage': sync_stage.current_stage(),
             'retry_after': retry_after,
         },
     )
@@ -863,6 +871,7 @@ def fenced_mark_job_failed(
             'completed_at': completed_at,
             'error': error,
             'reason_code': reason_code,
+            'failure_stage': sync_stage.current_stage(),
             'retry_after': retry_after,
         },
         now=completed_at,
@@ -950,7 +959,7 @@ def try_acquire_job_run_lock(job_id: str) -> Optional[str]:
     durable lease epoch.
     """
     token = str(uuid.uuid4())
-    acquired = r.set(f'{RUN_LOCK_KEY_PREFIX}{job_id}', token, nx=True, ex=RUN_LOCK_TTL_SECONDS)
+    acquired = r.set(_key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'), token, nx=True, ex=RUN_LOCK_TTL_SECONDS)
     return token if acquired else None
 
 
@@ -965,8 +974,8 @@ def try_acquire_sync_job_run_lock(job_id: str) -> Optional[str]:
     response = r.eval(
         _ACQUIRE_LOCK_WITH_EPOCH_SCRIPT,
         2,
-        f'{RUN_LOCK_KEY_PREFIX}{job_id}',
-        f'{RUN_LOCK_EPOCH_KEY_PREFIX}{job_id}',
+        _key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'),
+        _key(f'{RUN_LOCK_EPOCH_KEY_PREFIX}{job_id}'),
         str(uuid.uuid4()),
         RUN_LOCK_TTL_SECONDS,
     )
@@ -992,7 +1001,7 @@ def delete_sync_job_run_lock_epoch(job_id: str) -> None:
     leave a harmless counter rather than ever resetting a live generation.
     """
     try:
-        r.delete(f'{RUN_LOCK_EPOCH_KEY_PREFIX}{job_id}')
+        r.delete(_key(f'{RUN_LOCK_EPOCH_KEY_PREFIX}{job_id}'))
     except Exception as error:
         # A retained counter is safe; resetting it after a terminal result is
         # an optimization only, never a reason to disturb that result.
@@ -1025,7 +1034,7 @@ def renew_job_run_lock(job_id: str, token: str) -> bool:
         r.eval(
             _RENEW_LOCK_SCRIPT,
             1,
-            f'{RUN_LOCK_KEY_PREFIX}{job_id}',
+            _key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'),
             token,
             RUN_LOCK_TTL_SECONDS,
         )
@@ -1039,7 +1048,7 @@ def release_job_run_lock(job_id: str, token: str) -> None:
     duplicate delivery in the meantime gets 409-retried.
     """
     try:
-        r.eval(_RELEASE_LOCK_SCRIPT, 1, f'{RUN_LOCK_KEY_PREFIX}{job_id}', token)
+        r.eval(_RELEASE_LOCK_SCRIPT, 1, _key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'), token)
     except Exception as e:
         logger.warning('release_job_run_lock failed for %s: %s', job_id, e)
 
@@ -1051,7 +1060,7 @@ def add_processed_segment(job_id: str, segment_path: str) -> None:
     on failure the retry falls back to the timestamp-based segment dedup.
     """
     try:
-        key = f'{PROCESSED_SEGMENTS_KEY_PREFIX}{job_id}'
+        key = _key(f'{PROCESSED_SEGMENTS_KEY_PREFIX}{job_id}')
         r.sadd(key, segment_path)
         r.expire(key, JOB_TTL_SECONDS)
     except Exception as e:
@@ -1089,8 +1098,8 @@ def add_processed_segment_if_run_owner(
         r.eval(
             _FENCED_ADD_PROCESSED_SEGMENT_SCRIPT,
             2,
-            f'{RUN_LOCK_KEY_PREFIX}{job_id}',
-            f'{PROCESSED_SEGMENTS_KEY_PREFIX}{job_id}',
+            _key(f'{RUN_LOCK_KEY_PREFIX}{job_id}'),
+            _key(f'{PROCESSED_SEGMENTS_KEY_PREFIX}{job_id}'),
             run_lock_token,
             segment_path,
             JOB_TTL_SECONDS,
@@ -1101,7 +1110,7 @@ def add_processed_segment_if_run_owner(
 def get_processed_segments(job_id: str) -> Set[str]:
     """Return segment paths already processed for this job."""
     try:
-        members = r.smembers(f'{PROCESSED_SEGMENTS_KEY_PREFIX}{job_id}')
+        members = r.smembers(_key(f'{PROCESSED_SEGMENTS_KEY_PREFIX}{job_id}'))
         decoded: Set[str] = set()
         for m in cast(Set[Any], members):
             if isinstance(m, bytes):
@@ -1123,7 +1132,7 @@ def try_mark_once(job_id: str, tag: str) -> bool:
     silently never count.
     """
     try:
-        return bool(r.set(f'{ONCE_KEY_PREFIX}{job_id}:{tag}', '1', nx=True, ex=JOB_TTL_SECONDS))
+        return bool(r.set(_key(f'{ONCE_KEY_PREFIX}{job_id}:{tag}'), '1', nx=True, ex=JOB_TTL_SECONDS))
     except Exception as e:
         logger.warning('try_mark_once failed for %s:%s: %s', job_id, tag, e)
         return True

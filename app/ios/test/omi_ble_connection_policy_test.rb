@@ -19,6 +19,57 @@ class OmiBleConnectionPolicyTest < Minitest::Test
         @main
         struct OmiBleConnectionPolicyTestHarness {
             static func main() {
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: true,
+                    hasCompleteServices: true,
+                    discoveryInFlight: false
+                ) == .replayReady)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: false,
+                    hasCompleteServices: true,
+                    discoveryInFlight: false
+                ) == .hydrateReady)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: false,
+                    hasCompleteServices: true,
+                    discoveryInFlight: true
+                ) == .hydrateReady)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: true,
+                    hasCompleteServices: false,
+                    discoveryInFlight: false
+                ) == .discoverServices)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .connected,
+                    nativeReady: false,
+                    hasCompleteServices: false,
+                    discoveryInFlight: true
+                ) == .awaitDiscovery)
+                precondition(OmiBleConnectionPolicy.readyRecoveryAction(
+                    peripheralState: .disconnected,
+                    nativeReady: true,
+                    hasCompleteServices: true,
+                    discoveryInFlight: true
+                ) == .connect)
+                precondition(OmiBleConnectionPolicy.discoveryIsActive(startedAt: 100, now: 114))
+                precondition(!OmiBleConnectionPolicy.discoveryIsActive(startedAt: 100, now: 115))
+                precondition(OmiBleConnectionPolicy.discoveryFailureAction(
+                    peripheralState: .connected, nativeReady: false, requestPending: true, retries: 0
+                ) == .retry)
+                precondition(OmiBleConnectionPolicy.discoveryFailureAction(
+                    peripheralState: .connected, nativeReady: false, requestPending: true, retries: 1
+                ) == .fail)
+                precondition(OmiBleConnectionPolicy.discoveryFailureAction(
+                    peripheralState: .connected, nativeReady: false, requestPending: false, retries: 0
+                ) == .ignore)
+                precondition(OmiBleConnectionPolicy.discoveryFailureAction(
+                    peripheralState: .disconnected, nativeReady: false, requestPending: true, retries: 0
+                ) == .ignore)
+
                 let recoveryCodes = [
                     CBATTError.insufficientAuthentication.rawValue,
                     CBATTError.insufficientAuthorization.rawValue,

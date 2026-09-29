@@ -55,7 +55,7 @@ EXPECTED_XCODE_APP = PIN["app_path"]
 EXPECTED_XCODE_CACHE_TOKEN = "xcode" + EXPECTED_XCODE_VERSION.replace(".", "")
 CODEMAGIC_DESKTOP_WORKFLOWS = ["omi-desktop-swift-release", "omi-desktop-swift-preview"]
 CODEMAGIC_IOS_WORKFLOWS = ["ios-internal-auto", "ios-prod-testflight", "ios-prod-patch"]
-JOBS = ["changes", "desktop-swift-verify", "desktop-swift", "desktop-swift-release-compile"]
+JOBS = ["changes", "desktop-swift-verify", "desktop-swift", "desktop-swift-release-compile", "post-merge-failure-issue"]
 MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
 # Hosted macOS budgets are per-job: the consolidated verify lane needs a longer
 # cold-runner ceiling than the narrower release-compile job.
@@ -293,14 +293,16 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("UserNotificationCallbackBridgeTests/", _runner_text())
 
     def test_release_test_phase_is_forwarded_and_gates_the_existing_job(self):
-        """Static workflow contract; executable runner/selector tests own behavior."""
+        """The selected release job can build tests without waking on ordinary PRs."""
         self.assertIn(
             "should_release_test_compile: ${{ steps.changed.outputs.should_release_test_compile }}",
             self.jobs["changes"],
         )
-        for job_id in ("desktop-swift", "desktop-swift-release-compile"):
-            self.assertIn("needs.changes.outputs.should_release_test_compile == 'true'", self.jobs[job_id])
+        self.assertNotIn("should_release_test_compile", self.jobs["desktop-swift"])
         release = self.jobs["desktop-swift-release-compile"]
+        self.assertIn("needs.changes.outputs.should_release_compile == 'true'", release)
+        self.assertNotIn("|| needs.changes.outputs.should_release_test_compile", release)
+        self.assertIn("needs.changes.outputs.should_release_test_compile == 'true'", release)
         self.assertIn('if [ "$BUILD_RELEASE_TESTS" = true ]; then', release)
         self.assertRegex(release, r"--release-test-compile\s+else\s+./scripts/run-swift-ci.sh --release-compile")
 
@@ -315,12 +317,11 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("STATIC_REQUIRED", gate)
         self.assertIn("TESTS_REQUIRED", gate)
         self.assertIn("RELEASE_REQUIRED", gate)
+        self.assertIn("RELEASE_REQUIRED: ${{ needs.changes.outputs.should_release_compile }}", gate)
         self.assertIn('test "$VERIFY_RESULT" = success', gate)
         self.assertIn('test "$VERIFY_RESULT" = skipped', gate)
-        # The release lane (WMO compile + UserNotifications release regression)
-        # reports through the Release Compile job; the required check must fail
-        # closed on it so release-only breaks cannot merge on a green debug
-        # lane (#11373/#11374).
+        # Selected release-specific PRs still require this lane; ordinary PRs
+        # require only the debug/static verdict.
         self.assertIn('test "$RELEASE_RESULT" = success', gate)
         self.assertIn('test "$RELEASE_RESULT" = skipped', gate)
 
@@ -774,12 +775,12 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("cut -f1 | tr '\\n' ' '", suite_runner)
 
     def test_release_compile_is_reserved_off_ordinary_prs(self):
-        """One hosted Mac per ordinary PR; pushes and package edits compile release.
+        """One hosted Mac per ordinary PR; pushes and release inputs compile release.
 
         The predictor owns this asymmetry; pin it here because the required
         aggregate check and the release planner both consume the job's verdict.
         """
-        source_probe = ["desktop/macos/Desktop/Sources/OmiApp.swift"]
+        source_probe = ["desktop/macos/Desktop/Sources/Chat/ChatProvider.swift"]
         self.assertFalse(resolve_impact(source_probe, event="pull_request").includes("desktop-swift-release-compile"))
         self.assertTrue(resolve_impact(source_probe, event="push").includes("desktop-swift-release-compile"))
         self.assertTrue(
@@ -792,6 +793,16 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
                 self.assertTrue(
                     resolve_impact(["backend/database/users.py"], event=event).includes("desktop-swift-release-compile")
                 )
+
+    def test_main_and_nightly_release_failures_have_one_issue_owner(self):
+        issue_job = self.jobs["post-merge-failure-issue"]
+        self.assertIn("github.event_name == 'push' || github.event_name == 'schedule'", issue_job)
+        self.assertIn("needs: [changes, desktop-swift-release-compile]", issue_job)
+        self.assertIn("issues: write", issue_job)
+        self.assertIn('title="CI post-merge failure: Desktop Swift Release Compile"', issue_job)
+        self.assertIn("gh issue list", issue_job)
+        self.assertIn("gh issue edit", issue_job)
+        self.assertIn("gh issue create", issue_job)
 
     # --- changed-file gate assertions --------------------------------------
 

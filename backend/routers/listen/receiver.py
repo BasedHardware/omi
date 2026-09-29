@@ -57,11 +57,13 @@ from utils.stt.live_failure import (
     note_typed_provider_death,
     send_live_stt_audio,
     terminate_live_stt_session,
+    terminate_live_stt_backoff,
 )
+from utils.stt.live_chain import ProviderChainUnavailable
 from config.stt_provider_policy import provider_for_service
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.live_metrics import RECONNECT
-from utils.stt.resilient_stream import ResilientAudio
+from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
 from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
@@ -191,7 +193,7 @@ def _get_lc3() -> Any:
     return lc3
 
 
-class ListenReceiver:
+class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.host = host
         self.channel_configs = channel_configs
@@ -205,6 +207,7 @@ class ListenReceiver:
         self._stt_failover_lock = asyncio.Lock()
         self._pending_live_failover: Optional[PendingLiveFailover] = None
         self._resilient_audio: ResilientAudio | None = None
+        self._window_replay_audio: ResilientAudio | None = None
         self.stt_sockets_multi: List[Any] = [None] * len(channel_configs)
         self.multi_opus_decoders: List[Any] = [None] * len(channel_configs)
         self.channel_mix_buffers: List[bytearray] = [bytearray() for _ in channel_configs]
@@ -237,6 +240,8 @@ class ListenReceiver:
             and int(getattr(host.request, 'sample_rate', 0) or 0) > 0
         ):
             self.capture_timeline = CaptureTimeline(sample_rate=int(host.request.sample_rate))
+            # One 90s ring per session matches the maximum window buffer (30/15).
+            self._window_replay_audio = ResilientAudio(int(host.request.sample_rate), ring_seconds=90)
             if resilient_reconnect_enabled():
                 self._resilient_audio = ResilientAudio(int(host.request.sample_rate))
             # Pin the persistence mode for the recording's life; the flag is
@@ -446,23 +451,6 @@ class ListenReceiver:
                     continue
             segment['_capture_window_unavailable'] = True
         self._enqueue_stt_segments(segments, provider=provider)
-
-    def _filter_replayed_segments(
-        self, segments: List[Dict[str, Any]], provider: Optional[str]
-    ) -> List[Dict[str, Any]]:
-        ring = getattr(self, '_resilient_audio', None)
-        if ring is None or provider != 'soniox':
-            return segments
-        cutoff = getattr(self, '_replay_cutoff_sample', 0)
-        kept = []
-        for segment in segments:
-            end = segment.get('_capture_end_sample')
-            if isinstance(end, int) and end <= cutoff:
-                continue
-            if isinstance(end, int):
-                ring.finalize_through(end)
-            kept.append(segment)
-        return kept
 
     def _run_on_listen_loop(self, action, segments: List[Dict[str, Any]]) -> None:
         """Run a provider callback on the listen event loop.
@@ -1081,6 +1069,8 @@ class ListenReceiver:
         self._resilient_closing = True
         if self._resilient_audio is not None:
             self._resilient_audio.close()
+        if (ring := getattr(self, '_window_replay_audio', None)) is not None:
+            ring.close()
         sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
         for socket in sockets:
             target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
@@ -1215,6 +1205,15 @@ class ListenReceiver:
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
             self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
             return True
+        except ProviderChainUnavailable as error:
+            await self._drain_stt_sockets()
+            await terminate_live_stt_backoff(
+                request.websocket,
+                self.host.state,
+                reason='provider_unavailable',
+                retry_after=error.retry_after,
+            )
+            return False
         except Exception as error:
             await self._drain_stt_sockets()
             await terminate_live_stt_session(
@@ -1232,31 +1231,13 @@ class ListenReceiver:
             # Soniox drain_and_close() sets this before its final flush.  Treat a
             # finishing socket as receiver teardown even if its dead latch was
             # already set; opening a replacement here races the zero-audio close.
-            if self._stt_socket_is_finishing(self.stt_socket):
+            if socket_is_finishing(self.stt_socket):
                 return False
             if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
                 return True
             if await self._reconnect_stt_socket_locked():
                 return True
             return await self._rebuild_stt_socket_locked()
-
-    @staticmethod
-    def _stt_socket_is_finishing(socket: Any) -> bool:
-        """Read the Soniox teardown latch through managed and legacy wrappers."""
-        seen: set[int] = set()
-        pending = [socket]
-        while pending:
-            current = pending.pop()
-            if current is None or id(current) in seen:
-                continue
-            seen.add(id(current))
-            try:
-                if getattr(current, '_finishing', False):
-                    return True
-                pending.extend((getattr(current, '_conn', None), getattr(current, 'raw', None)))
-            except Exception:
-                continue
-        return False
 
     async def _reconnect_stt_socket_locked(self) -> bool:
         ring = self._resilient_audio
@@ -1271,7 +1252,7 @@ class ListenReceiver:
             or self.host.state.stt_terminal_failure
             or self._stt_rebuild is None
             or getattr(self, '_resilient_closing', False)
-            or self._stt_socket_is_finishing(socket)
+            or socket_is_finishing(socket)
         ):
             return False
         reason = getattr(socket, 'typed_death_reason', None)
@@ -1358,7 +1339,6 @@ class ListenReceiver:
             return False
         # Feed account/serve deaths even when failover prevents a terminal event.
         note_typed_provider_death(self.stt_socket, dead_provider)
-
         service, language, model = get_stt_service_for_language(
             self.host.language,
             multi_lang_enabled=self.host.multi_lang_enabled,
@@ -1368,11 +1348,14 @@ class ListenReceiver:
         )
         if service is None:
             return False
-
         parakeet_callback, modulate_callback, epoch = rebuild[0]()
         sample_rate = rebuild[1]
         previous = self.stt_socket
         previous_selection = (self.host.stt_service, self.host.stt_language, self.host.stt_model)
+        window_ring = self._window_ring()
+        replay = window_ring.snapshot() if window_ring is not None else ()
+        if replay and epoch is not None:
+            epoch.replay_origin_sample = replay[0][0]
         self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
         hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
         try:
@@ -1382,6 +1365,17 @@ class ListenReceiver:
                 modulate_callback=modulate_callback,
                 epoch=epoch,
             )
+        except ProviderChainUnavailable as error:
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+            hop.note_failure(None)
+            await terminate_live_stt_backoff(
+                self.host.request.websocket,
+                self.host.state,
+                reason='provider_unavailable',
+                retry_after=error.retry_after,
+            )
+            return False
         except Exception:
             if managed_chain_enabled(self.host):
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
@@ -1404,8 +1398,24 @@ class ListenReceiver:
             if managed_chain_enabled(self.host):
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             return False
-
+        # Replay capture positions after the last emitted segment.
+        rejected_sample = replay_chunks(
+            raw,
+            replay,
+            source=window_ring,
+            provider=dead_provider or 'parakeet',
+            soniox=self._resilient_audio if self.host.stt_service == STTService.soniox else None,
+        )
+        if rejected_sample is not None and window_ring is not None:
+            window_ring.finalize_through(rejected_sample)
+            close_rejected_socket(raw)
+            hop.note_failure('connection_lost')
+            self._stt_failed_providers.add(provider_for_service(service) or service.value)
+            self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+            return await self._rebuild_stt_socket_locked()
         self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
+        if window_ring is not None:
+            window_ring.close()
         self._record_selected_epoch(epoch, self.stt_socket)
         record_live_connection(self.host, self._serving_provider())
         self._pending_live_failover = hop
@@ -1523,6 +1533,14 @@ class ListenReceiver:
                 return
             outbound_audio = bytes(buffer)
             outbound_start_sample = self._stt_buffer_start_sample
+            window_ring = self._window_ring()
+            if window_ring is not None and window_ring.would_overflow(outbound_audio, outbound_start_sample):
+                raw = getattr(self.stt_socket, 'raw', None)
+                if raw is not None:
+                    raw.fail('capacity_full')
+                if await self._failover_stt_socket():
+                    continue
+                return
             sent = await flush_live_stt_buffer(
                 request.websocket,
                 self.host.state,
@@ -1536,6 +1554,8 @@ class ListenReceiver:
             if sent:
                 if self._resilient_audio is not None and self.host.stt_service == STTService.soniox:
                     self._resilient_audio.append(outbound_audio, outbound_start_sample)
+                if (ring := self._window_ring()) is not None:
+                    ring.append(outbound_audio, outbound_start_sample)
                 self._capture('capture_outbound_stt', outbound_audio)
                 self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
                 self._stt_buffer_start_sample = None
@@ -1898,6 +1918,8 @@ class ListenReceiver:
         self._resilient_closing = True
         if self._resilient_audio is not None:
             self._resilient_audio.close()
+        if (ring := getattr(self, '_window_replay_audio', None)) is not None:
+            ring.close()
         for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
             if socket:
                 try:

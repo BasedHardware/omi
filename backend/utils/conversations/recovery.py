@@ -9,6 +9,7 @@ through the same definitions so admission and verification cannot drift.
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping
 from typing import Any
 
@@ -19,6 +20,16 @@ _PROTECTED_STRUCTURED_TEXT_FIELDS = ('title', 'overview')
 _PROTECTED_STRUCTURED_LIST_FIELDS = ('sections', 'action_items', 'events')
 
 TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
+
+
+def recovery_minimum_terminal_enabled() -> bool:
+    """Kill switch for ending a recovery whose enrichment returned only a minimum."""
+    return os.getenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'false').strip().lower() in {
+        '1',
+        'true',
+        'yes',
+        'on',
+    }
 
 
 def _field(structured: Any, name: str) -> Any:

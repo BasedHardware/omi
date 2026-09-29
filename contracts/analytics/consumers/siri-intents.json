@@ -5,7 +5,8 @@
   "question": "How many Siri intent outcomes were observed per app namespace and build?",
   "query": "contracts/analytics/consumers/siri-intents.sql",
   "events": [
-    "siriIntentPerformed"
+    "siriIntentPerformed",
+    "siriAskOmiPerformed"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

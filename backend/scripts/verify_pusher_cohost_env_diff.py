@@ -56,6 +56,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
+            "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             "PARAKEET_WINDOW_MAX_SESSIONS",
@@ -64,6 +66,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
+            "SONIOX_ESTIMATED_USD_PER_HOUR",
+            "SONIOX_MONTHLY_CEILING_USD",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_CONNECT_ORDER_FROM_CONFIG",
@@ -71,6 +75,11 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_LEARNED_LANGUAGE_PROFILE",
             "STT_MULTI_LANGUAGE_HINTS",
             "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
+            # Fleet live routing and runway polling run on backend-listen only.
+            "STT_NO_TEXT_SECONDS",
+            "STT_ROUTING_MODE",
+            "STT_ROUTING_PROBE_PERCENT",
+            "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "DEEPGRAM_SELF_HOSTED_ENABLED",
             "DESKTOP_UPDATE_POINTERS_MODE",
@@ -99,6 +108,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
+            # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
+            "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MEETING_RECEIPT_RECONCILER_ENABLED",
             "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
@@ -139,6 +150,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "prod": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
+            "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             "PARAKEET_WINDOW_MAX_SESSIONS",
@@ -147,6 +160,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
+            "SONIOX_ESTIMATED_USD_PER_HOUR",
+            "SONIOX_MONTHLY_CEILING_USD",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_CONNECT_ORDER_FROM_CONFIG",
@@ -154,6 +169,11 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_LEARNED_LANGUAGE_PROFILE",
             "STT_MULTI_LANGUAGE_HINTS",
             "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
+            # Fleet live routing and runway polling run on backend-listen only.
+            "STT_NO_TEXT_SECONDS",
+            "STT_ROUTING_MODE",
+            "STT_ROUTING_PROBE_PERCENT",
+            "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
             "ACCOUNT_DELETION_TASKS_QUEUE",
@@ -184,6 +204,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
+            # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
+            "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MCP_OAUTH_CLIENTS_JSON",
             "MEETING_RECEIPT_RECONCILER_ENABLED",
@@ -253,7 +275,9 @@ SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
         }
     ),
-    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "DEEPGRAM_SELF_HOSTED_ENABLED"}),
+    # The 1% windowed-TDT canary is listen-only. Pusher retains its streaming
+    # and prerecorded policy while allocated listen sessions may lead with TDT.
+    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "DEEPGRAM_SELF_HOSTED_ENABLED", "STT_SERVICE_MODELS"}),
 }
 
 DEV_SHADOW_VALUES = {

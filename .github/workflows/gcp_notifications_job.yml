@@ -313,10 +313,10 @@ jobs:
             python3 backend/scripts/scheduler_reconcile.py \
               --environment prod --project "${{ vars.GCP_PROJECT_ID }}" \
               --apply --jobs notifications-job-scheduler-trigger
+            python3 backend/scripts/scheduler_reconcile.py \
+              --environment prod --project "${{ vars.GCP_PROJECT_ID }}" \
+              --check --jobs notifications-job-scheduler-trigger
           fi
-          python3 backend/scripts/scheduler_reconcile.py \
-            --environment "$SCHEDULER_ENVIRONMENT" \
-            --project "${{ vars.GCP_PROJECT_ID }}" --check
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'
