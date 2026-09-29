@@ -780,8 +780,25 @@ struct ConversationDetailView: View {
     // Action items sit directly under the summary: they are the part of a
     // meeting a reader acts on. Nothing here is a task until the reader says
     // so (I1) — each row carries its own "Add to Tasks".
-    ConversationActionItemsSection(conversation: displayConversation, onOpenLinkedTask: onOpenLinkedTask)
-      .padding(.top, OmiSpacing.xxl)
+    ConversationActionItemsSection(
+      conversation: displayConversation, onOpenLinkedTask: onOpenLinkedTask,
+      onTaskAdded: { selected, taskID in
+        guard
+          let linked = ConversationSummaryTaskPromoter.linkedConversation(
+            displayConversation, selected: selected, taskID: taskID)
+        else { return }
+        loadedConversation = linked
+        let canonical = serverClockConversation ?? linked
+        if let cached = ConversationSummaryTaskPromoter.linkedConversation(
+          canonical, selected: selected, taskID: taskID)
+        {
+          serverClockConversation = cached
+          AppState.current?.replaceConversation(cached)
+        }
+      }
+    )
+    .id(displayConversation.id)
+    .padding(.top, OmiSpacing.xxl)
   }
 
   @ViewBuilder

@@ -39,6 +39,9 @@ That volume is a property of screen capture, which samples continuously. Convers
 - `backend/tests/unit/test_task_intelligence_contract_freeze.py` — the frozen fixture's outcomes stay disjoint from the creating ones
 - `backend/tests/unit/test_process_conversation_usage_context.py` — capture reporting itself unavailable still touches no writer
 - `desktop/macos/Desktop/Tests/TaskIntelligenceContractFixtureTests.swift` — no workflow mode permits a legacy effect; delivery leaves the proposal pending
+- `backend/tests/unit/test_summary_task_promotion.py` — summary preparation leaves the Candidate pending; separate acceptance atomically resolves it and saves the summary/task link
+- `backend/tests/integration/test_summary_task_promotion_emulator.py` — real Firestore retries and concurrent Suggested/summary acceptance preserve one task and its durable link
+- `desktop/macos/Desktop/Tests/ConversationSummaryTaskPromoterTests.swift` — explicit summary gesture uses separate prepare/accept calls, fences owner changes, and persists its receipt instead of falling back to manual creation
 
 ## Path globs
 
@@ -47,12 +50,16 @@ That volume is a property of screen capture, which samples continuously. Convers
 - `backend/utils/task_intelligence/backend_capture.py`
 - `backend/utils/conversations/process_conversation.py`
 - `backend/database/candidates.py`
+- `backend/database/summary_task_links.py`
+- `backend/utils/task_intelligence/summary_tasks.py`
 - `backend/routers/candidates.py`
 - `backend/routers/staged_tasks.py`
 - `backend/config/task_intelligence_sources_v1.json`
 - `backend/tests/unit/fixtures/task_intelligence/capture_v2.json`
 - `desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/**`
 - `desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksStore.swift`
+- `desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationSummaryTaskPromoter.swift`
+- `desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailSections.swift`
 
 ## PR rule
 

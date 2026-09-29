@@ -429,7 +429,9 @@
         "backend/database/candidates.py",
         "backend/database/task_recommendations.py",
         "backend/routers/candidates.py",
-        "backend/utils/task_intelligence/candidate_service.py"
+        "backend/utils/task_intelligence/candidate_service.py",
+        "backend/utils/task_intelligence/summary_tasks.py",
+        "backend/database/summary_task_links.py"
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [

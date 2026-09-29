@@ -14,6 +14,7 @@ import database.action_items as action_items_db
 from database._client import db
 from database.firestore_index_registry import CANDIDATES_COMPATIBILITY_QUERY
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
+from database.summary_task_links import read_summary_task_row, SummaryTaskConflictError, SummaryTaskNotFoundError
 from models.action_item import EvidenceRef, TaskChangePayload, TaskCreatePayload, TaskOwner, TaskPriority, TaskStatus
 from models.candidate import (
     CandidateAction,
@@ -23,6 +24,7 @@ from models.candidate import (
     CandidateResolutionReceipt,
     CandidateStatus,
     CandidateSubjectKind,
+    SummaryTaskReference,
 )
 from models.task_intelligence import TaskWorkflowControl
 
@@ -853,6 +855,7 @@ def resolve_task_candidate(
     account_generation: int,
     expected_task_links: Optional[tuple[Optional[str], Optional[str]]] = None,
     now: Optional[datetime] = None,
+    summary_item: Optional[SummaryTaskReference] = None,
 ) -> CandidateResolutionReceipt:
     """Atomically accept a task Candidate and create/update exactly one task."""
 
@@ -869,7 +872,46 @@ def resolve_task_candidate(
         candidate = parse_snapshot_strict(CandidateRecord, snapshot)
         if candidate.account_generation != account_generation:
             raise CandidateGenerationMismatchError(candidate_id)
+        summary_row = None
+        if summary_item is not None:
+            if (
+                candidate.subject_kind != CandidateSubjectKind.task
+                or candidate.proposed_action != CandidateAction.create
+            ):
+                raise CandidateConflictError('Summary promotion requires a task-create Candidate')
+            try:
+                summary_row = read_summary_task_row(uid, summary_item, transaction=write_transaction)
+            except SummaryTaskNotFoundError as exc:
+                raise CandidateNotFoundError('Summary action item not found') from exc
+            except SummaryTaskConflictError as exc:
+                raise CandidateConflictError(str(exc)) from exc
+            if pending_candidate_semantic_identity(summary_row.proposal()) != pending_candidate_semantic_identity(
+                candidate.as_proposal()
+            ):
+                raise CandidateConflictError('Summary action item changed; refresh the conversation')
+            expected_task_id = candidate.result_task_id or task_id_for_candidate(uid, account_generation, candidate_id)
+            if summary_row.item.target_task_id not in {None, expected_task_id}:
+                raise CandidateConflictError('Summary action item is linked to another task')
         if candidate.status == CandidateStatus.accepted:
+            if summary_row is not None:
+                task_snapshot = _task_ref(uid, cast(str, candidate.result_task_id)).get(transaction=write_transaction)
+                if not task_snapshot.exists:
+                    raise CandidateNotFoundError('Linked task not found')
+                existing_task = _snapshot_dict(task_snapshot)
+                if existing_task.get('account_generation', 0) not in {0, account_generation}:
+                    raise CandidateGenerationMismatchError('task account generation mismatch')
+                if not existing_task.get('conversation_id'):
+                    write_transaction.update(
+                        _task_ref(uid, cast(str, candidate.result_task_id)),
+                        {
+                            'conversation_id': summary_row.conversation_id,
+                            'updated_at': now or datetime.now(timezone.utc),
+                        },
+                    )
+                if summary_row.item.target_task_id is None:
+                    write_transaction.update(
+                        summary_row.reference, summary_row.linked_patch(cast(str, candidate.result_task_id))
+                    )
             return CandidateResolutionReceipt(
                 candidate_id=candidate_id,
                 status=CandidateStatus.accepted,
@@ -895,6 +937,8 @@ def resolve_task_candidate(
             task_ref = _task_ref(uid, task_id)
             task_snapshot = task_ref.get(transaction=write_transaction)
             task_data = _task_create_storage(candidate, task_id=task_id, now=resolved_at)
+            if summary_row is not None:
+                task_data['conversation_id'] = summary_row.conversation_id
             try:
                 action_items_db.validate_task_relationship_in_transaction(
                     uid,
@@ -944,6 +988,9 @@ def resolve_task_candidate(
             except action_items_db.TaskRelationshipConflictError as exc:
                 raise CandidateConflictError(str(exc)) from exc
             write_transaction.update(task_ref, task_patch)
+
+        if summary_row is not None:
+            write_transaction.update(summary_row.reference, summary_row.linked_patch(task_id))
 
         candidate_patch = {
             'status': CandidateStatus.accepted.value,

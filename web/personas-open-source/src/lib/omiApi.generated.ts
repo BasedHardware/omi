@@ -843,6 +843,10 @@ export interface CancelSubscriptionRequest {
   reason_details?: string | null;
 }
 
+export interface CandidateAcceptanceRequest {
+  summary_item?: SummaryTaskReference | null;
+}
+
 export type CandidateAction = "create" | "update" | "complete" | "cancel" | "supersede";
 
 export interface CandidateCompatibilityMetadata {
@@ -4427,6 +4431,12 @@ export interface SubscriptionPlan {
 
 export type SubscriptionStatus = "active" | "inactive";
 
+export interface SummaryTaskReference {
+  action_item_index: number;
+  conversation_id: string;
+  expected_description: string;
+}
+
 export interface SyncBatchItem {
   apple_reminder_id?: string | null;
   completed?: boolean | null;
@@ -5373,6 +5383,7 @@ export interface OmiApiSchemas {
   "CalendarOnboardingSkipResponse": CalendarOnboardingSkipResponse;
   "CalendarOnboardingStatusResponse": CalendarOnboardingStatusResponse;
   "CancelSubscriptionRequest": CancelSubscriptionRequest;
+  "CandidateAcceptanceRequest": CandidateAcceptanceRequest;
   "CandidateAction": CandidateAction;
   "CandidateCompatibilityMetadata": CandidateCompatibilityMetadata;
   "CandidateCreate": CandidateCreate;
@@ -5852,6 +5863,7 @@ export interface OmiApiSchemas {
   "Subscription": Subscription;
   "SubscriptionPlan": SubscriptionPlan;
   "SubscriptionStatus": SubscriptionStatus;
+  "SummaryTaskReference": SummaryTaskReference;
   "SyncBatchItem": SyncBatchItem;
   "SyncBatchRequest": SyncBatchRequest;
   "SyncCaptureManifestFile": SyncCaptureManifestFile;
@@ -6803,6 +6815,16 @@ export interface OmiApiPaths {
       operationId: "get_candidate_workflow_control_v1_candidates_control_get";
       responses: {
         "200": TaskWorkflowControl;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/candidates/from-conversation": {
+    post: {
+      operationId: "prepare_conversation_task_candidate_v1_candidates_from_conversation_post";
+      responses: {
+        "200": CandidateRecord;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -12255,6 +12277,29 @@ export async function get_candidate_workflow_control_v1_candidates_control_get(h
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function prepare_conversation_task_candidate_v1_candidates_from_conversation_post(header: { X_Account_Generation: number, Idempotency_Key: string, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SummaryTaskReference, init?: OmiApiClientInit): Promise<CandidateRecord> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/candidates/from-conversation`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      "X-Account-Generation": String(header.X_Account_Generation),
+      "Idempotency-Key": String(header.Idempotency_Key),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function drain_candidate_integrations_v1_candidates_integrations_drain_post(query: { limit?: number }, header: { X_Account_Generation: number, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Record<string, number>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/candidates/integrations/drain`;
@@ -12318,13 +12363,14 @@ export async function get_candidate_v1_candidates__candidate_id__get(path: { can
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function accept_candidate_v1_candidates__candidate_id__accept_post(path: { candidate_id: string }, header: { X_Account_Generation: number, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CandidateResolutionReceipt> {
+export async function accept_candidate_v1_candidates__candidate_id__accept_post(path: { candidate_id: string }, header: { X_Account_Generation: number, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CandidateAcceptanceRequest | null, init?: OmiApiClientInit): Promise<CandidateResolutionReceipt> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/candidates/${path.candidate_id}/accept`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
     headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       "X-Account-Generation": String(header.X_Account_Generation),
@@ -12333,6 +12379,7 @@ export async function accept_candidate_v1_candidates__candidate_id__accept_post(
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -19675,4 +19722,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 458 client methods generated.
+// Total: 459 client methods generated.

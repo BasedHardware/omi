@@ -37,6 +37,14 @@ client claim or cached enablement.
 - `candidate_service.py` owns candidate acceptance, rejection, expiry, and the
   post-commit task-integration handoff. `staged_migration.py` migrates only the
   legacy staged-task representation through that lifecycle.
+- `summary_tasks.py` prepares an explicit conversation-summary gesture as a
+  pending Candidate, reusing the extraction's semantic claim. It never accepts
+  in that request. The separate accept endpoint optionally carries a
+  `SummaryTaskReference`; `database/summary_task_links.py` rereads the stored
+  owner-scoped row inside the Candidate transaction, which commits task,
+  Candidate, and `target_task_id` together. Client titles/due dates are not
+  trusted task input. Replays return the linked task even after it is edited or
+  completed; stale/locked/deleted rows fail without a manual-task fallback.
 - `task_links.py`, `workstream_association.py`, and `workstream_index.py` bind
   validated tasks to canonical goals and workstreams. They may read resolvers
   owned by the database layer but must not become alternate persistence owners.

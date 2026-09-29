@@ -991,6 +991,24 @@ public enum OmiAPI {
   }
 
 
+  public struct CandidateAcceptanceRequest: Codable, Sendable {
+    public let summaryItem: SummaryTaskReference?
+
+    private enum CodingKeys: String, CodingKey {
+      case summaryItem = "summary_item"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      summaryItem = try c.decodeIfPresent(SummaryTaskReference.self, forKey: .summaryItem)
+    }
+
+    public init(summaryItem: SummaryTaskReference? = nil) {
+      self.summaryItem = summaryItem
+    }
+  }
+
+
   public enum CandidateAction: String, Codable, CaseIterable {
     case create
     case update
@@ -4548,6 +4566,32 @@ public enum OmiAPI {
   }
 
 
+  public struct SummaryTaskReference: Codable, Sendable {
+    public let actionItemIndex: Int
+    public let conversationId: String
+    public let expectedDescription: String
+
+    private enum CodingKeys: String, CodingKey {
+      case actionItemIndex = "action_item_index"
+      case conversationId = "conversation_id"
+      case expectedDescription = "expected_description"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      actionItemIndex = try c.decode(Int.self, forKey: .actionItemIndex)
+      conversationId = try c.decode(String.self, forKey: .conversationId)
+      expectedDescription = try c.decode(String.self, forKey: .expectedDescription)
+    }
+
+    public init(actionItemIndex: Int, conversationId: String, expectedDescription: String) {
+      self.actionItemIndex = actionItemIndex
+      self.conversationId = conversationId
+      self.expectedDescription = expectedDescription
+    }
+  }
+
+
   public struct TaskCancelCandidate: Codable {
     public let captureConfidence: Double
     public let compatibility: CandidateCompatibilityMetadata?
@@ -7844,6 +7888,34 @@ public enum OmiAPI {
     return try JSONDecoder().decode(TaskWorkflowControl.self, from: data)
   }
 
+  public static func prepareConversationTaskCandidateV1CandidatesFromConversationPost(client: OmiApiClient, xAccountGeneration: Int, idempotencyKey: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: SummaryTaskReference) async throws -> CandidateRecord {
+    let _path = "/v1/candidates/from-conversation"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    req.setValue(String(xAccountGeneration), forHTTPHeaderField: "X-Account-Generation")
+    req.setValue(String(idempotencyKey), forHTTPHeaderField: "Idempotency-Key")
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(CandidateRecord.self, from: data)
+  }
+
   public static func drainCandidateIntegrationsV1CandidatesIntegrationsDrainPost(client: OmiApiClient, limit: Int? = nil, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [String: Int] {
     let _path = "/v1/candidates/integrations/drain"
     guard var components = URLComponents(string: client.baseURL + _path) else {
@@ -7924,7 +7996,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(CandidateRecord.self, from: data)
   }
 
-  public static func acceptCandidateV1CandidatesCandidateIdAcceptPost(client: OmiApiClient, candidateId: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> CandidateResolutionReceipt {
+  public static func acceptCandidateV1CandidatesCandidateIdAcceptPost(client: OmiApiClient, candidateId: String, xAccountGeneration: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: CandidateAcceptanceRequest? = nil) async throws -> CandidateResolutionReceipt {
     let _path = "/v1/candidates/\(candidateId)/accept"
     guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -7941,6 +8013,8 @@ public enum OmiAPI {
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
     if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = try JSONEncoder().encode(body)
     let (data, resp) = try await URLSession.shared.data(for: req)
     guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
     guard (200..<300).contains(http.statusCode) else {
@@ -17643,5 +17717,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 458 Swift client methods generated.
+  // Total: 459 Swift client methods generated.
 }

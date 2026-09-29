@@ -5337,6 +5337,23 @@
         "title": "CancelSubscriptionRequest",
         "type": "object"
       },
+      "CandidateAcceptanceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "summary_item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SummaryTaskReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "CandidateAcceptanceRequest",
+        "type": "object"
+      },
       "CandidateAction": {
         "enum": [
           "create",
@@ -26981,6 +26998,37 @@
         "title": "SubscriptionStatus",
         "type": "string"
       },
+      "SummaryTaskReference": {
+        "additionalProperties": false,
+        "description": "The summary row the reader explicitly chose, not a client-authored task.",
+        "properties": {
+          "action_item_index": {
+            "minimum": 0.0,
+            "title": "Action Item Index",
+            "type": "integer"
+          },
+          "conversation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "expected_description": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Expected Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "action_item_index",
+          "expected_description"
+        ],
+        "title": "SummaryTaskReference",
+        "type": "object"
+      },
       "SyncBatchItem": {
         "properties": {
           "apple_reminder_id": {
@@ -39633,6 +39681,115 @@
         ]
       }
     },
+    "/v1/candidates/from-conversation": {
+      "post": {
+        "description": "Prepare only; the reader must separately accept to materialize a task.",
+        "operationId": "prepare_conversation_task_candidate_v1_candidates_from_conversation_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Account-Generation",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "X-Account-Generation",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 512,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SummaryTaskReference"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Prepare Conversation Task Candidate",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
     "/v1/candidates/integrations/drain": {
       "post": {
         "operationId": "drain_candidate_integrations_v1_candidates_integrations_drain_post",
@@ -39972,6 +40129,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CandidateAcceptanceRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -58069,7 +58243,7 @@
     },
     "/v1/stripe/return/{account_id}": {
       "get": {
-        "description": "Handle the return flow from Stripe Connect account creation",
+        "description": "Handle the return flow from Stripe Connect account creation.\nAccount onboarding status is updated via webhook and queried by authenticated\nclients at /v1/stripe/onboarded. This landing page provides user feedback without\nleaking account onboarding status to unauthenticated callers.",
         "operationId": "stripe_return_v1_stripe_return__account_id__get",
         "parameters": [
           {
