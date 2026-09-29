@@ -556,8 +556,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         pump = self._pump_task
         if pump is not None and not pump.done() and pump is not asyncio.current_task():
             pump.cancel()
-        self._health_close()
-        self._release()
+        try:
+            self._close_health()
+        finally:
+            self._release()
 
     async def drain_and_close(self) -> None:
         self._closed = True

@@ -480,6 +480,31 @@ async def test_session_outcome_is_recorded_before_health_close_callback():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', ['finish', 'fail'])
+async def test_terminal_callback_failure_releases_admission_once(terminal):
+    sock = window.connect_window(lambda _: None, 16000)
+    assert window.admission.active == 1
+
+    def fail_health_close():
+        raise RuntimeError('health callback failed')
+
+    sock._health_close = fail_health_close
+    if terminal == 'finish':
+        sock.finish()
+    else:
+        sock.fail('test_failure')
+
+    # The releasing call must not wait for the cancelled pump's done callback.
+    assert window.admission.active == 0
+    assert sock._pump_task is not None
+    with pytest.raises(asyncio.CancelledError):
+        await sock._pump_task
+    await _REAL_SLEEP(0)
+    # _on_pump_done may release again, but the admission lease is idempotent.
+    assert window.admission.active == 0
+
+
+@pytest.mark.asyncio
 async def test_pure_noise_close_posts_nothing(monkeypatch):
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
