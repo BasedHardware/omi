@@ -693,7 +693,7 @@ def get_entity_timeline_tool(
         if include_rejected and not include_history:
             raise ValueError("include_rejected requires include_history")
     except ValueError as exc:
-        return f"Error: unsupported or invalid entity timeline request: {exc}"
+        return "Error: unsupported or invalid entity timeline request. Please try again later."
 
     uid = _resolve_uid(config)
     if not uid:
