@@ -23,7 +23,7 @@ WINDOW_SESSION_OUTCOME = Counter(
 )
 WINDOW_REPLAY_SAFE_TRIMS = Counter(
     'omi_stt_window_replay_safe_trims_total',
-    'Window replay ring overruns trimmed after all admitted speech was transcribed',
+    'Window replay ring trims through emitted anchors or speech-free capture',
 )
 WINDOW_CANARY_OUTCOME = Counter(
     'omi_stt_window_canary_transcript_outcome_total',

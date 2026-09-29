@@ -7,7 +7,7 @@ import os
 from collections import deque
 from typing import Any, Literal
 
-from utils.stt.live_metrics import RECONNECT, REPLAY_SECONDS
+from utils.stt.live_metrics import RECONNECT, REPLAY_SECONDS, WINDOW_REPLAY_SAFE_TRIMS
 
 RING_SECONDS = 15
 MAX_RECONNECTS = 3
@@ -20,9 +20,10 @@ def enabled() -> bool:
 
 
 class ResilientAudio:
-    def __init__(self, sample_rate: int, *, ring_seconds: int = RING_SECONDS) -> None:
+    def __init__(self, sample_rate: int, *, ring_seconds: int = RING_SECONDS, strict_replay: bool = False) -> None:
         self.sample_rate = sample_rate
         self.ring_seconds = ring_seconds
+        self.strict_replay = strict_replay
         self._chunks: deque[tuple[int, bytes]] = deque()
         self._end_sample = 0
         self.finalized_sample = 0
@@ -47,12 +48,16 @@ class ResilientAudio:
         self._end_sample = max(self._end_sample, start_sample + len(data) // 2)
         self._trim()
 
-    def finalize_through(self, sample: int) -> None:
+    def finalize_through(self, sample: int) -> int:
+        before = self.buffered_bytes
         self.finalized_sample = max(self.finalized_sample, sample)
         self._trim()
+        return before - self.buffered_bytes
 
     def _trim(self) -> None:
-        first = max(self.finalized_sample, self._end_sample - self.ring_seconds * self.sample_rate)
+        first = self.finalized_sample
+        if not self.strict_replay:
+            first = max(first, self._end_sample - self.ring_seconds * self.sample_rate)
         while self._chunks and self._chunks[0][0] + len(self._chunks[0][1]) // 2 <= first:
             self._chunks.popleft()
         if self._chunks and self._chunks[0][0] < first:
@@ -87,11 +92,24 @@ class ResilientAudio:
         self._chunks.clear()
 
 
+def trim_window_replay_to_anchor(ring: ResilientAudio | None, socket: Any) -> None:
+    """Discard only capture samples before the window's emitted sentence anchor."""
+    if ring is None:
+        return
+    anchor = getattr(socket, 'window_replay_anchor_sample', None)
+    sample = anchor() if callable(anchor) else None
+    if isinstance(sample, int) and ring.finalize_through(sample):
+        WINDOW_REPLAY_SAFE_TRIMS.inc()
+
+
 def window_replay_action(
     ring: ResilientAudio | None, socket: Any, data: bytes, start_sample: int | None
 ) -> Literal['append', 'trim', 'failover']:
-    """Reserve replay space before send; trim only when no admitted speech awaits text."""
-    if ring is None or not ring.would_overflow(data, start_sample):
+    """Reserve replay space after reconciling emitted text with the capture ring."""
+    if ring is None:
+        return 'append'
+    trim_window_replay_to_anchor(ring, socket)
+    if not ring.would_overflow(data, start_sample):
         return 'append'
     raw = getattr(socket, 'raw', None)
     has_untranscribed_speech = getattr(raw, 'has_untranscribed_speech', None)
@@ -100,6 +118,10 @@ def window_replay_action(
         and not has_untranscribed_speech()
         and len(data) <= ring.ring_seconds * ring.sample_rate * 2
     ):
+        assert start_sample is not None
+        keep_from = start_sample + len(data) // 2 - ring.ring_seconds * ring.sample_rate
+        if ring.finalize_through(keep_from):
+            WINDOW_REPLAY_SAFE_TRIMS.inc()
         return 'trim'
     if raw is not None:
         raw.fail('capacity_full')
@@ -111,15 +133,8 @@ def filter_replayed_segments(
     provider: str | None,
     *,
     soniox: ResilientAudio | None,
-    window: ResilientAudio | None,
-    window_model: bool,
     cutoff: int,
 ) -> list[dict[str, Any]]:
-    if provider == 'parakeet' and window is not None and window_model:
-        for segment in segments:
-            end = segment.get('_capture_end_sample')
-            if isinstance(end, int):
-                window.finalize_through(end)
     if soniox is None or provider != 'soniox':
         return segments
     kept = []
@@ -148,8 +163,6 @@ class ReplayFilterMixin:
             segments,
             provider,
             soniox=getattr(self, '_resilient_audio', None),
-            window=getattr(self, '_window_replay_audio', None),
-            window_model=getattr(self.host, 'stt_model', None) == 'parakeet-window',
             cutoff=getattr(self, '_replay_cutoff_sample', 0),
         )
 

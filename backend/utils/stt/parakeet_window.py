@@ -438,6 +438,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._anchor_bytes = 0
         self._now_bytes = 0
         self._last_emitted_end = 0.0
+        self._on_replay_progress: Callable[[], None] = lambda: None
         # Anchor bytes of the one window whose beyond-window drops are being
         # re-posted (see `_run_job`): bounded to a single retry per anchor.
         self._beyond_window_repost: int | None = None
@@ -454,6 +455,17 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     def has_untranscribed_speech(self) -> bool:
         """Whether replay still protects speech that this leg has not emitted."""
         return (self._first_speech_at is not None and not self._first_text_recorded) or self._has_unemitted_speech()
+
+    def replay_anchor_sample(self) -> int | None:
+        """Provider sample before which emitted text makes capture replay unnecessary."""
+        if not self._first_text_recorded:
+            return None
+        with self._lock:
+            # Empty forced cuts may slide the POST anchor without emitting text.
+            return min(self._anchor_bytes, self._to_bytes(self._last_emitted_end)) // 2
+
+    def set_replay_progress_callback(self, callback: Callable[[], None]) -> None:
+        self._on_replay_progress = callback
 
     def start(self) -> None:
         super().start()
@@ -893,6 +905,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
     def _advance_anchor(self, new_anchor: int) -> None:
         with self._lock:
+            previous = self._anchor_bytes
             origin = self._origin_bytes()
             drop = new_anchor - origin
             if drop > 0:
@@ -901,6 +914,13 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self._anchor_bytes = max(new_anchor, origin)
             while self._speech_spans and self._speech_spans[0][1] <= self._anchor_bytes:
                 self._speech_spans.popleft()
+        if self._anchor_bytes > previous:
+            try:
+                self._on_replay_progress()
+            except Exception:
+                # Replay telemetry/compaction cannot turn a successful POST
+                # into provider failure; the receiver checks again before send.
+                logger.warning('Parakeet window replay anchor callback failed')
 
     async def _assign_speaker(self, seg_pcm: bytes) -> int:
         if self._embedded_this_window:

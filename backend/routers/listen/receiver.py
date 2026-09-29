@@ -65,10 +65,14 @@ from utils.stt.live_failure import (
 from utils.stt.live_chain import ProviderChainUnavailable
 from config.stt_provider_policy import provider_for_service
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
-from utils.stt.live_metrics import RECONNECT, WINDOW_REPLAY_SAFE_TRIMS
+from utils.stt.live_metrics import RECONNECT
 from utils.stt.brand_terms import normalize_brand_segments
 from utils.stt.resilient_stream import ReplayFilterMixin, ResilientAudio, replay_chunks, socket_is_finishing
-from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled, window_replay_action
+from utils.stt.resilient_stream import (
+    enabled as resilient_reconnect_enabled,
+    trim_window_replay_to_anchor,
+    window_replay_action,
+)
 from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
@@ -247,7 +251,9 @@ class ListenReceiver(ReplayFilterMixin):
         ):
             self.capture_timeline = CaptureTimeline(sample_rate=int(host.request.sample_rate))
             # One 90s ring per session matches the maximum window buffer (30/15).
-            self._window_replay_audio = ResilientAudio(int(host.request.sample_rate), ring_seconds=90)
+            self._window_replay_audio = ResilientAudio(
+                int(host.request.sample_rate), ring_seconds=90, strict_replay=True
+            )
             if resilient_reconnect_enabled():
                 self._resilient_audio = ResilientAudio(int(host.request.sample_rate))
             # Pin the persistence mode for the recording's life; the flag is
@@ -1358,6 +1364,7 @@ class ListenReceiver(ReplayFilterMixin):
         previous = self.stt_socket
         previous_selection = (self.host.stt_service, self.host.stt_language, self.host.stt_model)
         window_ring = self._window_ring()
+        trim_window_replay_to_anchor(window_ring, previous)
         replay = window_ring.snapshot() if window_ring is not None else ()
         if replay and epoch is not None:
             epoch.replay_origin_sample = replay[0][0]
@@ -1560,8 +1567,6 @@ class ListenReceiver(ReplayFilterMixin):
                     self._resilient_audio.append(outbound_audio, outbound_start_sample)
                 if (ring := self._window_ring()) is not None:
                     ring.append(outbound_audio, outbound_start_sample)
-                    if ring_action == 'trim':
-                        WINDOW_REPLAY_SAFE_TRIMS.inc()
                 self._capture('capture_outbound_stt', outbound_audio)
                 self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
                 self._stt_buffer_start_sample = None
