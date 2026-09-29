@@ -236,14 +236,21 @@ def accept_candidate(
         if final_workstream_id is None:
             final_workstream_id = expected_task_links[1]
     task_links.validate_task_links(uid, goal_id=final_goal_id, workstream_id=final_workstream_id)
-    summary_arguments = {'summary_item': summary_item} if summary_item is not None else {}
-    receipt = candidates_db.resolve_task_candidate(
-        uid,
-        candidate_id,
-        account_generation=account_generation,
-        expected_task_links=expected_task_links,
-        **summary_arguments,
-    )
+    if summary_item is None:
+        receipt = candidates_db.resolve_task_candidate(
+            uid,
+            candidate_id,
+            account_generation=account_generation,
+            expected_task_links=expected_task_links,
+        )
+    else:
+        receipt = candidates_db.resolve_task_candidate(
+            uid,
+            candidate_id,
+            account_generation=account_generation,
+            expected_task_links=expected_task_links,
+            summary_item=summary_item,
+        )
     if candidate.proposed_action == CandidateAction.create and receipt.task_id:
         _dispatch_task_integration(
             uid,

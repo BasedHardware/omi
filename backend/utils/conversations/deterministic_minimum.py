@@ -17,8 +17,7 @@ from datetime import datetime, timezone
 from datetime import tzinfo
 from typing import Any, Callable, Iterable, List, Optional
 
-from models.conversation_enums import CategoryEnum
-from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
+from models.structured import CategoryEnum, Structured
 
 # ~60 chars, cut on a word boundary. Long enough for a real first sentence,
 # short enough to stay one line in every conversation list we ship.

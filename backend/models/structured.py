@@ -10,7 +10,16 @@ if _SDK_SRC.exists() and str(_SDK_SRC) not in sys.path:
     sys.path.insert(0, str(_SDK_SRC))
 
 try:
-    from omi_plugin_sdk.models import ActionItem, Event, Insight, MeetingType, Participant, Section, Structured
+    from omi_plugin_sdk.models import (
+        ActionItem,
+        CategoryEnum,
+        Event,
+        Insight,
+        MeetingType,
+        Participant,
+        Section,
+        Structured,
+    )
 except ModuleNotFoundError:
     from models.conversation_enums import CategoryEnum
 
@@ -191,4 +200,4 @@ except ModuleNotFoundError:
             return result.strip()
 
 
-__all__ = ['ActionItem', 'Event', 'Insight', 'MeetingType', 'Participant', 'Section', 'Structured']
+__all__ = ['ActionItem', 'CategoryEnum', 'Event', 'Insight', 'MeetingType', 'Participant', 'Section', 'Structured']

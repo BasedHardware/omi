@@ -12,7 +12,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from database._client import get_firestore_client
 from database.read_boundary import MalformedDocError, parse_payload_strict
-from models.action_item import EvidenceRef, TaskCreatePayload
+from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope, TaskCreatePayload, TaskOwner
 from models.candidate import CandidateCreate, SummaryTaskReference
 from models.structured import ActionItem
 from models.task_intelligence import StableId
@@ -47,7 +47,7 @@ class SummaryTaskRow:
                 'proposed_action': 'create',
                 'task_change': TaskCreatePayload(
                     description=self.item.description,
-                    owner=self.item.capture_owner or 'unknown',
+                    owner=TaskOwner(self.item.capture_owner or 'unknown'),
                     due_at=self.item.due_at,
                     due_confidence=1.0 if self.item.due_at else None,
                 ),
@@ -58,8 +58,8 @@ class SummaryTaskRow:
                 'source_surface': 'conversation',
                 'evidence_refs': [
                     EvidenceRef(
-                        kind='conversation',
-                        scope='canonical',
+                        kind=EvidenceKind.conversation,
+                        scope=EvidenceScope.canonical,
                         id=self.conversation_id,
                         transcript_segment_ids=self.item.source_segment_ids,
                     )
