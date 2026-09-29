@@ -391,17 +391,17 @@ env:
   - name: SONIOX_CONTEXT_TERMS
     value: "false"
   - name: STT_LEARNED_LANGUAGE_PROFILE
-    value: "false"
+    value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
-    value: "25"
+    value: "50"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
-    value: "1"
+    value: "5"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
-    value: "1"
+    value: "8"
   - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
     value: "prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local"
   - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
-    value: "2"
+    value: "3"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION

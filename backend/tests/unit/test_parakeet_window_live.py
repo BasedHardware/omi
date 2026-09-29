@@ -11,6 +11,7 @@ import pytest
 
 from utils.stt import parakeet_window as window, provider_resilience, streaming as st, vad_gate
 from utils.stt.live_metrics import (
+    WINDOW_ADMISSION,
     WINDOW_FIRST_TEXT,
     WINDOW_FORCED_CUTS,
     WINDOW_POSTS,
@@ -300,8 +301,8 @@ async def test_batch_pressure_endpoint_thresholds_and_unavailable_signal(monkeyp
         AsyncMock(side_effect=lambda *_args, **_kwargs: [(None, None, None, None, (ip, 8080)) for ip in ips]),
     )
     payloads = {
-        '10.0.0.1': {'pending_requests': 2, 'oldest_pending_seconds': 0},
-        '10.0.0.2': {'pending_requests': 2, 'oldest_pending_seconds': 0},
+        '10.0.0.1': {'pending_requests': 100, 'live_pending_requests': 3, 'live_oldest_pending_seconds': 0},
+        '10.0.0.2': {'pending_requests': 100, 'live_pending_requests': 3, 'live_oldest_pending_seconds': 0},
     }
 
     class Response:
@@ -324,24 +325,29 @@ async def test_batch_pressure_endpoint_thresholds_and_unavailable_signal(monkeyp
 
     client = Client()
     await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert not pressure.allows('tdt-headless.invalid', 2)  # 2 + 2 trips pool cutoff
-    payloads['10.0.0.2']['pending_requests'] = 0
-    await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert pressure.allows('tdt-headless.invalid', 2)
-    payloads['10.0.0.2']['oldest_pending_seconds'] = 1
+    assert pressure.allows('tdt-headless.invalid', 2)  # Backfill and fleet sum do not trip the live gate.
+    payloads['10.0.0.2']['live_pending_requests'] = 4
     await pressure._refresh('tdt-headless.invalid', 2, client)
     assert not pressure.allows('tdt-headless.invalid', 2)
-    payloads['10.0.0.2']['oldest_pending_seconds'] = 0
+    payloads['10.0.0.2']['live_pending_requests'] = 0
+    payloads['10.0.0.2']['live_oldest_pending_seconds'] = 0.75
+    await pressure._refresh('tdt-headless.invalid', 2, client)
+    assert not pressure.allows('tdt-headless.invalid', 2)
+    payloads['10.0.0.2']['live_oldest_pending_seconds'] = 0
     ips.pop()
     await pressure._refresh('tdt-headless.invalid', 2, client)
     assert not pressure.allows('tdt-headless.invalid', 2)  # incomplete DNS set
     ips.append('10.0.0.2')
-    payloads['10.0.0.2']['pending_requests'] = float('nan')
+    payloads['10.0.0.2']['live_pending_requests'] = float('nan')
     await pressure._refresh('tdt-headless.invalid', 2, client)
     assert not pressure.allows('tdt-headless.invalid', 2)  # invalid telemetry
-    payloads['10.0.0.2']['pending_requests'] = 0
+    payloads['10.0.0.2']['live_pending_requests'] = 0
     await pressure._refresh('tdt-headless.invalid', 2, client)
     assert pressure.allows('tdt-headless.invalid', 2)
+    del payloads['10.0.0.2']['live_oldest_pending_seconds']
+    await pressure._refresh('tdt-headless.invalid', 2, client)
+    assert not pressure.allows('tdt-headless.invalid', 2)  # Old GPU replica: fail closed.
+    payloads['10.0.0.2']['live_oldest_pending_seconds'] = 0
     requests_before = len(client.requests)
     ips[:] = [f'10.0.0.{i}' for i in range(1, pressure.MAX_REPLICAS + 2)]
     await pressure._refresh('tdt-headless.invalid', 2, client)
@@ -403,6 +409,7 @@ def receiver():
 
 @pytest.mark.asyncio
 async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypatch):
+    before_accepted = WINDOW_ADMISSION.labels(outcome='accepted')._value.get()
     before_text = WINDOW_SESSION_OUTCOME.labels(outcome='text')._value.get()
     before_first = WINDOW_FIRST_TEXT._sum.get()
     client = Client()
@@ -435,6 +442,7 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
     assert session.consume_speech_ms_delta() == 1000
     assert session.consume_speech_ms_delta() == 0
     assert window.admission.active == 0
+    assert WINDOW_ADMISSION.labels(outcome='accepted')._value.get() == before_accepted + 1
     assert WINDOW_SESSION_OUTCOME.labels(outcome='text')._value.get() == before_text + 1
     assert WINDOW_FIRST_TEXT._sum.get() > before_first
 
@@ -442,11 +450,63 @@ async def test_speech_only_post_silence_flush_tail_timestamps_and_usage(monkeypa
 @pytest.mark.asyncio
 async def test_speech_with_empty_tdt_output_counts_no_text(monkeypatch):
     monkeypatch.setattr(window, 'get_stt_client', lambda: Client(data={'text': ''}))
+    before_accepted = WINDOW_ADMISSION.labels(outcome='accepted')._value.get()
     before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get()
     sock = await LiveChainSession(receiver()).connect(16000)
     assert sock.send(b'\x01\x00' * 16000)
     await sock.drain_and_close()
+    assert WINDOW_ADMISSION.labels(outcome='accepted')._value.get() == before_accepted + 1
     assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_session_outcome_is_recorded_before_health_close_callback():
+    sock = window.connect_window(lambda _: None, 16000)
+    sock._first_speech_at = window.time.monotonic()
+    before = WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get()
+
+    def fail_health_close():
+        raise RuntimeError('health callback failed')
+
+    sock._health_close = fail_health_close
+    sock._on_pump_done(SimpleNamespace(cancelled=lambda: False))
+
+    assert WINDOW_SESSION_OUTCOME.labels(outcome='no_text')._value.get() == before + 1
+    assert window.admission.active == 0
+
+    # The real pump task is still running; close it through the normal async
+    # lifecycle after restoring its callback so this test leaves no task behind.
+    sock._health_close = lambda: None
+    sock._closed = True
+    sock._wake.set()
+    assert sock._pump_task is not None
+    await sock._pump_task
+    sock.finish()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal', ['finish', 'fail'])
+async def test_terminal_callback_failure_releases_admission_once(terminal):
+    sock = window.connect_window(lambda _: None, 16000)
+    assert window.admission.active == 1
+
+    def fail_health_close():
+        raise RuntimeError('health callback failed')
+
+    sock._health_close = fail_health_close
+    if terminal == 'finish':
+        sock.finish()
+    else:
+        sock.fail('test_failure')
+
+    # The releasing call must not wait for the cancelled pump's done callback.
+    assert window.admission.active == 0
+    assert sock._pump_task is not None
+    with pytest.raises(asyncio.CancelledError):
+        await sock._pump_task
+    await _REAL_SLEEP(0)
+    # _on_pump_done may release again, but the admission lease is idempotent.
+    assert window.admission.active == 0
 
 
 @pytest.mark.asyncio
@@ -496,6 +556,24 @@ async def test_overflow_moves_to_soniox_and_releases_on_finish(monkeypatch):
     assert window.admission.active == 0
     await asyncio.gather(first.raw._pump_task, return_exceptions=True)
     second.finish()
+
+
+def test_eight_session_cap_is_hard_and_releases_idempotently(monkeypatch):
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
+    admission = window.WindowAdmission()
+    releases = [admission.acquire() for _ in range(8)]
+    assert admission.active == 8
+    with pytest.raises(st.ParakeetConnectionError, match='capacity_full'):
+        admission.acquire()
+    releases[0]()
+    releases[0]()
+    assert admission.active == 7
+    replacement = admission.acquire()
+    assert admission.active == 8
+    for release in releases[1:]:
+        release()
+    replacement()
+    assert admission.active == 0
 
 
 @pytest.mark.parametrize('fault', ['503', 'timeout'])
