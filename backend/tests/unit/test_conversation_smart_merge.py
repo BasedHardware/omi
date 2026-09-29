@@ -178,7 +178,7 @@ class World:
 
 @pytest.fixture
 def world(monkeypatch):
-    monkeypatch.delenv(config.SMART_MERGE_MODE_ENV, raising=False)
+    monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
     monkeypatch.delenv(config.SMART_MERGE_UID_ALLOWLIST_ENV, raising=False)
     return World(monkeypatch)
 
@@ -186,10 +186,32 @@ def world(monkeypatch):
 # --------------------------------------------------------------------------- flag
 
 
-@pytest.mark.parametrize('raw, mode', [('', 'off'), ('bogus', 'off'), ('SHADOW', 'shadow'), (' merge ', 'merge')])
-def test_mode_parsing_defaults_to_off(monkeypatch, raw, mode):
+@pytest.mark.parametrize(
+    'raw, mode',
+    [
+        ('', 'merge'),
+        ('   ', 'merge'),
+        ('merge', 'merge'),
+        (' MERGE ', 'merge'),
+        ('SHADOW', 'shadow'),
+        ('off', 'off'),
+        (' Off ', 'off'),
+        # The variable is the kill switch: a typo must stop merging, not keep it on.
+        ('of', 'off'),
+        ('disabled', 'off'),
+        ('bogus', 'off'),
+        ('false', 'off'),
+    ],
+)
+def test_mode_parsing(monkeypatch, raw, mode):
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, raw)
     assert config.smart_merge_mode().value == mode
+
+
+def test_unset_mode_is_merge_by_default(monkeypatch):
+    monkeypatch.delenv(config.SMART_MERGE_MODE_ENV, raising=False)
+    assert config.smart_merge_mode() is config.SmartMergeMode.MERGE
+    assert config.DEFAULT_SMART_MERGE_MODE is config.SmartMergeMode.MERGE
 
 
 def test_uid_allowlist(monkeypatch):
@@ -212,7 +234,7 @@ def test_metric_reason_is_bounded_to_known_values(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_flag_off_step_is_a_no_op_without_any_io(monkeypatch):
-    monkeypatch.delenv(config.SMART_MERGE_MODE_ENV, raising=False)
+    monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'off')
 
     async def forbidden(*args, **kwargs):
         raise AssertionError('flag off must not schedule work')

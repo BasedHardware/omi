@@ -17,6 +17,11 @@ badly calibrated (true continuations average 0.3-0.4) and the nearest held-out
 negative scored 0.305, so the threshold is a cutoff, not a probability, and
 any wording, state-format or model change needs a re-measure.
 
+The owner overrode that verdict on 2026-09-29 and made ``merge`` the default:
+with the variable unset the step folds conversations. ``off`` is the kill
+switch, ``shadow`` records decisions without merging, and any other non-empty
+value fails to ``off`` so a typo in the kill switch can never leave merging on.
+
 Pure module: stdlib only, flags read at the call boundary, never at import.
 """
 
@@ -35,9 +40,18 @@ class SmartMergeMode(str, Enum):
     MERGE = 'merge'  # decide, record, and fold the conversation into its predecessor
 
 
+DEFAULT_SMART_MERGE_MODE = SmartMergeMode.MERGE
+
+
 def smart_merge_mode() -> SmartMergeMode:
-    """Unknown or empty values are ``off``: a typo must never enable merging."""
+    """Unset or blank is the default (``merge``); an unrecognized value is ``off``.
+
+    The asymmetry is deliberate: the variable is the kill switch, so a mistyped
+    ``of`` or ``disabled`` must stop the feature, not silently keep it running.
+    """
     raw = os.getenv(SMART_MERGE_MODE_ENV, '').strip().lower()
+    if not raw:
+        return DEFAULT_SMART_MERGE_MODE
     try:
         return SmartMergeMode(raw)
     except ValueError:
