@@ -21,6 +21,7 @@ void main() {
     Future<bool> Function()? isAvailable,
     Future<void> Function()? requestNativeReview,
     Future<bool> Function(String key, String value)? writeState,
+    Future<Duration> Function()? cooldown,
     AppReviewTelemetry? telemetry,
   }) {
     return AppReviewService.forTesting(
@@ -31,53 +32,72 @@ void main() {
       isAvailable: isAvailable,
       requestNativeReview: requestNativeReview,
       writeState: writeState,
+      cooldown: cooldown,
       telemetry: telemetry,
     );
   }
 
-  Future<void> recordThreeReadingDays(AppReviewService reviewService) async {
-    now = DateTime(2026, 9, 1, 12);
-    await reviewService.recordEngagement();
-    now = DateTime(2026, 9, 2, 12);
-    await reviewService.recordEngagement();
-    now = DateTime(2026, 9, 8, 12);
-    await reviewService.recordEngagement();
-    now = DateTime(2026, 9, 22, 12);
-  }
-
-  test('recordEngagement stores distinct local days and first seen only', () async {
+  test('bad experience stores only a timestamp per category', () async {
     final reviewService = service();
-    now = DateTime(2026, 9, 1, 23, 59);
-    await reviewService.recordEngagement();
-    now = DateTime(2026, 9, 2, 0, 1);
-    await reviewService.recordEngagement();
-    await reviewService.recordEngagement();
+    await reviewService.recordBadExperience(AppReviewBadExperience.negativeChatRating);
 
     final raw = jsonDecode(preferences.getString('app_review_policy_v1')!) as Map<String, dynamic>;
-    expect(raw['firstSeenAtMs'], DateTime(2026, 9, 1, 23, 59).millisecondsSinceEpoch);
-    expect(raw['readingDays'], ['2026-09-01', '2026-09-02']);
+    expect(raw['badExperiences'], {'negativeChatRating': now.millisecondsSinceEpoch});
     expect(raw.containsKey('conversation'), isFalse);
   });
 
-  test('does not ask before familiarity is established', () async {
+  for (final category in AppReviewBadExperience.values) {
+    test('$category suppresses requests for three days across service instances', () async {
+      final writer = service();
+      await writer.recordBadExperience(category);
+      final events = <Map<String, Object>>[];
+      var requests = 0;
+      final reader = service(
+        isAvailable: () async => true,
+        requestNativeReview: () async => requests++,
+        telemetry: (event, properties) => events.add(<String, Object>{'event': event, ...properties}),
+      );
+      now = now.add(const Duration(days: 2));
+      await reader.requestReview(moment: AppReviewMoment.dailySummaryRead, isStillAppropriate: () => true);
+      expect(events.single['decision'], 'recent_bad_experience');
+      expect(requests, 0);
+      now = now.add(const Duration(days: 1));
+      await reader.requestReview(moment: AppReviewMoment.dailySummaryRead, isStillAppropriate: () => true);
+      expect(events.last['event'], 'App Review Request Finished');
+      expect(requests, 1);
+    });
+  }
+
+  test('remote cooldown override is applied to later versions', () async {
+    final first = service(isAvailable: () async => true, requestNativeReview: () async {});
+    await first.requestReview(moment: AppReviewMoment.dailySummaryRead, isStillAppropriate: () => true);
+    now = now.add(const Duration(days: 8));
+    final events = <Map<String, Object>>[];
+    final second = service(
+      version: '1.3',
+      cooldown: () async => const Duration(days: 7),
+      isAvailable: () async => false,
+      telemetry: (event, properties) => events.add(<String, Object>{'event': event, ...properties}),
+    );
+    await second.requestReview(moment: AppReviewMoment.dailySummaryRead, isStillAppropriate: () => true);
+    expect(events.single['decision'], 'unavailable');
+  });
+
+  test('can ask on the first value moment without familiarity history', () async {
     var availabilityCalls = 0;
     final events = <Map<String, Object>>[];
     final reviewService = service(
       isAvailable: () async {
         availabilityCalls++;
-        return true;
+        return false;
       },
       telemetry: (event, properties) => events.add(<String, Object>{'event': event, ...properties}),
     );
-    await reviewService.recordEngagement();
-    await reviewService.requestReview(
-      moment: AppReviewMoment.dailySummaryRead,
-      isStillAppropriate: () => true,
-    );
+    await reviewService.requestReview(moment: AppReviewMoment.dailySummaryRead, isStillAppropriate: () => true);
 
-    expect(availabilityCalls, 0);
+    expect(availabilityCalls, 1);
     expect(events.single['event'], 'App Review Opportunity');
-    expect(events.single['decision'], 'not_familiar');
+    expect(events.single['decision'], 'unavailable');
   });
 
   test('checks lifecycle around availability and persists before native request', () async {
@@ -93,7 +113,6 @@ void main() {
       },
       telemetry: (event, properties) => events.add(<String, Object>{'event': event, ...properties}),
     );
-    await recordThreeReadingDays(reviewService);
     await reviewService.requestReview(
       moment: AppReviewMoment.conversationRead,
       isStillAppropriate: () {
@@ -104,10 +123,11 @@ void main() {
 
     expect(lifecycleChecks, 3);
     expect(requestCalls, 1);
-    expect(
-      events.map((event) => event['event']),
-      ['App Review Opportunity', 'App Review Request Attempted', 'App Review Request Finished'],
-    );
+    expect(events.map((event) => event['event']), [
+      'App Review Opportunity',
+      'App Review Request Attempted',
+      'App Review Request Finished',
+    ]);
     expect(events.first['decision'], 'eligible');
     expect(events.last['result'], 'returned');
   });
@@ -121,7 +141,6 @@ void main() {
       requestNativeReview: () async => requestCalls++,
       telemetry: (event, properties) => events.add(<String, Object>{'event': event, ...properties}),
     );
-    await recordThreeReadingDays(reviewService);
     await reviewService.requestReview(
       moment: AppReviewMoment.dailySummaryRead,
       isStillAppropriate: () {
@@ -149,7 +168,6 @@ void main() {
       requestNativeReview: () async => requestCalls++,
       telemetry: (event, properties) => events.add(<String, Object>{'event': event, ...properties}),
     );
-    await recordThreeReadingDays(reviewService);
     await reviewService.requestReview(moment: AppReviewMoment.dailySummaryRead, isStillAppropriate: () => true);
     await reviewService.requestReview(moment: AppReviewMoment.dailySummaryRead, isStillAppropriate: () => true);
 
@@ -167,7 +185,6 @@ void main() {
       requestNativeReview: () async => throw StateError('native failure'),
       telemetry: (event, properties) => events.add(<String, Object>{'event': event, ...properties}),
     );
-    await recordThreeReadingDays(reviewService);
     await reviewService.requestReview(moment: AppReviewMoment.conversationRead, isStillAppropriate: () => true);
 
     expect(events.where((event) => event['event'] == 'App Review Opportunity'), hasLength(1));
@@ -178,14 +195,10 @@ void main() {
   });
 
   test('a new build of the same marketing version cannot request again', () async {
-    final first = service(
-      isAvailable: () async => true,
-      requestNativeReview: () async {},
-    );
-    await recordThreeReadingDays(first);
+    final first = service(isAvailable: () async => true, requestNativeReview: () async {});
     await first.requestReview(moment: AppReviewMoment.dailySummaryRead, isStillAppropriate: () => true);
 
-    now = now.add(const Duration(days: 121));
+    now = now.add(const Duration(days: 31));
     final events = <Map<String, Object>>[];
     final second = service(
       version: '1.2+100',
@@ -198,11 +211,7 @@ void main() {
 
   test('concurrent triggers serialize to one native call', () async {
     var requestCalls = 0;
-    final reviewService = service(
-      isAvailable: () async => true,
-      requestNativeReview: () async => requestCalls++,
-    );
-    await recordThreeReadingDays(reviewService);
+    final reviewService = service(isAvailable: () async => true, requestNativeReview: () async => requestCalls++);
     await Future.wait([
       reviewService.requestReview(moment: AppReviewMoment.dailySummaryRead, isStillAppropriate: () => true),
       reviewService.requestReview(moment: AppReviewMoment.conversationRead, isStillAppropriate: () => true),
@@ -211,19 +220,20 @@ void main() {
     expect(requestCalls, 1);
   });
 
-  test('legacy shown flags start one migration cooldown and do not count as a rating', () async {
-    SharedPreferences.setMockInitialValues(<String, Object>{'has_shown_review_for_conversation': true});
+  test('legacy shown flags no longer block an eligible request', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{'has_shown_review_prompt': true});
     preferences = await SharedPreferences.getInstance();
     final events = <Map<String, Object>>[];
     final reviewService = service(
+      isAvailable: () async => true,
+      requestNativeReview: () async {},
       telemetry: (event, properties) => events.add(<String, Object>{'event': event, ...properties}),
     );
-    await recordThreeReadingDays(reviewService);
     await reviewService.requestReview(moment: AppReviewMoment.conversationRead, isStillAppropriate: () => true);
 
-    expect(events.single['decision'], 'migration_cooldown');
+    expect(events.first['decision'], 'eligible');
     final state = jsonDecode(preferences.getString('app_review_policy_v1')!) as Map<String, dynamic>;
-    expect(state['attempts'], isEmpty);
+    expect(state['attempts'], hasLength(1));
     expect(state['migrationComplete'], isTrue);
   });
 

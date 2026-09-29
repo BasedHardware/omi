@@ -1067,7 +1067,8 @@ enum AppReviewOpportunityDecision {
   lifecycleChanged("lifecycle_changed"),
   availabilityError("availability_error"),
   unavailable("unavailable"),
-  requestError("request_error");
+  requestError("request_error"),
+  recentBadExperience("recent_bad_experience");
   const AppReviewOpportunityDecision(this.wireName);
   final String wireName;
 }

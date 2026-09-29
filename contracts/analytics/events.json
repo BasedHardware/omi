@@ -1841,7 +1841,8 @@
             "lifecycle_changed",
             "availability_error",
             "unavailable",
-            "request_error"
+            "request_error",
+            "recent_bad_experience"
           ]
         }
       },
