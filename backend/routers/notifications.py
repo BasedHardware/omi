@@ -119,7 +119,9 @@ def send_app_notification_to_user(
     app_data = get_available_app_by_id(aid, uid)
     if not app_data:
         raise HTTPException(status_code=404, detail='App not found')
-    app = App(**app_data)
+    app = App.deserialize_safe(app_data)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
 
     # Check if user has app installed
     user_enabled = set(get_enabled_apps(uid))
