@@ -533,9 +533,9 @@ class TranslationCoordinator:
 
         reservation = None
         if viewed:
-            revision = hashlib.sha256(
-                repr([(seg_id, text, version) for seg_id, text, _, version in valid_units]).encode('utf-8')
-            ).hexdigest()
+            # Match the detail-read revision for the same canonical segment page.
+            # The generation stays on each queued work item; it is not source content.
+            revision = hashlib.sha256(repr(api_units).encode('utf-8')).hexdigest()
             reservation, reason = await run_blocking(
                 db_executor,
                 reserve_translation,

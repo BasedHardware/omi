@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 
 from config.translation import TranslationProvider
@@ -27,9 +28,13 @@ def test_hidden_observation_is_uncommitted_then_viewed_reconciles_without_new_te
     monkeypatch.setattr(
         'utils.translation_coordinator.classify_translation_need', lambda *args, **kwargs: TranslationNeed.TRANSLATE
     )
-    monkeypatch.setattr(
-        'utils.translation_coordinator.reserve_translation', lambda *args, **kwargs: (object(), 'admitted')
-    )
+    reservations = []
+
+    def reserve(*args, **kwargs):
+        reservations.append(args)
+        return object(), 'admitted'
+
+    monkeypatch.setattr('utils.translation_coordinator.reserve_translation', reserve)
     monkeypatch.setattr('utils.translation_coordinator.reservation_is_current', lambda *args, **kwargs: True)
     monkeypatch.setattr('utils.translation_coordinator.release_translation', lambda *args, **kwargs: True)
     now = [0.0]
@@ -60,6 +65,7 @@ def test_hidden_observation_is_uncommitted_then_viewed_reconciles_without_new_te
         await coordinator._flush_batch()
         assert received and received[0][0] == 's'
         assert provider.calls[0]['profile'].policy_version == 'viewed_v1'
+        assert reservations[0][3] == hashlib.sha256(repr([('s', segment().text)]).encode('utf-8')).hexdigest()
 
     asyncio.run(run())
 
