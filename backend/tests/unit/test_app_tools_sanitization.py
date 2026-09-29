@@ -36,9 +36,7 @@ class TestAppToolsSanitization:
         with (
             patch.object(self.mod, "is_app_webhook_disabled", return_value=False),
             patch.object(self.mod, "get_webhook_circuit_breaker", return_value=_allowing_breaker()),
-            patch.object(
-                self.mod, "call_mcp_tool", new_callable=AsyncMock, side_effect=RuntimeError(SENTINEL_ERROR)
-            ),
+            patch.object(self.mod, "call_mcp_tool", new_callable=AsyncMock, side_effect=RuntimeError(SENTINEL_ERROR)),
             patch.object(self.mod, "record_app_webhook_failure"),
             patch.object(self.mod, "_handle_app_webhook_disable"),
         ):
