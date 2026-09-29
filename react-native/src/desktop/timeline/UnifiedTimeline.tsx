@@ -493,7 +493,11 @@ export function UnifiedTimeline({
         {onOpenEntry ? (
           <Pressable
             accessibilityLabel={`${kindMeta[entry.kind].label} ${entry.title}`}
-            style={styles.rowPress}
+            style={({hovered, pressed}) => [
+              styles.rowPress,
+              hovered && !pressed && styles.rowHover,
+              pressed && styles.rowPressed,
+            ]}
             onPress={() => onOpenEntry(entry)}>
             {body}
           </Pressable>
@@ -508,6 +512,7 @@ export function UnifiedTimeline({
       <ScrollView
         accessibilityLabel="Unified timeline"
         scrollEventThrottle={16}
+        style={styles.scroller}
         contentContainerStyle={styles.content}>
         {header}
         {loading && entries.length === 0 ? (
@@ -536,7 +541,11 @@ export function UnifiedTimeline({
                   section.label
                 } section`}
                 accessibilityRole="button"
-                style={styles.sectionHeader}
+                style={({hovered, pressed}) => [
+                  styles.sectionHeader,
+                  hovered && !pressed && styles.sectionHeaderHover,
+                  pressed && styles.pressed,
+                ]}
                 onPress={() => toggleSection(section.key)}>
                 <MaterialIcon
                   name="expand_more"
@@ -563,12 +572,16 @@ export function UnifiedTimeline({
 const createStyles = (token: DesktopTokens) =>
   StyleSheet.create({
     root: {flex: 1},
+    scroller: {
+      // Full-width stretch: the omnibar and filter rows above no longer cap
+      // at 992, so the timeline stretches with them on wide windows.
+      alignSelf: 'center',
+      width: '100%',
+    },
     content: {
       paddingHorizontal: 8,
       paddingBottom: 24,
-      maxWidth: 860,
       width: '100%',
-      alignSelf: 'center',
     },
     sectionHeader: {
       alignItems: 'center',
@@ -582,6 +595,8 @@ const createStyles = (token: DesktopTokens) =>
       paddingHorizontal: 12,
       paddingVertical: 8,
     },
+    sectionHeaderHover: {backgroundColor: token.color.glassStrong},
+    pressed: {opacity: 0.78},
     sectionLabel: {
       color: token.color.ink,
       flex: 1,
@@ -619,6 +634,8 @@ const createStyles = (token: DesktopTokens) =>
       paddingHorizontal: 6,
       marginHorizontal: -6,
     },
+    rowHover: {backgroundColor: token.color.glassQuiet},
+    rowPressed: {opacity: 0.78},
     rowIcon: {
       width: 30,
       height: 30,

@@ -630,7 +630,12 @@ const createStyles = (token: DesktopTokens) =>
       fontWeight: '600',
     },
     pressed: {opacity: 0.78},
-    list: {flex: 1},
+    list: {
+      flex: 1,
+      // Full-width stretch to match the uncapped chrome rows above.
+      alignSelf: 'center',
+      width: '100%',
+    },
     section: {
       backgroundColor: token.color.glassStrong,
       borderWidth: 1,
@@ -643,9 +648,7 @@ const createStyles = (token: DesktopTokens) =>
       paddingTop: 8,
       paddingBottom: 32,
       paddingHorizontal: 24,
-      maxWidth: 1040,
       width: '100%',
-      alignSelf: 'center',
       gap: 16,
     },
   });

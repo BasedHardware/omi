@@ -7,6 +7,14 @@ const mockReact = React;
 let mockPlatformOS = 'macos';
 let mockReduceMotion = false;
 
+jest.mock('react-native-svg', () => ({
+  __esModule: true,
+  // MaterialIcon renders Material Symbols geometry through react-native-svg;
+  // in unit tests it only needs to stand up as inert host elements.
+  default: 'Svg',
+  Path: 'Path',
+}));
+
 jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   const component =

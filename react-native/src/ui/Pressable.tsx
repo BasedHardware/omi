@@ -4,9 +4,24 @@ import {
   Pressable as NativePressable,
   type GestureResponderEvent,
   type PressableProps,
+  type StyleProp,
   StyleSheet,
+  type ViewStyle,
 } from 'react-native';
 import {type KitTokens, useKitStyleSheets} from '../desktop/DesktopTheme';
+
+/**
+ * Pressable state as this kit exposes it: RN's own callback type carries only
+ * `pressed`, but macOS and web both deliver hover, so every style callback in
+ * the tree may branch on `hovered` (touch platforms simply never set it).
+ */
+export type PressableState = {pressed: boolean; hovered: boolean};
+export type PressableStyleProp =
+  | StyleProp<ViewStyle>
+  | ((state: PressableState) => StyleProp<ViewStyle>);
+export type FocusPressableProps = Omit<PressableProps, 'style'> & {
+  style?: PressableStyleProp;
+};
 
 // On macOS the chrome row doubles as a window-drag region: a left-click that
 // hit-tests to a plain RCTView is swallowed by performWindowDragWithEvent and
@@ -18,10 +33,14 @@ const blocksWindowDrag =
 
 export const FocusPressable = forwardRef<
   React.ElementRef<typeof NativePressable>,
-  PressableProps
->(function FocusPressable({onBlur, onFocus, style, ...props}, ref) {
+  FocusPressableProps
+>(function FocusPressable(
+  {onBlur, onFocus, onHoverIn, onHoverOut, style, ...props},
+  ref,
+) {
   const styles = useKitStyleSheets(createStyles);
   const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
   return (
     <NativePressable
@@ -59,8 +78,17 @@ export const FocusPressable = forwardRef<
         setFocused(true);
         onFocus?.(event);
       }}
+      onHoverIn={event => {
+        setHovered(true);
+        onHoverIn?.(event);
+      }}
+      onHoverOut={event => {
+        setHovered(false);
+        onHoverOut?.(event);
+      }}
       style={state => [
-        typeof style === 'function' ? style(state) : style,
+        typeof style === 'function' ? style({...state, hovered}) : style,
+        hovered && !state.pressed && styles.hoverCursor,
         focused && styles.focusRing,
       ]}
     />
@@ -75,4 +103,9 @@ const createStyles = (tokens: KitTokens) =>
       borderColor: tokens.color.focus,
       borderWidth: tokens.border.width,
     },
+    hoverCursor: {
+      // macOS and web both honor the NSCursor/CSS pointer hand; touch
+      // platforms never enter hover so the key stays inert there.
+      cursor: 'pointer',
+    } as ReturnType<typeof StyleSheet.create>,
   });

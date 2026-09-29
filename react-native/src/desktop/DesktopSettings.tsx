@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {useRewindCapture} from '../app/useRewindCapture';
 import type {useAmbientAudio} from '../app/useAmbientAudio';
 import {Animated, Easing, ScrollView, Text, View} from 'react-native';
@@ -54,21 +54,27 @@ type Props = {
   /** Live interface-version switch (Settings → General → Interface). */
   onUiVersionChange?: (version: DesktopUiVersion) => void;
   softwarePlaneLocked: boolean;
+  /** Fuzzy-search query typed into the omnibar while Settings is open. */
+  query?: string;
+  /** Clears the fuzzy-search query (called after a result jump). */
+  onQueryChange?: (value: string) => void;
 };
 
 const PANE_ITEM_HEIGHT = 40;
 const PANE_ITEM_GAP = 4;
 const PANE_PILL_RADIUS = 10;
 
-const TOGGLE_WIDTH = 44;
-const TOGGLE_HEIGHT = 26;
-const TOGGLE_THUMB = 20;
+// macOS-native switch geometry (System Settings measures ~40x24 with an 18pt
+// thumb); the on fill is Apple's switch green in both appearances.
+const TOGGLE_WIDTH = 40;
+const TOGGLE_HEIGHT = 24;
+const TOGGLE_THUMB = 18;
 const TOGGLE_TRAVEL = TOGGLE_WIDTH - TOGGLE_THUMB - 6;
 
 /**
- * The house toggle: a glass pill with a sliding thumb, matching the nav pill
- * and segmented controls instead of the system switch. Role stays "switch" so
- * accessibility behavior is unchanged.
+ * The house toggle: a macOS-style switch — systemFill track off, Apple switch
+ * green on, white thumb. Role stays "switch" so accessibility behavior is
+ * unchanged.
  */
 function GlassToggle({
   accessibilityLabel,
@@ -122,7 +128,6 @@ function GlassToggle({
       <Animated.View
         style={[
           styles.toggleThumb,
-          value && styles.toggleThumbOn,
           {
             transform: [
               {
@@ -190,6 +195,160 @@ const paneInfo: Record<
   },
 };
 
+/** One fuzzy-search hit target: a pane itself or a row inside a pane. */
+type SettingsSearchEntry = {
+  pane: DesktopSettingsPane;
+  title: string;
+  keywords: string;
+};
+
+// Searched surface for the omnibar's Settings mode. Keep row titles in sync
+// with the Row titles below — this is the address book the omnibar jumps by.
+const settingsSearchIndex: SettingsSearchEntry[] = [
+  {
+    pane: 'General',
+    title: 'Backend',
+    keywords: 'old new api origin cloud server staging account data plane',
+  },
+  {
+    pane: 'General',
+    title: 'Appearance',
+    keywords: 'light dark theme color mode',
+  },
+  {
+    pane: 'General',
+    title: 'Interface',
+    keywords: 'v5 v5.1 ui version pages activity timeline layout',
+  },
+  {
+    pane: 'General',
+    title: 'Live voice',
+    keywords: 'gemini live gpt voice realtime provider audio',
+  },
+  {
+    pane: 'General',
+    title: 'Screen Capture',
+    keywords: 'screen recording capture rewind permission privacy tcc',
+  },
+  {
+    pane: 'General',
+    title: 'Audio Recording',
+    keywords: 'microphone mic record audio permission transcription',
+  },
+  {
+    pane: 'General',
+    title: 'Notifications',
+    keywords: 'alerts notify notifications macos permission',
+  },
+  {
+    pane: 'Account & Plan',
+    title: 'Account',
+    keywords: 'sign in sign out email login auth',
+  },
+  {pane: 'Account & Plan', title: 'Name', keywords: 'profile display name'},
+  {
+    pane: 'Account & Plan',
+    title: 'Current plan',
+    keywords: 'subscription billing plan pro trial',
+  },
+  {
+    pane: 'Transcription',
+    title: 'Language Mode',
+    keywords: 'auto detect language transcription words',
+  },
+  {
+    pane: 'Transcription',
+    title: 'Local VAD Gate',
+    keywords: 'silence vad voice activity skip gate',
+  },
+  {
+    pane: 'Rewind',
+    title: 'Data Retention',
+    keywords: 'retention days delete history frames storage',
+  },
+  {
+    pane: 'Rewind',
+    title: 'Meeting Screenshots',
+    keywords: 'screenshots meetings notes capture',
+  },
+  {
+    pane: 'Alerts & Privacy',
+    title: 'Store Recordings',
+    keywords: 'cloud storage upload recordings store',
+  },
+  {
+    pane: 'Alerts & Privacy',
+    title: 'Private Cloud Sync',
+    keywords: 'sync private cloud encryption devices',
+  },
+  {
+    pane: 'Apps',
+    title: 'Apps & integrations',
+    keywords: 'connectors catalog apps gallery integrations',
+  },
+  {
+    pane: 'About',
+    title: 'Version',
+    keywords: 'about build release version desktop mac',
+  },
+  {pane: 'About', title: 'Website', keywords: 'omi.me site link web'},
+  {
+    pane: 'About',
+    title: 'Privacy Policy',
+    keywords: 'privacy policy legal terms',
+  },
+  ...desktopSettingsPanes.map(pane => ({
+    pane,
+    title: paneInfo[pane].title,
+    keywords: paneInfo[pane].description,
+  })),
+];
+
+const normalizeSettingsSearch = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** 0 = no match; 1 = in-order subsequence; 2 = substring; 3 = word prefix. */
+function fuzzySettingsScore(haystack: string, needle: string): number {
+  if (needle.length === 0) {
+    return 1;
+  }
+  if (haystack.includes(needle)) {
+    return haystack.startsWith(needle) || haystack.includes(` ${needle}`)
+      ? 3
+      : 2;
+  }
+  let cursor = 0;
+  for (const char of haystack) {
+    if (char === needle[cursor]) {
+      cursor += 1;
+      if (cursor === needle.length) {
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+function scoreSettingsEntry(
+  entry: SettingsSearchEntry,
+  needle: string,
+): number {
+  return Math.max(
+    fuzzySettingsScore(normalizeSettingsSearch(entry.title), needle) * 4,
+    fuzzySettingsScore(
+      normalizeSettingsSearch(paneInfo[entry.pane].title),
+      needle,
+    ) * 3,
+    fuzzySettingsScore(normalizeSettingsSearch(entry.keywords), needle),
+  );
+}
+
 function Row({
   action,
   actionLabel,
@@ -216,7 +375,11 @@ function Row({
           accessibilityLabel={actionLabel}
           accessibilityRole="button"
           onPress={action}
-          style={({pressed}) => [styles.action, pressed && styles.pressed]}>
+          style={({hovered, pressed}) => [
+            styles.action,
+            hovered && !pressed && styles.actionHover,
+            pressed && styles.pressed,
+          ]}>
           <Text style={styles.actionText}>{actionLabel}</Text>
         </FocusPressable>
       ) : null}
@@ -249,9 +412,10 @@ function Segmented<Value extends string>({
               onChange(option);
             }
           }}
-          style={({pressed}) => [
+          style={({hovered, pressed}) => [
             styles.segment,
             value === option && styles.segmentActive,
+            hovered && !pressed && value !== option && styles.segmentHover,
             pressed && styles.pressed,
           ]}>
           <Text
@@ -300,7 +464,6 @@ function SettingsNav({
   }, [index, reduceMotion, translateY]);
   return (
     <View accessibilityRole="tablist" style={styles.sidebar}>
-      <Text style={styles.sidebarTitle}>Settings</Text>
       <View style={styles.panes}>
         <Animated.View
           pointerEvents="none"
@@ -308,24 +471,26 @@ function SettingsNav({
         />
         {desktopSettingsPanes.map(label => {
           const icon = paneInfo[label].icon;
+          const selected = pane === label;
           return (
             <FocusPressable
               accessibilityLabel={label}
               accessibilityRole="tab"
-              accessibilityState={{selected: pane === label}}
+              accessibilityState={{selected}}
               key={label}
               onPress={() => onChange(label)}
-              style={styles.paneItem}>
+              style={({hovered, pressed}) => [
+                styles.paneItem,
+                hovered && !pressed && !selected && styles.paneItemHover,
+                pressed && styles.pressed,
+              ]}>
               <MaterialIcon
                 name={icon}
-                size={16}
-                color={pane === label ? token.color.ink : token.color.inkMuted}
+                size={18}
+                color={selected ? token.color.ink : token.color.inkMuted}
               />
               <Text
-                style={[
-                  styles.paneText,
-                  pane === label && styles.paneTextActive,
-                ]}>
+                style={[styles.paneText, selected && styles.paneTextActive]}>
                 {label === 'Rewind' ? 'Recall' : label}
               </Text>
             </FocusPressable>
@@ -345,9 +510,11 @@ export function DesktopSettings({
   onWorkspaceReload,
   onPreferencesChange,
   onUiVersionChange,
+  onQueryChange,
   session,
   signingIn,
   softwarePlaneLocked,
+  query = '',
 }: Props) {
   const styles = useDesktopStyleSheets(createStyles);
   const [pane, setPane] = useState<DesktopSettingsPane>('General');
@@ -869,26 +1036,86 @@ export function DesktopSettings({
       ? apps
       : about;
 
+  // Omnibar fuzzy search: while the query is non-empty the sidebar is
+  // replaced by ranked hits; choosing one jumps to its pane and clears the
+  // field back in the omnibar.
+  const {tokens: searchToken} = useDesktopTheme();
+  const needle = normalizeSettingsSearch(query);
+  const results = useMemo(() => {
+    if (needle.length === 0) {
+      return [];
+    }
+    return settingsSearchIndex
+      .map(entry => ({entry, score: scoreSettingsEntry(entry, needle)}))
+      .filter(hit => hit.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(hit => hit.entry);
+  }, [needle]);
+
   return (
     <View style={styles.root}>
-      <SettingsNav onChange={setPane} pane={pane} />
+      {needle.length > 0 ? null : (
+        <SettingsNav onChange={setPane} pane={pane} />
+      )}
       <View style={styles.scroll}>
-        <ScrollView
-          scrollEventThrottle={16}
-          contentContainerStyle={styles.content}>
-          {actionStatus !== null ? (
-            <Text
-              accessibilityLabel="Settings action status"
-              accessibilityLiveRegion="polite"
-              style={styles.status}>
-              {actionStatus}
-            </Text>
-          ) : null}
-          <ShippingStage stageKey={pane} variant="page" style={styles.stage}>
-            <View style={styles.group}>{body}</View>
-            {pane === 'General' ? deviceContent : null}
-          </ShippingStage>
-        </ScrollView>
+        {needle.length > 0 ? (
+          <ScrollView
+            accessibilityLabel="Settings search results"
+            contentContainerStyle={styles.content}>
+            {results.length === 0 ? (
+              <Text style={styles.searchEmpty}>
+                No settings match “{query.trim()}”.
+              </Text>
+            ) : (
+              <View style={styles.group}>
+                {results.map(entry => (
+                  <FocusPressable
+                    accessibilityLabel={`Open ${entry.title} in settings`}
+                    accessibilityRole="button"
+                    key={`${entry.pane}:${entry.title}`}
+                    onPress={() => {
+                      setPane(entry.pane);
+                      onQueryChange?.('');
+                    }}
+                    style={({hovered, pressed}) => [
+                      styles.resultRow,
+                      hovered && !pressed && styles.resultRowHover,
+                      pressed && styles.pressed,
+                    ]}>
+                    <MaterialIcon
+                      name={paneInfo[entry.pane].icon}
+                      size={18}
+                      color={searchToken.color.inkMuted}
+                    />
+                    <View style={styles.resultCopy}>
+                      <Text style={styles.rowTitle}>{entry.title}</Text>
+                      <Text style={styles.resultPane}>
+                        {paneInfo[entry.pane].title}
+                      </Text>
+                    </View>
+                  </FocusPressable>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        ) : (
+          <ScrollView
+            scrollEventThrottle={16}
+            contentContainerStyle={styles.content}>
+            {actionStatus !== null ? (
+              <Text
+                accessibilityLabel="Settings action status"
+                accessibilityLiveRegion="polite"
+                style={styles.status}>
+                {actionStatus}
+              </Text>
+            ) : null}
+            <ShippingStage stageKey={pane} variant="page" style={styles.stage}>
+              <View style={styles.group}>{body}</View>
+              {pane === 'General' ? deviceContent : null}
+            </ShippingStage>
+          </ScrollView>
+        )}
       </View>
     </View>
   );
@@ -898,7 +1125,7 @@ const createStyles = (token: DesktopTokens) => ({
   root: {
     flex: 1,
     flexDirection: 'row' as const,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 8,
   },
   stage: {flexBasis: 'auto' as const, flexGrow: 0, flexShrink: 0, gap: 20},
@@ -909,19 +1136,11 @@ const createStyles = (token: DesktopTokens) => ({
     borderWidth: 1,
     borderColor: token.color.line,
   },
-  sidebarTitle: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: token.color.inkMuted,
-    paddingHorizontal: 12,
-    paddingTop: 6,
-    paddingBottom: 22,
-  },
   panes: {position: 'relative' as const},
   sidebar: {
-    marginRight: 24,
+    marginRight: 28,
     position: 'relative' as const,
-    width: 182,
+    width: 208,
     flexShrink: 0,
   },
   panePill: {
@@ -936,11 +1155,15 @@ const createStyles = (token: DesktopTokens) => ({
   paneItem: {
     alignItems: 'center' as const,
     flexDirection: 'row' as const,
-    gap: 10,
+    gap: 11,
     height: PANE_ITEM_HEIGHT,
     justifyContent: 'flex-start' as const,
     marginBottom: PANE_ITEM_GAP,
     paddingHorizontal: 12,
+  },
+  paneItemHover: {
+    backgroundColor: token.color.glassQuiet,
+    borderRadius: PANE_PILL_RADIUS,
   },
   paneText: {
     color: token.color.inkMuted,
@@ -952,6 +1175,29 @@ const createStyles = (token: DesktopTokens) => ({
   paneTextActive: {color: token.color.ink},
   scroll: {flex: 1, minWidth: 0},
   content: {paddingBottom: 32},
+  searchEmpty: {
+    color: token.color.inkMuted,
+    fontFamily: token.font,
+    fontSize: token.type.meta,
+    padding: 24,
+    textAlign: 'center' as const,
+  },
+  resultRow: {
+    alignItems: 'center' as const,
+    flexDirection: 'row' as const,
+    gap: 12,
+    minHeight: 56,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  resultRowHover: {backgroundColor: token.color.glassQuiet},
+  resultCopy: {flexGrow: 1, flexShrink: 1},
+  resultPane: {
+    color: token.color.inkMuted,
+    fontFamily: token.font,
+    fontSize: token.type.meta,
+    marginTop: 3,
+  },
   status: {
     color: token.color.inkMuted,
     fontFamily: token.font,
@@ -984,39 +1230,42 @@ const createStyles = (token: DesktopTokens) => ({
     marginTop: 5,
   },
   action: {
-    backgroundColor: token.color.dark,
+    // Prominent filled control: ink surface with the flipped fg. Hard-coding
+    // white text (the old pairing) vanishes in light mode where
+    // `color.dark` is the near-white surface.
+    backgroundColor: token.color.ink,
     borderRadius: token.radius.control,
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
   actionText: {
-    color: token.color.white,
+    color: token.color.dark,
     fontFamily: token.font,
     fontSize: token.type.caption,
     fontWeight: '600' as const,
   },
+  actionHover: {opacity: 0.86},
   pressed: {opacity: 0.78},
   toggle: {
     alignItems: 'center' as const,
-    borderColor: token.color.line,
+    // macOS switch: no border, a systemFill track when off, Apple's switch
+    // green when on, white thumb in both states and both appearances.
+    backgroundColor: 'rgba(120,120,128,0.36)',
     borderRadius: TOGGLE_HEIGHT / 2,
-    borderWidth: 1,
     height: TOGGLE_HEIGHT,
     justifyContent: 'center' as const,
     paddingLeft: 3,
     width: TOGGLE_WIDTH,
   },
   toggleOn: {
-    backgroundColor: token.color.ink,
-    borderColor: token.color.ink,
+    backgroundColor: '#34C759',
   },
   toggleThumb: {
-    backgroundColor: token.color.inkMuted,
+    backgroundColor: '#FFFFFF',
     borderRadius: TOGGLE_THUMB / 2,
     height: TOGGLE_THUMB,
     width: TOGGLE_THUMB,
   },
-  toggleThumbOn: {backgroundColor: token.color.dark},
   toggleDisabled: {opacity: 0.4},
   segments: {
     flexDirection: 'row' as const,
@@ -1033,6 +1282,7 @@ const createStyles = (token: DesktopTokens) => ({
     paddingHorizontal: 10,
   },
   segmentActive: {backgroundColor: token.color.glassStrong},
+  segmentHover: {backgroundColor: token.color.glassQuiet},
   segmentText: {
     color: token.color.inkMuted,
     fontFamily: token.font,
