@@ -20,8 +20,10 @@ overlay:
           value: 'true'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
           value: '1'
+        PARAKEET_WINDOW_MAX_SESSIONS:
+          value: '8'
         PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
-          value: '2'
+          value: '3'
         STT_SERVICE_MODELS:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:

@@ -300,8 +300,8 @@ async def test_batch_pressure_endpoint_thresholds_and_unavailable_signal(monkeyp
         AsyncMock(side_effect=lambda *_args, **_kwargs: [(None, None, None, None, (ip, 8080)) for ip in ips]),
     )
     payloads = {
-        '10.0.0.1': {'pending_requests': 2, 'oldest_pending_seconds': 0},
-        '10.0.0.2': {'pending_requests': 2, 'oldest_pending_seconds': 0},
+        '10.0.0.1': {'pending_requests': 100, 'live_pending_requests': 3, 'live_oldest_pending_seconds': 0},
+        '10.0.0.2': {'pending_requests': 100, 'live_pending_requests': 3, 'live_oldest_pending_seconds': 0},
     }
 
     class Response:
@@ -324,24 +324,29 @@ async def test_batch_pressure_endpoint_thresholds_and_unavailable_signal(monkeyp
 
     client = Client()
     await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert not pressure.allows('tdt-headless.invalid', 2)  # 2 + 2 trips pool cutoff
-    payloads['10.0.0.2']['pending_requests'] = 0
-    await pressure._refresh('tdt-headless.invalid', 2, client)
-    assert pressure.allows('tdt-headless.invalid', 2)
-    payloads['10.0.0.2']['oldest_pending_seconds'] = 1
+    assert pressure.allows('tdt-headless.invalid', 2)  # Backfill and fleet sum do not trip the live gate.
+    payloads['10.0.0.2']['live_pending_requests'] = 4
     await pressure._refresh('tdt-headless.invalid', 2, client)
     assert not pressure.allows('tdt-headless.invalid', 2)
-    payloads['10.0.0.2']['oldest_pending_seconds'] = 0
+    payloads['10.0.0.2']['live_pending_requests'] = 0
+    payloads['10.0.0.2']['live_oldest_pending_seconds'] = 0.75
+    await pressure._refresh('tdt-headless.invalid', 2, client)
+    assert not pressure.allows('tdt-headless.invalid', 2)
+    payloads['10.0.0.2']['live_oldest_pending_seconds'] = 0
     ips.pop()
     await pressure._refresh('tdt-headless.invalid', 2, client)
     assert not pressure.allows('tdt-headless.invalid', 2)  # incomplete DNS set
     ips.append('10.0.0.2')
-    payloads['10.0.0.2']['pending_requests'] = float('nan')
+    payloads['10.0.0.2']['live_pending_requests'] = float('nan')
     await pressure._refresh('tdt-headless.invalid', 2, client)
     assert not pressure.allows('tdt-headless.invalid', 2)  # invalid telemetry
-    payloads['10.0.0.2']['pending_requests'] = 0
+    payloads['10.0.0.2']['live_pending_requests'] = 0
     await pressure._refresh('tdt-headless.invalid', 2, client)
     assert pressure.allows('tdt-headless.invalid', 2)
+    del payloads['10.0.0.2']['live_oldest_pending_seconds']
+    await pressure._refresh('tdt-headless.invalid', 2, client)
+    assert not pressure.allows('tdt-headless.invalid', 2)  # Old GPU replica: fail closed.
+    payloads['10.0.0.2']['live_oldest_pending_seconds'] = 0
     requests_before = len(client.requests)
     ips[:] = [f'10.0.0.{i}' for i in range(1, pressure.MAX_REPLICAS + 2)]
     await pressure._refresh('tdt-headless.invalid', 2, client)
@@ -496,6 +501,24 @@ async def test_overflow_moves_to_soniox_and_releases_on_finish(monkeypatch):
     assert window.admission.active == 0
     await asyncio.gather(first.raw._pump_task, return_exceptions=True)
     second.finish()
+
+
+def test_eight_session_cap_is_hard_and_releases_idempotently(monkeypatch):
+    monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
+    admission = window.WindowAdmission()
+    releases = [admission.acquire() for _ in range(8)]
+    assert admission.active == 8
+    with pytest.raises(st.ParakeetConnectionError, match='capacity_full'):
+        admission.acquire()
+    releases[0]()
+    releases[0]()
+    assert admission.active == 7
+    replacement = admission.acquire()
+    assert admission.active == 8
+    for release in releases[1:]:
+        release()
+    replacement()
+    assert admission.active == 0
 
 
 @pytest.mark.parametrize('fault', ['503', 'timeout'])
