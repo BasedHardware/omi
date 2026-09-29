@@ -11319,37 +11319,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get openCall => 'Ouvrir l\'appel';
 
   @override
-  String get renameDevice => 'Renommer l\'appareil';
-
-  @override
-  String get renameDeviceDescription =>
-      'Le nom est enregistré sur votre Omi, il apparaît donc sur tout téléphone avec lequel vous l\'associez.';
-
-  @override
-  String get tapToRename => 'Touchez pour renommer';
-
-  @override
-  String get deviceNameCannotBeEmpty => 'Le nom de l\'appareil ne peut pas être vide';
-
-  @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Le nom est trop long (jusqu\'à $maxBytes caractères ; les emojis et accents comptent davantage)';
-  }
-
-  @override
-  String get deviceNameInvalidCharacters => 'Le nom contient des caractères non pris en charge';
-
-  @override
-  String get deviceRenameFailed =>
-      'Impossible d\'enregistrer le nom sur votre Omi. Vérifiez qu\'il est connecté et réessayez.';
-
-  @override
-  String deviceRenamed(String name) {
-    return 'Appareil renommé en $name';
-  }
-
-  @override
-  String get captureRecoveryBanner => 'Le son du pendentif n\'arrive pas à l\'application — touchez pour réparer';
+  String get captureRecoveryBanner => 'Omi n’envoie pas de son — touchez pour vous reconnecter';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11521,4 +11491,127 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Apparence';
+
+  @override
+  String get appearanceSystem => 'Système';
+
+  @override
+  String get appearanceLight => 'Clair';
+
+  @override
+  String get appearanceDark => 'Sombre';
+
+  @override
+  String get chatDiscardRecording => 'Ignorer';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Je n’ai pas compris — réessayez';
+
+  @override
+  String get siriIndexSetting => 'Utiliser Omi avec Siri et Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Autorisez Siri à trouver vos conversations, souvenirs et tâches sur cet appareil. Désactiver cette option les supprime de la recherche Apple.';
+
+  @override
+  String get sendToSupport => 'Envoyer au support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Vérifiez les données de diagnostic JSON ci-dessous. Elles incluent l’identifiant de l’appareil, les connexions, la batterie, le micrologiciel et les événements Bluetooth. Aucun audio ni transcription.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Code du ticket de support';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Impossible d’envoyer les données de diagnostic. Réessayez.';
+
+  @override
+  String get feedbackGiveFeedback => 'Donner son avis';
+
+  @override
+  String get feedbackAllGood => 'Tout va bien';
+
+  @override
+  String get feedbackChatWithUs => 'Plus de détails ? Discutez avec nous';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inexact';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplet';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Pas pertinent';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Mauvais contexte';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Autre chose';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Audio manquant';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Transcription médiocre';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Mauvais orateur';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Retardé ou bloqué';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmenté ou dupliqué';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Autre chose';
+
+  @override
+  String get searchPeople => 'Rechercher des personnes';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Ajouter « $query » comme nouvelle personne';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Afficher les $count personnes';
+  }
+
+  @override
+  String get renameDevice => 'Renommer l\'appareil';
+
+  @override
+  String get renameDeviceDescription =>
+      'Le nom est enregistré sur votre Omi, il apparaît donc sur tout téléphone avec lequel vous l\'associez.';
+
+  @override
+  String get tapToRename => 'Touchez pour renommer';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Le nom de l\'appareil ne peut pas être vide';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Le nom est trop long (jusqu\'à $maxBytes caractères ; les emojis et accents comptent davantage)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Le nom contient des caractères non pris en charge';
+
+  @override
+  String get deviceRenameFailed =>
+      'Impossible d\'enregistrer le nom sur votre Omi. Vérifiez qu\'il est connecté et réessayez.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Appareil renommé en $name';
+  }
 }

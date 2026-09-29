@@ -11019,35 +11019,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openCall => '打开通话';
 
   @override
-  String get renameDevice => '重命名设备';
-
-  @override
-  String get renameDeviceDescription => '名称保存在 Omi 设备本身，因此在你配对的任何手机上都会显示。';
-
-  @override
-  String get tapToRename => '点按以重命名';
-
-  @override
-  String get deviceNameCannotBeEmpty => '设备名称不能为空';
-
-  @override
-  String deviceNameTooLong(int maxBytes) {
-    return '名称过长（最多 $maxBytes 个字符；表情符号和汉字按多个字符计算）';
-  }
-
-  @override
-  String get deviceNameInvalidCharacters => '名称包含不支持的字符';
-
-  @override
-  String get deviceRenameFailed => '无法将名称保存到 Omi。请确认设备已连接，然后重试。';
-
-  @override
-  String deviceRenamed(String name) {
-    return '设备已重命名为 $name';
-  }
-
-  @override
-  String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
+  String get captureRecoveryBanner => 'Omi 未发送音频 — 轻点以重新连接';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '在用手机录音之前，请先停止吊坠上的“稍后转录”。';
@@ -11210,4 +11182,125 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => '外观';
+
+  @override
+  String get appearanceSystem => '系统';
+
+  @override
+  String get appearanceLight => '浅色';
+
+  @override
+  String get appearanceDark => '深色';
+
+  @override
+  String get chatDiscardRecording => '放弃';
+
+  @override
+  String get voiceQuestionNoSpeech => '没听清楚 — 请再试一次';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => '提供反馈';
+
+  @override
+  String get feedbackAllGood => '一切正常';
+
+  @override
+  String get feedbackChatWithUs => '想补充细节？和我们聊聊';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => '不准确';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => '不完整';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => '不相关';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => '语境不对';
+
+  @override
+  String get feedbackReasonSummaryOther => '其他问题';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => '缺少音频';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => '转写质量差';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => '说话人错误';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => '延迟或卡住';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => '断断续续或重复';
+
+  @override
+  String get feedbackReasonRecordingOther => '其他问题';
+
+  @override
+  String get searchPeople => '搜索人员';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return '将“$query”添加为新人员';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return '显示全部 $count 人';
+  }
+
+  @override
+  String get renameDevice => '重命名设备';
+
+  @override
+  String get renameDeviceDescription => '名称保存在 Omi 设备本身，因此在你配对的任何手机上都会显示。';
+
+  @override
+  String get tapToRename => '点按以重命名';
+
+  @override
+  String get deviceNameCannotBeEmpty => '设备名称不能为空';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return '名称过长（最多 $maxBytes 个字符；表情符号和汉字按多个字符计算）';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => '名称包含不支持的字符';
+
+  @override
+  String get deviceRenameFailed => '无法将名称保存到 Omi。请确认设备已连接，然后重试。';
+
+  @override
+  String deviceRenamed(String name) {
+    return '设备已重命名为 $name';
+  }
 }

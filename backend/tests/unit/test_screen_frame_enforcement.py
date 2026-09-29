@@ -160,6 +160,9 @@ class TestBuildFrameSetResponse:
             },
         ]
         fake_screen_frames_db.get_conversation_screen_frames_revision.return_value = 3
+        fake_screen_frames_db.get_conversation_screen_frames_selection_fingerprint.return_value = (
+            "meeting-content-v1:1:2"
+        )
         monkeypatch.setattr(enforcement_mod, "screen_frames_db", fake_screen_frames_db)
 
         fake_storage = MagicMock()
@@ -177,6 +180,7 @@ class TestBuildFrameSetResponse:
         assert frame_set.banner.id == "banner-frame"
         assert [f.id for f in frame_set.strip] == ["strip-early", "strip-late"]
         assert frame_set.banner.content_url == "https://signed/banner-frame"
+        assert frame_set.selection_fingerprint == "meeting-content-v1:1:2"
 
 
 class TestAnAllRejectedPassIsStillRecorded:
@@ -242,6 +246,7 @@ def test_one_unrepresentable_stored_frame_does_not_break_the_whole_read(monkeypa
     monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames", lambda *_: [good, bad])
     monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames_revision", lambda *_: 3)
     monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames_adjudicated_at", lambda *_: None)
+    monkeypatch.setattr(enf.screen_frames_db, "get_conversation_screen_frames_selection_fingerprint", lambda *_: None)
     monkeypatch.setattr(enf.storage, "get_screen_frame_signed_url", lambda *_: "https://example/c")
     monkeypatch.setattr(enf.storage, "get_screen_frame_thumbnail_signed_url", lambda *_: "https://example/t")
 

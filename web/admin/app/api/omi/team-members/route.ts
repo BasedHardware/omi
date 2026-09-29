@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyAdmin } from "@/lib/auth";
 import { getAdminAuth, getDb } from "@/lib/firebase/admin";
+import { sendAdminInviteEmail } from "@/lib/email/invite";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,14 @@ const removeTeamMemberSchema = z.object({
  */
 function isOwnerDoc(data: FirebaseFirestore.DocumentData | undefined) {
   return data?.owner === true;
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = (error as { code: unknown }).code;
+    if (typeof code === "string") return code;
+  }
+  return undefined;
 }
 
 export async function GET(request: NextRequest) {
@@ -91,22 +100,30 @@ export async function POST(request: NextRequest) {
 
   try {
     let firebaseUser;
+    let provisioned = false;
     try {
       firebaseUser = await getAdminAuth().getUserByEmail(email);
     } catch (error) {
-      const code =
-        error && typeof error === "object" && "code" in error
-          ? error.code
-          : undefined;
-      if (code === "auth/user-not-found") {
-        return NextResponse.json(
-          {
-            error: `No Omi account found for ${email}. Ask them to sign in to Omi once, then try again.`,
-          },
-          { status: 404 }
-        );
+      if (errorCode(error) !== "auth/user-not-found") throw error;
+      // The invitee has never signed in to Omi, so no Firebase Auth user
+      // exists to key `adminData/{uid}` on. Reserve the uid now with an
+      // unverified, credential-less account: the project keeps Firebase's
+      // default one-account-per-email setting, so when they later sign in
+      // with Google for this address the provider links into this very uid
+      // and the admin grant below is already waiting for them.
+      try {
+        firebaseUser = await getAdminAuth().createUser({
+          email,
+          emailVerified: false,
+        });
+        provisioned = true;
+      } catch (createError) {
+        // Lost a race with a concurrent add (or with their first sign-in).
+        if (errorCode(createError) !== "auth/email-already-exists") {
+          throw createError;
+        }
+        firebaseUser = await getAdminAuth().getUserByEmail(email);
       }
-      throw error;
     }
 
     const db = getDb();
@@ -132,7 +149,33 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     });
 
-    return NextResponse.json({ teamMember }, { status: 201 });
+    // The grant has landed. Telling them about it is best effort: a mail
+    // failure is reported in the response, never rolled back into an error.
+    let invitedBy: string | null = null;
+    try {
+      const inviterDoc = await db
+        .collection("adminData")
+        .doc(authResult.uid)
+        .get();
+      const inviterEmail = inviterDoc.data()?.email;
+      invitedBy = typeof inviterEmail === "string" ? inviterEmail : null;
+    } catch (error) {
+      console.error("Could not read the inviting admin's email:", error);
+    }
+
+    const invite = await sendAdminInviteEmail({ email, invitedBy });
+    if (!invite.sent) {
+      console.error(
+        `Admin invite email not sent to ${email} (reason ${
+          invite.reason ?? "unknown"
+        })`
+      );
+    }
+
+    return NextResponse.json(
+      { teamMember, provisioned, emailSent: invite.sent },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Error adding team member:", error);
     return NextResponse.json(

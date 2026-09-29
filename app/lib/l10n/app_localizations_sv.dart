@@ -11232,37 +11232,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get openCall => 'Öppna samtal';
 
   @override
-  String get renameDevice => 'Byt namn på enheten';
-
-  @override
-  String get renameDeviceDescription =>
-      'Namnet sparas på själva Omi-enheten, så det visas på alla telefoner du parkopplar den med.';
-
-  @override
-  String get tapToRename => 'Tryck för att byta namn';
-
-  @override
-  String get deviceNameCannotBeEmpty => 'Enhetsnamnet får inte vara tomt';
-
-  @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Namnet är för långt (upp till $maxBytes tecken; emoji och accenter räknas extra)';
-  }
-
-  @override
-  String get deviceNameInvalidCharacters => 'Namnet innehåller tecken som inte stöds';
-
-  @override
-  String get deviceRenameFailed =>
-      'Namnet kunde inte sparas på din Omi. Kontrollera att den är ansluten och försök igen.';
-
-  @override
-  String deviceRenamed(String name) {
-    return 'Enheten har fått namnet $name';
-  }
-
-  @override
-  String get captureRecoveryBanner => 'Ljudet från hänget når inte appen — tryck för att reparera';
+  String get captureRecoveryBanner => 'Omi skickar inget ljud — tryck för att ansluta igen';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11432,4 +11402,127 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Utseende';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Ljust';
+
+  @override
+  String get appearanceDark => 'Mörkt';
+
+  @override
+  String get chatDiscardRecording => 'Förkasta';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Jag uppfattade inte det — försök igen';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Sök personer';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Lägg till \"$query\" som en ny person';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Visa alla $count personer';
+  }
+
+  @override
+  String get renameDevice => 'Byt namn på enheten';
+
+  @override
+  String get renameDeviceDescription =>
+      'Namnet sparas på själva Omi-enheten, så det visas på alla telefoner du parkopplar den med.';
+
+  @override
+  String get tapToRename => 'Tryck för att byta namn';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Enhetsnamnet får inte vara tomt';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Namnet är för långt (upp till $maxBytes tecken; emoji och accenter räknas extra)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Namnet innehåller tecken som inte stöds';
+
+  @override
+  String get deviceRenameFailed =>
+      'Namnet kunde inte sparas på din Omi. Kontrollera att den är ansluten och försök igen.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Enheten har fått namnet $name';
+  }
 }

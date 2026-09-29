@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, cast
 
 gc.disable()
 
-from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, Form, UploadFile, File, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge, Histogram
 from prometheus_client import make_asgi_app  # type: ignore[reportUnknownVariableType]  # prometheus_client partially typed
@@ -84,6 +84,9 @@ GPU_FATAL_ERRORS_TOTAL = Counter(
     'Fatal CUDA errors that make a Parakeet GPU worker unavailable',
 )
 REQUESTS_TOTAL = Counter('parakeet_requests_total', 'Total requests by status', ['endpoint', 'status'])
+PRERECORDED_REQUESTS = Counter(
+    'parakeet_prerecorded_requests_total', 'Pre-recorded requests excluding live windowed TDT', ['status']
+)
 
 gpu_worker: Optional[GPUWorker] = None
 batch_engine: Optional[BatchEngine] = None
@@ -187,9 +190,12 @@ def _remove_file(path: str) -> None:
 
 
 @app.post("/v1/transcribe", response_model=None)
-async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
+async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
+    prerecorded = request.headers.get('X-Omi-STT-Surface') != 'live-window'
     if gpu_worker is not None and not gpu_worker.is_ready:
         REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="error").inc()
+        if prerecorded:
+            PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
@@ -232,6 +238,8 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
         elapsed = time.monotonic() - t0
         REQUEST_DURATION.labels(endpoint="v1_transcribe").observe(elapsed)
         REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status=status).inc()
+        if prerecorded:
+            PRERECORDED_REQUESTS.labels(status=status).inc()
         if status == "success" and audio_dur > 0 and elapsed > 0:
             RTFX.set(audio_dur / elapsed)
         ACTIVE_BATCH.dec()
@@ -249,9 +257,11 @@ async def transcribe_v2(
 ) -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None and not gpu_worker.is_ready:
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
+        PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
     if min_speakers is not None and max_speakers is not None and min_speakers > max_speakers:
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
+        PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(
             status_code=422,
             content={"detail": f"min_speakers ({min_speakers}) cannot exceed max_speakers ({max_speakers})"},
@@ -261,6 +271,7 @@ async def transcribe_v2(
         # consistent with min > max above; silently preferring one would leave the
         # caller believing a bound they set was honoured.
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
+        PRERECORDED_REQUESTS.labels(status='error').inc()
         return JSONResponse(
             status_code=422,
             content={"detail": "num_speakers cannot be combined with min_speakers or max_speakers"},
@@ -328,6 +339,7 @@ async def transcribe_v2(
         elapsed = time.monotonic() - t0
         REQUEST_DURATION.labels(endpoint="v2_transcribe").observe(elapsed)
         REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status=status).inc()
+        PRERECORDED_REQUESTS.labels(status=status).inc()
         if status == "success" and audio_dur > 0 and elapsed > 0:
             RTFX.set(audio_dur / elapsed)
         ACTIVE_BATCH.dec()
@@ -445,5 +457,12 @@ async def health_check() -> JSONResponse | Dict[str, Any]:
 async def batch_metrics() -> Dict[str, Any]:
     if batch_engine is not None:
         PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
-        return cast(Dict[str, Any], batch_engine.metrics)  # type: ignore[reportUnknownMemberType]  # batch_engine.metrics partially typed
+        metrics = dict(batch_engine.metrics)
+        metrics['pending_requests'] = len(batch_engine._pending)  # type: ignore[reportPrivateUsage]  # batch engine queue snapshot
+        metrics['oldest_pending_seconds'] = (
+            max(0.0, time.monotonic() - batch_engine._pending[0].submitted_at)  # type: ignore[reportPrivateUsage]  # queue snapshot
+            if batch_engine._pending  # type: ignore[reportPrivateUsage]  # queue snapshot
+            else 0.0
+        )
+        return metrics
     return {}

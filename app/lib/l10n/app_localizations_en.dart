@@ -11212,35 +11212,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get openCall => 'Open call';
 
   @override
-  String get renameDevice => 'Rename Device';
-
-  @override
-  String get renameDeviceDescription => 'The name is saved on your Omi, so it shows up on any phone you pair with.';
-
-  @override
-  String get tapToRename => 'Tap to rename';
-
-  @override
-  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
-
-  @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Name is too long (up to $maxBytes characters; emoji and accents count extra)';
-  }
-
-  @override
-  String get deviceNameInvalidCharacters => 'Name contains unsupported characters';
-
-  @override
-  String get deviceRenameFailed => 'Could not save the name to your Omi. Check that it is connected and try again.';
-
-  @override
-  String deviceRenamed(String name) {
-    return 'Device renamed to $name';
-  }
-
-  @override
-  String get captureRecoveryBanner => 'Pendant audio is not reaching the app — tap to repair';
+  String get captureRecoveryBanner => 'Omi isn\'t sending audio — tap to reconnect';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11409,4 +11381,125 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Appearance';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Light';
+
+  @override
+  String get appearanceDark => 'Dark';
+
+  @override
+  String get chatDiscardRecording => 'Discard';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Didn\'t catch that — try again';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Search people';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Add \"$query\" as a new person';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Show all $count people';
+  }
+
+  @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get renameDeviceDescription => 'The name is saved on your Omi, so it shows up on any phone you pair with.';
+
+  @override
+  String get tapToRename => 'Tap to rename';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Name is too long (up to $maxBytes characters; emoji and accents count extra)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Name contains unsupported characters';
+
+  @override
+  String get deviceRenameFailed => 'Could not save the name to your Omi. Check that it is connected and try again.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Device renamed to $name';
+  }
 }

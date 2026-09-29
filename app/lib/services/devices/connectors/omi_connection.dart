@@ -952,6 +952,27 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
+  /// CV1 publishes its nRF FICR device ID as exactly 16 hex characters.
+  /// Only that shape is accepted: this connection also serves other
+  /// Omi-protocol devices, and any constant or fallback serial they report
+  /// (e.g. the firmware's "unknown") would merge every unit into one
+  /// analytics hardware_id.
+  static final RegExp _unitIdPattern = RegExp(r'^[0-9A-F]{16}$');
+
+  /// Bounds the serial read so a missing native callback cannot stall setup.
+  static const Duration _serialReadTimeout = Duration(seconds: 3);
+
+  /// Parses a DIS Serial Number String read into a CV1 unit ID, or null when
+  /// it is not a 16-hex-character ID or is a single repeated digit (unset FICR).
+  @visibleForTesting
+  static String? parseSerialNumber(List<int> value) {
+    if (value.isEmpty) return null;
+    final serial = String.fromCharCodes(value).replaceAll('\u0000', '').trim().toUpperCase();
+    if (!_unitIdPattern.hasMatch(serial)) return null;
+    if (serial.split('').toSet().length == 1) return null;
+    return serial;
+  }
+
   /// Get device information from Omi device
   Future<Map<String, String>> getDeviceInfo() async {
     Map<String, String> deviceInfo = {};
@@ -1015,6 +1036,21 @@ class OmiDeviceConnection extends DeviceConnection {
       final storedName = await performGetDeviceName();
       if (storedName != null) {
         deviceInfo['deviceName'] = storedName;
+      }
+
+      // Read serial number (0x2A25). CV1 firmware that exposes the per-unit
+      // hardware ID serves it here; older firmware has no such characteristic
+      // and the transport returns an empty read, leaving serialNumber unset.
+      try {
+        final serialValue = await transport
+            .readCharacteristic(deviceInformationServiceUuid, serialNumberCharacteristicUuid)
+            .timeout(_serialReadTimeout);
+        final serial = parseSerialNumber(serialValue);
+        if (serial != null) {
+          deviceInfo['serialNumber'] = serial;
+        }
+      } catch (e) {
+        Logger.debug('OmiDeviceConnection: Error reading serial number: $e');
       }
 
       // Check if device has image streaming capability (for OpenGlass/OmiGlass detection)

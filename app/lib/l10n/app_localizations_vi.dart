@@ -11218,36 +11218,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openCall => 'Mở cuộc gọi';
 
   @override
-  String get renameDevice => 'Đổi tên thiết bị';
-
-  @override
-  String get renameDeviceDescription =>
-      'Tên được lưu ngay trên Omi, nên sẽ hiển thị trên mọi điện thoại mà bạn ghép nối.';
-
-  @override
-  String get tapToRename => 'Chạm để đổi tên';
-
-  @override
-  String get deviceNameCannotBeEmpty => 'Tên thiết bị không được để trống';
-
-  @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Tên quá dài (tối đa $maxBytes ký tự; emoji và chữ có dấu được tính nhiều hơn)';
-  }
-
-  @override
-  String get deviceNameInvalidCharacters => 'Tên chứa ký tự không được hỗ trợ';
-
-  @override
-  String get deviceRenameFailed => 'Không thể lưu tên vào Omi. Hãy kiểm tra thiết bị đã kết nối rồi thử lại.';
-
-  @override
-  String deviceRenamed(String name) {
-    return 'Đã đổi tên thiết bị thành $name';
-  }
-
-  @override
-  String get captureRecoveryBanner => 'Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa';
+  String get captureRecoveryBanner => 'Omi không gửi âm thanh — chạm để kết nối lại';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11417,4 +11388,126 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Giao diện';
+
+  @override
+  String get appearanceSystem => 'Hệ thống';
+
+  @override
+  String get appearanceLight => 'Sáng';
+
+  @override
+  String get appearanceDark => 'Tối';
+
+  @override
+  String get chatDiscardRecording => 'Hủy bỏ';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Không nghe rõ — hãy thử lại';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Gửi cho bộ phận hỗ trợ';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Xem lại dữ liệu chẩn đoán JSON bên dưới. Dữ liệu gồm mã thiết bị, lịch sử kết nối, pin, firmware và sự kiện Bluetooth. Không có âm thanh hay bản chép lời.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Mã hỗ trợ';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Không thể gửi dữ liệu chẩn đoán. Vui lòng thử lại.';
+
+  @override
+  String get feedbackGiveFeedback => 'Gửi phản hồi';
+
+  @override
+  String get feedbackAllGood => 'Mọi thứ đều ổn';
+
+  @override
+  String get feedbackChatWithUs => 'Thêm chi tiết? Nhắn tin với chúng tôi';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Không chính xác';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Chưa đầy đủ';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Không liên quan';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Sai ngữ cảnh';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Vấn đề khác';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Thiếu âm thanh';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Chuyển ngữ kém';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Sai người nói';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Bị chậm hoặc treo';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Đứt đoạn hoặc trùng lặp';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Vấn đề khác';
+
+  @override
+  String get searchPeople => 'Tìm kiếm người';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Thêm \"$query\" như một người mới';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Hiển thị tất cả $count người';
+  }
+
+  @override
+  String get renameDevice => 'Đổi tên thiết bị';
+
+  @override
+  String get renameDeviceDescription =>
+      'Tên được lưu ngay trên Omi, nên sẽ hiển thị trên mọi điện thoại mà bạn ghép nối.';
+
+  @override
+  String get tapToRename => 'Chạm để đổi tên';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Tên thiết bị không được để trống';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Tên quá dài (tối đa $maxBytes ký tự; emoji và chữ có dấu được tính nhiều hơn)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Tên chứa ký tự không được hỗ trợ';
+
+  @override
+  String get deviceRenameFailed => 'Không thể lưu tên vào Omi. Hãy kiểm tra thiết bị đã kết nối rồi thử lại.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Đã đổi tên thiết bị thành $name';
+  }
 }

@@ -63,7 +63,7 @@ from utils.stt.provider_resilience import close_rejected_socket, fallback_socket
 from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
 from config.stt_provider_policy import MODULATE_PROVIDER, STTServingSurface, provider_for_service
-from utils.stt.outcomes import TranscriptionFailure, failure_from_exception
+from utils.stt.outcomes import TranscriptionFailure, bounded_provider, failure_from_exception
 from utils.observability.transcription import TranscriptionAttempt
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
@@ -75,7 +75,7 @@ from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_rou
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils import share_links
 from utils.other import endpoints as auth, storage
-from utils.other.chat_file import FileChatTool, UnsupportedChatFileError
+from utils.other.chat_file import FileChatTool, UnsupportedChatFileError, _safe_file_chats
 from utils.multipart import (
     CHAT_FILE_MAX_PART_SIZE,
     MultipartMaxPartSizeRoute,
@@ -469,7 +469,7 @@ def send_message(
         if len(new_file_ids) > 0:
             message.files_id = new_file_ids
             files = chat_db.get_chat_files(uid, new_file_ids)
-            files = [FileChat(**f) if f else None for f in files]
+            files = _safe_file_chats([f for f in files if f])
             message.files = files
 
     if chat_session:
@@ -610,7 +610,6 @@ def send_message(
     mobile_journey_attempt = ClientJourneyAttempt(
         'mobile_chat',
         resolve_client_kind_from_headers(request.headers),
-        app_build=extract_app_build(request),
     )
 
     async def generate_stream():
@@ -860,7 +859,17 @@ def get_messages(
         # The greeting belongs to the session that was read, not to whatever
         # session `acquire_chat_session` would pick for the app.
         return [] if offset > 0 else [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
-    return messages
+    # FastAPI validates the response against Message, so one malformed/legacy stored row would
+    # 500 the whole page; skip bad rows the same way the send path does.
+    return Message.deserialize_many_safe(
+        messages,
+        on_error=lambda record, exc: logger.warning(
+            'Skipping malformed chat message %s for uid=%s: %s',
+            record.get('id') if isinstance(record, dict) else None,
+            uid,
+            type(exc).__name__,
+        ),
+    )
 
 
 @router.post(
@@ -980,6 +989,14 @@ def create_voice_message_stream(
                 yield chunk
             if not attempt.finished:
                 attempt.finish(TranscriptionOutcome.EXPECTED_SILENCE)
+                no_speech = {
+                    'error': 'no_speech',
+                    'outcome': TranscriptionOutcome.EXPECTED_SILENCE.value,
+                    'provider': bounded_provider(stt_provider),
+                    'retryable': True,
+                    'message': 'No speech was detected.',
+                }
+                yield f"error: {json.dumps(no_speech, separators=(',', ':'))}\n\n"
         except Exception as error:
             if attempt.finished:
                 raise

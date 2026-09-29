@@ -24,6 +24,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import httpx
 import numpy as np
+from google.api_core import exceptions as google_exceptions
 from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
@@ -67,6 +68,15 @@ from database.sync_ledger import (
     release_sync_content_claim_after_job_retired,
     release_sync_content_claim,
 )
+from config.capture_evidence import capture_evidence_dark_write_enabled
+from utils.capture_evidence import (
+    bounded_envelope,
+    decoded_frame_map,
+    merge_track_receipts,
+    sync_segment_receipt,
+    unknown_envelope,
+)
+from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
 from models.geolocation import Geolocation
@@ -134,8 +144,10 @@ from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
+from utils.sync.recording_session_target import resolve_recording_session_sync_target
 from utils.sync.bridge import finish_sync_segment
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
+from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
@@ -151,6 +163,7 @@ from utils.sync.assignment import fragment_rule, needs_fragment_review
 from utils.sync.speaker_identity import SpeakerIdentityDependencies, USER_SELF_PERSON_ID
 from utils.sync.speaker_identity import build_person_embeddings_cache as _build_person_embeddings_cache
 from utils.sync.speaker_identity import identify_speakers_for_segments as _identify_speakers_for_segments
+from utils.manual_speaker_assignments import manual_owner_reserved
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL, record_conversation_relevance
 
@@ -182,6 +195,54 @@ _SYNC_FAILURE_REASON_CODES = {
     'sync_vad_failed',
     'sync_worker_stale',
 }
+
+
+def _persistence_failure_fingerprint(error: BaseException, phase: str) -> str | None:
+    """Identify a bounded persistence data-shape failure, never an unknown error.
+
+    Inspect the full cause chain so an apparent data-shape error wrapping a
+    transient transport or Firestore failure cannot record a strike.
+    """
+    if phase != 'persistence':
+        return None
+    subtype = bounded_exception_class(error)
+    if subtype not in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS:
+        return None
+    chain: list[BaseException] = []
+    current: BaseException | None = error
+    while current is not None and all(current is not item for item in chain):
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    if any(
+        type(item).__name__ == 'FirestoreContentionExhausted'
+        or isinstance(
+            item,
+            (
+                google_exceptions.Aborted,
+                google_exceptions.GoogleAPICallError,
+                google_exceptions.DeadlineExceeded,
+                google_exceptions.ServiceUnavailable,
+                google_exceptions.ResourceExhausted,
+                google_exceptions.RetryError,
+                TimeoutError,
+                ConnectionError,
+                httpx.TimeoutException,
+                httpx.TransportError,
+                httpx.HTTPStatusError,
+            ),
+        )
+        for item in chain
+    ):
+        return None
+    return f'persistence:{subtype}'
+
+
+def _whole_job_persistence_fingerprint(
+    failed_segments: int, total_segments: int, fingerprints: list[str]
+) -> str | None:
+    if failed_segments > 0 and failed_segments == total_segments == len(fingerprints) and len(set(fingerprints)) == 1:
+        return fingerprints[0]
+    return None
 
 
 async def _resolve_fair_use_soft_cap_plan(uid: str):
@@ -695,6 +756,8 @@ async def _finalize_sync_job_failure(
     attempt_ref: str | None = None,
     failure_phase: str | None = None,
     failure_class: str | None = None,
+    failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
 ) -> None:
     """Offload the atomic failure publication boundary to the DB executor."""
     finalized = await run_blocking(
@@ -714,6 +777,8 @@ async def _finalize_sync_job_failure(
         attempt_ref=attempt_ref,
         failure_phase=failure_phase,
         failure_class=failure_class,
+        failure_key=failure_key,
+        failure_fingerprint=failure_fingerprint,
     )
     if finalized is None:
         # The epoch-fenced path lost its lease; the compatibility path saw an
@@ -738,6 +803,8 @@ def finalize_sync_job_failure_now(
     attempt_ref: str | None = None,
     failure_phase: str | None = None,
     failure_class: str | None = None,
+    failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
 ) -> Optional[Dict]:
     """Publish one truthful failure and then make its retry claim available.
 
@@ -766,16 +833,19 @@ def finalize_sync_job_failure_now(
     if finalized is None:
         return None
     if content_id:
+        failure_kwargs = {'failure_key': failure_key} if failure_key else {}
+        if failure_fingerprint:
+            failure_kwargs['failure_fingerprint'] = failure_fingerprint
         if run_lock_token is None:
             # The pre-cutover protocol has no epoch binding. Keep all ledger
             # operations tokenless while legacy revisions may still exist.
-            release_sync_content_claim(uid, content_id, job_id)
+            release_sync_content_claim(uid, content_id, job_id, **failure_kwargs)
         else:
             # The fenced Redis terminal transition already succeeded. A lease
             # can expire between that CAS and Firestore release, so use the
             # deliberately retired-job transaction rather than treating this
             # as a live write.
-            release_sync_content_claim_after_job_retired(uid, content_id, job_id)
+            release_sync_content_claim_after_job_retired(uid, content_id, job_id, **failure_kwargs)
     if run_lock_token is not None:
         delete_sync_job_run_lock_epoch(job_id)
     logger.error(
@@ -820,7 +890,14 @@ def _merge_and_cap_vad_segments(voice_segments: list) -> list:
     return segments
 
 
-def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
+def retrieve_vad_segments(
+    path: str,
+    segmented_paths: set,
+    errors: list = None,
+    source_frame_map: dict | None = None,
+    segment_source_maps: dict | None = None,
+    segment_source_lock: threading.Lock | None = None,
+):
     try:
         start_timestamp = get_timestamp_from_path(path)
         voice_segments = vad_is_empty(path, return_segments=True, cache=True)
@@ -849,6 +926,16 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
             segment_aseg.export(segment_path, format='wav')
             segmented_paths.add(segment_path)
+            if segment_source_maps is not None:
+                # Pydub's millisecond slice starts at this original WAV sample.
+                # The derivative STT clock resets to zero; retain its bridge.
+                with segment_source_lock or contextlib.nullcontext():
+                    if segment_path in segment_source_maps:
+                        segment_source_maps[segment_path] = None
+                    elif source_frame_map is not None:
+                        segment_source_maps[segment_path] = (source_frame_map, int(segment['start'] * aseg.frame_rate))
+                    else:
+                        segment_source_maps[segment_path] = None
             # Explicitly delete segment to free memory immediately
             del segment_aseg
     finally:
@@ -949,6 +1036,8 @@ def identify_speakers_for_segments(
     person_embeddings_cache: Dict[str, dict],
     uid: str,
     language: Optional[str] = None,
+    *,
+    owner_reserved: bool = False,
 ) -> None:
     _identify_speakers_for_segments(
         transcript_segments,
@@ -956,6 +1045,7 @@ def identify_speakers_for_segments(
         person_embeddings_cache,
         uid,
         language,
+        owner_reserved=owner_reserved,
         dependencies=_speaker_identity_dependencies(),
     )
 
@@ -1021,6 +1111,7 @@ def process_segment(
     job_id: str | None = None,
     segment_key: str | None = None,
     attempt_ref: str | None = None,
+    source_position_map: tuple[dict, int] | None = None,
 ):
     conversation_id = None
     provider = 'unknown'
@@ -1098,28 +1189,6 @@ def process_segment(
             empty_retried = True
             _log_empty_retry('started')
 
-        # Download the segment audio once — used for speaker ID and/or to persist the
-        # conversation's audio as a private-cloud chunk (realtime parity, below).
-        phase = 'download'
-        audio_bytes = _download_audio_bytes(url) if (person_embeddings_cache or private_cloud_sync_enabled) else None
-        try:
-            identify_speakers_for_segments(
-                transcript_segments,
-                audio_bytes if person_embeddings_cache else None,
-                person_embeddings_cache or {},
-                uid,
-                language=language,
-            )
-        except Exception as e:
-            logger.warning(
-                'event=sync_speaker_id outcome=failed exception_type=%s',
-                _bounded_exception_type(e),
-            )
-        finally:
-            # Keep audio_bytes for chunk storage when private cloud sync is on; free it now otherwise.
-            if audio_bytes is not None and not private_cloud_sync_enabled:
-                audio_bytes = None
-
         # Chronological scheduling reduces bridge work; the transaction remains
         # correct when independent jobs or a timed-out worker arrive out of order.
         phase = 'assignment'
@@ -1139,6 +1208,33 @@ def process_segment(
             if target_conversation_id
             else get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
         )
+        candidate_id = target_conversation_id or (closest_memory['id'] if closest_memory else None)
+        owner_reserved = False
+        if candidate_id:
+            try:
+                owner_reserved = manual_owner_reserved(conversations_db.get_manual_speaker_receipt(uid, candidate_id))
+            except Exception as error:
+                # A receipt read failure cannot authorize an automatic owner.
+                owner_reserved = True
+                logger.warning('event=sync_speaker_receipt outcome=failed exception_type=%s', type(error).__name__)
+
+        # Download once for matching and optional private-cloud chunk storage.
+        phase = 'download'
+        audio_bytes = _download_audio_bytes(url) if (person_embeddings_cache or private_cloud_sync_enabled) else None
+        try:
+            identify_speakers_for_segments(
+                transcript_segments,
+                audio_bytes if person_embeddings_cache else None,
+                person_embeddings_cache or {},
+                uid,
+                language=language,
+                owner_reserved=owner_reserved,
+            )
+        except Exception as e:
+            logger.warning('event=sync_speaker_id outcome=failed exception_type=%s', _bounded_exception_type(e))
+        finally:
+            if audio_bytes is not None and not private_cloud_sync_enabled:
+                audio_bytes = None
         started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         create_memory = CreateConversation(
             started_at=started_at,
@@ -1159,6 +1255,26 @@ def process_segment(
             **create_memory.model_dump(),
         ).model_dump()
         incoming['data_protection_level'] = data_protection_level
+        if capture_evidence_dark_write_enabled():
+            receipt = unknown_envelope('missing_source_position', origin='sync_vad')
+            if source_position_map is not None:
+                frame_map, derivative_start = source_position_map
+                rate = frame_map['claim']['rate_hz']
+                mapped = [
+                    sync_segment_receipt(
+                        frame_map,
+                        wav_sample_start=derivative_start + round(segment.start * rate),
+                        wav_sample_end=derivative_start + round(segment.end * rate),
+                        segment_id=str(segment.id),
+                    )
+                    for segment in transcript_segments
+                ]
+                if all(item is not None for item in mapped):
+                    receipt = merge_track_receipts([], mapped)
+                    if frame_map['incomplete'] and receipt.get('capability') == 'source_position':
+                        receipt['coverage'] = 'incomplete'
+                    receipt = bounded_envelope(receipt)
+            incoming['capture_evidence'] = receipt
         phase = 'persistence'
         from utils.conversations.lifecycle import ingest_sync_conversation
 
@@ -1168,6 +1284,11 @@ def process_segment(
             candidate_id=closest_memory['id'] if closest_memory else None,
             target_id=target_conversation_id,
         )
+        if capture_evidence_dark_write_enabled():
+            OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
+                path='sync',
+                status='mapped' if incoming['capture_evidence']['capability'] == 'source_position' else 'unknown',
+            ).inc()
         conversation_id = assigned['id']
         with lock:
             response['new_memories' if created else 'updated_memories'].add(conversation_id)
@@ -1232,6 +1353,15 @@ def process_segment(
     except Exception as e:
         if is_destructive_operation_in_progress(e):
             raise
+        if phase == 'persistence' and bounded_exception_class(e) == 'OtherException':
+            # Preserve a bounded code-defined subtype for incident diagnosis;
+            # never log exception text, document IDs, paths, or transcript.
+            logger.error(
+                'event=sync_persistence_exception exception_type=%s job_ref=%s attempt_ref=%s',
+                _bounded_exception_type(e),
+                _bounded_correlation_ref(job_id),
+                _bounded_correlation_ref(attempt_ref),
+            )
         failure = failure_from_exception(e, provider=provider)
         _set_deferred_segment_outcome(
             deferred_outcome,
@@ -1242,6 +1372,16 @@ def process_segment(
             phase=phase,
             exception_type=bounded_exception_class(e),
         )
+        fingerprint = _persistence_failure_fingerprint(e, phase)
+        if deferred_outcome is not None and fingerprint:
+            deferred_outcome['repeat_failure_key'] = 'persistent_persistence'
+            deferred_outcome['repeat_failure_fingerprint'] = fingerprint
+        elif (
+            deferred_outcome is not None
+            and phase in ('provider_call', 'parse')
+            and failure.outcome == TranscriptionOutcome.INVALID_INPUT
+        ):
+            deferred_outcome['provider_invalid_input'] = True
         _record_sync_segment_failure(
             failure,
             model=model,
@@ -1561,15 +1701,31 @@ async def _record_restricted_sync_dg_usage(
             raise
 
 
-async def _run_sync_vad_phase(wav_paths: list, segmented_paths: set) -> tuple[list[str], int]:
+async def _run_sync_vad_phase(
+    wav_paths: list,
+    segmented_paths: set,
+    source_frame_maps: dict | None = None,
+    segment_source_maps: dict | None = None,
+) -> tuple[list[str], int]:
     """Finish all mutating VAD work before the coordinator advances or cleans up."""
     phase_started = time.monotonic()
     vad_errors: list[str] = []
+    segment_source_lock = threading.Lock()
 
     def _run_vad_bg(path: str):
         local_errors: list[str] = []
         try:
-            retrieve_vad_segments(path, segmented_paths, local_errors)
+            if segment_source_maps is not None:
+                retrieve_vad_segments(
+                    path,
+                    segmented_paths,
+                    local_errors,
+                    source_frame_map=(source_frame_maps or {}).get(path),
+                    segment_source_maps=segment_source_maps,
+                    segment_source_lock=segment_source_lock,
+                )
+            else:
+                retrieve_vad_segments(path, segmented_paths, local_errors)
         except Exception as error:
             if not local_errors:
                 local_errors.append(_bounded_exception_type(error))
@@ -1592,6 +1748,32 @@ async def _run_sync_vad_phase(wav_paths: list, segmented_paths: set) -> tuple[li
     return vad_errors, vad_ms
 
 
+async def _resolve_safety_wal_target(
+    uid: str,
+    stamped_target: Optional[str],
+    recording_session_id: Optional[str],
+    source: ConversationSource,
+    client_device_id: Optional[str],
+    should_lock: bool,
+    audio_start_seconds: Optional[float],
+    audio_end_seconds: Optional[float],
+) -> Optional[str]:
+    """Use server recording proof over the phone's possibly stale local stamp."""
+    if not recording_session_id or audio_start_seconds is None or audio_end_seconds is None:
+        return stamped_target
+    return await run_blocking(
+        db_executor,
+        resolve_recording_session_sync_target,
+        uid,
+        recording_session_id,
+        source,
+        client_device_id,
+        bool(should_lock),
+        audio_start_seconds,
+        audio_end_seconds,
+    )
+
+
 async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -1610,6 +1792,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     inline_run_lock_token: Optional[str] = None,
     content_run_bound: bool = False,
     ledger_fence_active: bool = True,
+    capture_evidence_claims: dict[str, dict] | None = None,
+    recording_session_id: Optional[str] = None,
+    audio_start_seconds: Optional[float] = None,
+    audio_end_seconds: Optional[float] = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -1634,6 +1820,19 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # keeps the caller's exact coordinates and returns the input unchanged on
     # any geocode failure, so a miss never drops the user's location.
     geolocation = await async_resolve_geolocation(geolocation)
+    # Resolve before segment intake. A unique server-side match is authoritative
+    # over a local stamp from another silence-rollover generation; no safe match
+    # invalidates the stamp. Old clients without this proof retain their stamp.
+    target_conversation_id = await _resolve_safety_wal_target(
+        uid,
+        target_conversation_id,
+        recording_session_id,
+        source,
+        client_device_id,
+        should_lock,
+        audio_start_seconds,
+        audio_end_seconds,
+    )
 
     sync_provider = 'unknown'
     sync_model = 'unknown'
@@ -1680,6 +1879,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
         set_byok_uid(uid if get_byok_keys() else None)
         segmented_paths = set()
         wav_paths = []
+        decoded_frames: dict[str, list[int]] = {}
+        source_frame_maps: dict[str, dict] = {}
+        segment_source_maps: dict[str, tuple[dict, int] | None] = {}
         stage_timings = {}
         pipeline_start = time.monotonic()
         try:
@@ -1720,7 +1922,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             )
             t0 = time.monotonic()
             try:
-                wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths)
+                if capture_evidence_dark_write_enabled() and capture_evidence_claims:
+                    wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths, decoded_frames)
+                else:
+                    wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths)
             except asyncio.CancelledError:
                 # Cancellation detaches only the asyncio Future; the decoder
                 # leaf may still be reading these inputs in its executor. Keep
@@ -1742,6 +1947,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     attempt_ref=attempt_ref,
                     failure_phase='decode',
                     failure_class=bounded_exception_class(e),
+                    failure_key='invalid_audio',
                 )
                 return
             except Exception as e:
@@ -1790,13 +1996,85 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     run_lock_token=active_run_lock_token,
                     attempt_ref=attempt_ref,
                     failure_phase='decode',
+                    failure_key='invalid_audio',
                 )
                 return
 
+            if capture_evidence_dark_write_enabled() and capture_evidence_claims:
+                for wav_path in wav_paths:
+                    claim = capture_evidence_claims.get(os.path.basename(wav_path).replace('.wav', '.bin'))
+                    if (
+                        claim is None
+                        or (claim['codec'] == 'pcm16' and '_pcm16_' not in wav_path)
+                        or (claim['codec'] == 'opus' and '_opus_' not in wav_path)
+                    ):
+                        continue
+                    with wave.open(wav_path, 'rb') as decoded_wav:
+                        mapping = decoded_frame_map(
+                            claim,
+                            decoded_frames.get(wav_path, []),
+                            wav_rate_hz=decoded_wav.getframerate(),
+                            wav_channels=decoded_wav.getnchannels(),
+                        )
+                    if mapping is not None:
+                        source_frame_maps[wav_path] = mapping
+
             # --- Phase 2: VAD ---
             job_phase = 'vad'
-            await run_blocking(db_executor, _update_sync_job_for_run, job_id, active_run_lock_token, {'stage': 'vad'})
-            vad_errors, vad_ms = await _run_sync_vad_phase(wav_paths, segmented_paths)
+            await run_blocking(
+                db_executor,
+                _update_sync_job_for_run,
+                job_id,
+                active_run_lock_token,
+                {
+                    'stage': 'vad',
+                    **(
+                        {
+                            'capture_evidence': (
+                                bounded_envelope(
+                                    {
+                                        'version': 1,
+                                        'capability': 'source_position' if source_frame_maps else 'unknown',
+                                        'coverage': (
+                                            'incomplete'
+                                            if (
+                                                len(source_frame_maps) != len(wav_paths)
+                                                or any(mapping['incomplete'] for mapping in source_frame_maps.values())
+                                            )
+                                            else 'mapped'
+                                        ),
+                                        'origin': 'sync_pre_vad',
+                                        'runs': [
+                                            {
+                                                'capture_root': mapping['claim']['capture_root'],
+                                                'clock_epoch': mapping['claim']['clock_epoch'],
+                                                'source_frame_start': mapping['claim']['source_frame_start'],
+                                                'source_frame_end': mapping['claim']['source_frame_start']
+                                                + len(mapping['offsets'])
+                                                - 1,
+                                                'decoded_sample_end': mapping['offsets'][-1],
+                                                'rate_hz': mapping['claim']['rate_hz'],
+                                                'incomplete': mapping['incomplete'],
+                                            }
+                                            for mapping in source_frame_maps.values()
+                                        ],
+                                    }
+                                )
+                                if source_frame_maps
+                                else unknown_envelope('missing_source_position', origin='sync_pre_vad')
+                            )
+                        }
+                        if capture_evidence_dark_write_enabled()
+                        else {}
+                    ),
+                },
+            )
+            if source_frame_maps:
+                vad_errors, vad_ms = await _run_sync_vad_phase(
+                    wav_paths, segmented_paths, source_frame_maps, segment_source_maps
+                )
+            else:
+                vad_errors, vad_ms = await _run_sync_vad_phase(wav_paths, segmented_paths)
             stage_timings['vad_ms'] = vad_ms
             wav_paths = []
 
@@ -2057,6 +2335,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             content_segment_count = [0]
             segment_lock = threading.Lock()
             first_segment_failure: list = []
+            persistence_failure_fingerprints: list[str] = []
+            provider_invalid_failures = [0]
 
             # Segments that fully landed in a prior Cloud Tasks attempt are skipped
             already_processed = set()
@@ -2115,6 +2395,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     job_id=job_id,
                     segment_key=segment_id or path,
                     attempt_ref=attempt_ref,
+                    source_position_map=segment_source_maps.get(path),
                 )
                 if ok:
                     # Persist result contributions before the processed marker.
@@ -2188,6 +2469,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         attempt_ref=attempt_ref,
                     )
                 elif ok is False:
+                    if deferred_outcome.get('repeat_failure_key') == 'persistent_persistence':
+                        with segment_lock:
+                            persistence_failure_fingerprints.append(deferred_outcome['repeat_failure_fingerprint'])
+                    elif deferred_outcome.get('provider_invalid_input'):
+                        with segment_lock:
+                            provider_invalid_failures[0] += 1
                     (
                         outcome,
                         outcome_provider,
@@ -2363,6 +2650,17 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 'model': _bounded_sync_model(sync_model),
                 'lane': sync_lane,
             }
+            repeat_failure_fingerprint = _whole_job_persistence_fingerprint(
+                failed_segments, total_segments, persistence_failure_fingerprints
+            )
+            repeat_failure_key = 'persistent_persistence' if repeat_failure_fingerprint else None
+            if repeat_failure_key:
+                # A polling cleanup or duplicate task may release the retired
+                # claim before this worker. Carry the strike through Redis.
+                final_result['repeat_failure_key'] = repeat_failure_key
+                final_result['repeat_failure_fingerprint'] = repeat_failure_fingerprint
+            if failed_segments == total_segments == provider_invalid_failures[0] and failed_segments > 0:
+                final_result['reason_code'] = 'stt_invalid_input'
             if content_id and failed_segments == 0:
                 # The durable content ledger proves every successful segment
                 # before the WAL-visible completed status is published.
@@ -2393,6 +2691,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 failure_class=failure_class,
             )
             if content_id and failed_segments > 0:
+                failure_kwargs = (
+                    {'failure_key': repeat_failure_key, 'failure_fingerprint': repeat_failure_fingerprint}
+                    if repeat_failure_key
+                    else {}
+                )
                 if ledger_fence_active:
                     await run_blocking(
                         db_executor,
@@ -2400,9 +2703,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         uid,
                         content_id,
                         job_id,
+                        **failure_kwargs,
                     )
                 else:
-                    await run_blocking(db_executor, release_sync_content_claim, uid, content_id, job_id)
+                    await run_blocking(
+                        db_executor, release_sync_content_claim, uid, content_id, job_id, **failure_kwargs
+                    )
             if ledger_fence_active:
                 await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)
             await _record_sync_job_outcome_async(

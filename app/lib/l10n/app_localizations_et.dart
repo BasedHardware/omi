@@ -11220,37 +11220,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get openCall => 'Ava kõne';
 
   @override
-  String get renameDevice => 'Nimeta seade ümber';
-
-  @override
-  String get renameDeviceDescription =>
-      'Nimi salvestatakse Omi seadmesse, seega kuvatakse seda igas telefonis, millega selle seod.';
-
-  @override
-  String get tapToRename => 'Puuduta ümbernimetamiseks';
-
-  @override
-  String get deviceNameCannotBeEmpty => 'Seadme nimi ei saa olla tühi';
-
-  @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Nimi on liiga pikk (kuni $maxBytes märki; emojid ja täpitähed loevad rohkem)';
-  }
-
-  @override
-  String get deviceNameInvalidCharacters => 'Nimi sisaldab toetamata märke';
-
-  @override
-  String get deviceRenameFailed =>
-      'Nime ei õnnestunud Omi seadmesse salvestada. Kontrolli, et see on ühendatud, ja proovi uuesti.';
-
-  @override
-  String deviceRenamed(String name) {
-    return 'Seade nimetati ümber: $name';
-  }
-
-  @override
-  String get captureRecoveryBanner => 'Ripatsi heli ei jõua rakendusse — parandamiseks puudutage';
+  String get captureRecoveryBanner => 'Omi ei saada heli — puudutage uuesti ühendamiseks';
 
   @override
   String get phoneRecordingBlockedByPendantBatch =>
@@ -11419,4 +11389,127 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Välimus';
+
+  @override
+  String get appearanceSystem => 'Süsteem';
+
+  @override
+  String get appearanceLight => 'Hele';
+
+  @override
+  String get appearanceDark => 'Tume';
+
+  @override
+  String get chatDiscardRecording => 'Loobu';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Ma ei saanud aru — proovige uuesti';
+
+  @override
+  String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+
+  @override
+  String get sendToSupport => 'Send to support';
+
+  @override
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+
+  @override
+  String get deviceDiagnosticsTicket => 'Support ticket code';
+
+  @override
+  String get deviceDiagnosticsUploadFailed => 'Could not send diagnostics to support. Please try again.';
+
+  @override
+  String get feedbackGiveFeedback => 'Give feedback';
+
+  @override
+  String get feedbackAllGood => 'All good';
+
+  @override
+  String get feedbackChatWithUs => 'More detail? Chat with us';
+
+  @override
+  String get feedbackReasonSummaryInaccurate => 'Inaccurate';
+
+  @override
+  String get feedbackReasonSummaryIncomplete => 'Incomplete';
+
+  @override
+  String get feedbackReasonSummaryIrrelevant => 'Not relevant';
+
+  @override
+  String get feedbackReasonSummaryWrongContext => 'Wrong context';
+
+  @override
+  String get feedbackReasonSummaryOther => 'Something else';
+
+  @override
+  String get feedbackReasonRecordingMissingAudio => 'Missing audio';
+
+  @override
+  String get feedbackReasonRecordingPoorTranscription => 'Poor transcription';
+
+  @override
+  String get feedbackReasonRecordingWrongSpeaker => 'Wrong speaker';
+
+  @override
+  String get feedbackReasonRecordingDelayedOrStuck => 'Delayed or stuck';
+
+  @override
+  String get feedbackReasonRecordingFragmentedOrDuplicated => 'Fragmented or duplicated';
+
+  @override
+  String get feedbackReasonRecordingOther => 'Something else';
+
+  @override
+  String get searchPeople => 'Otsi inimesi';
+
+  @override
+  String addQueryAsNewPerson(String query) {
+    return 'Lisa \"$query\" uue inimesena';
+  }
+
+  @override
+  String showAllPeople(int count) {
+    return 'Kuva kõik inimesed ($count)';
+  }
+
+  @override
+  String get renameDevice => 'Nimeta seade ümber';
+
+  @override
+  String get renameDeviceDescription =>
+      'Nimi salvestatakse Omi seadmesse, seega kuvatakse seda igas telefonis, millega selle seod.';
+
+  @override
+  String get tapToRename => 'Puuduta ümbernimetamiseks';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Seadme nimi ei saa olla tühi';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Nimi on liiga pikk (kuni $maxBytes märki; emojid ja täpitähed loevad rohkem)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Nimi sisaldab toetamata märke';
+
+  @override
+  String get deviceRenameFailed =>
+      'Nime ei õnnestunud Omi seadmesse salvestada. Kontrolli, et see on ühendatud, ja proovi uuesti.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Seade nimetati ümber: $name';
+  }
 }

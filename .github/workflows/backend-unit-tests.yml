@@ -12,6 +12,7 @@ on:
       - 'config/deployment-setting-classification.json'
       - 'firestore.indexes.json'
       - '.github/actions/detect-changes/**'
+      - '.github/actions/ci-tier/**'
       - '.github/actions/deploy-backend-stack/**'
       - '.github/actions/sync-backfill-lifecycle/**'
       - '.github/actions/release-eligibility/action.yml'
@@ -59,6 +60,7 @@ on:
       - 'config/deployment-setting-classification.json'
       - 'firestore.indexes.json'
       - '.github/actions/detect-changes/**'
+      - '.github/actions/ci-tier/**'
       - '.github/actions/deploy-backend-stack/**'
       - '.github/actions/sync-backfill-lifecycle/**'
       - '.github/actions/release-eligibility/action.yml'
@@ -101,6 +103,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
 
 concurrency:
   # PR updates supersede earlier test runs; main and manual runs retain an
@@ -109,6 +112,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ci-tier:
+    name: Resolve CI Tier
+    runs-on: ubuntu-latest
+    outputs:
+      full_ci: ${{ steps.resolve.outputs.full_ci }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: resolve
+        uses: ./.github/actions/ci-tier
+
   # The suite's measured cost is per-file pytest process startup (2026-09-10,
   # run 34430370667: 1126 files each in its own session, 19m18s of a 21m53s
   # run, only two files above 4.5s of test time), and sharing processes
@@ -188,11 +201,13 @@ jobs:
   # `run-unit-ci.sh` runs `not integration and not slow`, which is correct
   # for PR latency but meant every `slow`-marked codebase guardrail in the
   # repository executed nowhere. This job runs exactly those, unselected
-  # and unconditional: a guardrail whose job is to notice a change nobody
-  # anticipated cannot be gated on the change set that triggered the run.
+  # on internal PRs and main. Forks defer it until a maintainer marks ci:full;
+  # a guardrail cannot be gated on the changed-file set alone.
   backend-unit-guardrails:
     name: Backend unit guardrails
+    needs: ci-tier
     runs-on: ubuntu-latest
+    if: needs.ci-tier.outputs.full_ci == 'true'
     timeout-minutes: 10
     steps:
       - name: Checkout code
@@ -226,7 +241,7 @@ jobs:
   # closed on any non-success shard or guardrail result.
   backend-unit-suite:
     name: Backend unit suite
-    needs: [backend-unit-shard, backend-unit-guardrails]
+    needs: [ci-tier, backend-unit-shard, backend-unit-guardrails]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
@@ -237,14 +252,27 @@ jobs:
           # verdict this gate exists to publish.
           SHARD_RESULT: ${{ needs.backend-unit-shard.result }}
           GUARDRAILS_RESULT: ${{ needs.backend-unit-guardrails.result }}
+          TIER_RESULT: ${{ needs.ci-tier.result }}
+          FULL_CI: ${{ needs.ci-tier.outputs.full_ci }}
         run: |
           failed=0
+          if [ "$TIER_RESULT" != "success" ]; then
+            echo "FAIL: CI tier resolution was '$TIER_RESULT'" >&2
+            failed=1
+          fi
           if [ "$SHARD_RESULT" != "success" ]; then
             echo "FAIL: backend unit shards result was '$SHARD_RESULT'" >&2
             failed=1
           fi
-          if [ "$GUARDRAILS_RESULT" != "success" ]; then
-            echo "FAIL: backend unit guardrails result was '$GUARDRAILS_RESULT'" >&2
+          guardrails_required=success
+          if [ "$FULL_CI" != true ]; then
+            guardrails_required=skipped
+            notice='fork PR — a maintainer adds label ci:full, then Re-run all jobs'
+            echo "::notice title=Heavy CI deferred::$notice"
+            echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$GUARDRAILS_RESULT" != "$guardrails_required" ]; then
+            echo "FAIL: backend unit guardrails result was '$GUARDRAILS_RESULT' (expected $guardrails_required)" >&2
             failed=1
           fi
           exit "$failed"

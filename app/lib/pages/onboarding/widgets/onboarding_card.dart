@@ -30,9 +30,9 @@ class OnboardingCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: padding,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: OmiColors.surface0,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(OmiRadius.xl)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(OmiRadius.xl)),
       ),
       child: SafeArea(
         top: false,

@@ -7,8 +7,9 @@ from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from ._client import db
+from ._client import db, get_firestore_client
 from database.document_ids import system_folder_doc_id
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
 logger = logging.getLogger(__name__)
 
@@ -110,9 +111,10 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
-def get_folders(uid: str) -> List[Dict[str, Any]]:
+def get_folders(uid: str, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
     """Get all folders for a user, sorted by order."""
-    user_ref = db.collection('users').document(uid)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
     folders_ref = user_ref.collection('folders')
 
     folders: List[Dict[str, Any]] = []
@@ -186,19 +188,44 @@ def update_folder(uid: str, folder_id: str, update_data: Dict[str, Any]) -> bool
     return True
 
 
-def delete_folder(uid: str, folder_id: str, move_to_folder_id: Optional[str] = None) -> bool:
+def _rehome_folder_conversations(
+    client: Any, references: List[Any], source_folder_id: str, target_folder_id: Optional[str]
+) -> None:
+    """Rehome only candidates still owned by the source, without reviving deletions."""
+
+    @firestore.transactional
+    def rehome(write_transaction):
+        # BatchGet is unordered and lazy. Materialize all projected reads before
+        # staging any writes, both to fence membership and to obey Firestore's
+        # read-before-write rule without loading transcripts/audio metadata.
+        snapshots = list(client.get_all(references, field_paths=['folder_id'], transaction=write_transaction))
+        for snapshot in snapshots:
+            if snapshot.exists and _typed_doc(snapshot).get('folder_id') == source_folder_id:
+                write_transaction.update(snapshot.reference, {'folder_id': target_folder_id})
+
+    run_with_transaction_contention_retry(client.transaction, rehome, operation_name='folder_delete_rehome')
+
+
+def delete_folder(
+    uid: str,
+    folder_id: str,
+    move_to_folder_id: Optional[str] = None,
+    *,
+    firestore_client: Any = None,
+) -> bool:
     """
     Delete a folder and move its conversations to another folder.
     If move_to_folder_id is not provided, moves to the default 'Other' folder.
     """
-    user_ref = db.collection('users').document(uid)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
     folder_ref = user_ref.collection('folders').document(folder_id)
 
     # Find target folder
     target_folder_id: Optional[str] = move_to_folder_id
     if not target_folder_id:
         # Find the default folder (usually 'Other')
-        folders = get_folders(uid)
+        folders = get_folders(uid, firestore_client=client)
         default_folder = next((f for f in folders if f.get('is_default')), None)
         if default_folder:
             target_folder_id = str(default_folder['id'])
@@ -209,24 +236,21 @@ def delete_folder(uid: str, folder_id: str, move_to_folder_id: Optional[str] = N
     # deleted below. A stale pointer used to survive here and 500 every later
     # move of that conversation.
     conversations_ref = user_ref.collection('conversations')
-    conversations = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id)).stream()
+    conversations = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id)).select([]).stream()
 
-    batch = db.batch()
-    count = 0
+    references: List[Any] = []
     for conv_doc in conversations:
-        batch.update(conv_doc.reference, {'folder_id': target_folder_id})
-        count += 1
-        if count >= 450:
-            batch.commit()
-            batch = db.batch()
-            count = 0
+        references.append(conv_doc.reference)
+        if len(references) >= 450:
+            _rehome_folder_conversations(client, references, folder_id, target_folder_id)
+            references = []
 
-    if count > 0:
-        batch.commit()
+    if references:
+        _rehome_folder_conversations(client, references, folder_id, target_folder_id)
 
     # Update target folder count
     if target_folder_id:
-        update_folder_conversation_count(uid, target_folder_id)
+        update_folder_conversation_count(uid, target_folder_id, firestore_client=client)
 
     # Delete the folder
     folder_ref.delete()
@@ -392,9 +416,10 @@ def bulk_move_conversations_to_folder(
     return moved
 
 
-def update_folder_conversation_count(uid: str, folder_id: str) -> int:
+def update_folder_conversation_count(uid: str, folder_id: str, *, firestore_client: Any = None) -> int:
     """Update the conversation count for a folder."""
-    user_ref = db.collection('users').document(uid)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
     conversations_ref = user_ref.collection('conversations')
 
     query = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id)).where(

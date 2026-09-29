@@ -9,6 +9,7 @@ from copy import deepcopy
 from typing import TYPE_CHECKING, Callable, Optional
 
 from utils.manual_speaker_assignments import apply_manual_assignments
+from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
 from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
 from utils.conversations.relevance import sync_intake_decision
@@ -200,6 +201,11 @@ def assign_in_transaction(
     for row in sorted(records, key=lambda row: row['id'] != canonical):
         new = deepcopy(row.get('transcript_segments', []))
         for segment in new:
+            if row['id'] == canonical and not result['sync_live_target'] and not segment.get('speaker_id_scope'):
+                # A pre-scope sync survivor is still audio-aligned. Leave its
+                # visible ID intact (manual receipts may name it), but give
+                # conversation resolution the provenance it needs.
+                segment['speaker_id_scope'] = f"legacy-conversation:{row['id']}:{segment.get('speaker_id')}"
             segment['timestamp'] = row['started_at'].timestamp() + segment['start']
             duration = segment['end'] - segment['start']
             segment['start'] = segment['timestamp'] - origin
@@ -215,7 +221,14 @@ def assign_in_transaction(
     for segment in new:
         segment['timestamp'] = incoming['started_at'].timestamp() + segment['start']
     survivors = dedupe_segments_for_merge(
-        origin, existing, new, text_match_slop_seconds=600 if target and not target.get('sync_content_revision') else 0
+        origin,
+        existing,
+        new,
+        text_match_slop_seconds=600 if target and not target.get('sync_content_revision') else 0,
+        # A bound safety WAL can mix one duplicate with genuinely new speech.
+        # Near-exact text, duration, and time are enough to drop that one line;
+        # broader clock-offset matches still require the batch gate.
+        single_match_slop_seconds=2 if target and result['sync_live_target'] else 0,
     )
     for segment in survivors:
         allocator.assign(segment)
@@ -230,6 +243,19 @@ def assign_in_transaction(
         finished_at=extent['finished_at'],
         transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
     )
+    if incoming.get('capture_evidence') is not None:
+        contributors = [row.get('capture_evidence') or {} for row in records] + [incoming['capture_evidence']]
+        mapped = [receipt for item in contributors for receipt in item.get('receipts') or []]
+        if mapped:
+            combined = merge_track_receipts([], mapped)
+            if any(
+                item.get('capability') != 'source_position' or item.get('coverage') == 'incomplete'
+                for item in contributors
+            ):
+                combined['coverage'] = 'incomplete'
+            result['capture_evidence'] = bounded_envelope(combined)
+        else:
+            result['capture_evidence'] = incoming['capture_evidence']
     result['has_content'] = bool(segments)
     result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
     result['sync_relevance'] = (

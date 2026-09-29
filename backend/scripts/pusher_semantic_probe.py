@@ -202,6 +202,12 @@ async def _listen_sample(
         deadline = time.monotonic() + 60
         while not (session_bound and ready):
             payload = await _receive_json(websocket, deadline)
+            if (
+                isinstance(payload, dict)
+                and payload.get("type") == "service_status"
+                and payload.get("status") == "stt_failed"
+            ):
+                raise ProbeError("stt_unavailable")
             if isinstance(payload, dict) and payload.get("type") == "conversation_session":
                 session_bound = payload.get("conversation_id") == conversation_id
             if (
@@ -219,6 +225,12 @@ async def _listen_sample(
                     payload = await _receive_json(websocket, deadline)
                 except ProbeError:
                     return
+                if (
+                    isinstance(payload, dict)
+                    and payload.get("type") == "service_status"
+                    and payload.get("status") == "stt_failed"
+                ):
+                    raise ProbeError("stt_unavailable")
                 segments = (
                     payload
                     if isinstance(payload, list)
@@ -243,6 +255,11 @@ async def _listen_sample(
                 if len(chunk) != chunk_bytes:
                     break
                 await websocket.send(chunk)
+                # This is live microphone PCM, not an upload. Dumping ~39 s of
+                # audio into the socket at network speed can overrun a serving
+                # recognizer and make the durable phrase assertion depend on
+                # whichever frames it managed to consume (prod 36476253887).
+                await asyncio.sleep(CHUNK_MILLISECONDS / 1000.0)
         await asyncio.sleep(TRANSCRIPT_SETTLE_SECONDS)
         receiver.cancel()
         try:
@@ -780,17 +797,34 @@ async def _terminal_readback(
         # The durable transcript is the release contract: every recognized
         # pipeline (live streaming or batch finalization) must have produced
         # the fixture phrase in the completed conversation.
-        segments = conversation.get("transcript_segments") or []
-        durable_text = _normalize(
-            " ".join(
-                str(segment.get("text", ""))
-                for segment in segments
-                if isinstance(segment, dict) and segment.get("text")
-            )
-        )
-        if expected_phrase not in durable_text:
+        if not _durable_fixture_matches(conversation, expected_phrase):
             raise ProbeError("transcript_mismatch")
     return conversation
+
+
+def _durable_fixture_matches(conversation: dict[str, Any], expected_phrase: str) -> bool:
+    segments = conversation.get("transcript_segments") or []
+    durable_text = _normalize(
+        " ".join(
+            str(segment.get("text", "")) for segment in segments if isinstance(segment, dict) and segment.get("text")
+        )
+    )
+    return expected_phrase in durable_text
+
+
+def _early_listen_failure(task: asyncio.Task[tuple[bool, str]]) -> ProbeError:
+    """Classify a socket that died before the durable conversation finalized."""
+    try:
+        task.result()
+    except websockets.exceptions.ConnectionClosed as error:
+        # The listen service uses 1011 when every STT leg has failed. Keep the
+        # provider's free-form close reason out of the bounded probe receipt.
+        return ProbeError("stt_unavailable" if error.code == 1011 else "listen_closed_early")
+    except ProbeError as error:
+        return error
+    except Exception:
+        return ProbeError("listen_failure")
+    return ProbeError("listen_closed_early")
 
 
 async def _observe_candidate_pusher(
@@ -877,7 +911,7 @@ def _receipt(
         },
         "synthetic_uid_class": SYNTHETIC_UID_CLASS,
         "producer_observation": {
-            "status": "PASS" if status == "PASS" else "FAIL",
+            "status": "PASS" if candidate_pod_count == 1 else "FAIL",
             "candidate_pod_count": candidate_pod_count,
         },
         "consumer_readback": {"status": "PASS" if consumer_readback_passed or status == "PASS" else "FAIL"},
@@ -925,33 +959,47 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
                 hold_open=probe_socket_hold,
             )
         )
-        try:
-            conversation = await _terminal_readback(
+        readback_task = asyncio.create_task(
+            _terminal_readback(
                 args.api_url.rstrip("/"),
                 token,
                 conversation_id,
                 args.finalization_timeout_seconds,
-                expected_phrase=fixture.expected_phrase,
             )
-            consumer_readback_passed = True
+        )
+        readback_succeeded = False
+        try:
+            done, _ = await asyncio.wait({listen_task, readback_task}, return_when=asyncio.FIRST_COMPLETED)
+            if listen_task in done:
+                raise _early_listen_failure(listen_task)
+            conversation = readback_task.result()
             live_word_count, expected_word_count = _alignment_word_counts(
                 conversation.get("transcript_segments") or [], fixture.expected_phrase, DISCARD_KEEP_AUDIO_PASSES
             )
-            if not _base_word_count_ok(live_word_count, expected_word_count, len(fixture.expected_phrase.split())):
-                raise ProbeError("transcript_word_count")
+            readback_succeeded = True
         finally:
             probe_socket_hold.set()
+            if not readback_task.done():
+                readback_task.cancel()
+            if not readback_succeeded and not listen_task.done():
+                listen_task.cancel()
+            await asyncio.gather(readback_task, listen_task, return_exceptions=True)
         live_window_matched, live_window_transcript = await listen_task
+        receipt_kwargs = {
+            "live_window_matched": live_window_matched,
+            "live_window_transcript": live_window_transcript,
+        }
+        consumer_readback_passed = _durable_fixture_matches(conversation, fixture.expected_phrase)
         candidate_pod_count = await _observe_candidate_pusher(
             deployment_receipt,
             conversation_id=conversation_id,
             project=args.project,
             namespace=args.namespace,
         )
-        receipt_kwargs = {
-            "live_window_matched": live_window_matched,
-            "live_window_transcript": live_window_transcript,
-        }
+        if not consumer_readback_passed:
+            raise ProbeError("transcript_mismatch")
+        if not _base_word_count_ok(live_word_count, expected_word_count, len(fixture.expected_phrase.split())):
+            raise ProbeError("transcript_word_count")
     except (OSError, json.JSONDecodeError, ProbeError) as error:
         failure_stage = error.stage if isinstance(error, ProbeError) else "deployment_receipt"
         deployment_receipt = locals().get("deployment_receipt", {})
@@ -989,9 +1037,10 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--project", required=True)
     parser.add_argument("--namespace", required=True)
     parser.add_argument("--run-id", type=int, required=True)
-    # Keep all authenticated read-back inside the existing five-minute probe
-    # token lifetime even after WebSocket setup and real-time audio streaming.
-    parser.add_argument("--finalization-timeout-seconds", type=int, default=180)
+    # The 39 s real-time fixture plus 120 s listener rollover needs processing
+    # headroom. Readback starts with the socket, so 240 s still fits the
+    # existing five-minute probe token after setup and port-forward readiness.
+    parser.add_argument("--finalization-timeout-seconds", type=int, default=240)
     # Opt-in audio-timeline alignment scenario (dev only, isolated test
     # identity with private-cloud sync). All authenticated reads must stay
     # within the five-minute probe token TTL.

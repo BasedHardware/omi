@@ -106,7 +106,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       text: TextSpan(
         text: 'omi.me',
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.8),
+          color: OmiColors.textPrimary.withValues(alpha: 0.8),
           fontSize: 14 * 3.0, // Scale font size with pixelRatio
           fontWeight: FontWeight.w600,
         ),
@@ -489,7 +489,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                   child: isPaid
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
-                          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+                          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
                           child: Text(planLabel, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w700)),
                         )
                       : Text(planLabel, style: OmiType.headline)),
@@ -507,7 +507,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                           Text(context.l10n.managePlan,
                               style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                           const SizedBox(width: OmiSpacing.xxs),
-                          const Icon(Icons.chevron_right, color: OmiColors.textSecondary, size: 20),
+                          Icon(Icons.chevron_right, color: OmiColors.textSecondary, size: 20),
                         ],
                       ),
                     ),

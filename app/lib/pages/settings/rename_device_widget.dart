@@ -108,7 +108,7 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
             ),
             const SizedBox(height: 20),
             Container(
-              decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+              decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
               child: TextField(
                 key: OmiKeys.settingsRenameField,
                 controller: _controller,
@@ -126,7 +126,7 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
-                  focusedBorder: const OutlineInputBorder(
+                  focusedBorder: OutlineInputBorder(
                     borderRadius: OmiRadius.mdAll,
                     borderSide: BorderSide(color: OmiColors.border),
                   ),

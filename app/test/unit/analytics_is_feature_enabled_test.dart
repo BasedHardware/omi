@@ -12,6 +12,7 @@ class _FlagAdapter implements AnalyticsAdapter, AnalyticsIdentityAdapter, Analyt
   bool _initialized = false;
   final settles = <Completer<String>>[];
   final flagReads = <Completer<bool>>[];
+  final payloadReads = <Completer<Object?>>[];
 
   @override
   bool get isInitialized => _initialized;
@@ -32,6 +33,13 @@ class _FlagAdapter implements AnalyticsAdapter, AnalyticsIdentityAdapter, Analyt
   Future<bool> isFeatureEnabled(String key) {
     final completer = Completer<bool>();
     flagReads.add(completer);
+    return completer.future;
+  }
+
+  @override
+  Future<Object?> getFeatureFlagPayload(String key) {
+    final completer = Completer<Object?>();
+    payloadReads.add(completer);
     return completer.future;
   }
 
@@ -129,6 +137,20 @@ void main() {
     final read = AnalyticsManager().isFeatureEnabled('mobile-capture-recovery-v1');
     adapter.flagReads.single.complete(true);
     expect(await read, isTrue);
+  });
+
+  test('payload read respects settled identity and consent', () async {
+    final adapter = _FlagAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    await settleIdentity(adapter, 'user-a');
+    final read = AnalyticsManager().getFeatureFlagPayload('mobile_store_review_tuning');
+    adapter.payloadReads.single.complete({'reading_seconds': 5});
+    expect(await read, {'reading_seconds': 5});
+    final second = AnalyticsManager().getFeatureFlagPayload('mobile_store_review_tuning');
+    AnalyticsManager().optOutTracking();
+    adapter.payloadReads.last.complete({'reading_seconds': 1});
+    expect(await second, isNull);
   });
 
   test('an identity switch while the flag read is in flight fails closed', () async {

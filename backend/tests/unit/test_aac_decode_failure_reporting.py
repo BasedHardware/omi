@@ -2,7 +2,8 @@
 
 Failure-Class: FC-typed-failure-collapsed-to-generic — instance fix; the AAC
 decoder collapsed every FFmpeg rejection into ``b''`` so the receiver's
-decode-failure contract (per-frame warning, streak, ``silent_mic`` fallback)
+decode-failure contract (per-session warning, per-frame counter, streak,
+``silent_mic`` fallback)
 never fired for AAC, leaving only FFmpeg's context-free
 ``ERROR:libav.aac:Channel element 1.7 is not allocated`` / ``Reserved bit
 set.`` native lines (~130 events / 30 min across the ``libav.aac`` family,
@@ -503,7 +504,7 @@ class TestReceiverIntegration:
         """The prod-relevant shape: a flaky client stream with corrupt frames
         scattered among good ones. Each good frame resets the streak, so the
         session never reaches the silent-mic threshold it must not reach —
-        but every corrupt frame is still individually reported."""
+        while the per-session warning stays bounded."""
         stream = []
         expected_failures = 0
         for i in range(1, 8):
@@ -518,7 +519,8 @@ class TestReceiverIntegration:
             await receiver.receive_data()
 
         failures = [r for r in caplog.records if 'decode failed' in r.getMessage()]
-        assert len(failures) == expected_failures
+        assert expected_failures > 1
+        assert len(failures) == 1
         assert receiver.decode_failure_streak == 0
         assert recorded_fallbacks == []
 
@@ -536,10 +538,9 @@ class TestReceiverIntegration:
         assert recorded_fallbacks == []
 
     @pytest.mark.anyio
-    async def test_second_consecutive_corrupt_frame_advances_streak(self, adts_frames, caplog):
-        """The streak is per-frame evidence, cumulative across consecutive
-        failures: the second corrupt frame logs streak=2 with the same
-        codec/type shape (the per-frame report the prod feed lacked)."""
+    async def test_second_consecutive_corrupt_frame_advances_streak_without_a_second_log(self, adts_frames, caplog):
+        """The metric and streak count every rejected frame, while logs stay
+        bounded to one detailed warning per session."""
         corrupt = _corrupt_payload(adts_frames[1])
         receiver = _receiver([{'bytes': corrupt}, {'bytes': corrupt}])
 
@@ -547,9 +548,8 @@ class TestReceiverIntegration:
             await receiver.receive_data()
 
         failures = [r.getMessage() for r in caplog.records if 'decode failed' in r.getMessage()]
-        assert len(failures) == 2
+        assert len(failures) == 1
         assert 'streak=1' in failures[0]
-        assert 'streak=2' in failures[1]
 
     @pytest.mark.anyio
     async def test_initialize_decoders_builds_real_aac_decoder(self):
