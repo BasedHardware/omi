@@ -80,3 +80,29 @@ def test_malformed_stored_provenance_is_a_safe_cache_miss():
     segment['translations'] = [{'lang': 'en', 'text': None}]
     conversation['translation_materializations'] = {'s': {'en': {'policy': 'viewed_v1'}}}
     assert not conversations.translation_materialization_is_current(UID, conversation, segment, 'en', 'viewed_v1')
+
+
+def test_kill_switch_flip_mid_flight_blocks_viewed_commit(monkeypatch):
+    """Luna R3-4: the gate is read at commit time inside the transaction, so a
+    write already in flight when the kill switch flips must not land."""
+    monkeypatch.setenv('TRANSLATION_DEMAND_GATE_ENABLED', 'true')
+    store = store_with_segments({'id': 's', 'text': 'năm', 'translations': []})
+    write = lambda: conversations.materialize_translation(
+        UID, CID, 's', 'năm', 'en', 'year', policy_version='viewed_v1', firestore_client=store
+    )
+    assert write() is not None
+    monkeypatch.setenv('TRANSLATION_DEMAND_GATE_ENABLED', 'false')
+    store = store_with_segments({'id': 's', 'text': 'năm', 'translations': []})
+    assert (
+        conversations.materialize_translation(
+            UID, CID, 's', 'năm', 'en', 'year', policy_version='viewed_v1', firestore_client=store
+        )
+        is None
+    )
+    # Legacy writes are unaffected by the gate.
+    assert (
+        conversations.materialize_translation(
+            UID, CID, 's', 'năm', 'en', 'year', policy_version='legacy', firestore_client=store
+        )
+        is not None
+    )

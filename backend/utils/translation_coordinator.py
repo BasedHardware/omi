@@ -552,6 +552,19 @@ class TranslationCoordinator:
             if reservation is None:
                 self._decision_metrics.decision(self.target_language, 'defer', reason)
                 return
+            # Kill-switch + demand recheck AFTER the await (Luna R3-3): the
+            # reservation path can park this task in Redis while visibility
+            # hides/expires or the gate flips off. Never dispatch then.
+            current_config = resolve_ondemand_config()
+            if (
+                not current_config.gate_enabled
+                or not current_config.admits(self.uid)
+                or self.demand is None
+                or self.demand.snapshot(lease_v1_enabled=current_config.lease_v1_enabled).policy != DemandPolicy.viewed
+            ):
+                release_translation(reservation, 0)
+                self._decision_metrics.decision(self.target_language, 'defer', 'no_demand')
+                return
 
         self.metrics['batch_api_calls'] += 1
         logger.info(f"translate_coordinator [batch] units={len(api_units)}")

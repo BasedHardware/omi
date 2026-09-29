@@ -2811,6 +2811,13 @@ def materialize_translation(
 
     @firestore.transactional
     def _write(transaction):
+        # Kill-switch recheck at COMMIT time (Luna R3-4): a transaction retry
+        # must not land a viewed result after the gate flipped off mid-flight.
+        commit_config = resolve_ondemand_config()
+        if policy_version != 'legacy' and not (
+            commit_config.gate_enabled if admission_kind == 'live' else commit_config.onopen_enabled
+        ):
+            return None
         snapshot = doc_ref.get(transaction=transaction)
         if not getattr(snapshot, 'exists', False):
             return None

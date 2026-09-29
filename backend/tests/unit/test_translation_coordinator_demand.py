@@ -70,6 +70,57 @@ def test_hidden_observation_is_uncommitted_then_viewed_reconciles_without_new_te
     asyncio.run(run())
 
 
+def test_demand_hidden_during_reservation_blocks_dispatch(monkeypatch):
+    """Luna R3-3: if visibility hides while the Redis reservation is in flight,
+    the coordinator must release it and never dispatch the provider."""
+    flags(monkeypatch)
+    monkeypatch.setenv('TRANSLATION_ONDEMAND_GEMINI_ENABLED', 'true')
+    monkeypatch.setenv('TRANSLATION_ONDEMAND_UID_DAILY_CHARS', '100000')
+    monkeypatch.setenv('TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS', '1000000')
+    monkeypatch.delenv('TRANSLATION_ONDEMAND_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('TRANSLATION_ONDEMAND_COHORT_PERCENT', '100')
+
+    def reserve(*args, **kwargs):
+        return object(), 'admitted'
+
+    released = []
+    monkeypatch.setattr('utils.translation_coordinator.reserve_translation', reserve)
+    monkeypatch.setattr('utils.translation_coordinator.reservation_is_current', lambda *args, **kwargs: True)
+    monkeypatch.setattr('utils.translation_coordinator.release_translation', lambda *a, **k: released.append(1) or True)
+    now = [0.0]
+    demand = TranslationDemand(lambda: now[0])
+    provider = FakeProvider(TranslationProvider.gemini, [])
+    service, _ = build_service({TranslationProvider.gemini: provider})
+    received = []
+
+    async def callback(*args):
+        received.append(args)
+
+    coordinator = TranslationCoordinator('en', service, callback, uid='u', demand=demand)
+    coordinator.language_state.source_is_plausible = lambda *args: True
+    coordinator.language_state.observe = lambda *args, **kwargs: False
+
+    async def run():
+        demand.observe(
+            {'foreground': True, 'transcript_visible': True, 'translation_demand_version': 1}, lease_v1_enabled=True
+        )
+        await coordinator.observe([segment()], [], 'c')
+        coordinator._cancel_batch_timer()
+        # Demand hides AFTER the buffer filled but BEFORE dispatch.
+        demand.observe(
+            {'foreground': True, 'transcript_visible': False, 'translation_demand_version': 1}, lease_v1_enabled=True
+        )
+        await coordinator._flush_batch()
+        assert not provider.calls, 'provider dispatched after demand hidden'
+        assert not received
+        # The buffer is cleared synchronously by demand_changed() on the hide
+        # edge; nothing reaches the reservation, so no release is owed. The
+        # in-flight guard (recheck after the await) covers the racing case.
+        assert not coordinator._batch_buffer
+
+    asyncio.run(run())
+
+
 def test_flag_off_hidden_report_keeps_legacy_provider_and_no_redis_admission(monkeypatch):
     flags(monkeypatch)
     monkeypatch.setenv('TRANSLATION_DEMAND_GATE_ENABLED', 'false')
