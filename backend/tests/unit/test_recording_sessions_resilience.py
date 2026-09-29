@@ -68,11 +68,14 @@ if not hasattr(_conv_db, "raw_conversation_has_content"):
     _conv_db.raw_conversation_has_content = lambda uid, conv: bool(conv.get("has_content"))
 setattr(db_pkg, "conversations", _conv_db)
 
+_psc = _mod("database.people_stats_cache")
+if not hasattr(_psc, "invalidate_people_stats_cache"):
+    _psc.invalidate_people_stats_cache = MagicMock()
+setattr(db_pkg, "people_stats_cache", _psc)
 
 
 from database import recording_sessions
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
-
 
 
 class _FakeSnapshot:
@@ -172,7 +175,9 @@ class TestRecordingSessionsResilience(unittest.TestCase):
         with self.assertRaises(ValueError):
             recording_sessions.create_or_get_recording_session("", "sid", "cid", firestore_client=self.client)
         with self.assertRaises(ValueError):
-            recording_sessions.create_or_get_recording_session("../traversal", "sid", "cid", firestore_client=self.client)
+            recording_sessions.create_or_get_recording_session(
+                "../traversal", "sid", "cid", firestore_client=self.client
+            )
 
         # Empty or traversal recording_session_id
         with self.assertRaises(ValueError):
@@ -187,9 +192,15 @@ class TestRecordingSessionsResilience(unittest.TestCase):
             recording_sessions.create_or_get_recording_session("u1", "sid", "..", firestore_client=self.client)
 
     def test_renew_recording_session_lease_safely_rejects_invalid_inputs(self):
-        self.assertFalse(recording_sessions.renew_recording_session_lease("", "sid", "cid", firestore_client=self.client))
-        self.assertFalse(recording_sessions.renew_recording_session_lease("u1", "../sid", "cid", firestore_client=self.client))
-        self.assertFalse(recording_sessions.renew_recording_session_lease("u1", "sid", None, firestore_client=self.client))
+        self.assertFalse(
+            recording_sessions.renew_recording_session_lease("", "sid", "cid", firestore_client=self.client)
+        )
+        self.assertFalse(
+            recording_sessions.renew_recording_session_lease("u1", "../sid", "cid", firestore_client=self.client)
+        )
+        self.assertFalse(
+            recording_sessions.renew_recording_session_lease("u1", "sid", None, firestore_client=self.client)
+        )
 
     def test_get_recording_session_validates_inputs(self):
         with self.assertRaises(ValueError):
@@ -201,20 +212,28 @@ class TestRecordingSessionsResilience(unittest.TestCase):
         with self.assertRaises(ValueError):
             recording_sessions.tombstone_and_delete_empty_conversation("", "c1", "s1", firestore_client=self.client)
         with self.assertRaises(ValueError):
-            recording_sessions.tombstone_and_delete_empty_conversation("u1", "c1/bad", "s1", firestore_client=self.client)
+            recording_sessions.tombstone_and_delete_empty_conversation(
+                "u1", "c1/bad", "s1", firestore_client=self.client
+            )
         with self.assertRaises(ValueError):
-            recording_sessions.tombstone_and_delete_empty_conversation("u1", "c1", "../s1", firestore_client=self.client)
+            recording_sessions.tombstone_and_delete_empty_conversation(
+                "u1", "c1", "../s1", firestore_client=self.client
+            )
 
     def test_record_lifecycle_event_safely_rejects_invalid_identifiers(self):
         res1 = recording_sessions.record_lifecycle_event("", "s1", "c1", "processing", firestore_client=self.client)
         self.assertFalse(res1["accepted"])
         self.assertEqual(res1["discard_reason"], "invalid_identifier")
 
-        res2 = recording_sessions.record_lifecycle_event("u1", "../s1", "c1", "processing", firestore_client=self.client)
+        res2 = recording_sessions.record_lifecycle_event(
+            "u1", "../s1", "c1", "processing", firestore_client=self.client
+        )
         self.assertFalse(res2["accepted"])
         self.assertEqual(res2["discard_reason"], "invalid_identifier")
 
-        res3 = recording_sessions.record_lifecycle_event("u1", "s1", "c1/hack", "processing", firestore_client=self.client)
+        res3 = recording_sessions.record_lifecycle_event(
+            "u1", "s1", "c1/hack", "processing", firestore_client=self.client
+        )
         self.assertFalse(res3["accepted"])
         self.assertEqual(res3["discard_reason"], "invalid_identifier")
 
@@ -278,9 +297,7 @@ class TestRecordingSessionsResilience(unittest.TestCase):
         self.assertEqual(attempts, 2)
 
     def test_record_lifecycle_event_contention_retry_recovers(self):
-        recording_sessions.create_or_get_recording_session(
-            "u1", "sid2", "cid2", firestore_client=self.client
-        )
+        recording_sessions.create_or_get_recording_session("u1", "sid2", "cid2", firestore_client=self.client)
         real_txn = self.client.transaction
         attempts = 0
 
@@ -302,4 +319,3 @@ class TestRecordingSessionsResilience(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
