@@ -140,6 +140,10 @@ _stub_package("utils.retrieval")
 _stub_package("utils.retrieval.tools")
 _stub_package("utils.conversations")
 
+# Stub utils.log_sanitizer (action_item_tools imports sanitize)
+_log_sanitizer_stub = _stub_module("utils.log_sanitizer")
+_log_sanitizer_stub.sanitize = lambda s: str(s)
+
 # Stub utils.conversations.render with the REAL tz-resolution behavior so the
 # conversion under test is genuine (not a mock).
 _render_stub = _stub_module("utils.conversations.render")

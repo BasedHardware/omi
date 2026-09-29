@@ -22,10 +22,7 @@ def test_get_action_items_tool_sanitized(caplog):
 
     assert "/databases/default/documents/users/secret_uid/action_items" not in res
     assert "secret_uid" not in res
-    assert (
-        res
-        == "An error occurred while retrieving action items. Please try again later."
-    )
+    assert res == "An error occurred while retrieving action items. Please try again later."
     assert any(
         record.levelname == "ERROR"
         and "Error getting action items:" in record.message
@@ -50,10 +47,7 @@ def test_create_action_item_tool_sanitized(caplog):
 
     assert "/databases/default/documents/users/secret_uid/action_items" not in res
     assert "secret_uid" not in res
-    assert (
-        res
-        == "An error occurred while creating the action item. Please try again later."
-    )
+    assert res == "An error occurred while creating the action item. Please try again later."
     assert any(
         record.levelname == "ERROR"
         and "Error creating action item:" in record.message
@@ -84,10 +78,7 @@ def test_update_action_item_tool_sanitized(caplog):
 
     assert "/databases/default/documents/users/secret_uid/action_items" not in res
     assert "secret_uid" not in res
-    assert (
-        res
-        == "An error occurred while updating the action item. Please try again later."
-    )
+    assert res == "An error occurred while updating the action item. Please try again later."
     assert any(
         record.levelname == "ERROR"
         and "Error updating action item:" in record.message

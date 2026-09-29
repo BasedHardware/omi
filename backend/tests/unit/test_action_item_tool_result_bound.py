@@ -65,6 +65,7 @@ _SYS_MODULE_NAMES = [
     "utils.notifications",
     "utils.conversations",
     "utils.conversations.render",
+    "utils.log_sanitizer",
     "utils.retrieval",
     "utils.retrieval.agentic",
     "utils.retrieval.chat_scope",
@@ -92,10 +93,11 @@ for _name, _attrs in {
     ],
     "utils.conversations.render": ["resolve_display_tz", "format_local_time"],
     "utils.retrieval.agentic": ["agent_config_context"],
+    "utils.log_sanitizer": ["sanitize"],
 }.items():
     _m = _mod(_name)
     for _a in _attrs:
-        setattr(_m, _a, MagicMock())
+        setattr(_m, _a, MagicMock(side_effect=lambda s: str(s)) if _a == "sanitize" else MagicMock())
 
 
 def _apply_chat_scope_dates(scope, start_date, end_date):

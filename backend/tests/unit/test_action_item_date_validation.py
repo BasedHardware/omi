@@ -125,6 +125,7 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval.tools.action_item_tools",
     "utils.retrieval.agentic",
     "utils.retrieval.chat_scope",
+    "utils.log_sanitizer",
     "utils.conversations",
     "utils.conversations.render",
     "utils.conversations.wake_word",
@@ -260,6 +261,10 @@ _stub_package("utils.retrieval")
 _stub_package("utils.retrieval.tools")
 _stub_package("utils.llm")
 _stub_package("utils.conversations")
+
+# Stub utils.log_sanitizer (action_item_tools imports sanitize)
+_log_sanitizer_stub = _stub_module("utils.log_sanitizer")
+_log_sanitizer_stub.sanitize = lambda s: str(s)
 
 # Stub utils.conversations.render (action_item_tools imports resolve_display_tz, format_local_time)
 _render_stub = _stub_module("utils.conversations.render")
