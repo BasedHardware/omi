@@ -359,6 +359,12 @@ async def test_hanging_redis_adds_under_five_ms_to_connection_decision(monkeypat
             await asyncio.sleep(1.0)
 
     class Circuit:
+        state = 'closed'
+        account_cooldown_seconds_remaining = 0.0
+
+        def cooldown_elapsed(self):
+            return True
+
         def allow_request(self, **_kwargs):
             return True
 
@@ -431,6 +437,12 @@ async def test_hanging_recovery_lease_is_not_awaited_by_connection(monkeypatch):
             await asyncio.sleep(1.0)
 
     class Circuit:
+        state = 'closed'
+        account_cooldown_seconds_remaining = 0.0
+
+        def cooldown_elapsed(self):
+            return True
+
         def allow_request(self, **_kwargs):
             return True
 
@@ -573,6 +585,11 @@ async def test_local_probe_is_checked_before_fleet_lease_and_released_on_denial(
         def __init__(self, allowed):
             self.allowed = allowed
             self.releases = 0
+            self.state = 'closed'
+            self.account_cooldown_seconds_remaining = 0.0
+
+        def cooldown_elapsed(self):
+            return True
 
         def allow_request(self, **_kwargs):
             return self.allowed

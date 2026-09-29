@@ -522,6 +522,8 @@ protocol SiriIndexApi {
   /// A complete active-only fetch preserves completed rows when false.
   func reconcileTasks(uid: String, tasks: [SiriTask], includeCompleted: Bool, completion: @escaping (Result<Void, Error>) -> Void)
   func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void)
+  /// Clear one owner's persisted snapshot and Spotlight index before a fresh authoritative traversal.
+  func repairOwnerIndex(uid: String, completion: @escaping (Result<Void, Error>) -> Void)
   func wipe(completion: @escaping (Result<Int64, Error>) -> Void)
   /// Durably block engine-free Siri and clear its token before Firebase signs out.
   func prepareForSignOut(completion: @escaping (Result<Void, Error>) -> Void)
@@ -673,6 +675,24 @@ class SiriIndexApiSetup {
       }
     } else {
       deleteEntitiesChannel.setMessageHandler(nil)
+    }
+    /// Clear one owner's persisted snapshot and Spotlight index before a fresh authoritative traversal.
+    let repairOwnerIndexChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.repairOwnerIndex\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      repairOwnerIndexChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uidArg = args[0] as! String
+        api.repairOwnerIndex(uid: uidArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      repairOwnerIndexChannel.setMessageHandler(nil)
     }
     let wipeChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.wipe\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

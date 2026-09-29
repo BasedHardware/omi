@@ -5,21 +5,38 @@ on:
     branches: [main]
     paths:
       - 'sdks/python-cli/**'
+      - '.github/actions/ci-tier/**'
       - '.github/workflows/python-cli-ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'sdks/python-cli/**'
+      - '.github/actions/ci-tier/**'
       - '.github/workflows/python-cli-ci.yml'
 
 permissions:
   contents: read
+  issues: read
 
 defaults:
   run:
     working-directory: sdks/python-cli
 
 jobs:
+  ci-tier:
+    name: Resolve CI Tier
+    runs-on: ubuntu-latest
+    outputs:
+      full_ci: ${{ steps.resolve.outputs.full_ci }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: resolve
+        uses: ./.github/actions/ci-tier
+      - name: Explain deferred Windows coverage
+        if: steps.resolve.outputs.full_ci != 'true'
+        run: |
+          echo 'deferred: fork PR — a maintainer adds label ci:full, then Re-run all jobs' >> "$GITHUB_STEP_SUMMARY"
+
   tests:
     name: ${{ matrix.label }}
     strategy:
@@ -32,9 +49,6 @@ jobs:
           - label: Linux / Python 3.12
             os: ubuntu-latest
             python-version: '3.12'
-          - label: Windows ACL / Python 3.12
-            os: windows-latest
-            python-version: '3.12'
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -42,6 +56,28 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: sdks/python-cli/pyproject.toml
+
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest -q
+
+  windows-acl:
+    name: Windows ACL / Python 3.12
+    needs: ci-tier
+    if: needs.ci-tier.outputs.full_ci == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
           cache: pip
           cache-dependency-path: sdks/python-cli/pyproject.toml
 

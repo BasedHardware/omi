@@ -1324,7 +1324,9 @@ never erase the gap while the header claims the first run's position. Opcode
 rather than concatenating across rollovers.
 
 The dev qualification probe sends the same 17-word release fixture eight
-times (136 expected words), then near-silence while finalization completes.
+times (136 expected words) at the fixture's 100 ms PCM cadence, then
+near-silence while finalization completes. The paced send takes about 39 s;
+the terminal readback allows 240 s within the five-minute probe token lifetime.
 The base probe checks that the completed client conversation contains the
 fixture phrase and has at least four passes' words (68), while bounding that one
 conversation to at most 120% of all eight sends. Late STT flushes can land in
@@ -1332,6 +1334,10 @@ a rollover generation; the observed client conversation held about six passes
 in run 35583992730, leaving two passes of headroom at this lower bound. The
 136 words remain a diagnostic total sent. Its receipt and CI status line
 report the observed and expected counts and the failure stage without text.
+Candidate-pod attribution is checked after terminal readback even if the
+durable fixture phrase is missing, so a transcript mismatch still reports
+whether the candidate Pusher handled the finalization handoff. Passing still
+requires both candidate attribution and the durable transcript checks.
 Its separate opt-in alignment scenario sends the fixture twice (34 expected
 words), with delivered silence and an inter-arrival gap between sends. The
 shadow pass uses the first stored chunk as its time origin; its result records

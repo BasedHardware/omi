@@ -49,13 +49,31 @@ void main() {
     expect(prefs.deviceIdHash, isEmpty);
     expect(prefs.appearanceMode, 'system');
     final stored = await SharedPreferences.getInstance();
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    final journal = File('${directory.path}/boot_stages.json');
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
+    var quarantineRecorded = false;
+    while (!quarantineRecorded && DateTime.now().isBefore(deadline)) {
+      final recordedKeys = stored.getKeys().where((candidate) => [
+            'onboardingCompleted',
+            'batchModeEnabled',
+            'btDevice',
+            'btDevices',
+            'capturePolicy'
+          ].any((key) => candidate.startsWith('$key.corrupt-')));
+      final allOriginalsArchived = recordedKeys.length == 5;
+      if (allOriginalsArchived && await journal.exists()) {
+        final entries = jsonDecode(await journal.readAsString()) as List<dynamic>;
+        quarantineRecorded = entries.any((entry) => entry is Map && entry['stage'] == 'quarantine:btDevice');
+      }
+      if (!quarantineRecorded) await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
     for (final key in ['onboardingCompleted', 'batchModeEnabled', 'btDevice', 'btDevices', 'capturePolicy']) {
       expect(stored.getKeys().any((candidate) => candidate.startsWith('$key.corrupt-')), isTrue);
     }
     final archivedPairing = stored.getKeys().singleWhere((key) => key.startsWith('btDevice.corrupt-'));
     expect(stored.getString(archivedPairing), '{"id":42}');
-    expect(await File('${directory.path}/boot_stages.json').readAsString(), contains('quarantine:btDevice'));
+    expect(quarantineRecorded, isTrue, reason: 'quarantine journal should record btDevice within two seconds');
+    expect(await journal.readAsString(), contains('quarantine:btDevice'));
   });
 
   test('mixed-type list is archived as JSON before the original is removed', () async {

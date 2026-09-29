@@ -36,6 +36,11 @@ from utils.executors import run_blocking as _production_run_blocking
 PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
 
 
+@pytest.fixture(autouse=True)
+def _prod_sync_stage(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+
+
 def _read_pipeline_source():
     with open(PIPELINE_PATH, encoding='utf-8') as f:
         return f.read()

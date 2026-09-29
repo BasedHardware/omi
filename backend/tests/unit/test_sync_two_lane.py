@@ -501,6 +501,7 @@ def test_server_manifest_allows_only_one_content_set_per_conversation(monkeypatc
 
 
 def test_backfill_reservation_maps_user_and_global_caps(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     # Admission caps are opt-in now (Cloud Tasks queue is the pacer); enable them
     # to exercise the user/global cap → reason mapping.
     monkeypatch.setenv('SYNC_BACKFILL_ADMISSION_LIMITS', 'true')
