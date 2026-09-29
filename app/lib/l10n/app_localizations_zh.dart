@@ -11347,4 +11347,66 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => '声音识别';
+
+  @override
+  String get greetingMorning => '早上好';
+
+  @override
+  String get greetingAfternoon => '下午好';
+
+  @override
+  String get greetingEvening => '晚上好';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting，$name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => '你想知道什么？';
+
+  @override
+  String get askSuggestDecide => '我今天决定了什么？';
+
+  @override
+  String get askSuggestOwe => '我还欠别人什么？';
+
+  @override
+  String get askSuggestNotice => 'Omi 注意到了什么？';
+
+  @override
+  String get pastChats => '过往聊天';
+
+  @override
+  String get newChat => '新聊天';
+
+  @override
+  String get startFresh => '重新开始';
+
+  @override
+  String get noPastChats => '你和 Omi 的聊天会显示在这里。';
+
+  @override
+  String get deleteChatQuestion => '删除这个聊天？';
+
+  @override
+  String get deleteChatMessage => '它会从过往聊天中永久消失。';
+
+  @override
+  String get deleteChat => '删除聊天';
+
+  @override
+  String get appsAskWith => '用这些向 Omi 提问';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '今天有 $count 段对话。',
+      one: '今天有 1 段对话。',
+      zero: '今天还没有对话。',
+    );
+    return '$_temp0';
+  }
 }

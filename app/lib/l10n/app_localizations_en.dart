@@ -11547,4 +11547,66 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'Voice Recognition';
+
+  @override
+  String get greetingMorning => 'Morning';
+
+  @override
+  String get greetingAfternoon => 'Afternoon';
+
+  @override
+  String get greetingEvening => 'Evening';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'What do you want to know?';
+
+  @override
+  String get askSuggestDecide => 'What did I decide today?';
+
+  @override
+  String get askSuggestOwe => 'What do I still owe people?';
+
+  @override
+  String get askSuggestNotice => 'What did Omi notice?';
+
+  @override
+  String get pastChats => 'Past chats';
+
+  @override
+  String get newChat => 'New chat';
+
+  @override
+  String get startFresh => 'Start fresh';
+
+  @override
+  String get noPastChats => 'Your chats with Omi show up here.';
+
+  @override
+  String get deleteChatQuestion => 'Delete this chat?';
+
+  @override
+  String get deleteChatMessage => 'It’s gone from Past chats for good.';
+
+  @override
+  String get deleteChat => 'Delete chat';
+
+  @override
+  String get appsAskWith => 'Ask Omi with';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations today.',
+      one: '1 conversation today.',
+      zero: 'No conversations today.',
+    );
+    return '$_temp0';
+  }
 }

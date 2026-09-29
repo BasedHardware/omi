@@ -21032,6 +21032,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Voice Recognition'**
   String get voiceRecognitionSettings;
+
+  /// Home greeting (large title) for 8 AM to 10 AM; keep it short so the first name fits after it on one line
+  ///
+  /// In en, this message translates to:
+  /// **'Morning'**
+  String get greetingMorning;
+
+  /// Home greeting (large title) for 2 PM to 4 PM; keep it short so the first name fits after it on one line
+  ///
+  /// In en, this message translates to:
+  /// **'Afternoon'**
+  String get greetingAfternoon;
+
+  /// Home greeting (large title) for 6 PM to 8 PM; keep it short so the first name fits after it on one line
+  ///
+  /// In en, this message translates to:
+  /// **'Evening'**
+  String get greetingEvening;
+
+  /// Home's greeting with the reader's first name after it, when it fits one line
+  ///
+  /// In en, this message translates to:
+  /// **'{greeting}, {name}'**
+  String greetingWithName(String greeting, String name);
+
+  /// Ask: under the greeting
+  ///
+  /// In en, this message translates to:
+  /// **'What do you want to know?'**
+  String get whatDoYouWantToKnow;
+
+  /// Ask suggestion
+  ///
+  /// In en, this message translates to:
+  /// **'What did I decide today?'**
+  String get askSuggestDecide;
+
+  /// Ask suggestion
+  ///
+  /// In en, this message translates to:
+  /// **'What do I still owe people?'**
+  String get askSuggestOwe;
+
+  /// Ask suggestion
+  ///
+  /// In en, this message translates to:
+  /// **'What did Omi notice?'**
+  String get askSuggestNotice;
+
+  /// Ask: the history page title and button
+  ///
+  /// In en, this message translates to:
+  /// **'Past chats'**
+  String get pastChats;
+
+  /// Ask: the first row of Past chats
+  ///
+  /// In en, this message translates to:
+  /// **'New chat'**
+  String get newChat;
+
+  /// Ask: under New chat
+  ///
+  /// In en, this message translates to:
+  /// **'Start fresh'**
+  String get startFresh;
+
+  /// Ask: Past chats when there are none
+  ///
+  /// In en, this message translates to:
+  /// **'Your chats with Omi show up here.'**
+  String get noPastChats;
+
+  /// Ask: confirm before deleting a past chat
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this chat?'**
+  String get deleteChatQuestion;
+
+  /// Ask: what deleting a past chat means
+  ///
+  /// In en, this message translates to:
+  /// **'It’s gone from Past chats for good.'**
+  String get deleteChatMessage;
+
+  /// Ask: the confirm button
+  ///
+  /// In en, this message translates to:
+  /// **'Delete chat'**
+  String get deleteChat;
+
+  /// Apps: group of chat apps
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Omi with'**
+  String get appsAskWith;
+
+  /// Chat greeting: number of non-discarded conversations created today.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No conversations today.} =1{1 conversation today.} other{{count} conversations today.}}'**
+  String conversationsTodayCount(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
