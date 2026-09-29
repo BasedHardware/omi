@@ -59,6 +59,7 @@ from .first_open_obligations import (
 )
 
 from config.translation import resolve_ondemand_config
+from database.translation_admission import TranslationReservation, reservation_is_current
 
 logger = logging.getLogger(__name__)
 
@@ -2785,6 +2786,7 @@ def materialize_translation(
     source_hint: str = '',
     policy_version: str = 'legacy',
     admission_kind: str = 'live',
+    reservation: TranslationReservation | None = None,
     firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
     """Fence a display translation against the current source and merge one target."""
@@ -2851,6 +2853,8 @@ def materialize_translation(
         payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, level)
         payload['translation_materializations'] = _protect_json_value(metadata, uid, 'enhanced')
         payload['translation_materializations_compressed'] = True
+        if reservation is not None and not reservation_is_current(reservation):
+            return None
         transaction.update(doc_ref, payload)
         return selected
 

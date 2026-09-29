@@ -14,6 +14,7 @@ class DemandPolicy(str, Enum):
     viewed = 'viewed'
     hidden = 'hidden'
     lease_expired = 'lease_expired'
+    closed = 'closed'
 
 
 @dataclass(frozen=True)
@@ -71,7 +72,9 @@ class TranslationDemand:
         return True
 
     def snapshot(self, *, lease_v1_enabled: bool) -> DemandSnapshot:
-        if self._closed or self._unsupported or self._last_report is None:
+        if self._closed:
+            return DemandSnapshot(DemandPolicy.closed, None, self._generation)
+        if self._unsupported or self._last_report is None:
             return DemandSnapshot(DemandPolicy.legacy_unknown, None, self._generation)
         expires_at = self._last_report + self._lease_seconds
         if self._clock() >= expires_at:

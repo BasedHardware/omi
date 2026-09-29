@@ -18,6 +18,11 @@ from dataclasses import dataclass
 from typing import Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
 from models.transcript_segment import TranscriptSegment, SENTENCE_ENDERS
+from database.translation_admission import (
+    release_translation,
+    reservation_is_current,
+    reserve_translation,
+)
 from utils.translation import (
     TranslationNeed,
     TranslationStatus,
@@ -25,7 +30,14 @@ from utils.translation import (
     TranslationService,
 )
 from utils.translation_core.metrics import get_translation_metrics
-from config.translation import translation_profile_gate_enabled
+from config.translation import (
+    resolve_ondemand_config,
+    resolve_translation_profile,
+    translation_profile_gate_enabled,
+    viewed_translation_profile,
+)
+from utils.translation_core.planner import TranslationMode
+from utils.translation_demand import DemandPolicy, TranslationDemand
 from utils.translation_language import detect_language_with_confidence, expected_foreign_language
 from utils.executors import db_executor, sync_executor, run_blocking
 from utils.translation_cache import ConversationLanguageState, should_persist_translation, _normalize_base_language  # type: ignore[reportPrivateUsage]  # internal helper, intentional cross-module use
@@ -135,6 +147,8 @@ class TranslationCoordinator:
         source_language: str = "",
         expected_languages: Tuple[str, ...] = (),
         realtime_interpreter: bool = False,
+        uid: str = '',
+        demand: TranslationDemand | None = None,
     ):
         self.target_language = target_language
         self.target_base = _normalize_base_language(target_language) or ''
@@ -144,6 +158,9 @@ class TranslationCoordinator:
         self.source_language = source_language
         self.expected_languages = expected_languages
         self.realtime_interpreter = realtime_interpreter
+        self.uid = uid
+        self.demand = demand
+        self._result_context: dict[tuple[str, str], tuple[str, str, object | None]] = {}
         self._decision_metrics = get_translation_metrics()
         self._conversation_id: Optional[str] = None
 
@@ -174,6 +191,20 @@ class TranslationCoordinator:
         if segment_id not in self._segment_states:
             self._segment_states[segment_id] = SegmentState(segment_id=segment_id)
         return self._segment_states[segment_id]
+
+    def _admission(self) -> DemandPolicy:
+        config = resolve_ondemand_config()
+        if self.realtime_interpreter or not config.gate_enabled or not config.admits(self.uid) or self.demand is None:
+            return DemandPolicy.legacy_unknown
+        return self.demand.snapshot(lease_v1_enabled=config.lease_v1_enabled).policy
+
+    def result_context(self, segment_id: str, conversation_id: str) -> tuple[str, str, object | None] | None:
+        return self._result_context.get((conversation_id, segment_id))
+
+    def demand_changed(self) -> None:
+        if self._admission() in {DemandPolicy.hidden, DemandPolicy.lease_expired, DemandPolicy.closed}:
+            self._batch_buffer.clear()
+            self._cancel_batch_timer()
 
     async def observe(
         self,
@@ -217,6 +248,12 @@ class TranslationCoordinator:
             return
 
         state = self._get_or_create_state(segment.id)
+        if self._admission() in {DemandPolicy.hidden, DemandPolicy.lease_expired, DemandPolicy.closed}:
+            self._invalidate_segment_work(segment.id, state)
+            state.latest_text = text
+            state.last_update_at = now
+            self._decision_metrics.decision(self.target_language, 'skip', 'no_demand')
+            return
         if not self.realtime_interpreter and not self.language_state.source_is_plausible(text, self.expected_languages):
             self._invalidate_segment_work(segment.id, state)
             state.latest_text = text
@@ -291,11 +328,15 @@ class TranslationCoordinator:
         self._invalidate_segment_work(segment_id, state)
         version = state.version
         text_hash = hashlib.md5(text.encode()).hexdigest()
-        cached = await run_blocking(
-            db_executor,
-            self.translation_service.get_cached_translation,
-            text_hash,
-            self.target_language,
+        cached = (
+            None
+            if self._admission() == DemandPolicy.viewed and resolve_ondemand_config().gemini_enabled
+            else await run_blocking(
+                db_executor,
+                self.translation_service.get_cached_translation,
+                text_hash,
+                self.target_language,
+            )
         )
         if (
             self._segment_states.get(segment_id) is not state
@@ -425,12 +466,45 @@ class TranslationCoordinator:
         if not valid_units:
             return
 
+        admission = self._admission()
+        if admission in {DemandPolicy.hidden, DemandPolicy.lease_expired, DemandPolicy.closed}:
+            return
+        config = resolve_ondemand_config()
+        viewed = admission == DemandPolicy.viewed and config.gemini_enabled
+        if viewed and not config.spend_configured:
+            self._decision_metrics.decision(self.target_language, 'defer', 'budget_denied')
+            return
+        profile = viewed_translation_profile(resolve_translation_profile(), config) if viewed else None
+
         # Prepare (unit_id, text) pairs for batch API
         api_units: List[Tuple[str, str]] = [(seg_id, text) for seg_id, text, _, _ in valid_units]
+
+        reservation = None
+        if viewed:
+            revision = hashlib.sha256(
+                repr([(seg_id, text, version) for seg_id, text, _, version in valid_units]).encode('utf-8')
+            ).hexdigest()
+            reservation, reason = await run_blocking(
+                db_executor,
+                reserve_translation,
+                self.uid,
+                valid_units[0][2],
+                self.target_language,
+                revision,
+                'viewed_v1',
+                sum(len(text) for _, text in api_units) + config.max_output_tokens * 4,
+                config.uid_daily_chars,
+                config.global_daily_chars,
+                provider_deadline_seconds=config.deadline_seconds,
+            )
+            if reservation is None:
+                self._decision_metrics.decision(self.target_language, 'defer', reason)
+                return
 
         self.metrics['batch_api_calls'] += 1
         logger.info(f"translate_coordinator [batch] units={len(api_units)}")
 
+        actual_chars = sum(len(text) for _, text in api_units)
         try:
             # Run the sync provider call in a thread pool to avoid blocking the event loop
             outcomes = await run_blocking(
@@ -439,13 +513,25 @@ class TranslationCoordinator:
                 self.target_language,
                 api_units,
                 source_language=self.source_language,
+                **({'mode': TranslationMode.whole_text, 'profile': profile} if viewed else {}),
             )
             if len(outcomes) != len(valid_units):
                 raise RuntimeError('Translation service returned the wrong number of outcomes')
+            actual_chars += sum(
+                len(outcome.text) for outcome in outcomes if outcome.status == TranslationStatus.translated
+            )
 
             for outcome, (seg_id, original_text, conv_id, version) in zip(outcomes, valid_units):
+                if reservation is not None and not await run_blocking(db_executor, reservation_is_current, reservation):
+                    break
                 state = self._segment_states.get(seg_id)
-                if not state or state.version != version:
+                if (
+                    not state
+                    or state.version != version
+                    or (self._conversation_id is not None and self._conversation_id != conv_id)
+                ):
+                    continue
+                if viewed and not resolve_ondemand_config().gate_enabled:
                     continue
                 if outcome.status == TranslationStatus.failed:
                     continue
@@ -490,22 +576,41 @@ class TranslationCoordinator:
                 state.detected_lang = outcome.detected_language
 
                 # Notify via callback
-                await self.on_translation_ready(
-                    seg_id,
-                    outcome.text,
-                    outcome.detected_language,
-                    conv_id,
+                self._result_context[(conv_id, seg_id)] = (
+                    original_text,
+                    'viewed_v1' if viewed else 'legacy',
+                    reservation,
                 )
+                try:
+                    await self.on_translation_ready(
+                        seg_id,
+                        outcome.text,
+                        outcome.detected_language,
+                        conv_id,
+                    )
+                finally:
+                    self._result_context.pop((conv_id, seg_id), None)
 
         except (RuntimeError, ValueError) as error:
             logger.error('TranslationCoordinator batch error: %s', error)
+        finally:
+            if reservation is not None:
+                await run_blocking(
+                    db_executor,
+                    release_translation,
+                    reservation,
+                    actual_chars,
+                )
 
     async def flush(self):
         """Flush all pending translations before session cleanup."""
         self._flushing = True
 
         self._cancel_batch_timer()
-        await self._flush_batch()
+        if self._admission() not in {DemandPolicy.hidden, DemandPolicy.lease_expired, DemandPolicy.closed}:
+            await self._flush_batch()
+        else:
+            self._batch_buffer.clear()
 
         self._segment_states.clear()
         self._flushing = False

@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 from fastapi.websockets import WebSocketDisconnect
 
 from config.capture_evidence import capture_evidence_dark_write_enabled
+from config.translation import resolve_ondemand_config
 from utils.capture_evidence import unknown_envelope
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 
@@ -49,6 +50,7 @@ from utils.transcribe_store import conversations_db, user_db
 from utils.translation import TranslationService
 from utils.translation_cache import ConversationLanguageState, TranscriptSegmentLanguageCache
 from utils.translation_coordinator import TranslationCoordinator
+from utils.translation_demand import DemandPolicy
 from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
@@ -104,6 +106,8 @@ class TranscriptProcessor:
         self.translation_lock = asyncio.Lock()
         self.translation_enabled = host.translation_language is not None
         self.translation_coordinator: Optional[TranslationCoordinator] = None
+        self._last_translation_demand_generation = -1
+        self._last_translation_demand_conversation: Optional[str] = None
         if self.translation_enabled:
             self.translation_coordinator = TranslationCoordinator(
                 target_language=host.translation_language or 'en',
@@ -112,6 +116,8 @@ class TranscriptProcessor:
                 language_state=ConversationLanguageState(host.translation_language or 'en'),
                 expected_languages=getattr(getattr(host, 'language_profile', None), 'expected', ()),
                 realtime_interpreter=getattr(getattr(host, 'request', None), 'source', None) == 'phone_call',
+                uid=host.request.uid,
+                demand=getattr(getattr(host, 'receiver', None), 'translation_demand', None),
             )
         self._flush_failures = 0
         self._flush_backoff_until = 0.0
@@ -269,6 +275,45 @@ class TranscriptProcessor:
         # silently drops the translations for every remaining segment. Keep the failure contained.
         try:
             async with self.translation_lock:
+                config = resolve_ondemand_config()
+                context = (
+                    self.translation_coordinator.result_context(segment_id, conversation_id)
+                    if self.translation_coordinator
+                    else None
+                )
+                if context is not None and context[1] == 'viewed_v1' and not config.gate_enabled:
+                    return
+                if config.gate_enabled and config.admits(self.host.request.uid):
+                    if context is None:
+                        current = await self.cache.get(conversation_id, force_refresh=True)
+                        source = next(
+                            (
+                                s.get('text', '')
+                                for s in (current or {}).get('transcript_segments', [])
+                                if s.get('id') == segment_id
+                            ),
+                            '',
+                        )
+                        context = (source, 'legacy', None)
+                    source_text, policy_version, reservation = context
+                    committed = await self.host.persistence.call(
+                        conversations_db.materialize_translation,
+                        self.host.request.uid,
+                        conversation_id,
+                        segment_id,
+                        source_text,
+                        self.host.translation_language,
+                        translated_text,
+                        source_hint=(
+                            self.translation_coordinator.source_language if self.translation_coordinator else ''
+                        ),
+                        policy_version=policy_version,
+                        reservation=reservation,
+                    )
+                    if committed is not None and conversation_id == self.host.state.current_conversation_id:
+                        await self.cache.get(conversation_id, force_refresh=True)
+                        self.host.send_event(TranslationEvent(segments=[committed]))
+                    return
                 conversation = (
                     await self.cache.get(conversation_id)
                     if conversation_id == self.host.state.current_conversation_id
@@ -530,6 +575,43 @@ class TranscriptProcessor:
     async def _translate(self, segments: List[TranscriptSegment], conversation_id: str, removed: List[str]) -> None:
         if self.translation_coordinator:
             await self.translation_coordinator.observe(segments, removed, conversation_id)
+            if self._last_translation_demand_conversation != conversation_id:
+                await self.on_translation_demand_changed()
+
+    async def on_translation_demand_changed(self) -> None:
+        coordinator = self.translation_coordinator
+        if coordinator is None:
+            return
+        coordinator.demand_changed()
+        config = resolve_ondemand_config()
+        if not config.gate_enabled or not config.admits(self.host.request.uid) or coordinator.realtime_interpreter:
+            return
+        demand = coordinator.demand
+        if demand is None:
+            return
+        snapshot = demand.snapshot(lease_v1_enabled=config.lease_v1_enabled)
+        if snapshot.policy != DemandPolicy.viewed:
+            return
+        conversation_id = self.host.state.current_conversation_id
+        if not conversation_id:
+            return
+        if (snapshot.generation, conversation_id) == (
+            self._last_translation_demand_generation,
+            self._last_translation_demand_conversation,
+        ):
+            return
+        self._last_translation_demand_generation = snapshot.generation
+        self._last_translation_demand_conversation = conversation_id
+        conversation = await self.cache.get(conversation_id, force_refresh=True)
+        if not conversation:
+            return
+        # Bound each reconciliation; subsequent transcript changes enter the ordinary live path.
+        segments = [
+            TranscriptSegment(**raw)
+            for raw in conversation.get('transcript_segments', [])[-config.max_segments :]
+            if isinstance(raw, dict) and raw.get('id')
+        ]
+        await coordinator.observe(segments, [], conversation_id)
 
     async def _deliver_segments(self, client_segments: List[Dict[str, Any]]) -> bool:
         """Push live segments to the client without letting a gone client kill the loop.

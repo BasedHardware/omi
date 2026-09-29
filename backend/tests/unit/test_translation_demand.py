@@ -45,7 +45,7 @@ def test_lease_expiry_malformed_reports_and_lifetime_beyond_telemetry_cap():
     now[0] += 61
     assert demand.snapshot(lease_v1_enabled=True).policy == DemandPolicy.lease_expired
     demand.close()
-    assert demand.snapshot(lease_v1_enabled=True).policy == DemandPolicy.legacy_unknown
+    assert demand.snapshot(lease_v1_enabled=True).policy == DemandPolicy.closed
 
 
 def test_unsupported_capability_does_not_silently_enter_unversioned_rollout():

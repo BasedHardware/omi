@@ -14,10 +14,12 @@ from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config.audio_timeline import audio_timeline_v2_enabled, live_speaker_capture_clock_enabled
+from config.translation import resolve_ondemand_config
 from config.capture_evidence import capture_evidence_dark_write_enabled
 from routers.listen.contracts import ConversationCaptureOrigin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.capture_evidence import SourcePositionMap, parse_live_frame
+from utils.translation_demand import TranslationDemand
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -197,6 +199,8 @@ def _get_lc3() -> Any:
 class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.host = host
+        self.translation_demand = TranslationDemand()
+        self._translation_expiry_task: asyncio.Task[Any] | None = None
         self.channel_configs = channel_configs
         self.channel_id_to_index = channel_id_to_index
         self.stt_socket: Any = None
@@ -1674,6 +1678,18 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'client_state':
             if not self.host.state.realtime_demand.observe(payload):
                 logger.debug('Ignored malformed or over-budget client_state')
+            config = resolve_ondemand_config()
+            if config.shadow_enabled or config.gate_enabled:
+                if self.translation_demand.observe(payload, lease_v1_enabled=config.lease_v1_enabled):
+                    if self._translation_expiry_task is not None:
+                        self._translation_expiry_task.cancel()
+                    snapshot = self.translation_demand.snapshot(lease_v1_enabled=config.lease_v1_enabled)
+                    if snapshot.expires_at is not None:
+                        self._translation_expiry_task = self.host.spawn(
+                            self._expire_translation_demand(snapshot.expires_at), name='translation_demand_expiry'
+                        )
+                    if self.host.transcripts is not None:
+                        await self.host.transcripts.on_translation_demand_changed()
         elif kind == 'capture_evidence_frame' and capture_evidence_dark_write_enabled():
             # The next binary message alone may consume this claim. A new
             # control message supersedes an unpaired one, never a later frame.
@@ -1690,6 +1706,11 @@ class ListenReceiver(ReplayFilterMixin):
                 'retry',
             }:
                 self.host.state.finalization_reason = reason
+
+    async def _expire_translation_demand(self, expires_at: float) -> None:
+        interrupted = await self.host.wait(max(0.0, expires_at - time.monotonic()))
+        if not interrupted and self.host.transcripts is not None:
+            await self.host.transcripts.on_translation_demand_changed()
 
     async def _handle_speaker_assigned(self, payload: Dict[str, Any]) -> None:
         segment_ids = payload.get('segment_ids', [])
@@ -1901,6 +1922,12 @@ class ListenReceiver(ReplayFilterMixin):
                 await self._flush_stt_buffer(buffer, force=True)
             await self._drain_stt_sockets()
             self.host.state.active = False
+            self.translation_demand.close()
+            if self._translation_expiry_task is not None:
+                self._translation_expiry_task.cancel()
+            coordinator = getattr(self.host.transcripts, 'translation_coordinator', None)
+            if coordinator is not None:
+                coordinator.demand_changed()
 
     async def flush_multi_channel_tail(self) -> None:
         if not should_flush_final_multi_channel_mix(
@@ -1916,6 +1943,9 @@ class ListenReceiver(ReplayFilterMixin):
             buffer.clear()
 
     def finish(self) -> None:
+        self.translation_demand.close()
+        if self._translation_expiry_task is not None:
+            self._translation_expiry_task.cancel()
         self._resilient_closing = True
         if self._resilient_audio is not None:
             self._resilient_audio.close()
