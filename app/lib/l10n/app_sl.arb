@@ -11182,5 +11182,10 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Iskanje oseb",
     "addQueryAsNewPerson": "Dodaj \"{query}\" kot novo osebo",
-    "showAllPeople": "Pokaži vse osebe ({count})"
+    "showAllPeople": "Pokaži vse osebe ({count})",
+    "chatGreeting": "Živjo {name}, vprašaj karkoli",
+    "activity": "Dejavnost",
+    "places": "Kraji",
+    "recaps": "Povzetki",
+    "recent": "Nedavno"
 }

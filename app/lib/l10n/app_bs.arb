@@ -11182,5 +11182,10 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Pretraži osobe",
     "addQueryAsNewPerson": "Dodaj \"{query}\" kao novu osobu",
-    "showAllPeople": "Prikaži sve osobe ({count})"
+    "showAllPeople": "Prikaži sve osobe ({count})",
+    "chatGreeting": "Zdravo {name}, pitaj bilo šta",
+    "activity": "Aktivnost",
+    "places": "Mjesta",
+    "recaps": "Sažeci",
+    "recent": "Nedavno"
 }

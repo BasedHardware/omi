@@ -11498,4 +11498,21 @@ class AppLocalizationsTr extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Tüm $count kişiyi göster';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Merhaba $name, ne istersen sor';
+  }
+
+  @override
+  String get activity => 'Etkinlik';
+
+  @override
+  String get places => 'Yerler';
+
+  @override
+  String get recaps => 'Özetler';
+
+  @override
+  String get recent => 'Son aramalar';
 }

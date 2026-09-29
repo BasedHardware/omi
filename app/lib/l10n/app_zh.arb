@@ -3622,5 +3622,10 @@
     "feedbackReasonRecordingOther": "其他问题",
     "searchPeople": "搜索人员",
     "addQueryAsNewPerson": "将“{query}”添加为新人员",
-    "showAllPeople": "显示全部 {count} 人"
+    "showAllPeople": "显示全部 {count} 人",
+    "chatGreeting": "你好，{name}，随便问吧",
+    "activity": "活动",
+    "places": "地点",
+    "recaps": "回顾",
+    "recent": "最近"
 }

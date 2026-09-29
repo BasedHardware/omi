@@ -11500,4 +11500,21 @@ class AppLocalizationsSr extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Прикажи све особе ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Здраво $name, питај било шта';
+  }
+
+  @override
+  String get activity => 'Активност';
+
+  @override
+  String get places => 'Места';
+
+  @override
+  String get recaps => 'Резимеи';
+
+  @override
+  String get recent => 'Недавно';
 }

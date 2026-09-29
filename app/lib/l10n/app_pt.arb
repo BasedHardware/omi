@@ -3657,5 +3657,10 @@
     "feedbackReasonRecordingOther": "Outra coisa",
     "searchPeople": "Pesquisar pessoas",
     "addQueryAsNewPerson": "Adicionar \"{query}\" como nova pessoa",
-    "showAllPeople": "Mostrar todas as {count} pessoas"
+    "showAllPeople": "Mostrar todas as {count} pessoas",
+    "chatGreeting": "Olá {name}, pergunte o que quiser",
+    "activity": "Atividade",
+    "places": "Lugares",
+    "recaps": "Resumos",
+    "recent": "Recentes"
 }

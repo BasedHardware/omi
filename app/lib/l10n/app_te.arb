@@ -11182,5 +11182,10 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "వ్యక్తులను వెతకండి",
     "addQueryAsNewPerson": "\"{query}\" ను కొత్త వ్యక్తిగా జోడించండి",
-    "showAllPeople": "అన్ని ({count}) మందిని చూపించు"
+    "showAllPeople": "అన్ని ({count}) మందిని చూపించు",
+    "chatGreeting": "హాయ్ {name}, ఏదైనా అడగండి",
+    "activity": "కార్యకలాపం",
+    "places": "స్థలాలు",
+    "recaps": "సారాంశాలు",
+    "recent": "ఇటీవలివి"
 }

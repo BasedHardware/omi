@@ -3622,5 +3622,10 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "ابحث عن الأشخاص",
     "addQueryAsNewPerson": "إضافة \"{query}\" كشخص جديد",
-    "showAllPeople": "إظهار كل الأشخاص ({count})"
+    "showAllPeople": "إظهار كل الأشخاص ({count})",
+    "chatGreeting": "مرحبًا {name}، اسأل أي شيء",
+    "activity": "النشاط",
+    "places": "الأماكن",
+    "recaps": "الملخصات",
+    "recent": "الأخيرة"
 }

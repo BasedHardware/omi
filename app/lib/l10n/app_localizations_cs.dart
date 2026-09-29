@@ -11484,4 +11484,21 @@ class AppLocalizationsCs extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Zobrazit všechny osoby ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Ahoj $name, zeptej se na cokoli';
+  }
+
+  @override
+  String get activity => 'Aktivita';
+
+  @override
+  String get places => 'Místa';
+
+  @override
+  String get recaps => 'Shrnutí';
+
+  @override
+  String get recent => 'Nedávné';
 }

@@ -23899,6 +23899,79 @@
         "title": "SearchConversationsResponse",
         "type": "object"
       },
+      "SearchOverviewFolder": {
+        "description": "One conversation folder with its non-discarded conversation count.",
+        "properties": {
+          "color": {
+            "default": "#6B7280",
+            "title": "Color",
+            "type": "string"
+          },
+          "count": {
+            "default": 0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "icon": {
+            "default": "folder",
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SearchOverviewFolder",
+        "type": "object"
+      },
+      "SearchOverviewResponse": {
+        "description": "Counts behind the global-search tiles shown before the user types.\n\nEvery count is decoration: a failed aggregation reports 0 instead of\nfailing the response.",
+        "properties": {
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/SearchOverviewFolder"
+            },
+            "title": "Folders",
+            "type": "array"
+          },
+          "memories": {
+            "default": 0,
+            "title": "Memories",
+            "type": "integer"
+          },
+          "people": {
+            "default": 0,
+            "title": "People",
+            "type": "integer"
+          },
+          "places": {
+            "default": 0,
+            "title": "Places",
+            "type": "integer"
+          },
+          "recaps": {
+            "default": 0,
+            "title": "Recaps",
+            "type": "integer"
+          },
+          "starred": {
+            "default": 0,
+            "title": "Starred",
+            "type": "integer"
+          }
+        },
+        "title": "SearchOverviewResponse",
+        "type": "object"
+      },
       "SearchRequest": {
         "properties": {
           "end_date": {
@@ -56557,6 +56630,84 @@
         ]
       }
     },
+    "/v1/search/overview": {
+      "get": {
+        "description": "Counts for the global-search tiles shown before the user types.\n\nEvery count is a Firestore server-side aggregation and fails independently\n(reported as 0). Semantics:\n\n- `starred`: starred, non-discarded, non-deleted conversations (same count as\n  `GET /v1/conversations/count?starred=true`).\n- `folders`: the user's folders in display order, each with its non-discarded,\n  non-deleted conversation count.\n- `recaps`: stored daily summaries.\n- `memories`: approximation of the default memories list — active canonical\n  memory items (Archive tier included), or the legacy collection when the\n  account has no canonical items. See `count_default_visible_memories`.\n- `people`: the people (speaker profiles) collection.\n- `places`: conversations with a geolocation, discarded ones included (an\n  exact non-discarded filter would need an undeclared composite index).",
+        "operationId": "get_search_overview_v1_search_overview_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchOverviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Search Overview",
+        "tags": [
+          "search"
+        ]
+      }
+    },
     "/v1/speaker-tag-prompts": {
       "get": {
         "description": "Today's small set of voices to confirm, from conversations in the last 48 hours.",
@@ -60432,6 +60583,106 @@
           }
         ],
         "summary": "Create User Daily Summary",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/daily-summaries/search": {
+      "get": {
+        "description": "Search the user's recent daily summaries, newest first.\n\nCase-insensitive substring match: every whitespace-separated term must appear\nin the recap's readable text (headline, overview, highlights, action items,\nquestions, decisions, knowledge nuggets, learned memories, place addresses).\nOnly the latest 365 summaries are scanned.",
+        "operationId": "search_daily_summaries_v1_users_daily_summaries_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailySummariesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Search Daily Summaries",
         "tags": [
           "v1"
         ]

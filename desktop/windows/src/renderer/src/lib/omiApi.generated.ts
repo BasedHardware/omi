@@ -3872,6 +3872,23 @@ export interface SearchConversationsResponse {
   total_pages: number;
 }
 
+export interface SearchOverviewFolder {
+  color?: string;
+  count?: number;
+  icon?: string;
+  id: string;
+  name: string;
+}
+
+export interface SearchOverviewResponse {
+  folders?: Array<SearchOverviewFolder>;
+  memories?: number;
+  people?: number;
+  places?: number;
+  recaps?: number;
+  starred?: number;
+}
+
 export interface SearchRequest {
   end_date?: string | null;
   include_discarded?: boolean | null;
@@ -5680,6 +5697,8 @@ export interface OmiApiSchemas {
   "ScreenFrameSharingUpdateRequest": ScreenFrameSharingUpdateRequest;
   "ScreenFrameSubjectIn": ScreenFrameSubjectIn;
   "SearchConversationsResponse": SearchConversationsResponse;
+  "SearchOverviewFolder": SearchOverviewFolder;
+  "SearchOverviewResponse": SearchOverviewResponse;
   "SearchRequest": SearchRequest;
   "SearchedMemory": SearchedMemory;
   "Section": Section;
@@ -8767,6 +8786,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/search/overview": {
+    get: {
+      operationId: "get_search_overview_v1_search_overview_get";
+      responses: {
+        "200": SearchOverviewResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/speaker-tag-prompts": {
     get: {
       operationId: "get_speaker_tag_prompts_v1_speaker_tag_prompts_get";
@@ -9200,6 +9229,16 @@ export interface OmiApiPaths {
       operationId: "create_user_daily_summary_v1_users_daily_summaries_post";
       responses: {
         "200": DailySummaryResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/daily-summaries/search": {
+    get: {
+      operationId: "search_daily_summaries_v1_users_daily_summaries_search_get";
+      responses: {
+        "200": DailySummariesResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -16061,6 +16100,25 @@ export async function update_screen_frame_settings_v1_screen_frame_egress_settin
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_search_overview_v1_search_overview_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SearchOverviewResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/search/overview`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_speaker_tag_prompts_v1_speaker_tag_prompts_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SpeakerTagPromptsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/speaker-tag-prompts`;
@@ -16905,6 +16963,28 @@ export async function create_user_daily_summary_v1_users_daily_summaries_post(he
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function search_daily_summaries_v1_users_daily_summaries_search_get(query: { query: string, limit?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DailySummariesResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/daily-summaries/search`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -19481,4 +19561,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 455 client methods generated.
+// Total: 457 client methods generated.

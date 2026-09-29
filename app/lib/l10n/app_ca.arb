@@ -3622,5 +3622,10 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Cerca persones",
     "addQueryAsNewPerson": "Afegeix \"{query}\" com a persona nova",
-    "showAllPeople": "Mostra totes les persones ({count})"
+    "showAllPeople": "Mostra totes les persones ({count})",
+    "chatGreeting": "Hola {name}, pregunta el que vulguis",
+    "activity": "Activitat",
+    "places": "Llocs",
+    "recaps": "Resums",
+    "recent": "Recents"
 }

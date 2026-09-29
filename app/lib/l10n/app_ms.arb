@@ -3622,5 +3622,10 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Cari orang",
     "addQueryAsNewPerson": "Tambah \"{query}\" sebagai orang baru",
-    "showAllPeople": "Tunjukkan semua {count} orang"
+    "showAllPeople": "Tunjukkan semua {count} orang",
+    "chatGreeting": "Hai {name}, tanya apa sahaja",
+    "activity": "Aktiviti",
+    "places": "Tempat",
+    "recaps": "Ringkasan",
+    "recent": "Terkini"
 }

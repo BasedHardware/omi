@@ -3622,5 +3622,10 @@
     "feedbackReasonRecordingOther": "कुछ और",
     "searchPeople": "लोगों को खोजें",
     "addQueryAsNewPerson": "\"{query}\" को नए व्यक्ति के रूप में जोड़ें",
-    "showAllPeople": "सभी {count} लोग दिखाएँ"
+    "showAllPeople": "सभी {count} लोग दिखाएँ",
+    "chatGreeting": "नमस्ते {name}, कुछ भी पूछें",
+    "activity": "गतिविधि",
+    "places": "स्थान",
+    "recaps": "सारांश",
+    "recent": "हाल के"
 }

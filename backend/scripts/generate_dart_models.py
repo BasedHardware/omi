@@ -224,6 +224,13 @@ SCHEMA_GROUPS = {
             'VoiceProfileSettingsUpdate',
         ),
     },
+    'search': {
+        'output': DEFAULT_OUTPUT_DIR / 'search_wire.g.dart',
+        'schemas': (
+            'SearchOverviewFolder',
+            'SearchOverviewResponse',
+        ),
+    },
     'imports_integrations': {
         'output': DEFAULT_OUTPUT_DIR / 'imports_integrations_wire.g.dart',
         'schemas': (

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
@@ -59,10 +60,12 @@ class _InertPhoneCallProvider extends ChangeNotifier implements PhoneCallProvide
 /// its build method, use an offstage decoy, or construct default CaptureProvider.
 /// Include real MaterialApp localization delegates. Spine tests check actual page
 /// ancestry and behavior; fixture wiring is deliberately editable by the builder.
+/// Home's recaps row with nothing to show, and no I/O.
+Future<({List<DailySummary> items, bool ok})> _noRecaps() async => (items: const <DailySummary>[], ok: true);
+
 Future<Widget> buildTypedConversationScreen(ConversationProvider provider) async {
   SharedPreferences.setMockInitialValues({});
   await SharedPreferencesUtil.init();
-  SharedPreferencesUtil().showGoalTrackerEnabled = false;
 
   final recordings = _InertLocalRecordingsProvider();
   final folders = FolderProvider(foldersFetcher: () async => <Folder>[]);
@@ -94,7 +97,7 @@ Future<Widget> buildTypedConversationScreen(ConversationProvider provider) async
         ChangeNotifierProvider<SpeakerTagPromptsProvider>.value(value: speakerTagPrompts),
       ],
       child: const Scaffold(
-        body: ConversationsPage(requestInitialLoad: false),
+        body: ConversationsPage(requestInitialLoad: false, loadRecaps: _noRecaps),
       ),
     ),
   );

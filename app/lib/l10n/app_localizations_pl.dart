@@ -11522,4 +11522,21 @@ class AppLocalizationsPl extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Pokaż wszystkie osoby ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Cześć $name, zapytaj o cokolwiek';
+  }
+
+  @override
+  String get activity => 'Aktywność';
+
+  @override
+  String get places => 'Miejsca';
+
+  @override
+  String get recaps => 'Podsumowania';
+
+  @override
+  String get recent => 'Ostatnie';
 }

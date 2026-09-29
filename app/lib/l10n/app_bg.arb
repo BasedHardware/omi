@@ -3622,5 +3622,10 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Търсене на хора",
     "addQueryAsNewPerson": "Добавяне на „{query}“ като нов човек",
-    "showAllPeople": "Показване на всички хора ({count})"
+    "showAllPeople": "Показване на всички хора ({count})",
+    "chatGreeting": "Здравей, {name}, питай каквото искаш",
+    "activity": "Активност",
+    "places": "Места",
+    "recaps": "Обобщения",
+    "recent": "Скорошни"
 }

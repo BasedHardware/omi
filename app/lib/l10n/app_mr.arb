@@ -11182,5 +11182,10 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "लोक शोधा",
     "addQueryAsNewPerson": "\"{query}\" ला नवीन व्यक्ती म्हणून जोडा",
-    "showAllPeople": "सर्व {count} लोक दाखवा"
+    "showAllPeople": "सर्व {count} लोक दाखवा",
+    "chatGreeting": "नमस्कार {name}, काहीही विचारा",
+    "activity": "क्रियाकलाप",
+    "places": "ठिकाणे",
+    "recaps": "सारांश",
+    "recent": "अलीकडील"
 }

@@ -11522,4 +11522,21 @@ class AppLocalizationsKn extends AppLocalizations {
   String showAllPeople(int count) {
     return 'ಎಲ್ಲಾ ($count) ಜನರನ್ನು ತೋರಿಸಿ';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'ಹಾಯ್ $name, ಏನು ಬೇಕಾದರೂ ಕೇಳಿ';
+  }
+
+  @override
+  String get activity => 'ಚಟುವಟಿಕೆ';
+
+  @override
+  String get places => 'ಸ್ಥಳಗಳು';
+
+  @override
+  String get recaps => 'ಸಾರಾಂಶಗಳು';
+
+  @override
+  String get recent => 'ಇತ್ತೀಚಿನ';
 }

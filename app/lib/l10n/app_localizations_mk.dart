@@ -11548,4 +11548,21 @@ class AppLocalizationsMk extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Прикажи сите луѓе ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Здраво $name, прашај што сакаш';
+  }
+
+  @override
+  String get activity => 'Активност';
+
+  @override
+  String get places => 'Места';
+
+  @override
+  String get recaps => 'Резимеа';
+
+  @override
+  String get recent => 'Неодамнешни';
 }

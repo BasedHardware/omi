@@ -3622,5 +3622,10 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Hľadať osoby",
     "addQueryAsNewPerson": "Pridať „{query}“ ako novú osobu",
-    "showAllPeople": "Zobraziť všetky osoby ({count})"
+    "showAllPeople": "Zobraziť všetky osoby ({count})",
+    "chatGreeting": "Ahoj {name}, opýtaj sa na čokoľvek",
+    "activity": "Aktivita",
+    "places": "Miesta",
+    "recaps": "Zhrnutia",
+    "recent": "Nedávne"
 }

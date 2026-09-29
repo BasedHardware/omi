@@ -11497,4 +11497,21 @@ class AppLocalizationsUr extends AppLocalizations {
   String showAllPeople(int count) {
     return 'تمام ($count) افراد دکھائیں';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'ہیلو $name، کچھ بھی پوچھیں';
+  }
+
+  @override
+  String get activity => 'سرگرمی';
+
+  @override
+  String get places => 'مقامات';
+
+  @override
+  String get recaps => 'خلاصے';
+
+  @override
+  String get recent => 'حالیہ';
 }

@@ -11534,4 +11534,21 @@ class AppLocalizationsTe extends AppLocalizations {
   String showAllPeople(int count) {
     return 'అన్ని ($count) మందిని చూపించు';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'హాయ్ $name, ఏదైనా అడగండి';
+  }
+
+  @override
+  String get activity => 'కార్యకలాపం';
+
+  @override
+  String get places => 'స్థలాలు';
+
+  @override
+  String get recaps => 'సారాంశాలు';
+
+  @override
+  String get recent => 'ఇటీవలివి';
 }

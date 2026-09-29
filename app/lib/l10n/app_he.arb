@@ -11182,5 +11182,10 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "חיפוש אנשים",
     "addQueryAsNewPerson": "הוספת \"{query}\" כאדם חדש",
-    "showAllPeople": "הצג את כל האנשים ({count})"
+    "showAllPeople": "הצג את כל האנשים ({count})",
+    "chatGreeting": "היי {name}, שאל כל דבר",
+    "activity": "פעילות",
+    "places": "מקומות",
+    "recaps": "סיכומים",
+    "recent": "אחרונים"
 }

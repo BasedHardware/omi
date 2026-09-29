@@ -11522,4 +11522,21 @@ class AppLocalizationsHr extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Prikaži sve osobe ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Bok $name, pitaj bilo što';
+  }
+
+  @override
+  String get activity => 'Aktivnost';
+
+  @override
+  String get places => 'Mjesta';
+
+  @override
+  String get recaps => 'Sažeci';
+
+  @override
+  String get recent => 'Nedavno';
 }

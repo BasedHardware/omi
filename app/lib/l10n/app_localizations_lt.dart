@@ -11504,4 +11504,21 @@ class AppLocalizationsLt extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Rodyti visus asmenis ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Labas, $name, klausk ko tik nori';
+  }
+
+  @override
+  String get activity => 'Veikla';
+
+  @override
+  String get places => 'Vietos';
+
+  @override
+  String get recaps => 'Santraukos';
+
+  @override
+  String get recent => 'Naujausi';
 }
