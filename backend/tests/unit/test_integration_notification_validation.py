@@ -107,3 +107,19 @@ def test_missing_message_returns_400():
             authorization=None,
         )
     assert e.value.status_code == 400
+
+
+def test_malformed_app_doc_returns_404():
+    """A malformed stored app doc must return 404 (not 500) via App.deserialize_safe."""
+    malformed_doc = {'id': 'app1'}  # missing required fields: name, category, author, etc.
+    with patch.object(notif_mod, 'verify_api_key', return_value=True), patch.object(
+        notif_mod, 'get_available_app_by_id', return_value=malformed_doc
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            notif_mod.send_app_notification_to_user(
+                request=MagicMock(),
+                data={'aid': 'app1', 'message': 'test message', 'uid': 'uid1'},
+                authorization='Bearer valid_key',
+            )
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == 'App not found'
