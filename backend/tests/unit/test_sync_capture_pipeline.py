@@ -352,6 +352,7 @@ def test_assignment_outcomes_through_process_segment(pipeline, condition):
     if condition in ('provenance', 'cycle'):
         assert errors == ['stt_upstream_error']
         assert outcome['outcome'].value == 'upstream_error' and outcome['retryable']
+        assert outcome['failure_subtype'] == ('provenance_mismatch' if condition == 'provenance' else 'redirect_cycle')
     else:
         assert errors == []
         assert outcome['outcome'].value == 'success' and not outcome['retryable']
