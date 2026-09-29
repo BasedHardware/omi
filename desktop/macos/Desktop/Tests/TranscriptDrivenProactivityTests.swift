@@ -55,6 +55,32 @@ final class TranscriptDrivenProactivityTests: XCTestCase {
 
   // MARK: - Admission
 
+  @MainActor
+  func testCoordinatorResetLetsANewCaptureSessionEvaluateImmediately() {
+    let coordinator = SpeechProactivityCoordinator(
+      featureEnabled: { true },
+      conversationActive: { false })
+    let start = Date(timeIntervalSince1970: 1_725_000_000)
+
+    XCTAssertTrue(
+      coordinator.observe(
+        slice("where does the deploy script live", isUser: true, segmentID: "old-session"),
+        now: start))
+    XCTAssertFalse(
+      coordinator.observe(
+        slice("what is open on this page", isUser: true, segmentID: "new-session"),
+        now: start.addingTimeInterval(1)),
+      "without a reset the previous session's cooldown still applies")
+
+    coordinator.reset()
+
+    XCTAssertTrue(
+      coordinator.observe(
+        slice("what is open on this page", isUser: true, segmentID: "new-session"),
+        now: start.addingTimeInterval(1)),
+      "a new capture conversation must not inherit speech or cooldown state")
+  }
+
   func testAdmissionRequiresFeatureFlag() {
     let result = SpeechProactivityAdmission.decides(
       flagEnabled: false,

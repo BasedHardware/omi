@@ -329,7 +329,8 @@ actor ContextProactivityEngine {
     fence: ContextVisitFence,
     snapshot: ContextBucketSnapshot,
     frame: CapturedFrame,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    speechSection: String? = nil
   ) async -> ContextProactivityAdmissionOutcome {
     let route = ContextProactivityVisitAdmission.route(for: snapshot)
     guard route != .skip else { return .skipped }
@@ -341,7 +342,8 @@ actor ContextProactivityEngine {
       fence: fence,
       snapshot: snapshot,
       currentFrame: frame,
-      authorizationSnapshot: authorizationSnapshot)
+      authorizationSnapshot: authorizationSnapshot,
+      speechSection: speechSection)
     return .legacyDirector
   }
 
@@ -381,8 +383,9 @@ actor ContextProactivityEngine {
       freshness.fresh,
       let snapshot = await store.snapshot(for: fence)
     else { return }
-    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else {
-      log("Context director suppressed: bucket has no notifiable memory to fuse with speech")
+    let route = ContextProactivityVisitAdmission.route(for: snapshot)
+    guard route != .skip else {
+      log("Context director suppressed: bucket has no validated memory to fuse with speech")
       return
     }
     guard
@@ -399,29 +402,11 @@ actor ContextProactivityEngine {
         startedAt: fence.startedAt,
         endedAt: frameFreshness.endedAt)
     else { return }
-    // JIT admission, in the same position the dwell and departure entry points use it.
-    // Speech is the third way into `evaluateAndDeliver`, and it was the only one that
-    // skipped this call.
-    //
-    // The gap was never the kill switch: `permitsNewLane` false — kill switch included —
-    // yields `.legacyContextBucketFallback`, `handle()` answers `false`, and all three
-    // lanes fall through to the legacy director alike. What speech escaped was
-    // `.suppressed`, where JIT is enabled and declines on dedup, continuity keys, or
-    // planned-trigger precedence: dwell and departure stop there, speech did not.
-    //
-    // Routed rather than documented as independent, per the ruling on #12407.
-    //
-    // Through `jitHandle` rather than the singleton: main moved the dwell lanes onto
-    // that injected seam, and a lane that reaches the coordinator by a second route
-    // is one a test can configure the others away from but not this one.
-    if await jitHandle(fence, snapshot, frameSample.frame, authorizationSnapshot) {
-      return
-    }
     let speechSection = ContextProactivityPromptBuilder.liveSpeechSection(speech)
-    await evaluateAndDeliver(
+    _ = await admitJITThenLegacyDirector(
       fence: fence,
       snapshot: snapshot,
-      currentFrame: frameSample.frame,
+      frame: frameSample.frame,
       authorizationSnapshot: authorizationSnapshot,
       speechSection: speechSection)
   }

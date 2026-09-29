@@ -11,28 +11,47 @@ final class SpeechProactivityCoordinator {
   private var window = SpeechProactivityWindow()
   private var lastEvaluationAt: Date?
   private var lastEvaluatedSegmentID: String?
+  private let featureEnabled: () -> Bool
+  private let conversationActive: () -> Bool
 
-  private init() {}
+  init(
+    featureEnabled: @escaping () -> Bool = { ContextBucketsFeature.isTranscriptProactivityEnabled },
+    conversationActive: @escaping () -> Bool = { VoiceTurnCoordinator.shared.activeTurnID != nil }
+  ) {
+    self.featureEnabled = featureEnabled
+    self.conversationActive = conversationActive
+  }
 
-  func observe(_ slice: TranscriptSpeechSlice, now: Date = Date()) {
-    guard ContextBucketsFeature.isTranscriptProactivityEnabled else { return }
+  /// A speech window belongs to exactly one capture conversation. Carrying it
+  /// across stop/start or an in-place rotation can disclose old speech in the
+  /// next conversation and lets the previous cooldown suppress its first turn.
+  func reset() {
+    window = SpeechProactivityWindow()
+    lastEvaluationAt = nil
+    lastEvaluatedSegmentID = nil
+  }
+
+  @discardableResult
+  func observe(_ slice: TranscriptSpeechSlice, now: Date = Date()) -> Bool {
+    guard featureEnabled() else { return false }
     window.append(slice, seenAt: now)
     // Decide about the slice that just arrived, not about whatever user slice
     // the window still retains: another person speaking after the cooldown must
     // not re-open an evaluation grounded on a stale user utterance.
     let outcome = SpeechProactivityAdmission.decides(
       flagEnabled: true,
-      conversationActive: VoiceTurnCoordinator.shared.activeTurnID != nil,
+      conversationActive: conversationActive(),
       arrivingSlice: slice,
       lastEvaluationAt: lastEvaluationAt,
       lastEvaluatedSegmentID: lastEvaluatedSegmentID,
       now: now)
-    guard outcome == .evaluate else { return }
+    guard outcome == .evaluate else { return false }
     lastEvaluationAt = now
     lastEvaluatedSegmentID = slice.segmentID
     let snapshot = window.snapshot()
     Task {
       await ContextProactivityEngine.shared.evaluateFromSpeech(speech: snapshot)
     }
+    return true
   }
 }
