@@ -11315,4 +11315,24 @@ class AppLocalizationsKo extends AppLocalizations {
   String showAllPeople(int count) {
     return '모두 $count명 표시';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return '안녕하세요 $name님, 무엇이든 물어보세요';
+  }
+
+  @override
+  String get activity => '활동';
+
+  @override
+  String get places => '장소';
+
+  @override
+  String get recaps => '요약';
+
+  @override
+  String get recent => '최근';
+
+  @override
+  String get searchPartialFailure => '일부 결과를 불러오지 못했습니다';
 }

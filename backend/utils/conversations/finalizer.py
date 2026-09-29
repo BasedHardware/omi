@@ -153,8 +153,11 @@ async def finalize_persisted_conversation(
                     outcome='degraded',
                     log=logger,
                 )
-                geolocation = Geolocation(**geolocation)
-                conversation.geolocation = await async_resolve_geolocation(geolocation)
+                cached_geo = Geolocation.deserialize_safe(geolocation)
+                if cached_geo:
+                    conversation.geolocation = await async_resolve_geolocation(cached_geo)
+                else:
+                    logger.warning('Skipping malformed cached user geolocation for uid=%s', uid)
 
         # The post-processing bulkhead preserves request context (including
         # validated live BYOK keys) while isolating this expensive sync path

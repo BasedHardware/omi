@@ -11497,4 +11497,24 @@ class AppLocalizationsEt extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Kuva kõik inimesed ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Tere, $name, küsi mida tahes';
+  }
+
+  @override
+  String get activity => 'Tegevus';
+
+  @override
+  String get places => 'Kohad';
+
+  @override
+  String get recaps => 'Kokkuvõtted';
+
+  @override
+  String get recent => 'Hiljutised';
+
+  @override
+  String get searchPartialFailure => 'Mõnda tulemust ei õnnestunud laadida';
 }

@@ -388,18 +388,20 @@ env:
     value: "0.07537"
   - name: STT_MULTI_LANGUAGE_HINTS
     value: "true"
-  - name: STT_LEARNED_LANGUAGE_PROFILE
+  - name: SONIOX_CONTEXT_TERMS
     value: "false"
+  - name: STT_LEARNED_LANGUAGE_PROFILE
+    value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
-    value: "25"
+    value: "50"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
-    value: "1"
+    value: "5"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
-    value: "1"
+    value: "8"
   - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
     value: "prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local"
   - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
-    value: "2"
+    value: "3"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
@@ -408,10 +410,18 @@ env:
     value: "6"
   - name: PARAKEET_WINDOW_MAX_CONTEXT_SECONDS
     value: "24"
+  - name: PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS
+    value: "12"
+  - name: PARAKEET_WINDOW_MAX_EMPTY_STREAK
+    value: "4"
   - name: STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS
     value: "1800"
+  - name: LISTEN_RECONNECT_BUDGET_PER_MIN
+    value: "6"
   - name: STT_CIRCUIT_HALF_OPEN_PROBES
     value: "1"
+  - name: STT_SHED_CONNECT_FAILURES
+    value: "3"
   - name: SONIOX_CIRCUIT_FAILURE_THRESHOLD
     value: "3"
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS

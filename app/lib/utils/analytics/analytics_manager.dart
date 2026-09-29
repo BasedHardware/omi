@@ -150,14 +150,17 @@ class AnalyticsManager {
     }
   }
 
-  void recordProductError(ProductErrorKind kind) => track('Product Error', properties: {
-        'error_kind': switch (kind) {
-          ProductErrorKind.flutterFramework => 'flutter_framework',
-          ProductErrorKind.uncaughtDart => 'uncaught_dart',
-          ProductErrorKind.startup => 'startup',
+  void recordProductError(ProductErrorKind kind) => track(
+        'Product Error',
+        properties: {
+          'error_kind': switch (kind) {
+            ProductErrorKind.flutterFramework => 'flutter_framework',
+            ProductErrorKind.uncaughtDart => 'uncaught_dart',
+            ProductErrorKind.startup => 'startup',
+          },
+          'diagnostic_source': 'crashlytics',
         },
-        'diagnostic_source': 'crashlytics',
-      });
+      );
 
   /// Periodic operational signal; does not recursively emit on queue failures.
   void recordTelemetryHealth() {
@@ -524,6 +527,26 @@ class AnalyticsManager {
       return enabled;
     } catch (_) {
       return false;
+    }
+  }
+
+  Future<Object?> getFeatureFlagPayload(String key) async {
+    final adapter = _adapter;
+    if (adapter == null ||
+        !adapter.isInitialized ||
+        !_trackingEnabled ||
+        _settledDistinctId == null ||
+        adapter is! AnalyticsFeatureFlagAdapter) {
+      return null;
+    }
+    final epoch = _identityEpoch;
+    final identity = _settledDistinctId;
+    try {
+      final payload = await (adapter as AnalyticsFeatureFlagAdapter).getFeatureFlagPayload(key).timeout(_initTimeout);
+      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
+      return payload;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -918,10 +941,10 @@ class AnalyticsManager {
   void deviceConnected(BtDevice device) {
     final vendor = device.type.analyticsVendor;
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
-    track('Device Connected', properties: {
-      ..._deviceConnectionEventProperties(device),
-      if (device.rssi < 0) 'rssi': device.rssi,
-    });
+    track(
+      'Device Connected',
+      properties: {..._deviceConnectionEventProperties(device), if (device.rssi < 0) 'rssi': device.rssi},
+    );
     setUserProperty('device_vendor', vendor);
     setUserProperty('hardware_family', hardwareFamily);
   }
@@ -1431,18 +1454,20 @@ class AnalyticsManager {
     required int firstAudioLatencyMs,
     required VoiceReplyPlaybackInterruptSource interruptSource,
   }) =>
-      const TypedEvents().emit(VoiceReplyPlayback(
-        outcome: outcome,
-        skipReason: skipReason,
-        mode: mode,
-        outputRoute: outputRoute,
-        chunksRequested: chunksRequested,
-        chunksPlayed: chunksPlayed,
-        chunksDropped: chunksDropped,
-        fallbackReason: fallbackReason,
-        firstAudioLatencyMs: firstAudioLatencyMs,
-        interruptSource: interruptSource,
-      ));
+      const TypedEvents().emit(
+        VoiceReplyPlayback(
+          outcome: outcome,
+          skipReason: skipReason,
+          mode: mode,
+          outputRoute: outputRoute,
+          chunksRequested: chunksRequested,
+          chunksPlayed: chunksPlayed,
+          chunksDropped: chunksDropped,
+          fallbackReason: fallbackReason,
+          firstAudioLatencyMs: firstAudioLatencyMs,
+          interruptSource: interruptSource,
+        ),
+      );
 
   // Conversation Merge Events
   void conversationMergeSelectionModeEntered() =>
@@ -2699,11 +2724,7 @@ class AnalyticsManager {
       if (packageInfo.buildNumber.isNotEmpty) build = packageInfo.buildNumber;
       _clientAppNamespace = packageInfo.packageName;
     } catch (_) {}
-    _globalEventProperties = {
-      'app_platform': _mobilePlatformName,
-      'app_version': version,
-      'app_build': build,
-    };
+    _globalEventProperties = {'app_platform': _mobilePlatformName, 'app_version': version, 'app_build': build};
   }
 
   static Map<String, dynamic> _searchProperties({required String query, required String surface, int? resultsCount}) {

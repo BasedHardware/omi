@@ -3627,5 +3627,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Meklēt cilvēkus",
     "addQueryAsNewPerson": "Pievienot \"{query}\" kā jaunu personu",
-    "showAllPeople": "Rādīt visas personas ({count})"
+    "showAllPeople": "Rādīt visas personas ({count})",
+    "chatGreeting": "Sveiks, {name}, jautā jebko",
+    "activity": "Darbības",
+    "places": "Vietas",
+    "recaps": "Kopsavilkumi",
+    "recent": "Nesenie",
+    "searchPartialFailure": "Dažus rezultātus neizdevās ielādēt"
 }

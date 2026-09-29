@@ -244,7 +244,9 @@ export async function toggleStarred(id: string, starred: boolean): Promise<void>
  * Delete a conversation
  */
 export async function deleteConversation(id: string): Promise<void> {
-  await fetchWithAuth(`/v1/conversations/${id}`, {
+  // The server default is still cascade=false (Q8). Mobile and macOS already
+  // send true, which is what removes memories extracted from the recording.
+  await fetchWithAuth(`/v1/conversations/${id}?cascade=true`, {
     method: 'DELETE',
   });
   invalidateCache(invalidationPatterns.conversations);

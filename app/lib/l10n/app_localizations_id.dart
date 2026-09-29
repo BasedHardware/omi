@@ -11512,4 +11512,24 @@ class AppLocalizationsId extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Tampilkan semua $count orang';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Hai $name, tanyakan apa saja';
+  }
+
+  @override
+  String get activity => 'Aktivitas';
+
+  @override
+  String get places => 'Tempat';
+
+  @override
+  String get recaps => 'Ringkasan';
+
+  @override
+  String get recent => 'Terbaru';
+
+  @override
+  String get searchPartialFailure => 'Beberapa hasil tidak dapat dimuat';
 }

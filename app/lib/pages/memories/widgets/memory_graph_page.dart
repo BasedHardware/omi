@@ -222,6 +222,10 @@ class ForceDirectedSimulation3D {
 
 class MemoryGraphPage extends StatefulWidget {
   final bool embedded;
+
+  /// A non-interactive card (the Memories page header): card surface, and no retry button on
+  /// failure because the card itself opens the full graph.
+  final bool preview;
   final bool showAppBar;
   final bool showShareButton;
   final bool trackOpenEvent;
@@ -232,6 +236,7 @@ class MemoryGraphPage extends StatefulWidget {
   const MemoryGraphPage({
     super.key,
     this.embedded = false,
+    this.preview = false,
     this.showAppBar = true,
     this.showShareButton = true,
     this.trackOpenEvent = true,
@@ -553,7 +558,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     if (widget.embedded) {
-      return ColoredBox(color: OmiColors.surface0, child: _buildBody());
+      return ColoredBox(color: widget.preview ? OmiColors.surface1 : OmiColors.surface0, child: _buildBody());
     }
 
     return Scaffold(
@@ -586,6 +591,27 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     if (_error != null) {
+      if (widget.preview) {
+        // The preview ignores pointers, so it cannot offer a retry; tapping the card opens the full
+        // graph, which loads (and retries) on its own.
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(OmiSpacing.md),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.hub_outlined, size: 28, color: OmiColors.textTertiary),
+                const SizedBox(height: OmiSpacing.xs),
+                Text(
+                  _error!,
+                  textAlign: TextAlign.center,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
       return SafeArea(
         child: SingleChildScrollView(child: OmiErrorState(message: _error!, onRetry: _loadGraph)),
       );

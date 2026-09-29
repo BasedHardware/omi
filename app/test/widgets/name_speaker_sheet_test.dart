@@ -21,14 +21,15 @@ Person _person(String id, String name) =>
     Person(id: id, name: name, createdAt: DateTime(2026), updatedAt: DateTime(2026));
 
 TranscriptSegment _seg(String id, {String? personId}) => TranscriptSegment(
-    id: id,
-    text: 'speech',
-    speaker: 'SPEAKER_00',
-    isUser: false,
-    personId: personId,
-    translations: [],
-    start: 0,
-    end: 1);
+      id: id,
+      text: 'speech',
+      speaker: 'SPEAKER_00',
+      isUser: false,
+      personId: personId,
+      translations: [],
+      start: 0,
+      end: 1,
+    );
 
 Future<void> _pumpSheet(
   WidgetTester tester, {
@@ -36,26 +37,32 @@ Future<void> _pumpSheet(
   List<TranscriptSegment> segments = const [],
   SpeakerLabelSuggestionEvent? suggestion,
   Future<bool> Function(
-          int speakerId, String personId, String personName, List<String> segmentIds, bool applyToSpeaker)?
-      onSpeakerAssigned,
+    int speakerId,
+    String personId,
+    String personName,
+    List<String> segmentIds,
+    bool applyToSpeaker,
+  )? onSpeakerAssigned,
 }) async {
   final provider = PeopleProvider()..people = people;
-  await tester.pumpWidget(ChangeNotifierProvider.value(
+  await tester.pumpWidget(
+    ChangeNotifierProvider.value(
       value: provider,
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-            body: NameSpeakerBottomSheet(
-                speakerId: 0,
-                segmentId: 'seg0',
-                segments: [
-                  _seg('seg0'),
-                  ...segments,
-                ],
-                suggestion: suggestion,
-                onSpeakerAssigned: onSpeakerAssigned ?? (_, __, ___, ____, _____) async => false)),
-      )));
+          body: NameSpeakerBottomSheet(
+            speakerId: 0,
+            segmentId: 'seg0',
+            segments: [_seg('seg0'), ...segments],
+            suggestion: suggestion,
+            onSpeakerAssigned: onSpeakerAssigned ?? (_, __, ___, ____, _____) async => false,
+          ),
+        ),
+      ),
+    ),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -69,26 +76,30 @@ void main() {
   });
   testWidgets('sheet closes while a speaker save is pending and the transcript rolls back on failure', (tester) async {
     final response = Completer<bool>();
-    final provider =
-        ConversationDetailProvider(assignSpeaker: (_, __, {isUser, personId, speakerId}) => response.future);
+    final provider = ConversationDetailProvider(
+      assignSpeaker: (_, __, {isUser, personId, speakerId}) => response.future,
+    );
     final conversation = ServerConversation(
-        id: 'conversation',
-        createdAt: DateTime(2026),
-        structured: Structured('Title', ''),
-        transcriptSegments: [
-          TranscriptSegment(
-              id: 'segment',
-              text: 'Hello',
-              speaker: 'SPEAKER_00',
-              isUser: false,
-              personId: null,
-              translations: [],
-              start: 0,
-              end: 1)
-        ]);
+      id: 'conversation',
+      createdAt: DateTime(2026),
+      structured: Structured('Title', ''),
+      transcriptSegments: [
+        TranscriptSegment(
+          id: 'segment',
+          text: 'Hello',
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          translations: [],
+          start: 0,
+          end: 1,
+        ),
+      ],
+    );
     provider.selectedDate = conversation.createdAt;
     provider.setCachedConversation(conversation);
-    await tester.pumpWidget(MultiProvider(
+    await tester.pumpWidget(
+      MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: provider),
           ChangeNotifierProvider(create: (_) => PeopleProvider()),
@@ -97,23 +108,35 @@ void main() {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-              body: Builder(
-                  builder: (context) => Column(children: [
-                        Consumer<ConversationDetailProvider>(
-                            builder: (_, detail, __) =>
-                                Text(detail.conversation.transcriptSegments.single.isUser ? 'You' : 'Speaker')),
-                        ElevatedButton(
-                            onPressed: () => showNameSpeakerSheet(context,
-                                    speakerId: 0, segmentId: 'segment', segments: conversation.transcriptSegments,
-                                    onSpeakerAssigned: (_, personId, __, ids, ___) async {
-                                  final pending = provider.startSpeakerAssignment(ids, personId);
-                                  if (pending == null) return false;
-                                  unawaited(pending);
-                                  return true;
-                                }),
-                            child: const Text('Open')),
-                      ]))),
-        )));
+            body: Builder(
+              builder: (context) => Column(
+                children: [
+                  Consumer<ConversationDetailProvider>(
+                    builder: (_, detail, __) =>
+                        Text(detail.conversation.transcriptSegments.single.isUser ? 'You' : 'Speaker'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => showNameSpeakerSheet(
+                      context,
+                      speakerId: 0,
+                      segmentId: 'segment',
+                      segments: conversation.transcriptSegments,
+                      onSpeakerAssigned: (_, personId, __, ids, ___) async {
+                        final pending = provider.startSpeakerAssignment(ids, personId);
+                        if (pending == null) return false;
+                        unawaited(pending);
+                        return true;
+                      },
+                    ),
+                    child: const Text('Open'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byType(OmiButton));
@@ -126,46 +149,58 @@ void main() {
     expect(find.text('Speaker'), findsOneWidget);
     provider.dispose();
   });
-  testWidgets('name-only suggestion survives initialization; failed save stays open and bulk includes corrections',
-      (tester) async {
+  testWidgets('name-only suggestion survives initialization; failed save stays open and bulk includes corrections', (
+    tester,
+  ) async {
     final segments = [
       TranscriptSegment(
-          id: 'first',
-          text: 'First synthetic speech',
-          speaker: 'SPEAKER_00',
-          isUser: false,
-          personId: null,
-          start: 0,
-          end: 2,
-          translations: []),
+        id: 'first',
+        text: 'First synthetic speech',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        personId: null,
+        start: 0,
+        end: 2,
+        translations: [],
+      ),
       TranscriptSegment(
-          id: 'wrong',
-          text: 'Wrongly assigned speech',
-          speaker: 'SPEAKER_00',
-          isUser: true,
-          personId: null,
-          start: 2,
-          end: 4,
-          translations: []),
+        id: 'wrong',
+        text: 'Wrongly assigned speech',
+        speaker: 'SPEAKER_00',
+        isUser: true,
+        personId: null,
+        start: 2,
+        end: 4,
+        translations: [],
+      ),
     ];
     final calls = <({String name, List<String> ids, bool whole})>[];
-    await tester.pumpWidget(ChangeNotifierProvider(
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
         create: (_) => PeopleProvider(),
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-              body: NameSpeakerBottomSheet(
-                  speakerId: 0,
-                  segmentId: 'first',
-                  segments: segments,
-                  suggestion:
-                      SpeakerLabelSuggestionEvent(speakerId: 0, personId: '', personName: 'Alex', segmentId: 'first'),
-                  onSpeakerAssigned: (speaker, person, name, ids, whole) async {
-                    calls.add((name: name, ids: ids, whole: whole));
-                    return false;
-                  })),
-        )));
+            body: NameSpeakerBottomSheet(
+              speakerId: 0,
+              segmentId: 'first',
+              segments: segments,
+              suggestion: SpeakerLabelSuggestionEvent(
+                speakerId: 0,
+                personId: '',
+                personName: 'Alex',
+                segmentId: 'first',
+              ),
+              onSpeakerAssigned: (speaker, person, name, ids, whole) async {
+                calls.add((name: name, ids: ids, whole: whole));
+                return false;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Alex'), findsOneWidget);
     final save = find.byType(OmiButton);
@@ -191,32 +226,38 @@ void main() {
   testWidgets('live default tags a single in-progress bubble as speaker-wide including later speech', (tester) async {
     final segments = [
       TranscriptSegment(
-          id: 'only',
-          text: 'Only synthetic speech',
-          speaker: 'SPEAKER_00',
-          isUser: false,
-          personId: null,
-          start: 0,
-          end: 2,
-          translations: []),
+        id: 'only',
+        text: 'Only synthetic speech',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        personId: null,
+        start: 0,
+        end: 2,
+        translations: [],
+      ),
     ];
     final calls = <({List<String> ids, bool whole})>[];
-    await tester.pumpWidget(ChangeNotifierProvider(
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
         create: (_) => PeopleProvider(),
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-              body: NameSpeakerBottomSheet(
-                  speakerId: 0,
-                  segmentId: 'only',
-                  segments: segments,
-                  defaultApplyToSpeaker: true,
-                  onSpeakerAssigned: (speaker, person, name, ids, whole) async {
-                    calls.add((ids: ids, whole: whole));
-                    return true;
-                  })),
-        )));
+            body: NameSpeakerBottomSheet(
+              speakerId: 0,
+              segmentId: 'only',
+              segments: segments,
+              defaultApplyToSpeaker: true,
+              onSpeakerAssigned: (speaker, person, name, ids, whole) async {
+                calls.add((ids: ids, whole: whole));
+                return true;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.textContaining('later speech'), findsOneWidget);
     final checkbox = tester.widget<CheckboxListTile>(find.byType(CheckboxListTile).first);
@@ -232,31 +273,37 @@ void main() {
   testWidgets('detail default with one bubble stays a selected-segments edit', (tester) async {
     final segments = [
       TranscriptSegment(
-          id: 'only',
-          text: 'Only synthetic speech',
-          speaker: 'SPEAKER_00',
-          isUser: false,
-          personId: null,
-          start: 0,
-          end: 2,
-          translations: []),
+        id: 'only',
+        text: 'Only synthetic speech',
+        speaker: 'SPEAKER_00',
+        isUser: false,
+        personId: null,
+        start: 0,
+        end: 2,
+        translations: [],
+      ),
     ];
     final calls = <bool>[];
-    await tester.pumpWidget(ChangeNotifierProvider(
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
         create: (_) => PeopleProvider(),
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-              body: NameSpeakerBottomSheet(
-                  speakerId: 0,
-                  segmentId: 'only',
-                  segments: segments,
-                  onSpeakerAssigned: (speaker, person, name, ids, whole) async {
-                    calls.add(whole);
-                    return true;
-                  })),
-        )));
+            body: NameSpeakerBottomSheet(
+              speakerId: 0,
+              segmentId: 'only',
+              segments: segments,
+              onSpeakerAssigned: (speaker, person, name, ids, whole) async {
+                calls.add(whole);
+                return true;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byType(OmiButton));
     await tester.tap(find.byType(OmiButton));
@@ -264,8 +311,9 @@ void main() {
     expect(calls.single, isFalse);
   });
 
-  testWidgets('search field appears above the threshold and filters chips case- and diacritic-insensitively',
-      (tester) async {
+  testWidgets('search field appears above the threshold and filters chips case- and diacritic-insensitively', (
+    tester,
+  ) async {
     SharedPreferencesUtil().givenName = 'Owner';
     final people = [
       _person('p1', 'Alex'),
@@ -316,10 +364,14 @@ void main() {
     SharedPreferencesUtil().givenName = 'Owner';
     final people = List.generate(11, (i) => _person('p$i', 'Person ${i.toString().padLeft(2, '0')}'));
     final calls = <String>[];
-    await _pumpSheet(tester, people: people, onSpeakerAssigned: (_, __, name, ___, ____) async {
-      calls.add(name);
-      return true;
-    });
+    await _pumpSheet(
+      tester,
+      people: people,
+      onSpeakerAssigned: (_, __, name, ___, ____) async {
+        calls.add(name);
+        return true;
+      },
+    );
 
     await tester.enterText(find.byType(TextField), 'Zed');
     await tester.pumpAndSettle();
@@ -357,18 +409,18 @@ void main() {
     SharedPreferencesUtil().givenName = 'Owner';
     final now = DateTime.now().millisecondsSinceEpoch;
     SharedPreferencesUtil().speakerLabelLastUsedMs = {'p3': now - 1000, 'p2': now};
-    await _pumpSheet(tester, people: [
-      _person('p1', 'Alice'),
-      _person('p2', 'Bob'),
-      _person('p3', 'Carol'),
-    ], segments: [
-      _seg('s1', personId: 'p1'),
-      _seg('s2', personId: 'p1'),
-      _seg('s3', personId: 'p1'),
-      _seg('s4', personId: 'p2'),
-      _seg('s5', personId: 'p3'),
-      _seg('s6', personId: 'p3'),
-    ]);
+    await _pumpSheet(
+      tester,
+      people: [_person('p1', 'Alice'), _person('p2', 'Bob'), _person('p3', 'Carol')],
+      segments: [
+        _seg('s1', personId: 'p1'),
+        _seg('s2', personId: 'p1'),
+        _seg('s3', personId: 'p1'),
+        _seg('s4', personId: 'p2'),
+        _seg('s5', personId: 'p3'),
+        _seg('s6', personId: 'p3'),
+      ],
+    );
     // "You" first, then most-recently-used (Bob > Carol), then frequency
     // (Alice has 3 segments but no recency).
     expect(_chipNames(tester), ['Add Person', 'Owner (You)', 'Bob', 'Carol', 'Alice']);
@@ -411,12 +463,13 @@ void main() {
 
   testWidgets('successful save records speaker label recency', (tester) async {
     SharedPreferencesUtil().givenName = 'Owner';
-    await _pumpSheet(tester, people: [
-      _person('p1', 'Alice'),
-      _person('p3', 'Carol'),
-    ], onSpeakerAssigned: (_, personId, __, ___, ____) async {
-      return personId == 'p3';
-    });
+    await _pumpSheet(
+      tester,
+      people: [_person('p1', 'Alice'), _person('p3', 'Carol')],
+      onSpeakerAssigned: (_, personId, __, ___, ____) async {
+        return personId == 'p3';
+      },
+    );
 
     await tester.ensureVisible(find.text('Carol'));
     await tester.tap(find.text('Carol'));
@@ -432,12 +485,11 @@ void main() {
 
   testWidgets('failed save does not record speaker label recency', (tester) async {
     SharedPreferencesUtil().givenName = 'Owner';
-    await _pumpSheet(tester,
-        people: [
-          _person('p1', 'Alice'),
-          _person('p3', 'Carol'),
-        ],
-        onSpeakerAssigned: (_, __, ___, ____, _____) async => false);
+    await _pumpSheet(
+      tester,
+      people: [_person('p1', 'Alice'), _person('p3', 'Carol')],
+      onSpeakerAssigned: (_, __, ___, ____, _____) async => false,
+    );
 
     await tester.ensureVisible(find.text('Carol'));
     await tester.tap(find.text('Carol'));

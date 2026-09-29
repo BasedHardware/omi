@@ -18,11 +18,11 @@ import database.action_items as action_items_db
 import database.calendar_meetings as calendar_db
 import database.conversations as conversations_db
 import database.goals as goals_db
-import database.memories as memories_db
 import database.screen_activity as screen_activity_db
-from database._client import get_firestore_client
+from database._client import db as firestore_db, get_firestore_client
 from database.auth import get_user_from_uid
 from models.calendar_context import CalendarMeetingContext
+from utils.memory.memory_service import MemoryService
 from utils.conversations.meeting_context import stored_meeting_window
 from utils.conversations.meeting_participants import MeetingRoster
 from utils.conversations.screen_text_digest import digest_screen_rows
@@ -521,14 +521,16 @@ def _gather_memories(uid: str, roster: MeetingRoster) -> tuple[str, ...]:
         # fetching memories nothing can match against.
         return ()
     try:
-        memories: Any = memories_db.get_memories(uid, limit=40)
+        # Canonical read path (utils/memory/ARCHITECTURE.md): MemoryService merges canonical
+        # memory_items with the historical collection, so a meeting whose attendees' memories
+        # were written after the store switch is no longer missing from the notes context.
+        universal_memories = MemoryService(db_client=firestore_db).read(uid, limit=40)
     except Exception as exc:  # noqa: BLE001 - best effort
         _log_source_failure('memories', uid, exc)
         return ()
+    memories = [record.dict() for record in universal_memories if not record.is_locked]
     lines: list[str] = []
-    for memory in memories or []:
-        if not isinstance(memory, Mapping):
-            continue
+    for memory in memories:
         content = memory.get('content')
         if not isinstance(content, str) or not content.strip():
             continue

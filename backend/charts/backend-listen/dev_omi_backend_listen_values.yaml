@@ -335,6 +335,8 @@ env:
     value: "0.07537"
   - name: STT_MULTI_LANGUAGE_HINTS
     value: "true"
+  - name: SONIOX_CONTEXT_TERMS
+    value: "false"
   - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
@@ -357,8 +359,12 @@ env:
     value: "24"
   - name: STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS
     value: "1800"
+  - name: LISTEN_RECONNECT_BUDGET_PER_MIN
+    value: "6"
   - name: STT_CIRCUIT_HALF_OPEN_PROBES
     value: "1"
+  - name: STT_SHED_CONNECT_FAILURES
+    value: "3"
   - name: SONIOX_CIRCUIT_FAILURE_THRESHOLD
     value: "3"
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS

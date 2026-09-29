@@ -1,5 +1,5 @@
 // Home's capture surfaces where the app really draws them: the live card at the top of Home, the
-// record button to the right of the Ask Omi bar above the tab bar, the device chip in the header,
+// record button to the right of the floating Ask Omi bar, the device chip in the header,
 // the sheets they open, and the live page. The frame mirrors HomePage's layout; its Ask Omi bar
 // is a copy of HomePage._buildChatBar (private there).
 import 'package:flutter/material.dart';
@@ -15,13 +15,18 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
+import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
-import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/widgets/home_bottom_bar.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 
 import '../fakes.dart';
@@ -153,12 +158,25 @@ class _CallInProgress extends ChangeNotifier implements PhoneCallProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+Future<({List<DailySummary> items, bool ok})> _noRecaps() async => (items: const <DailySummary>[], ok: true);
+
 final auditPendant = BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi, rssi: -40);
 
 /// Home as HomePage lays it out: header (device chip, settings), content, the tab bar, and the
 /// [Ask Omi | record] row floating above it.
-class _HomeFrame extends StatelessWidget {
-  const _HomeFrame();
+/// Mirrors HomePage's layout: the header, the Home | Tasks switcher, Home, and the floating
+/// Ask Omi row. [recaps] feeds the Daily Recaps row (none by default).
+class HomeFrame extends StatelessWidget {
+  const HomeFrame({super.key, this.recaps = _noRecaps, this.tasks, this.pendingSync});
+
+  final RecentRecapsLoader recaps;
+
+  /// Recordings waiting to sync or transcribe: shows the Cloud button with that count as a badge,
+  /// as HeaderSyncButton does. Null leaves Cloud out (no device paired, nothing waiting).
+  final int? pendingSync;
+
+  /// The Tasks page to show instead of Home (Tasks selected in the switcher; no chat bar there).
+  final Widget? tasks;
 
   @override
   Widget build(BuildContext context) {
@@ -173,23 +191,40 @@ class _HomeFrame extends StatelessWidget {
             padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
             child: BatteryInfoWidget(),
           ),
-          HeaderCircleButton(
-            semanticLabel: 'Settings',
-            onTap: () {},
-            icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
-          ),
+          Row(children: [
+            if (pendingSync != null)
+              HeaderCircleButton(
+                semanticLabel: 'Sync',
+                onTap: () {},
+                badgeCount: pendingSync!,
+                icon: Icon(Icons.cloud_rounded, size: 18, color: OmiColors.textSecondary),
+              ),
+            HeaderCircleButton(
+              semanticLabel: 'Search',
+              onTap: () {},
+              icon: Icon(Icons.search, size: 20, color: OmiColors.textSecondary),
+            ),
+            HeaderCircleButton(
+              semanticLabel: 'Settings',
+              onTap: () {},
+              icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+            ),
+          ]),
         ]),
       ),
       body: Stack(children: [
-        const HomeContentPage(),
-        BottomNavBar(onTabTap: (_, __) {}),
-        const HomeChatBarBackdrop(),
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: bottomNavChatBarOffset(context),
-          child: const Row(children: [Expanded(child: _AskOmiBar()), SizedBox(width: 10), HomeRecordButton()]),
-        ),
+        Column(children: [
+          HomeTabSwitcher(onTabTap: (_, __) {}),
+          Expanded(child: tasks ?? HomeContentPage(loadRecaps: recaps)),
+        ]),
+        if (tasks == null) const HomeChatBarBackdrop(),
+        if (tasks == null)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: homeChatBarOffset(context),
+            child: const Row(children: [Expanded(child: _AskOmiBar()), SizedBox(width: 10), HomeRecordButton()]),
+          ),
       ]),
     );
   }
@@ -231,7 +266,7 @@ Future<void> _runHome(
   Finder? longPress,
   String action = 'Home',
 }) async {
-  await a.pump(const _HomeFrame(), scaffold: false, providers: [
+  await a.pump(const HomeFrame(), scaffold: false, providers: [
     ChangeNotifierProvider<DeviceProvider>.value(
         value: pendantConnected
             ? AuditDeviceProvider(connected: true, battery: 72, device: auditPendant)
@@ -242,6 +277,63 @@ Future<void> _runHome(
   if (tap != null) await a.tap(tap);
   if (longPress != null) await a.longPress(longPress);
   await a.shot(action);
+}
+
+/// Home's feed: two recaps and five conversations, with the capture card in [live]'s state.
+Future<void> _runFeed(AuditRun a, {AuditLive live = AuditLive.idle}) async {
+  final now = DateTime.now();
+  ServerConversation convo(String id, String title, String emoji, DateTime at, int minutes) => ServerConversation(
+        id: id,
+        createdAt: at,
+        startedAt: at,
+        finishedAt: at.add(Duration(minutes: minutes)),
+        structured: Structured(title, 'Overview', emoji: emoji, category: 'work'),
+        status: ConversationStatus.completed,
+      );
+  final today = DateTime(now.year, now.month, now.day);
+  final items = [
+    convo('h1', 'Device Connection Troubleshooting', '🔧', today.add(const Duration(hours: 9, minutes: 12)), 2),
+    convo('h2', 'Trying to Identify a Place', '📍', today.subtract(const Duration(hours: 1, minutes: 42)), 3),
+    convo('h3', 'Dinner, a Mall Walk, and Plans for Tomorrow', '🍽️',
+        today.subtract(const Duration(hours: 2, minutes: 50)), 49),
+    convo('h4', 'Omi Reliability Talk on Stage', '🎤', today.subtract(const Duration(hours: 9)), 31),
+    convo('h5', 'Weekly Sync', '📅', today.subtract(const Duration(days: 6, hours: 7)), 32),
+  ];
+  final conversations = ConversationProvider(
+    conversationListFetcher: () async => (items: items, ok: true),
+    isSignedIn: () => true,
+  )
+    ..conversations = items
+    ..groupConversationsByDate();
+  final recaps = [
+    DailySummary(
+      id: 'r1',
+      date: today.subtract(const Duration(days: 1)).toIso8601String().substring(0, 10),
+      createdAt: today,
+      headline: 'Rewrite, equity, and product polish dominated',
+      overview: 'Most of the day went to the v5 rewrite plan and a long equity conversation, '
+          'with a late push on the mobile polish list.',
+      dayEmoji: '🛠️',
+      stats: DayStats(totalConversations: 6, actionItemsCount: 2),
+    ),
+    DailySummary(
+      id: 'r2',
+      date: today.subtract(const Duration(days: 2)).toIso8601String().substring(0, 10),
+      createdAt: today,
+      headline: 'Omi Reliability Talk on Stage',
+      overview: '',
+      stats: DayStats(totalConversations: 4, actionItemsCount: 1),
+    ),
+  ];
+  await a.pump(HomeFrame(recaps: () async => (items: recaps, ok: true), pendingSync: 1), scaffold: false, providers: [
+    ChangeNotifierProvider<DeviceProvider>.value(
+        value: live == AuditLive.idle
+            ? AuditDeviceProvider()
+            : AuditDeviceProvider(connected: true, battery: 89, device: auditPendant)),
+    ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
+    ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+  ]);
+  await a.shot(live == AuditLive.idle ? 'Open the app: Home' : 'Open the app while recording');
 }
 
 Future<void> _runLivePage(AuditRun a, AuditLive live) async {
@@ -258,6 +350,21 @@ const _home = 'lib/pages/home/page.dart (Home: live card, record button, device 
 const _live = 'lib/pages/conversation_capturing/page.dart (ConversationCapturingPage)';
 
 final captureScenarios = <AuditScenario>[
+  AuditScenario(
+    id: 'home-feed',
+    title: 'Home: daily recaps, then every conversation',
+    page: _home,
+    state: 'Two recaps; five conversations across today, yesterday and last week; nothing recording; '
+        'one recording waiting to transcribe (Cloud badge)',
+    run: (a) => _runFeed(a),
+  ),
+  AuditScenario(
+    id: 'home-feed-live',
+    title: 'Home while the pendant records: live card, recaps, conversations',
+    page: _home,
+    state: 'Pendant connected and recording; two recaps; five conversations; one recording waiting (Cloud badge)',
+    run: (a) => _runFeed(a, live: AuditLive.pendant),
+  ),
   AuditScenario(
     id: 'home-header',
     title: 'Home, nothing recording, pendant connected',

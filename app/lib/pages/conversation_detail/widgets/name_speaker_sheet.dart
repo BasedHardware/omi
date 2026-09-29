@@ -134,8 +134,12 @@ Future<void> showNameSpeakerSheet(
   required String segmentId,
   required List<TranscriptSegment> segments,
   required Future<bool> Function(
-          int speakerId, String personId, String personName, List<String> segmentIds, bool applyToSpeaker)
-      onSpeakerAssigned,
+    int speakerId,
+    String personId,
+    String personName,
+    List<String> segmentIds,
+    bool applyToSpeaker,
+  ) onSpeakerAssigned,
   SpeakerLabelSuggestionEvent? suggestion,
   bool defaultApplyToSpeaker = false,
 }) {
@@ -157,8 +161,12 @@ class NameSpeakerBottomSheet extends StatefulWidget {
   final int speakerId;
   final String segmentId;
   final Future<bool> Function(
-          int speakerId, String personId, String personName, List<String> segmentIds, bool applyToSpeaker)
-      onSpeakerAssigned;
+    int speakerId,
+    String personId,
+    String personName,
+    List<String> segmentIds,
+    bool applyToSpeaker,
+  ) onSpeakerAssigned;
   final List<TranscriptSegment> segments;
   final SpeakerLabelSuggestionEvent? suggestion;
   final bool defaultApplyToSpeaker;
@@ -321,11 +329,16 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
         final personFrequencies = _personFrequencies();
         final peopleList = List.from(people);
         final currentPersonId = currentSegment?.personId;
-        peopleList.sort((a, b) => _comparePeopleForPicker(a, b,
+        peopleList.sort(
+          (a, b) => _comparePeopleForPicker(
+            a,
+            b,
             currentPersonId: currentPersonId,
             suggestionId: widget.suggestion?.personId,
             lastUsedMs: SharedPreferencesUtil().speakerLabelLastUsedMs,
-            frequencies: personFrequencies));
+            frequencies: personFrequencies,
+          ),
+        );
         setSelectedPerson(peopleList[0].id);
         setSelectedPersonName(peopleList[0].name);
       }
@@ -496,11 +509,16 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
       Person(id: 'user', name: '$userName (You)', colorIdx: 0, createdAt: DateTime.now(), updatedAt: DateTime.now()),
     ];
     people.addAll(ppl);
-    people.sort((a, b) => _comparePeopleForPicker(a, b,
+    people.sort(
+      (a, b) => _comparePeopleForPicker(
+        a,
+        b,
         currentPersonId: currentSegment?.personId,
         suggestionId: widget.suggestion?.personId,
         lastUsedMs: SharedPreferencesUtil().speakerLabelLastUsedMs,
-        frequencies: personFrequencies));
+        frequencies: personFrequencies,
+      ),
+    );
 
     final query = _personSearchQuery.trim();
     final isSearching = query.isNotEmpty;
@@ -646,15 +664,12 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                   title: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        segment.text,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: OmiType.caption,
-                      ),
+                      Text(segment.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: OmiType.caption),
                       const SizedBox(height: 4),
-                      Text(OmiDuration.offset(segment.start),
-                          style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
+                      Text(
+                        OmiDuration.offset(segment.start),
+                        style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                      ),
                     ],
                   ),
                   value: _selectedSegmentIds.contains(segment.id),

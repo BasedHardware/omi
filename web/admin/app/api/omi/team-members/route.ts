@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyAdmin } from "@/lib/auth";
 import { getAdminAuth, getDb } from "@/lib/firebase/admin";
+import { sendAdminInviteEmail } from "@/lib/email/invite";
 
 export const dynamic = "force-dynamic";
 
@@ -148,7 +149,33 @@ export async function POST(request: NextRequest) {
       createdAt: new Date().toISOString(),
     });
 
-    return NextResponse.json({ teamMember, provisioned }, { status: 201 });
+    // The grant has landed. Telling them about it is best effort: a mail
+    // failure is reported in the response, never rolled back into an error.
+    let invitedBy: string | null = null;
+    try {
+      const inviterDoc = await db
+        .collection("adminData")
+        .doc(authResult.uid)
+        .get();
+      const inviterEmail = inviterDoc.data()?.email;
+      invitedBy = typeof inviterEmail === "string" ? inviterEmail : null;
+    } catch (error) {
+      console.error("Could not read the inviting admin's email:", error);
+    }
+
+    const invite = await sendAdminInviteEmail({ email, invitedBy });
+    if (!invite.sent) {
+      console.error(
+        `Admin invite email not sent to ${email} (reason ${
+          invite.reason ?? "unknown"
+        })`
+      );
+    }
+
+    return NextResponse.json(
+      { teamMember, provisioned, emailSent: invite.sent },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Error adding team member:", error);
     return NextResponse.json(

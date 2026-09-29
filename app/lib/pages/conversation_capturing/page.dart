@@ -36,10 +36,10 @@ import 'package:omi/pages/conversations/capture_state_labels.dart';
 
 import 'capture_state_header.dart';
 
-/// Switch the home IndexedStack to Conversations *before* popping the capturing
-/// route so the user lands on that tab with no flash of the previous page.
+/// Switch the home IndexedStack to Home (the conversation list) *before* popping the capturing
+/// route so the user lands there with no flash of the previous page.
 void switchHomeToConversationsTab(BuildContext context) {
-  context.read<HomeProvider>().setIndex(1);
+  context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
 }
 
 class ConversationCapturingPage extends StatefulWidget {

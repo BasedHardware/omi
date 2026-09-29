@@ -11187,5 +11187,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "মানুষ খুঁজুন",
     "addQueryAsNewPerson": "\"{query}\"-কে নতুন ব্যক্তি হিসেবে যোগ করুন",
-    "showAllPeople": "সমস্ত ({count}) জনকে দেখান"
+    "showAllPeople": "সমস্ত ({count}) জনকে দেখান",
+    "chatGreeting": "হাই {name}, যা খুশি জিজ্ঞেস করুন",
+    "activity": "কার্যকলাপ",
+    "places": "স্থান",
+    "recaps": "সারাংশ",
+    "recent": "সাম্প্রতিক",
+    "searchPartialFailure": "কিছু ফলাফল লোড করা যায়নি"
 }

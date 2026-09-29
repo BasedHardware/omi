@@ -11492,4 +11492,24 @@ class AppLocalizationsSk extends AppLocalizations {
   String showAllPeople(int count) {
     return 'Zobraziť všetky osoby ($count)';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return 'Ahoj $name, opýtaj sa na čokoľvek';
+  }
+
+  @override
+  String get activity => 'Aktivita';
+
+  @override
+  String get places => 'Miesta';
+
+  @override
+  String get recaps => 'Zhrnutia';
+
+  @override
+  String get recent => 'Nedávne';
+
+  @override
+  String get searchPartialFailure => 'Niektoré výsledky sa nepodarilo načítať';
 }

@@ -78,13 +78,13 @@ def task_create_proposal(**overrides):
     return CandidateCreate.model_validate(payload)
 
 
-def create_record(fake_db, **overrides):
+def create_record(fake_db, *, now=None, **overrides):
     return candidates_db.create_candidate(
         'user-1',
         task_create_proposal(**overrides),
         idempotency_key='conversation-1:item-1',
         account_generation=3,
-        now=datetime(2026, 7, 9, tzinfo=timezone.utc),
+        now=now,
     )
 
 
@@ -206,8 +206,8 @@ def test_candidate_union_rejects_mixed_or_invalid_payloads(patch):
 
 
 def test_candidate_create_and_accept_are_idempotent_and_preserve_envelope(fake_db):
-    record = create_record(fake_db)
-    duplicate = create_record(fake_db)
+    record = create_record(fake_db, now=datetime(2026, 7, 9, tzinfo=timezone.utc))
+    duplicate = create_record(fake_db, now=record.created_at)
     first = candidates_db.resolve_task_candidate(
         'user-1', record.candidate_id, account_generation=3, now=datetime(2026, 7, 10, tzinfo=timezone.utc)
     )
@@ -595,7 +595,9 @@ def test_accepted_active_task_coalesces_exact_cross_source_capture_until_work_cl
         account_generation=3,
         now=datetime(2026, 7, 9, tzinfo=timezone.utc),
     )
-    receipt = candidates_db.resolve_task_candidate('user-1', first.candidate_id, account_generation=3)
+    receipt = candidates_db.resolve_task_candidate(
+        'user-1', first.candidate_id, account_generation=3, now=first.created_at
+    )
     task_path = ('users', 'user-1', 'action_items', receipt.task_id)
     second_proposal = task_create_proposal(
         task_change={

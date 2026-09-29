@@ -11290,4 +11290,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String showAllPeople(int count) {
     return '显示全部 $count 人';
   }
+
+  @override
+  String chatGreeting(String name) {
+    return '你好，$name，随便问吧';
+  }
+
+  @override
+  String get activity => '活动';
+
+  @override
+  String get places => '地点';
+
+  @override
+  String get recaps => '回顾';
+
+  @override
+  String get recent => '最近';
+
+  @override
+  String get searchPartialFailure => '部分结果无法加载';
 }

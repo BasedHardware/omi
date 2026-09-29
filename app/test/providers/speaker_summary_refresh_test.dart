@@ -12,24 +12,29 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/widgets/speaker_summary_action.dart';
 import 'package:omi/providers/conversation_provider.dart';
 
-ServerConversation conversation(
-        {String id = 'c', ConversationStatus status = ConversationStatus.completed, String overview = 'Summary'}) =>
+ServerConversation conversation({
+  String id = 'c',
+  ConversationStatus status = ConversationStatus.completed,
+  String overview = 'Summary',
+}) =>
     ServerConversation(
-        id: id,
-        createdAt: DateTime(2026),
-        structured: Structured('Title', overview),
-        status: status,
-        transcriptSegments: [
-          TranscriptSegment(
-              id: 's',
-              text: 'Synthetic speech',
-              speaker: 'SPEAKER_00',
-              isUser: false,
-              personId: null,
-              translations: [],
-              start: 0,
-              end: 3)
-        ]);
+      id: id,
+      createdAt: DateTime(2026),
+      structured: Structured('Title', overview),
+      status: status,
+      transcriptSegments: [
+        TranscriptSegment(
+          id: 's',
+          text: 'Synthetic speech',
+          speaker: 'SPEAKER_00',
+          isUser: false,
+          personId: null,
+          translations: [],
+          start: 0,
+          end: 3,
+        ),
+      ],
+    );
 
 void select(ConversationDetailProvider provider, ServerConversation value) {
   provider.selectedDate = value.createdAt;
@@ -123,23 +128,28 @@ void main() {
     provider.dispose();
   });
 
-  testWidgets('explicit action runs once, retains label and retry after failure, replaces detail on success',
-      (tester) async {
+  testWidgets('explicit action runs once, retains label and retry after failure, replaces detail on success', (
+    tester,
+  ) async {
     final result = Completer<ServerConversation?>();
     int requests = 0;
     bool fail = true;
     final provider = ConversationDetailProvider(
-        assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
-          requests++;
-          return fail ? await result.future : conversation(overview: 'Named summary');
-        });
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) async => true,
+      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        requests++;
+        return fail ? await result.future : conversation(overview: 'Named summary');
+      },
+    );
     select(provider, conversation());
     expect(await provider.assignSpeaker(['s'], 'new'), isTrue);
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(
+      MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: SpeakerSummaryAction(provider: provider))));
+        home: Scaffold(body: SpeakerSummaryAction(provider: provider)),
+      ),
+    );
     expect(requests, 0);
     await tester.pump(const Duration(seconds: 4));
     expect(requests, 1);
@@ -163,11 +173,12 @@ void main() {
     final saved = Completer<bool>();
     int reprocessCalls = 0;
     final provider = ConversationDetailProvider(
-        assignSpeaker: (id, ids, {isUser, personId, speakerId}) => saved.future,
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
-          reprocessCalls++;
-          return null;
-        });
+      assignSpeaker: (id, ids, {isUser, personId, speakerId}) => saved.future,
+      reprocess: (id, {appId, requireSpeakerReceipt = false}) async {
+        reprocessCalls++;
+        return null;
+      },
+    );
     select(provider, conversation());
     final assignment = provider.assignSpeaker(['s'], 'new');
     expect(await provider.reprocessConversation(), isFalse);
@@ -221,7 +232,8 @@ void main() {
       },
     );
     final target = conversation();
-    target.transcriptSegments.add(TranscriptSegment(
+    target.transcriptSegments.add(
+      TranscriptSegment(
         id: 's2',
         text: 'Second synthetic voice',
         speaker: 'SPEAKER_01',
@@ -229,7 +241,9 @@ void main() {
         personId: null,
         translations: [],
         start: 4,
-        end: 7));
+        end: 7,
+      ),
+    );
     select(provider, target);
 
     expect(await provider.assignSpeaker(['s'], 'first-person'), isTrue);
@@ -492,8 +506,9 @@ void main() {
     expect(fetchedIds, [donorId]);
     expect(provider.conversation.id, survivorId);
     expect(list.conversations.map((conversation) => conversation.id), [survivorId]);
-    expect(
-        list.groupedConversations.values.expand((group) => group).map((conversation) => conversation.id), [survivorId]);
+    expect(list.groupedConversations.values.expand((group) => group).map((conversation) => conversation.id), [
+      survivorId,
+    ]);
     expect(await provider.assignSpeaker(['s'], 'other-person'), isTrue);
     expect(assignedIds, [donorId, survivorId]);
     await tester.pump(const Duration(seconds: 4));

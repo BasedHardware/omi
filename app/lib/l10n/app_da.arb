@@ -3669,5 +3669,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "Søg efter personer",
     "addQueryAsNewPerson": "Tilføj \"{query}\" som en ny person",
-    "showAllPeople": "Vis alle {count} personer"
+    "showAllPeople": "Vis alle {count} personer",
+    "chatGreeting": "Hej {name}, spørg om hvad som helst",
+    "activity": "Aktivitet",
+    "places": "Steder",
+    "recaps": "Opsummeringer",
+    "recent": "Seneste",
+    "searchPartialFailure": "Nogle resultater kunne ikke indlæses"
 }

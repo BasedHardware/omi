@@ -76,7 +76,7 @@ class SharedPreferencesUtil {
 
   static const String appearanceModeKey = 'appearanceMode';
 
-  String get appearanceMode => getString(appearanceModeKey, defaultValue: 'system');
+  String get appearanceMode => getString(appearanceModeKey, defaultValue: 'light');
 
   Future<void> setAppearanceMode(String mode) async {
     final prefs = _preferences ?? await SharedPreferences.getInstance();
@@ -525,9 +525,11 @@ class SharedPreferencesUtil {
         final parsed = BtDevice.fromJson(decoded);
         if (parsed.id.isNotEmpty) return parsed;
       }
-      Logger.debug(PhysicalQualification.enabled
-          ? 'Stored device is not a JSON object: ${decoded.runtimeType}'
-          : 'Stored device is not a JSON object');
+      Logger.debug(
+        PhysicalQualification.enabled
+            ? 'Stored device is not a JSON object: ${decoded.runtimeType}'
+            : 'Stored device is not a JSON object',
+      );
     } catch (e) {
       Logger.debug(PhysicalQualification.enabled ? 'Error decoding stored device: $e' : 'Error decoding stored device');
     }
@@ -734,26 +736,6 @@ class SharedPreferencesUtil {
   set transcriptionDiagnosticEnabled(bool value) => saveBool('transcriptionDiagnosticEnabled', value);
 
   bool get transcriptionDiagnosticEnabled => getBool('transcriptionDiagnosticEnabled');
-
-  // Goal tracker widget on homepage - default is true (experimental feature)
-  set showGoalTrackerEnabled(bool value) => saveBool('showGoalTrackerEnabled', value);
-
-  bool get showGoalTrackerEnabled => getBool('showGoalTrackerEnabled', defaultValue: true);
-
-  // Daily score widget on homepage - default is true
-  set showDailyScoreEnabled(bool value) => saveBool('showDailyScoreEnabled', value);
-
-  bool get showDailyScoreEnabled => getBool('showDailyScoreEnabled', defaultValue: true);
-
-  // Tasks widget on homepage - default is true
-  set showTasksEnabled(bool value) => saveBool('showTasksEnabled', value);
-
-  bool get showTasksEnabled => getBool('showTasksEnabled', defaultValue: true);
-
-  // Phone call floating button on home screen - default is true
-  set showPhoneCallButton(bool value) => saveBool('showPhoneCallButton', value);
-
-  bool get showPhoneCallButton => getBool('showPhoneCallButton', defaultValue: true);
 
   // Voice response playback mode for hardware-button replies.
   //   0 = off (never speak)

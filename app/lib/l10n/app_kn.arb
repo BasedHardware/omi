@@ -11187,5 +11187,11 @@
     "feedbackReasonRecordingOther": "Something else",
     "searchPeople": "ಜನರನ್ನು ಹುಡುಕಿ",
     "addQueryAsNewPerson": "\"{query}\" ಅವರನ್ನು ಹೊಸ ವ್ಯಕ್ತಿಯಾಗಿ ಸೇರಿಸಿ",
-    "showAllPeople": "ಎಲ್ಲಾ ({count}) ಜನರನ್ನು ತೋರಿಸಿ"
+    "showAllPeople": "ಎಲ್ಲಾ ({count}) ಜನರನ್ನು ತೋರಿಸಿ",
+    "chatGreeting": "ಹಾಯ್ {name}, ಏನು ಬೇಕಾದರೂ ಕೇಳಿ",
+    "activity": "ಚಟುವಟಿಕೆ",
+    "places": "ಸ್ಥಳಗಳು",
+    "recaps": "ಸಾರಾಂಶಗಳು",
+    "recent": "ಇತ್ತೀಚಿನ",
+    "searchPartialFailure": "ಕೆಲವು ಫಲಿತಾಂಶಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ"
 }

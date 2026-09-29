@@ -3662,5 +3662,11 @@
     "feedbackReasonRecordingOther": "Başka bir şey",
     "searchPeople": "Kişi ara",
     "addQueryAsNewPerson": "\"{query}\" adlı yeni bir kişi ekle",
-    "showAllPeople": "Tüm {count} kişiyi göster"
+    "showAllPeople": "Tüm {count} kişiyi göster",
+    "chatGreeting": "Merhaba {name}, ne istersen sor",
+    "activity": "Etkinlik",
+    "places": "Yerler",
+    "recaps": "Özetler",
+    "recent": "Son aramalar",
+    "searchPartialFailure": "Bazı sonuçlar yüklenemedi"
 }

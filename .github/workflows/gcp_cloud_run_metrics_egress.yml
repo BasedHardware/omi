@@ -88,9 +88,12 @@ jobs:
         if: github.event.inputs.environment != 'prod'
         uses: google-github-actions/auth@v3
         with:
-          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          # Development: GitHub WIF as omi-ci-monitoring-dev@, mirroring prod. The chart's
+          # admission hooks create and delete ClusterRoles, which omi-ci-deployer-dev
+          # (container.developer) cannot do; this identity holds container.admin and is
+          # impersonable only from this workflow on main.
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
-          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
+          service_account: omi-ci-monitoring-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
@@ -149,6 +152,21 @@ jobs:
             --timeout=5m
           kubectl get service "$EXPORTER_RELEASE" \
             --namespace "$MONITORING_NAMESPACE"
+
+  provision-live-alerts:
+    # Grafana alert provisioning is independent of Helm deploy health: a
+    # Helm failure must not suppress live-STT alert updates.
+    if: github.ref == 'refs/heads/main'
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed monitoring configuration
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
 
       - name: Import allowlisted live-STT Grafana alerts
         env:
