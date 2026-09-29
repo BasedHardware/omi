@@ -63,7 +63,7 @@ function values(view: Renderer.ReactTestRenderer) {
 test('press animates actual control style, composes handlers/styles, and stops on release/unmount', () => {
   const onPressIn = jest.fn(),
     onPressOut = jest.fn();
-  const style = jest.fn(({pressed}: {pressed: boolean}) => ({
+  const style = jest.fn(({pressed}: {pressed: boolean; hovered: boolean}) => ({
     opacity: 0.5,
     padding: pressed ? 9 : 8,
     transform: [{translateX: 2}],
@@ -73,7 +73,7 @@ test('press animates actual control style, composes handlers/styles, and stops o
   expect(onPressIn).toHaveBeenCalledTimes(1);
   expect(values(view).opacity).toBeCloseTo(0.46);
   expect(values(view).transform).toEqual([{translateX: 2}, {scale: 0.985}]);
-  expect(style).toHaveBeenLastCalledWith({pressed: true});
+  expect(style).toHaveBeenLastCalledWith({hovered: false, pressed: true});
   expect(timing).toHaveBeenCalledWith(
     expect.anything(),
     expect.objectContaining({duration: 120, toValue: 1, useNativeDriver: true}),

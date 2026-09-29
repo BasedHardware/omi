@@ -402,15 +402,16 @@ export function DesktopChromeV5({
                   accessibilityRole="button"
                   accessibilityState={{selected: active}}
                   onPress={() => onNavigate(label)}
-                  style={({pressed}) => [
+                  style={({hovered, pressed}) => [
                     styles.navHit,
+                    hovered && !pressed && !active && styles.navHitHover,
                     pressed && styles.pressed,
                   ]}>
                   <View style={styles.navIcon}>
                     <MaterialIcon
                       color={token.color.ink}
                       name={iconName}
-                      size={14}
+                      size={16}
                     />
                   </View>
                   <Text
@@ -442,7 +443,7 @@ export function DesktopChromeV5({
             <MaterialIcon
               color={captureActive ? token.color.red : token.color.ink}
               name="monitor"
-              size={17}
+              size={18}
             />
           </ShippingPressable>
         ) : null}
@@ -460,7 +461,7 @@ export function DesktopChromeV5({
             styles.settingsButton,
             route === 'Settings' && styles.settingsButtonActive,
           ]}>
-          <MaterialIcon name="settings" color={token.color.ink} size={17} />
+          <MaterialIcon name="settings" color={token.color.ink} size={18} />
         </ShippingPressable>
       </View>
       <View style={styles.omnibar}>
@@ -496,10 +497,14 @@ export function DesktopChromeV5({
                     }));
                   }}
                   onPress={() => onModeChange?.(value)}
-                  style={styles.modeButton}>
+                  style={({hovered, pressed}) => [
+                    styles.modeButton,
+                    hovered && !pressed && mode !== value && styles.modeHover,
+                    pressed && styles.pressed,
+                  ]}>
                   <MaterialIcon
                     name={iconName}
-                    size={15}
+                    size={16}
                     color={
                       mode === value ? token.color.ink : token.color.inkMuted
                     }
@@ -577,16 +582,17 @@ export function DesktopChromeV5({
                 onSend();
               }
             }}
-            style={({pressed}) => [
+            style={({hovered, pressed}) => [
               styles.send,
               mode === 'Ask' &&
                 !canStop &&
                 (chatBusy || !draft.trim()) &&
                 styles.sendDisabled,
+              hovered && !pressed && styles.sendHover,
               pressed && styles.pressed,
             ]}>
             {canStop ? (
-              <MaterialIcon name="stop" size={14} color={token.color.dark} />
+              <MaterialIcon name="stop" size={16} color={token.color.dark} />
             ) : mode === 'Ask' ? (
               <MaterialIcon
                 name="arrow_upward"
@@ -594,7 +600,7 @@ export function DesktopChromeV5({
                 color={token.color.dark}
               />
             ) : (
-              <MaterialIcon name="search" size={17} color={token.color.dark} />
+              <MaterialIcon name="search" size={18} color={token.color.dark} />
             )}
           </FocusPressable>
         )}
@@ -691,7 +697,16 @@ const createStyles = (token: DesktopTokens) =>
       justifyContent: 'center',
       borderRadius: 12,
     },
-    modeText: {fontSize: 12, color: token.color.inkMuted},
+    modeHover: {
+      backgroundColor: token.color.glassQuiet,
+    },
+    modeText: {
+      fontSize: 12,
+      // Same explicit line box as DesktopTopChrome's mode pills: SF's
+      // default 12 px line parks the ink ~1 px high beside the 15 px icons.
+      lineHeight: 16,
+      color: token.color.inkMuted,
+    },
     chrome: {
       gap: 14,
       marginBottom: 4,
@@ -760,6 +775,10 @@ const createStyles = (token: DesktopTokens) =>
       flexDirection: 'row',
       height: 40,
       justifyContent: 'center',
+    },
+    navHitHover: {
+      backgroundColor: token.color.glassQuiet,
+      borderRadius: 10,
     },
     navIcon: {
       marginRight: 7,
@@ -837,6 +856,7 @@ const createStyles = (token: DesktopTokens) =>
       backgroundColor: token.color.ink,
     },
     sendDisabled: {opacity: 0.3},
+    sendHover: {opacity: 0.86},
     sendText: {
       color: token.color.ink,
       fontFamily: token.font,

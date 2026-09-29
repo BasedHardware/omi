@@ -491,6 +491,7 @@ export function UnifiedTimeline({
       <ScrollView
         accessibilityLabel="Unified timeline"
         scrollEventThrottle={16}
+        style={styles.scroller}
         contentContainerStyle={styles.content}>
         {header}
         {loading && entries.length === 0 ? (
@@ -584,6 +585,12 @@ const filterIcon: Record<ActivityFilterId, MaterialIconName> = {
 
 const createStyles = (t: OmiTheme) => ({
   root: {flex: 1},
+  // Full-width scroller: the uncapped chrome rows above stretch, so the
+  // scroll surface follows; the centered list column inside stays capped.
+  scroller: {
+    alignSelf: 'center' as const,
+    width: '100%' as const,
+  },
   // The feed reads as one centered list column; the chrome above keeps its
   // own width.
   content: {

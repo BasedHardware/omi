@@ -72,6 +72,10 @@ type Props = {
   onDraftChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
+  // Settings mode: while route === 'Settings' the omnibar morphs into a fuzzy
+  // settings search — these carry its query instead of the chat draft.
+  settingsQuery?: string;
+  onSettingsQueryChange?: (value: string) => void;
   chatNotice: string | null;
   omnibarRef: React.RefObject<TextInput | null>;
   // When set, a decorative fake cursor travels to this destination in the
@@ -93,6 +97,8 @@ export function DesktopChrome({
   onDraftChange,
   onSend,
   onStop,
+  settingsQuery = '',
+  onSettingsQueryChange,
   onNavigate,
   route,
   filter,
@@ -110,6 +116,9 @@ export function DesktopChrome({
   const reduceMotion = useReduceMotion();
   const canStop = mode === 'Ask' && activeGenerationId !== null;
   const sending = mode === 'Ask' && chatBusy && !canStop;
+  // In Settings the chrome morphs: the omnibar becomes a fuzzy settings
+  // search, the filter row hides, and the gear flips into an exit button.
+  const inSettings = route === 'Settings';
 
   // Sliding selection pill for the omnibar mode switcher.
   const [modeFrames, setModeFrames] = useState<
@@ -291,7 +300,13 @@ export function DesktopChrome({
           {!hostMode && <DesktopTrafficLights />}
         </View>
         <View style={styles.omnibar}>
-          {chatActive ? null : (
+          {inSettings ? (
+            <MaterialIcon
+              name="search"
+              size={18}
+              color={token.color.inkMuted}
+            />
+          ) : chatActive ? null : (
             <View style={styles.modes}>
               <Animated.View
                 pointerEvents="none"
@@ -323,10 +338,14 @@ export function DesktopChrome({
                       }));
                     }}
                     onPress={() => onModeChange?.(value)}
-                    style={styles.modeButton}>
+                    style={({hovered, pressed}) => [
+                      styles.modeButton,
+                      hovered && !pressed && mode !== value && styles.modeHover,
+                      pressed && styles.pressed,
+                    ]}>
                     <MaterialIcon
                       name={iconName}
-                      size={15}
+                      size={16}
                       color={
                         mode === value ? token.color.ink : token.color.inkMuted
                       }
@@ -364,34 +383,47 @@ export function DesktopChrome({
             </FocusPressable>
           ) : (
             <TextInput
-              accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search Recall'}
+              accessibilityLabel={
+                inSettings
+                  ? 'Search settings'
+                  : mode === 'Ask'
+                  ? 'Ask Omi'
+                  : 'Search Recall'
+              }
               blurOnSubmit={false}
-              onChangeText={onDraftChange}
+              onChangeText={
+                inSettings ? onSettingsQueryChange ?? (() => {}) : onDraftChange
+              }
               onKeyPress={event => {
                 if (event.nativeEvent.key === 'Escape') {
                   onNavigate('Chat');
                 }
               }}
               onSubmitEditing={() => {
+                if (inSettings) {
+                  return;
+                }
                 if (mode !== 'Ask' || (!chatBusy && draft.trim())) {
                   onSend();
                 }
               }}
               placeholder={
-                mode === 'Search'
+                inSettings
+                  ? 'Search settings…'
+                  : mode === 'Search'
                   ? desktopSearchPlaceholder
                   : 'Ask about your day…'
               }
               placeholderTextColor={token.color.inkMuted}
               ref={omnibarRef}
               style={styles.omnibarInput}
-              value={draft}
+              value={inSettings ? settingsQuery : draft}
             />
           )}
-          {liveControl && !chatActive ? (
+          {liveControl && !chatActive && !inSettings ? (
             <View style={styles.liveSlot}>{liveControl}</View>
           ) : null}
-          {!chatActive && (
+          {!chatActive && !inSettings && (
             <FocusPressable
               accessibilityLabel={
                 canStop
@@ -413,16 +445,17 @@ export function DesktopChrome({
                   onSend();
                 }
               }}
-              style={({pressed}) => [
+              style={({hovered, pressed}) => [
                 styles.send,
                 mode === 'Ask' &&
                   !canStop &&
                   (chatBusy || !draft.trim()) &&
                   styles.sendDisabled,
+                hovered && !pressed && styles.sendHover,
                 pressed && styles.pressed,
               ]}>
               {canStop ? (
-                <MaterialIcon name="stop" size={14} color={token.color.dark} />
+                <MaterialIcon name="stop" size={16} color={token.color.dark} />
               ) : mode === 'Ask' ? (
                 <MaterialIcon
                   name="arrow_upward"
@@ -432,7 +465,7 @@ export function DesktopChrome({
               ) : (
                 <MaterialIcon
                   name="search"
-                  size={17}
+                  size={18}
                   color={token.color.dark}
                 />
               )}
@@ -459,12 +492,12 @@ export function DesktopChrome({
             <MaterialIcon
               color={captureActive ? token.color.red : token.color.ink}
               name="monitor"
-              size={17}
+              size={18}
             />
           </ShippingPressable>
         ) : null}
         <ShippingPressable
-          accessibilityLabel="Settings"
+          accessibilityLabel={inSettings ? 'Close settings' : 'Settings'}
           accessibilityRole="button"
           accessibilityState={{selected: route === 'Settings'}}
           active={route === 'Settings'}
@@ -478,7 +511,11 @@ export function DesktopChrome({
             styles.settingsButton,
             route === 'Settings' && styles.settingsButtonActive,
           ]}>
-          <MaterialIcon name="settings" color={token.color.ink} size={17} />
+          {inSettings ? (
+            <MaterialIcon name="close" color={token.color.ink} size={18} />
+          ) : (
+            <MaterialIcon name="settings" color={token.color.ink} size={18} />
+          )}
         </ShippingPressable>
       </View>
       {chatNotice === null ? null : (
@@ -489,99 +526,110 @@ export function DesktopChrome({
           {chatNotice}
         </Text>
       )}
-      <View
-        accessibilityLabel="Activity filters"
-        accessibilityRole="tablist"
-        onLayout={event => {
-          const {x, y, width, height} = event.nativeEvent.layout;
-          setFiltersBox({height, width, x, y});
-        }}
-        style={styles.filterRow}>
-        <FocusPressable
-          accessibilityRole="button"
-          accessibilityLabel="Open Chat"
-          accessibilityState={{selected: chatActive}}
-          onPress={() => onNavigate(chatActive ? 'Home' : 'Chat')}
-          style={({pressed}) => [
-            styles.filterHit,
-            chatActive && styles.filterHitSelected,
-            pressed && styles.pressed,
-          ]}>
-          <MaterialIcon
-            name="forum"
-            size={14}
-            color={chatActive ? token.color.ink : token.color.inkMuted}
-          />
-          <Text
-            style={[styles.filterText, chatActive && styles.filterTextActive]}>
-            Chat
-          </Text>
-        </FocusPressable>
-        {desktopActivityFilters.map(id => {
-          // Filters belong to the Activity page: away from it (Settings,
-          // Recall search) no chip claims to be the current view.
-          const selected = id === filter && route === 'Home';
-          return (
-            <FocusPressable
-              key={id}
-              accessibilityLabel={`Filter ${desktopFilterLabel(id)}`}
-              accessibilityRole="button"
-              accessibilityState={{selected}}
-              onLayout={event => {
-                const {x, width} = event.nativeEvent.layout;
-                setChipFrames(current => {
-                  const next = {x, width};
-                  if (
-                    current[id] !== undefined &&
-                    Math.abs(current[id]!.x - next.x) < 0.5 &&
-                    Math.abs(current[id]!.width - next.width) < 0.5
-                  ) {
-                    return current;
-                  }
-                  return {...current, [id]: next};
-                });
-              }}
-              onPress={() => onFilterChange(id)}
-              style={({pressed}) => [
-                styles.filterHit,
-                selected && styles.filterHitSelected,
-                pressed && styles.pressed,
-              ]}>
-              <MaterialIcon
-                name={filterIcons[id]}
-                size={14}
-                color={selected ? token.color.ink : token.color.inkMuted}
-              />
-              <Text
-                style={[
-                  styles.filterText,
-                  selected && styles.filterTextActive,
+      {inSettings ? null : (
+        <View
+          accessibilityLabel="Activity filters"
+          accessibilityRole="tablist"
+          onLayout={event => {
+            const {x, y, width, height} = event.nativeEvent.layout;
+            setFiltersBox({height, width, x, y});
+          }}
+          style={styles.filterRow}>
+          <FocusPressable
+            accessibilityRole="button"
+            accessibilityLabel="Open Chat"
+            accessibilityState={{selected: chatActive}}
+            onPress={() => onNavigate(chatActive ? 'Home' : 'Chat')}
+            style={({pressed}) => [
+              styles.filterHit,
+              chatActive && styles.filterHitSelected,
+              pressed && styles.pressed,
+            ]}>
+            <MaterialIcon
+              name="forum"
+              size={14}
+              color={chatActive ? token.color.ink : token.color.inkMuted}
+            />
+            <Text
+              style={[styles.filterText, chatActive && styles.filterTextActive]}>
+              Chat
+            </Text>
+          </FocusPressable>
+          {desktopActivityFilters.map(id => {
+            // Filters belong to the Activity page: away from it (Settings,
+            // Recall search) no chip claims to be the current view.
+            const selected = id === filter && route === 'Home';
+            return (
+              <FocusPressable
+                key={id}
+                accessibilityLabel={`Filter ${desktopFilterLabel(id)}`}
+                accessibilityRole="button"
+                accessibilityState={{selected}}
+                onLayout={event => {
+                  const {x, width} = event.nativeEvent.layout;
+                  setChipFrames(current => {
+                    const next = {x, width};
+                    if (
+                      current[id] !== undefined &&
+                      Math.abs(current[id]!.x - next.x) < 0.5 &&
+                      Math.abs(current[id]!.width - next.width) < 0.5
+                    ) {
+                      return current;
+                    }
+                    return {...current, [id]: next};
+                  });
+                }}
+                onPress={() => onFilterChange(id)}
+                style={({hovered, pressed}) => [
+                  styles.filterHit,
+                  selected && styles.filterHitSelected,
+                  hovered &&
+                    !pressed &&
+                    (selected
+                      ? styles.filterHitHoverSelected
+                      : styles.filterHitHover),
+                  pressed && styles.pressed,
                 ]}>
-                {desktopFilterLabel(id)}
-              </Text>
-            </FocusPressable>
-          );
-        })}
-        <View style={styles.groupBySlot} />
-        {chatActive ? null : (
-          <View
-            accessibilityLabel="Timeline grouping"
-            accessibilityRole="tablist"
-            style={styles.groupBy}>
-            {desktopTimelineGroupings.map(value => {
-              const selected = value === groupBy;
-              return (
-                <FocusPressable
-                  key={value}
-                  accessibilityLabel={`Group by ${value}`}
-                  accessibilityRole="button"
-                  accessibilityState={{selected}}
-                  onPress={() => onGroupByChange(value)}
-                  style={({pressed}) => [
-                    styles.groupHit,
-                    selected && styles.groupHitSelected,
-                    pressed && styles.pressed,
+                <MaterialIcon
+                  name={filterIcons[id]}
+                  size={16}
+                  color={selected ? token.color.ink : token.color.inkMuted}
+                />
+                <Text
+                  style={[
+                    styles.filterText,
+                    selected && styles.filterTextActive,
                   ]}>
+                  {desktopFilterLabel(id)}
+                </Text>
+              </FocusPressable>
+            );
+          })}
+          <View style={styles.groupBySlot} />
+          {chatActive ? null : (
+            <View
+              accessibilityLabel="Timeline grouping"
+              accessibilityRole="tablist"
+              style={styles.groupBy}>
+              {desktopTimelineGroupings.map(value => {
+                const selected = value === groupBy;
+                return (
+                  <FocusPressable
+                    key={value}
+                    accessibilityLabel={`Group by ${value}`}
+                    accessibilityRole="button"
+                    accessibilityState={{selected}}
+                    onPress={() => onGroupByChange(value)}
+                    style={({hovered, pressed}) => [
+                      styles.groupHit,
+                      selected && styles.groupHitSelected,
+                      hovered &&
+                        !pressed &&
+                        (selected
+                          ? styles.groupHitHoverSelected
+                          : styles.groupHitHover),
+                      pressed && styles.pressed,
+                    ]}>
                   <Text
                     style={[
                       styles.groupText,
@@ -597,8 +645,9 @@ export function DesktopChrome({
               );
             })}
           </View>
-        )}
-      </View>
+          )}
+        </View>
+      )}
       {guideTarget !== null && guideRect !== null ? (
         <Animated.View
           accessibilityLabel="Explore guide highlight"
@@ -683,7 +732,16 @@ const createStyles = (token: DesktopTokens) =>
       justifyContent: 'center',
       borderRadius: 16,
     },
-    modeText: {fontSize: 12, color: token.color.inkMuted},
+    modeText: {
+      fontSize: 12,
+      // Explicit line box: SF's default 12 px line parks the ink ~1 px high
+      // vs the 15 px icons in the same pill (measured, shipping build).
+      lineHeight: 16,
+      color: token.color.inkMuted,
+    },
+    modeHover: {
+      backgroundColor: token.color.glassQuiet,
+    },
     modeTextActive: {color: token.color.ink},
     searchOnly: {
       alignItems: 'center',
@@ -750,7 +808,6 @@ const createStyles = (token: DesktopTokens) =>
       flexDirection: 'row',
       gap: 8,
       height: desktopOmnibarHeight,
-      maxWidth: 992,
       minWidth: 220,
       paddingHorizontal: 8,
       paddingVertical: 6,
@@ -787,6 +844,10 @@ const createStyles = (token: DesktopTokens) =>
       backgroundColor: token.color.ink,
     },
     sendDisabled: {opacity: 0.3},
+    sendHover: {opacity: 0.86},
+    settingsButtonHover: {
+      backgroundColor: token.color.glassQuiet,
+    },
     settingsButton: {
       alignItems: 'center',
       backgroundColor: 'rgba(0,0,0,0)',
@@ -807,7 +868,6 @@ const createStyles = (token: DesktopTokens) =>
       flexDirection: 'row',
       gap: 6,
       height: desktopFilterRowHeight,
-      maxWidth: 992,
       width: '100%',
       alignSelf: 'center',
     },
@@ -825,6 +885,12 @@ const createStyles = (token: DesktopTokens) =>
     filterHitSelected: {
       backgroundColor: token.color.glassSelected,
       borderColor: token.color.line,
+    },
+    filterHitHover: {
+      backgroundColor: token.color.glassQuiet,
+    },
+    filterHitHoverSelected: {
+      backgroundColor: token.color.glassStrong,
     },
     filterText: {
       color: token.color.inkMuted,
@@ -854,6 +920,12 @@ const createStyles = (token: DesktopTokens) =>
     },
     groupHitSelected: {
       backgroundColor: token.color.glassSelected,
+    },
+    groupHitHover: {
+      backgroundColor: token.color.glassQuiet,
+    },
+    groupHitHoverSelected: {
+      backgroundColor: token.color.glassStrong,
     },
     groupText: {
       color: token.color.inkMuted,

@@ -496,7 +496,9 @@ export function AppsPage({session}: {session: DesktopSession}) {
           ),
         )}
       </View>
-      <ScrollView contentContainerStyle={styles.galleryContent}>
+      <ScrollView
+        style={styles.galleryScroller}
+        contentContainerStyle={styles.galleryContent}>
         <ShippingStage
           stageKey={section}
           variant="hub"
@@ -555,11 +557,14 @@ const createStyles = (token: DesktopTokens) =>
       paddingHorizontal: 0,
       paddingVertical: 8,
     },
+    galleryScroller: {
+      // Full-width stretch to match the uncapped chrome rows above.
+      alignSelf: 'center',
+      width: '100%',
+    },
     galleryContent: {
       paddingVertical: 24,
-      maxWidth: 1040,
       width: '100%',
-      alignSelf: 'center',
     },
     conversationDetail: {gap: 16, padding: 16},
     memoryDetail: {gap: 16},

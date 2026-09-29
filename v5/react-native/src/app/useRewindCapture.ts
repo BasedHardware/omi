@@ -59,7 +59,15 @@ export function useRewindCapture(
     const check = () => {
       probe().then(
         permission => {
-          if (current) setAvailable(permission === 'granted');
+          if (current)
+            setAvailable(
+              // `restartRequired` = the user granted Screen Recording while
+              // this app was already running. The grant is real — hiding the
+              // toggle would look like the feature vanished ("where did the
+              // capture button go"). Show it; tapping it explains the one
+              // restart macOS needs for the grant to take effect.
+              permission === 'granted' || permission === 'restartRequired',
+            );
         },
         () => {
           if (current) setAvailable(false);
@@ -157,7 +165,9 @@ export function useRewindCapture(
           : await (native.capturePermissionStatus?.() ??
               native.requestCapturePermission());
         if (!valid()) return;
-        setAvailable(permission === 'granted');
+        setAvailable(
+          permission === 'granted' || permission === 'restartRequired',
+        );
         if (permission !== 'granted') {
           setError(
             permission === 'restartRequired'

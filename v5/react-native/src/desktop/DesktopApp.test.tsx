@@ -475,9 +475,15 @@ test('persistent capture toggle uses the existing owner across Settings and Home
     .mockReturnValue(capture);
   try {
     const renderer = renderDesktop();
+    // The gear flips to an exit button while Settings is open, so either
+    // label toggles the Settings route.
     const openSettings = () =>
       renderer.root
-        .find(node => node.props.accessibilityLabel === 'Settings')
+        .find(
+          node =>
+            node.props.accessibilityLabel === 'Settings' ||
+            node.props.accessibilityLabel === 'Close settings',
+        )
         .props.onPress();
     const toggle = () =>
       renderer.root
@@ -2116,6 +2122,12 @@ test('Settings does not inherit unrelated chat and history failures', async () =
   expect(renderedText(renderer)).not.toContain(
     "Some of your history isn't loaded yet.",
   );
+  // Filters hide while Settings is open; exit first, then filter the feed.
+  act(() => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Close settings')
+      .props.onPress();
+  });
   act(() =>
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Filter All')

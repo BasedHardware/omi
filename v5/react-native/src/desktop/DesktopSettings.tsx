@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {useRewindCapture} from '../app/useRewindCapture';
 import type {useAmbientAudio} from '../app/useAmbientAudio';
 import {Animated, Easing, ScrollView, Text, View} from 'react-native';
@@ -54,6 +54,10 @@ type Props = {
   softwarePlaneLocked: boolean;
   /** Initial pane for previews and screenshots; users start at General. */
   initialPane?: DesktopSettingsPane;
+  /** Fuzzy-search query typed into the omnibar while Settings is open. */
+  query?: string;
+  /** Clears the fuzzy-search query (called after a result jump). */
+  onQueryChange?: (value: string) => void;
 };
 
 const PANE_ITEM_HEIGHT = 40;
@@ -121,7 +125,6 @@ function GlassToggle({
       <Animated.View
         style={[
           styles.toggleThumb,
-          value && styles.toggleThumbOn,
           {
             transform: [
               {
@@ -182,6 +185,160 @@ const paneInfo: Record<
     description: 'A little less to remember. A little more room for you.',
   },
 };
+
+/** One fuzzy-search hit target: a pane itself or a row inside a pane. */
+type SettingsSearchEntry = {
+  pane: DesktopSettingsPane;
+  title: string;
+  keywords: string;
+};
+
+// Searched surface for the omnibar's Settings mode. Keep row titles in sync
+// with the Row titles below — this is the address book the omnibar jumps by.
+const settingsSearchIndex: SettingsSearchEntry[] = [
+  {
+    pane: 'General',
+    title: 'Backend',
+    keywords: 'old new api origin cloud server staging account data plane',
+  },
+  {
+    pane: 'General',
+    title: 'Appearance',
+    keywords: 'light dark theme color mode',
+  },
+  {
+    pane: 'General',
+    title: 'Interface',
+    keywords: 'v5 v5.1 ui version pages activity timeline layout',
+  },
+  {
+    pane: 'General',
+    title: 'Live voice',
+    keywords: 'gemini live gpt voice realtime provider audio',
+  },
+  {
+    pane: 'General',
+    title: 'Screen Capture',
+    keywords: 'screen recording capture rewind permission privacy tcc',
+  },
+  {
+    pane: 'General',
+    title: 'Audio Recording',
+    keywords: 'microphone mic record audio permission transcription',
+  },
+  {
+    pane: 'General',
+    title: 'Notifications',
+    keywords: 'alerts notify notifications macos permission',
+  },
+  {
+    pane: 'Account & Plan',
+    title: 'Account',
+    keywords: 'sign in sign out email login auth',
+  },
+  {pane: 'Account & Plan', title: 'Name', keywords: 'profile display name'},
+  {
+    pane: 'Account & Plan',
+    title: 'Current plan',
+    keywords: 'subscription billing plan pro trial',
+  },
+  {
+    pane: 'Transcription',
+    title: 'Language Mode',
+    keywords: 'auto detect language transcription words',
+  },
+  {
+    pane: 'Transcription',
+    title: 'Local VAD Gate',
+    keywords: 'silence vad voice activity skip gate',
+  },
+  {
+    pane: 'Rewind',
+    title: 'Data Retention',
+    keywords: 'retention days delete history frames storage',
+  },
+  {
+    pane: 'Rewind',
+    title: 'Meeting Screenshots',
+    keywords: 'screenshots meetings notes capture',
+  },
+  {
+    pane: 'Alerts & Privacy',
+    title: 'Store Recordings',
+    keywords: 'cloud storage upload recordings store',
+  },
+  {
+    pane: 'Alerts & Privacy',
+    title: 'Private Cloud Sync',
+    keywords: 'sync private cloud encryption devices',
+  },
+  {
+    pane: 'Apps',
+    title: 'Apps & integrations',
+    keywords: 'connectors catalog apps gallery integrations',
+  },
+  {
+    pane: 'About',
+    title: 'Version',
+    keywords: 'about build release version desktop mac',
+  },
+  {pane: 'About', title: 'Website', keywords: 'omi.me site link web'},
+  {
+    pane: 'About',
+    title: 'Privacy Policy',
+    keywords: 'privacy policy legal terms',
+  },
+  ...desktopSettingsPanes.map(pane => ({
+    pane,
+    title: paneInfo[pane].title,
+    keywords: paneInfo[pane].description,
+  })),
+];
+
+const normalizeSettingsSearch = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** 0 = no match; 1 = in-order subsequence; 2 = substring; 3 = word prefix. */
+function fuzzySettingsScore(haystack: string, needle: string): number {
+  if (needle.length === 0) {
+    return 1;
+  }
+  if (haystack.includes(needle)) {
+    return haystack.startsWith(needle) || haystack.includes(` ${needle}`)
+      ? 3
+      : 2;
+  }
+  let cursor = 0;
+  for (const char of haystack) {
+    if (char === needle[cursor]) {
+      cursor += 1;
+      if (cursor === needle.length) {
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+function scoreSettingsEntry(
+  entry: SettingsSearchEntry,
+  needle: string,
+): number {
+  return Math.max(
+    fuzzySettingsScore(normalizeSettingsSearch(entry.title), needle) * 4,
+    fuzzySettingsScore(
+      normalizeSettingsSearch(paneInfo[entry.pane].title),
+      needle,
+    ) * 3,
+    fuzzySettingsScore(normalizeSettingsSearch(entry.keywords), needle),
+  );
+}
 
 function Row({
   action,
@@ -303,7 +460,6 @@ function SettingsNav({
   }, [index, reduceMotion, translateY]);
   return (
     <View accessibilityRole="tablist" style={styles.sidebar}>
-      <Text style={styles.sidebarTitle}>Settings</Text>
       <View style={styles.panes}>
         <Animated.View
           pointerEvents="none"
@@ -311,14 +467,19 @@ function SettingsNav({
         />
         {desktopSettingsPanes.map(label => {
           const icon = paneInfo[label].icon;
+          const selected = pane === label;
           return (
             <FocusPressable
               accessibilityLabel={label}
               accessibilityRole="tab"
-              accessibilityState={{selected: pane === label}}
+              accessibilityState={{selected}}
               key={label}
               onPress={() => onChange(label)}
-              style={styles.paneItem}>
+              style={({hovered, pressed}) => [
+                styles.paneItem,
+                hovered && !pressed && !selected && styles.paneItemHover,
+                pressed && styles.pressed,
+              ]}>
               <MaterialIcon
                 name={icon}
                 size={16}
@@ -327,10 +488,7 @@ function SettingsNav({
                 }
               />
               <Text
-                style={[
-                  styles.paneText,
-                  pane === label && styles.paneTextActive,
-                ]}>
+                style={[styles.paneText, selected && styles.paneTextActive]}>
                 {label === 'Rewind' ? 'Recall' : label}
               </Text>
             </FocusPressable>
@@ -350,10 +508,12 @@ export function DesktopSettings({
   onWorkspaceReload,
   onPreferencesChange,
   onUiVersionChange,
+  onQueryChange,
   session,
   signingIn,
   softwarePlaneLocked,
   initialPane = 'General',
+  query = '',
 }: Props) {
   const styles = useOmiStyles(createStyles);
   const [pane, setPane] = useState<DesktopSettingsPane>(initialPane);
@@ -893,34 +1053,94 @@ export function DesktopSettings({
       ? apps
       : about;
 
+  // Omnibar fuzzy search: while the query is non-empty the sidebar is
+  // replaced by ranked hits; choosing one jumps to its pane and clears the
+  // field back in the omnibar.
+  const theme = useOmiTheme();
+  const needle = normalizeSettingsSearch(query);
+  const results = useMemo(() => {
+    if (needle.length === 0) {
+      return [];
+    }
+    return settingsSearchIndex
+      .map(entry => ({entry, score: scoreSettingsEntry(entry, needle)}))
+      .filter(hit => hit.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(hit => hit.entry);
+  }, [needle]);
+
   return (
     <View style={styles.root}>
-      <SettingsNav onChange={setPane} pane={pane} />
+      {needle.length > 0 ? null : (
+        <SettingsNav onChange={setPane} pane={pane} />
+      )}
       <View style={styles.scroll}>
-        <ScrollView
-          scrollEventThrottle={16}
-          contentContainerStyle={styles.content}>
-          {actionStatus !== null ? (
-            <Text
-              accessibilityLabel="Settings action status"
-              accessibilityLiveRegion="polite"
-              style={styles.status}>
-              {actionStatus}
-            </Text>
-          ) : null}
-          <ShippingStage stageKey={pane} variant="page" style={styles.stage}>
-            {pane === 'Apps' ? (
-              // The gallery brings its own tabs and states; it is not a
-              // settings group.
-              body
+        {needle.length > 0 ? (
+          <ScrollView
+            accessibilityLabel="Settings search results"
+            contentContainerStyle={styles.content}>
+            {results.length === 0 ? (
+              <Text style={styles.searchEmpty}>
+                No settings match “{query.trim()}”.
+              </Text>
             ) : (
               <View style={styles.group}>
-                <View style={styles.groupRows}>{body}</View>
+                {results.map(entry => (
+                  <FocusPressable
+                    accessibilityLabel={`Open ${entry.title} in settings`}
+                    accessibilityRole="button"
+                    key={`${entry.pane}:${entry.title}`}
+                    onPress={() => {
+                      setPane(entry.pane);
+                      onQueryChange?.('');
+                    }}
+                    style={({hovered, pressed}) => [
+                      styles.resultRow,
+                      hovered && !pressed && styles.resultRowHover,
+                      pressed && styles.pressed,
+                    ]}>
+                    <MaterialIcon
+                      name={paneInfo[entry.pane].icon}
+                      size={18}
+                      color={theme.color.inkSecondary}
+                    />
+                    <View style={styles.resultCopy}>
+                      <Text style={styles.rowTitle}>{entry.title}</Text>
+                      <Text style={styles.resultPane}>
+                        {paneInfo[entry.pane].title}
+                      </Text>
+                    </View>
+                  </FocusPressable>
+                ))}
               </View>
             )}
-            {pane === 'General' ? deviceContent : null}
-          </ShippingStage>
-        </ScrollView>
+          </ScrollView>
+        ) : (
+          <ScrollView
+            scrollEventThrottle={16}
+            contentContainerStyle={styles.content}>
+            {actionStatus !== null ? (
+              <Text
+                accessibilityLabel="Settings action status"
+                accessibilityLiveRegion="polite"
+                style={styles.status}>
+                {actionStatus}
+              </Text>
+            ) : null}
+            <ShippingStage stageKey={pane} variant="page" style={styles.stage}>
+              {pane === 'Apps' ? (
+                // The gallery brings its own tabs and states; it is not a
+                // settings group.
+                body
+              ) : (
+                <View style={styles.group}>
+                  <View style={styles.groupRows}>{body}</View>
+                </View>
+              )}
+              {pane === 'General' ? deviceContent : null}
+            </ShippingStage>
+          </ScrollView>
+        )}
       </View>
     </View>
   );
@@ -959,7 +1179,7 @@ const createStyles = (t: OmiTheme) => ({
   sidebar: {
     marginRight: t.space.xxl,
     position: 'relative' as const,
-    width: 182,
+    width: 208,
     flexShrink: 0,
   },
   panePill: {
@@ -980,6 +1200,10 @@ const createStyles = (t: OmiTheme) => ({
     marginBottom: PANE_ITEM_GAP,
     paddingHorizontal: t.space.md,
   },
+  paneItemHover: {
+    backgroundColor: t.color.fill,
+    borderRadius: PANE_PILL_RADIUS,
+  },
   paneText: {
     ...t.type.subhead,
     color: t.color.inkSecondary,
@@ -991,6 +1215,27 @@ const createStyles = (t: OmiTheme) => ({
     paddingBottom: t.space.section,
     maxWidth: t.layout.listColumn,
     width: '100%' as const,
+  },
+  searchEmpty: {
+    ...t.type.footnote,
+    color: t.color.inkSecondary,
+    textAlign: 'center' as const,
+    padding: t.space.md,
+  },
+  resultRow: {
+    alignItems: 'center' as const,
+    flexDirection: 'row' as const,
+    gap: t.space.md,
+    minHeight: 56,
+    paddingHorizontal: t.space.lg,
+    paddingVertical: t.space.sm,
+  },
+  resultRowHover: {backgroundColor: t.color.fill},
+  resultCopy: {flexGrow: 1, flexShrink: 1},
+  resultPane: {
+    ...t.type.footnote,
+    color: t.color.inkSecondary,
+    marginTop: 3,
   },
   status: {
     ...t.type.footnote,

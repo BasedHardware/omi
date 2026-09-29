@@ -6,7 +6,7 @@ import {
   Text,
   type TextStyle,
 } from 'react-native';
-import {FocusPressable} from './Pressable';
+import {FocusPressable, type PressableStyleProp} from './Pressable';
 import {type KitTokens, useKitStyleSheets} from '../desktop/DesktopTheme';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -16,7 +16,7 @@ export type ButtonProps = Omit<PressableProps, 'children' | 'style'> & {
   children: React.ReactNode;
   labelStyle?: StyleProp<TextStyle>;
   size?: ButtonSize;
-  style?: PressableProps['style'];
+  style?: PressableStyleProp;
   variant?: ButtonVariant;
 };
 
@@ -66,6 +66,22 @@ export function Button({
         size === 'default' && styles.defaultSize,
         size === 'large' && styles.large,
         size === 'icon' && styles.icon,
+        state.hovered &&
+          !state.pressed &&
+          variant === 'primary' &&
+          styles.primaryHover,
+        state.hovered &&
+          !state.pressed &&
+          variant === 'secondary' &&
+          styles.secondaryHover,
+        state.hovered &&
+          !state.pressed &&
+          variant === 'ghost' &&
+          styles.ghostHover,
+        state.hovered &&
+          !state.pressed &&
+          variant === 'danger' &&
+          styles.dangerHover,
         state.pressed && styles.pressed,
         isDisabled && styles.disabled,
         typeof style === 'function' ? style(state) : style,
@@ -86,17 +102,21 @@ const createStyles = (tokens: KitTokens) =>
       paddingHorizontal: tokens.space.md,
     },
     primary: {backgroundColor: tokens.color.primary},
+    primaryHover: {backgroundColor: tokens.color.primaryPressed},
     secondary: {
       backgroundColor: tokens.color.input,
       borderColor: tokens.color.line,
       borderWidth: tokens.border.width,
     },
+    secondaryHover: {backgroundColor: tokens.color.inputPressed},
     ghost: {backgroundColor: tokens.color.transparent},
+    ghostHover: {backgroundColor: tokens.color.input},
     danger: {
       backgroundColor: tokens.color.transparent,
       borderColor: tokens.color.danger,
       borderWidth: tokens.border.width,
     },
+    dangerHover: {backgroundColor: tokens.color.input},
     compact: {height: tokens.size.controlCompact},
     defaultSize: {height: tokens.size.control},
     large: {height: tokens.size.controlLarge},

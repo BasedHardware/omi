@@ -6,9 +6,10 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import {FocusPressable} from '../ui/Pressable';
+import {FocusPressable, type PressableStyleProp} from '../ui/Pressable';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {pressMotionDuration, runShippingTiming} from './desktopMotion';
+import {useDesktopTheme} from './DesktopTheme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(FocusPressable);
 
@@ -21,11 +22,13 @@ export function ShippingPressable({
   onHoverIn,
   onHoverOut,
   ...props
-}: Omit<PressableProps, 'children'> & {
+}: Omit<PressableProps, 'children' | 'style'> & {
   active?: boolean;
   children?: React.ReactNode;
+  style?: PressableStyleProp;
 }) {
   const reduceMotion = useReduceMotion();
+  const {name: themeName} = useDesktopTheme();
   const [pressed, setPressed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const disabled =
@@ -61,7 +64,10 @@ export function ShippingPressable({
   }, [active, disabled, hovered, progress, reduceMotion]);
   const resolved =
     typeof style === 'function'
-      ? style({pressed: pressed && !disabled})
+      ? style({
+          pressed: pressed && !disabled,
+          hovered: hovered && !disabled,
+        })
       : (style as StyleProp<ViewStyle>);
   const flattened = StyleSheet.flatten(resolved);
   const existingTransform = flattened?.transform;
@@ -114,7 +120,12 @@ export function ShippingPressable({
           {
             backgroundColor: progress.interpolate({
               inputRange: [0, 1],
-              outputRange: ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.16)'],
+              // Dark glass needs a light wash to read as hover; the light
+              // theme keeps the classic dark scrim.
+              outputRange:
+                themeName === 'light'
+                  ? ['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.12)']
+                  : ['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.20)'],
             }),
           },
         ]}
