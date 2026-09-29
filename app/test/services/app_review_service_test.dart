@@ -46,6 +46,12 @@ void main() {
     expect(raw.containsKey('conversation'), isFalse);
   });
 
+  test('bad experience recording contains unexpected errors for global handlers', () async {
+    final reviewService = AppReviewService.forTesting(clock: () => throw StateError('clock unavailable'));
+
+    await expectLater(reviewService.recordBadExperience(AppReviewBadExperience.fatalError), completes);
+  });
+
   for (final category in AppReviewBadExperience.values) {
     test('$category suppresses requests for three days across service instances', () async {
       final writer = service();

@@ -79,7 +79,12 @@ class AppReviewService {
   bool _storageBroken = false;
 
   /// Saves only the latest local timestamp for a user-visible bad experience.
-  Future<void> recordBadExperience(AppReviewBadExperience category) => _enqueue<void>(() async {
+  Future<void> recordBadExperience(AppReviewBadExperience category) async {
+    // This is called from global error handlers. Keep even unexpected local
+    // failures out of the zone so recording a crash cannot recursively report
+    // another crash or interfere with startup.
+    try {
+      await _enqueue<void>(() async {
         if (_storageBroken) return;
         final now = _clock();
         final storage = await _storage();
@@ -90,6 +95,11 @@ class AppReviewService {
         state.badExperiences[category.name] = now.millisecondsSinceEpoch;
         await _persistState(storage, state);
       });
+    } catch (_) {
+      // Bad-experience suppression is best-effort; review storage remains
+      // fail-closed in requestReview if its state cannot be read or written.
+    }
+  }
 
   /// Requests the platform review dialog when local policy and lifecycle
   /// checks permit it. The lifecycle guard is checked before and after the
