@@ -93,3 +93,37 @@ def test_flag_off_hidden_report_keeps_legacy_provider_and_no_redis_admission(mon
         assert provider.calls[0]['profile'].policy_version == 'legacy'
 
     asyncio.run(run())
+
+
+def test_failed_materialization_does_not_commit_translated_prefix(monkeypatch):
+    flags(monkeypatch)
+    monkeypatch.setattr(
+        'utils.translation_coordinator.classify_translation_need', lambda *args, **kwargs: TranslationNeed.TRANSLATE
+    )
+    monkeypatch.setattr(
+        'utils.translation_coordinator.reserve_translation', lambda *args, **kwargs: (object(), 'admitted')
+    )
+    monkeypatch.setattr('utils.translation_coordinator.reservation_is_current', lambda *args, **kwargs: True)
+    monkeypatch.setattr('utils.translation_coordinator.release_translation', lambda *args, **kwargs: True)
+    demand = TranslationDemand(lambda: 0)
+    demand.observe(
+        {'foreground': True, 'transcript_visible': True, 'translation_demand_version': 1}, lease_v1_enabled=True
+    )
+    provider = FakeProvider(TranslationProvider.gemini, [translations(('Yến spoke with the elder about 2025.', 'vi'))])
+    service, _ = build_service({TranslationProvider.gemini: provider})
+
+    async def rejected(*args):
+        return False
+
+    coordinator = TranslationCoordinator('en', service, rejected, uid='u', demand=demand)
+    coordinator.language_state.source_is_plausible = lambda *args: True
+    coordinator.language_state.observe = lambda *args, **kwargs: False
+
+    async def run():
+        await coordinator.observe([segment()], [], 'c')
+        coordinator._cancel_batch_timer()
+        await coordinator._flush_batch()
+        assert coordinator._segment_states['s'].committed_text == ''
+        assert coordinator._segment_states['s'].assembled_translation is None
+
+    asyncio.run(run())

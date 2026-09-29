@@ -2763,8 +2763,14 @@ def translation_materialization_is_current(
         return False
     if not isinstance(metadata, dict):
         return False
-    record = metadata.get(segment.get('id'), {}).get(target)
-    translation = next((item for item in segment.get('translations', []) if item.get('lang') == target), None)
+    segment_records = metadata.get(segment.get('id'))
+    record = segment_records.get(target) if isinstance(segment_records, dict) else None
+    stored_translations = segment.get('translations')
+    translation = (
+        next((item for item in stored_translations if isinstance(item, dict) and item.get('lang') == target), None)
+        if isinstance(stored_translations, list)
+        else None
+    )
     return bool(
         isinstance(record, dict)
         and isinstance(translation, dict)

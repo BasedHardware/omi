@@ -1942,10 +1942,13 @@ class ListenReceiver(ReplayFilterMixin):
                 await self._flush_stt_buffer(buffer, force=True)
             await self._drain_stt_sockets()
             self.host.state.active = False
-            self.translation_demand.close()
-            if self._translation_expiry_task is not None:
-                self._translation_expiry_task.cancel()
-            coordinator = getattr(self.host.transcripts, 'translation_coordinator', None)
+            demand = getattr(self, 'translation_demand', None)
+            if demand is not None:
+                demand.close()
+            expiry_task = getattr(self, '_translation_expiry_task', None)
+            if expiry_task is not None:
+                expiry_task.cancel()
+            coordinator = getattr(getattr(self.host, 'transcripts', None), 'translation_coordinator', None)
             if coordinator is not None:
                 coordinator.demand_changed()
 
@@ -1963,9 +1966,12 @@ class ListenReceiver(ReplayFilterMixin):
             buffer.clear()
 
     def finish(self) -> None:
-        self.translation_demand.close()
-        if self._translation_expiry_task is not None:
-            self._translation_expiry_task.cancel()
+        demand = getattr(self, 'translation_demand', None)
+        if demand is not None:
+            demand.close()
+        expiry_task = getattr(self, '_translation_expiry_task', None)
+        if expiry_task is not None:
+            expiry_task.cancel()
         self._resilient_closing = True
         if self._resilient_audio is not None:
             self._resilient_audio.close()

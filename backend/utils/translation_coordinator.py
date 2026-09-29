@@ -142,7 +142,7 @@ class TranslationCoordinator:
         self,
         target_language: str,
         translation_service: TranslationService,
-        on_translation_ready: Callable[[str, str, str, str], Awaitable[None]],
+        on_translation_ready: Callable[[str, str, str, str], Awaitable[bool | None]],
         language_state: Optional[ConversationLanguageState] = None,
         source_language: str = "",
         expected_languages: Tuple[str, ...] = (),
@@ -373,8 +373,13 @@ class TranslationCoordinator:
             self.metrics['prefix_resets'] += 1
             return False
 
+        accepted = await self.on_translation_ready(segment_id, translated_text, detected_lang, conversation_id)
+        if accepted is False:
+            state.committed_text = ''
+            state.assembled_translation = None
+            state.detected_lang = None
+            return False
         self._adopt_cached_prefix(state, text, translated_text, detected_lang, now)
-        await self.on_translation_ready(segment_id, translated_text, detected_lang, conversation_id)
         return True
 
     @staticmethod
@@ -639,11 +644,6 @@ class TranslationCoordinator:
                         state.committed_text = original_text
                     continue
 
-                # Update state
-                state.committed_text = original_text
-                state.assembled_translation = outcome.text
-                state.detected_lang = outcome.detected_language
-
                 # Notify via callback
                 self._result_context[(conv_id, seg_id)] = (
                     original_text,
@@ -651,12 +651,16 @@ class TranslationCoordinator:
                     reservation,
                 )
                 try:
-                    await self.on_translation_ready(
+                    accepted = await self.on_translation_ready(
                         seg_id,
                         outcome.text,
                         outcome.detected_language,
                         conv_id,
                     )
+                    if accepted is not False:
+                        state.committed_text = original_text
+                        state.assembled_translation = outcome.text
+                        state.detected_lang = outcome.detected_language
                 finally:
                     self._result_context.pop((conv_id, seg_id), None)
 

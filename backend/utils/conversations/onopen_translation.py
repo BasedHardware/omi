@@ -14,7 +14,7 @@ from config.translation import resolve_ondemand_config, resolve_translation_prof
 from database import conversations as conversations_db
 from database import users as users_db
 from database.translation_admission import release_translation, reservation_is_current, reserve_translation
-from utils.translation import TranslationService, TranslationStatus
+from utils.translation import VIEWED_REST_CAPACITY, TranslationService, TranslationStatus
 from utils.translation_cache import should_persist_translation
 from utils.translation_core.planner import TranslationMode
 from utils.translation_language import TranslationNeed, classify_translation_need
@@ -179,9 +179,18 @@ def translate_open_page(
     failed = False
     try:
         profile = viewed_translation_profile(resolve_translation_profile(), config) if policy == 'viewed_v1' else None
-        outcomes = (service or TranslationService()).translate_outcomes(
-            target, selected_text, mode=TranslationMode.whole_text, profile=profile
-        )
+        rest_slot = False
+        if profile is not None:
+            rest_slot = VIEWED_REST_CAPACITY.acquire(blocking=False)
+            if not rest_slot:
+                return conversation, 'deferred', make_cursor(selected[0][0])
+        try:
+            outcomes = (service or TranslationService()).translate_outcomes(
+                target, selected_text, mode=TranslationMode.whole_text, profile=profile
+            )
+        finally:
+            if rest_slot:
+                VIEWED_REST_CAPACITY.release()
         for (index, segment), outcome in zip(selected, outcomes):
             if clock() >= deadline or not reservation_is_current(reservation):
                 failed = True

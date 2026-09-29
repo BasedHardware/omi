@@ -68,3 +68,12 @@ def test_deleted_locked_or_removed_segments_reject_write(monkeypatch):
         )
         is None
     )
+
+
+def test_malformed_stored_provenance_is_a_safe_cache_miss():
+    segment = {'id': 's', 'text': 'năm', 'translations': [None, {'lang': 'en', 'text': 'year'}]}
+    conversation = {'translation_materializations': {'s': None}}
+    assert not conversations.translation_materialization_is_current(UID, conversation, segment, 'en', 'viewed_v1')
+    segment['translations'] = None
+    conversation['translation_materializations'] = {'s': {'en': None}}
+    assert not conversations.translation_materialization_is_current(UID, conversation, segment, 'en', 'viewed_v1')

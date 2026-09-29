@@ -1007,6 +1007,9 @@ def get_conversation_by_id(
             conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)
         except ValueError as error:
             raise HTTPException(status_code=400, detail='Invalid translation cursor') from error
+        except Exception as error:
+            logger.error('On-open translation unavailable type=%s', type(error).__name__)
+            translation_status, next_cursor = 'unavailable', None
         if response is not None:
             response.headers['X-Translation-Status'] = translation_status
             if next_cursor is not None:

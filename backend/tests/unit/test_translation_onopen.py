@@ -136,3 +136,43 @@ def test_authenticated_detail_http_opt_in_returns_status_without_shape_change(mo
     assert 'x-translation-status' not in ordinary.headers
     assert opted.headers['x-translation-status'] == 'partial'
     assert opted.headers['x-translation-cursor'] == 'signed-next-page'
+
+
+def test_detail_route_serves_raw_when_translation_service_fails(monkeypatch):
+    detail = conversation(1)
+    monkeypatch.setattr(conversation_routes, '_get_valid_conversation_by_id', lambda *args, **kwargs: detail)
+    monkeypatch.setattr(conversation_routes, '_dispatch_first_open_work', lambda *args, **kwargs: None)
+
+    def unavailable(*args):
+        raise ConnectionError('translation unavailable')
+
+    monkeypatch.setattr(conversation_routes, 'translate_open_page', unavailable)
+    response = Response()
+    returned = conversation_routes.get_conversation_by_id(
+        'canonical',
+        source=None,
+        include_discarded=True,
+        uid='u',
+        include_translations=True,
+        translation_cursor=None,
+        response=response,
+    )
+    assert returned == detail
+    assert response.headers['X-Translation-Status'] == 'unavailable'
+
+
+def test_rest_capacity_defers_provider_without_dispatch(monkeypatch):
+    configure(monkeypatch)
+
+    class Busy:
+        def acquire(self, **kwargs):
+            return False
+
+        def release(self):
+            raise AssertionError('unacquired slot released')
+
+    monkeypatch.setattr(onopen_translation, 'VIEWED_REST_CAPACITY', Busy())
+    service = FakeService()
+    _, status, cursor = onopen_translation.translate_open_page('u', conversation(1), service=service)
+    assert status == 'deferred' and cursor
+    assert service.calls == []

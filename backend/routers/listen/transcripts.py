@@ -116,7 +116,7 @@ class TranscriptProcessor:
                 language_state=ConversationLanguageState(host.translation_language or 'en'),
                 expected_languages=getattr(getattr(host, 'language_profile', None), 'expected', ()),
                 realtime_interpreter=getattr(getattr(host, 'request', None), 'source', None) == 'phone_call',
-                uid=host.request.uid,
+                uid=str(getattr(host.request, 'uid', '') or ''),
                 demand=getattr(getattr(host, 'receiver', None), 'translation_demand', None),
                 spawn_task=getattr(host, 'spawn', None),
             )
@@ -264,26 +264,24 @@ class TranscriptProcessor:
 
     async def _on_translation_ready(
         self, segment_id: str, translated_text: str, _detected_language: str, conversation_id: str
-    ) -> None:
+    ) -> bool:
         if not self.host.translation_language:
-            return
+            return False
         if not self.host.state.active and not (
-            self.translation_coordinator and self.translation_coordinator._flushing  # type: ignore[reportPrivateUsage]
+            getattr(self, 'translation_coordinator', None)
+            and self.translation_coordinator._flushing  # type: ignore[reportPrivateUsage]
         ):
-            return
+            return False
         # TranslationCoordinator invokes this callback from a bare task and only catches
         # (RuntimeError, ValueError), so a persist failure escaping here aborts the batch loop and
         # silently drops the translations for every remaining segment. Keep the failure contained.
         try:
             async with self.translation_lock:
                 config = resolve_ondemand_config()
-                context = (
-                    self.translation_coordinator.result_context(segment_id, conversation_id)
-                    if self.translation_coordinator
-                    else None
-                )
+                coordinator = getattr(self, 'translation_coordinator', None)
+                context = coordinator.result_context(segment_id, conversation_id) if coordinator else None
                 if context is not None and context[1] == 'viewed_v1' and not config.gate_enabled:
-                    return
+                    return False
                 if config.gate_enabled and config.admits(self.host.request.uid):
                     if context is None:
                         current = await self.cache.get(conversation_id, force_refresh=True)
@@ -305,23 +303,21 @@ class TranscriptProcessor:
                         source_text,
                         self.host.translation_language,
                         translated_text,
-                        source_hint=(
-                            self.translation_coordinator.source_language if self.translation_coordinator else ''
-                        ),
+                        source_hint=(coordinator.source_language if coordinator else ''),
                         policy_version=policy_version,
                         reservation=reservation,
                     )
                     if committed is not None and conversation_id == self.host.state.current_conversation_id:
                         await self.cache.get(conversation_id, force_refresh=True)
                         self.host.send_event(TranslationEvent(segments=[committed]))
-                    return
+                    return committed is not None
                 conversation = (
                     await self.cache.get(conversation_id)
                     if conversation_id == self.host.state.current_conversation_id
                     else await self._load_conversation(conversation_id)
                 )
                 if not conversation:
-                    return
+                    return False
                 for index, segment in enumerate(conversation.get('transcript_segments', [])):
                     if segment['id'] != segment_id:
                         continue
@@ -363,7 +359,8 @@ class TranscriptProcessor:
                         accepted = next((s for s in written if s['id'] == segment_id), None)
                         if accepted is not None:
                             self.host.send_event(TranslationEvent(segments=[accepted]))
-                    return
+                        return accepted is not None
+                    return bool(written)
         except Exception as error:
             logger.error(
                 'Translation persist failed segment=%s uid=%s type=%s',
@@ -371,6 +368,7 @@ class TranscriptProcessor:
                 self.host.request.uid,
                 type(error).__name__,
             )
+        return False
 
     async def _update_live_conversation(
         self,
