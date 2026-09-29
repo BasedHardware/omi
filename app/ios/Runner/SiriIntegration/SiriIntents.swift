@@ -8,6 +8,15 @@ private func cleanedMemory(_ text: String) -> String {
     return result.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
+func cleanedSiriQuestion(_ text: String) -> String {
+    var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let prefixes = ["ask omi about ", "ask omi ", "ask about ", "ask "]
+    if let prefix = prefixes.first(where: { result.lowercased().hasPrefix($0) }) {
+        result = String(result.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    return result
+}
+
 private func requireSignedInSiriSession() throws {
     guard let config = SiriSession.shared.currentConfig() else { throw SiriSession.Failure.auth }
     try SiriSession.shared.validateOwner(config)
@@ -97,11 +106,14 @@ struct RememberIntent: AppIntent {
     }
 }
 
-/// The literal App Shortcut owns the "Ask Omi" invocation. Siri elicits the
-/// free-text question because phrase interpolation cannot capture arbitrary text reliably.
+/// This navigation helper is an output of AskOmiIntent and an app-internal
+/// fallback. Keeping it out of discovery prevents Siri from treating its
+/// optional draft as the primary one-breath question surface.
 @available(iOS 16.0, *)
 struct OpenOmiChatIntent: AppIntent {
     static var title: LocalizedStringResource = "Open Omi chat"
+    static var description = IntentDescription("Open Omi's chat without asking a new question.")
+    static var isDiscoverable = false
     static var openAppWhenRun = true
     @Parameter(title: "Draft") var draft: String?
     @Parameter(title: "Owner") var ownerUID: String?
@@ -123,12 +135,35 @@ struct OpenOmiChatIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        guard let ownerUID, let ownerGeneration,
-              let config = SiriSession.shared.currentConfig(),
-              config.uid == ownerUID,
-              String(config.generation ?? 0) == ownerGeneration else { throw SiriSession.Failure.auth }
+        let started = Date()
+        var outcome = "server"
+        defer { SiriTelemetry.intent("openChat", outcome: outcome, started: started) }
+        guard let config = SiriSession.shared.currentConfig(),
+              ownerUID == nil || config.uid == ownerUID,
+              ownerGeneration == nil || String(config.generation ?? 0) == ownerGeneration
+        else {
+            outcome = "auth"
+            throw SiriSession.Failure.auth
+        }
         try SiriSession.shared.validateOwner(config)
-        SiriBridge.shared.navigate(try Self.route(draft: draft))
+        let question = cleanedSiriQuestion(draft ?? "")
+        guard !question.isEmpty else {
+            SiriBridge.shared.navigate(try Self.route(draft: nil))
+            outcome = "ok"
+            return .result()
+        }
+        do {
+            _ = try await OmiNativeAPI().ask(question: question, owner: config)
+            SiriBridge.shared.navigate(try Self.route(draft: nil))
+            outcome = "ok"
+        } catch SiriSession.Failure.auth {
+            outcome = "auth"
+            throw SiriSession.Failure.auth
+        } catch {
+            outcome = SiriTelemetry.outcome(error)
+            // Preserve the cleaned question when the one automatic send fails.
+            SiriBridge.shared.navigate(try Self.route(draft: question))
+        }
         return .result()
     }
 }
@@ -136,17 +171,26 @@ struct OpenOmiChatIntent: AppIntent {
 @available(iOS 16.0, *)
 struct AskOmiIntent: AppIntent {
     static var title: LocalizedStringResource = "Ask Omi"
-    static var description = IntentDescription("Ask a question in Omi chat.")
+    static var description = IntentDescription(
+        "Ask Omi a question about your conversations, memories, and tasks and get a spoken answer."
+    )
     static var authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
     static var openAppWhenRun = false
-    @Parameter(title: "Question", requestValueDialog: "What would you like to ask Omi?")
+    static var parameterSummary: some ParameterSummary {
+        Summary("Ask Omi \(\.$question)")
+    }
+    @Parameter(
+        title: "Question",
+        description: "A question for Omi to answer from your conversations, memories, and tasks.",
+        requestValueDialog: "What would you like to ask Omi?"
+    )
     var question: String
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let started = Date()
         var outcome = "server"
         defer { SiriTelemetry.intent("askOmi", outcome: outcome, started: started) }
-        let value = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = cleanedSiriQuestion(question)
         let openChat = OpenOmiChatIntent()
         guard !value.isEmpty else {
             outcome = "cancelled"
@@ -342,15 +386,13 @@ struct OpenOmiListIntent: OpenIntent {
 @AppIntent(schema: .system.searchInApp)
 struct SearchOmiIntent: ShowInAppSearchResultsIntent {
     static var searchScopes: [StringSearchScope] = [.general]
-    static var title: LocalizedStringResource = "Search in Omi"
-    static var supportedModes: IntentModes = .foreground(.immediate)
+    static var title: LocalizedStringResource = "Search Omi and answer"
+    static var authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
     @Parameter(title: "Search") var criteria: StringSearchCriteria
-    func perform() async throws -> some IntentResult {
-        let started = Date()
-        try requireSignedInSiriSession()
-        SiriBridge.shared.navigate("omi://search?q=\(criteria.term.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")
-        SiriTelemetry.intent("search", outcome: "ok", started: started)
-        return .result()
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let ask = AskOmiIntent()
+        ask.question = criteria.term
+        return try await ask.perform()
     }
 }
 

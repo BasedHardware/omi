@@ -125,11 +125,20 @@ enum SiriIntentService {
     return value
   }
 
+  static func normalizedQuestion(_ input: String) -> String {
+    var value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    for prefix in ["ask omi about ", "ask omi ", "ask about ", "ask "] where value.lowercased().hasPrefix(prefix) {
+      value = String(value.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+      break
+    }
+    return value
+  }
+
   /// Use the canonical main-chat provider so Siri's turn belongs to the same
   /// journal and answer timeline as a typed Ask Omi turn.
   @MainActor
   static func ask(_ input: String) async throws -> SiriAskResult {
-    let question = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    let question = normalizedQuestion(input)
     guard !question.isEmpty else { throw SiriActionFailure(action: "ask", failure: .unsupported) }
     guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
       throw SiriFailure.auth

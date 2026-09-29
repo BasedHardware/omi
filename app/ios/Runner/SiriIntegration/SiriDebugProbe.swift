@@ -21,6 +21,7 @@ enum SiriDebugProbe {
         _ = StartOmiListeningIntent()
         _ = StopOmiListeningIntent()
         return shortcuts.count == 4 && !RememberIntent.openAppWhenRun && !AskOmiIntent.openAppWhenRun &&
+            !OpenOmiChatIntent.isDiscoverable && AskOmiIntent.isDiscoverable &&
             StartOmiListeningIntent.openAppWhenRun && StopOmiListeningIntent.openAppWhenRun
     }
 
@@ -63,6 +64,14 @@ enum SiriDebugProbe {
             let decodedDraft = encodedRoute.flatMap { URLComponents(string: $0)?.queryItems?.first?.value }
             NSLog("[SiriProbe] askOmiDraftEncoding=%@",
                   decodedDraft == reservedDraft && encodedRoute?.contains("%2B") == true ? "PASS" : "FAIL")
+            let normalizedQuestion = cleanedSiriQuestion("  Ask Omi about what I did today  ")
+            let normalizedFallback = cleanedSiriQuestion("Ask about what I did today")
+            let normalizedBareCarrier = cleanedSiriQuestion("Ask what I did today")
+            NSLog("[SiriProbe] askOmiQuestionRouting=%@",
+                  normalizedQuestion == "what I did today" &&
+                    normalizedFallback == "what I did today" &&
+                    normalizedBareCarrier == "what I did today" &&
+                    !OpenOmiChatIntent.isDiscoverable && AskOmiIntent.isDiscoverable ? "PASS" : "FAIL")
             let production = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12")
             let development = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12.development")
             let productionKeys = [production.ownerKey, production.pendingWipeOwnersKey,
