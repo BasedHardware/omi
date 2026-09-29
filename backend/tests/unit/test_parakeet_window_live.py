@@ -17,6 +17,7 @@ from utils.stt.live_metrics import (
     WINDOW_POSTS,
     WINDOW_PRESSURE_REFRESH,
     WINDOW_PRESSURE_REFUSAL,
+    WINDOW_REPLAY_SAFE_TRIMS,
     WINDOW_SESSION_OUTCOME,
 )
 from utils.metrics import OMI_FALLBACK_TOTAL
@@ -618,6 +619,7 @@ async def test_one_post_in_flight_buffer_bounded_and_cancel_releases(monkeypatch
     assert len(calls) == 1
     assert sock.is_connection_dead
     assert sock.death_reason == 'capacity_full'
+    assert sock.typed_death_reason == 'capacity_full'
     assert st._parakeet_circuit.state == 'open'
     assert window.admission.active == 0
     await asyncio.gather(sock._pump_task, return_exceptions=True)
@@ -933,7 +935,7 @@ class RacingTextClient:
         )
 
 
-async def _receiver_with_racing_window(monkeypatch, client):
+async def _receiver_with_racing_window(monkeypatch, client, *, speech_seconds=6, silence_seconds=0):
     monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '30')
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
@@ -942,6 +944,9 @@ async def _receiver_with_racing_window(monkeypatch, client):
     host.request.sample_rate = 16000
     host.request.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
     host.state.stt_terminal_failure = False
+    host.state.fair_use_dg_budget_exhausted = False
+    host.state.fair_use_track_dg_usage = False
+    host.state.dg_usage_ms_pending = 0
     host.client_device_context = SimpleNamespace(platform='ios')
     host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
     host.spawn = lambda coro, **kw: coro.close()
@@ -962,13 +967,87 @@ async def _receiver_with_racing_window(monkeypatch, client):
     monkeypatch.setattr(st, 'process_audio_soniox', tail)
     assert await actual.initialize_stt()
     previous = actual.stt_socket
-    pcm = b'\x01\x00' * 16000 * 6
+    speech = b'\x01\x00' * 16000 * speech_seconds
+    silence = bytes(16000 * 2 * silence_seconds)
+    pcm = speech + silence
     actual.capture_timeline.accept(pcm, window.time.time(), window.time.monotonic())
-    assert previous.send(pcm, start_sample=0)
+    if silence:
+        previous.raw.mark_speech()
+        assert previous.raw.send(speech)
+        assert previous.raw.send(silence)
+    else:
+        assert previous.send(pcm, start_sample=0)
     actual._window_ring().append(pcm, 0)
     await asyncio.wait_for(client.started.wait(), timeout=2)
     assert previous.raw._first_text_timer is not None
     return actual, base, previous, pcm, replayed, callbacks
+
+
+@pytest.mark.asyncio
+async def test_pending_window_post_overflow_replays_speech_before_next_chunk(monkeypatch):
+    client = RacingTextClient()
+    actual, base, previous, pcm, replayed, callbacks = await _receiver_with_racing_window(monkeypatch, client)
+    ring = actual._window_ring()
+    ring.ring_seconds = 6
+    next_speech = b'\x02\x00' * 16000
+    actual.capture_timeline.accept(next_speech, window.time.time(), window.time.monotonic())
+    actual._stt_buffer_start_sample = len(pcm) // 2
+    before_trims = WINDOW_REPLAY_SAFE_TRIMS._value.get()
+
+    assert previous.raw.has_untranscribed_speech()
+    assert not previous.raw._pump_task.done()  # the real pump is still awaiting the POST
+    assert ring.snapshot() == ((0, pcm),)
+    await actual._flush_stt_buffer(bytearray(next_speech), force=True)
+
+    assert WINDOW_REPLAY_SAFE_TRIMS._value.get() == before_trims
+    assert previous.raw.death_reason == 'capacity_full'
+    assert actual._pending_live_failover.reason == 'capacity_full'
+    assert len(callbacks) == 1  # exactly one replacement leg
+    assert b''.join(replayed) == pcm + next_speech
+    assert base.emitted == []
+    client.release.set()
+    await asyncio.gather(previous.raw._pump_task, return_exceptions=True)
+    assert base.emitted == []  # a late POST cannot duplicate the replayed speech
+    assert await actual._failover_stt_socket()
+    assert len(callbacks) == 1
+    assert len(client.requests) == 1
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_completed_window_post_allows_silent_ring_trim_without_failover(monkeypatch):
+    client = RacingTextClient()
+    actual, base, previous, pcm, replayed, callbacks = await _receiver_with_racing_window(
+        monkeypatch, client, speech_seconds=4, silence_seconds=2
+    )
+    ring = actual._window_ring()
+    ring.ring_seconds = 6
+    before_trims = WINDOW_REPLAY_SAFE_TRIMS._value.get()
+    assert previous.raw.has_untranscribed_speech()
+
+    client.release.set()
+    for _ in range(100):
+        if base.emitted and previous.raw._anchor_bytes >= 4 * 16000 * 2:
+            break
+        await _REAL_SLEEP(0)
+    assert [segment['text'] for segment in base.emitted] == ['Done.']
+    assert previous.raw._anchor_bytes >= 4 * 16000 * 2
+    assert not previous.raw.has_untranscribed_speech()
+    assert len(client.requests) == 1
+
+    next_silence = bytes(16000 * 2)
+    actual.capture_timeline.accept(next_silence, window.time.time(), window.time.monotonic())
+    actual._stt_buffer_start_sample = len(pcm) // 2
+    await actual._flush_stt_buffer(bytearray(next_silence), force=True)
+
+    assert WINDOW_REPLAY_SAFE_TRIMS._value.get() == before_trims + 1
+    assert actual.stt_socket is previous
+    assert not previous.is_connection_dead
+    assert replayed == []
+    assert callbacks == []
+    assert ring.snapshot()[0][0] == 16000
+    assert ring.buffered_bytes == len(pcm)
+    await actual._drain_stt_sockets()
 
 
 @pytest.mark.asyncio
@@ -1063,6 +1142,44 @@ async def test_empty_post_without_speech_does_not_advance_streak(monkeypatch):
     assert not sock.is_connection_dead
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_long_vad_silence_does_not_replace_healthy_window_leg(monkeypatch):
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    fallback = AsyncMock(side_effect=AssertionError('silent window must not select Soniox'))
+    monkeypatch.setattr(st, 'process_audio_soniox', fallback)
+    base = receiver()
+    host = base.host
+    host.request.sample_rate = 16000
+    host.request.websocket = SimpleNamespace(send_json=AsyncMock(), close=AsyncMock())
+    host.state.stt_terminal_failure = False
+    host.state.fair_use_dg_budget_exhausted = False
+    host.state.fair_use_track_dg_usage = False
+    host.state.dg_usage_ms_pending = 0
+    host.client_device_context = SimpleNamespace(platform='ios')
+    host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
+    host.spawn = lambda coro, **kw: coro.close()
+    actual = ListenReceiver(host, [], {})
+    assert await actual.initialize_stt()
+    previous = actual.stt_socket
+    ring = actual._window_ring()
+    ring.ring_seconds = 3
+    one_second = bytes(16000 * 2)
+    for second in range(5):
+        actual.capture_timeline.accept(one_second, window.time.time(), window.time.monotonic())
+        actual._stt_buffer_start_sample = second * 16000
+        await actual._flush_stt_buffer(bytearray(one_second), force=True)
+    assert actual.stt_socket is previous
+    assert not previous.is_connection_dead
+    assert not previous.raw.has_untranscribed_speech()
+    assert ring.buffered_bytes == 3 * len(one_second)
+    assert ring.snapshot()[0][0] == 2 * 16000
+    assert client.requests == []
+    fallback.assert_not_awaited()
+    await actual._drain_stt_sockets()
+    assert previous.raw.death_reason is None  # normal teardown never becomes connection_lost
 
 
 @pytest.mark.asyncio
