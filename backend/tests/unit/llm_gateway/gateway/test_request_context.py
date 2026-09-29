@@ -3,7 +3,6 @@ import pytest
 from dataclasses import dataclass
 
 from fastapi import Request
-from starlette.datastructures import Headers
 
 from llm_gateway.gateway.request_context import (
     JIT_BUDGET_CONTRACT_ENV,
@@ -65,14 +64,7 @@ def test_validated_jit_budget_values_exceeds_ceiling(enable_jit_budget):
 
 
 def test_validated_jit_budget_values_valid(enable_jit_budget):
-    result = validated_jit_budget_values(
-        JIT_CLOUD_QA_CONTRACT_VERSION,
-        "run-123",
-        "2",
-        "1000",
-        "5000",
-        "20000"
-    )
+    result = validated_jit_budget_values(JIT_CLOUD_QA_CONTRACT_VERSION, "run-123", "2", "1000", "5000", "20000")
     assert result == (JIT_CLOUD_QA_CONTRACT_VERSION, "run-123", 2, 1000, 5000, 20000)
 
 
@@ -81,14 +73,7 @@ def test_jit_budget_forward_headers_none(enable_jit_budget):
 
 
 def test_jit_budget_forward_headers_valid(enable_jit_budget):
-    headers = jit_budget_forward_headers(
-        JIT_CLOUD_QA_CONTRACT_VERSION,
-        "run-123",
-        "2",
-        "1000",
-        "5000",
-        "20000"
-    )
+    headers = jit_budget_forward_headers(JIT_CLOUD_QA_CONTRACT_VERSION, "run-123", "2", "1000", "5000", "20000")
     assert headers == {
         "X-Omi-Jit-Contract-Version": JIT_CLOUD_QA_CONTRACT_VERSION,
         "X-Omi-Jit-Run-Id": "run-123",
@@ -99,12 +84,6 @@ def test_jit_budget_forward_headers_valid(enable_jit_budget):
     }
 
 
-class MockRequestState:
-    def __init__(self, request_id=None):
-        if request_id is not None:
-            self.request_id = request_id
-
-
 def build_mock_request(headers_dict, state_request_id=None):
     scope = {
         "type": "http",
@@ -112,14 +91,7 @@ def build_mock_request(headers_dict, state_request_id=None):
         "state": {"request_id": state_request_id} if state_request_id is not None else {},
     }
     req = Request(scope)
-    # mock state attribute
-    class MockState:
-        pass
-    mock_state = MockState()
-    if state_request_id is not None:
-        mock_state.request_id = state_request_id
-    # workaround for fastapi Request state property
-    object.__setattr__(req, "_state", mock_state)
+
     return req
 
 
@@ -129,14 +101,16 @@ def test_jit_budget_headers_for_none(enable_jit_budget):
 
 
 def test_jit_budget_headers_for_valid(enable_jit_budget):
-    req = build_mock_request({
-        "x-omi-jit-contract-version": JIT_CLOUD_QA_CONTRACT_VERSION,
-        "x-omi-jit-run-id": "run-123",
-        "x-omi-jit-max-attempts": "2",
-        "x-omi-jit-max-output-tokens": "1000",
-        "x-omi-jit-max-input-tokens": "5000",
-        "x-omi-jit-max-spend-micro-usd": "20000",
-    })
+    req = build_mock_request(
+        {
+            "x-omi-jit-contract-version": JIT_CLOUD_QA_CONTRACT_VERSION,
+            "x-omi-jit-run-id": "run-123",
+            "x-omi-jit-max-attempts": "2",
+            "x-omi-jit-max-output-tokens": "1000",
+            "x-omi-jit-max-input-tokens": "5000",
+            "x-omi-jit-max-spend-micro-usd": "20000",
+        }
+    )
 
     result = jit_budget_headers_for(req, owner_uid="user-123")
     assert isinstance(result, JITBudgetHeaders)
