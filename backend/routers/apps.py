@@ -1044,11 +1044,13 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     # Check if user already has a persona
     persona = await run_blocking(db_executor, get_user_persona_by_uid, uid)
     if persona:
-        # Return existing persona
-        return persona
+        safe_persona = _safe_app_from_dict(persona)
+        if safe_persona is not None:
+            return safe_persona
+        logger.warning('Existing persona for uid=%s is malformed; regenerating clean persona', uid)
 
     # Create a new persona for the user
-    user = await run_blocking(db_executor, get_user_from_uid, uid)
+    user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
 
     # Generate a unique ID for the persona
     persona_id = str(ULID())
