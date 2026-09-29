@@ -551,7 +551,10 @@ export function DesktopChrome({
               color={chatActive ? token.color.ink : token.color.inkMuted}
             />
             <Text
-              style={[styles.filterText, chatActive && styles.filterTextActive]}>
+              style={[
+                styles.filterText,
+                chatActive && styles.filterTextActive,
+              ]}>
               Chat
             </Text>
           </FocusPressable>
@@ -630,21 +633,21 @@ export function DesktopChrome({
                           : styles.groupHitHover),
                       pressed && styles.pressed,
                     ]}>
-                  <Text
-                    style={[
-                      styles.groupText,
-                      selected && styles.groupTextSelected,
-                    ]}>
-                    {value === 'date'
-                      ? 'Date'
-                      : value === 'type'
-                      ? 'Type'
-                      : 'Topic'}
-                  </Text>
-                </FocusPressable>
-              );
-            })}
-          </View>
+                    <Text
+                      style={[
+                        styles.groupText,
+                        selected && styles.groupTextSelected,
+                      ]}>
+                      {value === 'date'
+                        ? 'Date'
+                        : value === 'type'
+                        ? 'Type'
+                        : 'Topic'}
+                    </Text>
+                  </FocusPressable>
+                );
+              })}
+            </View>
           )}
         </View>
       )}
