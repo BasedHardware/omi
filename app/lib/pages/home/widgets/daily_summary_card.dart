@@ -100,7 +100,8 @@ class DailySummaryCard extends StatelessWidget {
                             child: Text(
                               summary.overview.trim(),
                               style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35),
-                              overflow: TextOverflow.fade,
+                              maxLines: 4,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ] else if (!hasMap) ...[
