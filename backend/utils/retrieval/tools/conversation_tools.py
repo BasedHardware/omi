@@ -375,7 +375,7 @@ def get_conversations_tool(
             # Fetch people data
             if all_person_ids:
                 people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
-                people = [Person(**p) for p in people_data]
+                people = Person.deserialize_many_safe(people_data)
                 logger.info(f"🔍 get_conversations_tool - Loaded {len(people)} people")
         else:
             logger.warning(f"🔍 get_conversations_tool - Skipping people loading (transcript not included)")
@@ -670,7 +670,7 @@ def search_conversations_tool(
             # Fetch people data
             if all_person_ids:
                 people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
-                people = [Person(**p) for p in people_data]
+                people = Person.deserialize_many_safe(people_data)
                 logger.info(f"🔍 search_conversations_tool - Loaded {len(people)} people")
         else:
             logger.warning(f"🔍 search_conversations_tool - Skipping people loading (transcript not included)")

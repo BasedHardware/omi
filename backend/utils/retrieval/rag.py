@@ -117,7 +117,7 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
     people = []
     if all_person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
-        people = [Person(**p) for p in people_data]
+        people = Person.deserialize_many_safe(people_data)
 
     user_name = get_user_name(uid, use_default=False) or ''
 
