@@ -2771,11 +2771,14 @@ def translation_materialization_is_current(
         if isinstance(stored_translations, list)
         else None
     )
+    source_text = segment.get('text')
+    translated_text = translation.get('text') if isinstance(translation, dict) else None
     return bool(
         isinstance(record, dict)
-        and isinstance(translation, dict)
-        and record.get('source') == hashlib.sha256(segment.get('text', '').encode('utf-8')).hexdigest()
-        and record.get('translation') == hashlib.sha256(translation.get('text', '').encode('utf-8')).hexdigest()
+        and isinstance(source_text, str)
+        and isinstance(translated_text, str)
+        and record.get('source') == hashlib.sha256(source_text.encode('utf-8')).hexdigest()
+        and record.get('translation') == hashlib.sha256(translated_text.encode('utf-8')).hexdigest()
         and record.get('policy') == policy_version
         and record.get('source_hint') == (source_hint.strip().lower() or 'detect-v1')
     )

@@ -77,3 +77,6 @@ def test_malformed_stored_provenance_is_a_safe_cache_miss():
     segment['translations'] = None
     conversation['translation_materializations'] = {'s': {'en': None}}
     assert not conversations.translation_materialization_is_current(UID, conversation, segment, 'en', 'viewed_v1')
+    segment['translations'] = [{'lang': 'en', 'text': None}]
+    conversation['translation_materializations'] = {'s': {'en': {'policy': 'viewed_v1'}}}
+    assert not conversations.translation_materialization_is_current(UID, conversation, segment, 'en', 'viewed_v1')
