@@ -64,14 +64,40 @@ def _valid_cached_auth_context(cached_data: dict[str, Any]) -> bool:
     )
 
 
+def _clean_user_id(user_id: Any) -> str:
+    """Validate and clean user identifier to prevent path traversal and empty allocations."""
+    if not isinstance(user_id, str):
+        raise ApiKeyValidationError("user_id must be a string")
+    cleaned = user_id.strip()
+    if not cleaned:
+        raise ApiKeyValidationError("user_id must not be empty")
+    if "/" in cleaned or "\\" in cleaned or ".." in cleaned or len(cleaned) > 128:
+        raise ApiKeyValidationError("user_id contains invalid characters or exceeds maximum length")
+    return cleaned
+
+
+def _clean_key_name(name: Any) -> str:
+    """Validate and normalize API key name, enforcing bounds and rejecting raw token leakage."""
+    if not isinstance(name, str):
+        raise ApiKeyValidationError("API key name must be a string")
+    cleaned = " ".join(name.split()).strip()
+    if not cleaned:
+        raise ApiKeyValidationError("API key name must not be empty")
+    if len(cleaned) > 255:
+        raise ApiKeyValidationError("API key name must not exceed 255 characters")
+    if contains_raw_api_key(cleaned):
+        raise ApiKeyValidationError("API key name must not contain a raw API key")
+    return cleaned
+
+
 def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) -> Tuple[str, DevApiKey]:
     """
     Creates a new Developer API key for a user.
     If scopes are not provided, defaults to read-only scopes.
     Returns the raw key and the key's metadata.
     """
-    if contains_raw_api_key(name):
-        raise ApiKeyValidationError("API key name must not contain a raw API key")
+    clean_uid = _clean_user_id(user_id)
+    clean_name = _clean_key_name(name)
     raw_key, hashed_key, key_prefix = generate_dev_api_key()
 
     key_id = str(uuid.uuid4())
@@ -81,8 +107,8 @@ def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) 
 
     api_key_doc = {
         "id": key_id,
-        "user_id": user_id,
-        "name": name,
+        "user_id": clean_uid,
+        "name": clean_name,
         "hashed_key": hashed_key,
         "key_prefix": key_prefix,
         "created_at": now,
@@ -100,7 +126,7 @@ def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) 
     grant_write = Scopes.MEMORIES_WRITE in (resolved_scopes or [])
     if grant_default_read or grant_write:
         seed_developer_api_key_memory_grant(
-            user_id,
+            clean_uid,
             key_id,
             default_read=grant_default_read,
             write=grant_write,
@@ -109,7 +135,7 @@ def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) 
 
     api_key_data = DevApiKey(
         id=key_id,
-        name=name,
+        name=clean_name,
         key_prefix=key_prefix,
         created_at=now,
         last_used_at=None,
@@ -124,7 +150,12 @@ def get_dev_keys_for_user_with_repair_info(
     """
     Retrieves Developer API keys and bounded metadata-repair reasons for a user.
     """
-    keys_ref = _db().collection("dev_api_keys").where("user_id", "==", user_id)
+    if not isinstance(user_id, str):
+        return [], frozenset()
+    clean_uid = user_id.strip()
+    if not clean_uid or "/" in clean_uid or "\\" in clean_uid or ".." in clean_uid or len(clean_uid) > 128:
+        return [], frozenset()
+    keys_ref = _db().collection("dev_api_keys").where("user_id", "==", clean_uid)
     docs = keys_ref.stream()
     keys: list[DevApiKey] = []
     repairs: set[ApiKeyMetadataRepair] = set()
@@ -165,12 +196,24 @@ def delete_dev_key(user_id: str, key_id: str):
     """
     Deletes a Developer API key.
     """
+    if not isinstance(user_id, str) or not isinstance(key_id, str):
+        return
+    clean_uid = user_id.strip()
+    clean_key_id = key_id.strip()
+    if not clean_uid or not clean_key_id:
+        return
+    if "/" in clean_uid or "\\" in clean_uid or ".." in clean_uid or len(clean_uid) > 128:
+        return
+    if "/" in clean_key_id or "\\" in clean_key_id or ".." in clean_key_id or len(clean_key_id) > 128:
+        return
+
     firestore_client = _db()
-    key_ref = firestore_client.collection("dev_api_keys").document(key_id)
+    key_ref = firestore_client.collection("dev_api_keys").document(clean_key_id)
     key_doc = key_ref.get()
     if key_doc.exists:
-        key_data = key_doc.to_dict()
-        if key_data.get("user_id") == user_id:
+        raw = key_doc.to_dict()
+        key_data = raw if isinstance(raw, dict) else {}
+        if key_data.get("user_id") == clean_uid:
             hashed_key = key_data.get("hashed_key")
             if not is_valid_api_key_hash(hashed_key):
                 raise ApiKeyRevocationUnavailableError("Developer API key credential metadata is invalid")
@@ -183,7 +226,7 @@ def delete_dev_key(user_id: str, key_id: str):
             key_ref.delete()
             # Remove the persisted app/key memory grant for this key so a
             # deleted key can no longer pass the memory grant gate.
-            remove_developer_api_key_memory_grant(user_id, key_id, db_client=firestore_client)
+            remove_developer_api_key_memory_grant(clean_uid, clean_key_id, db_client=firestore_client)
 
 
 def get_user_id_by_api_key(api_key: str) -> Optional[str]:
