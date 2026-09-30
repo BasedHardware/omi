@@ -11539,4 +11539,66 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get voiceRecognitionSettings => 'आवाज़ पहचान';
+
+  @override
+  String get greetingMorning => 'सुप्रभात';
+
+  @override
+  String get greetingAfternoon => 'नमस्कार';
+
+  @override
+  String get greetingEvening => 'शुभ संध्या';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'आप क्या जानना चाहते हैं?';
+
+  @override
+  String get askSuggestDecide => 'आज मैंने क्या तय किया?';
+
+  @override
+  String get askSuggestOwe => 'मुझे अभी लोगों को क्या देना है?';
+
+  @override
+  String get askSuggestNotice => 'Omi ने क्या नोटिस किया?';
+
+  @override
+  String get pastChats => 'पिछली चैट';
+
+  @override
+  String get newChat => 'नई चैट';
+
+  @override
+  String get startFresh => 'नए सिरे से शुरू करें';
+
+  @override
+  String get noPastChats => 'Omi के साथ आपकी चैट यहाँ दिखेंगी।';
+
+  @override
+  String get deleteChatQuestion => 'यह चैट हटाएं?';
+
+  @override
+  String get deleteChatMessage => 'यह पिछली चैट से हमेशा के लिए हट जाएगी।';
+
+  @override
+  String get deleteChat => 'चैट हटाएं';
+
+  @override
+  String get appsAskWith => 'Omi से पूछें इनके साथ';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'आज $count बातचीत।',
+      one: 'आज 1 बातचीत।',
+      zero: 'आज कोई बातचीत नहीं।',
+    );
+    return '$_temp0';
+  }
 }
