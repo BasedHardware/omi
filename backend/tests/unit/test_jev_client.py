@@ -143,7 +143,7 @@ def test_a_429_fails_open_without_an_instant_retry(gateway):
     assert ask_jev('state', QUESTIONS, lane='conversation_relevance') is None
     assert len(requests) == 1
     assert len(script) == 1
-    assert [entry['outcome'] for entry in recorded] == ['http_error']
+    assert [entry['outcome'] for entry in recorded] == ['http_429']
 
 
 @pytest.mark.parametrize(

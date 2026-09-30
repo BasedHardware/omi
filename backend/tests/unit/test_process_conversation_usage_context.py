@@ -68,6 +68,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod = ModuleType("database._client")
     client_mod.db = MagicMock(name="db")
     client_mod.get_firestore_client = lambda: client_mod.db
+    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
 
     def _document_id_from_seed(seed: str) -> str:
         seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()

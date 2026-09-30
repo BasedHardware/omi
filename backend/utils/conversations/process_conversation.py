@@ -87,8 +87,9 @@ from utils.conversations.relevance import (
     final_relevance,
 )
 from utils.conversations.relevance_jev import jev_discard_probability, jev_tier_applies, relevance_transcript
-from utils.conversations.owner_jev import MAX_OWNER_CHECKS_PER_CONVERSATION, OwnerFlip, jev_owner_flip
-from config.jev_decisions import conversation_relevance_jev_enabled, memory_owner_jev_flip_enabled
+from utils.conversations.owner_jev import MAX_OWNER_CHECKS_PER_CONVERSATION, OwnerFlip, jev_owner_flip, owner_state
+from utils.conversations.jev_shadow import owner_shadow_in_cohort, submit_owner_shadow, submit_relevance_shadow
+from config.jev_decisions import relevance_arm, relevance_experiment_active, owner_flip_enabled_for
 from utils.conversations.relevance_io import (
     adjacent_conversation,
     apply_relevance,
@@ -117,7 +118,12 @@ from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_exa
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
-from utils.metrics import record_jit_first_open, record_lazy_desktop_deferral, record_memory_owner_jev
+from utils.metrics import (
+    record_jit_first_open,
+    record_lazy_desktop_deferral,
+    record_memory_owner_jev,
+    record_jev_shadow_outcome,
+)
 from utils.observability.finalization import FinalizationFailureReason, record_finalization_failure
 from utils.product_telemetry import emit_product_event
 from utils.release_probe import is_release_probe_uid
@@ -614,9 +620,10 @@ def _get_structured(
         # Jev replaces conv_discard only for transcript-only conversations, the
         # population it was measured on; photos and wake-word invocations keep
         # the existing model prompt (#14835).
+        arm = relevance_arm(uid)
         jev_discard: Optional[Callable[[], Optional[float]]] = None
-        if conversation_relevance_jev_enabled() and not has_described_photos and not has_wake_word_marker:
-            jev_transcript = relevance_transcript(segments)
+        jev_transcript = relevance_transcript(segments)
+        if arm == 'jev' and not has_described_photos and not has_wake_word_marker:
             if jev_tier_applies(jev_transcript):
                 jev_discard = lambda: jev_discard_probability(jev_transcript)
 
@@ -638,6 +645,17 @@ def _get_structured(
             ),
             neighbor=lambda: adjacent_conversation(uid, main_conv, conversation_id),
             jev_discard_probability=jev_discard,
+            arm=arm,
+            record_arm=relevance_experiment_active(),
+        )
+        submit_relevance_shadow(
+            uid=uid,
+            conversation_id=prompt_conversation_id,
+            transcript=jev_transcript,
+            decision=decision,
+            arm=arm,
+            source=getattr(main_conv.source, 'value', main_conv.source),
+            transcript_only=not bool(main_conv.photos) and not has_wake_word_marker,
         )
         if relevance_observer is not None:
             relevance_observer(decision)
@@ -1518,6 +1536,19 @@ def _canonical_conversation_write_payload(
     return payload
 
 
+def _owner_candidate_quotes(conversation: Conversation, evidence_quotes: List[str]) -> List[Tuple[Optional[str], str]]:
+    quotes: List[Tuple[Optional[str], str]] = []
+    for quote in evidence_quotes:
+        try:
+            ref = _canonical_quote_ref(
+                quote=quote, source_id=conversation.id, segments=conversation.transcript_segments
+            )
+        except RuntimeError:
+            ref = {}
+        quotes.append((ref.get("speaker_label"), quote))
+    return quotes
+
+
 def _jev_owner_flip_for_candidate(
     conversation: Conversation,
     *,
@@ -1528,15 +1559,7 @@ def _jev_owner_flip_for_candidate(
     subject_kind: str,
 ) -> Optional[OwnerFlip]:
     """Ask Jev whether a third-party candidate is the user's own fact (MEMORY_OWNER_JEV_FLIP_ENABLED)."""
-    quotes: List[Tuple[Optional[str], str]] = []
-    for quote in evidence_quotes:
-        try:
-            ref = _canonical_quote_ref(
-                quote=quote, source_id=conversation.id, segments=conversation.transcript_segments
-            )
-        except RuntimeError:
-            ref = {}
-        quotes.append((ref.get("speaker_label"), quote))
+    quotes = _owner_candidate_quotes(conversation, evidence_quotes)
     structured = getattr(conversation, "structured", None)
     flip, outcome = jev_owner_flip(
         candidate=candidate_content,
@@ -1550,6 +1573,45 @@ def _jev_owner_flip_for_candidate(
     )
     record_memory_owner_jev(outcome)
     return flip
+
+
+def _shadow_owner_candidate(
+    uid: str,
+    conversation: Conversation,
+    candidate_content: str,
+    evidence_quotes: List[str],
+    user_name: str,
+    user_name_present: bool,
+    subject_kind: str,
+) -> None:
+    try:
+        if not owner_shadow_in_cohort(conversation.id):
+            return
+        quotes = _owner_candidate_quotes(conversation, evidence_quotes)
+        structured = conversation.structured
+        source = conversation.source.value
+        state = owner_state(
+            candidate=candidate_content,
+            quotes=quotes,
+            title=structured.title,
+            overview=structured.overview,
+            source=source,
+            user_name=user_name,
+        )
+        submit_owner_shadow(
+            uid=uid,
+            conversation_id=conversation.id,
+            candidate_content=candidate_content,
+            state=state,
+            user_name=user_name,
+            pipeline_subject_kind=subject_kind,
+            source=source,
+            n_quotes=len(quotes),
+            user_name_present=user_name_present,
+        )
+    except Exception:
+        # Measurement cannot affect canonical capture, even before submission.
+        record_jev_shadow_outcome('owner', 'dropped')
 
 
 def _canonical_extraction_unavailable(
@@ -1686,7 +1748,7 @@ def _extract_memories_canonical(
         ungrounded_candidates = 0
         seen_candidates = 0
         owner_checks = 0
-        owner_jev_enabled = memory_owner_jev_flip_enabled()
+        owner_jev_enabled = owner_flip_enabled_for(uid)
         for candidate in extracted_candidates:
             seen_candidates += 1
             evidence_quotes = _grounded_l1_evidence_quotes(
@@ -1709,12 +1771,14 @@ def _extract_memories_canonical(
                 segments=conversation.transcript_segments,
             )
             owner_flip: Optional[OwnerFlip] = None
+            owner_live_scored = False
             if owner_jev_enabled and subject_attribution == SubjectAttribution.third_party:
                 # Only third-party -> user, never the reverse (owner_jev.py).
                 if owner_checks >= MAX_OWNER_CHECKS_PER_CONVERSATION:
                     record_memory_owner_jev('skipped_budget')
                 else:
                     owner_checks += 1
+                    owner_live_scored = True
                     owner_flip = _jev_owner_flip_for_candidate(
                         conversation,
                         candidate_content=candidate.content,
@@ -1725,6 +1789,16 @@ def _extract_memories_canonical(
                     )
                 if owner_flip is not None:
                     subject_entity_id, subject_attribution, subject_kind = "user", SubjectAttribution.user, "user"
+            if subject_attribution == SubjectAttribution.third_party and not owner_live_scored:
+                _shadow_owner_candidate(
+                    uid,
+                    conversation,
+                    candidate.content,
+                    evidence_quotes,
+                    user_name,
+                    user_name.lower() != "the user",
+                    subject_kind,
+                )
             memory = Memory(
                 content=candidate.content,
                 category=(

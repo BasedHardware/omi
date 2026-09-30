@@ -13,8 +13,11 @@ defaults off, and flags are read at the call boundary, never at import.
 
 from __future__ import annotations
 
+import hashlib
+import math
 import os
 from datetime import datetime, timezone
+from typing import Literal
 
 JEV_AUTO_LANE_ID = 'omi:auto:jev-decisions'
 # Pinned: a new Jev version changes calibration, and every threshold below was
@@ -53,6 +56,63 @@ def conversation_relevance_jev_enabled() -> bool:
 def memory_owner_jev_flip_enabled() -> bool:
     """Capture may re-attribute a third-party memory candidate to the user on a confident Jev answer."""
     return _flag(MEMORY_OWNER_JEV_FLIP_ENABLED_ENV)
+
+
+RelevanceArm = Literal['keep_all', 'jev', 'nano']
+
+
+def uid_bucket(uid: str, salt: str) -> float:
+    """Stable salted cohort, using the capture shadow's first eight SHA256 bytes."""
+    digest = hashlib.sha256(f'{salt}\0{uid}'.encode()).digest()
+    # Floating-point rounding of the largest uint64 must not produce 100.
+    return min(int.from_bytes(digest[:8], 'big') / 2**64 * 100, math.nextafter(100.0, 0.0))
+
+
+def percentage(name: str, *, default: float = 0.0) -> float:
+    """Invalid, non-finite and out-of-range configuration admits nobody."""
+    try:
+        value = float(os.getenv(name, str(default)))
+        return value if math.isfinite(value) and 0 <= value <= 100 else 0.0
+    except ValueError:
+        return 0.0
+
+
+def _allowlisted(uid: str, name: str) -> bool:
+    return uid in {value.strip() for value in os.getenv(name, '').split(',') if value.strip()}
+
+
+def relevance_arm(uid: str) -> RelevanceArm:
+    """Consecutive disjoint cohorts. Set K first: changing K moves the Jev window.
+
+    With K fixed, increasing J only extends the Jev range. K+J is capped at
+    100; increasing K can absorb existing Jev users into keep_all and shift
+    the range's upper edge. Allowlisting never overrides keep_all or flag off.
+    """
+    bucket = uid_bucket(uid, 'relevance-arm-v1')
+    keep_all = percentage('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT')
+    if bucket < keep_all:
+        return 'keep_all'
+    if conversation_relevance_jev_enabled():
+        jev = percentage('CONVERSATION_RELEVANCE_JEV_PERCENT', default=100.0)
+        if bucket < min(100.0, keep_all + jev) or _allowlisted(uid, 'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST'):
+            return 'jev'
+    return 'nano'
+
+
+def owner_flip_enabled_for(uid: str) -> bool:
+    return memory_owner_jev_flip_enabled() and (
+        uid_bucket(uid, 'owner-flip-v1') < percentage('MEMORY_OWNER_JEV_FLIP_PERCENT', default=100.0)
+        or _allowlisted(uid, 'MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST')
+    )
+
+
+def relevance_experiment_active() -> bool:
+    """Preserve the legacy nano record while every experiment control is off."""
+    return (
+        conversation_relevance_jev_enabled()
+        or percentage('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT') > 0
+        or percentage('CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT') > 0
+    )
 
 
 def capture_jev_shadow_enabled(now: datetime | None = None) -> tuple[bool, str]:

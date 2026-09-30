@@ -245,3 +245,46 @@ class TestDiscardGateDuration:
         duration = _duration_seen_by_the_discard_gate(_conversation([], photos=[photo]))
 
         assert duration == WALL_WINDOW_SECONDS
+
+
+@pytest.mark.parametrize('failure', ['exception', 'timeout'])
+def test_shadow_failure_cannot_change_real_conversation_discard(monkeypatch, failure):
+    from concurrent.futures import Future
+    from utils.conversations import jev_shadow
+
+    conversation = _conversation([_segment('Coming over there in a second.', 0.0, 2.0)])
+    emitted = []
+    persisted = []
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'false')
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '0')
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT', '100')
+    monkeypatch.setattr(jev_shadow, '_admit', lambda *args: 'admitted')
+    monkeypatch.setattr(jev_shadow, 'write_jev_shadow', lambda *args: persisted.append(args))
+
+    def unavailable(*args, **kwargs):
+        if failure == 'exception':
+            raise RuntimeError('synthetic private text must never escape')
+        kwargs['outcome_observer']('timeout')
+        return None
+
+    def immediate(_executor, fn, *args):
+        task = Future()
+        fn(*args)
+        task.set_result(None)
+        return task
+
+    monkeypatch.setattr(jev_shadow, 'ask_jev', unavailable)
+    monkeypatch.setattr(jev_shadow, 'submit_with_context', immediate)
+    with (
+        patch.object(pc.notification_db, 'get_user_time_zone', MagicMock(return_value=None)),
+        patch.object(pc.users_db, 'get_user_language_preference', MagicMock(return_value=None)),
+        patch.object(pc, 'track_usage', lambda *args, **kwargs: nullcontext()),
+        patch.object(pc, 'should_discard_conversation', MagicMock(return_value=True)),
+        patch.object(pc.calendar_db, 'get_meetings_in_time_range', MagicMock(return_value=[])),
+        patch.object(pc, 'get_overlapping_calendar_event', AsyncMock(return_value=None)),
+    ):
+        _, discarded = pc._get_structured('uid-synthetic', 'en', conversation, relevance_observer=emitted.append)
+    assert discarded is True
+    assert len(emitted) == 1
+    assert (emitted[0].verdict, emitted[0].reason, emitted[0].arm) == ('discard', 'model_discard', 'nano')
+    assert persisted == []

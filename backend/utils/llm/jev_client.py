@@ -147,7 +147,7 @@ def _post_once(body: Mapping[str, Any], *, lane: str, timeout_seconds: float) ->
     except httpx.HTTPError as exc:
         raise _AttemptFailed('transport_error', retryable=True) from exc
     if response.status_code == 429:
-        raise _AttemptFailed('http_error', retryable=False)
+        raise _AttemptFailed('http_429', retryable=False)
     if response.status_code in _RETRYABLE_STATUS_CODES:
         raise _AttemptFailed('http_error', retryable=True)
     if response.status_code >= 400:

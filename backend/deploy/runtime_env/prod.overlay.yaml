@@ -140,6 +140,27 @@ overlay:
           secret:
             name: prod-omi-backend-secrets
             key: MCP_OAUTH_CLIENTS_JSON
+        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
+          category: rollout
+        MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
+          value: ''
+          category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -199,6 +220,27 @@ overlay:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
           value: http://diarizer.omi.me:80
+        CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_PERCENT:
+          value: '100'
+          category: rollout
+        CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+          value: '0'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+          value: '60000'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+          value: ''
+          category: rollout
+        MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
+          value: ''
+          category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -410,6 +452,27 @@ overlay:
           MCP_OAUTH_CLAUDE_REDIRECT_URIS:
             env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
             category: oauth_metadata
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
+            value: ''
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -517,6 +580,27 @@ overlay:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
+            value: ''
+            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -602,6 +686,27 @@ overlay:
             value: based-hardware
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_PERCENT:
+            value: '100'
+            category: rollout
+          CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
+            value: '0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          MEMORY_OWNER_JEV_SHADOW_DAILY_CAP:
+            value: '60000'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
+            value: ''
             category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'

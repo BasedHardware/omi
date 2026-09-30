@@ -81,6 +81,11 @@ def capture(monkeypatch, pc):
     asked: list[dict] = []
     outcomes: list[str] = []
     answer: dict = {'p_user': None}
+    shadowed = []
+    real_shadow_helper = pc._shadow_owner_candidate
+    monkeypatch.setattr(pc, '_real_owner_shadow_test_helper', real_shadow_helper, raising=False)
+    monkeypatch.setattr(pc, '_shadow_owner_candidate', lambda *args: shadowed.append(args))
+    monkeypatch.setattr(pc, '_owner_shadow_test_calls', shadowed, raising=False)
 
     def fake_ask(state, questions, *, lane):
         asked.append({'state': state, 'questions': questions, 'lane': lane})
@@ -104,7 +109,7 @@ def capture(monkeypatch, pc):
 
     def run(candidate: SimpleNamespace, *, enabled: bool, p_user: float | None = None) -> dict:
         answer['p_user'] = p_user
-        monkeypatch.setattr(pc, 'memory_owner_jev_flip_enabled', lambda: enabled)
+        monkeypatch.setattr(pc, 'owner_flip_enabled_for', lambda _uid: enabled)
         monkeypatch.setattr(pc, 'extract_canonical_l1_memory_candidates', lambda *_a, **_k: [candidate])
         service.reset_mock()
         result = pc._extract_memories_canonical('uid-synthetic', _conversation(), db_client=MagicMock())
@@ -232,3 +237,90 @@ def test_owner_state_uses_a_generic_preamble_and_bounds_quotes():
     assert 'Omi desktop app' in state
     assert state.count('[SPEAKER_0') == owner_jev.MAX_QUOTES
     assert 'o' * (owner_jev.MAX_OVERVIEW_CHARS + 1) not in state
+
+
+def test_owner_shadow_only_for_third_party_not_live_scored(capture, pc):
+    run, _, _ = capture
+    run(THIRD_PARTY, enabled=False)
+    assert len(pc._owner_shadow_test_calls) == 1
+    assert pc._owner_shadow_test_calls[0][-1] == 'speaker'
+    assert pc._owner_shadow_test_calls[0][-2] is True
+    pc._owner_shadow_test_calls.clear()
+    run(OWNER, enabled=False)
+    run(THIRD_PARTY, enabled=True, p_user=0.4)
+    run(THIRD_PARTY, enabled=True, p_user=None)
+    run(THIRD_PARTY, enabled=True, p_user=0.99)
+    assert pc._owner_shadow_test_calls == []
+
+
+def test_owner_shadow_includes_candidates_beyond_live_budget(capture, pc, monkeypatch):
+    run, asked, outcomes = capture
+    monkeypatch.setattr(pc, 'MAX_OWNER_CHECKS_PER_CONVERSATION', 0)
+    payload = run(THIRD_PARTY, enabled=True, p_user=0.99)
+    assert not asked and outcomes == ['skipped_budget']
+    assert len(pc._owner_shadow_test_calls) == 1
+    assert payload['subject_attribution'] == 'third_party'
+
+
+def test_owner_shadow_builds_state_without_retaining_conversation(capture, pc, monkeypatch):
+    run, _, _ = capture
+    submitted = []
+    monkeypatch.setattr(pc, '_shadow_owner_candidate', pc._real_owner_shadow_test_helper)
+    monkeypatch.setattr(pc, 'owner_shadow_in_cohort', lambda _cid: True)
+    monkeypatch.setattr(pc, 'submit_owner_shadow', lambda **kwargs: submitted.append(kwargs))
+    run(THIRD_PARTY, enabled=False)
+    assert len(submitted) == 1
+    assert all(isinstance(value, (str, int, bool)) or value is None for value in submitted[0].values())
+    assert 'SPEAKER_01' in submitted[0]['state']
+    assert submitted[0]['user_name_present'] is True
+
+
+@pytest.mark.parametrize('failure', ['exception', 'timeout'])
+def test_owner_shadow_failure_cannot_change_canonical_memory(capture, pc, monkeypatch, failure):
+    from concurrent.futures import Future
+    from utils.conversations import jev_shadow
+
+    run, _, _ = capture
+    baseline = run(THIRD_PARTY, enabled=False)
+    monkeypatch.setattr(pc, '_shadow_owner_candidate', pc._real_owner_shadow_test_helper)
+    monkeypatch.setenv('MEMORY_OWNER_JEV_SHADOW_PERCENT', '100')
+    monkeypatch.setattr(jev_shadow, '_admit', lambda *args: 'admitted')
+    written = []
+    monkeypatch.setattr(jev_shadow, 'write_jev_shadow', lambda *args: written.append(args))
+
+    def unavailable(*args, **kwargs):
+        if failure == 'exception':
+            raise RuntimeError('synthetic private failure text')
+        kwargs['outcome_observer']('timeout')
+        return None
+
+    def immediate(_executor, fn, *args):
+        future = Future()
+        fn(*args)
+        future.set_result(None)
+        return future
+
+    monkeypatch.setattr(jev_shadow, 'ask_jev', unavailable)
+    monkeypatch.setattr(jev_shadow, 'submit_with_context', immediate)
+    actual = run(THIRD_PARTY, enabled=False)
+    # Generated capture timestamps and IDs are outside attribution treatment.
+    for field in (
+        'content',
+        'category',
+        'subject_entity_id',
+        'subject_attribution',
+        'subject_kind',
+        'subject_scope',
+        'source_attribution',
+    ):
+        assert actual.get(field) == baseline.get(field)
+    assert 'attribution_override' not in actual and written == []
+
+
+@pytest.mark.parametrize('name', [None, '', '   ', 'The User'])
+def test_missing_profile_name_is_visible_in_owner_shadow(capture, pc, monkeypatch, name):
+    run, _, _ = capture
+    monkeypatch.setattr(pc, 'get_user_name', lambda _uid: name)
+    run(THIRD_PARTY, enabled=False)
+    assert len(pc._owner_shadow_test_calls) == 1
+    assert pc._owner_shadow_test_calls[0][-2] is False

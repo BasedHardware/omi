@@ -1943,3 +1943,20 @@ source-fenced display materialization, and an explicit bounded detail-read
 request. Per the owner decision of 2026-09-29 these switches ship enabled
 (default on) with kill switches back to legacy behavior. Current clients send
 visibility edges but do not renew a lease or opt into detail translation.
+
+### Jev population measurement (EXP-004)
+
+Conversation processing assigns stable per-user relevance arms (`relevance_arm`)
+and owner flip cohorts (`owner_flip_enabled_for`). Existing live flags are dev-on,
+prod-off; unset live percentages preserve dev behavior. The ambiguous model tier
+can be policy-kept by `CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT`; deterministic
+rules, restores, calendar retention and plan gates retain their precedence.
+
+Both processing hosts submit advisory relevance/owner questions through
+`utils/conversations/jev_shadow.py` after the relevant live decision. Percentages
+sample conversation IDs, defaults are off, Redis atomically dedupes content hashes
+and caps daily calls (60000 per lane), and two slots per lane bound queued/active
+work. IO stays in the worker; slow or unavailable services drop measurement without
+changing the conversation or memory. All durable `users/{uid}/jev_shadow` records
+are text-free and have a 60-day expiry. The protocol and TTL deployment prerequisite
+are in [EXP-004](./experiments/EXP-004-jev-relevance-owner-ramp.md).

@@ -204,6 +204,13 @@ def with_capture_jev_shadow_env(payload: str) -> str:
         r'\1\n        {"name": "CAPTURE_JEV_SHADOW_ENABLED", "value": "true"},'
         r'\n        {"name": "CAPTURE_JEV_SHADOW_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},'
         r'\n        {"name": "CAPTURE_JEV_SHADOW_PERCENT", "value": "0"},'
+        r'\n        {"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT", "value": "100"},'
+        r'\n        {"name": "MEMORY_OWNER_JEV_SHADOW_PERCENT", "value": "100"},'
+        r'\n        {"name": "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT", "value": "0"},'
+        r'\n        {"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP", "value": "60000"},'
+        r'\n        {"name": "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP", "value": "60000"},'
+        r'\n        {"name": "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST", "value": ""},'
+        r'\n        {"name": "MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST", "value": ""},'
     )
     for service in ('backend', 'backend-sync', 'backend-sync-backfill'):
         payload = re.sub(

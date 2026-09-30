@@ -40,7 +40,15 @@ and background processing.
   (`relevance_jev.py`, gateway lane `omi:auto:jev-decisions`) and discards only
   when P(discard) exceeds `JEV_DISCARD_THRESHOLD`; no answer keeps
   (`decided_by=jev`, `reason=jev_error`). Photos and wake-word invocations keep
-  `conv_discard`. The record carries the probability under `jev`.
+  `conv_discard`. The record carries the probability under `jev`. EXP-004 uses
+  `relevance_arm(uid)`: consecutive keep-all then Jev user cohorts, then nano.
+  Keep-all bypasses only the reached model tier; restores/rules/plan gates remain
+  first. Set keep-all percentage before ramping Jev: changing K moves its window.
+  Unset live percentages preserve dev's flag-on=everyone behavior. Prod live
+  flags remain off. `CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT` admits short,
+  transcript-only model-tier decisions outside the Jev arm asynchronously, with
+  Redis dedupe/daily caps, a bounded queue and text-free 60-day shadow records.
+  See `backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md`.
 - `owner_attribution.py` owns typed source-cluster evidence for memory writes.
   A passive memory may be attributed to the account owner only when the
   transcript identifies exactly one owner speaker cluster, keyed by
@@ -54,7 +62,7 @@ and background processing.
   only materialized `speaker_id` from the SPEAKER_00 default is not
   cluster evidence.
   One flagged exception (`MEMORY_OWNER_JEV_FLIP_ENABLED`, default off,
-  `owner_jev.py`): a candidate capture resolved to a *third party* may be
+  `owner_jev.py`, gated per UID by `owner_flip_enabled_for`): a candidate capture resolved to a *third party* may be
   re-attributed to the user when Jev's P(owner = user) is at least 0.9. It
   never moves a candidate away from the user or out of `unknown`, and the
   item's `promotion.source_attribution.override` records the probability and
@@ -166,3 +174,10 @@ service and developer delete endpoint. Raw DB deletion and new-target rollback d
 not orchestrate external cleanup. The shared gap
 predicate lives in `utils/conversation_continuity.py`; both paths supply speech
 silence (sync uses the default timeout; realtime can configure it per session). See `utils/sync/ARCHITECTURE.md`.
+
+EXP-004 owner measurement (`MEMORY_OWNER_JEV_SHADOW_PERCENT`) asks only grounded
+third-party candidates not scored by the live flip path, including those beyond
+its eight-candidate budget. It records the full owner distribution without
+changing capture output. Both shadows share `jev_shadow.py` admission/worker
+primitives and persist only numeric/enum/identifier metadata through
+`database/jev_shadow.py`; Redis unavailable fails closed before vendor egress.

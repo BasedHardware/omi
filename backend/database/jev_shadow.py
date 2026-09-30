@@ -1,0 +1,19 @@
+"""Identifier-only EXP-004 measurements. Client rules deny this server-owned collection."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from database._client import get_data_plane_firestore_client
+
+RETENTION_DAYS = 60
+
+
+def write_jev_shadow(uid: str, record_id: str, record: dict[str, Any], *, firestore_client: Any = None) -> None:
+    """No prompts, transcript, quotes, candidate content or user names belong here."""
+    client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
+    now = datetime.now(timezone.utc)
+    client.collection('users').document(uid).collection('jev_shadow').document(record_id).set(
+        {**record, 'created_at': now, 'expire_at': now + timedelta(days=RETENTION_DAYS)}, timeout=2.5
+    )
