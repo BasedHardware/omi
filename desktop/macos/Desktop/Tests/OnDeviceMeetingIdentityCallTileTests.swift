@@ -106,6 +106,16 @@ final class OnDeviceMeetingIdentityCallTileTests: XCTestCase {
     XCTAssertEqual(OnDeviceMeetingIdentityExtractor.callTileNames(in: rows), ["Ash Kalb"])
   }
 
+  func testAgentMarkersAreWholeTokensSoHumanSurnamesSurvive() {
+    let rows = (0..<4).map {
+      meetRow("James Talbot\nAlice Abbot\nTomorrow Inc - NoteTaker\nTomorrow Inc NoteTaker", minute: $0)
+    }
+    XCTAssertEqual(OnDeviceMeetingIdentityExtractor.callTileNames(in: rows), ["James Talbot", "Alice Abbot"])
+    XCTAssertFalse(OnDeviceMeetingIdentityExtractor.isAIAgentTileName("James Talbot"))
+    XCTAssertTrue(OnDeviceMeetingIdentityExtractor.isAIAgentTileName("Tomorrow Inc NoteTaker"))
+    XCTAssertTrue(OnDeviceMeetingIdentityExtractor.isAIAgentTileName("Chatbot Helper"))
+  }
+
   func testTooFewCallRowsOrTooSmallAShareYieldsNoTile() {
     XCTAssertEqual(
       OnDeviceMeetingIdentityExtractor.callTileNames(in: (0..<2).map { meetRow("Jordan Rivera", minute: $0) }), [])

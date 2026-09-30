@@ -819,6 +819,58 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     XCTAssertEqual(storedSession?.backendId, "evidence-recording-id")
   }
 
+  func testFailedPreNotesEvidenceIsRetriedRightAfterFinalize() async throws {
+    FinalizationRecoveryURLStub.reset()
+    setenv("OMI_PYTHON_API_URL", "https://finalization-recovery.test/", 1)
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [FinalizationRecoveryURLStub.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+    await ConversationFinalizationService.shared.setAPIClientForTesting(client)
+    let events = EvidenceEventRecorder()
+    let retried = expectation(description: "screen evidence is retried after finalize")
+    await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(
+      MeetingScreenEvidencePass(
+        screenshotsEnabled: { true },
+        flushScreenActivity: { _ in },
+        adjudicate: { conversationID, _ in
+          let posts = FinalizationRecoveryURLStub.requests.filter { $0.method == "POST" }.count
+          await events.record("adjudicate \(conversationID) posts=\(posts)")
+          if posts == 0 {
+            return .failed("409 conversation_not_completed")
+          }
+          retried.fulfill()
+          return .ready
+        },
+        sleep: boundThatNeverFires))
+    addTeardownBlock {
+      await ConversationFinalizationService.shared.setAPIClientForTesting(nil)
+      await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(nil)
+    }
+    defer {
+      unsetenv("OMI_PYTHON_API_URL")
+      FinalizationRecoveryURLStub.reset()
+    }
+
+    let sessionId = try await TranscriptionStorage.shared.startSession(
+      source: "desktop",
+      clientConversationId: "evidence-recording-id",
+      conversationRole: .meeting,
+      finalizationStrategy: .cloudReconcile
+    )
+    try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .meetingEnded)
+
+    await ConversationFinalizationService.shared.finalizeSession(
+      id: sessionId, reason: .meetingEnded, allowCloudForceProcess: true)
+    await fulfillment(of: [retried], timeout: 5)
+
+    let recorded = await events.events
+    XCTAssertEqual(
+      recorded,
+      ["adjudicate evidence-recording-id posts=0", "adjudicate evidence-recording-id posts=1"],
+      "a failed pre-notes pass must be retried once the backend has finalized")
+  }
+
   func testFreshUploadingSessionWaitsForStaleRecoveryWindow() async throws {
     let sessionId = try await TranscriptionStorage.shared.startSession(source: "desktop")
     try await TranscriptionStorage.shared.finishSession(

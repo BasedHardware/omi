@@ -431,14 +431,30 @@ actor ConversationFinalizationService {
     id conversationId: String,
     session: TranscriptionSessionRecord
   ) async throws -> ServerConversation {
-    if session.conversationRole == .meeting {
-      let client = apiClient
-      _ = await screenEvidencePass.beforeNotes(
-        captureInterval: Self.captureInterval(of: session),
-        conversationID: conversationId,
-        fetchConversation: { try await client.getConversation(id: conversationId) })
+    guard session.conversationRole == .meeting else {
+      return try await apiClient.finalizeConversation(id: conversationId)
     }
-    return try await apiClient.finalizeConversation(id: conversationId)
+    let client = apiClient
+    let before = await screenEvidencePass.beforeNotes(
+      captureInterval: Self.captureInterval(of: session),
+      conversationID: conversationId,
+      fetchConversation: { try await client.getConversation(id: conversationId) })
+    let conversation = try await apiClient.finalizeConversation(id: conversationId)
+    if before.needsRetryAfterFinalize {
+      retryScreenEvidenceAfterFinalize(conversationID: conversation.id)
+    }
+    return conversation
+  }
+
+  /// Not awaited: finalization and the meeting-completion wake never wait on screen evidence.
+  private func retryScreenEvidenceAfterFinalize(conversationID: String) {
+    let pass = screenEvidencePass
+    let client = apiClient
+    Task {
+      _ = await pass.afterFinalize(
+        conversationID: conversationID,
+        fetchConversation: { try await client.getConversation(id: conversationID) })
+    }
   }
 
   static func compactSegmentsForBackendLimit(
@@ -547,6 +563,10 @@ actor ConversationFinalizationService {
         source: conversation.source,
         sessionStartedAt: session.startedAt
       ) {
+        if session.conversationRole == .meeting {
+          // The id was unknown before force-process, so this is the first chance to adjudicate.
+          retryScreenEvidenceAfterFinalize(conversationID: conversation.id)
+        }
         let status = LocalConversationStatus(rawValue: conversation.status.rawValue) ?? .processing
         try await TranscriptionStorage.shared.markSessionCompleted(
           id: sessionId,

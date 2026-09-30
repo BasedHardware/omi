@@ -289,9 +289,11 @@ enum OnDeviceMeetingIdentityExtractor {
     untitled unmute update usage users view webex window workspace you zoom
     """.split(separator: " ").map(String.init))
   /// AI notetakers and assistants join calls as tiles too; they are never human participants.
+  /// Whole tokens only: a suffix rule ("ends with bot") also drops people named Talbot or Abbot.
+  /// Dotted agent names ("Otter.ai", "Read.ai", "tl;dv") already fail the tile-name shape.
   private static let aiAgentTileWords: Set<String> = [
-    "agent", "ai", "assistant", "boardy", "bot", "companion", "fathom", "fireflies", "gemini", "granola",
-    "notetaker", "otter", "recorder", "tldv",
+    "agent", "ai", "assistant", "boardy", "bot", "chatbot", "companion", "fathom", "fireflies", "gemini",
+    "granola", "meetbot", "notebot", "notes", "notetaker", "otter", "recorder", "tldv",
   ]
 
   /// Names shown as call-tile labels, by persistence across the call's rows. A candidate is a line
@@ -368,7 +370,7 @@ enum OnDeviceMeetingIdentityExtractor {
   static func isAIAgentTileName(_ name: String) -> Bool {
     name.split(separator: " ").contains { word in
       let token = word.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".'’-"))
-      return aiAgentTileWords.contains(token) || token.hasSuffix("bot")
+      return aiAgentTileWords.contains(token)
     }
   }
 

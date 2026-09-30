@@ -183,6 +183,74 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     XCTAssertEqual(flushes, 4, "the OCR flush serves the notes whether or not screenshots are on")
   }
 
+  func testDeadlineExpiryAndFailureRecordDegradedFallbackTelemetry() async {
+    let fallbacks = FallbackRecorder()
+    var pass = MeetingScreenEvidencePass(
+      screenshotsEnabled: { true },
+      flushScreenActivity: { _ in },
+      adjudicate: { _, _ in .ready },
+      sleep: { _ in },
+      recordFallback: { fallbacks.record($0) })
+    let interval = DateInterval(start: Date(timeIntervalSince1970: 0), duration: 10)
+    let conversation = try? Self.decodeConversation(Self.serverVectors[3], id: "telemetry")
+    let fetch: @Sendable () async throws -> ServerConversation = {
+      guard let conversation else { throw URLError(.badServerResponse) }
+      return conversation
+    }
+
+    let blocked = AsyncFlag()
+    pass.adjudicate = { _, _ in
+      await blocked.wait()
+      return .ready
+    }
+    let timedOut = await pass.beforeNotes(
+      captureInterval: interval, conversationID: "telemetry", fetchConversation: fetch)
+    XCTAssertEqual(timedOut, .timedOut)
+    XCTAssertTrue(timedOut.needsRetryAfterFinalize)
+    await blocked.set()
+
+    pass.sleep = boundThatNeverFires
+    pass.adjudicate = { _, _ in .failed("503") }
+    let failed = await pass.beforeNotes(
+      captureInterval: interval, conversationID: "telemetry", fetchConversation: fetch)
+    XCTAssertTrue(failed.needsRetryAfterFinalize)
+
+    pass.adjudicate = { _, _ in .ready }
+    let settled = await pass.beforeNotes(
+      captureInterval: interval, conversationID: "telemetry", fetchConversation: fetch)
+    XCTAssertFalse(settled.needsRetryAfterFinalize)
+
+    XCTAssertEqual(fallbacks.reasons, ["timeout", "upload_failed"], "a settled pass records no fallback")
+  }
+
+  @MainActor
+  func testRetryAfterFinalizeJoinsTheRunTheDeadlineLeftInFlight() async throws {
+    let vector = Self.serverVectors[3]
+    let conversation = try Self.decodeConversation(vector, id: "retry-\(UUID().uuidString)")
+    let window = try XCTUnwrap(MeetingScreenshotSelectionWindow.resolve(conversation))
+    let server = FakeScreenFrameServer(stampedFingerprint: window.fingerprint, holdsAdjudication: true)
+    let selections = SelectionCounter()
+    var pass = Self.makePass(server: server, selections: selections)
+    pass.sleep = { _ in await server.waitUntilAdjudicationStarts() }  // the bound expires mid-judging
+
+    let before = await pass.beforeNotes(
+      captureInterval: DateInterval(start: window.start, end: window.end),
+      conversationID: conversation.id,
+      fetchConversation: { conversation })
+    XCTAssertEqual(before, .timedOut)
+
+    let retry = Task { @MainActor in
+      await pass.afterFinalize(conversationID: conversation.id, fetchConversation: { conversation })
+    }
+    await server.releaseAdjudication()
+    let after = await retry.value
+
+    XCTAssertEqual(after, .settled(.ready))
+    XCTAssertEqual(selections.count, 1)
+    let adjudications = await server.adjudications
+    XCTAssertEqual(adjudications, 1, "the retry must join the in-flight run, not judge the frames twice")
+  }
+
   // MARK: - Helpers
 
   @MainActor
@@ -321,4 +389,21 @@ private let boundThatNeverFires: @Sendable (Duration) async -> Void = { _ in
   let (stream, continuation) = AsyncStream<Void>.makeStream()
   for await _ in stream {}
   continuation.finish()
+}
+
+private final class FallbackRecorder: @unchecked Sendable {
+  private let lock = NSLock()
+  private var recorded: [String] = []
+
+  var reasons: [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    return recorded
+  }
+
+  func record(_ fallback: MeetingScreenEvidencePass.Fallback) {
+    lock.lock()
+    recorded.append(fallback.reason)
+    lock.unlock()
+  }
 }

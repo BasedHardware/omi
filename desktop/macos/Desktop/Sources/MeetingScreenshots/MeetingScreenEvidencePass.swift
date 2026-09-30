@@ -26,6 +26,22 @@ struct MeetingScreenEvidencePass: Sendable {
     case settled(MeetingScreenshotsStore.Phase)
     /// The bound expired first; the work continues in the background.
     case timedOut
+
+    /// Whether the conversation still lacks a settled screenshot pass after this outcome, so the
+    /// post-finalization retry should run. An untrusted pre-finalization window can become trusted
+    /// once the backend stamps `finished_at`, so it is retried too.
+    var needsRetryAfterFinalize: Bool {
+      switch self {
+      case .disabled, .settled(.ready), .settled(.noCapture), .settled(.disabled): return false
+      default: return true
+      }
+    }
+  }
+
+  /// A degraded fail-open path taken before notes (`fallback-telemetry.md`): notes proceed without
+  /// the evidence and the post-finalization retry takes over. Bounded labels only.
+  struct Fallback: Equatable, Sendable {
+    let reason: String
   }
 
   /// Long enough for the server's serial judge over the eight-candidate ceiling on a normal link;
@@ -37,6 +53,7 @@ struct MeetingScreenEvidencePass: Sendable {
   var flushScreenActivity: @Sendable (DateInterval) async -> Void
   var adjudicate: @Sendable (String, MeetingScreenshotSelectionWindow) async -> MeetingScreenshotsStore.Phase
   var sleep: @Sendable (Duration) async -> Void
+  var recordFallback: @Sendable (Fallback) -> Void = { _ in }
 
   static let production = MeetingScreenEvidencePass(
     screenshotsEnabled: { MeetingNoteScreenshotsFeature.isEnabled },
@@ -46,7 +63,15 @@ struct MeetingScreenEvidencePass: Sendable {
       // the same run a note opened mid-flight awaits, and its result is what that note renders.
       await MeetingScreenshotsStore().loadAndWait(conversationID: conversationID, selectionWindow: window)
     },
-    sleep: { try? await Task.sleep(for: $0) })
+    sleep: { try? await Task.sleep(for: $0) },
+    recordFallback: { fallback in
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "meeting_screen_evidence",
+        from: "before_notes",
+        to: "after_finalize",
+        reason: fallback.reason,
+        outcome: .degraded)
+    })
 
   /// Before the backend writes notes: flush the meeting's OCR text and, when the conversation id
   /// is known, select and adjudicate its frames. Returns within `timeout`.
@@ -75,6 +100,27 @@ struct MeetingScreenEvidencePass: Sendable {
       sleep: sleep,
       timeoutValue: .timedOut)
     log("MeetingScreenEvidence: before-notes pass for \(conversationID ?? "unbound") -> \(outcome)")
+    switch outcome {
+    case .timedOut:
+      recordFallback(Fallback(reason: "timeout"))
+    case .settled(.failed):
+      recordFallback(Fallback(reason: "upload_failed"))
+    default:
+      break
+    }
+    return outcome
+  }
+
+  /// After the backend has finalized a cloud conversation whose pre-notes pass did not settle:
+  /// adjudicate again so screenshots exist on every surface even if the note is never opened on
+  /// this Mac. A run the bound left in flight is joined through the store, never repeated.
+  func afterFinalize(
+    conversationID: String,
+    fetchConversation: @Sendable () async throws -> ServerConversation
+  ) async -> Outcome {
+    guard await screenshotsEnabled() else { return .disabled }
+    let outcome = await adjudicate(conversationID: conversationID, fetchConversation: fetchConversation)
+    log("MeetingScreenEvidence: after-finalize pass for \(conversationID) -> \(outcome)")
     return outcome
   }
 
