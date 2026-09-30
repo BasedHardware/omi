@@ -146,6 +146,13 @@ class ConversationScreenFrameSet(BaseModel):
     strip: List[ConversationScreenFrame] = Field(default_factory=list, max_length=6)
     adjudicated_at: Optional[datetime] = None
     selection_fingerprint: Optional[str] = None
+    trusted_selection_fingerprint: Optional[str] = None
+    """The fingerprint of the conversation's current trusted content window (owner route only).
+
+    Lets a client check whether its selection still matches without reading the conversation
+    itself (GET /v1/conversations/{id} triggers first-open enrichment). Null when the transcript
+    does not yet fix a trusted window, and on every other route.
+    """
     """When an adjudication pass last ran, whatever it decided.
 
     A client must use this, not `revision`, to decide whether to offer candidates. `revision`

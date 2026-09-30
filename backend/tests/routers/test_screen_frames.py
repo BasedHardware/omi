@@ -266,13 +266,15 @@ class TestAuthenticatedScreenshotsRoute:
         fake_enforcement.build_frame_set_response.assert_not_called()
 
     def test_builds_frame_set_when_account_setting_on(self, _stub_admission_dependencies, monkeypatch):
+        from models.screen_frame import ConversationScreenFrameSet
+
         fake_enforcement = MagicMock()
-        sentinel = object()
-        fake_enforcement.build_frame_set_response.return_value = sentinel
+        built = ConversationScreenFrameSet(revision=3)
+        fake_enforcement.build_frame_set_response.return_value = built
         monkeypatch.setattr(screen_frames_mod, "enforcement", fake_enforcement)
 
         result = screen_frames_mod.get_conversation_screenshots(CONVERSATION_ID, uid=UID)
-        assert result is sentinel
+        assert result.revision == 3 and result.trusted_selection_fingerprint is None
         fake_enforcement.build_frame_set_response.assert_called_once_with(UID, CONVERSATION_ID)
 
 
@@ -538,3 +540,71 @@ def test_owner_read_drains_cleanup_records_for_this_bucket(_stub_admission_depen
     screen_frames_mod.get_conversation_screenshots(CONVERSATION_ID, uid=UID)
 
     assert submitted == [(screen_frames_mod.storage_executor, drain)]
+
+
+class TestTrustedSelectionFingerprint:
+    """Owner route only: the client checks its selection without GET /v1/conversations/{id}."""
+
+    EXPECTED = "meeting-content-v1:1767225610000:1767225920000"
+
+    def _owner_read(self, deps, monkeypatch, *, setting_on):
+        from models.screen_frame import ConversationScreenFrameSet
+
+        fake_conversations_db, fake_users_db, _fake_redis_db = deps
+        fake_conversations_db.get_conversation.return_value = _live_meeting(ConversationStatus.in_progress.value)
+        fake_users_db.get_meeting_note_screenshots_enabled.return_value = setting_on
+        fake_enforcement = MagicMock()
+        fake_enforcement.build_frame_set_response.return_value = ConversationScreenFrameSet(revision=2)
+        monkeypatch.setattr(screen_frames_mod, "enforcement", fake_enforcement)
+        return screen_frames_mod.get_conversation_screenshots(CONVERSATION_ID, uid=UID)
+
+    def test_owner_read_reports_the_trusted_window_fingerprint(self, _stub_admission_dependencies, monkeypatch):
+        result = self._owner_read(_stub_admission_dependencies, monkeypatch, setting_on=True)
+        assert result.trusted_selection_fingerprint == self.EXPECTED
+        # The same arithmetic adjudication stamps, so a client can compare the two.
+        live = _live_meeting(ConversationStatus.in_progress.value)
+        assert (
+            screen_frames_mod._validate_capture_window(
+                live, [_candidate(captured_at=live["started_at"] + timedelta(seconds=60))]
+            )
+            == self.EXPECTED
+        )
+
+    def test_setting_off_still_reports_it_on_the_empty_set(self, _stub_admission_dependencies, monkeypatch):
+        result = self._owner_read(_stub_admission_dependencies, monkeypatch, setting_on=False)
+        assert result.revision == 0 and result.banner is None and result.strip == []
+        assert result.trusted_selection_fingerprint == self.EXPECTED
+        assert screen_frames_mod.EMPTY_FRAME_SET.trusted_selection_fingerprint is None  # shared constant untouched
+
+    def test_no_trusted_window_is_null(self, _stub_admission_dependencies, monkeypatch):
+        fake_conversations_db, _fake_users_db, _fake_redis_db = _stub_admission_dependencies
+        fake_conversations_db.get_conversation.return_value = _conversation()
+        monkeypatch.setattr(screen_frames_mod, "enforcement", MagicMock())
+        screen_frames_mod.enforcement.build_frame_set_response.return_value = screen_frames_mod.EMPTY_FRAME_SET
+        result = screen_frames_mod.get_conversation_screenshots(CONVERSATION_ID, uid=UID)
+        assert result.trusted_selection_fingerprint is None
+
+    def test_the_public_shared_route_never_carries_it(self, monkeypatch):
+        from models.screen_frame import ConversationScreenFrameSet
+
+        fake_redis_db = MagicMock()
+        fake_redis_db.get_conversation_uid.return_value = UID
+        monkeypatch.setattr(screen_frames_mod, "redis_db", fake_redis_db)
+        fake_conversations_db = MagicMock()
+        fake_conversations_db.get_conversation.return_value = _live_meeting(
+            ConversationStatus.completed.value, visibility=ConversationVisibility.public.value
+        )
+        fake_conversations_db.is_soft_deleted.return_value = False
+        fake_conversations_db.get_conversation_screenshot_sharing_enabled.return_value = True
+        monkeypatch.setattr(screen_frames_mod, "conversations_db", fake_conversations_db)
+        monkeypatch.setattr(screen_frames_mod, "screen_frames_db", fake_conversations_db)
+        fake_users_db = MagicMock()
+        fake_users_db.get_meeting_note_screenshots_enabled.return_value = True
+        monkeypatch.setattr(screen_frames_mod, "users_db", fake_users_db)
+        fake_enforcement = MagicMock()
+        fake_enforcement.build_frame_set_response.return_value = ConversationScreenFrameSet(revision=1)
+        monkeypatch.setattr(screen_frames_mod, "enforcement", fake_enforcement)
+
+        result = screen_frames_mod.get_shared_conversation_screenshots(CONVERSATION_ID)
+
+        assert result.revision == 1 and result.trusted_selection_fingerprint is None

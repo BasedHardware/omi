@@ -396,7 +396,9 @@ def adjudicate_screen_frames(
     tags=["screen_frames"],
 )
 def get_conversation_screenshots(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    _get_owned_conversation(uid, conversation_id)
+    conversation = _get_owned_conversation(uid, conversation_id)
+    window = _trusted_content_window(conversation)
+    trusted = {'trusted_selection_fingerprint': _selection_fingerprint(*window) if window else None}
     # Opportunistic, bounded: bytes the other environment recorded as undeletable in this
     # environment's bucket (utils/screen_frames/store.py). No scheduled job owns this bucket.
     submit_with_context(storage_executor, screen_frame_store.drain_screen_frame_cleanups)
@@ -405,8 +407,8 @@ def get_conversation_screenshots(conversation_id: str, uid: str = Depends(auth.g
     # does locally — without this, turning the setting off on desktop leaves the web banner
     # rendering the persisted set.
     if not users_db.get_meeting_note_screenshots_enabled(uid):
-        return EMPTY_FRAME_SET
-    return enforcement.build_frame_set_response(uid, conversation_id)
+        return EMPTY_FRAME_SET.model_copy(update=trusted)
+    return enforcement.build_frame_set_response(uid, conversation_id).model_copy(update=trusted)
 
 
 @router.delete(
