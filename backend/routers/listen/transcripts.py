@@ -132,6 +132,11 @@ class TranscriptProcessor:
         self._v2_photos_committed = False
         self._v2_photos_requeued = False
         self._v2_photo_failures = 0
+        # Legacy (flag-off) live persist: a failed drain is retained and retried with backoff so
+        # one poison document (Firestore 1 MiB) or a transient error cannot crash the supervised
+        # stream_transcript task and tear the session down.
+        self._legacy_retry_until = 0.0
+        self._legacy_persist_failures = 0
 
     def _queue_v2_retry(self, segments: List[Dict[str, Any]]) -> None:
         """Retry uncommitted text, then retain it for unplaced v1 persistence."""
@@ -713,6 +718,13 @@ class TranscriptProcessor:
             self.host.onboarding_handler.on_segments_received([segment.model_dump() for segment in new_segments])
         await self._translate(updated, conversation.id, removed)
 
+    def _requeue_legacy_persist(self, segments, photos) -> None:
+        """Retain a failed legacy drain for the next tick (buffers are bounded deques)."""
+        for raw in segments or []:
+            self.segment_buffer.append(raw)
+        for photo in photos or []:
+            self.photo_buffer.append(photo)
+
     async def process_loop(self) -> None:
         diarized_speaker_ids_by_conversation: Dict[str, set[int]] = {}
         while self.host.state.active or self.segment_buffer or self.photo_buffer or self._v2_legacy_fallback:
@@ -746,11 +758,23 @@ class TranscriptProcessor:
                 break
             if getattr(self.host.state, 'capture_timeline_v2', False) and time.monotonic() < self._v2_retry_until:
                 continue
+            if not getattr(self.host.state, 'capture_timeline_v2', False) and time.monotonic() < getattr(
+                self, '_legacy_retry_until', 0.0
+            ):
+                continue
             if not self.segment_buffer and not self.photo_buffer:
                 if self.host.state.speaker_map_dirty and time.monotonic() >= self._flush_backoff_until:
-                    await self.flush_speaker_assignments(self.host.state.current_conversation_id)
+                    try:
+                        await self.flush_speaker_assignments(self.host.state.current_conversation_id)
+                    except Exception as error:
+                        logger.error('Live speaker flush failed type=%s', type(error).__name__)
                 continue
             raw_segments = sort_segments_by_start(list(self.segment_buffer))
+            # Pristine copies (pre-offset, capture windows intact) so a failed legacy persist can
+            # be re-queued and replayed without double-applying the offset.
+            legacy_retry_segments = (
+                None if getattr(self.host.state, 'capture_timeline_v2', False) else [dict(raw) for raw in raw_segments]
+            )
             if getattr(self.host.state, 'capture_timeline_v2', False):
                 for raw in raw_segments:
                     if not raw.get('id'):
@@ -850,13 +874,32 @@ class TranscriptProcessor:
                     ' '.join(segment.text for segment in new_segments).split()
                 )
             transcript_segments = new_segments
-            current = deserialize_conversation(data)
-            result = await self._update_live_conversation(current, transcript_segments, photos, finished_at, started_at)
-            rolled_over = False
-            if result is None:
-                await self.host.conversations.create_new_in_progress_conversation(rollover=True)
-                result = await self._write_fresh(transcript_segments, photos, finished_at, started_at)
-                rolled_over = True
+            try:
+                current = deserialize_conversation(data)
+                result = await self._update_live_conversation(
+                    current, transcript_segments, photos, finished_at, started_at
+                )
+                rolled_over = False
+                if result is None:
+                    await self.host.conversations.create_new_in_progress_conversation(rollover=True)
+                    result = await self._write_fresh(transcript_segments, photos, finished_at, started_at)
+                    rolled_over = True
+            except asyncio.CancelledError:
+                self._requeue_legacy_persist(legacy_retry_segments, photos)
+                raise
+            except Exception as error:
+                self._requeue_legacy_persist(legacy_retry_segments, photos)
+                failures = getattr(self, '_legacy_persist_failures', 0) + 1
+                self._legacy_persist_failures = failures
+                self._legacy_retry_until = time.monotonic() + min(8.0, 0.5 * 2 ** min(failures - 1, 4))
+                logger.error(
+                    'Live transcript persist failed; retained %d segment(s) for retry type=%s',
+                    len(legacy_retry_segments or []),
+                    type(error).__name__,
+                )
+                continue
+            self._legacy_persist_failures = 0
+            self._legacy_retry_until = 0.0
             if rolled_over:
                 record_fallback(
                     component='other',
@@ -886,7 +929,10 @@ class TranscriptProcessor:
             except asyncio.TimeoutError:
                 logger.warning('Timed out waiting for listen speaker identification to finish')
         await self.host.speakers.drain(timeout=10, label='listen_speaker_final')
-        await self.flush_speaker_assignments(self.host.state.current_conversation_id)
+        try:
+            await self.flush_speaker_assignments(self.host.state.current_conversation_id)
+        except Exception as error:
+            logger.error('Final speaker flush failed type=%s', type(error).__name__)
         for conversation_id, diarized_speaker_ids in diarized_speaker_ids_by_conversation.items():
             if not diarized_speaker_ids:
                 continue
