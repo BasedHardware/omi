@@ -19,37 +19,40 @@ _STATE_DOCUMENT = 'state'
 
 
 def _validate_uid(uid: str) -> str:
-    if not isinstance(uid, str) or not uid.strip():
+    if not uid or not uid.strip():
         raise ValueError("uid must be a non-empty string")
     return uid.strip()
 
 
 def _validate_str_id(val: str, name: str) -> str:
-    if not isinstance(val, str) or not val.strip():
+    if not val or not val.strip():
         raise ValueError(f"{name} must be a non-empty string")
     return val.strip()
 
 
 def _sanitize_embedding(embedding: Sequence[float]) -> List[float]:
-    if not isinstance(embedding, (list, tuple, Sequence)) or len(embedding) == 0:
+    if not embedding or len(embedding) == 0:
         raise ValueError("embedding must be a non-empty sequence")
-    sanitized = []
+    sanitized: List[float] = []
     for item in embedding:
-        if not isinstance(item, (int, float)) or isinstance(item, bool) or not math.isfinite(item):
+        val = float(item)
+        if type(item) is bool or not math.isfinite(val):
             raise ValueError(f"embedding contains invalid or non-finite coordinate: {item!r}")
-        sanitized.append(float(item))
+        sanitized.append(val)
     return sanitized
 
 
 def _sanitize_pooled_vector(vector: Sequence[float]) -> List[float]:
-    if not isinstance(vector, (list, tuple, Sequence)) or len(vector) == 0:
+    if not vector or len(vector) == 0:
         raise ValueError("pooled vector must be a non-empty sequence")
-    sanitized = []
+    sanitized: List[float] = []
     for item in vector:
-        if not isinstance(item, (int, float)) or isinstance(item, bool) or not math.isfinite(item):
+        val = float(item)
+        if type(item) is bool or not math.isfinite(val):
             raise ValueError(f"pooled vector contains invalid or non-finite coordinate: {item!r}")
-        sanitized.append(float(item))
+        sanitized.append(val)
     return sanitized
+
 
 
 def _client(firestore_client: Any = None) -> Any:
