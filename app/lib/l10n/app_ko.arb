@@ -3640,5 +3640,22 @@
     "peopleCount": "{count, plural, =1{1명} other{{count}명}}",
     "noMatchingPeople": "일치하는 사람 없음",
     "deselectAll": "모두 선택 해제",
-    "voiceRecognitionSettings": "음성 인식"
+    "voiceRecognitionSettings": "음성 인식",
+    "greetingMorning": "좋은 아침이에요",
+    "greetingAfternoon": "좋은 오후예요",
+    "greetingEvening": "좋은 저녁이에요",
+    "greetingWithName": "{greeting}, {name}님",
+    "whatDoYouWantToKnow": "무엇이 궁금하세요?",
+    "askSuggestDecide": "오늘 무엇을 결정했지?",
+    "askSuggestOwe": "아직 사람들에게 해 줘야 할 일은?",
+    "askSuggestNotice": "Omi가 알아챈 것은?",
+    "pastChats": "지난 채팅",
+    "newChat": "새 채팅",
+    "startFresh": "처음부터 시작",
+    "noPastChats": "Omi와 나눈 채팅이 여기에 표시돼요.",
+    "deleteChatQuestion": "이 채팅을 삭제할까요?",
+    "deleteChatMessage": "지난 채팅에서 영구히 사라져요.",
+    "deleteChat": "채팅 삭제",
+    "appsAskWith": "이것과 함께 Omi에게 묻기",
+    "conversationsTodayCount": "{count, plural, =0{오늘은 대화가 없어요.} =1{오늘 대화 1개.} other{오늘 대화 {count}개.}}"
 }

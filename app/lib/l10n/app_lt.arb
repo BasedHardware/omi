@@ -3640,5 +3640,22 @@
     "peopleCount": "{count, plural, =1{1 asmuo} other{Asmenų: {count}}}",
     "noMatchingPeople": "Atitinkančių asmenų nėra",
     "deselectAll": "Atžymėti viską",
-    "voiceRecognitionSettings": "Balso atpažinimas"
+    "voiceRecognitionSettings": "Balso atpažinimas",
+    "greetingMorning": "Labas rytas",
+    "greetingAfternoon": "Laba diena",
+    "greetingEvening": "Labas vakaras",
+    "greetingWithName": "{greeting}, {name}",
+    "whatDoYouWantToKnow": "Ką norite sužinoti?",
+    "askSuggestDecide": "Ką šiandien nusprendžiau?",
+    "askSuggestOwe": "Ką dar esu skolingas žmonėms?",
+    "askSuggestNotice": "Ką pastebėjo Omi?",
+    "pastChats": "Ankstesni pokalbiai",
+    "newChat": "Naujas pokalbis",
+    "startFresh": "Pradėti iš naujo",
+    "noPastChats": "Jūsų pokalbiai su Omi rodomi čia.",
+    "deleteChatQuestion": "Ištrinti šį pokalbį?",
+    "deleteChatMessage": "Jis visam laikui dings iš ankstesnių pokalbių.",
+    "deleteChat": "Ištrinti pokalbį",
+    "appsAskWith": "Klauskite Omi su",
+    "conversationsTodayCount": "{count, plural, =0{Šiandien pokalbių nėra.} =1{1 pokalbis šiandien.} other{{count} pokalbiai šiandien.}}"
 }

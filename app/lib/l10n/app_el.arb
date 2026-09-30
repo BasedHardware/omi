@@ -3640,5 +3640,22 @@
     "peopleCount": "{count, plural, =1{1 άτομο} other{{count} άτομα}}",
     "noMatchingPeople": "Δεν Βρέθηκαν Άτομα",
     "deselectAll": "Αποεπιλογή Όλων",
-    "voiceRecognitionSettings": "Αναγνώριση Φωνής"
+    "voiceRecognitionSettings": "Αναγνώριση Φωνής",
+    "greetingMorning": "Καλημέρα",
+    "greetingAfternoon": "Καλό απόγευμα",
+    "greetingEvening": "Καλησπέρα",
+    "greetingWithName": "{greeting}, {name}",
+    "whatDoYouWantToKnow": "Τι θέλεις να μάθεις;",
+    "askSuggestDecide": "Τι αποφάσισα σήμερα;",
+    "askSuggestOwe": "Τι χρωστάω ακόμη σε άλλους;",
+    "askSuggestNotice": "Τι παρατήρησε το Omi;",
+    "pastChats": "Προηγούμενες συνομιλίες",
+    "newChat": "Νέα συνομιλία",
+    "startFresh": "Ξεκινήστε από την αρχή",
+    "noPastChats": "Οι συνομιλίες σας με το Omi εμφανίζονται εδώ.",
+    "deleteChatQuestion": "Διαγραφή αυτής της συνομιλίας;",
+    "deleteChatMessage": "Θα φύγει οριστικά από τις προηγούμενες συνομιλίες.",
+    "deleteChat": "Διαγραφή συνομιλίας",
+    "appsAskWith": "Ρωτήστε το Omi με",
+    "conversationsTodayCount": "{count, plural, =0{Καμία συζήτηση σήμερα.} =1{1 συζήτηση σήμερα.} other{{count} συζητήσεις σήμερα.}}"
 }

@@ -45,10 +45,10 @@ overlay:
           value: 'true'
           category: rollout
         # Soniox-first arm for non-English multi-language users (omi#19343): 25% on 2026-09-27,
-        # then 50% on 2026-09-28 together with the learned profile. Compare arm=hintable vs control
-        # per language group before ramping further.
+        # then 50% on 2026-09-29 together with the learned profile, then 100% on 2026-09-30 after a
+        # 14.6h readback (hintable heavy 4.7% vs control 11.8%; better in every group with n>=30).
         STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
-          value: '50'
+          value: '100'
           category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
