@@ -19,7 +19,8 @@ keeps N separate and its finalization continues unchanged. After the absorb
 commits, N is a donor: cleanup and refresh failures raise
 ``SmartMergeIncomplete`` so the finalization job retries, and the donor branch
 resumes them on every later attempt, regardless of mode, and never runs N's
-own derived effects.
+own derived effects. The finalizer runs that resume before its fanout claim,
+which fences the discarded donor; a failed refresh releases its own lease.
 
 Races are settled by the survivor revision (``smart_merge.revision`` and
 ``refreshed_revision``): an absorb needs no refresh owed, so a refresh never
@@ -113,7 +114,7 @@ async def smart_merge_step(
     free donor check, so ``off`` stays I/O-free.
     """
     if is_donor(initial_row):
-        await run_blocking(postprocess_executor, finish_absorb, uid, conversation_id, owner=owner)
+        await run_blocking(postprocess_executor, finish_absorb, uid, conversation_id, owner=owner, resumed=True)
         return True
     mode = smart_merge_mode()
     if mode is SmartMergeMode.OFF:
@@ -417,8 +418,33 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
     return True
 
 
-def finish_absorb(uid: str, donor_id: str, *, owner: str) -> None:
-    """Replayable completion of a committed absorb: donor cleanup, then survivor refresh."""
+# This module's own SmartMergeIncomplete codes: a bounded log vocabulary.
+_INCOMPLETE_CODES = frozenset(
+    {
+        'donor_receipt_revision_changed',
+        'refresh_lease_busy',
+        'survivor_changed_before_refresh',
+        'refresh_not_persisted',
+        'survivor_vector_failed',
+        'refresh_completion_fenced',
+    }
+)
+
+
+def _incomplete_cause(error: Exception) -> str:
+    """An exception class name or one of this module's fence codes; never message text."""
+    code = error.args[0] if isinstance(error, SmartMergeIncomplete) and error.args else None
+    return code if code in _INCOMPLETE_CODES else type(error).__name__
+
+
+def finish_absorb(uid: str, donor_id: str, *, owner: str, resumed: bool = False) -> None:
+    """Replayable completion of a committed absorb: donor cleanup, then survivor refresh.
+
+    Idempotent: the cleanup receipt and the survivor's ``refreshed_revision``
+    make a repeat after a completed run a read-only no-op. ``resumed`` marks a
+    finalization retry of the donor; its success is logged as ``resumed_ok``.
+    """
+    step = 'cleanup'
     try:
         donor = conversations_db.get_conversation(uid, donor_id, read_site=FirestoreReadSite.SMART_MERGE)
         if not donor or not is_donor(donor):
@@ -427,11 +453,16 @@ def finish_absorb(uid: str, donor_id: str, *, owner: str) -> None:
         if not survivor_id:
             return
         _cleanup_donor(uid, donor_id, donor, survivor_id)
+        step = 'refresh'
         refresh_survivor(uid, survivor_id, owner=owner)
-    except SmartMergeIncomplete:
-        raise
     except Exception as error:
+        # Bounded: no ids, no message text (provider errors can quote transcript).
+        logger.warning('event=smart_merge outcome=incomplete step=%s cause=%s', step, _incomplete_cause(error))
+        if isinstance(error, SmartMergeIncomplete):
+            raise
         raise SmartMergeIncomplete(type(error).__name__) from error
+    if resumed:
+        logger.info('event=smart_merge outcome=resumed_ok')
 
 
 _DEFERRED_RETRACTION = (DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable)
@@ -487,6 +518,21 @@ def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
             record_conversation_smart_merge_refresh('lease_busy')
             raise SmartMergeIncomplete('refresh_lease_busy')
         return
+    try:
+        _refresh_claimed(uid, survivor_id, claimed, owner=owner)
+    except Exception:
+        # A failed refresh must not park the owed refresh behind its own lease for
+        # REFRESH_LEASE_SECONDS; compare-and-release so another owner's lease survives.
+        try:
+            smart_merge_db.release_survivor_refresh(uid, survivor_id, owner=owner)
+        except Exception as release_error:
+            logger.warning(
+                'event=smart_merge outcome=lease_release_failed exception_type=%s', type(release_error).__name__
+            )
+        raise
+
+
+def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str) -> None:
     row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
     if not row or row.get('deleted') or revision(row) != claimed:
         if row and not row.get('deleted'):

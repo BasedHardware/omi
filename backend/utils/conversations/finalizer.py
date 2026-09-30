@@ -24,6 +24,7 @@ from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import smart_merge_step
+from utils.conversations.smart_merge_policy import is_donor
 from utils.conversations.meeting_evidence_admission import await_meeting_evidence
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.conversations.process_conversation import (
@@ -119,6 +120,37 @@ async def finalize_persisted_conversation(
 
     stage = 'geolocation'
     try:
+        if is_donor(conversation_data):
+            # A retry of a committed smart-merge absorb whose cleanup or survivor
+            # refresh failed. The donor is discarded, so the fanout claim fences it;
+            # finish the absorb first. A failure raises and stays retryable. Only
+            # the claim transaction closes a job whose earlier attempt leased fanout.
+            stage = 'smart_merge'
+            await smart_merge_step(uid, conversation_id, conversation_data, trigger=trigger, owner=finalization_job_id)
+            stage = 'fanout_claim'
+            fanout = await run_blocking(
+                db_executor,
+                lifecycle_service.claim_finalization_fanout,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+            )
+            if fanout['status'] == 'claimed':
+                # Not admitted for a discarded row; close as the absorbing attempt does.
+                stage = 'fanout_completion'
+                if not await run_blocking(
+                    db_executor,
+                    lifecycle_service.complete_finalization_fanout,
+                    finalization_job_id,
+                    dispatch_generation,
+                    lease_epoch,
+                ):
+                    raise ConversationFinalizationError('fanout_completion_conflict')
+                return ConversationFinalizationDisposition.completed
+            if fanout['status'] in {'completed', 'fenced'}:
+                return ConversationFinalizationDisposition(fanout['status'])
+            raise ConversationFinalizationError('fanout_lease_conflict')
+
         # A location persisted with the recording session or WAL is the
         # canonical start-time snapshot. Redis remains only a compatibility
         # fallback for clients released before that contract.

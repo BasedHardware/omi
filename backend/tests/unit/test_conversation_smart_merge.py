@@ -12,12 +12,15 @@ from types import SimpleNamespace
 import pytest
 
 from config import conversation_smart_merge as config
+from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import smart_merge as smart_merge_db
 from database import sync_bridges
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY, INDEX_ONLY_REQUIREMENTS
 from database.legal_holds import DestructiveOperationInProgress
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+from utils.conversations import finalizer
+from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import smart_merge
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils import metrics
@@ -259,7 +262,7 @@ async def test_a_donor_resumes_even_when_the_flag_is_off(monkeypatch):
     monkeypatch.setattr(smart_merge, 'run_blocking', run_blocking)
     donor = {'id': 'n', 'smart_merge': {'role': 'donor', 'survivor_id': 'p'}}
     assert await smart_merge.smart_merge_step(UID, 'n', donor, trigger=ProcessingTrigger.CAPTURE_END, owner='job')
-    assert calls == [(smart_merge.finish_absorb, (UID, 'n'), {'owner': 'job'})]
+    assert calls == [(smart_merge.finish_absorb, (UID, 'n'), {'owner': 'job', 'resumed': True})]
 
 
 # --------------------------------------------------------------------------- shadow
@@ -458,8 +461,8 @@ def test_second_absorb_into_a_survivor_that_owes_a_refresh_pays_it_first(world):
         world.finish('n1', owner='job-1')
     assert world.raw('p')['smart_merge']['revision'] == 1
     assert world.raw('p')['smart_merge']['refreshed_revision'] == 0
-    # The lease of the failed attempt is still live; age it out like a crashed worker.
-    world.raw('p')['smart_merge']['refresh_lease']['until'] = T0
+    # The failed attempt released its lease, so the next decision pays the owed refresh at once.
+    assert 'refresh_lease' not in world.raw('p')['smart_merge']
     world.process_error = None
     assert world.finish('n2', owner='job-2') is True
     assert [cid for cid, _ in world.processed] == ['p', 'p']
@@ -527,6 +530,78 @@ def test_survivor_deleted_after_the_merge_ends_the_resume_quietly(world):
     assert world.processed == []
 
 
+def test_failed_refresh_releases_its_own_lease_but_never_another_owners(world, monkeypatch):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    world.process_error = RuntimeError('provider down')
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        world.finish('n', owner='job-1')
+    assert 'refresh_lease' not in world.raw('p')['smart_merge']
+
+    # job-1 retries; while it processes, its lease expires and job-2 takes it over.
+    taken = {'owner': 'job-2', 'until': T0 + timedelta(days=1)}
+
+    def lose_lease_then_fail(*args, **kwargs):
+        world.raw('p')['smart_merge']['refresh_lease'] = dict(taken)
+        raise RuntimeError('provider down')
+
+    monkeypatch.setattr(smart_merge, 'process_conversation', lose_lease_then_fail)
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        smart_merge.finish_absorb(UID, 'n', owner='job-1')
+    assert world.raw('p')['smart_merge']['refresh_lease'] == taken
+
+
+def test_lease_release_is_compare_and_release(world):
+    world.add('p', 0, 10, smart_merge={'revision': 1, 'refresh_lease': {'owner': 'job-2', 'until': T0}})
+    assert smart_merge_db.release_survivor_refresh(UID, 'p', owner='job-1') is False
+    assert world.raw('p')['smart_merge']['refresh_lease'] == {'owner': 'job-2', 'until': T0}
+    assert smart_merge_db.release_survivor_refresh(UID, 'p', owner='job-2') is True
+    assert world.raw('p')['smart_merge'] == {'revision': 1}
+
+
+@pytest.mark.parametrize(
+    'failure, line',
+    [
+        ('retract', 'event=smart_merge outcome=incomplete step=cleanup cause=RuntimeError'),
+        ('process', 'event=smart_merge outcome=incomplete step=refresh cause=RuntimeError'),
+        ('not_persisted', 'event=smart_merge outcome=incomplete step=refresh cause=refresh_not_persisted'),
+    ],
+)
+def test_incomplete_absorb_logs_one_bounded_line(world, caplog, failure, line):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    error = RuntimeError('synthetic provider text p n user-1')
+    world.retract_error = error if failure == 'retract' else None
+    world.process_error = error if failure == 'process' else None
+    world.process_persisted = failure != 'not_persisted'
+    caplog.set_level('INFO', logger=smart_merge.logger.name)
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        world.finish('n')
+    lines = [r.getMessage() for r in caplog.records if 'outcome=incomplete' in r.getMessage()]
+    assert lines == [line]
+
+
+def test_resumed_absorb_logs_ok_and_a_repeat_is_a_read_only_no_op(world, caplog, monkeypatch):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10, private_cloud_sync_enabled=True)
+    world.process_error = RuntimeError('provider down')
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        world.finish('n')
+    world.process_error = None
+    caplog.set_level('INFO', logger=smart_merge.logger.name)
+    smart_merge.finish_absorb(UID, 'n', owner='job', resumed=True)
+    after_first = {key: dict(value) for key, value in world.store.rows.items()}
+    writes = len(world.store.transactions)
+    smart_merge.finish_absorb(UID, 'n', owner='job', resumed=True)  # retry after a partial success
+    assert world.store.rows == after_first
+    assert len(world.store.transactions) == writes + 1  # the claim read only; it declines, writing nothing
+    assert world.store.transactions[-1].has_written is False
+    assert world.retracted == ['n'] and world.copied == [('n', 'p')] and world.processed == [('p', 4)]
+    assert [r.getMessage() for r in caplog.records if 'resumed_ok' in r.getMessage()] == [
+        'event=smart_merge outcome=resumed_ok'
+    ] * 2
+
+
 def test_already_absorbed_donor_is_idempotent_in_the_transaction(world):
     world.add('p', 0, 10)
     world.add('n', 15, 10)
@@ -550,6 +625,88 @@ def test_ambiguous_commit_is_settled_by_the_donor_marker(world, monkeypatch):
     monkeypatch.setattr(smart_merge_db, 'absorb_conversation', commit_then_fail)
     assert world.finish('n') is True
     assert world.processed == [('p', 4)]
+
+
+# --------------------------------------------------------------------------- finalizer retry
+
+JOB = 'job-n'
+
+
+class _Jobs:
+    """The real finalization-job transactions over the World's strict store."""
+
+    def __init__(self, world, monkeypatch):
+        self.world = world
+        monkeypatch.setattr(jobs_db, 'get_firestore_client', lambda: world.store)
+        # The claim binds the job by DocumentReference.id, which the strict fixture does not model.
+        monkeypatch.setattr(StrictFirestoreDocument, 'id', property(lambda ref: ref.path[-1]), raising=False)
+        monkeypatch.setattr(finalizer, 'get_cached_user_geolocation', lambda uid: None)
+        self.path = (jobs_db.FINALIZATION_JOBS_COLLECTION, JOB)
+        world.store.rows[self.path] = {
+            'uid': UID,
+            'conversation_id': 'n',
+            'finalization_revision': 1,
+            'fanout_status': 'pending',
+            'dispatch_generation': 1,
+        }
+        self.epoch = 0
+
+    @property
+    def job(self):
+        return self.world.store.rows[self.path]
+
+    async def attempt(self):
+        """One leased delivery, closed the way the pusher and Cloud Tasks callers close it."""
+        self.epoch += 1
+        self.job.update(status='leased', lease_epoch=self.epoch)
+        disposition = await finalizer.finalize_persisted_conversation(
+            UID, 'n', finalization_job_id=JOB, dispatch_generation=1, lease_epoch=self.epoch
+        )
+        assert disposition is finalizer.ConversationFinalizationDisposition.fenced
+        assert lifecycle_service.complete_fenced_finalization(JOB, 1, self.epoch) is True
+        return disposition
+
+
+@pytest.mark.asyncio
+async def test_failed_refresh_is_finished_by_the_finalization_retry_exactly_once(world, monkeypatch, caplog):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10, private_cloud_sync_enabled=True, finalization_job_id=JOB, finalization_revision=1)
+    monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'merge')
+    jobs = _Jobs(world, monkeypatch)
+    caplog.set_level('INFO', logger=smart_merge.logger.name)
+
+    # Attempt 1 claims fanout, absorbs, cleans the donor up, then the survivor refresh fails.
+    world.process_error = RuntimeError('provider down')
+    with pytest.raises(finalizer.ConversationFinalizationError):
+        await jobs.attempt()
+    assert world.raw('n')['smart_merge']['role'] == 'donor' and world.raw('n')['discarded'] is True
+    assert jobs.job['fanout_status'] == 'leased'
+    assert world.raw('p')['smart_merge']['refreshed_revision'] == 0
+    assert 'refresh_lease' not in world.raw('p')['smart_merge']
+    assert world.retracted == ['n'] and world.copied == [('n', 'p')] and world.processed == []
+
+    # Attempt 2 dies after the resume, before its claim: the job stays open.
+    world.process_error = None
+    real_claim = lifecycle_service.claim_finalization_fanout
+
+    def lost_claim(*args):
+        monkeypatch.setattr(lifecycle_service, 'claim_finalization_fanout', real_claim)
+        raise ConnectionError('synthetic')
+
+    monkeypatch.setattr(lifecycle_service, 'claim_finalization_fanout', lost_claim)
+    with pytest.raises(finalizer.ConversationFinalizationError):
+        await jobs.attempt()
+    assert world.processed == [('p', 4)] and world.raw('p')['smart_merge']['refreshed_revision'] == 1
+
+    # Attempt 3: the resume is a no-op and the claim closes the job as fenced.
+    await jobs.attempt()
+    assert jobs.job['status'] == 'completed' and jobs.job['finalization_outcome'] == 'fenced'
+    assert world.retracted == ['n'] and world.copied == [('n', 'p')] and world.processed == [('p', 4)]
+    assert world.vectors == ['p'] and 'refresh_lease' not in world.raw('p')['smart_merge']
+    assert world.raw('n')['sync_bridge_cleaned_revision'] == world.raw('n')['sync_content_revision']
+    messages = [r.getMessage() for r in caplog.records]
+    assert messages.count('event=smart_merge outcome=incomplete step=refresh cause=RuntimeError') == 1
+    assert messages.count('event=smart_merge outcome=resumed_ok') == 2
 
 
 # --------------------------------------------------------------------------- replay
