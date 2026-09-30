@@ -125,27 +125,39 @@ def _apply_cap_and_roles(
     return survivors, evicted
 
 
-def _to_api_frame(uid: str, conversation_id: str, doc: Dict[str, Any]) -> ConversationScreenFrame:
-    frame_id = doc['id']
+def _stored_frame_fields(doc: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        'id': doc['id'],
+        'captured_at': doc['captured_at'],
+        'role': doc.get('role') or 'strip',
+        'rank': int(doc.get('rank') or 0),
+        'caption': doc.get('caption') or '',
+        'labels': list(doc.get('labels') or []),
+        'source_badge': doc.get('source_badge'),
+        'focal_region': None,
+        'width': int(doc.get('width') or 0),
+        'height': int(doc.get('height') or 0),
+        'ground': ScreenFrameGround.model_validate(doc.get('ground') or _NEUTRAL_GROUND_FALLBACK),
+    }
+
+
+def _to_api_frame(uid: str, conversation_id: str, fields: Dict[str, Any]) -> ConversationScreenFrame:
+    frame_id = fields['id']
     content_url = storage.get_screen_frame_signed_url(uid, conversation_id, frame_id)
     thumbnail_url = storage.get_screen_frame_thumbnail_signed_url(uid, conversation_id, frame_id)
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=storage.SCREEN_FRAME_SIGNED_URL_MINUTES)
-    ground_data = doc.get('ground') or _NEUTRAL_GROUND_FALLBACK
     return ConversationScreenFrame(
-        id=frame_id,
-        captured_at=doc['captured_at'],
-        role=doc.get('role') or 'strip',
-        rank=int(doc.get('rank') or 0),
-        caption=doc.get('caption') or '',
-        labels=list(doc.get('labels') or []),
-        source_badge=doc.get('source_badge'),
-        focal_region=None,
-        width=int(doc.get('width') or 0),
-        height=int(doc.get('height') or 0),
-        content_url=content_url,
-        thumbnail_url=thumbnail_url,
-        url_expires_at=expires_at,
-        ground=ScreenFrameGround.model_validate(ground_data),
+        **fields, content_url=content_url, thumbnail_url=thumbnail_url, url_expires_at=expires_at
+    )
+
+
+def _warn_skipped_frame(uid: str, conversation_id: str, doc: Dict[str, Any], error: Exception) -> None:
+    logger.warning(
+        "screen_frame skipping unrepresentable stored frame uid=%s conversation_id=%s frame_id=%s error=%s",
+        uid,
+        conversation_id,
+        doc.get('id'),
+        type(error).__name__,
     )
 
 
@@ -160,21 +172,26 @@ def build_frame_set_response(uid: str, conversation_id: str) -> ConversationScre
     banner: Optional[ConversationScreenFrame] = None
     strip: List[ConversationScreenFrame] = []
     for doc in frames:
+        # One unrepresentable stored frame must cost that frame, not the note.
+        # ConversationScreenFrame still enforces the wire contract (caption
+        # length, label count, two gradient stops), and a doc that violates it
+        # — legacy data, a hand edit, a future write path that skips
+        # ScreenFrameJudgement — used to raise straight out of this loop and
+        # 500 the whole read. The user's other screenshots are fine; serve them.
+        # A partial doc fails before validation (a missing id/captured_at is a
+        # KeyError, a non-numeric rank or non-iterable labels a ValueError/
+        # TypeError), so only reading the doc is guarded that widely: URL
+        # signing is not, since google-auth's credential errors subclass
+        # ValueError/TypeError and a broken signing setup must still fail.
         try:
-            api_frame = _to_api_frame(uid, conversation_id, doc)
-        except ValidationError:
-            # One unrepresentable stored frame must cost that frame, not the note.
-            # ConversationScreenFrame still enforces the wire contract (caption
-            # length, label count, two gradient stops), and a doc that violates it
-            # — legacy data, a hand edit, a future write path that skips
-            # ScreenFrameJudgement — used to raise straight out of this loop and
-            # 500 the whole read. The user's other screenshots are fine; serve them.
-            logger.warning(
-                "screen_frame skipping unrepresentable stored frame uid=%s conversation_id=%s frame_id=%s",
-                uid,
-                conversation_id,
-                doc.get('id'),
-            )
+            fields = _stored_frame_fields(doc)
+        except (ValidationError, KeyError, TypeError, ValueError) as e:
+            _warn_skipped_frame(uid, conversation_id, doc, e)
+            continue
+        try:
+            api_frame = _to_api_frame(uid, conversation_id, fields)
+        except ValidationError as e:
+            _warn_skipped_frame(uid, conversation_id, doc, e)
             continue
         if api_frame.role == 'banner':
             banner = api_frame
