@@ -103,6 +103,7 @@ async def finalize_persisted_conversation(
         uid,
         conversation_id,
         read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
+        include_transcript_decode_status=trigger is ProcessingTrigger.SERVER_RECOVERY,
     )
     if not conversation_data:
         # A prior delivery can have durably completed fanout just before the
@@ -180,6 +181,8 @@ async def finalize_persisted_conversation(
                 resolved_language,
                 conversation,
                 trigger=trigger,
+                user_kept=bool(conversation_data.get('sync_relevance_user_kept')),
+                recovery_transcript_decoded=conversation_data.get('_recovery_transcript_decoded') is True,
                 defer_derived_effects=True,
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 derived_effects_observer=derived_effects.append,

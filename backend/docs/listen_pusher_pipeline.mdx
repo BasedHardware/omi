@@ -873,6 +873,15 @@ persisted server-recovery verdict and preserved transcript and audio IDs. With
 ordinary discard (empty transcript, filler, mic check) skips the paid notes
 model and is recorded as an explicit server-recovery discard, the same verdict
 capture-end processing reaches; it stays restorable through Show discarded.
+That discard requires strict decoding of the stored transcript and never
+writes its blob or compression marker. The persistence transaction rechecks
+protected structure, user title and `sync_relevance_user_kept`. A post-admission
+edit or restore refuses the discard before any content or decision write and
+takes the existing typed-minimum terminal path: the row remains visible,
+the job is dead-lettered, and self-heal reports `dead_letter` rather than
+verifying a contradictory discard. The finalizer also carries the stored
+restore marker into relevance assessment, so a restored row never receives
+a discard decision.
 Any other minimal result ends the job on its first occurrence instead of
 retrying the same content. That lease-fenced terminal write sets a still-bound
 conversation to completed and visible with its transcript retained; explicit

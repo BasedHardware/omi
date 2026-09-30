@@ -426,8 +426,13 @@ def _get_structured(
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
     relevance_observer: Optional[Callable[[RelevanceDecision], None]] = None,
+    recovery_transcript_decoded: bool = True,
 ) -> Tuple[Structured, bool]:
     try:
+        if trigger is ProcessingTrigger.SERVER_RECOVERY and not recovery_transcript_decoded:
+            # An unreadable stored blob is never evidence of an empty capture.
+            # Keep the pre-discard typed minimum failure before persistence.
+            return Structured(), False
         task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
@@ -2689,6 +2694,7 @@ def process_conversation(
     user_kept: bool = False,
     speaker_receipt_observer: Callable[[bool], None] | None = None,
     smart_merge_refresh: tuple[int, str] | None = None,
+    recovery_transcript_decoded: bool = True,
 ) -> Conversation:
     """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
     fixes run-now, reprocess, JIT bypass, and relevance policy together.
@@ -2947,6 +2953,7 @@ def process_conversation(
         trigger=trigger,
         user_kept=user_kept,
         relevance_observer=decisions.append,
+        recovery_transcript_decoded=recovery_transcript_decoded,
     )
     conversation = _get_conversation_obj(
         uid,
