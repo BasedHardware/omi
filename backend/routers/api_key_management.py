@@ -21,6 +21,12 @@ mcp_router = APIRouter()
 developer_router = APIRouter()
 
 
+def _sanitize_api_key_error(exc: Exception, fallback: str) -> str:
+    """Sanitize internal API key management exception details while preserving debug logging."""
+    logger.warning("API key operation failed: %s: %s", type(exc).__name__, exc)
+    return fallback
+
+
 @mcp_router.get(
     "/v1/mcp/keys",
     response_model=List[McpApiKey],
@@ -48,7 +54,17 @@ def create_mcp_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_use
     try:
         raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
     except ApiKeyValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        message = str(exc)
+        if "raw API key" in message:
+            detail = _sanitize_api_key_error(exc, "API key name must not contain a raw API key")
+        elif "app_id" in message:
+            detail = _sanitize_api_key_error(exc, "Invalid MCP API key app_id")
+        else:
+            detail = _sanitize_api_key_error(exc, "Invalid API key parameters")
+        raise HTTPException(status_code=422, detail=detail) from exc
+    except ValueError as exc:
+        detail = _sanitize_api_key_error(exc, "Invalid API key parameters")
+        raise HTTPException(status_code=422, detail=detail) from exc
     return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
@@ -113,7 +129,15 @@ def create_developer_key(key_data: DevApiKeyCreate, uid: str = Depends(get_curre
     try:
         raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip(), scopes=key_data.scopes)
     except ApiKeyValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        message = str(exc)
+        if "raw API key" in message:
+            detail = _sanitize_api_key_error(exc, "API key name must not contain a raw API key")
+        else:
+            detail = _sanitize_api_key_error(exc, "Invalid API key parameters")
+        raise HTTPException(status_code=422, detail=detail) from exc
+    except ValueError as exc:
+        detail = _sanitize_api_key_error(exc, "Invalid API key parameters")
+        raise HTTPException(status_code=422, detail=detail) from exc
     # Developer status changes affect proactive-notification limits immediately.
     invalidate_developer_cache(uid)
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
@@ -134,3 +158,16 @@ def delete_developer_key(key_id: str, uid: str = Depends(get_current_user_id)):
         raise HTTPException(status_code=503, detail="API key revocation temporarily unavailable") from exc
     invalidate_developer_cache(uid)
     return
+
+
+__all__ = [
+    "_sanitize_api_key_error",
+    "create_developer_key",
+    "create_mcp_key",
+    "delete_developer_key",
+    "delete_mcp_key",
+    "developer_router",
+    "get_developer_keys",
+    "get_mcp_keys",
+    "mcp_router",
+]
