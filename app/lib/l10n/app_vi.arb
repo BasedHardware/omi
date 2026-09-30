@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Gắn thẻ cả lời nói sau này của người nói này",
     "updateSummaryWithNewNames": "Cập nhật tóm tắt với tên mới",
     "syncStatusUnsupportedAudio": "Không đọc được âm thanh — không thể đồng bộ",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Bạn có thể giúp gì cho tôi?} goal{Giúp tôi đặt mục tiêu} activity{Tóm tắt hoạt động gần đây của tôi} improve{Tôi có thể cải thiện như thế nào?} other{}}",
     "nextWeek": "Tuần tới",
     "clearSearch": "Xóa tìm kiếm",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "Nội dung trên màn hình",
     "meetingScreenshotFallbackCaption": "Ảnh chụp màn hình từ cuộc họp này",
     "deleteMeetingScreenshotTitle": "Xóa ảnh chụp màn hình?",
-    "deleteMeetingScreenshotMessage": "Thao tác này sẽ xóa ảnh chụp màn hình khỏi ghi chú của cuộc họp này. Không thể hoàn tác."
+    "deleteMeetingScreenshotMessage": "Thao tác này sẽ xóa ảnh chụp màn hình khỏi ghi chú của cuộc họp này. Không thể hoàn tác.",
+    "conversationSummaryFailed": "Tạo tóm tắt thất bại"
 }

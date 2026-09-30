@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "この話者の以降の発話もタグ付けする",
     "updateSummaryWithNewNames": "新しい名前で要約を更新",
     "syncStatusUnsupportedAudio": "音声を読み取れません — 同期できません",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{どんなことを手伝ってくれる？} goal{目標を立てるのを手伝って} activity{最近の活動をまとめて} improve{どうすればもっと成長できる？} other{}}",
     "nextWeek": "来週",
     "clearSearch": "検索をクリア",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "画面に表示されていた内容",
     "meetingScreenshotFallbackCaption": "このミーティングのスクリーンショット",
     "deleteMeetingScreenshotTitle": "スクリーンショットを削除しますか？",
-    "deleteMeetingScreenshotMessage": "このミーティングのメモからスクリーンショットを削除します。この操作は取り消せません。"
+    "deleteMeetingScreenshotMessage": "このミーティングのメモからスクリーンショットを削除します。この操作は取り消せません。",
+    "conversationSummaryFailed": "要約に失敗しました"
 }

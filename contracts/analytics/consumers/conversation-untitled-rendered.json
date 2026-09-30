@@ -1,0 +1,16 @@
+{
+  "id": "conversation-untitled-rendered",
+  "kind": "question",
+  "owner": "Mobile product",
+  "question": "Does any conversation surface still render the bare Untitled Conversation fallback (a kept row with no server title and no transcript text in its payload)? The target is zero; age buckets separate legacy rows from new regressions.",
+  "query": "contracts/analytics/consumers/conversation-untitled-rendered.sql",
+  "events": [
+    "conversationUntitledRendered"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Zero is the goal: the server titles every kept row and the app falls back to transcript text. Zero is only meaningful alongside conversation-list traffic in the same namespace/build; the event fires at most once per conversation per app session."
+}

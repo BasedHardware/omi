@@ -893,6 +893,25 @@ for _has_categories in (False, True):
                 index_fields=tuple((*_index_fields, _desc('created_at'), _desc('__name__'))),
             )
 
+# Sync safety-WAL binding: the newest rollover generations of one recording that
+# started before the upload's audio ends (utils/sync/recording_lineage.py).
+SYNC_RECORDING_LINEAGE_QUERY = FirestoreQuerySpec(
+    identifier='conversations_recording_lineage',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('external_data.recording_origin_id', '==', 'recording_origin_id'),
+        FirestoreQueryFilter('started_at', '<=', 'started_before'),
+        FirestoreQueryFilter('finished_at', '>=', 'finished_after'),
+    ),
+    index_fields=(
+        _asc('external_data.recording_origin_id'),
+        _desc('started_at'),
+        _desc('finished_at'),
+        _desc('__name__'),
+    ),
+)
+
 ENTITY_TIMELINE_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     identifier='conversations_entity_timeline_completed',
     collection_group='conversations',
@@ -1423,6 +1442,7 @@ QUERY_SPECS = (
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
     CONVERSATIONS_COUNT_CREATED_RANGE_QUERY,
     *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
+    SYNC_RECORDING_LINEAGE_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,

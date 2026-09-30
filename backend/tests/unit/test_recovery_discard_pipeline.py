@@ -236,7 +236,16 @@ async def test_post_read_protection_refuses_discard_transactionally(pipeline, mo
     assert row['status'] == 'completed' and row['discarded'] is False
     assert row['transcript_segments'] == blob
     assert 'relevance_decision' not in row
-    assert all(row[key] == value for key, value in protection.items())
+    for key, value in protection.items():
+        if key == 'structured':
+            # Protected content survives; an untitled row also gains the
+            # dead-letter's deterministic title (never a retry marker, since it
+            # already holds saved content).
+            assert all(row['structured'][field] == saved for field, saved in value.items())
+            assert row['structured']['title'].strip()
+        else:
+            assert row[key] == value
+    assert 'summary_retryable' not in row
     assert counters['verified'] == 0 and counters['refused'] == 1
     events = capsys.readouterr().out
     assert '"reason": "dead_letter"' in events and 'verify_not_rich' not in events

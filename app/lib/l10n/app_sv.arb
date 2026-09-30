@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Märk även senare tal från den här talaren",
     "updateSummaryWithNewNames": "Uppdatera sammanfattningen med de nya namnen",
     "syncStatusUnsupportedAudio": "Ljudet kunde inte läsas — kan inte synkroniseras",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Vad kan du göra för mig?} goal{Hjälp mig att sätta ett mål} activity{Sammanfatta mina senaste aktiviteter} improve{Hur kan jag bli bättre?} other{}}",
     "nextWeek": "Nästa vecka",
     "clearSearch": "Rensa sökning",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "Vad som visades på skärmen",
     "meetingScreenshotFallbackCaption": "Skärmbild från det här mötet",
     "deleteMeetingScreenshotTitle": "Radera skärmbilden?",
-    "deleteMeetingScreenshotMessage": "Skärmbilden tas bort från anteckningen för det här mötet. Det går inte att ångra."
+    "deleteMeetingScreenshotMessage": "Skärmbilden tas bort från anteckningen för det här mötet. Det går inte att ångra.",
+    "conversationSummaryFailed": "Sammanfattningen misslyckades"
 }

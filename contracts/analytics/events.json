@@ -2625,6 +2625,21 @@
         "siri-index-health"
       ],
       "correlation": null
+    },
+    {
+      "id": "conversationUntitledRendered",
+      "wire_name": "Conversation Untitled Rendered",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {"type": "enum", "wire_name": "surface", "values": ["list", "map", "actions", "home_widget"]},
+        "ageBucket": {"type": "enum", "wire_name": "age_bucket", "values": ["under_1h", "under_1d", "under_7d", "under_30d", "over_30d"]},
+        "summaryRetryable": {"type": "bool", "wire_name": "summary_retryable"}
+      },
+      "consumers": ["conversation-untitled-rendered"],
+      "correlation": null
     }
   ]
 }
