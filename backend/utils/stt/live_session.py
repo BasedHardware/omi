@@ -347,6 +347,10 @@ class LiveLegSocket(STTSocket):
             return None
         return self._send_tracker.send_map.map_sample(provider_sample)
 
+    @property
+    def capacity_subtype(self) -> str | None:
+        return getattr(self.raw, 'capacity_subtype', None)
+
     def _trim_window_replay_to_anchor(self) -> None:
         trim_window_replay_to_anchor(self.session.receiver._window_ring(), self)
 
