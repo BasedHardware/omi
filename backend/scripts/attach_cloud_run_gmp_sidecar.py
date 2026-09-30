@@ -370,6 +370,21 @@ def _merge_container_dependencies(existing: object, *, ingress_container_name: s
     return json.dumps(dependencies, separators=(',', ':'), sort_keys=True)
 
 
+def _drop_startup_probe_initial_delay(ingress: ConfigDict) -> None:
+    """Let the ingress startup probe run as soon as the container starts.
+
+    uvicorn binds its port only after ``import main`` and the startup hooks
+    finish, so an open TCP port already means the app is ready. A fixed
+    ``initialDelaySeconds`` only holds every new instance out of service for
+    longer. Production ``backend`` carried a hand-set 60 s delay that each
+    export/replace preserved, pinning its cold start at about 61 s while the app
+    was ready at about 48 s (p50, 2026-09-29/30).
+    """
+    probe = ingress.get('startupProbe')
+    if isinstance(probe, dict):
+        cast(ConfigDict, probe).pop('initialDelaySeconds', None)
+
+
 def patch_service(
     service: Mapping[str, Any],
     *,
@@ -425,6 +440,7 @@ def patch_service(
             raise ValueError(f'service export has no unambiguous ingress container named {ingress_container_name!r}')
         ingress = candidates[0]
         ingress['name'] = ingress_container_name
+    _drop_startup_probe_initial_delay(ingress)
     retained_containers = [
         container for container in containers if container is not ingress and container.get('name') != SIDECAR_NAME
     ]

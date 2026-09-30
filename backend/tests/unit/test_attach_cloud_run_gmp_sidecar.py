@@ -126,6 +126,56 @@ def test_patch_service_adds_pinned_sidecar_without_losing_ingress_contract():
     assert 'name' not in source['spec']['template']['metadata']
 
 
+def test_patch_service_drops_ingress_startup_probe_initial_delay_and_keeps_the_rest():
+    module = _load_module()
+    source = _service()
+    source['spec']['template']['spec']['containers'][0]['startupProbe'] = {
+        'initialDelaySeconds': 60,
+        'timeoutSeconds': 240,
+        'periodSeconds': 240,
+        'failureThreshold': 3,
+        'tcpSocket': {'port': 8080},
+    }
+
+    patched = module.patch_service(
+        source,
+        project_number='1031333818730',
+        base_revision='desktop-backend-base',
+        latest_created_revision='desktop-backend-base',
+        final_revision='desktop-backend-final',
+        ingress_container_name='desktop-backend-1',
+        config_secret='cloud-run-gmp-config',
+        config_secret_version='7',
+    )
+
+    ingress = patched['spec']['template']['spec']['containers'][0]
+    assert ingress['startupProbe'] == {
+        'timeoutSeconds': 240,
+        'periodSeconds': 240,
+        'failureThreshold': 3,
+        'tcpSocket': {'port': 8080},
+    }
+    # The export the deploy read is not mutated in place.
+    assert source['spec']['template']['spec']['containers'][0]['startupProbe']['initialDelaySeconds'] == 60
+
+
+def test_patch_service_leaves_an_absent_startup_probe_to_cloud_run_defaults():
+    module = _load_module()
+
+    patched = module.patch_service(
+        _service(),
+        project_number='1031333818730',
+        base_revision='desktop-backend-base',
+        latest_created_revision='desktop-backend-base',
+        final_revision='desktop-backend-final',
+        ingress_container_name='desktop-backend-1',
+        config_secret='cloud-run-gmp-config',
+        config_secret_version='7',
+    )
+
+    assert 'startupProbe' not in patched['spec']['template']['spec']['containers'][0]
+
+
 def test_secret_annotation_uses_a_project_number_gcloud_can_parse():
     """gcloud rejects a project ID in the run.googleapis.com/secrets annotation.
 
