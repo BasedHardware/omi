@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from config.plan_catalog import PlanType
-from database import phone_call_config
+import database.phone_call_config as phone_call_config
 
 
 class TestPhoneCallConfigResilience:
@@ -146,6 +146,14 @@ class TestPhoneCallConfigResilience:
         cleaned = phone_call_config._declared_override(raw_override, defaults)
         assert cleaned["monthly_call_limit"] is None
         assert cleaned["max_duration_seconds"] is None
+
+    def test_declared_override_excludes_boolean(self):
+        defaults = {"monthly_call_limit": 5, "max_duration_seconds": 180}
+        raw_override = {"monthly_call_limit": True, "max_duration_seconds": False}
+        cleaned = phone_call_config._declared_override(raw_override, defaults)
+        # booleans must be excluded from integer limits
+        assert "monthly_call_limit" not in cleaned
+        assert "max_duration_seconds" not in cleaned
 
     def test_ignored_override_fields(self):
         defaults = {"monthly_call_limit": 0, "max_duration_seconds": 180}

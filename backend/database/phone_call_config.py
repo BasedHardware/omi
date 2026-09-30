@@ -90,6 +90,8 @@ _DEFAULT_PAID_PLAN = _profile_default('paid')
 def _fetch_config(*, firestore_client: Any = None) -> Dict[str, Any]:
     """Fetch phone call config document from Firestore with fallback error boundary."""
     client = firestore_client or db
+    if client is None:
+        return {}
     try:
         doc = client.collection("phone_call_config").document("default").get()
         if not getattr(doc, "exists", False):
@@ -128,22 +130,16 @@ def invalidate_phone_call_config_cache() -> None:
 
 def _phone_call_profile_for_plan(plan: PlanType | str | None) -> str:
     """Resolve phone-call membership from the catalog, with Basic as fallback."""
-    if plan is None:
-        candidate: PlanType | str = PlanType.basic
-    elif isinstance(plan, PlanType):
-        candidate = plan
-    elif isinstance(plan, str):
-        normalized = plan.strip().lower()
-        try:
-            candidate = PlanType(normalized)
-        except (ValueError, KeyError):
-            candidate = normalized
-    else:
-        candidate = PlanType.basic
-
     try:
-        resolved_plan = PlanType(candidate) if not isinstance(candidate, PlanType) else candidate
-        profile = get_plan_definition(resolved_plan).get('phone_calls_profile')
+        if plan is None:
+            candidate = PlanType.basic
+        else:
+            try:
+                candidate = PlanType(plan)
+            except (ValueError, KeyError):
+                val = str(plan).strip().lower()
+                candidate = PlanType(val)
+        profile = get_plan_definition(candidate).get('phone_calls_profile')
     except (TypeError, ValueError, KeyError):
         profile = 'free'
     return profile if profile in PHONE_CALL_PROFILE_DEFAULTS else 'free'
@@ -183,7 +179,7 @@ def _declared_override(override: object, defaults: Dict[str, Any]) -> Dict[str, 
         if key in ("monthly_call_limit", "max_duration_seconds"):
             if val is None:
                 sanitized[key] = None
-            elif isinstance(val, int):
+            elif type(val) is int:
                 sanitized[key] = max(0, val)
             elif isinstance(val, float) and val.is_integer():
                 sanitized[key] = max(0, int(val))
