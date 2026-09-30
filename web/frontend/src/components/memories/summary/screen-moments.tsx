@@ -6,8 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import getSharedScreenshots from '@/src/actions/memories/get-shared-screenshots';
 import {
-  MIN_REFRESH_INTERVAL_MS,
   captureOffsetLabel,
+  createRefreshGate,
   fitSize,
   groundGradient,
   msUntilRefresh,
@@ -60,33 +60,34 @@ export default function ScreenMoments({
   const [portalEl, setPortalEl] = useState<HTMLElement | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
   const tileRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const lastRefreshAt = useRef(0);
   // The tile to refocus on close: the frame last shown, not the one opened.
   const shownIndex = useRef(0);
-  const inFlight = useRef(false);
   const viewport = useViewport();
 
-  const refresh = useCallback(async () => {
-    const now = Date.now();
-    if (inFlight.current || now - lastRefreshAt.current < MIN_REFRESH_INTERVAL_MS) return;
-    inFlight.current = true;
-    lastRefreshAt.current = now;
-    try {
-      setFrameSet(await getSharedScreenshots(conversationId));
-    } catch {
-      setFrameSet(null);
-    } finally {
-      inFlight.current = false;
-    }
+  // One gate per conversation: serialises refetches and defers any request
+  // made during the post-renewal cooldown to its end (never drops it).
+  // Created in an effect (not memoised) so StrictMode's mount/unmount/mount
+  // cycle cannot leave a disposed gate in use.
+  const gateRef = useRef<ReturnType<typeof createRefreshGate> | null>(null);
+  useEffect(() => {
+    const gate = createRefreshGate({
+      run: async () => {
+        try {
+          setFrameSet(await getSharedScreenshots(conversationId));
+        } catch {
+          setFrameSet(null);
+        }
+      },
+    });
+    gateRef.current = gate;
+    return () => gate.dispose();
   }, [conversationId]);
+  const refresh = useCallback(() => gateRef.current?.request(), []);
 
   useEffect(() => {
     if (tiles.length === 0) return;
-    const sinceLast = Date.now() - lastRefreshAt.current;
-    const delay = Math.max(
-      msUntilRefresh(tiles, Date.now()),
-      MIN_REFRESH_INTERVAL_MS - sinceLast,
-    );
+    // The gate enforces the cooldown; this only waits for the expiry margin.
+    const delay = msUntilRefresh(tiles, Date.now());
     const timer = window.setTimeout(refresh, delay);
     // Timers stall in background tabs and bfcache; check again on return.
     const onVisible = () => {

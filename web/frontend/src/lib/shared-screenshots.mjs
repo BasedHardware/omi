@@ -120,3 +120,57 @@ export function groundGradient(frame) {
   if (!valid) return undefined;
   return `linear-gradient(135deg, ${stops[0]}, ${stops[1]})`;
 }
+
+/**
+ * Serialises refetches of the signed-URL set. A request made during the
+ * post-refetch cooldown is deferred to the cooldown's end, not dropped: an
+ * image that fails right after a renewal would otherwise stay broken until
+ * the next expiry timer, about an hour later. Requests during a run are
+ * absorbed by that run; several cooldown requests coalesce into one.
+ */
+export function createRefreshGate({
+  run,
+  minIntervalMs = MIN_REFRESH_INTERVAL_MS,
+  now = () => Date.now(),
+  setTimer = (fn, ms) => setTimeout(fn, ms),
+  clearTimer = (timer) => clearTimeout(timer),
+}) {
+  let lastRunAt = -Infinity;
+  let inFlight = false;
+  let deferred = null;
+  let disposed = false;
+
+  const start = () => {
+    deferred = null;
+    if (disposed || inFlight) return;
+    inFlight = true;
+    lastRunAt = now();
+    let pending;
+    try {
+      pending = run();
+    } catch {
+      pending = undefined;
+    }
+    Promise.resolve(pending)
+      .catch(() => {})
+      .finally(() => {
+        inFlight = false;
+      });
+  };
+
+  return {
+    request() {
+      if (disposed || inFlight || deferred) return;
+      const wait = lastRunAt + minIntervalMs - now();
+      if (wait <= 0) start();
+      else deferred = setTimer(start, wait);
+    },
+    /** Epoch ms of the last run start, for scheduling the next expiry refetch. */
+    lastRunAt: () => lastRunAt,
+    dispose() {
+      disposed = true;
+      if (deferred) clearTimer(deferred);
+      deferred = null;
+    },
+  };
+}

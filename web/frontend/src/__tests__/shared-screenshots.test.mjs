@@ -6,6 +6,7 @@ import {
   MIN_REFRESH_INTERVAL_MS,
   URL_REFRESH_MARGIN_MS,
   captureOffsetLabel,
+  createRefreshGate,
   earliestExpiryMs,
   fitSize,
   groundGradient,
@@ -118,11 +119,9 @@ describe('signed-url refresh timing', () => {
 
   it('keeps a floor between refetches so a fast clock cannot loop', () => {
     assert.ok(MIN_REFRESH_INTERVAL_MS >= 10_000);
-    assert.match(componentSource, /MIN_REFRESH_INTERVAL_MS - sinceLast/);
-    assert.match(
-      componentSource,
-      /now - lastRefreshAt\.current < MIN_REFRESH_INTERVAL_MS/,
-    );
+    // The floor lives in createRefreshGate (tested below); the component must route through it.
+    assert.match(componentSource, /createRefreshGate\(/);
+    assert.doesNotMatch(componentSource, /lastRefreshAt/);
   });
 });
 
@@ -206,5 +205,100 @@ describe('share page wiring', () => {
   it('styles the strip with the share tokens', () => {
     assert.match(cssSource, /\.sn-shot-button\s*\{[^}]*var\(--sn-hairline\)/);
     assert.match(cssSource, /\.sn-lightbox\s*\{/);
+  });
+});
+
+describe('createRefreshGate', () => {
+  function harness() {
+    let clock = 0;
+    const timers = [];
+    const runs = [];
+    let release = () => {};
+    const gate = createRefreshGate({
+      run: () => {
+        runs.push(clock);
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      },
+      minIntervalMs: 30_000,
+      now: () => clock,
+      setTimer: (fn, ms) => {
+        const t = { fn, at: clock + ms, cleared: false };
+        timers.push(t);
+        return t;
+      },
+      clearTimer: (t) => {
+        if (t) t.cleared = true;
+      },
+    });
+    const advance = async (ms) => {
+      clock += ms;
+      for (const t of timers) {
+        if (!t.cleared && t.at <= clock) {
+          t.cleared = true;
+          t.fn();
+        }
+      }
+      await Promise.resolve();
+    };
+    return {
+      gate,
+      runs,
+      advance,
+      finish: async () => {
+        release();
+        await new Promise((resolve) => setImmediate(resolve));
+      },
+    };
+  }
+
+  it('runs an unthrottled request immediately', async () => {
+    const h = harness();
+    h.gate.request();
+    assert.deepEqual(h.runs, [0]);
+  });
+
+  it('defers a request made during the cooldown to its end instead of dropping it', async () => {
+    const h = harness();
+    await h.advance(60_000);
+    h.gate.request();
+    await h.finish();
+    await h.advance(5_000); // an image error right after renewal
+    h.gate.request();
+    assert.deepEqual(h.runs, [60_000], 'must not run inside the cooldown');
+    await h.advance(25_000);
+    assert.deepEqual(h.runs, [60_000, 90_000], 'must run when the cooldown ends');
+  });
+
+  it('coalesces several cooldown requests into one deferred run', async () => {
+    const h = harness();
+    await h.advance(60_000);
+    h.gate.request();
+    await h.finish();
+    h.gate.request();
+    h.gate.request();
+    await h.advance(30_000);
+    assert.equal(h.runs.length, 2);
+  });
+
+  it('does not start a second run while one is in flight', async () => {
+    const h = harness();
+    await h.advance(60_000);
+    h.gate.request();
+    await h.advance(40_000);
+    h.gate.request();
+    assert.equal(h.runs.length, 1);
+  });
+
+  it('cancels a deferred run on dispose', async () => {
+    const h = harness();
+    await h.advance(60_000);
+    h.gate.request();
+    await h.finish();
+    h.gate.request();
+    h.gate.dispose();
+    await h.advance(60_000);
+    assert.equal(h.runs.length, 1);
   });
 });
