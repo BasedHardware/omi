@@ -19,6 +19,7 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
 class _Listener implements IWalSyncListener {
@@ -191,7 +192,8 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('keeps the badge and button neutral grey while files wait on the device', (tester) async {
+  testWidgets('stays quiet: no fill, a bare tertiary count, no warning colour while files wait on the device',
+      (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     localSync.testWals = [
       _wal(timerStart: now - 120, storage: WalStorage.sdcard),
@@ -202,12 +204,19 @@ void main() {
 
     await pumpButton(tester, syncProvider, hasPairedDevice: true);
 
-    final badge = tester.widget<Container>(find.byKey(const ValueKey('header_count_badge')));
-    final fill = (badge.decoration as BoxDecoration).color;
-    expect(fill, OmiColors.textTertiary);
-    expect(fill, isNot(OmiColors.warning));
-    final icon = tester.widget<Icon>(find.byIcon(Icons.cloud_rounded));
-    expect(icon.color, isNot(OmiColors.warning));
+    final count = tester.widget<Text>(find.byKey(const ValueKey('header_count_badge')));
+    expect(count.style!.color, OmiColors.textTertiary);
+    final icon = tester.widget<Icon>(find.byIcon(Icons.cloud_outlined));
+    expect(icon.color, OmiColors.textTertiary);
+    expect(
+      find.byWidgetPredicate(
+        (w) =>
+            w is Container &&
+            w.decoration is BoxDecoration &&
+            (w.decoration as BoxDecoration).color == OmiColors.warning,
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('caps the badge at 9+', (tester) async {
