@@ -284,6 +284,7 @@ def test_first_text_diagnostics_are_bounded_log_fields_not_labels(monkeypatch, c
         seconds_since_first_speech=1e20,
         episode_admitted_seconds=float('inf'),
         seconds_since_deadline_speech=12,
+        answered_empty_admitted_seconds=1e20,
     )
     fallback_mod.record_fallback(
         component='stt_live_session',
@@ -306,6 +307,7 @@ def test_first_text_diagnostics_are_bounded_log_fields_not_labels(monkeypatch, c
         ' vad_admitted_seconds=-1.000 posts=1000000 empty_posts=0'
         ' answered_empty_stranded_flushes=2 seconds_since_first_speech=86400.000'
         ' episode_admitted_seconds=-1.000 seconds_since_deadline_speech=12.000'
+        ' answered_empty_admitted_seconds=86400.000'
     )
     fallback_mod.record_fallback(
         component='stt_live_session',

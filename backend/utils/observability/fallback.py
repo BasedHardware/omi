@@ -67,6 +67,7 @@ class FirstTextDeadlineDiagnostics:
     seconds_since_first_speech: float
     episode_admitted_seconds: float
     seconds_since_deadline_speech: float
+    answered_empty_admitted_seconds: float
 
     def log_fields(self) -> str:
         def seconds(value: float) -> float:
@@ -83,6 +84,7 @@ class FirstTextDeadlineDiagnostics:
             f' seconds_since_first_speech={seconds(self.seconds_since_first_speech):.3f}'
             f' episode_admitted_seconds={seconds(self.episode_admitted_seconds):.3f}'
             f' seconds_since_deadline_speech={seconds(self.seconds_since_deadline_speech):.3f}'
+            f' answered_empty_admitted_seconds={seconds(self.answered_empty_admitted_seconds):.3f}'
         )
 
 

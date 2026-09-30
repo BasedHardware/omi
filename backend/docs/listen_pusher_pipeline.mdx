@@ -1513,18 +1513,29 @@ stranded answer. Only a fully answered, quiet episode of **less than one second
 of VAD-admitted provider audio** retires its startup timer and empty streak.
 This one-second bound is conservative relative to the observed 280ms blip:
 pre-roll counts as admitted audio, and no unresolved or in-flight fragment is
-exempted regardless of size. Separate settled blips do not accumulate into an
-empty-streak failure. No PCM, POST anchor or replay boundary changes in this
-transition. Speech resuming while a POST is in flight remains protected.
+exempted regardless of size. The cancellation allowance is additionally bounded
+by **three seconds of
+unique VAD-admitted speech answered empty since the last emitted text**. Empty
+POSTs with overlapping context count each admitted sample once. Neither a
+cancelled timer, a new episode, long silence nor context aging resets this
+budget. At or above three seconds, keep the current episode's deadline and
+empty streak; subsequent short episodes cannot renew it. Only actual emitted
+text resets the budget; parsed text held for sentence anchoring does not.
+Three seconds permits isolated 280ms admissions but rescues several short
+real utterances: eleven such blips (3.08s), four 760ms episodes (3.04s), or
+five 600ms episodes (exactly 3s). No PCM, POST anchor or replay boundary changes
+in this transition. Speech resuming while a POST is in flight remains protected.
 
 On later speech, a new deadline starts immediately on admission rather than
-waiting to cross a floor. First-text latency uses that active episode's clock,
-excluding only prior tiny, fully answered episodes. The original first-admission
-clock remains available for diagnostics and session outcome accounting.
+waiting to cross a floor. The existing first-text histogram continues to
+measure from the **session's first VAD speech**, including prior answered
+blips and quiet intervals, so its bake baseline retains the original semantics.
 `first_text_deadline` fallback logs carry `vad_admitted_seconds` (lifetime),
 `posts`, `empty_posts`, `answered_empty_stranded_flushes`,
 `seconds_since_first_speech` (original admission), `episode_admitted_seconds`,
-and `seconds_since_deadline_speech` (active budget). The immutable snapshot is
+`seconds_since_deadline_speech` (active budget), and
+`answered_empty_admitted_seconds` (the cumulative cancellation allowance).
+The immutable snapshot is
 taken before pump cancellation and carried through the existing replay hop.
 Seconds are bounded to 86,400 and counts to 1,000,000; non-finite seconds use
 `-1`. All values are log fields only, never customer content or metric labels.

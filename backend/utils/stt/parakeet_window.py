@@ -103,6 +103,8 @@ ANSWERED_CONTEXT_RETENTION_SECONDS = 90.0
 FIRST_TEXT_DEADLINE_SECONDS = 12.0
 # Three times the observed 280ms admission; never suppress unresolved audio.
 SHORT_SPEECH_EPISODE_SECONDS = 1.0
+# Several short utterances may return empty; only emitted text renews this allowance.
+ANSWERED_EMPTY_SPEECH_BUDGET_SECONDS = 3.0
 MAX_EMPTY_STREAK = 4
 
 
@@ -431,6 +433,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._deadline_speech_bytes = 0
         self._admitted_speech_bytes = 0
         self._answered_empty_stranded_flushes = 0
+        self._answered_empty_speech_bytes = 0
+        self._answered_empty_speech_end = 0
         self.first_text_diagnostics: FirstTextDeadlineDiagnostics | None = None
         self._session_outcome_recorded = False
         self._wake = asyncio.Event()
@@ -594,6 +598,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 seconds_since_first_speech=max(0.0, now - cast(float, self._first_speech_at)),
                 episode_admitted_seconds=self._to_seconds(self._deadline_speech_bytes),
                 seconds_since_deadline_speech=max(0.0, now - self._deadline_speech_at),
+                answered_empty_admitted_seconds=self._to_seconds(self._answered_empty_speech_bytes),
             )
             self.fail('first_text_deadline')
 
@@ -880,6 +885,12 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         else:
             with self._lock:
                 has_speech = self._speech_bytes_locked(job.start_bytes, job.end_bytes) > 0
+                # POSTs overlap retained context. Count each admitted sample
+                # once, before anchor advancement can prune its VAD span.
+                self._answered_empty_speech_bytes += self._speech_bytes_locked(
+                    max(job.start_bytes, self._answered_empty_speech_end), job.end_bytes
+                )
+                self._answered_empty_speech_end = max(self._answered_empty_speech_end, job.end_bytes)
             if has_speech:
                 self._empty_streak = min(1000000, self._empty_streak + 1)
                 if not self._first_text_recorded and self._empty_streak >= self._max_empty_streak:
@@ -910,13 +921,15 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             WINDOW_FORCED_CUTS.inc()
         emitted, beyond_window = await self._materialize(decision.emit, job.pcm, job.start, job.duration)
         if emitted and not self._dead:
-            if not self._first_text_recorded and any(str(item.get('text', '')).strip() for item in emitted):
-                self._first_text_recorded = True
-                self._cancel_first_text_timer()
-                if self._first_speech_at is not None:
-                    WINDOW_FIRST_TEXT.observe(
-                        max(0.0, time.monotonic() - (self._deadline_speech_at or self._first_speech_at))
-                    )
+            if any(str(item.get('text', '')).strip() for item in emitted):
+                # Parsed but held text cannot renew the allowance. Keep the
+                # counted endpoint so old overlapping PCM is not counted again.
+                self._answered_empty_speech_bytes = 0
+                if not self._first_text_recorded:
+                    self._first_text_recorded = True
+                    self._cancel_first_text_timer()
+                    if self._first_speech_at is not None:
+                        WINDOW_FIRST_TEXT.observe(max(0.0, time.monotonic() - self._first_speech_at))
             # Snapshot the emission boundary in this socket's stream seconds
             # BEFORE the callback: downstream rewrites start/end in place onto
             # other clocks (the epoch translator projects wall-epoch seconds,
@@ -970,10 +983,12 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     not self._first_text_recorded
                     and self._capture_silence_seconds >= STRANDED_SILENCE_SECONDS
                     and self._deadline_speech_bytes < self._to_bytes(SHORT_SPEECH_EPISODE_SECONDS)
+                    and self._answered_empty_speech_bytes < self._to_bytes(ANSWERED_EMPTY_SPEECH_BUDGET_SECONDS)
                 ):
-                    # A short, fully answered episode after long silence need
-                    # not buy a streaming fallback. Retain its PCM and replay;
-                    # unresolved/in-flight or >=1s speech keeps the 12s rescue.
+                    # Retire only isolated short, fully answered episodes.
+                    # Their cumulative empty-answered speech never resets on
+                    # cancellation, silence or PCM aging. At 3s, keep the
+                    # current 12s rescue even when each episode was <1s.
                     self._cancel_first_text_timer()
                     self._deadline_speech_at = None
                     self._deadline_speech_bytes = 0
