@@ -271,3 +271,48 @@ def test_replay_diagnostics_are_bounded_log_values_not_metric_labels(monkeypatch
         replay_diagnostics=diagnostics,
     )
     assert 'un_emitted_capture_seconds' not in caplog.records[-1].message
+
+
+def test_first_text_diagnostics_are_bounded_log_fields_not_labels(monkeypatch, caplog):
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    diagnostic = fallback_mod.FirstTextDeadlineDiagnostics(
+        admitted_seconds=float('nan'),
+        posts=1000001,
+        empty_posts=-1,
+        answered_empty_stranded_flushes=2,
+        seconds_since_first_speech=1e20,
+        episode_admitted_seconds=float('inf'),
+        seconds_since_deadline_speech=12,
+    )
+    fallback_mod.record_fallback(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='first_text_deadline',
+        outcome='recovered',
+        first_text_diagnostics=diagnostic,
+    )
+    labels, count = counter.increments[0]
+    assert labels == {
+        'component': 'stt_live_session',
+        'from_mode': 'parakeet',
+        'to_mode': 'soniox',
+        'reason': 'first_text_deadline',
+        'outcome': 'recovered',
+    }
+    assert count == 1
+    assert caplog.records[-1].message.endswith(
+        ' vad_admitted_seconds=-1.000 posts=1000000 empty_posts=0'
+        ' answered_empty_stranded_flushes=2 seconds_since_first_speech=86400.000'
+        ' episode_admitted_seconds=-1.000 seconds_since_deadline_speech=12.000'
+    )
+    fallback_mod.record_fallback(
+        component='stt_live_session',
+        from_mode='parakeet',
+        to_mode='soniox',
+        reason='connection_lost',
+        outcome='recovered',
+        first_text_diagnostics=diagnostic,
+    )
+    assert 'vad_admitted_seconds' not in caplog.records[-1].message

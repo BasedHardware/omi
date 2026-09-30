@@ -623,8 +623,12 @@ A partial replay retains its unaccepted tail and new audio
 for the next vendor leg while preserving capture sample offsets. Window POSTs mark their
 request so `parakeet_prerecorded_requests_total` excludes live canary errors
 while covering the batch path used by sync backfill.
-Before the first window transcript, 12 seconds after first VAD speech or four
-consecutive empty speech-containing POSTs ends the Parakeet leg. The death path
+Before the first window transcript, 12 seconds after the active speech episode
+starts or four consecutive empty speech-containing POSTs ends the Parakeet leg.
+A fully answered-empty episode with less than one admitted second and at least
+five trailing capture-silence seconds cancels that deadline and resets the
+empty streak. New speech starts a fresh 12-second budget; unresolved audio or
+an episode of one second or more retains its original deadline. The death path
 replays all untranscribed capture from the 90-second ring to the next vendor;
 the failed provider is excluded for that session. After first text, window
 formation and emission continue without this startup bound.
@@ -1503,8 +1507,27 @@ mapped through the provider epoch's accepted-send spans. Answered history can
 age out while new speech is pending, but no unresolved sample can be evicted
 to make room. Ring-pressure cuts use the pending span, excluding retained
 answered history. A stalled POST still fails through the existing replay path,
-and a late answer from the dead leg emits nothing. Startup deadline and
-empty-streak budgets are unchanged.
+and a late answer from the dead leg emits nothing. The 12-second deadline and
+four-POST empty-streak limits still rescue real speech, even after an empty
+stranded answer. Only a fully answered, quiet episode of **less than one second
+of VAD-admitted provider audio** retires its startup timer and empty streak.
+This one-second bound is conservative relative to the observed 280ms blip:
+pre-roll counts as admitted audio, and no unresolved or in-flight fragment is
+exempted regardless of size. Separate settled blips do not accumulate into an
+empty-streak failure. No PCM, POST anchor or replay boundary changes in this
+transition. Speech resuming while a POST is in flight remains protected.
+
+On later speech, a new deadline starts immediately on admission rather than
+waiting to cross a floor. First-text latency uses that active episode's clock,
+excluding only prior tiny, fully answered episodes. The original first-admission
+clock remains available for diagnostics and session outcome accounting.
+`first_text_deadline` fallback logs carry `vad_admitted_seconds` (lifetime),
+`posts`, `empty_posts`, `answered_empty_stranded_flushes`,
+`seconds_since_first_speech` (original admission), `episode_admitted_seconds`,
+and `seconds_since_deadline_speech` (active budget). The immutable snapshot is
+taken before pump cancellation and carried through the existing replay hop.
+Seconds are bounded to 86,400 and counts to 1,000,000; non-finite seconds use
+`-1`. All values are log fields only, never customer content or metric labels.
 
 A stranded flush is one-shot for each silence period, re-armed only by new VAD
 speech. Thus the additional flush rate is bounded by one per blip plus at least

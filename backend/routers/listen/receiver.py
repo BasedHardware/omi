@@ -1371,7 +1371,7 @@ class ListenReceiver(ReplayFilterMixin):
         self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
         hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
         hop.reason = getattr(previous, 'typed_death_reason', None) or 'connection_lost'
-        hop.capture_capacity_details(previous)
+        hop.capture_window_failure_details(previous)
         try:
             raw = await self._create_stt_socket(
                 parakeet_callback,
