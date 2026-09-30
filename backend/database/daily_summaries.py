@@ -43,6 +43,43 @@ DESKTOP_DAILY_USAGE_COUNTER_FIELDS = (
 )
 
 
+MAX_IDENTIFIER_LENGTH = 1500
+
+
+def _valid_path_segment(value: object, name: str) -> str:
+    """Validate a value used as a Firestore document id or path segment.
+
+    Firestore rejects ids containing '/' and treats blank ids as an error, and a
+    crafted value could otherwise address a document outside the intended
+    collection. Callers pass user-supplied identifiers (uid, date,
+    client_device_id, summary id), so each is checked before it reaches a
+    document path.
+    """
+    if not isinstance(value, str):
+        raise ValueError(f'{name} must be a string')
+    if not value.strip():
+        raise ValueError(f'{name} must not be empty or whitespace')
+    if '/' in value or '\x00' in value:
+        raise ValueError(f'{name} must not contain path separators')
+    if len(value) > MAX_IDENTIFIER_LENGTH:
+        raise ValueError(f'{name} must be at most {MAX_IDENTIFIER_LENGTH} characters')
+    return value
+
+
+def _valid_counter(value: object, name: str) -> int:
+    """Coerce a client-supplied counter to a non-negative int.
+
+    bool is a subclass of int in Python, so `isinstance(value, int)` alone lets
+    True/False through as 1/0 and would corrupt counters. Negative and
+    non-integer values are rejected for the same reason.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f'{name} must be an integer')
+    if value < 0:
+        raise ValueError(f'{name} must not be negative')
+    return value
+
+
 def upsert_desktop_daily_usage(
     uid: str,
     date: str,
@@ -51,6 +88,11 @@ def upsert_desktop_daily_usage(
     counters: Dict[str, int],
 ) -> None:
     """Atomically merge one device's running daily counters by maximum value."""
+    uid = _valid_path_segment(uid, 'uid')
+    date = _valid_path_segment(date, 'date')
+    client_device_id = _valid_path_segment(client_device_id, 'client_device_id')
+    counters = counters if isinstance(counters, dict) else {}
+    existing_raw = None
     user_ref = db.collection('users').document(uid)
     usage_ref = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).document(f'{date}__{client_device_id}')
     transaction = db.transaction()
@@ -69,7 +111,14 @@ def upsert_desktop_daily_usage(
         for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS:
             previous = existing.get(field, 0)
             previous_value = previous if isinstance(previous, int) and not isinstance(previous, bool) else 0
-            payload[field] = max(previous_value, counters[field])
+            # A partial payload previously raised KeyError inside the transaction.
+            # An omitted field now contributes nothing and leaves the stored value
+            # untouched, so a client that sends only the counters it changed still
+            # merges correctly.
+            if field not in counters:
+                payload[field] = previous_value
+                continue
+            payload[field] = max(previous_value, _valid_counter(counters[field], field))
         write_transaction.set(usage_ref, payload)
 
     merge_running_totals(transaction)
@@ -80,6 +129,8 @@ def get_desktop_daily_usage(uid: str, date: str) -> Dict[str, int]:
 
     A date with no usage documents returns every counter as zero.
     """
+    uid = _valid_path_segment(uid, 'uid')
+    date = _valid_path_segment(date, 'date')
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).where(filter=FieldFilter('date', '==', date))
     totals = {field: 0 for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS}
@@ -105,10 +156,16 @@ def create_daily_summary(uid: str, summary_data: Dict[str, Any]) -> str:
     Returns:
         The summary ID
     """
+    uid = _valid_path_segment(uid, 'uid')
+    if not isinstance(summary_data, dict):
+        raise ValueError('summary_data must be a dict')
+    if 'id' not in summary_data:
+        raise ValueError("summary_data must contain an 'id'")
+    summary_id = _valid_path_segment(summary_data['id'], "summary_data['id']")
     user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_data['id'])
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     summary_ref.set(summary_data)
-    return summary_data['id']
+    return summary_id
 
 
 def get_daily_summary(uid: str, summary_id: str) -> Optional[Dict[str, Any]]:
@@ -122,6 +179,8 @@ def get_daily_summary(uid: str, summary_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Summary data dict or None if not found
     """
+    uid = _valid_path_segment(uid, 'uid')
+    summary_id = _valid_path_segment(summary_id, 'summary_id')
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     doc = summary_ref.get()
@@ -143,6 +202,8 @@ def get_daily_summary_by_date(uid: str, date: str) -> Optional[Dict[str, Any]]:
     Returns:
         Summary data dict or None if not found
     """
+    uid = _valid_path_segment(uid, 'uid')
+    date = _valid_path_segment(date, 'date')
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).where(filter=FieldFilter('date', '==', date)).limit(1)
 
