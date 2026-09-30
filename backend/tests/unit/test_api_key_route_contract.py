@@ -197,6 +197,6 @@ def test_create_routes_sanitize_pii_and_tokens_in_validation_error(
         handler(payload, uid="user-1")
 
     assert caught.value.status_code == 422
+    assert caught.value.detail == "Invalid API key request"
     assert "tok_secret123456789" not in caught.value.detail
     assert "alice@example.com" not in caught.value.detail
-    assert "example.com" in caught.value.detail

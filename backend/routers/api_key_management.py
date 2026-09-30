@@ -56,7 +56,7 @@ def create_mcp_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_use
         raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
     except ApiKeyValidationError as exc:
         logger.warning(f"MCP API key validation failed for user {uid}: {sanitize(str(exc))}")
-        raise HTTPException(status_code=422, detail=sanitize(str(exc))) from exc
+        raise HTTPException(status_code=422, detail="Invalid API key request") from exc
     return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
@@ -122,7 +122,7 @@ def create_developer_key(key_data: DevApiKeyCreate, uid: str = Depends(get_curre
         raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip(), scopes=key_data.scopes)
     except ApiKeyValidationError as exc:
         logger.warning(f"Developer API key validation failed for user {uid}: {sanitize(str(exc))}")
-        raise HTTPException(status_code=422, detail=sanitize(str(exc))) from exc
+        raise HTTPException(status_code=422, detail="Invalid API key request") from exc
     # Developer status changes affect proactive-notification limits immediately.
     invalidate_developer_cache(uid)
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
