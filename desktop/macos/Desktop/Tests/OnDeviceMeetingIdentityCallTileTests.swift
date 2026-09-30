@@ -23,6 +23,7 @@ final class OnDeviceMeetingIdentityCallTileTests: XCTestCase {
     let ownerEmails: [String]
     let expectedTileNames: [String]
     let expectedParticipantNames: [String]
+    let expectedAgentNames: [String]
     let mustExclude: [String]
 
     enum CodingKeys: String, CodingKey {
@@ -31,6 +32,7 @@ final class OnDeviceMeetingIdentityCallTileTests: XCTestCase {
       case ownerEmails = "owner_emails"
       case expectedTileNames = "expected_tile_names"
       case expectedParticipantNames = "expected_participant_names"
+      case expectedAgentNames = "expected_agent_names"
       case mustExclude = "must_exclude"
     }
   }
@@ -68,8 +70,16 @@ final class OnDeviceMeetingIdentityCallTileTests: XCTestCase {
         OnDeviceMeetingIdentityExtractor.callTileNames(
           in: snapshots, ownerNames: vector.ownerNames, ownerEmails: vector.ownerEmails),
         vector.expectedTileNames, vector.id)
-      let names = participantNames(snapshots, ownerNames: vector.ownerNames, ownerEmails: vector.ownerEmails)
+      XCTAssertEqual(
+        OnDeviceMeetingIdentityExtractor.callTileAgentNames(
+          in: snapshots, ownerNames: vector.ownerNames, ownerEmails: vector.ownerEmails),
+        vector.expectedAgentNames, vector.id)
+      // Agent tiles join the upload as agents (the roster classifies them by name), never as people.
+      let everyone = participantNames(snapshots, ownerNames: vector.ownerNames, ownerEmails: vector.ownerEmails)
+      let names = everyone.filter { !OnDeviceMeetingIdentityExtractor.looksLikeAIAgentName($0) }
       XCTAssertEqual(names, vector.expectedParticipantNames, vector.id)
+      XCTAssertEqual(
+        everyone.filter(OnDeviceMeetingIdentityExtractor.looksLikeAIAgentName), vector.expectedAgentNames, vector.id)
       XCTAssertTrue(Set(names).isDisjoint(with: vector.mustExclude), vector.id)
     }
   }

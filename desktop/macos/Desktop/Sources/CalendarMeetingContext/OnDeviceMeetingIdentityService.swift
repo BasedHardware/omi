@@ -67,7 +67,11 @@ enum OnDeviceMeetingIdentityExtractor {
     guard !selected.isEmpty else { return nil }
     // Tile persistence is judged over every row, not the character-budgeted selection: three
     // full-desktop frames exhaust that budget.
-    let tiles = callTileNames(in: snapshots, ownerNames: ownerNames, ownerEmails: ownerEmails)
+    // Agent tiles join after the people, as plain names: the backend roster classifies them as
+    // `ai_agent` by name (the upload has no participant kind), never as a person.
+    let tiles =
+      callTileNames(in: snapshots, ownerNames: ownerNames, ownerEmails: ownerEmails)
+      + callTileAgentNames(in: snapshots, ownerNames: ownerNames, ownerEmails: ownerEmails)
     var participants = participants(from: selected.map(\.combinedText), tileNames: tiles)
     if participants.isEmpty {
       participants = messagingCallParticipants(from: snapshots)
@@ -308,6 +312,27 @@ enum OnDeviceMeetingIdentityExtractor {
     ownerNames: [String] = [],
     ownerEmails: [String] = []
   ) -> [String] {
+    callTileLabels(in: snapshots, ownerNames: ownerNames, ownerEmails: ownerEmails, agents: false)
+  }
+
+  /// AI-agent tiles that pass the same persistence rule. They are kept, as agents and never as
+  /// people, because an agent on the call is a fact about the call; only the ones the roster's own
+  /// name classifier (`looksLikeAIAgentName`) also calls agents are returned, so none becomes human.
+  static func callTileAgentNames(
+    in snapshots: [MeetingScreenActivitySnapshot],
+    ownerNames: [String] = [],
+    ownerEmails: [String] = []
+  ) -> [String] {
+    callTileLabels(in: snapshots, ownerNames: ownerNames, ownerEmails: ownerEmails, agents: true)
+      .filter(looksLikeAIAgentName)
+  }
+
+  private static func callTileLabels(
+    in snapshots: [MeetingScreenActivitySnapshot],
+    ownerNames: [String],
+    ownerEmails: [String],
+    agents: Bool
+  ) -> [String] {
     let callRows = snapshots.filter(isCallWindowRow)
     guard callRows.count >= minimumTileRows else { return [] }
     var owners = Set(ownerNames.map { cleanLine($0).casefolded }.filter { !$0.isEmpty })
@@ -351,7 +376,7 @@ enum OnDeviceMeetingIdentityExtractor {
     for key in order {
       guard let name = spelling[key], let count = counts[key] else { continue }
       if Double(count) < minimum || titleParts.contains(key) { continue }
-      if isOwnerName(name, owners: owners, ownerLocals: ownerLocals) || isAIAgentTileName(name) { continue }
+      if isOwnerName(name, owners: owners, ownerLocals: ownerLocals) || isAIAgentTileName(name) != agents { continue }
       if nonCallRows.count >= minimumNonCallRowsForChromeCheck {
         let elsewhere = nonCallRows.filter { row in
           row.combinedText.components(separatedBy: .newlines).contains { tileName(cleanLine($0)) == name }
@@ -387,10 +412,40 @@ enum OnDeviceMeetingIdentityExtractor {
   private static func isCallWindowRow(_ snapshot: MeetingScreenActivitySnapshot) -> Bool {
     let app = snapshot.appName.casefolded
     if tileMessagingApps.contains(where: app.contains) { return false }
-    if nativeVideoApps.contains(where: app.contains) { return true }
     let title = cleanLine(snapshot.windowTitle ?? "").casefolded
-    return firstMatch(meetTabTitle, in: title) != nil
+    if firstMatch(meetTabTitle, in: title) != nil { return true }  // a joined Meet tab: its title is the call
+    let conferencing =
+      nativeVideoApps.contains(where: app.contains)
       || conferencingMarkers.contains(where: "\(app) \(title)".contains)
+    // A conferencing app's other windows (Teams chat, a contact list, Zoom's home screen) repeat
+    // names too. The window must show that it is the call itself.
+    return conferencing && (hasCallControlChrome(snapshot) || firstMatch(callWindowTitle, in: title) != nil)
+  }
+
+  private static let callWindowTitle = regex("(?<!\\w)(?:zoom meeting|meeting|call|webinar|huddle)(?!\\w)")
+
+  // The backend roster's name-only agent classifier (`meeting_participants.looks_like_ai_agent_name`).
+  private static let rosterAgentNames: Set<String> = [
+    "boardy", "otter", "otter.ai", "fireflies", "fred from fireflies", "read.ai", "fathom", "tl;dv", "notetaker",
+    "zoom ai companion", "gemini", "omi agent", "o. omi agent",
+  ]
+  private static let rosterAgentTokens: Set<String> = [
+    "bot", "chatbot", "meetbot", "notebot", "notetaker", "note-taker", "recorder", "assistant", "companion",
+  ]
+  private static let rosterAgentFirstTokens: Set<String> = ["boardy", "fireflies", "otter.ai", "read.ai", "tl;dv"]
+  private static let rosterAgentPhrases = ["omi agent", "zoom ai companion", "fred from fireflies", "notetaker"].map {
+    regex("(?<![\\w])\(NSRegularExpression.escapedPattern(for: $0))(?![\\w])")
+  }
+
+  /// Whether the backend roster would classify a bare name (no email, no catalog entry) as an agent.
+  static func looksLikeAIAgentName(_ name: String) -> Bool {
+    let hay = name.trimmingCharacters(in: .whitespacesAndNewlines).casefolded
+    if rosterAgentNames.contains(hay) || hay.hasSuffix(" notetaker") { return true }
+    let words = hay.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+    let tokens = Set(words.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: ".'’-")) })
+    if !tokens.isDisjoint(with: rosterAgentTokens) { return true }
+    if let first = words.first, rosterAgentFirstTokens.contains(first) { return true }
+    return rosterAgentPhrases.contains { firstMatch($0, in: hay) != nil }
   }
 
   /// A window-title segment as it would read on screen: no unread counter, no trailing icon.
