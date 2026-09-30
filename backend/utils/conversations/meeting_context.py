@@ -10,6 +10,7 @@ from typing import Any, Callable, Iterable, Optional
 import database.calendar_meetings as calendar_db
 import database.redis_db as redis_db
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from utils.conversations.meeting_participants import looks_like_ai_agent_name
 from models.conversation import CalendarEventLink, Conversation, CreateConversation
 
 logger = logging.getLogger(__name__)
@@ -339,6 +340,7 @@ def _is_owner_name(name: str, owner_names: set[str], owner_locals: set[str]) -> 
 
 
 _NATIVE_VIDEO_APPS = ('zoom', 'microsoft teams', 'webex', 'facetime')
+_CALL_WINDOW_TITLE = re.compile(r'(?<!\w)(?:zoom meeting|meeting|call|webinar|huddle)(?!\w)')
 _UNREAD_TITLE_PREFIX = re.compile(r'^\(\d+\)\s*')
 _TITLE_TRAILING_NOISE = re.compile(r'[^\w)]+$')
 
@@ -354,10 +356,15 @@ def _is_call_window_row(row: dict[str, Any]) -> bool:
     app = str(row.get('appName') or '').casefold()
     if _is_messaging_call_app(app):
         return False
-    if any(marker in app for marker in _NATIVE_VIDEO_APPS):
-        return True
     title = _clean_line(str(row.get('windowTitle') or '')).casefold()
-    return bool(_MEET_TAB_TITLE.match(title)) or any(marker in f'{app} {title}' for marker in _CONFERENCING_MARKERS)
+    if _MEET_TAB_TITLE.match(title):
+        return True  # a joined Meet tab: its title is the call
+    conferencing = any(marker in app for marker in _NATIVE_VIDEO_APPS) or any(
+        marker in f'{app} {title}' for marker in _CONFERENCING_MARKERS
+    )
+    # A conferencing app's other windows (Teams chat, a contact list, Zoom's home
+    # screen) repeat names too. The window must show that it is the call itself.
+    return conferencing and (_has_call_control(row) or _CALL_WINDOW_TITLE.search(title) is not None)
 
 
 def _title_part(part: str) -> str:
@@ -375,6 +382,34 @@ def call_tile_names(
     *,
     owner_names: Iterable[str] = (),
     owner_emails: Iterable[str] = (),
+) -> list[str]:
+    """Human names shown as call-tile labels (see _call_tile_labels)."""
+    return _call_tile_labels(rows, owner_names, owner_emails, agents=False)
+
+
+def call_tile_agent_names(
+    rows: list[dict[str, Any]],
+    *,
+    owner_names: Iterable[str] = (),
+    owner_emails: Iterable[str] = (),
+) -> list[str]:
+    """AI-agent tiles that pass the same persistence rule.
+
+    They are kept (as agents, never people) because an agent on the call is a
+    possible identity for a speaker cluster; dropping it would let the roster
+    bind a mixed remote channel to the one visible human. Only names the roster
+    classifier also recognises as agents are returned, so none becomes a human.
+    """
+    labels = _call_tile_labels(rows, owner_names, owner_emails, agents=True)
+    return [name for name in labels if looks_like_ai_agent_name(name)]
+
+
+def _call_tile_labels(
+    rows: list[dict[str, Any]],
+    owner_names: Iterable[str],
+    owner_emails: Iterable[str],
+    *,
+    agents: bool,
 ) -> list[str]:
     """Names shown as call-tile labels, by persistence across the call's rows.
 
@@ -426,7 +461,7 @@ def call_tile_names(
         name = spelling[key]
         if counts[key] < minimum or key in title_parts:
             continue
-        if _is_owner_name(name, owner_set, owner_locals) or is_ai_agent_tile_name(name):
+        if _is_owner_name(name, owner_set, owner_locals) or is_ai_agent_tile_name(name) != agents:
             continue
         if len(non_call_rows) >= MIN_NON_CALL_ROWS_FOR_CHROME_CHECK:
             elsewhere = sum(
@@ -582,6 +617,7 @@ def context_from_screen_activity(
         return None
 
     tiles = call_tile_names(rows, owner_names=owner_names, owner_emails=owner_emails)
+    tiles += call_tile_agent_names(rows, owner_names=owner_names, owner_emails=owner_emails)
     participants = participants_from_ocr((str(row.get('ocrText') or '') for row in selected), tile_names=tiles)
     if not participants:
         participants = _messaging_call_participants(rows)

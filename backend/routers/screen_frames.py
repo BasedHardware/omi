@@ -182,6 +182,19 @@ def _validate_capture_window(conversation: Dict[str, Any], candidates: List[Scre
     return fingerprint
 
 
+def _discard_orphaned_frame(uid: str, conversation_id: str, frame_id: str) -> None:
+    try:
+        storage.delete_screen_frame_blobs(uid, conversation_id, frame_id)
+    except Exception as error:  # noqa: BLE001 - cleanup is best effort; the request already failed
+        logger.error(
+            "screen_frame orphan cleanup failed uid=%s conversation_id=%s frame_id=%s error_type=%s",
+            uid,
+            conversation_id,
+            frame_id,
+            type(error).__name__,
+        )
+
+
 def _request_fingerprint(request: ScreenFrameAdjudicationRequest) -> str:
     payload = {
         "subject": request.subject.model_dump(mode="json"),
@@ -315,12 +328,18 @@ def adjudicate_screen_frames(
         for candidate in request.candidates
     ]
     wait(futures)
-    try:
-        outcomes = [future.result() for future in futures]
-    except ScreenFrameWriteError as error:
-        logger.error("screen_frame writer unavailable uid=%s error=%s", uid, error)
-        raise HTTPException(status_code=503, detail={"code": "writer_unavailable"}) from error
-    new_frames = [outcome.written for outcome in outcomes if outcome.written is not None]
+    failure = next((future.exception() for future in futures if future.exception() is not None), None)
+    if failure is not None:
+        # A sibling may already have written its bytes; with no Firestore doc they would be
+        # unreachable (not served, not found by conversation delete). Remove them first.
+        for future in futures:
+            if future.exception() is None and future.result().written is not None:
+                _discard_orphaned_frame(uid, request.subject.id, future.result().written.frame_id)
+        if isinstance(failure, ScreenFrameWriteError):
+            logger.error("screen_frame writer unavailable uid=%s error=%s", uid, failure)
+            raise HTTPException(status_code=503, detail={"code": "writer_unavailable"}) from failure
+        raise failure
+    new_frames = [outcome.written for outcome in (future.result() for future in futures) if outcome.written]
 
     # Mark the attempt BEFORE building the response, and unconditionally — an all-rejected pass
     # is exactly the case this exists for. `revision` cannot record it, because nothing was

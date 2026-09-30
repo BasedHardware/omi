@@ -2,7 +2,7 @@
   "schema_version": 1,
   "rule": {
     "summary": "Call-tile names: a line that is only a person-shaped name, persisting across the call window rows.",
-    "call_rows": "call-window rows only (narrower than the conferencing classifier): never a messaging app (telegram, discord, slack, whatsapp); a native video app (appName contains zoom, microsoft teams, webex, facetime); or a window title starting \"Meet -\"/\"Meet –\"/\"Meet —\" followed by text; or appName+title containing a conferencing marker (zoom, microsoft teams, webex, facetime, google meet, meet.google). A row matched only by a Meet URL in its OCR does not count.",
+    "call_rows": "call-window rows only: never a messaging app (telegram, discord, slack, whatsapp); a window title starting \"Meet -\"/\"Meet –\"/\"Meet —\" + text is a call; otherwise the row must be conferencing (appName contains zoom, microsoft teams, webex, facetime, or appName+title contains zoom, microsoft teams, webex, facetime, google meet, meet.google) AND show call evidence in that window: a word-bounded call-control marker in title+OCR (mute, unmute, end call, hang up, leave call, stop video, start video, screen share, screenshare, in call, in-call, camera off, camera on) or a title containing the word \"zoom meeting\", \"meeting\", \"call\", \"webinar\" or \"huddle\". A row matched only by a Meet URL in its OCR does not count.",
     "min_call_rows": 3,
     "min_rows_with_name": 3,
     "min_row_share": 0.25,
@@ -10,7 +10,7 @@
     "tokens": "2-4 tokens, <=60 chars; each token is a lowercase particle (al bin da de del der di du la le van von, never first or last) or starts with an uppercase letter, contains only letters and - ' ’, and has at least one lowercase letter",
     "chrome_words": "reject when any casefolded token is in the chrome list, the non-person list, or the joiner list (see meeting_context.py _TILE_CHROME_WORDS/_NON_PERSON_WORDS/_JOINER_WORDS)",
     "owner": "exclude a name seen with a trailing \"(...you...)\" marker on any call row, a supplied owner name (casefold equal, or same first and last token), or whose tokens joined equal an owner email local part with . _ - + removed",
-    "ai_agents": "exclude when any whole token (casefolded, edge . ' ’ - trimmed) is agent ai assistant boardy bot chatbot companion fathom fireflies gemini granola meetbot notebot notes notetaker otter recorder tldv; never a suffix match (\"James Talbot\" is human)",
+    "ai_agents": "exclude when any whole token (casefolded, edge . ' ’ - trimmed) is agent ai assistant boardy bot chatbot companion fathom fireflies gemini granola meetbot notebot notes notetaker otter recorder tldv; never a suffix match (\"James Talbot\" is human). Agent tiles that pass every other tile rule are returned separately (call_tile_agent_names / expected_agent_names) when the roster classifier also calls them agents, and join the participants as agents; expected_participant_names lists only the human participants.",
     "window_title": "exclude when the name equals a part of any call row window title split on \" - \", \" – \", \" — \", \" | \", \" : \", each part with a leading \"(N) \" counter and trailing non-word characters removed",
     "chrome_elsewhere": "non-call rows = rows that are not call-window rows but share an appName with a call row; with >=3 of them, exclude a name appearing in more than 50% of them",
     "count": "count each name once per row; order by count desc then first appearance; cap 8",
@@ -73,7 +73,8 @@
         "Activation Rate YTD",
         "Spud pay",
         "Dashboards - Grafana"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "owner_tile_marked_you",
@@ -110,7 +111,8 @@
       ],
       "must_exclude": [
         "David Zhang"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "owner_name_supplied",
@@ -149,7 +151,8 @@
       ],
       "must_exclude": [
         "David Zhang"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "owner_email_supplied",
@@ -188,7 +191,8 @@
       ],
       "must_exclude": [
         "David Zhang"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "ai_agent_tiles_excluded",
@@ -230,6 +234,13 @@
         "Omi Agent",
         "Read Ai",
         "Meetbot Recorder"
+      ],
+      "expected_agent_names": [
+        "Boardy Boardman",
+        "Fireflies Notetaker",
+        "Otter Bot",
+        "Omi Agent",
+        "Meetbot Recorder"
       ]
     },
     {
@@ -269,7 +280,8 @@
         "Coinflow Portal",
         "Marta Kowalski",
         "Spud Pay"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "meet_code_titles_excluded",
@@ -308,7 +320,8 @@
       "must_exclude": [
         "Meet - amc-iajq-asx",
         "Meet Amc Iajq"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "bookmark_chrome_recurring_everywhere",
@@ -365,7 +378,8 @@
       ],
       "must_exclude": [
         "Jane Doe"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "too_few_call_rows",
@@ -388,7 +402,8 @@
       "expected_participant_names": [],
       "must_exclude": [
         "Jordan Rivera"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "row_share_threshold",
@@ -505,7 +520,8 @@
       ],
       "must_exclude": [
         "Jordan Rivera"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "window_title_meeting_name_excluded",
@@ -542,7 +558,8 @@
       ],
       "must_exclude": [
         "Acme Onboarding"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "non_ascii_and_particle_names",
@@ -578,7 +595,8 @@
         "Ludwig van Beethoven",
         "Anna-Lena Schmidt"
       ],
-      "must_exclude": []
+      "must_exclude": [],
+      "expected_agent_names": []
     },
     {
       "id": "single_token_and_decorated_tiles",
@@ -610,7 +628,8 @@
       ],
       "must_exclude": [
         "Nik"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "tile_joins_roster_sentence_without_duplicate",
@@ -642,7 +661,8 @@
         "Ash Kalb",
         "Jordan Rivera"
       ],
-      "must_exclude": []
+      "must_exclude": [],
+      "expected_agent_names": []
     },
     {
       "id": "agent_markers_are_whole_tokens",
@@ -681,6 +701,9 @@
       ],
       "must_exclude": [
         "Tomorrow Inc - NoteTaker",
+        "Tomorrow Inc NoteTaker"
+      ],
+      "expected_agent_names": [
         "Tomorrow Inc NoteTaker"
       ]
     },
@@ -732,6 +755,9 @@
         "Tomorrow Inc - NoteTaker",
         "Tomorrow Inc NoteTaker",
         "Omi feedback call: David / Tristan"
+      ],
+      "expected_agent_names": [
+        "Tomorrow Inc NoteTaker"
       ]
     },
     {
@@ -772,7 +798,8 @@
         "Saved Messages",
         "RedStone Important Updates",
         "Hermes Flop Finance"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "meet_url_in_ocr_only_is_not_a_call_window",
@@ -805,7 +832,8 @@
       "expected_participant_names": [],
       "must_exclude": [
         "Jordan Rivera"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "named_meet_title_counts_as_call_window",
@@ -843,7 +871,8 @@
       "must_exclude": [
         "Weekly Update",
         "Quick chat"
-      ]
+      ],
+      "expected_agent_names": []
     },
     {
       "id": "same_app_tab_strip_chrome_excluded",
@@ -926,7 +955,119 @@
       "must_exclude": [
         "Arc Blockchain Launch",
         "Upgrade Backend Helm"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "teams_chat_list_is_not_a_call",
+      "description": "A Teams chat window repeats contact names on every row; without call evidence it is not a call window.",
+      "rows": [
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Chat | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nType a message"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Chat | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nType a message"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Chat | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nType a message"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Chat | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nType a message"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Chat | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nType a message"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "must_exclude": [
+        "Jordan Rivera",
+        "Priya Natarajan"
+      ],
+      "expected_tile_names": [],
+      "expected_agent_names": [],
+      "expected_participant_names": []
+    },
+    {
+      "id": "teams_call_window_with_controls",
+      "description": "The Teams call window shows call controls, so its persistent tile labels count.",
+      "rows": [
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Weekly Sync | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nMute\nLeave\n10:30"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Weekly Sync | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nMute\nLeave\n10:31"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Weekly Sync | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nMute\nLeave\n10:32"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Weekly Sync | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nMute\nLeave\n10:33"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "must_exclude": [],
+      "expected_tile_names": [
+        "Jordan Rivera"
+      ],
+      "expected_agent_names": [],
+      "expected_participant_names": [
+        "Jordan Rivera"
       ]
+    },
+    {
+      "id": "zoom_home_screen_is_not_a_call",
+      "description": "Zoom's home window lists recent contacts; no meeting title, no controls.",
+      "rows": [
+        {
+          "appName": "zoom.us",
+          "windowTitle": "Zoom Workplace",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nNew meeting\nSchedule"
+        },
+        {
+          "appName": "zoom.us",
+          "windowTitle": "Zoom Workplace",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nNew meeting\nSchedule"
+        },
+        {
+          "appName": "zoom.us",
+          "windowTitle": "Zoom Workplace",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nNew meeting\nSchedule"
+        },
+        {
+          "appName": "zoom.us",
+          "windowTitle": "Zoom Workplace",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nNew meeting\nSchedule"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "must_exclude": [
+        "Jordan Rivera",
+        "Priya Natarajan"
+      ],
+      "expected_tile_names": [],
+      "expected_agent_names": [],
+      "expected_participant_names": []
     }
   ]
 }

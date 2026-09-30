@@ -29,6 +29,7 @@ from utils.conversations.screen_frame_evidence import (
     frame_evidence_started_at,
     load_notes_frame_images,
     load_screen_frame_evidence,
+    screen_frame_agent_names,
     screen_frame_names,
     screen_moment_lines,
     with_screen_frame_participants,
@@ -101,7 +102,7 @@ def _rich_meeting_roster(
         if evidence:
             calendar_context = with_screen_frame_participants(
                 calendar_context,
-                screen_frame_names(evidence),
+                screen_frame_names(evidence) + screen_frame_agent_names(evidence),
                 started_at=frame_evidence_started_at(conversation),
                 duration_minutes=frame_evidence_duration_minutes(conversation),
             )

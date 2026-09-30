@@ -12,7 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from utils.conversations.meeting_context import call_tile_names, context_from_screen_activity
+from utils.conversations.meeting_context import call_tile_agent_names, call_tile_names, context_from_screen_activity
+from utils.conversations.meeting_participants import looks_like_ai_agent_name
 
 VECTORS_PATH = Path(__file__).resolve().parents[1] / 'fixtures' / 'meeting_identity' / 'call_tile_vectors.json'
 VECTORS = json.loads(VECTORS_PATH.read_text(encoding='utf-8'))['vectors']
@@ -22,8 +23,9 @@ END = datetime(2026, 9, 30, 17, 30, tzinfo=timezone.utc)
 
 @pytest.mark.parametrize('vector', VECTORS, ids=[vector['id'] for vector in VECTORS])
 def test_tile_names_match_the_shared_vector(vector):
-    names = call_tile_names(vector['rows'], owner_names=vector['owner_names'], owner_emails=vector['owner_emails'])
-    assert names == vector['expected_tile_names']
+    owners = dict(owner_names=vector['owner_names'], owner_emails=vector['owner_emails'])
+    assert call_tile_names(vector['rows'], **owners) == vector['expected_tile_names']
+    assert call_tile_agent_names(vector['rows'], **owners) == vector['expected_agent_names']
 
 
 @pytest.mark.parametrize('vector', VECTORS, ids=[vector['id'] for vector in VECTORS])
@@ -35,8 +37,11 @@ def test_extractor_participants_match_the_shared_vector(vector):
         owner_names=vector['owner_names'],
         owner_emails=vector['owner_emails'],
     )
-    names = [participant.name for participant in (context.participants if context else []) if participant.name]
+    everyone = [participant.name for participant in (context.participants if context else []) if participant.name]
+    # Agent tiles join as agents (the roster classifies them), never as people.
+    names = [name for name in everyone if not looks_like_ai_agent_name(name)]
     assert names == vector['expected_participant_names']
+    assert [name for name in everyone if looks_like_ai_agent_name(name)] == vector['expected_agent_names']
     assert not set(names) & set(vector['must_exclude'])
     if context is not None:
         assert context.calendar_source == 'screen_activity'

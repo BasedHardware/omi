@@ -32,6 +32,7 @@ from database.screen_frames import get_conversation_screen_frames, own_frames
 from database.users import get_meeting_note_screenshots_enabled
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from utils.conversations.meeting_context import is_ai_agent_tile_name
+from utils.conversations.meeting_participants import looks_like_ai_agent_name
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.other.storage import configured_screen_frames_bucket, download_screen_frame_bytes
 
@@ -104,23 +105,36 @@ def load_screen_frame_evidence(uid: str, conversation_id: Optional[str]) -> tupl
     return tuple(evidence)
 
 
-def _clean_name(raw: str) -> Optional[str]:
+def _clean_name(raw: str, *, agents: bool = False) -> Optional[str]:
+    """A human tile name, or with ``agents`` an AI-agent tile the roster also classifies as one."""
     name = ' '.join(_NAME_DECORATION.sub('', raw).split()).strip(' •|*·-—')
     tokens = name.split()
-    if not 1 <= len(tokens) <= 4 or len(name) > 60 or '@' in name or any(ch.isdigit() for ch in name):
+    if not 1 <= len(tokens) <= 5 or len(name) > 60 or '@' in name or any(ch.isdigit() for ch in name):
         return None
-    if name.casefold() in _NOT_A_NAME or is_ai_agent_tile_name(name):
+    if name.casefold() in _NOT_A_NAME or is_ai_agent_tile_name(name) != agents:
         return None
-    return name if any(token[:1].isupper() for token in tokens) else None
+    if agents:
+        return name if looks_like_ai_agent_name(name) else None
+    return name if len(tokens) <= 4 and any(token[:1].isupper() for token in tokens) else None
+
+
+def screen_frame_agent_names(evidence: Sequence[ScreenFrameEvidence]) -> list[str]:
+    """AI-agent tiles on approved frames. They join the roster as agents (never
+    people) so the speaker-binding guard still sees them."""
+    return _frame_names(evidence, agents=True)
 
 
 def screen_frame_names(evidence: Sequence[ScreenFrameEvidence]) -> list[str]:
     """Human tile names the judge read off approved frames, most frequent first."""
+    return _frame_names(evidence, agents=False)
+
+
+def _frame_names(evidence: Sequence[ScreenFrameEvidence], *, agents: bool) -> list[str]:
     counts: dict[str, int] = {}
     spelling: dict[str, str] = {}
     for item in evidence:
         for raw in item.names:
-            name = _clean_name(raw)
+            name = _clean_name(raw, agents=agents)
             if name is None:
                 continue
             key = name.casefold()

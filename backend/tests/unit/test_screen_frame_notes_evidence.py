@@ -36,6 +36,7 @@ from utils.conversations.screen_frame_evidence import (  # noqa: E402
     ScreenFrameEvidence,
     load_notes_frame_images,
     load_screen_frame_evidence,
+    screen_frame_agent_names,
     screen_frame_names,
     screen_moment_lines,
     with_screen_frame_participants,
@@ -193,10 +194,27 @@ class TestSpeakerBindingWithScreenRoster:
         assert 'spk 1 Jordan Rivera' in prefix.context
         assert '- Jordan Rivera | - | human | via screen_activity' in prefix.context
 
-    def test_an_ai_agent_tile_does_not_become_the_remote_human(self):
-        prefix = self._prefix(screen_frame_names([_evidence('a', 1, ['Jordan Rivera', 'Boardy Boardman'])]))
-        assert 'spk 1 Jordan Rivera' in prefix.context
-        assert 'Boardy' not in prefix.context
+    def _frame_roster_names(self, names):
+        evidence = [_evidence('a', 1, names)]
+        return screen_frame_names(evidence) + screen_frame_agent_names(evidence)
+
+    def test_a_speaking_agent_tile_keeps_the_ambiguity_guard(self):
+        # Boardy talks on calls: with Jordan and Boardy on screen the remote channel may be
+        # either, so it must not bind to the one visible human.
+        prefix = self._prefix(self._frame_roster_names(['Jordan Rivera', 'Boardy Boardman']))
+        assert 'spk 1 Jordan Rivera' not in prefix.context
+        assert '- Boardy Boardman | - | ai agent | via screen_activity' in prefix.context
+
+    def test_a_silent_notetaker_tile_does_not_block_binding(self):
+        # Incident 449565eb: a NoteTaker bot records and never speaks, so the one remote
+        # voice is the one remote human.
+        prefix = self._prefix(self._frame_roster_names(['Tristan Jensen', 'You', 'Tomorrow Inc - NoteTaker']))
+        assert 'spk 1 Tristan Jensen' in prefix.context
+        assert '- Tomorrow Inc - NoteTaker | - | ai agent | via screen_activity' in prefix.context
+
+    def test_an_agent_the_roster_would_not_classify_is_not_added(self):
+        # "Read Ai" trips the tile marker but not the roster catalog; adding it would make a human.
+        assert screen_frame_agent_names([_evidence('a', 1, ['Read Ai'])]) == []
 
     def test_an_ai_agent_already_on_the_roster_still_blocks_the_guess(self):
         # Boardy on the OCR roster may be the remote voice: no binding.

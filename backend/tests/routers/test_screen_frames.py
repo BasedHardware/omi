@@ -497,3 +497,34 @@ class TestPerFrameDeleteHonoursTheAccountSetting:
         )
 
         assert screen_frames_mod.delete_conversation_screenshot(CONVERSATION_ID, "frame-a", uid=UID) is remaining
+
+
+def test_a_failed_sibling_write_removes_the_bytes_already_written(_stub_admission_dependencies, monkeypatch):
+    """Concurrent judging: if one candidate's write fails after another's upload landed, that
+    upload has no Firestore doc and no delete path would ever find it. It is removed before 503."""
+    from utils.screen_frames.pipeline import CandidateOutcome
+    from utils.screen_frames.writer import ScreenFrameWriteError
+
+    def judged(*, candidate, **_kwargs):
+        if candidate.client_frame_id == "c1":
+            raise ScreenFrameWriteError("upload_failed")
+        return CandidateOutcome(client_frame_id=candidate.client_frame_id, written=MagicMock(frame_id="landed-frame"))
+
+    monkeypatch.setattr(screen_frames_mod, "adjudicate_candidate", judged)
+    deleted = []
+    monkeypatch.setattr(
+        screen_frames_mod.storage, "delete_screen_frame_blobs", lambda uid, cid, fid: deleted.append((uid, cid, fid))
+    )
+    enforce = MagicMock()
+    monkeypatch.setattr(screen_frames_mod.enforcement, "enforce_and_persist", enforce)
+    candidates = [
+        _candidate(client_frame_id=f"c{i}", captured_at=datetime(2026, 1, 1, 0, i + 1, tzinfo=timezone.utc))
+        for i in range(2)
+    ]
+
+    with pytest.raises(HTTPException) as exc_info:
+        screen_frames_mod.adjudicate_screen_frames(_request(candidates=candidates), uid=UID)
+
+    assert exc_info.value.status_code == 503
+    assert deleted == [(UID, CONVERSATION_ID, "landed-frame")]
+    enforce.assert_not_called()
