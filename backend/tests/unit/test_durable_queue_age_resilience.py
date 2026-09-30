@@ -49,13 +49,18 @@ class TestDurableQueueAgeParsing:
         assert _parse_created_at("   ") is None
 
     def test_parse_created_at_numeric_epoch(self):
-        # Numeric epoch timestamps
+        # Numeric epoch timestamps (in seconds)
         ts = 1759200000.0
         parsed = _parse_created_at(ts)
         assert parsed is not None and parsed.tzinfo == timezone.utc
 
         parsed_int = _parse_created_at(1759200000)
         assert parsed_int is not None
+
+        # Millisecond epochs or absurd magnitudes (> 1e11) must be rejected
+        assert _parse_created_at(1759200000000) is None
+        assert _parse_created_at(1e11) is None
+        assert _parse_created_at(1e12) is None
 
         # Bools, NaNs, Infs, and negatives
         assert _parse_created_at(True) is None
@@ -168,33 +173,35 @@ class TestStoreWideSamplingResilience:
     """Tests for sample_store_wide_oldest_ready_ages logic and metrics publishing."""
 
     def test_ephemeral_queues_return_zero_without_client(self):
-        ages = sample_store_wide_oldest_ready_ages(firestore_client=None)
-        # Ephemeral queues must always be 0.0 even without firestore_client
-        assert ages.get("daily_summary_hour_groups") == 0.0
-        assert ages.get("daily_memory_sweep") == 0.0
+        with patch("database.durable_queue_age.get_firestore_client", return_value=None):
+            ages = sample_store_wide_oldest_ready_ages(firestore_client=None)
+            # Ephemeral queues must always be 0.0 even without firestore_client
+            assert ages.get("daily_summary_hour_groups") == 0.0
+            assert ages.get("daily_memory_sweep") == 0.0
 
     def test_summary_queue_handling(self):
-        # Summary missing -> absent from ages
-        ages1 = sample_store_wide_oldest_ready_ages(firestore_client=None, finalization_summary=None)
-        assert "conversation_finalization_jobs" not in ages1
+        with patch("database.durable_queue_age.get_firestore_client", return_value=None):
+            # Summary missing -> absent from ages
+            ages1 = sample_store_wide_oldest_ready_ages(firestore_client=None, finalization_summary=None)
+            assert "conversation_finalization_jobs" not in ages1
 
-        # Summary present with valid float
-        summary = {"oldest_nonterminal_age_seconds": 45.5}
-        ages2 = sample_store_wide_oldest_ready_ages(firestore_client=None, finalization_summary=summary)
-        assert ages2.get("conversation_finalization_jobs") == 45.5
+            # Summary present with valid float
+            summary = {"oldest_nonterminal_age_seconds": 45.5}
+            ages2 = sample_store_wide_oldest_ready_ages(firestore_client=None, finalization_summary=summary)
+            assert ages2.get("conversation_finalization_jobs") == 45.5
 
-        # Summary present with invalid types (bool, negative, NaN, string) safely handled
-        summary_invalid = {"oldest_nonterminal_age_seconds": True}
-        ages3 = sample_store_wide_oldest_ready_ages(firestore_client=None, finalization_summary=summary_invalid)
-        assert ages3.get("conversation_finalization_jobs") == 0.0
+            # Summary present with invalid types (bool, negative, NaN, string) safely handled
+            summary_invalid = {"oldest_nonterminal_age_seconds": True}
+            ages3 = sample_store_wide_oldest_ready_ages(firestore_client=None, finalization_summary=summary_invalid)
+            assert ages3.get("conversation_finalization_jobs") == 0.0
 
-        summary_nan = {"oldest_nonterminal_age_seconds": float("nan")}
-        ages4 = sample_store_wide_oldest_ready_ages(firestore_client=None, finalization_summary=summary_nan)
-        assert ages4.get("conversation_finalization_jobs") == 0.0
+            summary_nan = {"oldest_nonterminal_age_seconds": float("nan")}
+            ages4 = sample_store_wide_oldest_ready_ages(firestore_client=None, finalization_summary=summary_nan)
+            assert ages4.get("conversation_finalization_jobs") == 0.0
 
-        summary_negative = {"oldest_nonterminal_age_seconds": -15.0}
-        ages5 = sample_store_wide_oldest_ready_ages(firestore_client=None, finalization_summary=summary_negative)
-        assert ages5.get("conversation_finalization_jobs") == 0.0
+            summary_negative = {"oldest_nonterminal_age_seconds": -15.0}
+            ages5 = sample_store_wide_oldest_ready_ages(firestore_client=None, finalization_summary=summary_negative)
+            assert ages5.get("conversation_finalization_jobs") == 0.0
 
     def test_sampling_calculates_oldest_ready_age(self):
         now = datetime(2026, 9, 30, 8, 10, 0, tzinfo=timezone.utc)

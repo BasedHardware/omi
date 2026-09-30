@@ -94,7 +94,7 @@ def _parse_created_at(value: Any) -> datetime | None:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         try:
             flt = float(value)
-            if not math.isnan(flt) and not math.isinf(flt) and flt > 0:
+            if not math.isnan(flt) and not math.isinf(flt) and 0 < flt < 1e11:
                 return datetime.fromtimestamp(flt, tz=timezone.utc)
         except (OverflowError, OSError, ValueError):
             return None
