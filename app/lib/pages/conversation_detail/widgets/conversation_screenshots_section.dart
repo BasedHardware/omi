@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:http/http.dart' as http;
 
 import 'package:omi/backend/http/api/screen_frames.dart';
@@ -35,6 +36,7 @@ class ConversationScreenshotsSection extends StatefulWidget {
     this.delete,
     this.loadBytes,
     this.now,
+    this.gutter = OmiSpacing.md,
   });
 
   final String conversationId;
@@ -44,6 +46,10 @@ class ConversationScreenshotsSection extends StatefulWidget {
   final ConversationScreenshotDelete? delete;
   final ScreenshotBytesLoader? loadBytes;
   final DateTime Function()? now;
+
+  /// The page's side margin. The strip scrolls edge to edge; the heading and the first tile line
+  /// up with the rest of the note by padding this much inside.
+  final double gutter;
 
   static const tileWidth = 144.0;
   static const tileHeight = 90.0;
@@ -65,6 +71,12 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
   /// expiry can never turn into a fetch loop.
   bool _errorRefreshSpent = false;
 
+  /// Which answer may still be drawn. Bumped when a fetch starts and when a delete commits, so a
+  /// response can only be adopted if nothing newer has started or landed since it was asked for —
+  /// in particular a refresh that was in flight across a delete cannot resurrect the deleted tile,
+  /// whichever of the two started first.
+  int _generation = 0;
+
   DateTime _now() => (widget.now ?? DateTime.now)();
 
   @override
@@ -84,6 +96,7 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
   }
 
   Future<void> _fetch() async {
+    final generation = ++_generation;
     ApiResult<ConversationScreenshots> result;
     try {
       result = await (widget.fetch ?? getConversationScreenshots)(widget.conversationId);
@@ -94,7 +107,7 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
       Logger.debug('Meeting screenshots fetch threw: ${e.runtimeType}');
       result = const ApiFailure(ApiProblem(ApiProblemKind.decode));
     }
-    if (!mounted) return;
+    if (!mounted || generation != _generation) return;
     switch (result) {
       case ApiSuccess(:final data):
         _adopt(data);
@@ -200,6 +213,9 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
     switch (result) {
       case ApiSuccess(:final data):
         // The server's set, not a local prediction: it may have promoted another frame to banner.
+        // Committing it fences off every fetch already in flight — each was asked before the
+        // delete landed and would bring the frame back.
+        _generation++;
         _adopt(data);
       case ApiFailure():
         OmiFeedback.error(context, context.l10n.somethingWentWrong);
@@ -228,19 +244,22 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
           children: [
             Semantics(
               header: true,
-              child: Row(
-                children: [
-                  ExcludeSemantics(
-                    child: Icon(Icons.photo_library_outlined, size: 18, color: OmiColors.textSecondary),
-                  ),
-                  const SizedBox(width: OmiSpacing.xs),
-                  Flexible(
-                    child: Text(
-                      context.l10n.meetingScreenshotsTitle,
-                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: widget.gutter),
+                child: Row(
+                  children: [
+                    ExcludeSemantics(
+                      child: Icon(Icons.photo_library_outlined, size: 18, color: OmiColors.textSecondary),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: OmiSpacing.xs),
+                    Flexible(
+                      child: Text(
+                        context.l10n.meetingScreenshotsTitle,
+                        style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: OmiSpacing.sm),
@@ -251,7 +270,9 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
               child: ListView.separated(
                 key: const ValueKey('conversation_screenshots_strip'),
                 scrollDirection: Axis.horizontal,
-                clipBehavior: Clip.none,
+                // Edge to edge: the strip scrolls under the page's side margins, and the list's own
+                // padding lines the first and last tile up with the note's text.
+                padding: EdgeInsets.symmetric(horizontal: widget.gutter),
                 itemCount: frames.length,
                 separatorBuilder: (_, __) => const SizedBox(width: OmiSpacing.xs),
                 itemBuilder: (context, index) {
@@ -262,6 +283,7 @@ class _ConversationScreenshotsSectionState extends State<ConversationScreenshots
                     caption: _captionOf(context, frame),
                     onTap: () => unawaited(_open(frame)),
                     onLongPress: () => unawaited(_showMenu(frame)),
+                    onDelete: () => unawaited(_confirmDelete(frame)),
                     onThumbnailFailed: _onThumbnailFailed,
                   );
                 },
@@ -303,6 +325,7 @@ class _ScreenshotTile extends StatelessWidget {
     required this.caption,
     required this.onTap,
     required this.onLongPress,
+    required this.onDelete,
     required this.onThumbnailFailed,
   });
 
@@ -310,6 +333,7 @@ class _ScreenshotTile extends StatelessWidget {
   final String caption;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final VoidCallback onDelete;
   final VoidCallback onThumbnailFailed;
 
   static TextStyle get captionStyle => OmiType.footnote.copyWith(color: OmiColors.textSecondary);
@@ -331,10 +355,17 @@ class _ScreenshotTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dpr = MediaQuery.devicePixelRatioOf(context);
+    // The actions live here, on the node a screen reader lands on: double-tap opens, and the
+    // rotor / actions menu offers Open and Delete directly. The gesture detector below is for
+    // touch only, so it stays out of the semantics tree and the node carries one set of actions.
     return Semantics(
       button: true,
       label: caption,
-      onLongPressHint: context.l10n.delete,
+      onTap: onTap,
+      customSemanticsActions: {
+        CustomSemanticsAction(label: context.l10n.open): onTap,
+        CustomSemanticsAction(label: context.l10n.delete): onDelete,
+      },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         excludeFromSemantics: true,

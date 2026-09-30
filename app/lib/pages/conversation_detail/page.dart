@@ -1035,29 +1035,32 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                   // Title and facts, shared by every tab (#17297).
                   ConversationDetailHeader(onOpenRecordings: _openRecordings),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                    // Each tab owns the page's side margin, so a section can scroll edge to edge
+                    // (the Summary tab's screenshot strip) instead of clipping at the margin.
                     child: TabBarView(
                       controller: _controller,
                       children: [
-                        TranscriptWidgets(
-                          searchQuery: _searchQuery,
-                          currentResultIndex: getCurrentResultIndexForHighlighting(),
-                          onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                          onSegmentTap: (segment) async {
-                            if (selectedTab != ConversationTab.transcript) {
-                              setState(() {
-                                selectedTab = ConversationTab.transcript;
-                              });
-                              _controller!.animateTo(_transcriptTabIndex);
-                            }
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                          child: TranscriptWidgets(
+                            searchQuery: _searchQuery,
+                            currentResultIndex: getCurrentResultIndexForHighlighting(),
+                            onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                            onSegmentTap: (segment) async {
+                              if (selectedTab != ConversationTab.transcript) {
+                                setState(() {
+                                  selectedTab = ConversationTab.transcript;
+                                });
+                                _controller!.animateTo(_transcriptTabIndex);
+                              }
 
-                            // Seek to segment using callback (start + end for bounded play)
-                            if (_seekToSegmentCallback != null) {
-                              await _seekToSegmentCallback!(segment.start, segment.end);
-                              HapticFeedback.lightImpact();
-                            }
-                          },
+                              // Seek to segment using callback (start + end for bounded play)
+                              if (_seekToSegmentCallback != null) {
+                                await _seekToSegmentCallback!(segment.start, segment.end);
+                                HapticFeedback.lightImpact();
+                              }
+                            },
+                          ),
                         ),
                         SummaryTab(
                           reviewEnabled: !widget.isFromOnboarding &&
@@ -1072,10 +1075,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                           currentResultIndex: getCurrentResultIndexForHighlighting(),
                           onTapWhenSearchEmpty: _closeSearchIfEmpty,
                         ),
-                        if (_controller!.length > _tasksTabIndex) const ActionItemsTab(),
+                        if (_controller!.length > _tasksTabIndex)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                            child: ActionItemsTab(),
+                          ),
                       ],
                     ),
-                  )),
+                  ),
                 ],
               ),
             ),

@@ -1,6 +1,9 @@
 import 'dart:convert';
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
@@ -51,7 +54,15 @@ class _Fake {
   }
 }
 
-Future<void> _pump(WidgetTester tester, _Fake fake, {DateTime Function()? now}) async {
+Future<void> _pump(WidgetTester tester, _Fake fake, {DateTime Function()? now}) =>
+    _pumpWith(tester, fetch: fake.fetch, delete: fake.delete, now: now);
+
+Future<void> _pumpWith(
+  WidgetTester tester, {
+  required ConversationScreenshotsFetch fetch,
+  required ConversationScreenshotDelete delete,
+  DateTime Function()? now,
+}) async {
   await tester.pumpWidget(MaterialApp(
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: const [Locale('en')],
@@ -59,8 +70,8 @@ Future<void> _pump(WidgetTester tester, _Fake fake, {DateTime Function()? now}) 
       body: CustomScrollView(slivers: [
         ConversationScreenshotsSection(
           conversationId: 'conv-1',
-          fetch: fake.fetch,
-          delete: fake.delete,
+          fetch: fetch,
+          delete: delete,
           loadBytes: (_) async => base64Decode(
               'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='),
           now: now ?? () => _t0,
@@ -263,5 +274,139 @@ void main() {
     await tester.pumpAndSettle();
     expect(fake.deleted, ['only']);
     expect(_section, findsNothing);
+  });
+
+  // Review of #19887: a refresh in flight across a delete must never resurrect the deleted tile.
+  // Fetches and deletes resolve only when the test says so, so both orderings can be forced.
+  group('a refresh racing a delete', () {
+    late List<Completer<ApiResult<ConversationScreenshots>>> fetches;
+    late Completer<ApiResult<ConversationScreenshots>> deletion;
+
+    Future<void> pumpRacing(WidgetTester tester) async {
+      fetches = [];
+      deletion = Completer();
+      await _pumpWith(
+        tester,
+        fetch: (_) {
+          final c = Completer<ApiResult<ConversationScreenshots>>();
+          fetches.add(c);
+          return c.future;
+        },
+        delete: (_, __) => deletion.future,
+        // The timer refresh is the realistic racer: sets expire at +60 min, refresh at +58.
+        now: () => _t0,
+      );
+      fetches.first.complete(ApiSuccess(_set([_frame('a', caption: 'A'), _frame('b', caption: 'B')])));
+      await tester.pump();
+      await tester.pump();
+      expect(_tile('a'), findsOneWidget);
+    }
+
+    Future<void> confirmDeleteOfA(WidgetTester tester) async {
+      await tester.longPress(_tile('a'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete').last);
+      await tester.pump(); // delete request is now in flight
+    }
+
+    final afterDelete = ApiSuccess(_set([_frame('b', caption: 'B')], revision: 2));
+    final staleRefresh = ApiSuccess(_set([_frame('a', caption: 'A'), _frame('b', caption: 'B')]));
+
+    testWidgets('refresh starts after the delete starts and resolves after it commits', (tester) async {
+      await pumpRacing(tester);
+      await confirmDeleteOfA(tester);
+      await tester.pump(const Duration(minutes: 58, seconds: 1)); // refresh starts mid-delete
+      expect(fetches, hasLength(2));
+      deletion.complete(afterDelete);
+      await tester.pumpAndSettle();
+      expect(_tile('a'), findsNothing);
+      fetches[1].complete(staleRefresh); // resolves after the delete committed
+      await tester.pumpAndSettle();
+      expect(_tile('a'), findsNothing, reason: 'a refresh asked before the delete landed must not bring it back');
+      expect(_tile('b'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('refresh starts before the delete and resolves after it commits', (tester) async {
+      await pumpRacing(tester);
+      await tester.pump(const Duration(minutes: 58, seconds: 1)); // refresh in flight first
+      expect(fetches, hasLength(2));
+      await confirmDeleteOfA(tester);
+      deletion.complete(afterDelete);
+      await tester.pumpAndSettle();
+      fetches[1].complete(staleRefresh);
+      await tester.pumpAndSettle();
+      expect(_tile('a'), findsNothing);
+      expect(_tile('b'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a refresh that lands before the delete commits is superseded by the delete', (tester) async {
+      await pumpRacing(tester);
+      await confirmDeleteOfA(tester);
+      await tester.pump(const Duration(minutes: 58, seconds: 1));
+      fetches[1].complete(staleRefresh);
+      await tester.pumpAndSettle();
+      deletion.complete(afterDelete);
+      await tester.pumpAndSettle();
+      expect(_tile('a'), findsNothing);
+      expect(_tile('b'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  });
+
+  // Review of #19887: tap and long-press must reach VoiceOver / TalkBack too.
+  testWidgets('a screen reader can open a tile and reach Open and Delete', (tester) async {
+    final handle = tester.ensureSemantics();
+    final fake = _Fake([
+      ApiSuccess(_set([_frame('b', caption: 'Banner'), _frame('s1', caption: 'Other')]))
+    ]);
+    fake.deleteResponse = ApiSuccess(_set([_frame('s1', caption: 'Other')], revision: 2));
+    await _pump(tester, fake);
+
+    final node = tester.getSemantics(find.bySemanticsLabel('Banner'));
+    final data = node.getSemanticsData();
+    expect(data.hasAction(SemanticsAction.tap), isTrue);
+    expect(data.hasAction(SemanticsAction.customAction), isTrue);
+    final labels = [
+      for (final id in data.customSemanticsActionIds ?? const <int>[]) CustomSemanticsAction.getAction(id)!.label
+    ];
+    expect(labels, containsAll(['Open', 'Delete']));
+
+    tester.semantics.tap(find.semantics.byLabel('Banner'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MediaViewerPage), findsOneWidget);
+    Navigator.of(tester.element(find.byType(MediaViewerPage))).pop();
+    await tester.pumpAndSettle();
+
+    final delete = [
+      for (final id in data.customSemanticsActionIds!) CustomSemanticsAction.getAction(id)!,
+    ].firstWhere((a) => a.label == 'Delete');
+    tester.semantics.customAction(find.semantics.byLabel('Banner'), delete);
+    await tester.pumpAndSettle();
+    expect(find.text('Delete Screenshot?'), findsOneWidget);
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+
+    expect(fake.deleted, ['b']);
+    expect(_tile('b'), findsNothing);
+    expect(_tile('s1'), findsOneWidget);
+    handle.dispose();
+  });
+
+  // Review of #19887: the strip runs to the screen edges; only its padding aligns the first tile.
+  testWidgets('the strip scrolls edge to edge with the first tile at the gutter', (tester) async {
+    final fake = _Fake([
+      ApiSuccess(_set([_frame('a'), _frame('b'), _frame('c')]))
+    ]);
+    await _pump(tester, fake);
+    final strip = find.byKey(const ValueKey('conversation_screenshots_strip'));
+    final screenWidth = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    expect(tester.getTopLeft(strip).dx, 0);
+    expect(tester.getSize(strip).width, screenWidth);
+    expect(tester.getTopLeft(_tile('a')).dx, 16, reason: 'first tile lines up with the page margin');
+    expect(tester.getTopLeft(find.text('What was on screen')).dx, greaterThanOrEqualTo(16));
   });
 }

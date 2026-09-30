@@ -92,38 +92,46 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
               children: [
                 CustomScrollView(
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+                  // The page leaves the side margin to each tab; everything here sits inside it
+                  // except the screenshot strip, which scrolls edge to edge.
                   slivers: [
-                    // Title and facts live in the page header, shared by every tab.
-                    const SliverToBoxAdapter(child: SizedBox(height: 4)),
-                    discarded
-                        ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
-                        : GetAppsWidgets(
-                            searchQuery: widget.searchQuery,
-                            currentResultIndex: widget.currentResultIndex,
-                            canStartEditing: () {
-                              final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                              if (!connectivityProvider.isConnected) {
-                                ConnectivityProvider.showNoInternetDialog(context);
-                                return false;
-                              }
-                              return true;
-                            },
-                            onEditStarted: (_) {
-                              setState(() => _isEditing = true);
-                              PlatformManager.instance.analytics.editSummaryStarted();
-                            },
-                            onEditCancelled: (_) {
-                              setState(() => _isEditing = false);
-                              PlatformManager.instance.analytics.editSummaryCancelled();
-                            },
-                            onSaveSummarySelection: (selection, newContent) {
-                              PlatformManager.instance.analytics.editSummarySaved();
-                              context.read<ConversationDetailProvider>().saveEditingSummarySelection(
-                                    selection,
-                                    newContent,
-                                  );
-                            },
-                          ),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                      sliver: SliverMainAxisGroup(slivers: [
+                        // Title and facts live in the page header, shared by every tab.
+                        const SliverToBoxAdapter(child: SizedBox(height: 4)),
+                        discarded
+                            ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
+                            : GetAppsWidgets(
+                                searchQuery: widget.searchQuery,
+                                currentResultIndex: widget.currentResultIndex,
+                                canStartEditing: () {
+                                  final connectivityProvider =
+                                      Provider.of<ConnectivityProvider>(context, listen: false);
+                                  if (!connectivityProvider.isConnected) {
+                                    ConnectivityProvider.showNoInternetDialog(context);
+                                    return false;
+                                  }
+                                  return true;
+                                },
+                                onEditStarted: (_) {
+                                  setState(() => _isEditing = true);
+                                  PlatformManager.instance.analytics.editSummaryStarted();
+                                },
+                                onEditCancelled: (_) {
+                                  setState(() => _isEditing = false);
+                                  PlatformManager.instance.analytics.editSummaryCancelled();
+                                },
+                                onSaveSummarySelection: (selection, newContent) {
+                                  PlatformManager.instance.analytics.editSummarySaved();
+                                  context.read<ConversationDetailProvider>().saveEditingSummarySelection(
+                                        selection,
+                                        newContent,
+                                      );
+                                },
+                              ),
+                      ]),
+                    ),
                     // Where the Mac puts its strip: after the note's own sections. Only a completed
                     // conversation can have adjudicated screenshots.
                     if (!discarded && conversation != null && conversation.status == ConversationStatus.completed)
@@ -131,18 +139,23 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                         key: ValueKey('conversation-screenshots-${conversation.id}'),
                         conversationId: conversation.id,
                       ),
-                    if (feedbackKind == FeedbackPromptKind.summary)
-                      SummaryFeedbackPrompt(
-                        key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),
-                        conversationId: conversation?.id,
-                      ),
-                    if (feedbackKind == FeedbackPromptKind.recording && conversation != null)
-                      RecordingQualityFeedbackPrompt(
-                        key: ValueKey('recording-feedback-${conversation.id}'),
-                        recordingId: conversation.id,
-                      ),
-                    const SliverToBoxAdapter(child: GetGeolocationWidgets()),
-                    const SliverToBoxAdapter(child: SizedBox(height: 150)),
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                      sliver: SliverMainAxisGroup(slivers: [
+                        if (feedbackKind == FeedbackPromptKind.summary)
+                          SummaryFeedbackPrompt(
+                            key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),
+                            conversationId: conversation?.id,
+                          ),
+                        if (feedbackKind == FeedbackPromptKind.recording && conversation != null)
+                          RecordingQualityFeedbackPrompt(
+                            key: ValueKey('recording-feedback-${conversation.id}'),
+                            recordingId: conversation.id,
+                          ),
+                        const SliverToBoxAdapter(child: GetGeolocationWidgets()),
+                        const SliverToBoxAdapter(child: SizedBox(height: 150)),
+                      ]),
+                    ),
                   ],
                 ),
               ],
