@@ -22,6 +22,7 @@ from ._client import db, get_firestore_client
 from .cache import get_memory_cache
 from .firestore_index_registry import DAILY_SUMMARY_RECIPIENTS_QUERY
 from .firestore_transaction_retry import run_with_transaction_contention_retry
+from database.id_sanitizer import clean_id
 import logging
 from typing import Any, Dict, List, Mapping, Optional, Tuple, Union, cast
 
@@ -40,12 +41,15 @@ def save_token(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) 
     Also maintains time_zone in main user document for backward compatibility
     Migrates legacy fcm_token to subcollection
     """
-    device_key = data.get('device_key', 'unknown_default')
+    safe_uid = clean_id(uid, "uid")
+    raw_device_key = str(data.get('device_key', 'unknown_default'))
+    safe_device_key = clean_id(raw_device_key, "device_key")
+
     token = data.get('fcm_token')
     time_zone = data.get('time_zone')
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    user_ref = client.collection('users').document(uid)
+    user_ref = client.collection('users').document(safe_uid)
 
     # Step 1: Migrate legacy token if exists
     user_doc = user_ref.get()
@@ -75,7 +79,7 @@ def save_token(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) 
             user_ref.update({'fcm_token': DELETE_FIELD})
 
     # Step 2: If new token has proper device_key, replace unknown_default
-    if device_key != 'unknown_default':
+    if safe_device_key != 'unknown_default':
         unknown_ref = user_ref.collection('fcm_tokens').document('unknown_default')
         unknown_doc = unknown_ref.get()
         if getattr(unknown_doc, "exists", False):
@@ -85,13 +89,13 @@ def save_token(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) 
                 unknown_ref.delete()
 
     # Step 3: Save new token to subcollection
-    user_ref.collection('fcm_tokens').document(device_key).set(
+    user_ref.collection('fcm_tokens').document(safe_device_key).set(
         {'token': token, 'time_zone': time_zone, 'created_at': firestore.SERVER_TIMESTAMP}, merge=True
     )
 
     # Migration's earlier snapshot must not decide which schedule fields are
     # absent: another client can opt out while its token is being registered.
-    _update_summary_schedule(uid, {'time_zone': time_zone} if time_zone else {}, firestore_client=client)
+    _update_summary_schedule(safe_uid, {'time_zone': time_zone} if time_zone else {}, firestore_client=client)
 
 
 def get_user_time_zone(uid: str) -> Optional[str]:
@@ -313,25 +317,30 @@ def set_mentor_notification_frequency(uid: str, frequency: int) -> bool:
     return True
 
 
-def get_all_tokens(uid: str) -> list[str]:
+def get_all_tokens(uid: str, *, firestore_client: Any = None) -> list[str]:
     """Get all device tokens for a user from subcollection and legacy field"""
+    safe_uid = clean_id(uid, "uid")
     tokens: List[str] = []
+    client = firestore_client if firestore_client is not None else get_firestore_client()
 
-    # Get tokens from new subcollection
-    token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
-    for doc in token_docs:
-        token_data = _typed_doc(doc)
-        token_value = token_data.get('token')
-        if token_value:
-            tokens.append(str(token_value))
+    try:
+        # Get tokens from new subcollection
+        token_docs = client.collection('users').document(safe_uid).collection('fcm_tokens').stream()
+        for doc in token_docs:
+            token_data = _typed_doc(doc)
+            token_value = token_data.get('token')
+            if token_value:
+                tokens.append(str(token_value))
 
-    # Get legacy token from main user document (backward compatibility)
-    user_ref = db.collection('users').document(uid).get()
-    if getattr(user_ref, "exists", False):
-        user_data = _typed_doc(user_ref)
-        legacy_token = user_data.get('fcm_token')
-        if legacy_token and legacy_token not in tokens:
-            tokens.append(str(legacy_token))
+        # Get legacy token from main user document (backward compatibility)
+        user_ref = client.collection('users').document(safe_uid).get()
+        if getattr(user_doc := user_ref, "exists", False):
+            user_data = _typed_doc(user_doc)
+            legacy_token = user_data.get('fcm_token')
+            if legacy_token and legacy_token not in tokens:
+                tokens.append(str(legacy_token))
+    except Exception as exc:
+        logger.error(f"Failed to get tokens for uid {safe_uid}: {exc}", exc_info=True)
 
     return tokens
 
