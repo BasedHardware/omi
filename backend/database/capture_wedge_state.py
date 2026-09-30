@@ -36,16 +36,24 @@ def claim_wedge_first_seen(
     firestore_client: Any = None,
 ) -> bool:
     """Claim this uid's first-seen slot for ``day``; ``True`` only for the winner."""
+    if not isinstance(uid, str) or not uid.strip():
+        return False
+    if not isinstance(day, str) or not day.strip():
+        return False
     client = _client(firestore_client)
-    doc_ref = client.collection(CAPTURE_WEDGE_STATE_COLLECTION).document(uid)
+    clean_uid = uid.strip()
+    clean_day = day.strip()
+    doc_ref = client.collection(CAPTURE_WEDGE_STATE_COLLECTION).document(clean_uid)
     stamp = now or datetime.now(timezone.utc)
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
 
     def _txn(transaction: Any) -> bool:
         snapshot = doc_ref.get(transaction=transaction)
         data = snapshot.to_dict() or {} if getattr(snapshot, 'exists', False) else {}
-        if data.get('first_seen_day') == day:
+        if data.get('first_seen_day') == clean_day:
             return False
-        transaction.set(doc_ref, {'uid': uid, 'first_seen_day': day, 'updated_at': stamp}, merge=True)
+        transaction.set(doc_ref, {'uid': clean_uid, 'first_seen_day': clean_day, 'updated_at': stamp}, merge=True)
         return True
 
     return firestore.transactional(_txn)(client.transaction())
@@ -64,9 +72,16 @@ def claim_wedge_nudge_cooldown(
     the process dies between claim and send the nudge is simply missed — the
     at-most-once tradeoff documented in the module docstring.
     """
+    if not isinstance(uid, str) or not uid.strip():
+        return False
+    if not isinstance(cooldown, timedelta) or cooldown < timedelta(0):
+        cooldown = WEDGE_NUDGE_COOLDOWN
     client = _client(firestore_client)
-    now = now or datetime.now(timezone.utc)
-    doc_ref = client.collection(CAPTURE_WEDGE_STATE_COLLECTION).document(uid)
+    clean_uid = uid.strip()
+    now_dt = now or datetime.now(timezone.utc)
+    if now_dt.tzinfo is None:
+        now_dt = now_dt.replace(tzinfo=timezone.utc)
+    doc_ref = client.collection(CAPTURE_WEDGE_STATE_COLLECTION).document(clean_uid)
 
     def _txn(transaction: Any) -> bool:
         snapshot = doc_ref.get(transaction=transaction)
@@ -75,9 +90,10 @@ def claim_wedge_nudge_cooldown(
         if isinstance(last_nudge_at, datetime):
             if last_nudge_at.tzinfo is None:
                 last_nudge_at = last_nudge_at.replace(tzinfo=timezone.utc)
-            if now - last_nudge_at < cooldown:
+            if now_dt - last_nudge_at < cooldown:
                 return False
-        transaction.set(doc_ref, {'uid': uid, 'last_nudge_at': now, 'updated_at': now}, merge=True)
+        transaction.set(doc_ref, {'uid': clean_uid, 'last_nudge_at': now_dt, 'updated_at': now_dt}, merge=True)
         return True
 
     return firestore.transactional(_txn)(client.transaction())
+
