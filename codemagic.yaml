@@ -2914,9 +2914,15 @@ workflows:
     environment:
       groups:
         - google_play
-      # CONFIRM, PROMOTE_PLATFORM, PROMOTE_VERSION, PROMOTE_IOS_BUILD and PROMOTE_ANDROID_BUILD are
-      # supplied per run (Codemagic API `environment.variables` or the start-build dialog). Declaring
-      # them here with empty defaults failed Codemagic's yaml validation, so the workflow never started.
+      # Per-run inputs, overridden by the API trigger's environment.variables (Codemagic only injects
+      # overrides for declared variables). The placeholders are rejected by mobile_store_promote.py,
+      # so a run without explicit inputs fails closed; empty-string defaults fail yaml validation.
+      vars:
+        CONFIRM: "not-confirmed"
+        PROMOTE_PLATFORM: "unset"
+        PROMOTE_VERSION: "unset"
+        PROMOTE_IOS_BUILD: "0"
+        PROMOTE_ANDROID_BUILD: "0"
     working_directory: app
     scripts:
       - name: Submit explicitly selected existing builds
