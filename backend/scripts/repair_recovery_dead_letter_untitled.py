@@ -335,11 +335,25 @@ class LeaseLost(ArtifactError):
 
 class RunLease:
     TTL = 120.0
+    # Firestore transactions have a server-enforced 270s limit; use a 300s
+    # ceiling per attempt, all five retry_write attempts, and bounded backoff.
+    # https://firebase.google.com/docs/firestore/quotas#time_limit_for_a_transaction
+    TRANSACTION_ATTEMPT_SECONDS = 300.0
+    WRITE_ATTEMPTS = 5
+    RETRY_BACKOFF_SECONDS = 8.0
+    RETRY_JITTER_SECONDS = 0.2
+    TAKEOVER_GRACE = TRANSACTION_ATTEMPT_SECONDS * WRITE_ATTEMPTS + (WRITE_ATTEMPTS - 1) * (
+        RETRY_BACKOFF_SECONDS + RETRY_JITTER_SECONDS
+    )
+    SKEW_ALLOWANCE = 60.0
 
-    def __init__(self, blob: Any, *, clock: Callable[[], float] = time.time):
+    def __init__(self, blob: Any):
         self.blob = blob
-        self.clock = clock
         self.owner = uuid.uuid4().hex
+        # A read of unchanged metadata is not a current server-time sample.
+        # Rewrite this owner-specific probe and use the GCS-assigned timestamp.
+        self.probe = blob.bucket.blob(blob.name.rsplit('/', 1)[0] + f'/clock/{self.owner}.json')
+        self.probe_generation = 0
         self.generation: int | None = None
         self.expires = 0.0
         self.ready = False
@@ -348,9 +362,30 @@ class RunLease:
         self.stop = threading.Event()
         self.thread: threading.Thread | None = None
 
+    @staticmethod
+    def server_timestamp(blob: Any, *, created: bool = False) -> float:
+        stamp = blob.updated or (blob.time_created if created else None)
+        if not isinstance(stamp, datetime) or stamp.tzinfo is None:
+            raise LeaseLost('artifact lease has no server timestamp')
+        return stamp.timestamp()
+
+    def server_now(self) -> float:
+        created = self.probe_generation == 0
+        self.probe.upload_from_string(
+            json.dumps({'owner': self.owner}),
+            content_type='application/json',
+            if_generation_match=self.probe_generation,
+            timeout=10,
+            retry=None,
+        )
+        self.probe_generation = int(self.probe.generation)
+        return self.server_timestamp(self.probe, created=created)
+
     def _write(self, generation: int, *, ready: bool, expires: float) -> None:
         self.blob.upload_from_string(
-            json.dumps({'owner': self.owner, 'expires': expires, 'state': 'ready' if ready else 'reconciling'}),
+            json.dumps(
+                {'owner': self.owner, 'expires': expires, 'clock': 'gcs', 'state': 'ready' if ready else 'reconciling'}
+            ),
             content_type='application/json',
             if_generation_match=generation,
             timeout=10,
@@ -366,24 +401,37 @@ class RunLease:
                 self.renew()
                 return
             generation = 0
+            now = self.server_now()
             try:
                 self.blob.reload(timeout=10, retry=None)
                 generation = int(self.blob.generation)
                 prior = json.loads(self.blob.download_as_bytes(if_generation_match=generation, timeout=10, retry=None))
                 expiry = prior.get('expires')
-                if fresh or not isinstance(expiry, (int, float)) or not math.isfinite(expiry) or expiry > self.clock():
+                # Old-format leases used an untrusted local clock. Ignore their
+                # expiry and derive it from GCS metadata plus the maximum TTL.
+                metadata_expiry = self.server_timestamp(self.blob) + self.TTL
+                if prior.get('clock') != 'gcs':
+                    expiry = metadata_expiry
+                elif isinstance(expiry, (int, float)) and math.isfinite(expiry):
+                    expiry = max(expiry, metadata_expiry)
+                if (
+                    fresh
+                    or not isinstance(expiry, (int, float))
+                    or not math.isfinite(expiry)
+                    or now < expiry + self.TAKEOVER_GRACE + self.SKEW_ALLOWANCE
+                ):
                     raise LeaseLost('artifact run lease is occupied')
             except NotFound:
                 pass
             try:
-                self._write(generation, ready=fresh, expires=self.clock() + self.TTL)
+                self._write(generation, ready=fresh, expires=self.server_now() + self.TTL)
             except Exception:
                 self.lost = True
                 raise LeaseLost('artifact run lease acquisition failed') from None
 
     def renew(self, *, require_ready: bool = False, reconciled: bool = False) -> None:
         with self.lock:
-            if self.lost or self.generation is None or self.expires <= self.clock():
+            if self.lost or self.generation is None:
                 self.lost = True
                 raise LeaseLost('artifact run lease lost or expired')
             if require_ready and not self.ready:
@@ -398,10 +446,10 @@ class RunLease:
                 if (
                     record.get('owner') != self.owner
                     or record.get('expires') != self.expires
-                    or self.expires <= self.clock()
+                    or self.expires <= self.server_now()
                 ):
                     raise LeaseLost('artifact run lease owner changed')
-                self._write(self.generation, ready=self.ready or reconciled, expires=self.clock() + self.TTL)
+                self._write(self.generation, ready=self.ready or reconciled, expires=self.server_now() + self.TTL)
             except Exception:
                 self.lost = True
                 self.stop.set()
@@ -429,7 +477,7 @@ class RunLease:
             if self.generation is None or self.lost:
                 return
             try:
-                self._write(self.generation, ready=False, expires=0.0)
+                self._write(self.generation, ready=False, expires=self.server_now())
             except Exception:
                 pass  # generation fence prevents releasing another owner's lease
             self.lost = True
@@ -626,7 +674,9 @@ class ArtifactMirror:
                 continue
             log.append_local('results.jsonl', record)
             log.results[record['decision_id']] = record
-        log.processed = {record['job_id'] for record in log.results.values() if record['outcome'] != 'error'}
+        log.processed = {
+            record['job_id'] for record in log.results.values() if record['outcome'] not in ('error', 'unresolved')
+        }
 
 
 class RunLog:
@@ -652,7 +702,7 @@ class RunLog:
                 os.fsync(file.fileno())
         self.cipher = Fernet((path / 'audit.key').read_bytes())
         self.results = {r['decision_id']: r for r in self.read('results.jsonl')}
-        self.processed = {r['job_id'] for r in self.results.values() if r['outcome'] != 'error'}
+        self.processed = {r['job_id'] for r in self.results.values() if r['outcome'] not in ('error', 'unresolved')}
         state_path = path / 'checkpoint.json'
         self.cursor = json.loads(state_path.read_text()).get('cursor') if state_path.exists() else None
 
@@ -732,6 +782,7 @@ class RunLog:
                 'job_id': record['job_id'],
                 'outcome': outcome,
                 'commit_revision': record.get('commit_revision'),
+                'unresolved_reason': record.get('unresolved_reason') if outcome == 'unresolved' else None,
                 'projection_status': (
                     record.get('projection_status', existing.get('projection_status', 'pending'))
                     if outcome == 'written'
@@ -748,15 +799,23 @@ class RunLog:
                         f"receipts/{result['decision_id']}/{result['receipt_seq']:020d}.json", result
                     )
                 self.results[result['decision_id']] = result
-            if outcome != 'error':
+            if outcome not in ('error', 'unresolved'):
                 self.processed.add(result['job_id'])
+            else:
+                self.processed.discard(result['job_id'])
 
     def pending_projections(self) -> list[dict[str, Any]]:
         return [
             r for r in self.results.values() if r['outcome'] == 'written' and r.get('projection_status') != 'complete'
         ]
 
+    def unresolved_intents(self) -> list[str]:
+        with self.lock:
+            return sorted(digest(r['decision_id'])[:20] for r in self.results.values() if r['outcome'] == 'unresolved')
+
     def before_mutation(self) -> None:
+        if self.unresolved_intents():
+            raise ArtifactError('run has unresolved intents')
         if self.artifacts is not None:
             if self.artifacts.failed:
                 raise ArtifactError('artifact publication stopped')
@@ -950,7 +1009,7 @@ def write_cas(
 def retry_write(
     limiter: RateLimiter,
     operation: Callable[[], Any],
-    attempts: int = 5,
+    attempts: int = RunLease.WRITE_ATTEMPTS,
     *,
     reconcile: Callable[[], dict[str, Any] | None] | None = None,
 ) -> Any:
@@ -971,7 +1030,10 @@ def retry_write(
                     return recovered
             if attempt + 1 == attempts:
                 raise
-            time.sleep(min(8.0, 0.25 * 2**attempt) + random.uniform(0, 0.2))
+            time.sleep(
+                min(RunLease.RETRY_BACKOFF_SECONDS, 0.25 * 2**attempt)
+                + random.uniform(0, RunLease.RETRY_JITTER_SECONDS)
+            )
             continue
         # A previously timed-out commit may become visible between attempts.
         # Never record the second attempt's eligibility refusal before checking.
@@ -979,6 +1041,7 @@ def retry_write(
             recovered = reconcile()
             if recovered is not None:
                 return recovered
+            return dict(result, outcome='unresolved', unresolved_reason='before_state')
         return result
     raise RuntimeError('unreachable')
 
@@ -994,7 +1057,7 @@ def reconcile_intent(runtime: Runtime, record: dict[str, Any]) -> dict[str, Any]
         revision = getattr(snapshot, 'update_time', None)
         return {'outcome': 'written', 'commit_revision': revision.isoformat() if revision is not None else None}
     if current is not None and digest(current) == record['before_digest']:
-        return None  # unchanged, so another CAS attempt is safe
+        return None  # permits a same-owner retry, never proves a missing-receipt intent resolved
     return {'outcome': 'interrupted_cas_changed', 'commit_revision': None}
 
 
@@ -1160,17 +1223,31 @@ def reconcile_pending(runtime: Runtime, log: RunLog) -> None:
             continue
         outcome = record.get('skip_reason', 'dry_run')
         if has_intent:
-            recovered = reconcile_intent(runtime, record)
-            if recovered is None:
-                if existing and existing['outcome'] != 'error':
-                    continue  # a deliberate CAS refusal, with no observed write
-                outcome = 'error'  # not committed; retry on resume
-            else:
-                outcome = recovered['outcome']
-                record['commit_revision'] = recovered['commit_revision']
+            # A definitive refusal receipt proves that transaction did not write.
+            # Missing, error and unresolved receipts do not: even the before
+            # digest can be observed while an already submitted commit is pending.
+            definitive_refusal = existing and existing['outcome'] not in (
+                'error',
+                'unresolved',
+                'interrupted_binding_missing',
+                'interrupted_cas_changed',
+            )
+            try:
+                recovered = reconcile_intent(runtime, record)
+                if recovered is not None and recovered['outcome'] == 'written':
+                    outcome = 'written'
+                    record['commit_revision'] = recovered['commit_revision']
+                elif definitive_refusal:
+                    continue  # retain the refusal, unless an after-digest disproves it
+                else:
+                    outcome = 'unresolved'
+                    record['unresolved_reason'] = 'before_state' if recovered is None else recovered['outcome']
+            except Exception:
+                outcome = 'unresolved'
+                record['unresolved_reason'] = 'read_failed'
         log.finish(record, outcome)
     log.mirror()
-    if log.artifacts is not None:
+    if log.artifacts is not None and not log.unresolved_intents():
         log.artifacts.lease.renew(reconciled=True)
 
 
@@ -1187,6 +1264,19 @@ def run(
 ) -> dict[str, Any]:
     limiter = RateLimiter(max_writes_per_second)
     reconcile_pending(runtime, log)
+    if log.unresolved_intents():
+        summary: dict[str, Any] = {
+            'apply': log.config['apply'],
+            'processed': 0,
+            'classes': {},
+            'skip_reasons': {},
+            'unresolved_intents': log.unresolved_intents(),
+            'unresolved_count': len(log.unresolved_intents()),
+            'projection_pending': len(log.pending_projections()),
+            'exit_code': 2,
+        }
+        log.save('summary.json', summary)
+        return summary
     if log.config['apply']:
         retry_pending_projections(runtime, log, limiter, workers)
     counts: Counter[str] = Counter()
@@ -1254,6 +1344,11 @@ def run(
                 log.mirror()  # cursor freezes must never freeze durable pages
             if stopped or (limit is not None and processed >= limit):
                 break
+    if frozen or any(
+        r['outcome'] in ('unresolved', 'interrupted_binding_missing', 'interrupted_cas_changed')
+        for r in log.results.values()
+    ):
+        reconcile_pending(runtime, log)
     summary = {
         'apply': log.config['apply'],
         'processed': processed,
@@ -1263,9 +1358,11 @@ def run(
         'breakdown': breakdown,
         'samples': samples,
         'projection_pending': len(log.pending_projections()),
+        'unresolved_intents': log.unresolved_intents(),
+        'unresolved_count': len(log.unresolved_intents()),
         'journal_warnings': dict(log.journal_warnings),
         'stopped_error_rate': stopped,
-        'exit_code': 2 if frozen or stopped or log.pending_projections() else 0,
+        'exit_code': 2 if frozen or stopped or log.pending_projections() or log.unresolved_intents() else 0,
     }
     log.save('summary.json', summary)
     return summary
@@ -1287,6 +1384,18 @@ def rollback(
     recent: deque[bool] = deque(maxlen=error_window)
     reconcile_pending(runtime, source)
     reconcile_pending(runtime, target)
+    if source.unresolved_intents() or target.unresolved_intents():
+        summary = {
+            'rollback': True,
+            'apply': target.config['apply'],
+            'outcomes': {},
+            'unresolved_intents': {'source': source.unresolved_intents(), 'target': target.unresolved_intents()},
+            'unresolved_count': len(source.unresolved_intents()) + len(target.unresolved_intents()),
+            'projection_pending': len(source.pending_projections()) + len(target.pending_projections()),
+            'exit_code': 2,
+        }
+        target.save('summary.json', summary)
+        return summary
     if target.config['apply']:
         retry_pending_projections(runtime, target, limiter, workers)
     # An old error receipt and a later successful retry can identify the same
@@ -1409,6 +1518,13 @@ def rollback(
             if len(recent) == error_window and sum(recent) / error_window > error_threshold:
                 stopped = True
                 break
+    if (
+        counts['error']
+        or counts['unresolved']
+        or counts['interrupted_binding_missing']
+        or counts['interrupted_cas_changed']
+    ):
+        reconcile_pending(runtime, target)
     if target.config['apply']:
         # A source receipt may have been recovered during rollback. Index the
         # current durable row (including any restored state), without mutation.
@@ -1419,10 +1535,19 @@ def rollback(
         'outcomes': dict(counts),
         'projection_pending': len(target.pending_projections()) + len(source.pending_projections()),
         'source_projection_pending': len(source.pending_projections()),
+        'unresolved_intents': {'source': source.unresolved_intents(), 'target': target.unresolved_intents()},
+        'unresolved_count': len(source.unresolved_intents()) + len(target.unresolved_intents()),
         'journal_warnings': {'source': dict(source.journal_warnings), 'target': dict(target.journal_warnings)},
         'stopped_error_rate': stopped,
         'exit_code': (
-            2 if counts['error'] or stopped or target.pending_projections() or source.pending_projections() else 0
+            2
+            if counts['error']
+            or stopped
+            or target.pending_projections()
+            or source.pending_projections()
+            or source.unresolved_intents()
+            or target.unresolved_intents()
+            else 0
         ),
     }
     target.save('summary.json', summary)
