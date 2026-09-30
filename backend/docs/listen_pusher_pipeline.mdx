@@ -1946,8 +1946,9 @@ visibility edges but do not renew a lease or opt into detail translation.
 
 ### Jev population measurement (EXP-004)
 
-Conversation processing assigns stable per-user relevance arms (`relevance_arm`)
-and owner flip cohorts (`owner_flip_enabled_for`). Existing live flags are dev-on,
+Conversation processing assigns stable per-user relevance arms (`relevance_arm`).
+The owner flip flag is universal when enabled (INV-MEM-5); owner *measurement*
+stays conversation-sampled. Existing live flags are dev-on,
 prod-off; unset live percentages preserve dev behavior. The ambiguous model tier
 can be policy-kept by `CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT`; deterministic
 rules, restores, calendar retention and plan gates retain their precedence.

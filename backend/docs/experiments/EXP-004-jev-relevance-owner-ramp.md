@@ -20,9 +20,9 @@ admit nobody. With K fixed, increasing J retains existing Jev users. Set K
 before J: increasing K moves the Jev window and may absorb Jev users into
 keep-all; the upper bound is capped at 100.
 
-Owner flip uses `owner-flip-v1`, `MEMORY_OWNER_JEV_FLIP_PERCENT` (unset means
-100 when enabled), and `MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST`; neither enables
-the live path without `MEMORY_OWNER_JEV_FLIP_ENABLED`.
+Owner flip is universal when `MEMORY_OWNER_JEV_FLIP_ENABLED` is on; INV-MEM-5
+forbids UID cohorts in live owner attribution, so there is no owner-flip
+percentage or allowlist. Owner *measurement* stays conversation-sampled.
 
 Rules, restores, policy KEEP and the plan gate precede arm treatment. Keep-all
 returns policy keep at the ambiguous model tier without calling nano or Jev.
@@ -36,10 +36,13 @@ locked classifier/label set; shadow scores alone are not nano counterfactuals.
 
 ## Admission, durability and privacy
 
-Both deployment stages declare relevance and owner shadow percentages 100,
-keep-all percentage 0, and daily caps 60000. Dev retains both live flags on
-with unset live percentages; prod retains live flags and percentages absent.
-The new settings are literals, requiring no Secret Manager pre-bind.
+Both deployment stages declare keep-all percentage 0 and daily caps 60000. Dev
+runs both shadows at 100 and retains both live flags on with unset live
+percentages. Prod declares shadow percentages 0 and live flags absent: the
+Firestore TTL policy on collection group `jev_shadow` (field `expire_at`) must
+be provisioned and verified before any prod shadow percentage is raised, or the
+60-day retention promise is inert. The new settings are literals, requiring no
+Secret Manager pre-bind.
 
 `CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT` samples the conversation ID with
 salt `relevance-shadow-v1`. Only the reached model tier, transcript-only,

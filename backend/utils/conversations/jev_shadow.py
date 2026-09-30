@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal, cast
 
 import redis
+from google.api_core import exceptions as google_api_exceptions
 from redis.backoff import NoBackoff
 from redis.retry import Retry
 
@@ -39,7 +40,7 @@ Lane = Literal['relevance', 'owner']
 DEADLINE_SECONDS = 2.5
 _slots = {lane: threading.BoundedSemaphore(2) for lane in ('relevance', 'owner')}
 _SOURCES = frozenset(source.value for source in ConversationSource)
-_SUBJECT_KINDS = frozenset({'speaker', 'person', 'user', 'unknown', 'general_knowledge'})
+_SUBJECT_KINDS = frozenset({'speaker', 'person', 'user', 'entity', 'unknown', 'general_knowledge'})
 _ADMIT_LUA = """
 if redis.call('EXISTS', KEYS[2]) == 1 then return 2 end
 local count = tonumber(redis.call('GET', KEYS[1]) or '0')
@@ -181,6 +182,7 @@ def _run(
             timeout_seconds=remaining,
             max_attempts=1,
             outcome_observer=outcomes.append,
+            record_decision_metrics=False,
         )
         JEV_SHADOW_LATENCY.labels(lane).observe(time.monotonic() - (deadline - DEADLINE_SECONDS))
         if time.monotonic() > deadline:
@@ -209,10 +211,16 @@ def _run(
             for option in ('user', 'third_party', 'general_knowledge'):
                 record[f'p_{option}'] = answers.choice_probability(owner_jev.QUESTION_NAME, option)
             OWNER_JEV_SHADOW_SCORE.observe(record['p_user'])
-        record_id = _sha(f'{lane}|{conversation_id}|{content_sha}')[:32]
-        write_jev_shadow(uid, record_id, record, deadline=deadline)
+        record_id = _sha(f'{lane}|{conversation_id}|{content_sha}|{record["question_version"]}')[:32]
+        if not write_jev_shadow(uid, record_id, record, deadline=deadline):
+            # A deleting account fences the write; the record is intentionally absent.
+            record_jev_shadow_outcome(lane, 'dropped')
+            return
         record_jev_shadow_outcome(lane, 'ok')
     except TimeoutError:
+        record_jev_shadow_outcome(lane, 'timeout')
+    except google_api_exceptions.DeadlineExceeded:
+        # The Firestore client raises its own deadline type, not TimeoutError.
         record_jev_shadow_outcome(lane, 'timeout')
     except Exception:
         record_jev_shadow_outcome(lane, 'jev_failed')

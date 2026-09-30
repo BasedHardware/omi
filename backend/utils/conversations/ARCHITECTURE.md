@@ -62,7 +62,8 @@ and background processing.
   only materialized `speaker_id` from the SPEAKER_00 default is not
   cluster evidence.
   One flagged exception (`MEMORY_OWNER_JEV_FLIP_ENABLED`, default off,
-  `owner_jev.py`, gated per UID by `owner_flip_enabled_for`): a candidate capture resolved to a *third party* may be
+  `owner_jev.py`, universal when enabled — INV-MEM-5 forbids UID cohorts in
+  live owner attribution): a candidate capture resolved to a *third party* may be
   re-attributed to the user when Jev's P(owner = user) is at least 0.9. It
   never moves a candidate away from the user or out of `unknown`, and the
   item's `promotion.source_attribution.override` records the probability and

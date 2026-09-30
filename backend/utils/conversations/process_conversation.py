@@ -89,7 +89,7 @@ from utils.conversations.relevance import (
 from utils.conversations.relevance_jev import jev_discard_probability, jev_tier_applies, relevance_transcript
 from utils.conversations.owner_jev import MAX_OWNER_CHECKS_PER_CONVERSATION, OwnerFlip, jev_owner_flip, owner_state
 from utils.conversations.jev_shadow import owner_shadow_in_cohort, submit_owner_shadow, submit_relevance_shadow
-from config.jev_decisions import relevance_arm, relevance_experiment_active, owner_flip_enabled_for
+from config.jev_decisions import memory_owner_jev_flip_enabled, relevance_arm, relevance_experiment_active
 from utils.conversations.relevance_io import (
     adjacent_conversation,
     apply_relevance,
@@ -1586,10 +1586,15 @@ def _shadow_owner_candidate(
 ) -> None:
     try:
         if not owner_shadow_in_cohort(conversation.id):
+            # The unsampled denominator must be visible in the outcome metrics
+            # during a partial rollout, exactly as the relevance lane records it.
+            record_jev_shadow_outcome('owner', 'cohort')
             return
         quotes = _owner_candidate_quotes(conversation, evidence_quotes)
         structured = conversation.structured
-        source = conversation.source.value
+        # `Conversation.source` is optional; a source-less record is measured
+        # under the already-supported `unknown` source instead of crashing.
+        source = getattr(conversation.source, 'value', conversation.source) or 'unknown'
         state = owner_state(
             candidate=candidate_content,
             quotes=quotes,
@@ -1748,7 +1753,7 @@ def _extract_memories_canonical(
         ungrounded_candidates = 0
         seen_candidates = 0
         owner_checks = 0
-        owner_jev_enabled = owner_flip_enabled_for(uid)
+        owner_jev_enabled = memory_owner_jev_flip_enabled()
         for candidate in extracted_candidates:
             seen_candidates += 1
             evidence_quotes = _grounded_l1_evidence_quotes(

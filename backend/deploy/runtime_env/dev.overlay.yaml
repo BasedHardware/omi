@@ -125,9 +125,6 @@ overlay:
         CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
           value: ''
           category: rollout
-        MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
-          value: ''
-          category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
           value: 'true'
           category: rollout
@@ -226,9 +223,6 @@ overlay:
           value: '60000'
           category: rollout
         CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-          value: ''
-          category: rollout
-        MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
           value: ''
           category: rollout
         CAPTURE_JEV_SHADOW_ENABLED:
@@ -527,9 +521,6 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
             value: ''
             category: rollout
-          MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
-            value: ''
-            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -661,9 +652,6 @@ overlay:
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
             value: ''
             category: rollout
-          MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
-            value: ''
-            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -757,9 +745,6 @@ overlay:
             value: '60000'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
-            category: rollout
-          MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
             value: ''
             category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:

@@ -210,7 +210,6 @@ def with_capture_jev_shadow_env(payload: str) -> str:
         r'\n        {"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP", "value": "60000"},'
         r'\n        {"name": "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP", "value": "60000"},'
         r'\n        {"name": "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST", "value": ""},'
-        r'\n        {"name": "MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST", "value": ""},'
     )
     for service in ('backend', 'backend-sync', 'backend-sync-backfill'):
         payload = re.sub(

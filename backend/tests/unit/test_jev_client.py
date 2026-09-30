@@ -201,3 +201,14 @@ def test_state_is_truncated_to_the_context_budget_keeping_head_and_tail(gateway)
 
 def test_short_states_are_not_truncated():
     assert truncate_state('short') == 'short'
+
+
+def test_shadow_calls_suppress_the_live_decision_metric(gateway):
+    """record_decision_metrics=False leaves omi_jev_decision_total untouched."""
+    requests, script, recorded = gateway
+    script.append(_respond(200, _ok_body()))
+    script.append(_raise(httpx.ReadTimeout('read timed out')))
+
+    assert ask_jev('s', QUESTIONS, lane='conversation_relevance', record_decision_metrics=False) is not None
+    assert ask_jev('s', QUESTIONS, lane='conversation_relevance', max_attempts=1, record_decision_metrics=False) is None
+    assert recorded == [] and len(requests) == 2

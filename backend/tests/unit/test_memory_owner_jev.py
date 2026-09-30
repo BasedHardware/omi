@@ -109,7 +109,7 @@ def capture(monkeypatch, pc):
 
     def run(candidate: SimpleNamespace, *, enabled: bool, p_user: float | None = None) -> dict:
         answer['p_user'] = p_user
-        monkeypatch.setattr(pc, 'owner_flip_enabled_for', lambda _uid: enabled)
+        monkeypatch.setattr(pc, 'memory_owner_jev_flip_enabled', lambda: enabled)
         monkeypatch.setattr(pc, 'extract_canonical_l1_memory_candidates', lambda *_a, **_k: [candidate])
         service.reset_mock()
         result = pc._extract_memories_canonical('uid-synthetic', _conversation(), db_client=MagicMock())

@@ -404,9 +404,6 @@ environments:
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
             value: ''
             category: rollout
-          MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
-            value: ''
-            category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -540,9 +537,6 @@ environments:
             value: '60000'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
-            category: rollout
-          MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
             value: ''
             category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
@@ -1039,9 +1033,6 @@ environments:
             CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
               value: ''
               category: rollout
-            MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
-              value: ''
-              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -1283,9 +1274,6 @@ environments:
             CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
               value: ''
               category: rollout
-            MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
-              value: ''
-              category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
               value: 'true'
               category: rollout
@@ -1480,9 +1468,6 @@ environments:
               value: '60000'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-              value: ''
-              category: rollout
-            MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
               value: ''
               category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
@@ -2354,10 +2339,10 @@ environments:
               name: prod-omi-backend-secrets
               key: MCP_OAUTH_CLIENTS_JSON
           CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '100'
+            value: '0'
             category: rollout
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '100'
+            value: '0'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '0'
@@ -2369,9 +2354,6 @@ environments:
             value: '60000'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
-            category: rollout
-          MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
             value: ''
             category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
@@ -2467,10 +2449,10 @@ environments:
             value: based-hardware-prod-screen-frames
             category: storage_retention
           CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-            value: '100'
+            value: '0'
             category: rollout
           MEMORY_OWNER_JEV_SHADOW_PERCENT:
-            value: '100'
+            value: '0'
             category: rollout
           CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
             value: '0'
@@ -2482,9 +2464,6 @@ environments:
             value: '60000'
             category: rollout
           CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-            value: ''
-            category: rollout
-          MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
             value: ''
             category: rollout
           CAPTURE_JEV_SHADOW_ENABLED:
@@ -2896,10 +2875,10 @@ environments:
               env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
               category: oauth_metadata
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '100'
+              value: '0'
               category: rollout
             MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '100'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
               value: '0'
@@ -2911,9 +2890,6 @@ environments:
               value: '60000'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-              value: ''
-              category: rollout
-            MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
               value: ''
               category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
@@ -3133,10 +3109,10 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '100'
+              value: '0'
               category: rollout
             MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '100'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
               value: '0'
@@ -3148,9 +3124,6 @@ environments:
               value: '60000'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-              value: ''
-              category: rollout
-            MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
               value: ''
               category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:
@@ -3339,10 +3312,10 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '100'
+              value: '0'
               category: rollout
             MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '100'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
               value: '0'
@@ -3354,9 +3327,6 @@ environments:
               value: '60000'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST:
-              value: ''
-              category: rollout
-            MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST:
               value: ''
               category: rollout
             CAPTURE_JEV_SHADOW_ENABLED:

@@ -238,8 +238,6 @@ env:
     value: "60000"
   - name: CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
     value: ""
-  - name: MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST
-    value: ""
   - name: CAPTURE_JEV_SHADOW_ENABLED
     value: "true"
   - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST

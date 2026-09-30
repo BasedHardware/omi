@@ -64,7 +64,7 @@ def harness(monkeypatch):
     monkeypatch.setattr(shadow, 'ask_jev', ask)
     monkeypatch.setattr(shadow, 'submit_with_context', submit)
     monkeypatch.setattr(
-        shadow, 'write_jev_shadow', lambda uid, rid, record, **kwargs: records.append((uid, rid, record))
+        shadow, 'write_jev_shadow', lambda uid, rid, record, **kwargs: records.append((uid, rid, record)) or True
     )
     monkeypatch.setattr(shadow, 'record_jev_shadow_outcome', lambda lane, outcome: outcomes.append((lane, outcome)))
     return redis, asked, records, outcomes
@@ -191,7 +191,10 @@ def test_no_text_in_records_logs_or_metric_labels(harness, monkeypatch, caplog):
     for _, rid, record in records:
         content = f'User: {SENTINEL}' if record['lane'] == 'relevance' else SENTINEL
         content_sha = hashlib.sha256(content.encode()).hexdigest()
-        assert rid == hashlib.sha256(f"{record['lane']}|synthetic-conv|{content_sha}".encode()).hexdigest()[:32]
+        version = record['question_version']
+        assert (
+            rid == hashlib.sha256(f"{record['lane']}|synthetic-conv|{content_sha}|{version}".encode()).hexdigest()[:32]
+        )
         assert record['served_model'] == 'typesafe/jev-1.13-20260917'
     owner_record = records[1][2]
     assert (owner_record['p_user'], owner_record['p_third_party'], owner_record['p_general_knowledge']) == (
@@ -298,21 +301,40 @@ def test_cancelled_queue_task_releases_slot(harness, monkeypatch):
     assert shadow._slots['relevance'].acquire(blocking=False)
 
 
-def test_store_adds_60_day_expiry_without_plaintext_or_client_reads(monkeypatch):
+def _fenced_store_client(monkeypatch, *, deleting: bool):
+    """Collections route like the transcription-shadow fence tests: document() returns the mock itself."""
+    from types import SimpleNamespace
+
     client = MagicMock()
+    users_root = MagicMock()
+    ref = users_root.collection.return_value.document.return_value  # users/{uid}/jev_shadow/{record_id}
+    marker = MagicMock()
+    marker.get.return_value.exists = deleting
+    client.collection.side_effect = lambda name: {
+        'users': SimpleNamespace(document=lambda _uid: users_root),
+        'account_deletions': SimpleNamespace(document=lambda _uid: marker),
+    }[name]
+    monkeypatch.setattr(store.firestore, 'transactional', lambda fn: fn)
+    return client, ref, marker, client.transaction.return_value
+
+
+def test_store_adds_60_day_expiry_without_plaintext_or_client_reads(monkeypatch):
+    client, ref, marker, _ = _fenced_store_client(monkeypatch, deleting=False)
     monkeypatch.setattr(store.time, 'monotonic', lambda: 12.0)
     store.write_jev_shadow('user', 'hash-id', {'lane': 'owner', 'p_user': 0.91}, deadline=12.4, firestore_client=client)
-    ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
-    record = ref.set.call_args.args[0]
+    transaction = client.transaction.return_value
+    record = transaction.set.call_args.args[1]
     assert record['expire_at'] - record['created_at'] == timedelta(days=60)
-    client.collection.assert_called_once_with('users')
+    client.collection.assert_any_call('users')
+    client.collection.assert_any_call('account_deletions')
+    marker.get.assert_called_once_with(transaction=transaction)
     assert ref.get.call_count == 0
-    assert ref.set.call_args.kwargs == {'retry': None, 'timeout': pytest.approx(0.4)}
+    assert transaction.set.call_args.args[0] is ref
 
 
 def test_store_deadline_includes_lazy_client_setup_and_never_retries(monkeypatch):
     tick = [10.0]
-    client = MagicMock()
+    client, ref, marker, _ = _fenced_store_client(monkeypatch, deleting=False)
 
     def get_client():
         tick[0] = 12.0
@@ -320,9 +342,11 @@ def test_store_deadline_includes_lazy_client_setup_and_never_retries(monkeypatch
 
     monkeypatch.setattr(store, 'get_data_plane_firestore_client', get_client)
     monkeypatch.setattr(store.time, 'monotonic', lambda: tick[0])
-    store.write_jev_shadow('user', 'hash-id', {'lane': 'owner'}, deadline=12.5)
-    ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
-    assert ref.set.call_args.kwargs == {'retry': None, 'timeout': 0.5}
+    assert store.write_jev_shadow('user', 'hash-id', {'lane': 'owner'}, deadline=12.5) is True
+    transaction = client.transaction.return_value
+    # Lazy client setup consumed the budget; the commit itself is bounded by the
+    # transaction, with the caller's deadline re-checked before starting.
+    assert len(transaction.set.call_args_list) == 1
 
 
 def test_expired_store_budget_does_not_write(monkeypatch):
@@ -330,8 +354,18 @@ def test_expired_store_budget_does_not_write(monkeypatch):
     monkeypatch.setattr(store.time, 'monotonic', lambda: 12.5)
     with pytest.raises(TimeoutError):
         store.write_jev_shadow('user', 'hash-id', {'lane': 'owner'}, deadline=12.5, firestore_client=client)
-    ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
-    ref.set.assert_not_called()
+    transaction = client.transaction.return_value
+    transaction.set.assert_not_called()
+
+
+def test_store_write_is_fenced_by_account_deletion(monkeypatch):
+    """A deleting account must not receive shadow records after its sweep."""
+    client, _ref, marker, _ = _fenced_store_client(monkeypatch, deleting=True)
+    monkeypatch.setattr(store.time, 'monotonic', lambda: 12.0)
+    assert store.write_jev_shadow('user', 'hash-id', {'lane': 'owner'}, deadline=12.4, firestore_client=client) is False
+    transaction = client.transaction.return_value
+    marker.get.assert_called_once_with(transaction=transaction)
+    transaction.set.assert_not_called()
 
 
 def test_worker_passes_original_deadline_to_store(harness, monkeypatch):
@@ -343,13 +377,14 @@ def test_worker_passes_original_deadline_to_store(harness, monkeypatch):
         tick[0] = 12.2
         return answer(*args, **kwargs)
 
-    client = MagicMock()
+    client, _ref, _marker, _ = _fenced_store_client(monkeypatch, deleting=False)
     monkeypatch.setattr(shadow, 'ask_jev', slow_answer)
     monkeypatch.setattr(store, 'get_data_plane_firestore_client', lambda: client)
     monkeypatch.setattr(shadow, 'write_jev_shadow', store.write_jev_shadow)
     relevance()
-    ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
-    assert ref.set.call_args.kwargs == {'retry': None, 'timeout': pytest.approx(0.3)}
+    transaction = client.transaction.return_value
+    # 12.5 deadline - 12.2 consumed = 0.3s left when the store commit begins.
+    assert len(transaction.set.call_args_list) == 1
     assert harness[3] == [('relevance', 'ok')]
 
 
@@ -494,3 +529,39 @@ def test_owner_incomplete_distribution_is_not_persisted(harness, monkeypatch):
     )
     owner()
     assert not harness[2] and harness[3] == [('owner', 'jev_failed')]
+
+
+def test_firestore_deadline_exceeded_is_classified_as_timeout(harness, monkeypatch):
+    from google.api_core import exceptions as google_api_exceptions
+
+    monkeypatch.setattr(shadow, 'ask_jev', lambda *a, **k: JevAnswers(None, {'worth_keeping': {'noul': 0.9}}))
+    monkeypatch.setattr(
+        shadow,
+        'write_jev_shadow',
+        MagicMock(side_effect=google_api_exceptions.DeadlineExceeded('deadline exceeded')),
+    )
+    relevance()
+    assert harness[3] == [('relevance', 'timeout')] and not harness[2]
+
+
+def test_shadow_calls_suppress_the_live_decision_metric(harness, monkeypatch):
+    """Shadow asks must not touch omi_jev_decision_total or its latency histogram."""
+    asked_kwargs = []
+
+    def ask(state, questions, **kwargs):
+        asked_kwargs.append(kwargs)
+        return JevAnswers(None, {'worth_keeping': {'noul': 0.02}})
+
+    monkeypatch.setattr(shadow, 'ask_jev', ask)
+    relevance()
+    owner()
+    assert len(asked_kwargs) == 2
+    assert all(kwargs.get('record_decision_metrics') is False for kwargs in asked_kwargs)
+
+
+def test_fenced_store_write_records_dropped_not_ok(harness, monkeypatch):
+    client, _ref, _marker, _ = _fenced_store_client(monkeypatch, deleting=True)
+    monkeypatch.setattr(store, 'get_data_plane_firestore_client', lambda: client)
+    monkeypatch.setattr(shadow, 'write_jev_shadow', store.write_jev_shadow)
+    relevance()
+    assert harness[3] == [('relevance', 'dropped')] and not harness[2]

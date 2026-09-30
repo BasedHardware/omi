@@ -202,9 +202,9 @@ env:
   - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
     value: "1"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT
-    value: "100"
+    value: "0"
   - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
-    value: "100"
+    value: "0"
   - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
     value: "0"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
@@ -212,8 +212,6 @@ env:
   - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
     value: "60000"
   - name: CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST
-    value: ""
-  - name: MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST
     value: ""
   - name: CAPTURE_JEV_SHADOW_ENABLED
     value: "true"

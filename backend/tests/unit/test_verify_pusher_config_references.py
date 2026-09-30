@@ -190,7 +190,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT": "0",
         "MEMORY_OWNER_JEV_SHADOW_PERCENT": "100",
         "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP": "60000",
-        "MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST": "",
         "CAPTURE_JEV_SHADOW_ENABLED": "true",
         "CAPTURE_JEV_SHADOW_PERCENT": "0",
         "CAPTURE_JEV_SHADOW_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",

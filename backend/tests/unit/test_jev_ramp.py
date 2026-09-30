@@ -21,8 +21,6 @@ def clean_env(monkeypatch):
         'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST',
         'CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT',
         'MEMORY_OWNER_JEV_FLIP_ENABLED',
-        'MEMORY_OWNER_JEV_FLIP_PERCENT',
-        'MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST',
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -30,7 +28,7 @@ def clean_env(monkeypatch):
 def test_bucket_is_stable_salted_and_in_range():
     expected = int.from_bytes(hashlib.sha256(b'relevance-arm-v1\0user').digest()[:8], 'big') / 2**64 * 100
     assert config.uid_bucket('user', 'relevance-arm-v1') == expected
-    assert expected != config.uid_bucket('user', 'owner-flip-v1')
+    assert expected != config.uid_bucket('user', 'owner-shadow-v1')
     assert all(0 <= config.uid_bucket(str(i), 'salt') < 100 for i in range(500))
 
 
@@ -72,34 +70,42 @@ def test_boundary_ranges_and_keep_all_window_shift(monkeypatch):
 @pytest.mark.parametrize('invalid', ['broken', '', '-1', '101', 'nan', 'inf'])
 def test_invalid_percentages_fail_closed(monkeypatch, invalid):
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'true')
-    monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_ENABLED', 'true')
     for name in (
         'CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT',
         'CONVERSATION_RELEVANCE_JEV_PERCENT',
-        'MEMORY_OWNER_JEV_FLIP_PERCENT',
     ):
         monkeypatch.setenv(name, invalid)
     assert config.relevance_arm('user') == 'nano'
-    assert not config.owner_flip_enabled_for('user')
+
+
+def test_invalid_percentage_blocks_the_allowlist_too(monkeypatch):
+    """An allowlist must never rescue a malformed percentage (fail closed)."""
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'true')
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'user')
+    for invalid in ('broken', '', '-1', '101', 'nan', 'inf'):
+        monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_PERCENT', invalid)
+        assert config.relevance_arm('user') == 'nano', invalid
 
 
 def test_unset_percent_preserves_dev_and_allowlist_requires_flag(monkeypatch):
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST', 'user')
-    monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_UID_ALLOWLIST', 'user')
     assert config.relevance_arm('user') == 'nano'
-    assert not config.owner_flip_enabled_for('user')
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_ENABLED', 'true')
-    monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_ENABLED', 'true')
     assert all(config.relevance_arm(str(i)) == 'jev' for i in range(50))
-    assert all(config.owner_flip_enabled_for(str(i)) for i in range(50))
     monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_PERCENT', '0')
-    monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_PERCENT', '0')
     assert config.relevance_arm('user') == 'jev'
-    assert config.owner_flip_enabled_for('user')
     assert config.relevance_arm('other') == 'nano'
-    assert not config.owner_flip_enabled_for('other')
     monkeypatch.setenv('CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT', '100')
     assert config.relevance_arm('user') == 'keep_all'
+
+
+def test_owner_flip_flag_is_universal_not_uid_sampled(monkeypatch):
+    """INV-MEM-5: the live owner flip applies to every UID or none."""
+    monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_ENABLED', 'true')
+    assert config.memory_owner_jev_flip_enabled() is True
+    monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_ENABLED', 'false')
+    assert config.memory_owner_jev_flip_enabled() is False
+    assert not hasattr(config, 'owner_flip_enabled_for')
 
 
 def decision(**overrides):
@@ -177,14 +183,3 @@ def test_bucket_rounding_never_admits_100(monkeypatch):
     digest.digest.return_value = bytes([255]) * 32
     monkeypatch.setattr(config.hashlib, 'sha256', lambda _value: digest)
     assert config.uid_bucket('synthetic', 'salt') < 100
-
-
-def test_owner_ramp_is_monotone_and_independent_of_relevance(monkeypatch):
-    monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_ENABLED', 'true')
-    previous = set()
-    for percent in (1, 10, 50, 100):
-        monkeypatch.setenv('MEMORY_OWNER_JEV_FLIP_PERCENT', str(percent))
-        current = {str(i) for i in range(100) if config.owner_flip_enabled_for(str(i))}
-        assert previous <= current
-        previous = current
-    assert all(config.relevance_arm(str(i)) == 'nano' for i in range(100))
