@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 from fastapi import HTTPException
-from pydantic import ValidationError
 import pytest
 
 import database.calendar_meetings as calendar_db
