@@ -193,6 +193,9 @@ def conversations_db():
         "utils": utils,
         "utils.conversations": utils_conversations,
         "utils.encryption": AutoMockModule("utils.encryption"),
+        # database.conversations imports this helper at module load, but archive
+        # filtering never calls it; keep the contract isolated from its graph.
+        "utils.person_evidence": AutoMockModule("utils.person_evidence"),
         "utils.observability.speaker_identification": AutoMockModule("utils.observability.speaker_identification"),
         "utils.other": utils_other,
         "utils.other.hume": AutoMockModule("utils.other.hume"),
