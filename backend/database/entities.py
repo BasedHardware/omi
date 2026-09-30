@@ -26,6 +26,9 @@ def resolve_entity_id(
     label: Optional[str] = None,
     entity_type: str = 'person',
 ) -> Optional[str]:
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return None
+
     if person_id:
         entity_id = person_entity_id(person_id)
         kg_db.upsert_knowledge_node(
@@ -79,6 +82,8 @@ def _apply_merge(state: Dict[str, Dict[str, Any]], item: Dict[str, Any]):
     entity_b = item.get('entity_b')
     if not entity_a or not entity_b or entity_a not in state or entity_b not in state:
         return
+    if entity_a == entity_b:
+        return
 
     primary = state[entity_a]
     secondary = state.pop(entity_b)
@@ -108,6 +113,16 @@ def merge_entities(
     evidence: Optional[Dict[str, Any]] = None,
     confidence: float = 0.5,
 ):
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if not entity_a or not isinstance(entity_a, str) or not entity_a.strip():
+        raise ValueError("entity_a must be a non-empty string")
+    if not entity_b or not isinstance(entity_b, str) or not entity_b.strip():
+        raise ValueError("entity_b must be a non-empty string")
+    if entity_a == entity_b:
+        raise ValueError("Cannot merge an entity into itself")
+    confidence = max(0.0, min(1.0, float(confidence) if confidence is not None else 0.5))
+
     user_ref = kg_db.db.collection(kg_db.users_collection).document(uid)
     nodes_ref = user_ref.collection(kg_db.knowledge_nodes_collection)
     entity_a_ref = nodes_ref.document(entity_a)
@@ -124,7 +139,8 @@ def merge_entities(
         )
         if entity_a in merged:
             transaction.set(entity_a_ref, merged[entity_a])
-        transaction.delete(entity_b_ref)
+        if entity_a != entity_b:
+            transaction.delete(entity_b_ref)
 
     return memory_ledger.append_commit(
         uid,
@@ -136,15 +152,25 @@ def merge_entities(
 
 
 def split_entity(uid: str, entity_id: str, into: List[Dict[str, Any]], *, reason: str = ''):
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if not entity_id or not isinstance(entity_id, str) or not entity_id.strip():
+        raise ValueError("entity_id must be a non-empty string")
+    valid_into = [e for e in (into or []) if isinstance(e, dict) and e.get('id')]
+    if not valid_into:
+        raise ValueError("into must contain at least one valid entity with an 'id'")
+
     user_ref = kg_db.db.collection(kg_db.users_collection).document(uid)
     nodes_ref = user_ref.collection(kg_db.knowledge_nodes_collection)
     entity_ref = nodes_ref.document(entity_id)
 
     def write_projection(transaction: Any) -> None:
+        valid_into_sub = [e for e in (into or []) if isinstance(e, dict) and e.get('id')]
+        if not valid_into_sub:
+            return
         transaction.delete(entity_ref)
-        for entity in into:
-            if entity.get('id'):
-                transaction.set(nodes_ref.document(entity['id']), copy.deepcopy(entity))
+        for entity in valid_into_sub:
+            transaction.set(nodes_ref.document(entity['id']), copy.deepcopy(entity))
 
     return memory_ledger.append_commit(
         uid,
@@ -156,6 +182,11 @@ def split_entity(uid: str, entity_id: str, into: List[Dict[str, Any]], *, reason
 
 
 def reassign_fact_subject(uid: str, fact_id: str, old: Optional[str], new: Optional[str]):
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if not fact_id or not isinstance(fact_id, str) or not fact_id.strip():
+        raise ValueError("fact_id must be a non-empty string")
+
     memory_ref = kg_db.db.collection(kg_db.users_collection).document(uid).collection('memories').document(fact_id)
     if new == USER_ENTITY_ID:
         attribution = SubjectAttribution.user
