@@ -12,9 +12,11 @@ An interrupted commit is reconciled using the entire expected after-row digest,
 never retried blindly. Cursor checkpoints advance only after a page drains;
 processed IDs cover crashes mid-page. Errors remain retryable on resume.
 
-Calendar safety is deliberately conservative: stored overlaps retain, connected
-Google Calendar accounts retain without provider calls/token-refresh writes,
-and lookup errors are unclassifiable. Photo subcollections are checked even on
+Calendar safety protects nonempty rule discards: stored overlaps and connected
+Google Calendar accounts skip without provider calls/token-refresh writes. Empty
+transcript rule discards bypass calendars; photos and every other fence remain.
+Kept titles require nonempty text; protected rule discards never receive titles.
+Calendar lookup errors are unclassifiable. Photo subcollections are checked even on
 legacy rows. Only Typesense converges after successful writes, like the existing
 discard_by_relevance choke point; finalization job counters remain unchanged.
 """
@@ -294,12 +296,25 @@ class Runtime:
     protections: Callable[[Any, dict[str, Any], dict[str, Any], Any], str | None] | None = None
     converge: Callable[[str, str], Any] | None = None
 
-    def protect(self, ref: Any, row: dict[str, Any], job: dict[str, Any], transaction: Any = None) -> str | None:
+    def protect(
+        self,
+        ref: Any,
+        row: dict[str, Any],
+        job: dict[str, Any],
+        transaction: Any = None,
+        *,
+        include_calendar: bool = True,
+    ) -> str | None:
         if self.protections is not None:
-            return self.protections(ref, row, job, transaction)
+            protection = self.protections(ref, row, job, transaction)
+            if not include_calendar and protection in ('calendar_overlap', 'calendar_connected_unverified'):
+                return None
+            return protection
         # Read queries before any write, including legacy subcollection photos.
         if list(ref.collection('photos').select([]).limit(1).stream(transaction=transaction)):
             return 'photos'
+        if not include_calendar:
+            return None
         start, end = row.get('started_at'), row.get('finished_at')
         if row.get('calendar_event') or (row.get('external_data') or {}).get('calendar_meeting_context'):
             return 'calendar_overlap'
@@ -341,22 +356,31 @@ class Runtime:
 
 
 def classify(runtime: Runtime, row: dict[str, Any], job: dict[str, Any], ref: Any) -> tuple[str, str, dict[str, Any]]:
+    # Check photo subcollections independently of calendar lookups. An empty
+    # transcript must still be discardable when calendar reads are unavailable.
+    protection = runtime.protect(ref, row, job, include_calendar=False)
+    if protection == 'photos':
+        raise CannotClassify('photos')
     segments = runtime.decode(row, job['uid'])
+    texts = [s['text'] for s in segments]
     # Supply IDs for legacy segments so wake-word content cannot evade protection.
     wake_segments = [dict(s, id=s.get('id') or f'legacy-{i}') for i, s in enumerate(segments)]
-    verdict, rule = deterministic_relevance([s['text'] for s in segments], None)
+    verdict, rule = deterministic_relevance(texts, None)
     if find_wake_word_matches(wake_segments):
+        if verdict == 'discard':
+            raise CannotClassify('discard_protected')
         verdict, rule = 'keep', 'wake_word'
     if verdict == 'discard':
         # External/workflow/screen imports can hold content outside transcripts;
         # the ordinary capture-end rule does not assess those source branches.
         if row.get('source') not in AUDIO_TRANSCRIPT_SOURCES:
             raise CannotClassify('non_audio_source')
-        protection = runtime.protect(ref, row, job)
+        if rule != 'empty_transcript':
+            protection = runtime.protect(ref, row, job)
         if protection == 'photos':
             raise CannotClassify('photos')
         if protection:
-            verdict, rule = 'keep', protection
+            raise CannotClassify('discard_protected')
     if verdict == 'discard':
         return (
             'R',
@@ -368,6 +392,8 @@ def classify(runtime: Runtime, row: dict[str, Any], job: dict[str, Any], ref: An
                 ).as_record(),
             },
         )
+    if not any(text.strip() for text in texts):
+        raise CannotClassify('empty_not_discardable')
     conversation = SimpleNamespace(
         transcript_segments=[SimpleNamespace(**s) for s in segments], started_at=row.get('started_at')
     )
@@ -411,9 +437,13 @@ def write_cas(
             or getattr(job_snapshot, 'update_time', None) != job_revision
         ):
             return 'cas_changed'
-        protection = runtime.protect(ref, current, job, transaction)
-        if protection == 'photos' or (updates.get('discarded') and protection):
-            return protection
+        discarding = updates.get('discarded') is True
+        check_calendar = discarding and updates['relevance_decision']['reason'] != 'empty_transcript'
+        protection = runtime.protect(ref, current, job, transaction, include_calendar=check_calendar)
+        if protection == 'photos':
+            return 'photos'
+        if discarding and protection:
+            return 'discard_protected'
         transaction.update(ref, updates)
         return 'written'
 
@@ -465,48 +495,44 @@ def evaluate(runtime: Runtime, log: RunLog, job_id: str, *, limiter: RateLimiter
             reason = eligibility(row, job_id, job)
             if reason is None:
                 assert row is not None
-                # All classes must honor photos, including subcollection-only photos.
-                if runtime.protect(ref, row, job) == 'photos':
-                    reason = 'photos'
+                cls, rule, updates = classify(runtime, row, job, ref)
+                record.update({'class': cls, 'rule': rule})
+                if cls == 'K' and not log.config['include_kept_titles']:
+                    reason = 'kept_titles_disabled'
                 else:
-                    cls, rule, updates = classify(runtime, row, job, ref)
-                    record.update({'class': cls, 'rule': rule})
-                    if cls == 'K' and not log.config['include_kept_titles']:
-                        reason = 'kept_titles_disabled'
-                    else:
-                        before = {field: get_field(row, field) for field in updates}
-                        after = {field: {'present': True, 'value': value} for field, value in updates.items()}
-                        record.update(
-                            {
-                                'before': log.seal(before),
-                                'after': log.seal(after),
-                                'before_digest': digest(row),
-                                'after_digest': digest(patched(row, after)),
-                            }
+                    before = {field: get_field(row, field) for field in updates}
+                    after = {field: {'present': True, 'value': value} for field, value in updates.items()}
+                    record.update(
+                        {
+                            'before': log.seal(before),
+                            'after': log.seal(after),
+                            'before_digest': digest(row),
+                            'after_digest': digest(patched(row, after)),
+                        }
+                    )
+                    # Durable intent BEFORE the transaction can commit.
+                    log.append('audit.jsonl', record)
+                    audit_written = True
+                    if log.config['apply']:
+                        write_result = retry_write(
+                            limiter,
+                            lambda: write_cas(
+                                runtime,
+                                job_id,
+                                job,
+                                row,
+                                updates,
+                                getattr(snapshot, 'update_time', None),
+                                getattr(job_snapshot, 'update_time', None),
+                            ),
                         )
-                        # Durable intent BEFORE the transaction can commit.
-                        log.append('audit.jsonl', record)
-                        audit_written = True
-                        if log.config['apply']:
-                            write_result = retry_write(
-                                limiter,
-                                lambda: write_cas(
-                                    runtime,
-                                    job_id,
-                                    job,
-                                    row,
-                                    updates,
-                                    getattr(snapshot, 'update_time', None),
-                                    getattr(job_snapshot, 'update_time', None),
-                                ),
-                            )
-                            outcome = write_result['outcome']
-                            record['commit_revision'] = write_result['commit_revision']
-                        else:
-                            outcome = 'dry_run'
-                        if outcome == 'written':
-                            runtime.sync(job)
-                        return dict(record, outcome=outcome)
+                        outcome = write_result['outcome']
+                        record['commit_revision'] = write_result['commit_revision']
+                    else:
+                        outcome = 'dry_run'
+                    if outcome == 'written':
+                        runtime.sync(job)
+                    return dict(record, outcome=outcome)
     except CannotClassify as exc:
         reason = str(exc)
     except Exception as exc:

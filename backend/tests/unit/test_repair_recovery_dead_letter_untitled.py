@@ -232,11 +232,14 @@ def test_cas_aborts_changed_row(tmp_path, mutation):
 
 
 @pytest.mark.parametrize('protection', ['calendar_overlap', 'calendar_connected_unverified'])
-def test_calendar_protection_becomes_kept_title_only(tmp_path, protection):
-    client, runtime, log = setup(tmp_path, apply=True)
+def test_protected_rule_discard_skips_even_with_kept_titles_enabled(tmp_path, protection):
+    client, runtime, log = setup(tmp_path, apply=True, kept=True, text='yeah okay')
+    original = deepcopy(client.rows)
     runtime.protections = lambda *args: protection
-    assert evaluate(runtime, log)['class'] == 'K'
-    assert not client.transactions
+    result = evaluate(runtime, log)
+    assert result['outcome'] == 'discard_protected'
+    assert result['class'] is None
+    assert client.rows == original and not client.transactions
 
 
 def test_calendar_error_never_discards(tmp_path):
@@ -474,3 +477,85 @@ def test_rollback_limit_resume_skips_processed(tmp_path):
     assert repair.rollback(runtime, source, target, limit=1, workers=2)['outcomes'] == {'written': 1}
     resumed = repair.RunLog(target.path, target.config, resume=True)
     assert repair.rollback(runtime, source, resumed)['outcomes'] == {}
+
+
+@pytest.mark.parametrize('protection', ['calendar_overlap', 'calendar_connected_unverified'])
+@pytest.mark.parametrize('text', ['', ' \t\n '])
+def test_empty_transcript_discards_despite_calendar_protection(tmp_path, protection, text):
+    client, runtime, log = setup(tmp_path, apply=True, kept=True, text=text)
+    runtime.protections = lambda *args: protection
+    original = deepcopy(client.rows[ROW_PATH])
+    result = evaluate(runtime, log)
+    assert result['class'] == 'R' and result['rule'] == 'empty_transcript'
+    assert result['outcome'] == 'written'
+    current = client.rows[ROW_PATH]
+    assert verified_recovery_discard(current['discarded'], current['relevance_decision'])
+    assert current == dict(original, discarded=True, relevance_decision=current['relevance_decision'])
+    assert set(client.transactions[0].updates[0][1]) == {'discarded', 'relevance_decision'}
+
+
+def test_empty_rule_never_reads_calendar_but_still_checks_photo_subcollection(tmp_path):
+    client, runtime, log = setup(tmp_path)
+    calls = []
+
+    class Photos:
+        def select(self, fields):
+            assert fields == []
+            return self
+
+        def limit(self, limit):
+            assert limit == 1
+            return self
+
+        def stream(self, transaction=None):
+            calls.append('photos')
+            return []
+
+    def collection(name):
+        assert name == 'photos'
+        return Photos()
+
+    runtime.protections = None
+    # No client access is allowed: calendar/timezone lookups would fail here.
+    runtime.client = None
+    cls, rule, updates = repair.classify(runtime, row(), job(), SimpleNamespace(collection=collection))
+    assert cls == 'R' and rule == 'empty_transcript'
+    assert updates['discarded'] is True and calls == ['photos']
+
+
+@pytest.mark.parametrize('verdict', ['keep', None])
+@pytest.mark.parametrize('text', ['', ' \t\n '])
+def test_empty_non_discard_never_gets_fallback_title(tmp_path, monkeypatch, verdict, text):
+    client, runtime, log = setup(tmp_path, apply=True, kept=True, text=text)
+    original = deepcopy(client.rows)
+    monkeypatch.setattr(repair, 'deterministic_relevance', lambda *args: (verdict, 'synthetic_unknown'))
+    monkeypatch.setattr(
+        repair, 'deterministic_minimum_title', lambda *args, **kwargs: pytest.fail('empty fallback title')
+    )
+    result = evaluate(runtime, log)
+    assert result['outcome'] == 'empty_not_discardable' and result['class'] is None
+    assert client.rows == original and not client.transactions
+
+
+def test_rule_discard_with_wake_word_protection_skips_title(tmp_path, monkeypatch):
+    client, runtime, log = setup(tmp_path, apply=True, kept=True, text='Hey Omi')
+    monkeypatch.setattr(repair, 'deterministic_relevance', lambda *args: ('discard', 'synthetic_discard'))
+    result = evaluate(runtime, log)
+    assert result['outcome'] == 'discard_protected' and result['class'] is None
+    assert not client.transactions
+
+
+def test_new_calendar_protection_at_cas_skips_nonempty_rule_discard(tmp_path):
+    client, runtime, log = setup(tmp_path, apply=True, kept=True, text='yeah okay')
+    runtime.protections = lambda ref, data, job, tx: 'calendar_overlap' if tx is not None else None
+    result = evaluate(runtime, log)
+    assert result['outcome'] == 'discard_protected'
+    assert all(not tx.updates for tx in client.transactions)
+
+
+def test_empty_rule_keeps_other_protection_fences(tmp_path):
+    client, runtime, log = setup(tmp_path, apply=True, kept=True)
+    runtime.protections = lambda *args: 'other_protection'
+    result = evaluate(runtime, log)
+    assert result['outcome'] == 'discard_protected' and result['class'] is None
+    assert not client.transactions
