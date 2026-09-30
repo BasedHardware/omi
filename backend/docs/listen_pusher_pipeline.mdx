@@ -28,6 +28,13 @@ and backend-sync-backfill) restores the earlier whole-batch binding: one
 conversation whose recording id equals the client id must contain the whole
 upload, and a miss drops the stamp. See `backend/utils/sync/ARCHITECTURE.md`.
 
+The bounded lookup filters by both start and finish so an old stamp-extended
+row cannot hide behind newer generations; a truncated overlap set proves no
+binding. With lineage enabled, sync defers enrichment for an open live row,
+and fresh live speech advances the revision fence after sync has enriched it.
+The index must include `finished_at` as well as `started_at` before this query
+can serve. A missing index degrades to the origin-row lookup plus stamp fallback.
+
 The backend-to-Pusher binary protocol accepts only opcodes `100` through `105`.
 Audio frames (`101`) require the four-byte opcode, an eight-byte timestamp, and
 PCM payload; JSON opcodes require an object payload, with transcript, finalization,

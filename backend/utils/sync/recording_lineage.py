@@ -48,9 +48,8 @@ from utils.sync.recording_session_target import (
 
 logger = logging.getLogger(__name__)
 
-# A 5-WAL batch spans about five minutes and a rollover needs 120 s of silence,
-# so a batch normally touches at most three generations. Older generations
-# beyond this window cannot hold the batch's audio (see ``_decidable``).
+# Bound the potentially overlapping rows, rather than assuming older rows ended
+# before newer ones started: stamp appends and smart merge can extend old rows.
 GENERATION_LIMIT = 8
 # Rows sharing the origin's own recording id; more than this is anomalous.
 ORIGIN_ROW_LIMIT = 5
@@ -191,16 +190,6 @@ def _bind(generations: list[_Generation], start: float, end: float) -> Optional[
     return _unique(tolerant) if tolerant else None
 
 
-def _decidable(start: float, truncated_before: Optional[float]) -> bool:
-    # Unread generations started at or before the oldest row read, and a
-    # recording's generations follow one another, so an unread one ended by
-    # then. A match reaches at most the trailing allowance past a generation's
-    # end; audio starting later than that cannot belong to an unread generation.
-    # (A smart-merge survivor can end later, but its donors are in the window and
-    # canonicalize to it.)
-    return truncated_before is None or start - TRAILING_AUDIO_SECONDS >= truncated_before
-
-
 def select_segment_targets(
     rows: Sequence[Mapping[str, Any]],
     origin_id: str,
@@ -233,9 +222,13 @@ def select_segment_targets(
         bound = None
         if lookup_failed:
             misses.add('lookup_failed')
+        elif not math.isfinite(start) or not math.isfinite(end) or end <= start:
+            # A failed WAV-duration read returns zero; a point is not proof
+            # that the actual speech fits this generation.
+            misses.add('interval_miss')
         elif not generations:
             misses.add('no_rows')
-        elif not _decidable(start, truncated_before):
+        elif truncated_before is not None:
             misses.add('truncated')
         else:
             bound = _bind(generations, start, end)
@@ -271,9 +264,9 @@ def select_segment_targets(
 
 
 def _load_lineage(
-    uid: str, origin_id: str, started_before: datetime, firestore_client: Any
+    uid: str, origin_id: str, started_before: datetime, firestore_client: Any, finished_after: datetime
 ) -> tuple[list[dict[str, Any]], Optional[float], bool]:
-    """Lineage rows, the start before which the window is incomplete, and whether it degraded."""
+    """Lineage rows, an incomplete-overlap marker, and whether the lookup degraded."""
     # Import on use, like recording_session_target: pipeline.py loads this module
     # while unit harnesses stub google.cloud and the database package.
     from database import sync_recording_lineage as lineage_db
@@ -281,7 +274,12 @@ def _load_lineage(
     degraded = False
     try:
         rows = lineage_db.get_recording_generations(
-            uid, origin_id, started_before=started_before, limit=GENERATION_LIMIT, firestore_client=firestore_client
+            uid,
+            origin_id,
+            started_before=started_before,
+            finished_after=finished_after,
+            limit=GENERATION_LIMIT,
+            firestore_client=firestore_client,
         )
     except Exception as exc:
         # E.g. the composite index is still building: keep the origin-row read,
@@ -291,14 +289,15 @@ def _load_lineage(
     truncated_before = None
     if len(rows) > GENERATION_LIMIT:
         rows = rows[:GENERATION_LIMIT]
-        truncated_before = unix_seconds(rows[-1].get('started_at'))
-        if truncated_before is None:
-            truncated_before = math.inf
+        # An unread row can overlap any segment, regardless of its start. Never
+        # establish uniqueness from an incomplete overlap set.
+        truncated_before = math.inf
     if truncated_before is None and not any(
         clean_text((row.get('external_data') or {}).get('recording_session_id')) == origin_id for row in rows
     ):
         # A recording that began before the origin stamp existed: only the row
-        # bound to R itself is findable. A truncated window already starts after it.
+        # bound to R itself is findable. A truncated overlap set already proves
+        # no target, so another read cannot make that plan decidable.
         legacy = lineage_db.get_origin_generation(
             uid, origin_id, limit=ORIGIN_ROW_LIMIT, firestore_client=firestore_client
         )
@@ -329,8 +328,9 @@ def resolve_segment_targets(
             started_before = datetime.fromtimestamp(
                 max(end for _, end in spans.values()) + START_SKEW_SECONDS, tz=timezone.utc
             )
+            finished_after = datetime.fromtimestamp(min(start for start, _ in spans.values()), tz=timezone.utc)
             rows, truncated_before, degraded = _load_lineage(
-                uid, clean_text(origin_id), started_before, firestore_client
+                uid, clean_text(origin_id), started_before, firestore_client, finished_after
             )
             failed = False
         except Exception as exc:
@@ -362,6 +362,27 @@ def resolve_segment_targets(
             reason='other',
             outcome='degraded',
         )
+    _emit(plan, job_id)
+    return plan.targets
+
+
+def fallback_segment_targets(
+    keys: Sequence[str], stamped_target: Optional[str], *, job_id: Optional[str] = None
+) -> dict[str, Optional[str]]:
+    """Fail-open at the coordinator boundary, including span/executor failures."""
+    plan = LineagePlan(
+        targets={key: stamped_target for key in keys},
+        outcome='lookup_failed',
+        reason='lookup_failed',
+        counts={'stamp_fallback' if stamped_target else 'unbound': len(keys)},
+    )
+    record_fallback(
+        component='other',
+        from_mode='sync_lineage',
+        to_mode='stamp' if stamped_target else 'temporal',
+        reason='other',
+        outcome='degraded',
+    )
     _emit(plan, job_id)
     return plan.targets
 

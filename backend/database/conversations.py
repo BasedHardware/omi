@@ -59,6 +59,7 @@ from .first_open_obligations import (
 )
 
 from config.translation import resolve_ondemand_config
+from config.sync_lineage import sync_lineage_resolve_enabled
 from database.translation_admission import TranslationReservation, reservation_is_current
 
 logger = logging.getLogger(__name__)
@@ -2714,6 +2715,18 @@ def update_conversation_segments(
             # never reclaim it even if an older in-memory snapshot is empty.
             'has_content': bool(current.get('has_content')) or bool(accepted),
         }
+        if (
+            live_segments is not None
+            and sync_lineage_resolve_enabled()
+            and current.get('sync_live_target')
+            and current.get('sync_content_revision') is not None
+            and accepted != persisted
+        ):
+            # Sync and live now share this transcript. A processor that read
+            # before fresh live speech must lose the same revision fence as
+            # one that read before a sync append. Retries with no change do
+            # not invalidate a current processor.
+            update_payload['sync_content_revision'] = current['sync_content_revision'] + 1
         if capture_evidence is not None:
             update_payload['capture_evidence'] = capture_evidence
         if remap:

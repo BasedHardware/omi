@@ -55,21 +55,23 @@ def get_recording_generations(
     origin_id: str,
     *,
     started_before: datetime,
+    finished_after: datetime,
     limit: int,
     firestore_client: Any = None,
 ) -> list[dict[str, Any]]:
-    """Newest-first generations of ``origin_id`` that started at or before ``started_before``.
+    """Newest-first generations that can overlap the upload's segment envelope.
 
     Reads at most ``limit + 1`` documents so the caller can tell a complete
     window from a truncated one.
     """
     query = SYNC_RECORDING_LINEAGE_QUERY.build(
         _collection(uid, firestore_client),
-        {'recording_origin_id': origin_id, 'started_before': started_before},
+        {'recording_origin_id': origin_id, 'started_before': started_before, 'finished_after': finished_after},
         field_filter_factory=FieldFilter,
     )
     query = (
         query.order_by('started_at', direction=firestore.Query.DESCENDING)
+        .order_by('finished_at', direction=firestore.Query.DESCENDING)
         .select(list(LINEAGE_FIELD_PATHS))
         .limit(limit + 1)
     )

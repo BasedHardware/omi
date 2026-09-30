@@ -145,7 +145,8 @@ from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
-from utils.sync.recording_lineage import lineage_resolution_requested, resolve_segment_targets
+from config.sync_lineage import sync_lineage_resolve_enabled
+from utils.sync.recording_lineage import fallback_segment_targets, lineage_resolution_requested, resolve_segment_targets
 from utils.sync.bridge import finish_sync_segment
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
@@ -984,6 +985,16 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     if not conversation_data or conversation_data.get('deleted'):
         logger.warning(f'Conversation {conversation_id} not found for reprocessing')
+        return
+
+    if (
+        sync_lineage_resolve_enabled()
+        and conversation_data.get('sync_live_target')
+        and conversation_data.get('status') == 'in_progress'
+    ):
+        # Live finalization owns the open row. SYNC_UPDATE would mark it
+        # completed while the socket is still adding speech, after which the
+        # finalizer skips processing that later content.
         return
 
     # Intake already discarded a rule-settled fragment; skip the processing
@@ -2413,7 +2424,17 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         job_id=job_id,
                     )
 
-                segment_targets = await run_blocking(db_executor, _segment_targets)
+                try:
+                    segment_targets = await run_blocking(db_executor, _segment_targets)
+                except Exception as exc:
+                    # Span construction and the executor call are also part of
+                    # planning. Keep the stamp if either fails, then ingest
+                    # siblings normally under the existing persistence fences.
+                    segment_targets = fallback_segment_targets(segment_list, target_conversation_id, job_id=job_id)
+                    logger.warning(
+                        'event=sync_lineage_plan outcome=failed exception_type=%s',
+                        _bounded_exception_type(exc),
+                    )
 
             def _process_one_segment(path: str):
                 segment_target = segment_targets.get(path, target_conversation_id)

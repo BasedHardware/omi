@@ -882,8 +882,14 @@ SYNC_RECORDING_LINEAGE_QUERY = FirestoreQuerySpec(
     filters=(
         FirestoreQueryFilter('external_data.recording_origin_id', '==', 'recording_origin_id'),
         FirestoreQueryFilter('started_at', '<=', 'started_before'),
+        FirestoreQueryFilter('finished_at', '>=', 'finished_after'),
     ),
-    index_fields=(_asc('external_data.recording_origin_id'), _desc('started_at'), _desc('__name__')),
+    index_fields=(
+        _asc('external_data.recording_origin_id'),
+        _desc('started_at'),
+        _desc('finished_at'),
+        _desc('__name__'),
+    ),
 )
 
 ENTITY_TIMELINE_CONVERSATIONS_QUERY = FirestoreQuerySpec(

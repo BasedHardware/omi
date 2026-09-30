@@ -216,6 +216,12 @@ def test_residual_differently_worded_overlap_still_repeats_on_the_live_row():
     ]
     replay(store, chunks, plan(store, chunks, stamp=gen_id(L)).targets)
     assert len(texts(store, gen_id(L))) == 4 + 2  # both reworded repeats survive the text dedupe
+    from utils.conversations.duration import conversation_duration_seconds
+    from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
+
+    row = store.rows[('users', 'u', 'conversations', gen_id(L))]
+    assert conversation_duration_seconds(row) == 189  # max end, not summed speech
+    assert deduplicated_transcribed_speech_seconds(row['transcript_segments']) == 34  # originally 32; skew adds 2
 
 
 def test_retry_binds_the_same_rows_and_appends_nothing_new():
@@ -306,6 +312,21 @@ def test_adjacent_generations_inside_the_edge_allowance_are_ambiguous():
         rows, ORIGIN, spans([chunk]), stamped_target=None, source='omi', client_device_id='pendant', is_locked=False
     )
     assert result.targets == {chunk['id']: None} and result.reason == 'interval_miss'
+
+
+def test_trailing_allowance_does_not_exceed_sixty_seconds():
+    end = gen_start(L) + DURATION
+    chunk = sync_chunk(end - 1, end + 61, 'Synthetic speech across the trailing limit.')
+    result = select_segment_targets(
+        [generation(L)],
+        ORIGIN,
+        spans([chunk]),
+        stamped_target=None,
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
+    )
+    assert result.targets == {chunk['id']: None}
 
 
 def test_overlapping_generations_never_pick_one():
@@ -431,7 +452,9 @@ class _LineageDb:
         self.failing: set[str] = set()
         self.calls = []
 
-    def get_recording_generations(self, uid, origin_id, *, started_before, limit, firestore_client=None):
+    def get_recording_generations(
+        self, uid, origin_id, *, started_before, limit, finished_after=None, firestore_client=None
+    ):
         self.calls.append('generations')
         if 'generations' in self.failing:
             raise TimeoutError('index not serving')
@@ -440,6 +463,7 @@ class _LineageDb:
             for row in self.rows
             if (row.get('external_data') or {}).get('recording_origin_id') == origin_id
             and row['started_at'] <= started_before
+            and (finished_after is None or row['finished_at'] >= finished_after)
         ]
         matching.sort(key=lambda row: (row['started_at'], row['id']), reverse=True)
         return deepcopy(matching[: limit + 1])
@@ -481,14 +505,47 @@ def test_long_recording_reads_one_bounded_window(lineage_db):
     chunks = upload_straddling_next_two()
     targets = resolve(chunks)
     assert [targets[chunk['id']] for chunk in chunks] == [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2
-    assert lineage_db.calls == ['generations']  # the origin row is older than the window
+    assert lineage_db.calls == ['generations', 'origin']  # legacy origin can have a late append
 
 
 def test_audio_older_than_the_read_window_is_not_guessed(lineage_db):
     old = sync_chunk(gen_start(2) + 61, gen_start(2) + 69, live_text(2, 1))
     new = upload_straddling_next_two()[0]
     targets = resolve([old, new], stamp='STAMP')
-    assert targets == {old['id']: 'STAMP', new['id']: gen_id(L + 1)}
+    assert targets == {old['id']: 'STAMP', new['id']: 'STAMP'}  # incomplete overlap set proves neither target
+
+
+def test_old_stamp_extended_into_a_later_generation_is_not_hidden_by_the_limit(lineage_db):
+    old = lineage_db.rows[0]
+    old['finished_at'] = at(gen_start(L + 1) + DURATION)
+    chunk = upload_straddling_next_two()[0]
+    # The origin row and LIVE-12 both contain the segment. The original
+    # newest-eight query hides the extended origin and falsely overrides STAMP.
+    assert resolve([chunk], stamp='STAMP') == {chunk['id']: 'STAMP'}
+
+
+def test_unread_smart_survivor_can_overlap_without_a_donor_in_the_window(lineage_db):
+    old = lineage_db.rows[0]
+    old.update(finished_at=at(gen_start(L + 1) + DURATION), smart_merge={'role': 'survivor'})
+    # Donors need not be recent: the survivor can also have a late stamped
+    # append while unrelated newer generations of the same recording exist.
+    chunk = upload_straddling_next_two()[0]
+    assert resolve([chunk]) == {chunk['id']: None}
+
+
+@pytest.mark.parametrize('duration', [0, -1, float('nan'), float('inf')])
+def test_invalid_audio_span_cannot_prove_a_generation(duration):
+    start = gen_start(L) + 61
+    result = select_segment_targets(
+        [generation(L)],
+        ORIGIN,
+        {'bad': (start, start + duration)},
+        stamped_target='STAMP',
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
+    )
+    assert result.targets == {'bad': 'STAMP'}
 
 
 def test_recording_from_before_the_origin_stamp_reads_the_origin_row(lineage_db):
@@ -583,16 +640,20 @@ def test_lineage_reads_are_bounded_indexed_and_transcript_free(monkeypatch):
     doc = SimpleNamespace(id='LIVE-01', to_dict=lambda: {'started_at': at(T0)})
     before = at(T0 + 600)
     query = _FakeQuery([doc])
-    rows = lineage_db.get_recording_generations('u', ORIGIN, started_before=before, limit=8, firestore_client=query)
+    rows = lineage_db.get_recording_generations(
+        'u', ORIGIN, started_before=before, finished_after=at(T0), limit=8, firestore_client=query
+    )
     assert rows == [{'started_at': at(T0), 'id': 'LIVE-01'}]
     assert query.ops[:3] == [('collection', 'users'), ('document', 'u'), ('collection', 'conversations')]
-    assert query.ops[3:6] == [
+    assert query.ops[3:8] == [
         ('where', 'external_data.recording_origin_id', '==', ORIGIN),
         ('where', 'started_at', '<=', before),
+        ('where', 'finished_at', '>=', at(T0)),
         ('order_by', 'started_at', 'DESCENDING'),
+        ('order_by', 'finished_at', 'DESCENDING'),
     ]
-    selected = query.ops[6][1]
-    assert query.ops[7] == ('limit', 9)
+    selected = query.ops[8][1]
+    assert query.ops[9] == ('limit', 9)
     assert not any(field.startswith(('transcript', 'photos', 'structured')) for field in selected)
     origin = _FakeQuery([])
     assert lineage_db.get_origin_generation('u', ORIGIN, limit=5, firestore_client=origin) == []
@@ -654,11 +715,15 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp):
         return True
 
     pipeline.process_segment = capture
-    monkeypatch.setattr(
-        sys.modules[pipeline.resolve_segment_targets.__module__],
-        '_load_lineage',
-        lambda *_args: ([generation(k) for k in range(GENERATIONS)], None, False),
-    )
+    if hasattr(pipeline, 'resolve_segment_targets'):
+        # Also supports replaying the coordinator against origin/main's
+        # pipeline, which has no lineage call. Its observed targets must still
+        # satisfy the assertion below; absence is not the failure criterion.
+        monkeypatch.setattr(
+            sys.modules[pipeline.resolve_segment_targets.__module__],
+            '_load_lineage',
+            lambda *_args: ([generation(k) for k in range(GENERATIONS)], None, False),
+        )
     candidates = [generation(0)]
     monkeypatch.setattr(
         sys.modules[pipeline.resolve_recording_session_sync_target.__module__],
@@ -686,6 +751,65 @@ async def test_coordinator_forwards_each_segment_its_generation(coordinator, mon
     )
     expected = [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2 if flag == '' else [None] * 4
     assert [captured[chunk['id']] for chunk in chunks] == expected
+
+
+@pytest.mark.asyncio
+async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(coordinator, monkeypatch, caplog):
+    module, stubs = coordinator
+    chunks = upload_straddling_next_two()
+    captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp='STAMP')
+
+    def failed(*_args, **_kwargs):
+        raise RuntimeError('synthetic planner failure')
+
+    monkeypatch.setattr(stubs['pipeline'], 'resolve_segment_targets', failed)
+    metrics = MagicMock()
+    lineage_module = sys.modules[stubs['pipeline'].fallback_segment_targets.__module__]
+    monkeypatch.setattr(lineage_module, 'OMI_SYNC_LINEAGE_RESOLVE_TOTAL', metrics)
+    caplog.set_level(logging.INFO, logger=lineage_module.__name__)
+    await module._run_full_pipeline_background_async(
+        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
+    )
+    assert captured == {chunk['id']: 'STAMP' for chunk in chunks}
+    metrics.labels.assert_called_once_with(outcome='lookup_failed')
+    metrics.labels.return_value.inc.assert_called_once()
+    assert sum('event=sync_lineage_resolve' in r.getMessage() for r in caplog.records) == 1
+
+
+def test_sync_reprocess_does_not_complete_an_open_live_recording(dependencies, monkeypatch):
+    pipeline = dependencies
+    row = generation(
+        L,
+        status='in_progress',
+        sync_live_target=True,
+        sync_content_revision=1,
+        created_at=at(gen_start(L)),
+        structured={'title': 'Synthetic review'},
+    )
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_args: row)
+    process = MagicMock()
+    monkeypatch.setattr(pipeline, 'process_conversation', process)
+    pipeline._reprocess_conversation_after_update('u', row['id'], 'en')
+    process.assert_not_called()
+
+
+@pytest.mark.parametrize(('status', 'flag'), [('completed', ''), ('processing', ''), ('in_progress', 'off')])
+def test_finalized_and_processing_targets_and_off_keep_reprocessing(dependencies, monkeypatch, status, flag):
+    pipeline = dependencies
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
+    row = generation(
+        L,
+        status=status,
+        sync_live_target=True,
+        sync_content_revision=1,
+        created_at=at(gen_start(L)),
+        structured={'title': 'Synthetic review'},
+    )
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_args: row)
+    process = MagicMock()
+    monkeypatch.setattr(pipeline, 'process_conversation', process)
+    pipeline._reprocess_conversation_after_update('u', row['id'], 'en')
+    process.assert_called_once()
 
 
 # --- Live origin stamp ----------------------------------------------------------
