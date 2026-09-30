@@ -11218,12 +11218,16 @@
     "deleteChat": "చాట్ తొలగించండి",
     "appsAskWith": "వీటితో Omi ని అడగండి",
     "conversationsTodayCount": "{count, plural, =0{ఈరోజు సంభాషణలు లేవు.} =1{ఈరోజు 1 సంభాషణ.} other{ఈరోజు {count} సంభాషణలు.}}",
+    "meetingScreenshotsTitle": "స్క్రీన్‌పై ఏముంది",
+    "meetingScreenshotFallbackCaption": "ఈ సమావేశం నుండి స్క్రీన్‌షాట్",
+    "deleteMeetingScreenshotTitle": "స్క్రీన్‌షాట్‌ను తొలగించాలా?",
+    "deleteMeetingScreenshotMessage": "ఇది ఈ సమావేశం నోట్ నుండి స్క్రీన్‌షాట్‌ను తీసివేస్తుంది. దీన్ని రద్దు చేయలేరు.",
     "renameDevice": "పరికరం పేరు మార్చండి",
+    "deviceRenameFailed": "మీ Omi లో పేరును సేవ్ చేయలేకపోయాము. అది కనెక్ట్ అయి ఉందో లేదో తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
     "renameDeviceDescription": "పేరు మీ Omi లోనే సేవ్ అవుతుంది, అందువల్ల మీరు జోడించే ఏ ఫోన్‌లోనైనా అది కనిపిస్తుంది.",
     "tapToRename": "పేరు మార్చడానికి నొక్కండి",
     "deviceNameCannotBeEmpty": "పరికరం పేరు ఖాళీగా ఉండకూడదు",
-    "deviceNameTooLong": "పేరు చాలా పొడవుగా ఉంది (గరిష్ఠంగా {maxBytes} అక్షరాలు; ఎమోజీలు మరియు గుణింతాలు ఎక్కువగా లెక్కించబడతాయి)",
     "deviceNameInvalidCharacters": "పేరులో మద్దతు లేని అక్షరాలు ఉన్నాయి",
-    "deviceRenameFailed": "మీ Omi లో పేరును సేవ్ చేయలేకపోయాము. అది కనెక్ట్ అయి ఉందో లేదో తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "deviceNameTooLong": "పేరు చాలా పొడవుగా ఉంది (గరిష్ఠంగా {maxBytes} అక్షరాలు; ఎమోజీలు మరియు గుణింతాలు ఎక్కువగా లెక్కించబడతాయి)",
     "deviceRenamed": "పరికరం పేరు {name} గా మార్చబడింది"
 }

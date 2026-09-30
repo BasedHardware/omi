@@ -3658,12 +3658,16 @@
     "deleteChat": "चैट हटाएं",
     "appsAskWith": "Omi से पूछें इनके साथ",
     "conversationsTodayCount": "{count, plural, =0{आज कोई बातचीत नहीं।} =1{आज 1 बातचीत।} other{आज {count} बातचीत।}}",
-    "renameDevice": "डिवाइस का नाम बदलें",
-    "renameDeviceDescription": "नाम आपके Omi पर ही सहेजा जाता है, इसलिए यह हर उस फ़ोन पर दिखेगा जिससे आप इसे जोड़ेंगे।",
-    "tapToRename": "नाम बदलने के लिए टैप करें",
-    "deviceNameCannotBeEmpty": "डिवाइस का नाम खाली नहीं हो सकता",
-    "deviceNameTooLong": "नाम बहुत लंबा है (अधिकतम {maxBytes} वर्ण; इमोजी और मात्राएँ ज़्यादा गिनी जाती हैं)",
+    "meetingScreenshotsTitle": "स्क्रीन पर क्या था",
+    "meetingScreenshotFallbackCaption": "इस मीटिंग का स्क्रीनशॉट",
+    "deleteMeetingScreenshotTitle": "स्क्रीनशॉट हटाएं?",
+    "deleteMeetingScreenshotMessage": "यह इस मीटिंग के नोट से स्क्रीनशॉट हटा देगा। इसे पूर्ववत नहीं किया जा सकता।",
     "deviceNameInvalidCharacters": "नाम में असमर्थित वर्ण हैं",
+    "deviceNameTooLong": "नाम बहुत लंबा है (अधिकतम {maxBytes} वर्ण; इमोजी और मात्राएँ ज़्यादा गिनी जाती हैं)",
+    "renameDevice": "डिवाइस का नाम बदलें",
     "deviceRenameFailed": "आपके Omi पर नाम सहेजा नहीं जा सका। जाँचें कि यह कनेक्ट है और फिर से कोशिश करें।",
-    "deviceRenamed": "डिवाइस का नाम बदलकर {name} कर दिया गया"
+    "renameDeviceDescription": "नाम आपके Omi पर ही सहेजा जाता है, इसलिए यह हर उस फ़ोन पर दिखेगा जिससे आप इसे जोड़ेंगे।",
+    "deviceRenamed": "डिवाइस का नाम बदलकर {name} कर दिया गया",
+    "tapToRename": "नाम बदलने के लिए टैप करें",
+    "deviceNameCannotBeEmpty": "डिवाइस का नाम खाली नहीं हो सकता"
 }

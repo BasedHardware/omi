@@ -11648,7 +11648,23 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'Kas bija ekrānā';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ekrānuzņēmums no šīs sapulces';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Dzēst ekrānuzņēmumu?';
+
+  @override
+  String get deleteMeetingScreenshotMessage => 'Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt.';
+
+  @override
   String get renameDevice => 'Pārdēvēt ierīci';
+
+  @override
+  String get deviceRenameFailed =>
+      'Nosaukumu neizdevās saglabāt Omi ierīcē. Pārbaudiet, vai tā ir pievienota, un mēģiniet vēlreiz.';
 
   @override
   String get renameDeviceDescription =>
@@ -11661,16 +11677,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'Ierīces nosaukums nevar būt tukšs';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Nosaukums ir pārāk garš (līdz $maxBytes rakstzīmēm; emocijzīmes un diakritiskās zīmes aizņem vairāk)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'Nosaukumā ir neatbalstītas rakstzīmes';
 
   @override
-  String get deviceRenameFailed =>
-      'Nosaukumu neizdevās saglabāt Omi ierīcē. Pārbaudiet, vai tā ir pievienota, un mēģiniet vēlreiz.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'Nosaukums ir pārāk garš (līdz $maxBytes rakstzīmēm; emocijzīmes un diakritiskās zīmes aizņem vairāk)';
+  }
 
   @override
   String deviceRenamed(String name) {

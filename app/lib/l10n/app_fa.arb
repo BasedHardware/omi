@@ -11218,12 +11218,16 @@
     "deleteChat": "حذف گفتگو",
     "appsAskWith": "از Omi بپرسید با",
     "conversationsTodayCount": "{count, plural, =0{امروز گفتگویی نبوده.} =1{۱ گفتگو امروز.} other{{count} گفتگو امروز.}}",
+    "meetingScreenshotsTitle": "آنچه روی صفحه بود",
+    "meetingScreenshotFallbackCaption": "اسکرین‌شات از این جلسه",
+    "deleteMeetingScreenshotTitle": "اسکرین‌شات حذف شود؟",
+    "deleteMeetingScreenshotMessage": "این کار اسکرین‌شات را از یادداشت این جلسه حذف می‌کند. قابل بازگشت نیست.",
     "renameDevice": "تغییر نام دستگاه",
+    "deviceRenameFailed": "ذخیره نام روی Omi ممکن نشد. مطمئن شوید متصل است و دوباره تلاش کنید.",
     "renameDeviceDescription": "نام روی خودِ Omi ذخیره می‌شود، بنابراین در هر گوشی‌ای که با آن جفت کنید نمایش داده می‌شود.",
     "tapToRename": "برای تغییر نام ضربه بزنید",
     "deviceNameCannotBeEmpty": "نام دستگاه نمی‌تواند خالی باشد",
-    "deviceNameTooLong": "نام خیلی طولانی است (حداکثر {maxBytes} نویسه؛ ایموجی و اعراب بیشتر حساب می‌شوند)",
     "deviceNameInvalidCharacters": "نام شامل نویسه‌های پشتیبانی‌نشده است",
-    "deviceRenameFailed": "ذخیره نام روی Omi ممکن نشد. مطمئن شوید متصل است و دوباره تلاش کنید.",
+    "deviceNameTooLong": "نام خیلی طولانی است (حداکثر {maxBytes} نویسه؛ ایموجی و اعراب بیشتر حساب می‌شوند)",
     "deviceRenamed": "نام دستگاه به {name} تغییر یافت"
 }

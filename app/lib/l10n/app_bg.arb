@@ -3658,12 +3658,16 @@
     "deleteChat": "Изтрий чата",
     "appsAskWith": "Питай Omi с",
     "conversationsTodayCount": "{count, plural, =0{Днес няма разговори.} =1{1 разговор днес.} other{{count} разговора днес.}}",
-    "renameDevice": "Преименуване на устройството",
-    "renameDeviceDescription": "Името се записва в самото Omi, така че се показва на всеки телефон, с който го сдвоите.",
-    "tapToRename": "Докоснете за преименуване",
-    "deviceNameCannotBeEmpty": "Името на устройството не може да е празно",
-    "deviceNameTooLong": "Името е твърде дълго (до {maxBytes} знака; емоджи и ударения се броят за повече)",
+    "meetingScreenshotsTitle": "Какво имаше на екрана",
+    "meetingScreenshotFallbackCaption": "Екранна снимка от тази среща",
+    "deleteMeetingScreenshotTitle": "Изтриване на екранната снимка?",
+    "deleteMeetingScreenshotMessage": "Екранната снимка ще бъде премахната от бележката за тази среща. Това не може да бъде отменено.",
     "deviceNameInvalidCharacters": "Името съдържа неподдържани знаци",
+    "deviceNameTooLong": "Името е твърде дълго (до {maxBytes} знака; емоджи и ударения се броят за повече)",
+    "renameDevice": "Преименуване на устройството",
     "deviceRenameFailed": "Името не можа да бъде записано в Omi. Проверете дали е свързано и опитайте отново.",
-    "deviceRenamed": "Устройството е преименувано на {name}"
+    "renameDeviceDescription": "Името се записва в самото Omi, така че се показва на всеки телефон, с който го сдвоите.",
+    "deviceRenamed": "Устройството е преименувано на {name}",
+    "tapToRename": "Докоснете за преименуване",
+    "deviceNameCannotBeEmpty": "Името на устройството не може да е празно"
 }

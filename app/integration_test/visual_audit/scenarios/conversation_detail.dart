@@ -2,6 +2,7 @@
 // recordings sheet of a grouped capture, and the people chip.
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
@@ -16,6 +17,7 @@ import 'package:omi/providers/conversation_provider.dart';
 
 import '../fakes.dart';
 import '../harness.dart';
+import '../screen_frame_fixtures.dart';
 
 const _page = 'lib/pages/conversation_detail/page.dart (ConversationDetailPage)';
 const _summaryTab = 1;
@@ -74,6 +76,67 @@ final conversationDetailScenarios = <AuditScenario>[
       await a.shot('Open an ungrouped conversation: Ask Omi, Star, Share and the overflow button', step: 'summary');
       await a.tap(find.byKey(const Key('conversation_more')));
       await a.shot('Open the overflow menu', step: 'overflow');
+    },
+  ),
+  AuditScenario(
+    id: 'conversation-detail-screenshots',
+    title: 'Meeting screenshots: strip, viewer and delete',
+    page:
+        'lib/pages/conversation_detail/widgets/conversation_screenshots_section.dart (ConversationScreenshotsSection)',
+    state: 'A completed meeting whose fixture screenshot set has a banner (video call) and three strip frames, '
+        'rendered as iOS',
+    run: (a) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        final images = await a.tester.runAsync(renderScreenFrameFixtures);
+        a.server.images.addAll(images!);
+        final base = a.server.baseUrl;
+        final conversation = ServerConversation(
+            id: 'audit-meeting',
+            createdAt: DateTime(2026, 9, 30, 10),
+            structured: Structured(
+                'Weekly product sync',
+                'Maya walked through the Q4 onboarding roadmap. The team agreed to simplify the first recording, '
+                    'make saved memories easier to find, and roll the launch out at 10% before widening it.',
+                emoji: '\u{1F4C5}',
+                category: 'work'));
+        a.server.conversations.add(conversation.toJson());
+        a.server.screenFrameSets['audit-meeting'] = {
+          'revision': 1,
+          'banner': screenFrameJson(base, 'f-call', 'call.png',
+              role: 'banner', rank: 0, caption: 'Weekly product sync on a video call'),
+          'strip': [
+            screenFrameJson(base, 'f-slide', 'slide.png',
+                role: 'strip', rank: 1, caption: 'Q4 onboarding roadmap slide', badge: 'slides'),
+            screenFrameJson(base, 'f-editor', 'editor.png',
+                role: 'strip', rank: 2, caption: 'Onboarding flow code in the editor', badge: 'code'),
+            screenFrameJson(base, 'f-doc', 'doc.png',
+                role: 'strip', rank: 3, caption: 'Launch checklist document', badge: 'document'),
+          ],
+        };
+        await _pumpDetail(a, conversation);
+        final section = find.byKey(const ValueKey('conversation_screenshots_section'));
+        expect(section, findsOneWidget);
+        expect(find.text('What was on screen'), findsOneWidget);
+        await a.shot('Open a meeting with approved screenshots: the strip follows the summary', step: 'strip');
+
+        await a.tap(find.byKey(const ValueKey('conversation_screenshot_f-slide')));
+        await a.settle();
+        await a.shot('Tap a tile: the full-size viewer opens on that frame, swipeable across the set', step: 'viewer');
+        globalNavigatorKey.currentState!.pop();
+        await a.settle();
+
+        await a.longPress(find.byKey(const ValueKey('conversation_screenshot_f-slide')));
+        await a.shot('Long-press a tile: Open or Delete', step: 'menu');
+        await a.tap(find.text('Delete'));
+        expect(find.text('Delete Screenshot?'), findsOneWidget);
+        await a.shot('Choose Delete: a destructive confirmation', step: 'confirm');
+        await a.tap(find.text('Delete').last);
+        expect(find.byKey(const ValueKey('conversation_screenshot_f-slide')), findsNothing);
+        await a.shot('Confirm: the frame is gone and the strip closes up', step: 'deleted');
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     },
   ),
   AuditScenario(

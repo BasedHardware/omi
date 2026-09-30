@@ -37,7 +37,7 @@ WINDOW_CONTEXT = Histogram(
 )
 WINDOW_FORCED_CUTS = Counter(
     'omi_stt_window_forced_cuts_total',
-    'Window POSTs that hit max context without a sentence boundary',
+    'Window POSTs that cut an unfinished segment at max context or replay-ring pressure',
 )
 WINDOW_HEAD_RECOVERIES = Counter(
     'omi_stt_window_head_recoveries_total',

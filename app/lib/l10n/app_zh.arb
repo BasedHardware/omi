@@ -3658,12 +3658,16 @@
     "deleteChat": "删除聊天",
     "appsAskWith": "用这些向 Omi 提问",
     "conversationsTodayCount": "{count, plural, =0{今天还没有对话。} =1{今天有 1 段对话。} other{今天有 {count} 段对话。}}",
-    "renameDevice": "重命名设备",
-    "renameDeviceDescription": "名称保存在 Omi 设备本身，因此在你配对的任何手机上都会显示。",
-    "tapToRename": "点按以重命名",
-    "deviceNameCannotBeEmpty": "设备名称不能为空",
-    "deviceNameTooLong": "名称过长（最多 {maxBytes} 个字符；表情符号和汉字按多个字符计算）",
+    "meetingScreenshotsTitle": "屏幕上显示的内容",
+    "meetingScreenshotFallbackCaption": "本次会议的屏幕截图",
+    "deleteMeetingScreenshotTitle": "删除屏幕截图？",
+    "deleteMeetingScreenshotMessage": "这会从本次会议的笔记中移除该屏幕截图。此操作无法撤销。",
     "deviceNameInvalidCharacters": "名称包含不支持的字符",
+    "deviceNameTooLong": "名称过长（最多 {maxBytes} 个字符；表情符号和汉字按多个字符计算）",
+    "renameDevice": "重命名设备",
     "deviceRenameFailed": "无法将名称保存到 Omi。请确认设备已连接，然后重试。",
-    "deviceRenamed": "设备已重命名为 {name}"
+    "renameDeviceDescription": "名称保存在 Omi 设备本身，因此在你配对的任何手机上都会显示。",
+    "deviceRenamed": "设备已重命名为 {name}",
+    "tapToRename": "点按以重命名",
+    "deviceNameCannotBeEmpty": "设备名称不能为空"
 }

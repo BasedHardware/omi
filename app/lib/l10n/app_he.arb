@@ -11218,12 +11218,16 @@
     "deleteChat": "מחיקת הצ'אט",
     "appsAskWith": "לשאול את Omi עם",
     "conversationsTodayCount": "{count, plural, =0{אין שיחות היום.} =1{שיחה אחת היום.} other{{count} שיחות היום.}}",
+    "meetingScreenshotsTitle": "מה היה על המסך",
+    "meetingScreenshotFallbackCaption": "צילום מסך מהפגישה הזו",
+    "deleteMeetingScreenshotTitle": "למחוק את צילום המסך?",
+    "deleteMeetingScreenshotMessage": "צילום המסך יוסר מהסיכום של הפגישה הזו. לא ניתן לבטל פעולה זו.",
     "renameDevice": "שינוי שם המכשיר",
+    "deviceRenameFailed": "לא ניתן היה לשמור את השם על ה-Omi. ודאו שהוא מחובר ונסו שוב.",
     "renameDeviceDescription": "השם נשמר על ה-Omi עצמו, ולכן יופיע בכל טלפון שתצמידו אליו.",
     "tapToRename": "הקישו לשינוי השם",
     "deviceNameCannotBeEmpty": "שם המכשיר לא יכול להיות ריק",
-    "deviceNameTooLong": "השם ארוך מדי (עד {maxBytes} תווים; אמוג'י וניקוד נספרים יותר)",
     "deviceNameInvalidCharacters": "השם מכיל תווים שאינם נתמכים",
-    "deviceRenameFailed": "לא ניתן היה לשמור את השם על ה-Omi. ודאו שהוא מחובר ונסו שוב.",
+    "deviceNameTooLong": "השם ארוך מדי (עד {maxBytes} תווים; אמוג'י וניקוד נספרים יותר)",
     "deviceRenamed": "שם המכשיר שונה ל-{name}"
 }

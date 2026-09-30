@@ -3658,12 +3658,16 @@
     "deleteChat": "Chat löschen",
     "appsAskWith": "Omi fragen mit",
     "conversationsTodayCount": "{count, plural, =0{Heute keine Gespräche.} =1{1 Gespräch heute.} other{{count} Gespräche heute.}}",
-    "renameDevice": "Gerät umbenennen",
-    "renameDeviceDescription": "Der Name wird auf deinem Omi gespeichert und erscheint daher auf jedem Telefon, mit dem du es koppelst.",
-    "tapToRename": "Zum Umbenennen tippen",
-    "deviceNameCannotBeEmpty": "Der Gerätename darf nicht leer sein",
-    "deviceNameTooLong": "Name ist zu lang (bis zu {maxBytes} Zeichen; Emojis und Akzente zählen mehr)",
+    "meetingScreenshotsTitle": "Was auf dem Bildschirm war",
+    "meetingScreenshotFallbackCaption": "Bildschirmfoto aus diesem Meeting",
+    "deleteMeetingScreenshotTitle": "Bildschirmfoto löschen?",
+    "deleteMeetingScreenshotMessage": "Das Bildschirmfoto wird aus der Notiz dieses Meetings entfernt. Dies kann nicht rückgängig gemacht werden.",
     "deviceNameInvalidCharacters": "Der Name enthält nicht unterstützte Zeichen",
+    "deviceNameTooLong": "Name ist zu lang (bis zu {maxBytes} Zeichen; Emojis und Akzente zählen mehr)",
+    "renameDevice": "Gerät umbenennen",
     "deviceRenameFailed": "Der Name konnte nicht auf deinem Omi gespeichert werden. Prüfe, ob es verbunden ist, und versuche es erneut.",
-    "deviceRenamed": "Gerät umbenannt in {name}"
+    "renameDeviceDescription": "Der Name wird auf deinem Omi gespeichert und erscheint daher auf jedem Telefon, mit dem du es koppelst.",
+    "deviceRenamed": "Gerät umbenannt in {name}",
+    "tapToRename": "Zum Umbenennen tippen",
+    "deviceNameCannotBeEmpty": "Der Gerätename darf nicht leer sein"
 }

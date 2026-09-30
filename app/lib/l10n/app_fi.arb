@@ -3658,12 +3658,16 @@
     "deleteChat": "Poista keskustelu",
     "appsAskWith": "Kysy Omilta käyttäen",
     "conversationsTodayCount": "{count, plural, =0{Ei keskusteluja tänään.} =1{1 keskustelu tänään.} other{{count} keskustelua tänään.}}",
-    "renameDevice": "Nimeä laite uudelleen",
-    "renameDeviceDescription": "Nimi tallennetaan itse Omiin, joten se näkyy jokaisessa puhelimessa, johon sen yhdistät.",
-    "tapToRename": "Napauta nimetäksesi uudelleen",
-    "deviceNameCannotBeEmpty": "Laitteen nimi ei voi olla tyhjä",
-    "deviceNameTooLong": "Nimi on liian pitkä (enintään {maxBytes} merkkiä; emojit ja ääkköset vievät enemmän)",
+    "meetingScreenshotsTitle": "Mitä näytöllä oli",
+    "meetingScreenshotFallbackCaption": "Kuvakaappaus tästä kokouksesta",
+    "deleteMeetingScreenshotTitle": "Poistetaanko kuvakaappaus?",
+    "deleteMeetingScreenshotMessage": "Kuvakaappaus poistetaan tämän kokouksen muistiinpanosta. Toimintoa ei voi kumota.",
     "deviceNameInvalidCharacters": "Nimi sisältää merkkejä, joita ei tueta",
+    "deviceNameTooLong": "Nimi on liian pitkä (enintään {maxBytes} merkkiä; emojit ja ääkköset vievät enemmän)",
+    "renameDevice": "Nimeä laite uudelleen",
     "deviceRenameFailed": "Nimeä ei voitu tallentaa Omiin. Tarkista, että se on yhdistetty, ja yritä uudelleen.",
-    "deviceRenamed": "Laite nimettiin uudelleen: {name}"
+    "renameDeviceDescription": "Nimi tallennetaan itse Omiin, joten se näkyy jokaisessa puhelimessa, johon sen yhdistät.",
+    "deviceRenamed": "Laite nimettiin uudelleen: {name}",
+    "tapToRename": "Napauta nimetäksesi uudelleen",
+    "deviceNameCannotBeEmpty": "Laitteen nimi ei voi olla tyhjä"
 }

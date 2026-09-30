@@ -11641,7 +11641,24 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'Kas buvo ekrane';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Šio susitikimo ekrano kopija';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Ištrinti ekrano kopiją?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ekrano kopija bus pašalinta iš šio susitikimo užrašo. Šio veiksmo anuliuoti negalima.';
+
+  @override
   String get renameDevice => 'Pervadinti įrenginį';
+
+  @override
+  String get deviceRenameFailed =>
+      'Nepavyko išsaugoti pavadinimo Omi įrenginyje. Patikrinkite, ar jis prijungtas, ir bandykite dar kartą.';
 
   @override
   String get renameDeviceDescription =>
@@ -11654,16 +11671,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'Įrenginio pavadinimas negali būti tuščias';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Pavadinimas per ilgas (iki $maxBytes simbolių; jaustukai ir diakritiniai ženklai užima daugiau)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'Pavadinime yra nepalaikomų simbolių';
 
   @override
-  String get deviceRenameFailed =>
-      'Nepavyko išsaugoti pavadinimo Omi įrenginyje. Patikrinkite, ar jis prijungtas, ir bandykite dar kartą.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'Pavadinimas per ilgas (iki $maxBytes simbolių; jaustukai ir diakritiniai ženklai užima daugiau)';
+  }
 
   @override
   String deviceRenamed(String name) {

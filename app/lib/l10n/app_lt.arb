@@ -3658,12 +3658,16 @@
     "deleteChat": "Ištrinti pokalbį",
     "appsAskWith": "Klauskite Omi su",
     "conversationsTodayCount": "{count, plural, =0{Šiandien pokalbių nėra.} =1{1 pokalbis šiandien.} other{{count} pokalbiai šiandien.}}",
-    "renameDevice": "Pervadinti įrenginį",
-    "renameDeviceDescription": "Pavadinimas išsaugomas pačiame Omi, todėl jis rodomas visuose telefonuose, su kuriais jį susiesite.",
-    "tapToRename": "Palieskite, kad pervadintumėte",
-    "deviceNameCannotBeEmpty": "Įrenginio pavadinimas negali būti tuščias",
-    "deviceNameTooLong": "Pavadinimas per ilgas (iki {maxBytes} simbolių; jaustukai ir diakritiniai ženklai užima daugiau)",
+    "meetingScreenshotsTitle": "Kas buvo ekrane",
+    "meetingScreenshotFallbackCaption": "Šio susitikimo ekrano kopija",
+    "deleteMeetingScreenshotTitle": "Ištrinti ekrano kopiją?",
+    "deleteMeetingScreenshotMessage": "Ekrano kopija bus pašalinta iš šio susitikimo užrašo. Šio veiksmo anuliuoti negalima.",
     "deviceNameInvalidCharacters": "Pavadinime yra nepalaikomų simbolių",
+    "deviceNameTooLong": "Pavadinimas per ilgas (iki {maxBytes} simbolių; jaustukai ir diakritiniai ženklai užima daugiau)",
+    "renameDevice": "Pervadinti įrenginį",
     "deviceRenameFailed": "Nepavyko išsaugoti pavadinimo Omi įrenginyje. Patikrinkite, ar jis prijungtas, ir bandykite dar kartą.",
-    "deviceRenamed": "Įrenginys pervadintas į {name}"
+    "renameDeviceDescription": "Pavadinimas išsaugomas pačiame Omi, todėl jis rodomas visuose telefonuose, su kuriais jį susiesite.",
+    "deviceRenamed": "Įrenginys pervadintas į {name}",
+    "tapToRename": "Palieskite, kad pervadintumėte",
+    "deviceNameCannotBeEmpty": "Įrenginio pavadinimas negali būti tuščias"
 }

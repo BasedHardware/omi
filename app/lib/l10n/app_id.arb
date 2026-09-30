@@ -3693,12 +3693,16 @@
     "deleteChat": "Hapus chat",
     "appsAskWith": "Tanya Omi dengan",
     "conversationsTodayCount": "{count, plural, =0{Tidak ada percakapan hari ini.} =1{1 percakapan hari ini.} other{{count} percakapan hari ini.}}",
-    "renameDevice": "Ubah Nama Perangkat",
-    "renameDeviceDescription": "Nama disimpan di Omi itu sendiri, sehingga muncul di ponsel mana pun yang Anda pasangkan.",
-    "tapToRename": "Ketuk untuk mengubah nama",
-    "deviceNameCannotBeEmpty": "Nama perangkat tidak boleh kosong",
-    "deviceNameTooLong": "Nama terlalu panjang (maksimal {maxBytes} karakter; emoji dan aksen dihitung lebih)",
+    "meetingScreenshotsTitle": "Yang ada di layar",
+    "meetingScreenshotFallbackCaption": "Tangkapan layar dari rapat ini",
+    "deleteMeetingScreenshotTitle": "Hapus tangkapan layar?",
+    "deleteMeetingScreenshotMessage": "Ini akan menghapus tangkapan layar dari catatan rapat ini. Tindakan ini tidak dapat dibatalkan.",
     "deviceNameInvalidCharacters": "Nama mengandung karakter yang tidak didukung",
+    "deviceNameTooLong": "Nama terlalu panjang (maksimal {maxBytes} karakter; emoji dan aksen dihitung lebih)",
+    "renameDevice": "Ubah Nama Perangkat",
     "deviceRenameFailed": "Nama tidak dapat disimpan ke Omi Anda. Pastikan perangkat terhubung, lalu coba lagi.",
-    "deviceRenamed": "Nama perangkat diubah menjadi {name}"
+    "renameDeviceDescription": "Nama disimpan di Omi itu sendiri, sehingga muncul di ponsel mana pun yang Anda pasangkan.",
+    "deviceRenamed": "Nama perangkat diubah menjadi {name}",
+    "tapToRename": "Ketuk untuk mengubah nama",
+    "deviceNameCannotBeEmpty": "Nama perangkat tidak boleh kosong"
 }

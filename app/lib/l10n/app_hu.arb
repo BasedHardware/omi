@@ -3754,12 +3754,16 @@
     "deleteChat": "Csevegés törlése",
     "appsAskWith": "Kérdezd az Omit ezzel",
     "conversationsTodayCount": "{count, plural, =0{Ma nem volt beszélgetés.} =1{1 beszélgetés ma.} other{{count} beszélgetés ma.}}",
-    "renameDevice": "Eszköz átnevezése",
-    "renameDeviceDescription": "A név magán az Omin tárolódik, így minden telefonon megjelenik, amellyel párosítod.",
-    "tapToRename": "Koppints az átnevezéshez",
-    "deviceNameCannotBeEmpty": "Az eszköz neve nem lehet üres",
-    "deviceNameTooLong": "A név túl hosszú (legfeljebb {maxBytes} karakter; az emodzsik és ékezetek többet számítanak)",
+    "meetingScreenshotsTitle": "Mi volt a képernyőn",
+    "meetingScreenshotFallbackCaption": "Képernyőkép erről a megbeszélésről",
+    "deleteMeetingScreenshotTitle": "Törli a képernyőképet?",
+    "deleteMeetingScreenshotMessage": "A képernyőkép törlődik a megbeszélés jegyzetéből. Ez nem vonható vissza.",
     "deviceNameInvalidCharacters": "A név nem támogatott karaktereket tartalmaz",
+    "deviceNameTooLong": "A név túl hosszú (legfeljebb {maxBytes} karakter; az emodzsik és ékezetek többet számítanak)",
+    "renameDevice": "Eszköz átnevezése",
     "deviceRenameFailed": "A nevet nem sikerült elmenteni az Omira. Ellenőrizd, hogy csatlakoztatva van, majd próbáld újra.",
-    "deviceRenamed": "Az eszköz új neve: {name}"
+    "renameDeviceDescription": "A név magán az Omin tárolódik, így minden telefonon megjelenik, amellyel párosítod.",
+    "deviceRenamed": "Az eszköz új neve: {name}",
+    "tapToRename": "Koppints az átnevezéshez",
+    "deviceNameCannotBeEmpty": "Az eszköz neve nem lehet üres"
 }

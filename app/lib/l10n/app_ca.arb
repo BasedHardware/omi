@@ -3658,12 +3658,16 @@
     "deleteChat": "Suprimeix el xat",
     "appsAskWith": "Pregunta a Omi amb",
     "conversationsTodayCount": "{count, plural, =0{Avui cap conversa.} =1{1 conversa avui.} other{{count} converses avui.}}",
-    "renameDevice": "Canvia el nom del dispositiu",
-    "renameDeviceDescription": "El nom es desa al mateix Omi, així que apareix a qualsevol telèfon amb què l'emparellis.",
-    "tapToRename": "Toca per canviar el nom",
-    "deviceNameCannotBeEmpty": "El nom del dispositiu no pot estar buit",
-    "deviceNameTooLong": "El nom és massa llarg (fins a {maxBytes} caràcters; els emojis i els accents compten més)",
+    "meetingScreenshotsTitle": "Què hi havia a la pantalla",
+    "meetingScreenshotFallbackCaption": "Captura de pantalla d'aquesta reunió",
+    "deleteMeetingScreenshotTitle": "Vols suprimir la captura de pantalla?",
+    "deleteMeetingScreenshotMessage": "Això elimina la captura de pantalla de la nota d'aquesta reunió. No es pot desfer.",
     "deviceNameInvalidCharacters": "El nom conté caràcters no compatibles",
+    "deviceNameTooLong": "El nom és massa llarg (fins a {maxBytes} caràcters; els emojis i els accents compten més)",
+    "renameDevice": "Canvia el nom del dispositiu",
     "deviceRenameFailed": "No s'ha pogut desar el nom a l'Omi. Comprova que estigui connectat i torna-ho a provar.",
-    "deviceRenamed": "Dispositiu reanomenat a {name}"
+    "renameDeviceDescription": "El nom es desa al mateix Omi, així que apareix a qualsevol telèfon amb què l'emparellis.",
+    "deviceRenamed": "Dispositiu reanomenat a {name}",
+    "tapToRename": "Toca per canviar el nom",
+    "deviceNameCannotBeEmpty": "El nom del dispositiu no pot estar buit"
 }

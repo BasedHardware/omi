@@ -3658,12 +3658,16 @@
     "deleteChat": "Slett chat",
     "appsAskWith": "Spør Omi med",
     "conversationsTodayCount": "{count, plural, =0{Ingen samtaler i dag.} =1{1 samtale i dag.} other{{count} samtaler i dag.}}",
-    "renameDevice": "Gi enheten nytt navn",
-    "renameDeviceDescription": "Navnet lagres på selve Omi-enheten, så det vises på alle telefoner du parer den med.",
-    "tapToRename": "Trykk for å gi nytt navn",
-    "deviceNameCannotBeEmpty": "Enhetsnavnet kan ikke være tomt",
-    "deviceNameTooLong": "Navnet er for langt (opptil {maxBytes} tegn; emoji og aksenter teller ekstra)",
+    "meetingScreenshotsTitle": "Hva som var på skjermen",
+    "meetingScreenshotFallbackCaption": "Skjermbilde fra dette møtet",
+    "deleteMeetingScreenshotTitle": "Slette skjermbildet?",
+    "deleteMeetingScreenshotMessage": "Dette fjerner skjermbildet fra notatet for dette møtet. Det kan ikke angres.",
     "deviceNameInvalidCharacters": "Navnet inneholder tegn som ikke støttes",
+    "deviceNameTooLong": "Navnet er for langt (opptil {maxBytes} tegn; emoji og aksenter teller ekstra)",
+    "renameDevice": "Gi enheten nytt navn",
     "deviceRenameFailed": "Kunne ikke lagre navnet på Omi-enheten. Sjekk at den er tilkoblet, og prøv igjen.",
-    "deviceRenamed": "Enheten har fått navnet {name}"
+    "renameDeviceDescription": "Navnet lagres på selve Omi-enheten, så det vises på alle telefoner du parer den med.",
+    "deviceRenamed": "Enheten har fått navnet {name}",
+    "tapToRename": "Trykk for å gi nytt navn",
+    "deviceNameCannotBeEmpty": "Enhetsnavnet kan ikke være tomt"
 }

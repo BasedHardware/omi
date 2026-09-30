@@ -11621,7 +11621,24 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'Co bylo na obrazovce';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Snímek obrazovky z této schůzky';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Smazat snímek obrazovky?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Snímek obrazovky bude odebrán z poznámky této schůzky. Tuto akci nelze vrátit.';
+
+  @override
   String get renameDevice => 'Přejmenovat zařízení';
+
+  @override
+  String get deviceRenameFailed =>
+      'Název se nepodařilo uložit do Omi. Zkontrolujte, že je připojeno, a zkuste to znovu.';
 
   @override
   String get renameDeviceDescription =>
@@ -11634,16 +11651,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'Název zařízení nemůže být prázdný';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Název je příliš dlouhý (max. $maxBytes znaků; emoji a diakritika se počítají víc)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'Název obsahuje nepodporované znaky';
 
   @override
-  String get deviceRenameFailed =>
-      'Název se nepodařilo uložit do Omi. Zkontrolujte, že je připojeno, a zkuste to znovu.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'Název je příliš dlouhý (max. $maxBytes znaků; emoji a diakritika se počítají víc)';
+  }
 
   @override
   String deviceRenamed(String name) {

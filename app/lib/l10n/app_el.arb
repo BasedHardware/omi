@@ -3658,12 +3658,16 @@
     "deleteChat": "Διαγραφή συνομιλίας",
     "appsAskWith": "Ρωτήστε το Omi με",
     "conversationsTodayCount": "{count, plural, =0{Καμία συζήτηση σήμερα.} =1{1 συζήτηση σήμερα.} other{{count} συζητήσεις σήμερα.}}",
-    "renameDevice": "Μετονομασία συσκευής",
-    "renameDeviceDescription": "Το όνομα αποθηκεύεται στο ίδιο το Omi, ώστε να εμφανίζεται σε κάθε τηλέφωνο με το οποίο το συζευγνύετε.",
-    "tapToRename": "Πατήστε για μετονομασία",
-    "deviceNameCannotBeEmpty": "Το όνομα της συσκευής δεν μπορεί να είναι κενό",
-    "deviceNameTooLong": "Το όνομα είναι πολύ μεγάλο (έως {maxBytes} χαρακτήρες· τα emoji και οι τόνοι μετρούν περισσότερο)",
+    "meetingScreenshotsTitle": "Τι υπήρχε στην οθόνη",
+    "meetingScreenshotFallbackCaption": "Στιγμιότυπο οθόνης από αυτή τη σύσκεψη",
+    "deleteMeetingScreenshotTitle": "Διαγραφή στιγμιότυπου οθόνης;",
+    "deleteMeetingScreenshotMessage": "Το στιγμιότυπο οθόνης θα αφαιρεθεί από τη σημείωση αυτής της σύσκεψης. Δεν είναι δυνατή η αναίρεση.",
     "deviceNameInvalidCharacters": "Το όνομα περιέχει μη υποστηριζόμενους χαρακτήρες",
+    "deviceNameTooLong": "Το όνομα είναι πολύ μεγάλο (έως {maxBytes} χαρακτήρες· τα emoji και οι τόνοι μετρούν περισσότερο)",
+    "renameDevice": "Μετονομασία συσκευής",
     "deviceRenameFailed": "Δεν ήταν δυνατή η αποθήκευση του ονόματος στο Omi. Ελέγξτε ότι είναι συνδεδεμένο και δοκιμάστε ξανά.",
-    "deviceRenamed": "Η συσκευή μετονομάστηκε σε {name}"
+    "renameDeviceDescription": "Το όνομα αποθηκεύεται στο ίδιο το Omi, ώστε να εμφανίζεται σε κάθε τηλέφωνο με το οποίο το συζευγνύετε.",
+    "deviceRenamed": "Η συσκευή μετονομάστηκε σε {name}",
+    "tapToRename": "Πατήστε για μετονομασία",
+    "deviceNameCannotBeEmpty": "Το όνομα της συσκευής δεν μπορεί να είναι κενό"
 }

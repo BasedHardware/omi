@@ -11659,7 +11659,24 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'Co było na ekranie';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Zrzut ekranu z tego spotkania';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Usunąć zrzut ekranu?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Zrzut ekranu zostanie usunięty z notatki tego spotkania. Tej operacji nie można cofnąć.';
+
+  @override
   String get renameDevice => 'Zmień nazwę urządzenia';
+
+  @override
+  String get deviceRenameFailed =>
+      'Nie udało się zapisać nazwy w Omi. Sprawdź, czy jest połączone, i spróbuj ponownie.';
 
   @override
   String get renameDeviceDescription =>
@@ -11672,16 +11689,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'Nazwa urządzenia nie może być pusta';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Nazwa jest za długa (maks. $maxBytes znaków; emoji i znaki diakrytyczne liczą się więcej)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'Nazwa zawiera nieobsługiwane znaki';
 
   @override
-  String get deviceRenameFailed =>
-      'Nie udało się zapisać nazwy w Omi. Sprawdź, czy jest połączone, i spróbuj ponownie.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'Nazwa jest za długa (maks. $maxBytes znaków; emoji i znaki diakrytyczne liczą się więcej)';
+  }
 
   @override
   String deviceRenamed(String name) {

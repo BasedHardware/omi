@@ -3658,12 +3658,16 @@
     "deleteChat": "チャットを削除",
     "appsAskWith": "Omiに聞くときに使う",
     "conversationsTodayCount": "{count, plural, =0{今日の会話はまだありません。} =1{今日の会話は1件。} other{今日の会話は{count}件。}}",
-    "renameDevice": "デバイス名を変更",
-    "renameDeviceDescription": "名前はOmi本体に保存されるため、ペアリングしたどのスマートフォンでも表示されます。",
-    "tapToRename": "タップして名前を変更",
-    "deviceNameCannotBeEmpty": "デバイス名を空にすることはできません",
-    "deviceNameTooLong": "名前が長すぎます（最大{maxBytes}文字。絵文字や日本語などは複数文字分としてカウントされます）",
+    "meetingScreenshotsTitle": "画面に表示されていた内容",
+    "meetingScreenshotFallbackCaption": "このミーティングのスクリーンショット",
+    "deleteMeetingScreenshotTitle": "スクリーンショットを削除しますか？",
+    "deleteMeetingScreenshotMessage": "このミーティングのメモからスクリーンショットを削除します。この操作は取り消せません。",
     "deviceNameInvalidCharacters": "名前にサポートされていない文字が含まれています",
+    "deviceNameTooLong": "名前が長すぎます（最大{maxBytes}文字。絵文字や日本語などは複数文字分としてカウントされます）",
+    "renameDevice": "デバイス名を変更",
     "deviceRenameFailed": "Omiに名前を保存できませんでした。接続されていることを確認して、もう一度お試しください。",
-    "deviceRenamed": "デバイス名を{name}に変更しました"
+    "renameDeviceDescription": "名前はOmi本体に保存されるため、ペアリングしたどのスマートフォンでも表示されます。",
+    "deviceRenamed": "デバイス名を{name}に変更しました",
+    "tapToRename": "タップして名前を変更",
+    "deviceNameCannotBeEmpty": "デバイス名を空にすることはできません"
 }

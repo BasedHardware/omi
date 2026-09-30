@@ -11411,7 +11411,22 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => '屏幕上显示的内容';
+
+  @override
+  String get meetingScreenshotFallbackCaption => '本次会议的屏幕截图';
+
+  @override
+  String get deleteMeetingScreenshotTitle => '删除屏幕截图？';
+
+  @override
+  String get deleteMeetingScreenshotMessage => '这会从本次会议的笔记中移除该屏幕截图。此操作无法撤销。';
+
+  @override
   String get renameDevice => '重命名设备';
+
+  @override
+  String get deviceRenameFailed => '无法将名称保存到 Omi。请确认设备已连接，然后重试。';
 
   @override
   String get renameDeviceDescription => '名称保存在 Omi 设备本身，因此在你配对的任何手机上都会显示。';
@@ -11423,15 +11438,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceNameCannotBeEmpty => '设备名称不能为空';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return '名称过长（最多 $maxBytes 个字符；表情符号和汉字按多个字符计算）';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => '名称包含不支持的字符';
 
   @override
-  String get deviceRenameFailed => '无法将名称保存到 Omi。请确认设备已连接，然后重试。';
+  String deviceNameTooLong(int maxBytes) {
+    return '名称过长（最多 $maxBytes 个字符；表情符号和汉字按多个字符计算）';
+  }
 
   @override
   String deviceRenamed(String name) {

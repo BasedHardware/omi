@@ -3658,12 +3658,16 @@
     "deleteChat": "Padam sembang",
     "appsAskWith": "Tanya Omi dengan",
     "conversationsTodayCount": "{count, plural, =0{Tiada perbualan hari ini.} =1{1 perbualan hari ini.} other{{count} perbualan hari ini.}}",
-    "renameDevice": "Namakan Semula Peranti",
-    "renameDeviceDescription": "Nama disimpan pada Omi itu sendiri, jadi ia dipaparkan pada mana-mana telefon yang anda pasangkan.",
-    "tapToRename": "Ketik untuk menamakan semula",
-    "deviceNameCannotBeEmpty": "Nama peranti tidak boleh kosong",
-    "deviceNameTooLong": "Nama terlalu panjang (maksimum {maxBytes} aksara; emoji dan aksen dikira lebih)",
+    "meetingScreenshotsTitle": "Apa yang ada di skrin",
+    "meetingScreenshotFallbackCaption": "Tangkapan skrin daripada mesyuarat ini",
+    "deleteMeetingScreenshotTitle": "Padam tangkapan skrin?",
+    "deleteMeetingScreenshotMessage": "Ini akan mengalih keluar tangkapan skrin daripada nota mesyuarat ini. Tindakan ini tidak boleh dibuat asal.",
     "deviceNameInvalidCharacters": "Nama mengandungi aksara yang tidak disokong",
+    "deviceNameTooLong": "Nama terlalu panjang (maksimum {maxBytes} aksara; emoji dan aksen dikira lebih)",
+    "renameDevice": "Namakan Semula Peranti",
     "deviceRenameFailed": "Nama tidak dapat disimpan ke Omi anda. Pastikan ia disambungkan dan cuba lagi.",
-    "deviceRenamed": "Peranti dinamakan semula kepada {name}"
+    "renameDeviceDescription": "Nama disimpan pada Omi itu sendiri, jadi ia dipaparkan pada mana-mana telefon yang anda pasangkan.",
+    "deviceRenamed": "Peranti dinamakan semula kepada {name}",
+    "tapToRename": "Ketik untuk menamakan semula",
+    "deviceNameCannotBeEmpty": "Nama peranti tidak boleh kosong"
 }

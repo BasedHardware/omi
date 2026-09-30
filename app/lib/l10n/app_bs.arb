@@ -11218,12 +11218,16 @@
     "deleteChat": "Izbriši razgovor",
     "appsAskWith": "Pitaj Omi uz",
     "conversationsTodayCount": "{count, plural, =0{Danas nema razgovora.} =1{1 razgovor danas.} other{{count} razgovora danas.}}",
+    "meetingScreenshotsTitle": "Šta je bilo na ekranu",
+    "meetingScreenshotFallbackCaption": "Snimak ekrana sa ovog sastanka",
+    "deleteMeetingScreenshotTitle": "Izbrisati snimak ekrana?",
+    "deleteMeetingScreenshotMessage": "Ovo uklanja snimak ekrana iz bilješke ovog sastanka. Ne može se poništiti.",
     "renameDevice": "Preimenuj uređaj",
+    "deviceRenameFailed": "Ime nije moglo biti sačuvano na Omi. Provjerite je li povezan i pokušajte ponovo.",
     "renameDeviceDescription": "Ime se čuva na samom Omi uređaju, pa se prikazuje na svakom telefonu s kojim ga uparite.",
     "tapToRename": "Dodirnite za preimenovanje",
     "deviceNameCannotBeEmpty": "Ime uređaja ne može biti prazno",
-    "deviceNameTooLong": "Ime je predugo (do {maxBytes} znakova; emoji i dijakritici se računaju više)",
     "deviceNameInvalidCharacters": "Ime sadrži nepodržane znakove",
-    "deviceRenameFailed": "Ime nije moglo biti sačuvano na Omi. Provjerite je li povezan i pokušajte ponovo.",
+    "deviceNameTooLong": "Ime je predugo (do {maxBytes} znakova; emoji i dijakritici se računaju više)",
     "deviceRenamed": "Uređaj je preimenovan u {name}"
 }

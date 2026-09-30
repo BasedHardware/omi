@@ -11619,7 +11619,23 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'آنچه روی صفحه بود';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'اسکرین‌شات از این جلسه';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'اسکرین‌شات حذف شود؟';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'این کار اسکرین‌شات را از یادداشت این جلسه حذف می‌کند. قابل بازگشت نیست.';
+
+  @override
   String get renameDevice => 'تغییر نام دستگاه';
+
+  @override
+  String get deviceRenameFailed => 'ذخیره نام روی Omi ممکن نشد. مطمئن شوید متصل است و دوباره تلاش کنید.';
 
   @override
   String get renameDeviceDescription =>
@@ -11632,15 +11648,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'نام دستگاه نمی‌تواند خالی باشد';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'نام خیلی طولانی است (حداکثر $maxBytes نویسه؛ ایموجی و اعراب بیشتر حساب می‌شوند)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'نام شامل نویسه‌های پشتیبانی‌نشده است';
 
   @override
-  String get deviceRenameFailed => 'ذخیره نام روی Omi ممکن نشد. مطمئن شوید متصل است و دوباره تلاش کنید.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'نام خیلی طولانی است (حداکثر $maxBytes نویسه؛ ایموجی و اعراب بیشتر حساب می‌شوند)';
+  }
 
   @override
   String deviceRenamed(String name) {

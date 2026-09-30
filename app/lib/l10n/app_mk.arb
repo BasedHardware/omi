@@ -11218,12 +11218,16 @@
     "deleteChat": "Избриши разговор",
     "appsAskWith": "Прашај го Omi со",
     "conversationsTodayCount": "{count, plural, =0{Денес нема разговори.} =1{1 разговор денес.} other{{count} разговори денес.}}",
+    "meetingScreenshotsTitle": "Што имаше на екранот",
+    "meetingScreenshotFallbackCaption": "Слика од екранот од овој состанок",
+    "deleteMeetingScreenshotTitle": "Да се избрише сликата од екранот?",
+    "deleteMeetingScreenshotMessage": "Ова ја отстранува сликата од екранот од белешката на овој состанок. Не може да се врати.",
     "renameDevice": "Преименувај го уредот",
+    "deviceRenameFailed": "Името не можеше да се зачува на Omi. Проверете дали е поврзан и обидете се повторно.",
     "renameDeviceDescription": "Името се чува на самиот Omi, па се прикажува на секој телефон со кој ќе го спарите.",
     "tapToRename": "Допрете за преименување",
     "deviceNameCannotBeEmpty": "Името на уредот не може да биде празно",
-    "deviceNameTooLong": "Името е предолго (до {maxBytes} знаци; емоџи и акценти се бројат повеќе)",
     "deviceNameInvalidCharacters": "Името содржи неподдржани знаци",
-    "deviceRenameFailed": "Името не можеше да се зачува на Omi. Проверете дали е поврзан и обидете се повторно.",
+    "deviceNameTooLong": "Името е предолго (до {maxBytes} знаци; емоџи и акценти се бројат повеќе)",
     "deviceRenamed": "Уредот е преименуван во {name}"
 }

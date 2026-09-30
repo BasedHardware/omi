@@ -3658,12 +3658,16 @@
     "deleteChat": "Radera chatt",
     "appsAskWith": "Fråga Omi med",
     "conversationsTodayCount": "{count, plural, =0{Inga samtal i dag.} =1{1 samtal i dag.} other{{count} samtal i dag.}}",
-    "renameDevice": "Byt namn på enheten",
-    "renameDeviceDescription": "Namnet sparas på själva Omi-enheten, så det visas på alla telefoner du parkopplar den med.",
-    "tapToRename": "Tryck för att byta namn",
-    "deviceNameCannotBeEmpty": "Enhetsnamnet får inte vara tomt",
-    "deviceNameTooLong": "Namnet är för långt (upp till {maxBytes} tecken; emoji och accenter räknas extra)",
+    "meetingScreenshotsTitle": "Vad som visades på skärmen",
+    "meetingScreenshotFallbackCaption": "Skärmbild från det här mötet",
+    "deleteMeetingScreenshotTitle": "Radera skärmbilden?",
+    "deleteMeetingScreenshotMessage": "Skärmbilden tas bort från anteckningen för det här mötet. Det går inte att ångra.",
     "deviceNameInvalidCharacters": "Namnet innehåller tecken som inte stöds",
+    "deviceNameTooLong": "Namnet är för långt (upp till {maxBytes} tecken; emoji och accenter räknas extra)",
+    "renameDevice": "Byt namn på enheten",
     "deviceRenameFailed": "Namnet kunde inte sparas på din Omi. Kontrollera att den är ansluten och försök igen.",
-    "deviceRenamed": "Enheten har fått namnet {name}"
+    "renameDeviceDescription": "Namnet sparas på själva Omi-enheten, så det visas på alla telefoner du parkopplar den med.",
+    "deviceRenamed": "Enheten har fått namnet {name}",
+    "tapToRename": "Tryck för att byta namn",
+    "deviceNameCannotBeEmpty": "Enhetsnamnet får inte vara tomt"
 }

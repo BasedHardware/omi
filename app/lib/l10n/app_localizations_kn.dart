@@ -11659,7 +11659,24 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'ಪರದೆಯ ಮೇಲೆ ಏನಿತ್ತು';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'ಈ ಸಭೆಯ ಸ್ಕ್ರೀನ್‌ಶಾಟ್';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅಳಿಸುವುದೇ?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'ಇದು ಈ ಸಭೆಯ ಟಿಪ್ಪಣಿಯಿಂದ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.';
+
+  @override
   String get renameDevice => 'ಸಾಧನದ ಹೆಸರು ಬದಲಿಸಿ';
+
+  @override
+  String get deviceRenameFailed =>
+      'ನಿಮ್ಮ Omi ನಲ್ಲಿ ಹೆಸರನ್ನು ಉಳಿಸಲಾಗಲಿಲ್ಲ. ಅದು ಸಂಪರ್ಕದಲ್ಲಿದೆಯೇ ಎಂದು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 
   @override
   String get renameDeviceDescription =>
@@ -11672,16 +11689,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'ಸಾಧನದ ಹೆಸರು ಖಾಲಿಯಾಗಿರಲು ಸಾಧ್ಯವಿಲ್ಲ';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'ಹೆಸರು ತುಂಬಾ ಉದ್ದವಾಗಿದೆ (ಗರಿಷ್ಠ $maxBytes ಅಕ್ಷರಗಳು; ಎಮೋಜಿ ಮತ್ತು ಒತ್ತಕ್ಷರಗಳು ಹೆಚ್ಚು ಎಣಿಸಲ್ಪಡುತ್ತವೆ)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'ಹೆಸರಿನಲ್ಲಿ ಬೆಂಬಲವಿಲ್ಲದ ಅಕ್ಷರಗಳಿವೆ';
 
   @override
-  String get deviceRenameFailed =>
-      'ನಿಮ್ಮ Omi ನಲ್ಲಿ ಹೆಸರನ್ನು ಉಳಿಸಲಾಗಲಿಲ್ಲ. ಅದು ಸಂಪರ್ಕದಲ್ಲಿದೆಯೇ ಎಂದು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'ಹೆಸರು ತುಂಬಾ ಉದ್ದವಾಗಿದೆ (ಗರಿಷ್ಠ $maxBytes ಅಕ್ಷರಗಳು; ಎಮೋಜಿ ಮತ್ತು ಒತ್ತಕ್ಷರಗಳು ಹೆಚ್ಚು ಎಣಿಸಲ್ಪಡುತ್ತವೆ)';
+  }
 
   @override
   String deviceRenamed(String name) {

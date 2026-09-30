@@ -21135,11 +21135,41 @@ abstract class AppLocalizations {
   /// **'{count, plural, =0{No conversations today.} =1{1 conversation today.} other{{count} conversations today.}}'**
   String conversationsTodayCount(int count);
 
+  /// Heading of the strip of meeting screenshots in a conversation summary
+  ///
+  /// In en, this message translates to:
+  /// **'What was on screen'**
+  String get meetingScreenshotsTitle;
+
+  /// Caption and accessibility label for a meeting screenshot that has no caption
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot from this meeting'**
+  String get meetingScreenshotFallbackCaption;
+
+  /// Title of the dialog confirming deletion of one meeting screenshot
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Screenshot?'**
+  String get deleteMeetingScreenshotTitle;
+
+  /// Body of the dialog confirming deletion of one meeting screenshot
+  ///
+  /// In en, this message translates to:
+  /// **'This removes the screenshot from this meeting\'s note. It can\'t be undone.'**
+  String get deleteMeetingScreenshotMessage;
+
   /// Title of the dialog that renames the connected Omi device
   ///
   /// In en, this message translates to:
   /// **'Rename Device'**
   String get renameDevice;
+
+  /// Error shown when the device rejected or did not confirm the new name
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the name to your Omi. Check that it is connected and try again.'**
+  String get deviceRenameFailed;
 
   /// Explains that the device name is stored on the device itself
   ///
@@ -21159,23 +21189,17 @@ abstract class AppLocalizations {
   /// **'Device name cannot be empty'**
   String get deviceNameCannotBeEmpty;
 
-  /// Validation error when the device name exceeds the byte limit
-  ///
-  /// In en, this message translates to:
-  /// **'Name is too long (up to {maxBytes} characters; emoji and accents count extra)'**
-  String deviceNameTooLong(int maxBytes);
-
   /// Validation error when the device name has control characters
   ///
   /// In en, this message translates to:
   /// **'Name contains unsupported characters'**
   String get deviceNameInvalidCharacters;
 
-  /// Error shown when the device rejected or did not confirm the new name
+  /// Validation error when the device name exceeds the byte limit
   ///
   /// In en, this message translates to:
-  /// **'Could not save the name to your Omi. Check that it is connected and try again.'**
-  String get deviceRenameFailed;
+  /// **'Name is too long (up to {maxBytes} characters; emoji and accents count extra)'**
+  String deviceNameTooLong(int maxBytes);
 
   /// Confirmation after the device accepted the new name
   ///

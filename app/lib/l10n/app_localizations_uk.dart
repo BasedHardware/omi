@@ -11644,7 +11644,24 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'Що було на екрані';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Знімок екрана з цієї зустрічі';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Видалити знімок екрана?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Знімок екрана буде видалено з нотатки цієї зустрічі. Цю дію не можна скасувати.';
+
+  @override
   String get renameDevice => 'Перейменувати пристрій';
+
+  @override
+  String get deviceRenameFailed =>
+      'Не вдалося зберегти ім\'я на Omi. Перевірте, чи пристрій підключено, і спробуйте ще раз.';
 
   @override
   String get renameDeviceDescription =>
@@ -11657,16 +11674,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'Ім\'я пристрою не може бути порожнім';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Ім\'я надто довге (до $maxBytes символів; емодзі та кирилиця займають більше)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'Ім\'я містить непідтримувані символи';
 
   @override
-  String get deviceRenameFailed =>
-      'Не вдалося зберегти ім\'я на Omi. Перевірте, чи пристрій підключено, і спробуйте ще раз.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'Ім\'я надто довге (до $maxBytes символів; емодзі та кирилиця займають більше)';
+  }
 
   @override
   String deviceRenamed(String name) {

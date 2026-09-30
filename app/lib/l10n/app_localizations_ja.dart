@@ -11432,7 +11432,22 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => '画面に表示されていた内容';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'このミーティングのスクリーンショット';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'スクリーンショットを削除しますか？';
+
+  @override
+  String get deleteMeetingScreenshotMessage => 'このミーティングのメモからスクリーンショットを削除します。この操作は取り消せません。';
+
+  @override
   String get renameDevice => 'デバイス名を変更';
+
+  @override
+  String get deviceRenameFailed => 'Omiに名前を保存できませんでした。接続されていることを確認して、もう一度お試しください。';
 
   @override
   String get renameDeviceDescription => '名前はOmi本体に保存されるため、ペアリングしたどのスマートフォンでも表示されます。';
@@ -11444,15 +11459,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'デバイス名を空にすることはできません';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return '名前が長すぎます（最大$maxBytes文字。絵文字や日本語などは複数文字分としてカウントされます）';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => '名前にサポートされていない文字が含まれています';
 
   @override
-  String get deviceRenameFailed => 'Omiに名前を保存できませんでした。接続されていることを確認して、もう一度お試しください。';
+  String deviceNameTooLong(int maxBytes) {
+    return '名前が長すぎます（最大$maxBytes文字。絵文字や日本語などは複数文字分としてカウントされます）';
+  }
 
   @override
   String deviceRenamed(String name) {

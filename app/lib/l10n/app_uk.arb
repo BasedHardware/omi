@@ -3658,12 +3658,16 @@
     "deleteChat": "Видалити чат",
     "appsAskWith": "Питати Omi з",
     "conversationsTodayCount": "{count, plural, =0{Сьогодні розмов немає.} =1{1 розмова сьогодні.} other{{count} розмов сьогодні.}}",
-    "renameDevice": "Перейменувати пристрій",
-    "renameDeviceDescription": "Ім'я зберігається на самому Omi, тому воно з'явиться на будь-якому телефоні, з яким ви його з'єднаєте.",
-    "tapToRename": "Торкніться, щоб перейменувати",
-    "deviceNameCannotBeEmpty": "Ім'я пристрою не може бути порожнім",
-    "deviceNameTooLong": "Ім'я надто довге (до {maxBytes} символів; емодзі та кирилиця займають більше)",
+    "meetingScreenshotsTitle": "Що було на екрані",
+    "meetingScreenshotFallbackCaption": "Знімок екрана з цієї зустрічі",
+    "deleteMeetingScreenshotTitle": "Видалити знімок екрана?",
+    "deleteMeetingScreenshotMessage": "Знімок екрана буде видалено з нотатки цієї зустрічі. Цю дію не можна скасувати.",
     "deviceNameInvalidCharacters": "Ім'я містить непідтримувані символи",
+    "deviceNameTooLong": "Ім'я надто довге (до {maxBytes} символів; емодзі та кирилиця займають більше)",
+    "renameDevice": "Перейменувати пристрій",
     "deviceRenameFailed": "Не вдалося зберегти ім'я на Omi. Перевірте, чи пристрій підключено, і спробуйте ще раз.",
-    "deviceRenamed": "Пристрій перейменовано на {name}"
+    "renameDeviceDescription": "Ім'я зберігається на самому Omi, тому воно з'явиться на будь-якому телефоні, з яким ви його з'єднаєте.",
+    "deviceRenamed": "Пристрій перейменовано на {name}",
+    "tapToRename": "Торкніться, щоб перейменувати",
+    "deviceNameCannotBeEmpty": "Ім'я пристрою не може бути порожнім"
 }

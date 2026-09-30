@@ -11632,7 +11632,24 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'Vad som visades på skärmen';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Skärmbild från det här mötet';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Radera skärmbilden?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Skärmbilden tas bort från anteckningen för det här mötet. Det går inte att ångra.';
+
+  @override
   String get renameDevice => 'Byt namn på enheten';
+
+  @override
+  String get deviceRenameFailed =>
+      'Namnet kunde inte sparas på din Omi. Kontrollera att den är ansluten och försök igen.';
 
   @override
   String get renameDeviceDescription =>
@@ -11645,16 +11662,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'Enhetsnamnet får inte vara tomt';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Namnet är för långt (upp till $maxBytes tecken; emoji och accenter räknas extra)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'Namnet innehåller tecken som inte stöds';
 
   @override
-  String get deviceRenameFailed =>
-      'Namnet kunde inte sparas på din Omi. Kontrollera att den är ansluten och försök igen.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'Namnet är för långt (upp till $maxBytes tecken; emoji och accenter räknas extra)';
+  }
 
   @override
   String deviceRenamed(String name) {

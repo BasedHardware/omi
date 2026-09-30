@@ -11635,7 +11635,23 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'Ekranda olanlar';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Bu toplantıdan ekran görüntüsü';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Ekran görüntüsü silinsin mi?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Bu işlem ekran görüntüsünü bu toplantının notundan kaldırır. Geri alınamaz.';
+
+  @override
   String get renameDevice => 'Cihazı Yeniden Adlandır';
+
+  @override
+  String get deviceRenameFailed => 'Ad Omi\'nize kaydedilemedi. Bağlı olduğunu kontrol edip yeniden deneyin.';
 
   @override
   String get renameDeviceDescription =>
@@ -11648,15 +11664,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'Cihaz adı boş olamaz';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Ad çok uzun (en fazla $maxBytes karakter; emoji ve aksanlı harfler daha fazla sayılır)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'Ad desteklenmeyen karakterler içeriyor';
 
   @override
-  String get deviceRenameFailed => 'Ad Omi\'nize kaydedilemedi. Bağlı olduğunu kontrol edip yeniden deneyin.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'Ad çok uzun (en fazla $maxBytes karakter; emoji ve aksanlı harfler daha fazla sayılır)';
+  }
 
   @override
   String deviceRenamed(String name) {

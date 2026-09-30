@@ -11654,7 +11654,23 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'Apa yang ada di skrin';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Tangkapan skrin daripada mesyuarat ini';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Padam tangkapan skrin?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ini akan mengalih keluar tangkapan skrin daripada nota mesyuarat ini. Tindakan ini tidak boleh dibuat asal.';
+
+  @override
   String get renameDevice => 'Namakan Semula Peranti';
+
+  @override
+  String get deviceRenameFailed => 'Nama tidak dapat disimpan ke Omi anda. Pastikan ia disambungkan dan cuba lagi.';
 
   @override
   String get renameDeviceDescription =>
@@ -11667,15 +11683,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'Nama peranti tidak boleh kosong';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Nama terlalu panjang (maksimum $maxBytes aksara; emoji dan aksen dikira lebih)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'Nama mengandungi aksara yang tidak disokong';
 
   @override
-  String get deviceRenameFailed => 'Nama tidak dapat disimpan ke Omi anda. Pastikan ia disambungkan dan cuba lagi.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'Nama terlalu panjang (maksimum $maxBytes aksara; emoji dan aksen dikira lebih)';
+  }
 
   @override
   String deviceRenamed(String name) {

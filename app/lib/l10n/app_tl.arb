@@ -11218,12 +11218,16 @@
     "deleteChat": "Burahin ang chat",
     "appsAskWith": "Tanungin si Omi gamit ang",
     "conversationsTodayCount": "{count, plural, =0{Walang usapan ngayon.} =1{1 usapan ngayon.} other{{count} usapan ngayon.}}",
+    "meetingScreenshotsTitle": "Ano ang nasa screen",
+    "meetingScreenshotFallbackCaption": "Screenshot mula sa meeting na ito",
+    "deleteMeetingScreenshotTitle": "Burahin ang Screenshot?",
+    "deleteMeetingScreenshotMessage": "Aalisin nito ang screenshot sa note ng meeting na ito. Hindi na ito maibabalik.",
     "renameDevice": "Palitan ang Pangalan ng Device",
+    "deviceRenameFailed": "Hindi ma-save ang pangalan sa iyong Omi. Tiyaking nakakonekta ito at subukang muli.",
     "renameDeviceDescription": "Naka-save ang pangalan sa mismong Omi, kaya lalabas ito sa anumang teleponong ipapares mo.",
     "tapToRename": "I-tap para palitan ang pangalan",
     "deviceNameCannotBeEmpty": "Hindi maaaring blangko ang pangalan ng device",
-    "deviceNameTooLong": "Masyadong mahaba ang pangalan (hanggang {maxBytes} character; mas malaki ang bilang ng emoji at accent)",
     "deviceNameInvalidCharacters": "May hindi sinusuportahang character ang pangalan",
-    "deviceRenameFailed": "Hindi ma-save ang pangalan sa iyong Omi. Tiyaking nakakonekta ito at subukang muli.",
+    "deviceNameTooLong": "Masyadong mahaba ang pangalan (hanggang {maxBytes} character; mas malaki ang bilang ng emoji at accent)",
     "deviceRenamed": "Pinalitan ang pangalan ng device sa {name}"
 }

@@ -11626,7 +11626,24 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'Mitä näytöllä oli';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Kuvakaappaus tästä kokouksesta';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Poistetaanko kuvakaappaus?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Kuvakaappaus poistetaan tämän kokouksen muistiinpanosta. Toimintoa ei voi kumota.';
+
+  @override
   String get renameDevice => 'Nimeä laite uudelleen';
+
+  @override
+  String get deviceRenameFailed =>
+      'Nimeä ei voitu tallentaa Omiin. Tarkista, että se on yhdistetty, ja yritä uudelleen.';
 
   @override
   String get renameDeviceDescription =>
@@ -11639,16 +11656,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'Laitteen nimi ei voi olla tyhjä';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Nimi on liian pitkä (enintään $maxBytes merkkiä; emojit ja ääkköset vievät enemmän)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'Nimi sisältää merkkejä, joita ei tueta';
 
   @override
-  String get deviceRenameFailed =>
-      'Nimeä ei voitu tallentaa Omiin. Tarkista, että se on yhdistetty, ja yritä uudelleen.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'Nimi on liian pitkä (enintään $maxBytes merkkiä; emojit ja ääkköset vievät enemmän)';
+  }
 
   @override
   String deviceRenamed(String name) {

@@ -11618,7 +11618,23 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'Nội dung trên màn hình';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ảnh chụp màn hình từ cuộc họp này';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Xóa ảnh chụp màn hình?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Thao tác này sẽ xóa ảnh chụp màn hình khỏi ghi chú của cuộc họp này. Không thể hoàn tác.';
+
+  @override
   String get renameDevice => 'Đổi tên thiết bị';
+
+  @override
+  String get deviceRenameFailed => 'Không thể lưu tên vào Omi. Hãy kiểm tra thiết bị đã kết nối rồi thử lại.';
 
   @override
   String get renameDeviceDescription =>
@@ -11631,15 +11647,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'Tên thiết bị không được để trống';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Tên quá dài (tối đa $maxBytes ký tự; emoji và chữ có dấu được tính nhiều hơn)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'Tên chứa ký tự không được hỗ trợ';
 
   @override
-  String get deviceRenameFailed => 'Không thể lưu tên vào Omi. Hãy kiểm tra thiết bị đã kết nối rồi thử lại.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'Tên quá dài (tối đa $maxBytes ký tự; emoji và chữ có dấu được tính nhiều hơn)';
+  }
 
   @override
   String deviceRenamed(String name) {

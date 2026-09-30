@@ -11218,12 +11218,16 @@
     "deleteChat": "چیٹ حذف کریں",
     "appsAskWith": "اس کے ساتھ Omi سے پوچھیں",
     "conversationsTodayCount": "{count, plural, =0{آج کوئی گفتگو نہیں۔} =1{آج 1 گفتگو۔} other{آج {count} گفتگوئیں۔}}",
+    "meetingScreenshotsTitle": "اسکرین پر کیا تھا",
+    "meetingScreenshotFallbackCaption": "اس میٹنگ کا اسکرین شاٹ",
+    "deleteMeetingScreenshotTitle": "اسکرین شاٹ حذف کریں؟",
+    "deleteMeetingScreenshotMessage": "یہ اس میٹنگ کے نوٹ سے اسکرین شاٹ ہٹا دے گا۔ اسے واپس نہیں کیا جا سکتا۔",
     "renameDevice": "ڈیوائس کا نام بدلیں",
+    "deviceRenameFailed": "آپ کے Omi پر نام محفوظ نہیں ہو سکا۔ یقینی بنائیں کہ یہ منسلک ہے اور دوبارہ کوشش کریں۔",
     "renameDeviceDescription": "نام آپ کے Omi پر ہی محفوظ ہوتا ہے، اس لیے یہ ہر اس فون پر نظر آتا ہے جس کے ساتھ آپ اسے جوڑتے ہیں۔",
     "tapToRename": "نام بدلنے کے لیے ٹیپ کریں",
     "deviceNameCannotBeEmpty": "ڈیوائس کا نام خالی نہیں ہو سکتا",
-    "deviceNameTooLong": "نام بہت لمبا ہے (زیادہ سے زیادہ {maxBytes} حروف؛ ایموجی اور اعراب زیادہ شمار ہوتے ہیں)",
     "deviceNameInvalidCharacters": "نام میں غیر معاون حروف شامل ہیں",
-    "deviceRenameFailed": "آپ کے Omi پر نام محفوظ نہیں ہو سکا۔ یقینی بنائیں کہ یہ منسلک ہے اور دوبارہ کوشش کریں۔",
+    "deviceNameTooLong": "نام بہت لمبا ہے (زیادہ سے زیادہ {maxBytes} حروف؛ ایموجی اور اعراب زیادہ شمار ہوتے ہیں)",
     "deviceRenamed": "ڈیوائس کا نام بدل کر {name} کر دیا گیا"
 }

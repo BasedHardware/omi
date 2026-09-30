@@ -3693,12 +3693,16 @@
     "deleteChat": "Usuń czat",
     "appsAskWith": "Pytaj Omi z",
     "conversationsTodayCount": "{count, plural, =0{Dziś brak rozmów.} =1{1 rozmowa dzisiaj.} other{{count} rozmów dzisiaj.}}",
-    "renameDevice": "Zmień nazwę urządzenia",
-    "renameDeviceDescription": "Nazwa jest zapisywana w samym Omi, więc pojawia się na każdym telefonie, z którym je sparujesz.",
-    "tapToRename": "Dotknij, aby zmienić nazwę",
-    "deviceNameCannotBeEmpty": "Nazwa urządzenia nie może być pusta",
-    "deviceNameTooLong": "Nazwa jest za długa (maks. {maxBytes} znaków; emoji i znaki diakrytyczne liczą się więcej)",
+    "meetingScreenshotsTitle": "Co było na ekranie",
+    "meetingScreenshotFallbackCaption": "Zrzut ekranu z tego spotkania",
+    "deleteMeetingScreenshotTitle": "Usunąć zrzut ekranu?",
+    "deleteMeetingScreenshotMessage": "Zrzut ekranu zostanie usunięty z notatki tego spotkania. Tej operacji nie można cofnąć.",
     "deviceNameInvalidCharacters": "Nazwa zawiera nieobsługiwane znaki",
+    "deviceNameTooLong": "Nazwa jest za długa (maks. {maxBytes} znaków; emoji i znaki diakrytyczne liczą się więcej)",
+    "renameDevice": "Zmień nazwę urządzenia",
     "deviceRenameFailed": "Nie udało się zapisać nazwy w Omi. Sprawdź, czy jest połączone, i spróbuj ponownie.",
-    "deviceRenamed": "Zmieniono nazwę urządzenia na {name}"
+    "renameDeviceDescription": "Nazwa jest zapisywana w samym Omi, więc pojawia się na każdym telefonie, z którym je sparujesz.",
+    "deviceRenamed": "Zmieniono nazwę urządzenia na {name}",
+    "tapToRename": "Dotknij, aby zmienić nazwę",
+    "deviceNameCannotBeEmpty": "Nazwa urządzenia nie może być pusta"
 }

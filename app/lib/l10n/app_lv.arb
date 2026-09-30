@@ -3658,12 +3658,16 @@
     "deleteChat": "Dzēst tērzēšanu",
     "appsAskWith": "Jautājiet Omi ar",
     "conversationsTodayCount": "{count, plural, =0{Šodien sarunu nav.} =1{1 saruna šodien.} other{{count} sarunas šodien.}}",
-    "renameDevice": "Pārdēvēt ierīci",
-    "renameDeviceDescription": "Nosaukums tiek saglabāts pašā Omi, tāpēc tas parādās jebkurā tālrunī, ar kuru to savienosiet pārī.",
-    "tapToRename": "Pieskarieties, lai pārdēvētu",
-    "deviceNameCannotBeEmpty": "Ierīces nosaukums nevar būt tukšs",
-    "deviceNameTooLong": "Nosaukums ir pārāk garš (līdz {maxBytes} rakstzīmēm; emocijzīmes un diakritiskās zīmes aizņem vairāk)",
+    "meetingScreenshotsTitle": "Kas bija ekrānā",
+    "meetingScreenshotFallbackCaption": "Ekrānuzņēmums no šīs sapulces",
+    "deleteMeetingScreenshotTitle": "Dzēst ekrānuzņēmumu?",
+    "deleteMeetingScreenshotMessage": "Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt.",
     "deviceNameInvalidCharacters": "Nosaukumā ir neatbalstītas rakstzīmes",
+    "deviceNameTooLong": "Nosaukums ir pārāk garš (līdz {maxBytes} rakstzīmēm; emocijzīmes un diakritiskās zīmes aizņem vairāk)",
+    "renameDevice": "Pārdēvēt ierīci",
     "deviceRenameFailed": "Nosaukumu neizdevās saglabāt Omi ierīcē. Pārbaudiet, vai tā ir pievienota, un mēģiniet vēlreiz.",
-    "deviceRenamed": "Ierīce pārdēvēta uz {name}"
+    "renameDeviceDescription": "Nosaukums tiek saglabāts pašā Omi, tāpēc tas parādās jebkurā tālrunī, ar kuru to savienosiet pārī.",
+    "deviceRenamed": "Ierīce pārdēvēta uz {name}",
+    "tapToRename": "Pieskarieties, lai pārdēvētu",
+    "deviceNameCannotBeEmpty": "Ierīces nosaukums nevar būt tukšs"
 }

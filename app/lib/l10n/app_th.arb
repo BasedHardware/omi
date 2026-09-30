@@ -3658,12 +3658,16 @@
     "deleteChat": "ลบแชต",
     "appsAskWith": "ถาม Omi ด้วย",
     "conversationsTodayCount": "{count, plural, =0{วันนี้ยังไม่มีบทสนทนา} =1{วันนี้มี 1 บทสนทนา} other{วันนี้มี {count} บทสนทนา}}",
-    "renameDevice": "เปลี่ยนชื่ออุปกรณ์",
-    "renameDeviceDescription": "ชื่อจะถูกบันทึกไว้ในตัว Omi จึงแสดงบนโทรศัพท์ทุกเครื่องที่คุณจับคู่ด้วย",
-    "tapToRename": "แตะเพื่อเปลี่ยนชื่อ",
-    "deviceNameCannotBeEmpty": "ชื่ออุปกรณ์ต้องไม่ว่างเปล่า",
-    "deviceNameTooLong": "ชื่อยาวเกินไป (สูงสุด {maxBytes} ตัวอักษร อีโมจิและอักษรไทยนับมากกว่าหนึ่งตัว)",
+    "meetingScreenshotsTitle": "สิ่งที่อยู่บนหน้าจอ",
+    "meetingScreenshotFallbackCaption": "ภาพหน้าจอจากการประชุมนี้",
+    "deleteMeetingScreenshotTitle": "ลบภาพหน้าจอหรือไม่",
+    "deleteMeetingScreenshotMessage": "การดำเนินการนี้จะลบภาพหน้าจอออกจากบันทึกของการประชุมนี้ และไม่สามารถเลิกทำได้",
     "deviceNameInvalidCharacters": "ชื่อมีตัวอักษรที่ไม่รองรับ",
+    "deviceNameTooLong": "ชื่อยาวเกินไป (สูงสุด {maxBytes} ตัวอักษร อีโมจิและอักษรไทยนับมากกว่าหนึ่งตัว)",
+    "renameDevice": "เปลี่ยนชื่ออุปกรณ์",
     "deviceRenameFailed": "ไม่สามารถบันทึกชื่อลงใน Omi ได้ ตรวจสอบว่าอุปกรณ์เชื่อมต่ออยู่แล้วลองอีกครั้ง",
-    "deviceRenamed": "เปลี่ยนชื่ออุปกรณ์เป็น {name} แล้ว"
+    "renameDeviceDescription": "ชื่อจะถูกบันทึกไว้ในตัว Omi จึงแสดงบนโทรศัพท์ทุกเครื่องที่คุณจับคู่ด้วย",
+    "deviceRenamed": "เปลี่ยนชื่ออุปกรณ์เป็น {name} แล้ว",
+    "tapToRename": "แตะเพื่อเปลี่ยนชื่อ",
+    "deviceNameCannotBeEmpty": "ชื่ออุปกรณ์ต้องไม่ว่างเปล่า"
 }

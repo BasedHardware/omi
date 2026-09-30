@@ -11637,7 +11637,23 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'Шта је било на екрану';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Снимак екрана са овог састанка';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Избрисати снимак екрана?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ово уклања снимак екрана из белешке овог састанка. Не може се опозвати.';
+
+  @override
   String get renameDevice => 'Преименуј уређај';
+
+  @override
+  String get deviceRenameFailed => 'Име није могло да се сачува на Omi. Проверите да ли је повезан и покушајте поново.';
 
   @override
   String get renameDeviceDescription =>
@@ -11650,15 +11666,12 @@ class AppLocalizationsSr extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'Име уређаја не може бити празно';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Име је предугачко (до $maxBytes знакова; емоџији и dijakritički znakovi se računaju više)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'Име садржи неподржане знакове';
 
   @override
-  String get deviceRenameFailed => 'Име није могло да се сачува на Omi. Проверите да ли је повезан и покушајте поново.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'Име је предугачко (до $maxBytes знакова; емоџији и dijakritički znakovi se računaju više)';
+  }
 
   @override
   String deviceRenamed(String name) {

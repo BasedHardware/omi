@@ -11218,12 +11218,16 @@
     "deleteChat": "ಚಾಟ್ ಅಳಿಸಿ",
     "appsAskWith": "ಇದರೊಂದಿಗೆ Omi ಅನ್ನು ಕೇಳಿ",
     "conversationsTodayCount": "{count, plural, =0{ಇಂದು ಯಾವುದೇ ಸಂಭಾಷಣೆ ಇಲ್ಲ.} =1{ಇಂದು 1 ಸಂಭಾಷಣೆ.} other{ಇಂದು {count} ಸಂಭಾಷಣೆಗಳು.}}",
+    "meetingScreenshotsTitle": "ಪರದೆಯ ಮೇಲೆ ಏನಿತ್ತು",
+    "meetingScreenshotFallbackCaption": "ಈ ಸಭೆಯ ಸ್ಕ್ರೀನ್‌ಶಾಟ್",
+    "deleteMeetingScreenshotTitle": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅಳಿಸುವುದೇ?",
+    "deleteMeetingScreenshotMessage": "ಇದು ಈ ಸಭೆಯ ಟಿಪ್ಪಣಿಯಿಂದ ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಅನ್ನು ತೆಗೆದುಹಾಕುತ್ತದೆ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.",
     "renameDevice": "ಸಾಧನದ ಹೆಸರು ಬದಲಿಸಿ",
+    "deviceRenameFailed": "ನಿಮ್ಮ Omi ನಲ್ಲಿ ಹೆಸರನ್ನು ಉಳಿಸಲಾಗಲಿಲ್ಲ. ಅದು ಸಂಪರ್ಕದಲ್ಲಿದೆಯೇ ಎಂದು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "renameDeviceDescription": "ಹೆಸರು ನಿಮ್ಮ Omi ನಲ್ಲಿಯೇ ಉಳಿಯುತ್ತದೆ, ಆದ್ದರಿಂದ ನೀವು ಜೋಡಿಸುವ ಯಾವುದೇ ಫೋನ್‌ನಲ್ಲಿ ಇದು ಕಾಣಿಸುತ್ತದೆ.",
     "tapToRename": "ಹೆಸರು ಬದಲಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
     "deviceNameCannotBeEmpty": "ಸಾಧನದ ಹೆಸರು ಖಾಲಿಯಾಗಿರಲು ಸಾಧ್ಯವಿಲ್ಲ",
-    "deviceNameTooLong": "ಹೆಸರು ತುಂಬಾ ಉದ್ದವಾಗಿದೆ (ಗರಿಷ್ಠ {maxBytes} ಅಕ್ಷರಗಳು; ಎಮೋಜಿ ಮತ್ತು ಒತ್ತಕ್ಷರಗಳು ಹೆಚ್ಚು ಎಣಿಸಲ್ಪಡುತ್ತವೆ)",
     "deviceNameInvalidCharacters": "ಹೆಸರಿನಲ್ಲಿ ಬೆಂಬಲವಿಲ್ಲದ ಅಕ್ಷರಗಳಿವೆ",
-    "deviceRenameFailed": "ನಿಮ್ಮ Omi ನಲ್ಲಿ ಹೆಸರನ್ನು ಉಳಿಸಲಾಗಲಿಲ್ಲ. ಅದು ಸಂಪರ್ಕದಲ್ಲಿದೆಯೇ ಎಂದು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "deviceNameTooLong": "ಹೆಸರು ತುಂಬಾ ಉದ್ದವಾಗಿದೆ (ಗರಿಷ್ಠ {maxBytes} ಅಕ್ಷರಗಳು; ಎಮೋಜಿ ಮತ್ತು ಒತ್ತಕ್ಷರಗಳು ಹೆಚ್ಚು ಎಣಿಸಲ್ಪಡುತ್ತವೆ)",
     "deviceRenamed": "ಸಾಧನದ ಹೆಸರನ್ನು {name} ಎಂದು ಬದಲಿಸಲಾಗಿದೆ"
 }

@@ -3658,12 +3658,16 @@
     "deleteChat": "Odstrániť chat",
     "appsAskWith": "Pýtajte sa Omi s",
     "conversationsTodayCount": "{count, plural, =0{Dnes žiadne rozhovory.} =1{1 rozhovor dnes.} other{{count} rozhovorov dnes.}}",
-    "renameDevice": "Premenovať zariadenie",
-    "renameDeviceDescription": "Názov sa ukladá priamo do Omi, takže sa zobrazí na každom telefóne, s ktorým ho spárujete.",
-    "tapToRename": "Ťuknutím premenujete",
-    "deviceNameCannotBeEmpty": "Názov zariadenia nemôže byť prázdny",
-    "deviceNameTooLong": "Názov je príliš dlhý (max. {maxBytes} znakov; emoji a diakritika sa počítajú viac)",
+    "meetingScreenshotsTitle": "Čo bolo na obrazovke",
+    "meetingScreenshotFallbackCaption": "Snímka obrazovky z tejto schôdzky",
+    "deleteMeetingScreenshotTitle": "Odstrániť snímku obrazovky?",
+    "deleteMeetingScreenshotMessage": "Snímka obrazovky sa odstráni z poznámky tejto schôdzky. Túto akciu nie je možné vrátiť.",
     "deviceNameInvalidCharacters": "Názov obsahuje nepodporované znaky",
+    "deviceNameTooLong": "Názov je príliš dlhý (max. {maxBytes} znakov; emoji a diakritika sa počítajú viac)",
+    "renameDevice": "Premenovať zariadenie",
     "deviceRenameFailed": "Názov sa nepodarilo uložiť do Omi. Skontrolujte, či je pripojené, a skúste to znova.",
-    "deviceRenamed": "Zariadenie premenované na {name}"
+    "renameDeviceDescription": "Názov sa ukladá priamo do Omi, takže sa zobrazí na každom telefóne, s ktorým ho spárujete.",
+    "deviceRenamed": "Zariadenie premenované na {name}",
+    "tapToRename": "Ťuknutím premenujete",
+    "deviceNameCannotBeEmpty": "Názov zariadenia nemôže byť prázdny"
 }

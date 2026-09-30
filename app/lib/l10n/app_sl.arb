@@ -11218,12 +11218,16 @@
     "deleteChat": "Izbriši klepet",
     "appsAskWith": "Vprašajte Omi z",
     "conversationsTodayCount": "{count, plural, =0{Danes ni pogovorov.} =1{1 pogovor danes.} other{{count} pogovorov danes.}}",
+    "meetingScreenshotsTitle": "Kaj je bilo na zaslonu",
+    "meetingScreenshotFallbackCaption": "Posnetek zaslona s tega sestanka",
+    "deleteMeetingScreenshotTitle": "Izbrišem posnetek zaslona?",
+    "deleteMeetingScreenshotMessage": "S tem boste posnetek zaslona odstranili iz zapiska tega sestanka. Tega ni mogoče razveljaviti.",
     "renameDevice": "Preimenuj napravo",
+    "deviceRenameFailed": "Imena ni bilo mogoče shraniti v Omi. Preverite, ali je povezan, in poskusite znova.",
     "renameDeviceDescription": "Ime se shrani v sam Omi, zato se prikaže na vsakem telefonu, s katerim ga povežete.",
     "tapToRename": "Tapnite za preimenovanje",
     "deviceNameCannotBeEmpty": "Ime naprave ne sme biti prazno",
-    "deviceNameTooLong": "Ime je predolgo (do {maxBytes} znakov; emojiji in šumniki štejejo več)",
     "deviceNameInvalidCharacters": "Ime vsebuje nepodprte znake",
-    "deviceRenameFailed": "Imena ni bilo mogoče shraniti v Omi. Preverite, ali je povezan, in poskusite znova.",
+    "deviceNameTooLong": "Ime je predolgo (do {maxBytes} znakov; emojiji in šumniki štejejo več)",
     "deviceRenamed": "Naprava je preimenovana v {name}"
 }

@@ -3658,12 +3658,16 @@
     "deleteChat": "حذف المحادثة",
     "appsAskWith": "اسأل Omi مع",
     "conversationsTodayCount": "{count, plural, =0{لا محادثات اليوم.} =1{محادثة واحدة اليوم.} other{{count} محادثات اليوم.}}",
-    "renameDevice": "إعادة تسمية الجهاز",
-    "renameDeviceDescription": "يُحفظ الاسم على جهاز Omi نفسه، لذا يظهر على أي هاتف تقرنه به.",
-    "tapToRename": "انقر لإعادة التسمية",
-    "deviceNameCannotBeEmpty": "لا يمكن أن يكون اسم الجهاز فارغًا",
-    "deviceNameTooLong": "الاسم طويل جدًا (حتى {maxBytes} حرفًا؛ الرموز التعبيرية وعلامات التشكيل تُحسب أكثر)",
+    "meetingScreenshotsTitle": "ما كان على الشاشة",
+    "meetingScreenshotFallbackCaption": "لقطة شاشة من هذا الاجتماع",
+    "deleteMeetingScreenshotTitle": "حذف لقطة الشاشة؟",
+    "deleteMeetingScreenshotMessage": "سيؤدي هذا إلى إزالة لقطة الشاشة من ملاحظة هذا الاجتماع. لا يمكن التراجع عن ذلك.",
     "deviceNameInvalidCharacters": "يحتوي الاسم على أحرف غير مدعومة",
+    "deviceNameTooLong": "الاسم طويل جدًا (حتى {maxBytes} حرفًا؛ الرموز التعبيرية وعلامات التشكيل تُحسب أكثر)",
+    "renameDevice": "إعادة تسمية الجهاز",
     "deviceRenameFailed": "تعذّر حفظ الاسم على جهاز Omi. تأكد من أنه متصل وحاول مرة أخرى.",
-    "deviceRenamed": "تمت إعادة تسمية الجهاز إلى {name}"
+    "renameDeviceDescription": "يُحفظ الاسم على جهاز Omi نفسه، لذا يظهر على أي هاتف تقرنه به.",
+    "deviceRenamed": "تمت إعادة تسمية الجهاز إلى {name}",
+    "tapToRename": "انقر لإعادة التسمية",
+    "deviceNameCannotBeEmpty": "لا يمكن أن يكون اسم الجهاز فارغًا"
 }

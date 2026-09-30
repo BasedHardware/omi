@@ -3658,12 +3658,16 @@
     "deleteChat": "Xóa cuộc trò chuyện",
     "appsAskWith": "Hỏi Omi bằng",
     "conversationsTodayCount": "{count, plural, =0{Hôm nay chưa có cuộc trò chuyện.} =1{Hôm nay có 1 cuộc trò chuyện.} other{Hôm nay có {count} cuộc trò chuyện.}}",
-    "renameDevice": "Đổi tên thiết bị",
-    "renameDeviceDescription": "Tên được lưu ngay trên Omi, nên sẽ hiển thị trên mọi điện thoại mà bạn ghép nối.",
-    "tapToRename": "Chạm để đổi tên",
-    "deviceNameCannotBeEmpty": "Tên thiết bị không được để trống",
-    "deviceNameTooLong": "Tên quá dài (tối đa {maxBytes} ký tự; emoji và chữ có dấu được tính nhiều hơn)",
+    "meetingScreenshotsTitle": "Nội dung trên màn hình",
+    "meetingScreenshotFallbackCaption": "Ảnh chụp màn hình từ cuộc họp này",
+    "deleteMeetingScreenshotTitle": "Xóa ảnh chụp màn hình?",
+    "deleteMeetingScreenshotMessage": "Thao tác này sẽ xóa ảnh chụp màn hình khỏi ghi chú của cuộc họp này. Không thể hoàn tác.",
     "deviceNameInvalidCharacters": "Tên chứa ký tự không được hỗ trợ",
+    "deviceNameTooLong": "Tên quá dài (tối đa {maxBytes} ký tự; emoji và chữ có dấu được tính nhiều hơn)",
+    "renameDevice": "Đổi tên thiết bị",
     "deviceRenameFailed": "Không thể lưu tên vào Omi. Hãy kiểm tra thiết bị đã kết nối rồi thử lại.",
-    "deviceRenamed": "Đã đổi tên thiết bị thành {name}"
+    "renameDeviceDescription": "Tên được lưu ngay trên Omi, nên sẽ hiển thị trên mọi điện thoại mà bạn ghép nối.",
+    "deviceRenamed": "Đã đổi tên thiết bị thành {name}",
+    "tapToRename": "Chạm để đổi tên",
+    "deviceNameCannotBeEmpty": "Tên thiết bị không được để trống"
 }

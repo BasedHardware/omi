@@ -350,7 +350,12 @@ budget/quota and authentication refusals at the provider boundary;
 `omi_stt_window_admissions_total{outcome}`, `omi_stt_window_posts_total{outcome}`
 (success/empty/error/cancelled/queue_timeout), `omi_stt_window_post_seconds`,
 `omi_stt_window_context_seconds` (posted context duration), and
-`omi_stt_window_forced_cuts_total` expose TDT load. `empty` means the posted
+`omi_stt_window_forced_cuts_total` expose TDT load. The forced-cut counter includes
+held tails cut at max context or when un-emitted capture reaches two thirds of
+the 90-second replay ring. The latter is measured on capture time: VAD can admit
+less audio to the provider while the replay ring still protects the full capture.
+If a POST stalls or returns no usable text, the ring remains strict and fails
+over before un-emitted audio is evicted. `empty` means the posted
 context contained VAD speech and the model returned no text — not "we held the
 last sentence". No UID, transcript, URL or exception text is a metric label.
 Non-terminal configured-chain skips and failed legs emit

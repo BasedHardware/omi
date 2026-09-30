@@ -3693,12 +3693,16 @@
     "deleteChat": "Sohbeti sil",
     "appsAskWith": "Omi'ye şununla sor",
     "conversationsTodayCount": "{count, plural, =0{Bugün konuşma yok.} =1{Bugün 1 konuşma.} other{Bugün {count} konuşma.}}",
-    "renameDevice": "Cihazı Yeniden Adlandır",
-    "renameDeviceDescription": "Ad Omi'nin kendisine kaydedilir, böylece eşleştirdiğiniz her telefonda görünür.",
-    "tapToRename": "Yeniden adlandırmak için dokunun",
-    "deviceNameCannotBeEmpty": "Cihaz adı boş olamaz",
-    "deviceNameTooLong": "Ad çok uzun (en fazla {maxBytes} karakter; emoji ve aksanlı harfler daha fazla sayılır)",
+    "meetingScreenshotsTitle": "Ekranda olanlar",
+    "meetingScreenshotFallbackCaption": "Bu toplantıdan ekran görüntüsü",
+    "deleteMeetingScreenshotTitle": "Ekran görüntüsü silinsin mi?",
+    "deleteMeetingScreenshotMessage": "Bu işlem ekran görüntüsünü bu toplantının notundan kaldırır. Geri alınamaz.",
     "deviceNameInvalidCharacters": "Ad desteklenmeyen karakterler içeriyor",
+    "deviceNameTooLong": "Ad çok uzun (en fazla {maxBytes} karakter; emoji ve aksanlı harfler daha fazla sayılır)",
+    "renameDevice": "Cihazı Yeniden Adlandır",
     "deviceRenameFailed": "Ad Omi'nize kaydedilemedi. Bağlı olduğunu kontrol edip yeniden deneyin.",
-    "deviceRenamed": "Cihaz adı {name} olarak değiştirildi"
+    "renameDeviceDescription": "Ad Omi'nin kendisine kaydedilir, böylece eşleştirdiğiniz her telefonda görünür.",
+    "deviceRenamed": "Cihaz adı {name} olarak değiştirildi",
+    "tapToRename": "Yeniden adlandırmak için dokunun",
+    "deviceNameCannotBeEmpty": "Cihaz adı boş olamaz"
 }

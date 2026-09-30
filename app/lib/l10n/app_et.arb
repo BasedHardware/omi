@@ -3658,12 +3658,16 @@
     "deleteChat": "Kustuta vestlus",
     "appsAskWith": "Küsi Omilt koos",
     "conversationsTodayCount": "{count, plural, =0{Täna vestlusi pole.} =1{1 vestlus täna.} other{{count} vestlust täna.}}",
-    "renameDevice": "Nimeta seade ümber",
-    "renameDeviceDescription": "Nimi salvestatakse Omi seadmesse, seega kuvatakse seda igas telefonis, millega selle seod.",
-    "tapToRename": "Puuduta ümbernimetamiseks",
-    "deviceNameCannotBeEmpty": "Seadme nimi ei saa olla tühi",
-    "deviceNameTooLong": "Nimi on liiga pikk (kuni {maxBytes} märki; emojid ja täpitähed loevad rohkem)",
+    "meetingScreenshotsTitle": "Mis oli ekraanil",
+    "meetingScreenshotFallbackCaption": "Ekraanipilt sellelt koosolekult",
+    "deleteMeetingScreenshotTitle": "Kas kustutada ekraanipilt?",
+    "deleteMeetingScreenshotMessage": "See eemaldab ekraanipildi selle koosoleku märkmest. Seda ei saa tagasi võtta.",
     "deviceNameInvalidCharacters": "Nimi sisaldab toetamata märke",
+    "deviceNameTooLong": "Nimi on liiga pikk (kuni {maxBytes} märki; emojid ja täpitähed loevad rohkem)",
+    "renameDevice": "Nimeta seade ümber",
     "deviceRenameFailed": "Nime ei õnnestunud Omi seadmesse salvestada. Kontrolli, et see on ühendatud, ja proovi uuesti.",
-    "deviceRenamed": "Seade nimetati ümber: {name}"
+    "renameDeviceDescription": "Nimi salvestatakse Omi seadmesse, seega kuvatakse seda igas telefonis, millega selle seod.",
+    "deviceRenamed": "Seade nimetati ümber: {name}",
+    "tapToRename": "Puuduta ümbernimetamiseks",
+    "deviceNameCannotBeEmpty": "Seadme nimi ei saa olla tühi"
 }

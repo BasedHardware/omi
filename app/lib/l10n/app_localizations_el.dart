@@ -11701,7 +11701,24 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get meetingScreenshotsTitle => 'Τι υπήρχε στην οθόνη';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Στιγμιότυπο οθόνης από αυτή τη σύσκεψη';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Διαγραφή στιγμιότυπου οθόνης;';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Το στιγμιότυπο οθόνης θα αφαιρεθεί από τη σημείωση αυτής της σύσκεψης. Δεν είναι δυνατή η αναίρεση.';
+
+  @override
   String get renameDevice => 'Μετονομασία συσκευής';
+
+  @override
+  String get deviceRenameFailed =>
+      'Δεν ήταν δυνατή η αποθήκευση του ονόματος στο Omi. Ελέγξτε ότι είναι συνδεδεμένο και δοκιμάστε ξανά.';
 
   @override
   String get renameDeviceDescription =>
@@ -11714,16 +11731,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceNameCannotBeEmpty => 'Το όνομα της συσκευής δεν μπορεί να είναι κενό';
 
   @override
-  String deviceNameTooLong(int maxBytes) {
-    return 'Το όνομα είναι πολύ μεγάλο (έως $maxBytes χαρακτήρες· τα emoji και οι τόνοι μετρούν περισσότερο)';
-  }
-
-  @override
   String get deviceNameInvalidCharacters => 'Το όνομα περιέχει μη υποστηριζόμενους χαρακτήρες';
 
   @override
-  String get deviceRenameFailed =>
-      'Δεν ήταν δυνατή η αποθήκευση του ονόματος στο Omi. Ελέγξτε ότι είναι συνδεδεμένο και δοκιμάστε ξανά.';
+  String deviceNameTooLong(int maxBytes) {
+    return 'Το όνομα είναι πολύ μεγάλο (έως $maxBytes χαρακτήρες· τα emoji και οι τόνοι μετρούν περισσότερο)';
+  }
 
   @override
   String deviceRenamed(String name) {

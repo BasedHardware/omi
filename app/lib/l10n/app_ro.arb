@@ -3658,12 +3658,16 @@
     "deleteChat": "Șterge conversația",
     "appsAskWith": "Întreabă Omi cu",
     "conversationsTodayCount": "{count, plural, =0{Nicio conversație azi.} =1{1 conversație azi.} other{{count} conversații azi.}}",
-    "renameDevice": "Redenumește dispozitivul",
-    "renameDeviceDescription": "Numele este salvat pe Omi, așa că apare pe orice telefon cu care îl asociezi.",
-    "tapToRename": "Atinge pentru a redenumi",
-    "deviceNameCannotBeEmpty": "Numele dispozitivului nu poate fi gol",
-    "deviceNameTooLong": "Numele este prea lung (până la {maxBytes} caractere; emoji-urile și diacriticele contează mai mult)",
+    "meetingScreenshotsTitle": "Ce era pe ecran",
+    "meetingScreenshotFallbackCaption": "Captură de ecran din această întâlnire",
+    "deleteMeetingScreenshotTitle": "Ștergi captura de ecran?",
+    "deleteMeetingScreenshotMessage": "Captura de ecran va fi eliminată din nota acestei întâlniri. Acțiunea nu poate fi anulată.",
     "deviceNameInvalidCharacters": "Numele conține caractere neacceptate",
+    "deviceNameTooLong": "Numele este prea lung (până la {maxBytes} caractere; emoji-urile și diacriticele contează mai mult)",
+    "renameDevice": "Redenumește dispozitivul",
     "deviceRenameFailed": "Numele nu a putut fi salvat pe Omi. Verifică dacă este conectat și încearcă din nou.",
-    "deviceRenamed": "Dispozitivul a fost redenumit în {name}"
+    "renameDeviceDescription": "Numele este salvat pe Omi, așa că apare pe orice telefon cu care îl asociezi.",
+    "deviceRenamed": "Dispozitivul a fost redenumit în {name}",
+    "tapToRename": "Atinge pentru a redenumi",
+    "deviceNameCannotBeEmpty": "Numele dispozitivului nu poate fi gol"
 }
