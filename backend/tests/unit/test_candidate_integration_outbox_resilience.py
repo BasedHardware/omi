@@ -513,3 +513,16 @@ def test_malformed_task_control_does_not_crash():
         firestore_client=mock_client,
     )
     assert token is not None
+
+
+def test_snapshot_dict_without_exists_attribute():
+    class PlainSnap:
+        def __init__(self, data):
+            self.data = data
+
+        def to_dict(self):
+            return self.data
+
+    snap = PlainSnap({'candidate_id': 'ready', 'status': 'pending'})
+    res = outbox_db._snapshot_dict(snap)
+    assert res == {'candidate_id': 'ready', 'status': 'pending'}

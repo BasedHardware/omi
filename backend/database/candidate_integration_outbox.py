@@ -116,9 +116,9 @@ def _task_control_ref(uid: str, *, firestore_client: Any = None) -> Any:
 
 
 def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
-    if not getattr(snapshot, 'exists', False):
+    if hasattr(snapshot, 'exists') and not snapshot.exists:
         return {}
-    payload = snapshot.to_dict()
+    payload = snapshot.to_dict() if hasattr(snapshot, 'to_dict') else snapshot
     return cast(dict[str, Any], payload) if isinstance(payload, dict) else {}
 
 
