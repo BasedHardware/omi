@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 import firebase_admin.auth
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from database.referrals import claim_referral_trial
 from utils.other import endpoints as auth
@@ -29,7 +29,7 @@ class ReferralLinkResponse(BaseModel):
 
 
 class ReferralClaimRequest(BaseModel):
-    code: str = Field(..., min_length=1, max_length=256)
+    code: str
 
 
 class ReferralClaimResponse(BaseModel):
