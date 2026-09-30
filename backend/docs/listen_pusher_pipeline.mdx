@@ -816,6 +816,16 @@ adds a SCREEN MOMENTS line to BACKGROUND CONTEXT; under
 `BUCKET_SCREEN_FRAMES` (legacy docs belong to `based-hardware-dev-screen-frames`),
 so a notes host without that env reads no frame evidence at all.
 
+The Mac closes the listen socket before that evidence pass lands, and teardown
+admits finalization at once. So the shared finalizer (pusher, Cloud Tasks, and
+therefore `POST /finalize`) waits, bounded by `MEETING_NOTES_EVIDENCE_WAIT_SECONDS`
+(code default 0; 25 on dev and prod finalizer hosts), before processing a desktop
+`conversation_role == 'meeting'` capture on `capture_end`/`client_finalize`. It
+proceeds as soon as this bucket's adjudication marker is set. It skips the wait
+when the host has no `BUCKET_SCREEN_FRAMES` or the account's screenshot setting
+is off. The wait is async (a poll is one `db_executor` read), fails open, and
+counts `meeting_notes_evidence_wait_total{outcome}`.
+
 ### 2.1 Durable finalization ownership
 
 `conversation_finalization_jobs/{job_id}` is the finalization ledger. It is
@@ -1366,10 +1376,44 @@ segment would advance the anchor slower than one POST pace; earlier and normally
 progressing windows keep their sentence boundary. Because VAD can admit fewer
 provider seconds than the capture ring retains, the window also cuts a held
 TDT tail when projected capture lag reaches two thirds of the 90-second ring.
-The remaining third covers another paced POST and its timeout; a stalled leg
-still fails over before replay audio is evicted. `capacity_full` fallback logs
-carry a bounded `subtype` identifying PCM buffer, replay ring, or admission
-capacity without adding a metric label. Ownership of recent
+The remaining third is headroom for another paced POST; it is not a guarantee
+that a cut can advance the anchor. Empty responses provide no held tail to cut,
+and very short text can make insufficient progress. A stalled leg still fails
+over before replay audio is evicted. `capacity_full` fallback logs carry a
+bounded `subtype` identifying PCM buffer, replay ring, or admission capacity
+without adding a metric label.
+
+Replay-cut diagnostics count coalesced requests
+(`omi_stt_window_replay_cut_requests_total`), forced tails actually emitted with
+replay-anchor progress (`omi_stt_window_replay_cut_performed_total`), and skipped
+or deferred attempts (`omi_stt_window_replay_cut_skipped_total{reason}`). The
+fixed reasons are `post_in_flight`, `post_pacing`, `no_text_yet`, `no_held_tail`,
+and `other` (for example, unusable timestamps). A request can be deferred and
+subsequently performed; these counters are not mutually exclusive outcomes.
+An already pending request is not counted again for each capture chunk. A
+natural sentence/idle emission is `no_held_tail`, rather than a pressure cut.
+
+Before `replay_ring_cap` cancels the pump, listen snapshots numeric state and
+carries it onto the existing recovered fallback event: `un_emitted_capture_seconds`
+(projected protected capture span including the unsent overflow chunk),
+`vad_admitted_seconds` (accepted VAD output in the existing ring, including
+hangover, excluding gated gaps and the unsent chunk), `seconds_since_text`
+(monotonic wall time, `-1` before any text), `posts_since_anchor`,
+`empty_posts_since_anchor`, `post_in_flight`, `empty_streak`, `cut_pending`, and
+`pacing_wait`. POST counts include head-recovery requests and reset only when
+the emitted replay anchor advances, not when an empty result slides the POST
+anchor. Empty streak continues diagnostically after first text, while its
+failover limit remains startup-only. Log seconds are capped at 86,400 and
+counts at 1,000,000; these values never become metric labels. No transcript,
+audio, user or session identifier is recorded by these diagnostics.
+
+`has_untranscribed_speech()` checks startup speech or VAD spans remaining after
+the current POST anchor; it does not mean the audio has never been posted, nor
+is it a ledger of every capture sample retained behind an empty-result slide.
+An answered-empty POST is not proof that admitted audio contains no words:
+TDT can return empty on a mid-utterance start. Retaining that audio for the
+replacement leg preserves the opportunity to recover words; dropping it based
+only on the empty response would weaken transcript completeness. Ownership of recent
 capture ranges is retained as coalesced same-conversation *runs* for 120 s of
 capture time (a hard run cap is a pathological bound, not the working limit),
 so a provider final trailing its audio by tens of seconds still resolves its
