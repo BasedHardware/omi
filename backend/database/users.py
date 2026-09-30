@@ -235,11 +235,9 @@ def set_user_store_recording_permission(uid: str, value: bool):
 def get_meeting_note_screenshots_enabled(uid: str, *, rpc_timeout: Optional[float] = None) -> bool:
     """Account-level setting gating screen-frame egress admission (contract
     §6). Default true — off means the feature does nothing and existing
-    frames stay hidden (contract §9), it does not delete anything.
-    ``rpc_timeout`` bounds the read to one attempt for callers with a deadline."""
+    frames stay hidden (contract §9); ``rpc_timeout`` bounds it to one attempt."""
     user_ref = db.collection('users').document(uid)
-    bounds = {'timeout': rpc_timeout, 'retry': None} if rpc_timeout is not None else {}
-    user_data = user_ref.get(**bounds).to_dict() or {}
+    user_data = user_ref.get(**({'timeout': rpc_timeout, 'retry': None} if rpc_timeout else {})).to_dict() or {}
     return user_data.get('meeting_note_screenshots_enabled', True)
 
 
