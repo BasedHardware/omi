@@ -205,3 +205,46 @@ def test_record_non_serializable_payload_fails_safely_and_evicts_mirror():
 
     # Local mirror was evicted, so read falls back to the previous shared tier state
     assert read(uid, redis_client=fake) == state
+
+
+def test_monkeypatched_shared_store_positional_signatures(monkeypatch):
+    import database.mentor_gate_state as state_module
+
+    class _MockDebounceStore:
+        def __init__(self):
+            self.data: dict[str, dict] = {}
+            self.claims: set[str] = set()
+
+        def get(self, uid):
+            return self.data.get(uid)
+
+        def set(self, uid, state, ttl):
+            self.data[uid] = dict(state)
+            return True
+
+        def claim(self, uid, ttl):
+            if uid in self.claims:
+                return False
+            self.claims.add(uid)
+            return True
+
+        def release(self, uid):
+            self.claims.discard(uid)
+
+    mock_store = _MockDebounceStore()
+    monkeypatch.setattr(state_module, "_read_shared", mock_store.get)
+    monkeypatch.setattr(state_module, "_write_shared", mock_store.set)
+    monkeypatch.setattr(state_module, "_claim_shared", mock_store.claim)
+    monkeypatch.setattr(state_module, "_release_shared", mock_store.release)
+    state_module.clear_local_cache()
+
+    uid = "debounce-user"
+    assert state_module.claim(uid, 30) is True
+    assert state_module.claim(uid, 30) is False
+    state_module.release(uid)
+    assert state_module.claim(uid, 30) is True
+
+    state = {"last_evaluated_at": 12345}
+    state_module.record(uid, state, 30)
+    assert state_module.read(uid) == state
+    assert state_module.read_authoritative(uid) == state
