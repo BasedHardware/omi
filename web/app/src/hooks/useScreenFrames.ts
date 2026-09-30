@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   deleteAllScreenFrames,
   deleteScreenFrame,
@@ -24,69 +24,121 @@ interface UseScreenFramesReturn {
   setSharingEnabled: (enabled: boolean) => Promise<boolean>;
 }
 
+/** State is tagged with the conversation it belongs to, so it can never be shown under another. */
+interface OwnedFrameState {
+  conversationId: string | null;
+  frameSet: ConversationScreenFrameSet | null;
+  error: string | null;
+  loading: boolean;
+}
+
+const EMPTY_STATE: OwnedFrameState = {
+  conversationId: null,
+  frameSet: null,
+  error: null,
+  loading: false,
+};
+
 /**
  * Loads and mutates a conversation's meeting-note screenshot set. Every
  * mutation replaces local state with the server's response rather than
  * predicting it locally (e.g. banner promotion after a delete is a
  * server-side decision — see `@/lib/screenFrames`).
+ *
+ * Two fences keep late responses out:
+ * - Ownership: state carries its conversation id, and the returned values are
+ *   derived as empty unless it matches the current id. A switch clears the
+ *   previous set in the same render, and nothing for A can land under B.
+ * - Generation, within one conversation: bumped when a load or mutation
+ *   starts and when a mutation commits, but only while that conversation is
+ *   current. A load or URL renewal applies its response only if the counter
+ *   has not moved since it started, so no GET that overlapped a mutation can
+ *   resurrect frames the mutation removed.
  */
 export function useScreenFrames(
   conversationId: string | null,
   options: UseScreenFramesOptions = {},
 ): UseScreenFramesReturn {
   const { enabled = true } = options;
+  const activeId = enabled ? conversationId : null;
 
-  const [frameSet, setFrameSet] = useState<ConversationScreenFrameSet | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<OwnedFrameState>(EMPTY_STATE);
   // Consecutive renewals that did not adopt a fresh set (failed, or fenced out
   // by an overlapping mutation). Changing it rearms the renewal timer, with
   // backoff; any adopted set resets it.
   const [renewalMisses, setRenewalMisses] = useState(0);
 
-  // So an in-flight fetch/mutation for a conversation the user has since
-  // navigated away from can't clobber the newer conversation's state.
   const lastUrlRefreshAt = useRef(0);
-  // Bumped when a load or mutation starts AND when a mutation commits. A
-  // load or background URL refresh applies its response only if the counter
-  // has not moved since it started, so no GET that overlapped a mutation --
-  // whichever started first -- can resurrect frames the mutation removed.
   const setGeneration = useRef(0);
-  const convIdRef = useRef(conversationId);
-  useEffect(() => {
-    convIdRef.current = conversationId;
-  }, [conversationId]);
+  // Only the most recent load may end the loading state.
+  const latestLoad = useRef(0);
+  // Updated in a layout effect: synchronous with the commit, so no promise
+  // can resolve between a switch rendering and the ref catching up.
+  const currentIdRef = useRef(activeId);
+  useLayoutEffect(() => {
+    currentIdRef.current = activeId;
+  }, [activeId]);
+
+  const isCurrent = (id: string) => currentIdRef.current === id;
+  /** Bumps the generation only for the current conversation's work. */
+  const bumpIfCurrent = (id: string) => {
+    if (isCurrent(id)) setGeneration.current += 1;
+  };
+
+  const owned = state.conversationId === activeId && activeId !== null;
+  const frameSet = owned ? state.frameSet : null;
+  const error = owned ? state.error : null;
+  // A conversation whose load has not started yet is loading, not empty.
+  const loading = activeId === null ? false : owned ? state.loading : true;
 
   const fetchFrames = useCallback(async () => {
-    if (!enabled || !conversationId) {
-      setFrameSet(null);
-      setLoading(false);
+    if (!activeId) {
+      setState(EMPTY_STATE);
       return;
     }
-
-    const requestedId = conversationId;
+    const requestedId = activeId;
     const generation = ++setGeneration.current;
+    latestLoad.current = generation;
     lastUrlRefreshAt.current = Date.now();
     setRenewalMisses(0);
+    setState((prev) =>
+      prev.conversationId === requestedId
+        ? { ...prev, loading: true, error: null }
+        : { conversationId: requestedId, frameSet: null, error: null, loading: true },
+    );
     try {
-      setLoading(true);
-      setError(null);
       const data = await getConversationScreenFrames(requestedId);
-      if (convIdRef.current === requestedId && setGeneration.current === generation) {
-        setFrameSet(data);
+      if (isCurrent(requestedId) && setGeneration.current === generation) {
+        setState({
+          conversationId: requestedId,
+          frameSet: data,
+          error: null,
+          loading: false,
+        });
       }
     } catch (err) {
-      if (convIdRef.current === requestedId) {
-        setError(err instanceof Error ? err.message : 'Failed to load screenshots');
-        setFrameSet(null);
-      }
       console.error('Failed to fetch screen frames:', err);
+      if (isCurrent(requestedId) && setGeneration.current === generation) {
+        setState({
+          conversationId: requestedId,
+          frameSet: null,
+          error: err instanceof Error ? err.message : 'Failed to load screenshots',
+          loading: false,
+        });
+      }
     } finally {
-      if (convIdRef.current === requestedId) {
-        setLoading(false);
+      // A load fenced out by a mutation still ends the loading state, unless
+      // a newer load has taken over.
+      if (latestLoad.current === generation && isCurrent(requestedId)) {
+        setState((prev) =>
+          prev.conversationId === requestedId && prev.loading
+            ? { ...prev, loading: false }
+            : prev,
+        );
       }
     }
-  }, [enabled, conversationId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable
+  }, [activeId]);
 
   useEffect(() => {
     fetchFrames();
@@ -99,101 +151,104 @@ export function useScreenFrames(
   // Signed URLs expire after 60 minutes. Swap in fresh ones shortly before,
   // silently (no loading flash), so a panel left open never shows dead images.
   useEffect(() => {
-    if (!enabled || !conversationId) return;
+    if (!activeId) return;
     const due = msUntilFrameUrlRefresh(frameSet, Date.now());
     if (due === null) return;
     const sinceLast = Date.now() - lastUrlRefreshAt.current;
     const delay = Math.max(due, frameUrlRetryFloorMs(renewalMisses) - sinceLast);
-    const requestedId = conversationId;
+    const requestedId = activeId;
     const timer = setTimeout(async () => {
       lastUrlRefreshAt.current = Date.now();
       const generation = setGeneration.current;
       try {
         const data = await getConversationScreenFrames(requestedId);
-        if (convIdRef.current !== requestedId) return;
+        if (!isCurrent(requestedId)) return;
         if (setGeneration.current === generation) {
           setRenewalMisses(0);
-          setFrameSet(data);
+          setState((prev) =>
+            prev.conversationId === requestedId
+              ? { ...prev, frameSet: data, error: null }
+              : prev,
+          );
         } else {
           // Fenced out by a mutation. If that mutation adopted a set, the new
           // frameSet rearms the timer anyway; if it failed, nothing else will.
           setRenewalMisses((n) => n + 1);
         }
       } catch (err) {
+        // Keep the current set (its URLs may still be valid); retry with backoff.
         console.error('Failed to refresh screen frame URLs:', err);
-        if (convIdRef.current === requestedId) setRenewalMisses((n) => n + 1);
+        if (isCurrent(requestedId)) setRenewalMisses((n) => n + 1);
       }
     }, delay);
     return () => clearTimeout(timer);
-  }, [enabled, conversationId, frameSet, renewalMisses]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable
+  }, [activeId, frameSet, renewalMisses]);
 
-  const deleteFrame = useCallback(
-    async (frameId: string): Promise<boolean> => {
-      if (!conversationId) return false;
-      const requestedId = conversationId;
-      setGeneration.current += 1;
+  const mutate = useCallback(
+    async (
+      request: (id: string) => Promise<ConversationScreenFrameSet>,
+      failureMessage: string,
+      logMessage: string,
+    ): Promise<boolean> => {
+      if (!activeId) return false;
+      const requestedId = activeId;
+      bumpIfCurrent(requestedId);
       try {
-        const updated = await deleteScreenFrame(requestedId, frameId);
-        setGeneration.current += 1;
-        if (convIdRef.current === requestedId) {
-          setFrameSet(updated);
-          setError(null);
+        const updated = await request(requestedId);
+        if (isCurrent(requestedId)) {
+          setGeneration.current += 1;
+          setState((prev) =>
+            prev.conversationId === requestedId
+              ? { ...prev, frameSet: updated, error: null }
+              : prev,
+          );
         }
         return true;
       } catch (err) {
-        if (convIdRef.current === requestedId) {
-          setError(err instanceof Error ? err.message : 'Failed to delete screenshot');
+        console.error(logMessage, err);
+        if (isCurrent(requestedId)) {
+          setState((prev) =>
+            prev.conversationId === requestedId
+              ? { ...prev, error: err instanceof Error ? err.message : failureMessage }
+              : prev,
+          );
         }
-        console.error('Failed to delete screen frame:', err);
         return false;
       }
     },
-    [conversationId],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refs are stable
+    [activeId],
   );
 
-  const deleteAll = useCallback(async (): Promise<boolean> => {
-    if (!conversationId) return false;
-    const requestedId = conversationId;
-    setGeneration.current += 1;
-    try {
-      const updated = await deleteAllScreenFrames(requestedId);
-      setGeneration.current += 1;
-      if (convIdRef.current === requestedId) {
-        setFrameSet(updated);
-        setError(null);
-      }
-      return true;
-    } catch (err) {
-      if (convIdRef.current === requestedId) {
-        setError(err instanceof Error ? err.message : 'Failed to delete screenshots');
-      }
-      console.error('Failed to delete all screen frames:', err);
-      return false;
-    }
-  }, [conversationId]);
+  const deleteFrame = useCallback(
+    (frameId: string) =>
+      mutate(
+        (id) => deleteScreenFrame(id, frameId),
+        'Failed to delete screenshot',
+        'Failed to delete screen frame:',
+      ),
+    [mutate],
+  );
+
+  const deleteAll = useCallback(
+    () =>
+      mutate(
+        (id) => deleteAllScreenFrames(id),
+        'Failed to delete screenshots',
+        'Failed to delete all screen frames:',
+      ),
+    [mutate],
+  );
 
   const setSharingEnabled = useCallback(
-    async (enabledValue: boolean): Promise<boolean> => {
-      if (!conversationId) return false;
-      const requestedId = conversationId;
-      setGeneration.current += 1;
-      try {
-        const updated = await patchScreenFrameSharing(requestedId, enabledValue);
-        setGeneration.current += 1;
-        if (convIdRef.current === requestedId) {
-          setFrameSet(updated);
-          setError(null);
-        }
-        return true;
-      } catch (err) {
-        if (convIdRef.current === requestedId) {
-          setError(err instanceof Error ? err.message : 'Failed to update sharing');
-        }
-        console.error('Failed to update screen frame sharing:', err);
-        return false;
-      }
-    },
-    [conversationId],
+    (enabledValue: boolean) =>
+      mutate(
+        (id) => patchScreenFrameSharing(id, enabledValue),
+        'Failed to update sharing',
+        'Failed to update screen frame sharing:',
+      ),
+    [mutate],
   );
 
   return { frameSet, loading, error, refresh, deleteFrame, deleteAll, setSharingEnabled };

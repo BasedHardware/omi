@@ -393,4 +393,90 @@ describe('useScreenFrames', () => {
       vi.useRealTimers();
     }
   });
+
+  describe('across a conversation switch', () => {
+    function deferred<T>() {
+      let resolve: (value: T) => void = () => {};
+      const promise = new Promise<T>((r) => {
+        resolve = r;
+      });
+      return { promise, resolve };
+    }
+
+    it("never shows A's screenshots under B when A's delete commits during B's load", async () => {
+      const aDelete = deferred<ConversationScreenFrameSet>();
+      const bLoad = deferred<ConversationScreenFrameSet>();
+      vi.mocked(api.getConversationScreenFrames)
+        .mockReset()
+        .mockImplementation((id: string) =>
+          id === 'conv-a' ? Promise.resolve(frameSet()) : bLoad.promise,
+        );
+      vi.mocked(api.deleteScreenFrame).mockReset().mockReturnValueOnce(aDelete.promise);
+      const view = renderHook(({ id }) => useScreenFrames(id), {
+        initialProps: { id: 'conv-a' },
+      });
+      await waitFor(() => expect(view.result.current.loading).toBe(false));
+
+      let deletion: Promise<boolean> = Promise.resolve(false);
+      act(() => {
+        deletion = view.result.current.deleteFrame('a');
+      });
+      view.rerender({ id: 'conv-b' });
+      await act(async () => {
+        aDelete.resolve(frameSet({ strip: [frame('b')] }));
+        await deletion;
+      });
+      await act(async () => {
+        bLoad.resolve(frameSet({ strip: [frame('b-only')] }));
+      });
+      await waitFor(() =>
+        expect(view.result.current.frameSet?.strip?.map((f) => f.id)).toEqual(['b-only']),
+      );
+    });
+
+    it('clears the previous set in the same render as the switch', async () => {
+      const bLoad = deferred<ConversationScreenFrameSet>();
+      vi.mocked(api.getConversationScreenFrames)
+        .mockReset()
+        .mockImplementation((id: string) =>
+          id === 'conv-a' ? Promise.resolve(frameSet()) : bLoad.promise,
+        );
+      const view = renderHook(({ id }) => useScreenFrames(id), {
+        initialProps: { id: 'conv-a' },
+      });
+      await waitFor(() => expect(view.result.current.frameSet?.strip).toHaveLength(2));
+
+      view.rerender({ id: 'conv-b' });
+      expect(view.result.current.frameSet).toBeNull();
+      expect(view.result.current.error).toBeNull();
+    });
+
+    it("a stale conversation-A callback started after the switch cannot fence out B's load", async () => {
+      const bLoad = deferred<ConversationScreenFrameSet>();
+      vi.mocked(api.getConversationScreenFrames)
+        .mockReset()
+        .mockImplementation((id: string) =>
+          id === 'conv-a' ? Promise.resolve(frameSet()) : bLoad.promise,
+        );
+      vi.mocked(api.deleteScreenFrame)
+        .mockReset()
+        .mockResolvedValue(frameSet({ strip: [] }));
+      const view = renderHook(({ id }) => useScreenFrames(id), {
+        initialProps: { id: 'conv-a' },
+      });
+      await waitFor(() => expect(view.result.current.loading).toBe(false));
+      const staleDeleteForA = view.result.current.deleteFrame;
+
+      view.rerender({ id: 'conv-b' });
+      await act(async () => {
+        await staleDeleteForA('a');
+      });
+      await act(async () => {
+        bLoad.resolve(frameSet({ strip: [frame('b-only')] }));
+      });
+      await waitFor(() =>
+        expect(view.result.current.frameSet?.strip?.map((f) => f.id)).toEqual(['b-only']),
+      );
+    });
+  });
 });
