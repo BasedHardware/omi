@@ -43,7 +43,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse
 
 from utils.email.lifecycle import set_lifecycle_opted_out, verify_unsubscribe_token
 
