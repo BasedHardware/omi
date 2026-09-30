@@ -325,6 +325,10 @@ class SendMap:
             return None
         return self._spans[-1][0] + self._spans[-1][2]
 
+    def accepted_samples_in_capture_range(self, first: int, end: int) -> int:
+        """Count accepted VAD output in a capture interval, excluding gated gaps."""
+        return sum(max(0, min(end, start + length) - max(first, start)) for _, start, length in self._spans)
+
     def point_interval(self, provider_sample: int) -> Optional[Tuple[int, int]]:
         """A one-sample interval for an in-span zero-duration provider point.
 

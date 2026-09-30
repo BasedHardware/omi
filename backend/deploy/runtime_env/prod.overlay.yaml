@@ -59,15 +59,18 @@ overlay:
         FREE_TIER_EMERGENCY_STOP:
           value: 'false'
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-          value: 'false'
+          value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
         MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
         MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
         MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
+        BUCKET_SCREEN_FRAMES:
+          value: based-hardware-prod-screen-frames
+          category: storage_retention
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
         HOSTED_PARAKEET_API_URL:
@@ -170,15 +173,18 @@ overlay:
         FREE_TIER_EMERGENCY_STOP:
           value: 'false'
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-          value: 'false'
+          value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
         MEETING_NOTES_RICH_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
         MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
         MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-          value: 'false'
+          value: 'true'
+        BUCKET_SCREEN_FRAMES:
+          value: based-hardware-prod-screen-frames
+          category: storage_retention
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -286,9 +292,15 @@ overlay:
           MCP_OAUTH_CLIENTS_JSON:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
+          SCREEN_FRAME_SIGNING_SECRET:
+            secret: SCREEN_FRAME_SIGNING_SECRET
+            version: latest
         env:
           PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
             value: 'gateway'
+          SCREEN_FRAME_EGRESS_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
@@ -298,15 +310,18 @@ overlay:
           FREE_TIER_EMERGENCY_STOP:
             value: 'false'
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-            value: 'false'
+            value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-prod-screen-frames
+            category: storage_retention
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
           BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
@@ -424,15 +439,18 @@ overlay:
           MEMORY_BELIEF_AUTOMATION_PAUSED:
             value: 'false'
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-            value: 'false'
+            value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_RICH_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-prod-screen-frames
+            category: storage_retention
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
           LISTEN_FINALIZATION_DISPATCH_MODE:
