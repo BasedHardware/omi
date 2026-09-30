@@ -11624,4 +11624,17 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Mitä näytöllä oli';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Kuvakaappaus tästä kokouksesta';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Poistetaanko kuvakaappaus?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Kuvakaappaus poistetaan tämän kokouksen muistiinpanosta. Toimintoa ei voi kumota.';
 }

@@ -11675,4 +11675,17 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Ce era pe ecran';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Captură de ecran din această întâlnire';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Ștergi captura de ecran?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Captura de ecran va fi eliminată din nota acestei întâlniri. Acțiunea nu poate fi anulată.';
 }

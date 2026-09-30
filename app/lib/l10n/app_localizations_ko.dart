@@ -11434,4 +11434,16 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => '화면에 표시된 내용';
+
+  @override
+  String get meetingScreenshotFallbackCaption => '이 회의의 스크린샷';
+
+  @override
+  String get deleteMeetingScreenshotTitle => '스크린샷을 삭제할까요?';
+
+  @override
+  String get deleteMeetingScreenshotMessage => '이 회의 노트에서 스크린샷이 삭제됩니다. 되돌릴 수 없습니다.';
 }

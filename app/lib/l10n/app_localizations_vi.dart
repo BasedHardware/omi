@@ -11616,4 +11616,17 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Nội dung trên màn hình';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ảnh chụp màn hình từ cuộc họp này';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Xóa ảnh chụp màn hình?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Thao tác này sẽ xóa ảnh chụp màn hình khỏi ghi chú của cuộc họp này. Không thể hoàn tác.';
 }

@@ -3692,5 +3692,9 @@
     "deleteChatMessage": "Chat ini hilang dari chat sebelumnya untuk selamanya.",
     "deleteChat": "Hapus chat",
     "appsAskWith": "Tanya Omi dengan",
-    "conversationsTodayCount": "{count, plural, =0{Tidak ada percakapan hari ini.} =1{1 percakapan hari ini.} other{{count} percakapan hari ini.}}"
+    "conversationsTodayCount": "{count, plural, =0{Tidak ada percakapan hari ini.} =1{1 percakapan hari ini.} other{{count} percakapan hari ini.}}",
+    "meetingScreenshotsTitle": "Yang ada di layar",
+    "meetingScreenshotFallbackCaption": "Tangkapan layar dari rapat ini",
+    "deleteMeetingScreenshotTitle": "Hapus tangkapan layar?",
+    "deleteMeetingScreenshotMessage": "Ini akan menghapus tangkapan layar dari catatan rapat ini. Tindakan ini tidak dapat dibatalkan."
 }

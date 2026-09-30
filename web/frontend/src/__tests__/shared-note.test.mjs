@@ -52,6 +52,7 @@ const SHARE_RENDER_SOURCES = [
   '../components/memories/memory-header.tsx',
   '../components/memories/summary/sumary.tsx',
   '../components/memories/summary/action-items.tsx',
+  '../components/memories/summary/screen-moments.tsx',
   '../components/memories/summary/memory-with-tabs.tsx',
   '../components/memories/events/memory-events.tsx',
   '../components/memories/tabs.tsx',

@@ -3657,5 +3657,9 @@
     "deleteChatMessage": "See kaob varasematest vestlustest jäädavalt.",
     "deleteChat": "Kustuta vestlus",
     "appsAskWith": "Küsi Omilt koos",
-    "conversationsTodayCount": "{count, plural, =0{Täna vestlusi pole.} =1{1 vestlus täna.} other{{count} vestlust täna.}}"
+    "conversationsTodayCount": "{count, plural, =0{Täna vestlusi pole.} =1{1 vestlus täna.} other{{count} vestlust täna.}}",
+    "meetingScreenshotsTitle": "Mis oli ekraanil",
+    "meetingScreenshotFallbackCaption": "Ekraanipilt sellelt koosolekult",
+    "deleteMeetingScreenshotTitle": "Kas kustutada ekraanipilt?",
+    "deleteMeetingScreenshotMessage": "See eemaldab ekraanipildi selle koosoleku märkmest. Seda ei saa tagasi võtta."
 }

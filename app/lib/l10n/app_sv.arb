@@ -3657,5 +3657,9 @@
     "deleteChatMessage": "Den försvinner från tidigare chattar för gott.",
     "deleteChat": "Radera chatt",
     "appsAskWith": "Fråga Omi med",
-    "conversationsTodayCount": "{count, plural, =0{Inga samtal i dag.} =1{1 samtal i dag.} other{{count} samtal i dag.}}"
+    "conversationsTodayCount": "{count, plural, =0{Inga samtal i dag.} =1{1 samtal i dag.} other{{count} samtal i dag.}}",
+    "meetingScreenshotsTitle": "Vad som visades på skärmen",
+    "meetingScreenshotFallbackCaption": "Skärmbild från det här mötet",
+    "deleteMeetingScreenshotTitle": "Radera skärmbilden?",
+    "deleteMeetingScreenshotMessage": "Skärmbilden tas bort från anteckningen för det här mötet. Det går inte att ångra."
 }

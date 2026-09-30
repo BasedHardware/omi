@@ -3692,5 +3692,9 @@
     "deleteChatMessage": "Geçmiş sohbetlerden kalıcı olarak kaldırılır.",
     "deleteChat": "Sohbeti sil",
     "appsAskWith": "Omi'ye şununla sor",
-    "conversationsTodayCount": "{count, plural, =0{Bugün konuşma yok.} =1{Bugün 1 konuşma.} other{Bugün {count} konuşma.}}"
+    "conversationsTodayCount": "{count, plural, =0{Bugün konuşma yok.} =1{Bugün 1 konuşma.} other{Bugün {count} konuşma.}}",
+    "meetingScreenshotsTitle": "Ekranda olanlar",
+    "meetingScreenshotFallbackCaption": "Bu toplantıdan ekran görüntüsü",
+    "deleteMeetingScreenshotTitle": "Ekran görüntüsü silinsin mi?",
+    "deleteMeetingScreenshotMessage": "Bu işlem ekran görüntüsünü bu toplantının notundan kaldırır. Geri alınamaz."
 }
