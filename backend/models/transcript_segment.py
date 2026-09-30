@@ -219,7 +219,7 @@ class TranscriptSegment(BaseModel):
             return (
                 (a.speaker == b.speaker or (a.is_user and b.is_user))
                 and a.speech_profile_processed == b.speech_profile_processed
-                and (b.start - a.end < 3)
+                and _is_chronological_continuation(a, b)
                 and (len(a.text) < 125 or a.text[-1] not in SENTENCE_ENDERS)
             )
 
@@ -231,6 +231,7 @@ class TranscriptSegment(BaseModel):
                 and a.text[-1] not in SENTENCE_ENDERS
                 and _starts_with_lowercase_cased(b.text)
                 and a.speech_profile_processed == b.speech_profile_processed
+                and _is_chronological_continuation(a, b)
             )
 
         absorbed_into: Dict[str, str] = {}

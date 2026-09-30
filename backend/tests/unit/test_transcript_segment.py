@@ -658,3 +658,82 @@ def test_cross_speaker_repair_still_applies_to_adjacent_segments():
     assert segments[0].speaker == "SPEAKER_01"
     assert segments[0].text == "How are you doing today?"
     assert removed_ids == [existing.id]
+
+
+def test_same_speaker_late_arrival_not_merged_into_newer_tail():
+    """Issue #19980: same-speaker late arrival must not be absorbed into newer tail.
+
+    A segment from an earlier batch (start=2.0, end=5.0) arriving after a newer tail
+    (start=10.0, end=12.0) must not merge, reverse text, or set end < start.
+    """
+    later = _segment("This is the later statement.", speaker="SPEAKER_00", start=10.0, end=12.0)
+    earlier = _segment("This was the earlier statement.", speaker="SPEAKER_00", start=2.0, end=5.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([later], [earlier])
+
+    assert len(segments) == 2
+    assert segments[0].text == "This is the later statement."
+    assert segments[0].start == pytest.approx(10.0)
+    assert segments[0].end == pytest.approx(12.0)
+    assert segments[1].text == "This was the earlier statement."
+    assert segments[1].start == pytest.approx(2.0)
+    assert segments[1].end == pytest.approx(5.0)
+    assert removed_ids == []
+
+
+def test_same_speaker_nested_interval_not_merged():
+    """Nested arrival (b.end < a.end) does not satisfy chronological continuation."""
+    outer = _segment("Outer longer segment.", speaker="SPEAKER_00", start=10.0, end=20.0)
+    nested = _segment("nested segment", speaker="SPEAKER_00", start=12.0, end=15.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([outer], [nested])
+
+    assert len(segments) == 2
+    assert segments[0].text == "Outer longer segment."
+    assert segments[1].text == "nested segment"
+    assert removed_ids == []
+
+
+def test_same_speaker_adjacent_and_overlapping_still_merges():
+    """Chronologically valid adjacent and slightly overlapping same-speaker segments merge."""
+    a = _segment("Hello", speaker="SPEAKER_00", start=0.0, end=2.0)
+    b = _segment("world", speaker="SPEAKER_00", start=1.5, end=3.5)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([a], [b])
+
+    assert len(segments) == 1
+    assert segments[0].text == "Hello world"
+    assert segments[0].start == pytest.approx(0.0)
+    assert segments[0].end == pytest.approx(3.5)
+    assert removed_ids == [b.id]
+
+
+def test_same_speaker_gap_boundary():
+    """Same-speaker merge respects the 3-second continuity window."""
+    a = _segment("First part", speaker="SPEAKER_00", start=0.0, end=2.0)
+    b_under = _segment("second part", speaker="SPEAKER_00", start=4.9, end=6.0)
+
+    # Gap is 4.9 - 2.0 = 2.9s < 3.0s -> merges
+    segments, _, removed = TranscriptSegment.combine_segments([a], [b_under])
+    assert len(segments) == 1
+    assert segments[0].text == "First part second part"
+
+    # Gap is 5.1 - 2.0 = 3.1s >= 3.0s -> does not merge
+    c_over = _segment("third part", speaker="SPEAKER_00", start=5.1, end=7.0)
+    segments, _, removed = TranscriptSegment.combine_segments([a], [c_over])
+    assert len(segments) == 2
+    assert removed == []
+
+
+def test_lowercase_continuation_chronological_precondition():
+    """Lowercase continuation requires chronological continuation (not out-of-order arrival)."""
+    later = _segment("later statement", speaker="SPEAKER_00", start=10.0, end=12.0)
+    earlier = _segment("earlier continuation", speaker="SPEAKER_00", start=2.0, end=4.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([later], [earlier])
+
+    assert len(segments) == 2
+    assert segments[0].text == "later statement"
+    assert segments[1].text == "earlier continuation"
+    assert removed_ids == []
+
