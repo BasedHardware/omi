@@ -1577,6 +1577,8 @@ existing counter.
 **Supervisor re-waits on:**
 - Finite task normal completion (e.g. `process_pending_conversations`, `speaker_identification_task`)
 
+The pending-conversation sweep (`pending_convos`) isolates each earlier conversation it finalizes: a row whose finalization raises is logged (`Listen pending finalization failed stage=...`) and left for the next session's sweep, and the remaining rows still run. It must never crash the supervisor, because a row that fails every time (for example a document at Firestore's 1 MiB limit) would otherwise end every reconnect for that user seconds after it starts.
+
 After supervisor exit, remaining tasks drain with `BG_DRAIN_TIMEOUT` (30s) before force-cancel. The connection gauge (`inc`/`dec`) is always paired in `try`/`finally`.
 
 ## Offline speech continuity
