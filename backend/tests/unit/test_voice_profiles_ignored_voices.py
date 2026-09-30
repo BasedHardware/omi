@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+from database import conversations as conversations_db
 from database import voice_profiles as db
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
@@ -35,7 +36,6 @@ def test_remove_ignored_voice_forgets_its_answers_only():
 
 
 def test_restore_removes_only_the_ignored_decision_so_prompts_can_return():
-    from database import conversations as conversations_db
     from utils.speaker_tag_prompts.selection import select_prompts
 
     store = StrictFirestore()

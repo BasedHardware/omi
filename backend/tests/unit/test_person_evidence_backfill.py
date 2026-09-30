@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from database import conversations as db
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.person_evidence_backfill import backfill_person, receipt_conversations_by_person
 
@@ -56,8 +57,6 @@ def test_backfill_rechecks_relabels_and_scopes_every_read_to_uid():
 
 
 def test_live_card_evidence_is_not_counted_again_by_backfill(monkeypatch):
-    from database import conversations as db
-
     store = StrictFirestore()
     store.rows[PATH] = {'id': 'p1', 'name': 'Maya'}
     store.rows[('users', 'u', 'conversations', 'c1')] = {
