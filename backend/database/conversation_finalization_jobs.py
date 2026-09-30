@@ -2388,7 +2388,9 @@ def _abandon_byok_finalization_job_txn(
         and not conversation.get('deferred')
     )
     # Pure decode of the snapshot already held; no transactional read after a write.
-    title_update = kept_row_title_update(uid, conversation, time_zone_for_uid)[0] if closes_conversation else {}
+    title_update: dict[str, Any] = {}
+    if closes_conversation and isinstance(uid, str) and isinstance(conversation, Mapping):
+        title_update = kept_row_title_update(uid, conversation, time_zone_for_uid)[0]
 
     transaction.update(
         job_ref,
