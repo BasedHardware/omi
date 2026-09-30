@@ -459,17 +459,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedStartDate != null;
   }
 
-  Widget _buildNoConversationsHero(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 120),
-      child: OmiEmptyState(
-        icon: Icons.forum_rounded,
-        title: context.l10n.noConversationsYet,
-        message: context.l10n.noConversationsHeroMessage,
-      ),
-    );
-  }
-
   Widget _buildLoadingShimmer() {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -599,7 +588,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   !_hasActiveFilter(convoProvider))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
-                SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildNoConversationsHero(context)))
+                const SliverFillRemaining(hasScrollBody: false, child: Center(child: NoConversationsHero()))
               else if (hasProcessingConversations && convoProvider.groupedConversations.isEmpty && !hasRecordings)
                 const SliverToBoxAdapter(child: SizedBox(height: 20))
               else if (convoProvider.groupedConversations.isEmpty && !hasRecordings && !isShowingConversationSkeleton)

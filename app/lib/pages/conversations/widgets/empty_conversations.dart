@@ -5,6 +5,23 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// The unfiltered Home empty state, shared by initial and typed empty results.
+class NoConversationsHero extends StatelessWidget {
+  const NoConversationsHero({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 120),
+      child: OmiEmptyState(
+        icon: Icons.forum_rounded,
+        title: context.l10n.noConversationsYet,
+        message: context.l10n.noConversationsHeroMessage,
+      ),
+    );
+  }
+}
+
 /// The conversation list with nothing to show under the current filters.
 class EmptyConversationsWidget extends StatelessWidget {
   final bool isStarredFilterActive;
