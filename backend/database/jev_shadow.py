@@ -36,7 +36,7 @@ def write_jev_shadow(
         # Account deletion persists this marker before its recursive sweep.
         # Reading it in the same transaction fences a commit that would
         # otherwise land after the sweep has passed this subcollection.
-        if deletion_marker.get(transaction=transaction).exists:
+        if deletion_marker.get(transaction=transaction, retry=None, timeout=remaining).exists:
             return False
         transaction.set(ref, {**record, 'created_at': now, 'expire_at': now + timedelta(days=RETENTION_DAYS)})
         return True
@@ -44,4 +44,6 @@ def write_jev_shadow(
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise TimeoutError
-    return write_if_not_deleting(client.transaction())
+    # max_attempts=1 disables the SDK's transaction-restart loop, so one slow
+    # marker read or commit cannot stretch a write past the task's 2.5s budget.
+    return write_if_not_deleting(client.transaction(max_attempts=1))

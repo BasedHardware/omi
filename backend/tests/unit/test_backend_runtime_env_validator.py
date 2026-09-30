@@ -198,23 +198,30 @@ def with_capture_jev_shadow_env(payload: str) -> str:
 
     backend runs reprocess and merge inline. backend-sync writes Cloud Tasks
     finalization and fresh sync. backend-sync-backfill replays historical sync.
-    Percentage stays 0; only the allowlisted UID is shadowed.
+    Capture percentage stays 0; only the allowlisted UID is shadowed. The
+    EXP-004 population shadows stay 100 only on `backend`: the sync services
+    have no GMP sidecar/exporter entry, so their shadow metrics would be
+    invisible (EXP-004 doc, Admission and privacy).
     """
-    flags = (
-        r'\1\n        {"name": "CAPTURE_JEV_SHADOW_ENABLED", "value": "true"},'
-        r'\n        {"name": "CAPTURE_JEV_SHADOW_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},'
-        r'\n        {"name": "CAPTURE_JEV_SHADOW_PERCENT", "value": "0"},'
-        r'\n        {"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT", "value": "100"},'
-        r'\n        {"name": "MEMORY_OWNER_JEV_SHADOW_PERCENT", "value": "100"},'
-        r'\n        {"name": "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT", "value": "0"},'
-        r'\n        {"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP", "value": "60000"},'
-        r'\n        {"name": "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP", "value": "60000"},'
-        r'\n        {"name": "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST", "value": ""},'
-    )
+
+    def service_flags(service: str) -> str:
+        shadow_percent = '100' if service == 'backend' else '0'
+        return (
+            r'\1\n        {"name": "CAPTURE_JEV_SHADOW_ENABLED", "value": "true"},'
+            r'\n        {"name": "CAPTURE_JEV_SHADOW_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},'
+            r'\n        {"name": "CAPTURE_JEV_SHADOW_PERCENT", "value": "0"},'
+            rf'\n        {{"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT", "value": "{shadow_percent}"}},'
+            rf'\n        {{"name": "MEMORY_OWNER_JEV_SHADOW_PERCENT", "value": "{shadow_percent}"}},'
+            r'\n        {"name": "CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT", "value": "0"},'
+            r'\n        {"name": "CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP", "value": "60000"},'
+            r'\n        {"name": "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP", "value": "60000"},'
+            r'\n        {"name": "CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST", "value": ""},'
+        )
+
     for service in ('backend', 'backend-sync', 'backend-sync-backfill'):
         payload = re.sub(
             rf'("{service}":\s*\{{.*?"env":\s*\[\s*\{{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\}},)',
-            flags,
+            service_flags(service),
             payload,
             count=1,
             flags=re.DOTALL,

@@ -37,12 +37,16 @@ locked classifier/label set; shadow scores alone are not nano counterfactuals.
 ## Admission, durability and privacy
 
 Both deployment stages declare keep-all percentage 0 and daily caps 60000. Dev
-runs both shadows at 100 and retains both live flags on with unset live
-percentages. Prod declares shadow percentages 0 and live flags absent: the
-Firestore TTL policy on collection group `jev_shadow` (field `expire_at`) must
-be provisioned and verified before any prod shadow percentage is raised, or the
-60-day retention promise is inert. The new settings are literals, requiring no
-Secret Manager pre-bind.
+runs both shadows at 100 on the scraped processing hosts (backend-listen, pusher
+and the Cloud Run backend service) and retains both live flags on with unset
+live percentages. backend-sync and backend-sync-backfill stay at 0: their Cloud
+Run revisions have no GMP sidecar/exporter allowlist entry, so their shadow
+outcomes and latency would be invisible (see utils/metrics.py). Prod declares
+shadow percentages 0 and live flags absent: the Firestore TTL policy on
+collection group `jev_shadow` (field `expire_at`) must be provisioned and
+verified before any prod shadow percentage is raised, or the 60-day retention
+promise is inert. The new settings are literals, requiring no Secret Manager
+pre-bind.
 
 `CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT` samples the conversation ID with
 salt `relevance-shadow-v1`. Only the reached model tier, transcript-only,

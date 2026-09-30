@@ -327,7 +327,7 @@ def test_store_adds_60_day_expiry_without_plaintext_or_client_reads(monkeypatch)
     assert record['expire_at'] - record['created_at'] == timedelta(days=60)
     client.collection.assert_any_call('users')
     client.collection.assert_any_call('account_deletions')
-    marker.get.assert_called_once_with(transaction=transaction)
+    marker.get.assert_called_once_with(transaction=transaction, retry=None, timeout=pytest.approx(0.4))
     assert ref.get.call_count == 0
     assert transaction.set.call_args.args[0] is ref
 
@@ -364,7 +364,7 @@ def test_store_write_is_fenced_by_account_deletion(monkeypatch):
     monkeypatch.setattr(store.time, 'monotonic', lambda: 12.0)
     assert store.write_jev_shadow('user', 'hash-id', {'lane': 'owner'}, deadline=12.4, firestore_client=client) is False
     transaction = client.transaction.return_value
-    marker.get.assert_called_once_with(transaction=transaction)
+    marker.get.assert_called_once_with(transaction=transaction, retry=None, timeout=pytest.approx(0.4))
     transaction.set.assert_not_called()
 
 

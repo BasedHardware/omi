@@ -655,7 +655,10 @@ def _get_structured(
             decision=decision,
             arm=arm,
             source=getattr(main_conv.source, 'value', main_conv.source),
-            transcript_only=not bool(main_conv.photos) and not has_wake_word_marker,
+            # Must match the live Jev gate above: a conversation whose photos
+            # all lack descriptions is transcript-only to the model tier, so
+            # it belongs in the shadow's calibration population too.
+            transcript_only=not has_described_photos and not has_wake_word_marker,
         )
         if relevance_observer is not None:
             relevance_observer(decision)

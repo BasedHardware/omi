@@ -8,6 +8,7 @@ logged or persisted. Failed attempts consume their dedupe claim and daily cap.
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import re
 import threading
@@ -28,6 +29,7 @@ from utils.conversations.relevance import JEV_DISCARD_THRESHOLD, RelevanceDecisi
 from utils.conversations.relevance_rules import transcript_word_count
 from utils.executors import get_jev_shadow_executor, submit_with_context
 from utils.llm.jev_client import ask_jev
+from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.metrics import (
     JEV_SHADOW_LATENCY,
     OWNER_JEV_SHADOW_SCORE,
@@ -159,6 +161,7 @@ def _run(
     record: dict[str, Any],
     deadline: float,
 ) -> None:
+    model_called = False
     try:
         if not _in_cohort(lane, conversation_id):
             record_jev_shadow_outcome(lane, 'cohort')
@@ -175,16 +178,23 @@ def _run(
             record_jev_shadow_outcome(lane, 'timeout')
             return
         outcomes: list[str] = []
-        answers = ask_jev(
-            state,
-            relevance_jev.QUESTIONS if lane == 'relevance' else owner_jev.owner_questions(name),
-            lane=relevance_jev.LANE if lane == 'relevance' else owner_jev.LANE,
-            timeout_seconds=remaining,
-            max_attempts=1,
-            outcome_observer=outcomes.append,
-            record_decision_metrics=False,
-        )
-        JEV_SHADOW_LATENCY.labels(lane).observe(time.monotonic() - (deadline - DEADLINE_SECONDS))
+        model_called = True
+        # The parent's track_usage context (e.g. Features.MEMORIES) would win
+        # over ask_jev's lane in _gateway_usage_headers and charge the shadow
+        # budget to ordinary memory extraction; attribute it to the shadow lane.
+        usage_token = set_usage_context(uid, f'jev_shadow_{lane}')
+        try:
+            answers = ask_jev(
+                state,
+                relevance_jev.QUESTIONS if lane == 'relevance' else owner_jev.owner_questions(name),
+                lane=relevance_jev.LANE if lane == 'relevance' else owner_jev.LANE,
+                timeout_seconds=remaining,
+                max_attempts=1,
+                outcome_observer=outcomes.append,
+                record_decision_metrics=False,
+            )
+        finally:
+            reset_usage_context(usage_token)
         if time.monotonic() > deadline:
             record_jev_shadow_outcome(lane, 'timeout')
             return
@@ -205,10 +215,15 @@ def _run(
             ).inc()
         else:
             probabilities = answers.answers[owner_jev.QUESTION_NAME]['probabilities']
-            if not all(option in probabilities for option in ('user', 'third_party', 'general_knowledge')):
+            expected = ('user', 'third_party', 'general_knowledge')
+            if set(probabilities) != set(expected) or not math.isclose(
+                sum(float(probabilities[option]) for option in expected), 1.0, rel_tol=0.0, abs_tol=0.01
+            ):
+                # All values may be valid probabilities yet not form a distribution;
+                # persisting that would corrupt the owner-flip readout.
                 record_jev_shadow_outcome(lane, 'jev_failed')
                 return
-            for option in ('user', 'third_party', 'general_knowledge'):
+            for option in expected:
                 record[f'p_{option}'] = answers.choice_probability(owner_jev.QUESTION_NAME, option)
             OWNER_JEV_SHADOW_SCORE.observe(record['p_user'])
         record_id = _sha(f'{lane}|{conversation_id}|{content_sha}|{record["question_version"]}')[:32]
@@ -225,6 +240,10 @@ def _run(
     except Exception:
         record_jev_shadow_outcome(lane, 'jev_failed')
     finally:
+        if model_called:
+            # Observed at final task completion so the p95 bar includes score
+            # processing and persistence, matching the documented task deadline.
+            JEV_SHADOW_LATENCY.labels(lane).observe(time.monotonic() - (deadline - DEADLINE_SECONDS))
         _slots[lane].release()
 
 

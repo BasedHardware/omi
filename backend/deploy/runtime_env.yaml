@@ -1257,10 +1257,10 @@ environments:
               value: 'true'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '100'
+              value: '0'
               category: rollout
             MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '100'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
               value: '0'
@@ -1453,10 +1453,10 @@ environments:
               value: '1.0'
               category: rollout
             CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
-              value: '100'
+              value: '0'
               category: rollout
             MEMORY_OWNER_JEV_SHADOW_PERCENT:
-              value: '100'
+              value: '0'
               category: rollout
             CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT:
               value: '0'

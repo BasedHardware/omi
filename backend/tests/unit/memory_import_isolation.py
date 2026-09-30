@@ -215,6 +215,10 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
 
     usage_tracker_mod = types.ModuleType("utils.llm.usage_tracker")
     usage_tracker_mod.track_usage = lambda *args, **kwargs: None
+    # jev_shadow sets a dedicated shadow-lane context around ask_jev; the stub
+    # must accept the token-based setters without touching real contextvars.
+    usage_tracker_mod.set_usage_context = lambda *args, **kwargs: object()
+    usage_tracker_mod.reset_usage_context = lambda *args, **kwargs: None
 
     class _Features:
         pass
