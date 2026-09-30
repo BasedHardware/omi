@@ -581,7 +581,11 @@ def test_seven_fragment_evening_becomes_one_survivor_with_six_redirects(world):
     # Later decisions saw the stretch: the last state lists the four fragments before A.
     last_state = world.jev_calls[-1]['state']
     assert last_state.count('\n- ') == 4 and 'Title: title f5' in last_state and 'Title: title f6' in last_state
-    visible = [key[-1] for key, row in world.store.rows.items() if not row.get('deleted')]
+    visible = [
+        key[-1]
+        for key, row in world.store.rows.items()
+        if key[:3] == ('users', UID, 'conversations') and not row.get('deleted')
+    ]
     assert visible == ['f0']
 
 

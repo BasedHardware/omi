@@ -24,6 +24,10 @@ Do not make a hard-delete primitive call back into conversation orchestration.
   transaction and require explicit retry/convergence at the caller.
 - `firestore_index_registry.py` and `firestore_read_metrics.py` describe query/read
   contracts. `backend/AGENTS.md` owns setup, safety and test-runner instructions.
+- `smart_merge.py` atomically writes content-free `users/{uid}/smart_merge_audit`
+  siblings (60-day `expire_at`, outside conversation cascades). `smart_merge_unmerge.py`
+  owns undo revision checks and replay receipts; external work stays in utilities.
+  Collection rules, TTL activation and limitations: `backend/docs/smart_merge_unmerge.md`.
 
 Transaction tests use the strict Firestore fixture. It checks read-before-write
 ordering; it does not simulate production contention or external-service retries.

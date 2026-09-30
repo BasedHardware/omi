@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import logging
 import math
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
@@ -49,6 +50,7 @@ from config.jev_decisions import JEV_MODEL
 from database import conversations as conversations_db
 from database import notifications as notification_db
 from database import smart_merge as smart_merge_db
+from database import smart_merge_unmerge as unmerge_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable
 from database.sync_bridges import mark_sync_bridge_cleaned
@@ -76,11 +78,21 @@ from utils.conversations.smart_merge_policy import (
     stretch_before,
 )
 from utils.conversations.smart_merge_state import QUESTION_NAME, QUESTIONS, build_state, state_sha256
+from utils.conversations.smart_merge_unmerge_policy import unmerge_ineligible, unmerge_payload, unmerge_suffix
 from utils.executors import postprocess_executor, run_blocking
 from utils.llm.jev_client import ask_jev
-from utils.metrics import record_conversation_smart_merge, record_conversation_smart_merge_refresh
+from utils.metrics import (
+    record_conversation_smart_merge,
+    record_conversation_smart_merge_refresh,
+    record_smart_merge_unmerge,
+)
 from utils.observability.fallback import record_fallback
-from utils.other.storage import compute_audio_files_fingerprint, enqueue_conversation_artifact_build
+from utils.other.storage import (
+    compute_audio_files_fingerprint,
+    delete_copied_smart_merge_audio,
+    delete_cached_merged_audio,
+    enqueue_conversation_artifact_build,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +194,7 @@ def _decision_record(
     check: PairCheck,
     stretch_count: int,
     state_hash: Optional[str],
+    served_model: Optional[str] = None,
 ) -> dict[str, Any]:
     """Server-only audit record: numbers and ids, never text."""
     return {
@@ -193,6 +206,7 @@ def _decision_record(
         'p_same': None if p_same is None else round(p_same, 4),
         'threshold': MERGE_THRESHOLD,
         'model': JEV_MODEL,
+        'served_model': served_model,
         'question_version': QUESTION_VERSION,
         'candidate_id': candidate_id,
         'gap_seconds': None if check.gap_seconds is None else round(check.gap_seconds, 1),
@@ -203,11 +217,11 @@ def _decision_record(
     }
 
 
-def _ask(state: str) -> Optional[float]:
+def _ask(state: str) -> tuple[Optional[float], Optional[str]]:
     answers = ask_jev(
         state, QUESTIONS, lane=JEV_LANE, timeout_seconds=JEV_TIMEOUT_SECONDS, max_attempts=JEV_MAX_ATTEMPTS
     )
-    return None if answers is None else answers.noul(QUESTION_NAME)
+    return (None, None) if answers is None else (answers.noul(QUESTION_NAME), getattr(answers, 'served_model', None))
 
 
 def _decide(
@@ -270,6 +284,7 @@ def _decide(
     if reuse:
         # Sticky: a replay never re-asks, so a run-to-run flip cannot change a retried job.
         p_same = prior.get('p_same')
+        served_model = prior.get('served_model')
         stretch_count, state_hash = int(prior.get('stretch_count') or 0), prior.get('state_sha256')
     else:
         fragments = ledger_fragments(survivor)
@@ -292,7 +307,7 @@ def _decide(
             stretch=stretch,
             tz=_user_tz(uid),
         )
-        p_same = _ask(state)
+        p_same, served_model = _ask(state)
         stretch_count, state_hash = len(stretch), state_sha256(state)
 
     if (
@@ -315,6 +330,7 @@ def _decide(
             check=check,
             stretch_count=stretch_count,
             state_hash=state_hash,
+            served_model=served_model,
         )
 
     if mode is SmartMergeMode.SHADOW or not same:
@@ -527,3 +543,117 @@ def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
         record_conversation_smart_merge_refresh('refreshed')
     else:
         raise SmartMergeIncomplete('refresh_completion_fenced')
+
+
+def unmerge_conversation(
+    uid: str, donor_id: str, *, force: bool = False, dry_run: bool = True
+) -> unmerge_db.UnmergeResult:
+    """Admin-only undo. A middle donor restores the entire ledger suffix.
+
+    Dry run performs no writes or external effects. A completed retry is a
+    no-op; a retry after a committed undo resumes its durable follow-up receipt.
+    """
+    try:
+        donor = conversations_db.get_conversation(uid, donor_id, read_site=FirestoreReadSite.SMART_MERGE) or {}
+        state = smart_merge_state(donor)
+        survivor_id = str(state.get('survivor_id') or '')
+        survivor = (
+            conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
+            if survivor_id
+            else None
+        )
+        if state.get('role') == 'unmerged':
+            pending = smart_merge_state(survivor or {}).get('unmerge_pending') or {}
+            if donor_id in pending.get('donor_ids', []):
+                result = unmerge_db.UnmergeResult(
+                    'dry_run' if dry_run else 'ok',
+                    'followup_pending',
+                    survivor_id,
+                    tuple(pending['donor_ids']),
+                    revision=int(pending['revision']),
+                )
+                if not dry_run:
+                    finish_unmerge(uid, survivor_id)
+            else:
+                result = unmerge_db.UnmergeResult('noop', 'already_unmerged', survivor_id)
+        else:
+            now = datetime.now(timezone.utc)
+            result = unmerge_db.unmerge_transaction(
+                uid,
+                donor_id,
+                expected_revision=revision(survivor or {}),
+                expected_content_revision=(survivor or {}).get('sync_content_revision'),
+                dry_run=dry_run,
+                now=now,
+                suffix=unmerge_suffix,
+                eligibility=lambda row, donors: unmerge_ineligible(row, donors, force=force, now=now),
+                payload=unmerge_payload,
+            )
+            if result.outcome == 'ok':
+                finish_unmerge(uid, result.survivor_id)
+        record_smart_merge_unmerge('ok' if result.outcome == 'noop' else result.outcome)
+        return result
+    except Exception as error:
+        record_smart_merge_unmerge('error')
+        # Exception messages from providers may contain content. Expose only type.
+        raise SmartMergeIncomplete(type(error).__name__) from error
+
+
+def _rebuild_unmerge_audio(uid: str, conversation_id: str) -> None:
+    files = conversations_db.create_audio_files_from_chunks(uid, conversation_id)
+    payload = [item.dict() for item in files]
+    conversations_db.update_conversation(uid, conversation_id, {'audio_files': payload})
+    delete_cached_merged_audio(uid, conversation_id)
+    if payload and is_audio_merge_dispatch_enabled():
+        enqueue_conversation_artifact_build(
+            uid, conversation_id, compute_audio_files_fingerprint(payload), caller='smart_merge'
+        )
+
+
+def finish_unmerge(uid: str, survivor_id: str) -> None:
+    """Replay audio surgery, leased survivor refresh and each restored donor's first processing."""
+    owner = f'admin-unmerge:{uuid.uuid4().hex}'
+
+    def checkpoint(**kwargs):
+        receipt = unmerge_db.checkpoint_unmerge(
+            uid, survivor_id, owner=owner, now=datetime.now(timezone.utc), lease_seconds=REFRESH_LEASE_SECONDS, **kwargs
+        )
+        if receipt is None:
+            raise SmartMergeIncomplete('unmerge_receipt_fenced')
+        return receipt
+
+    try:
+        pending = checkpoint()
+        for cid in pending['donor_ids']:
+            donor = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
+            if not donor or donor.get('deleted') or smart_merge_state(donor).get('role') != 'unmerged':
+                raise SmartMergeIncomplete('restored_donor_missing_or_deleted')
+            if donor.get('sync_bridge_audio_target') == survivor_id:
+                delete_copied_smart_merge_audio(uid, cid, survivor_id)
+        _rebuild_unmerge_audio(uid, survivor_id)
+        refresh_survivor(uid, survivor_id, owner=owner)
+        for cid in pending['donor_ids']:
+            pending = checkpoint()
+            if cid in pending.get('processed_ids', []):
+                continue
+            row = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
+            if not row or row.get('deleted') or smart_merge_state(row).get('role') != 'unmerged':
+                raise SmartMergeIncomplete('restored_donor_missing_or_deleted')
+            persistence = {'owned': False}
+            processed = process_conversation(
+                uid,
+                row.get('language') or 'en',
+                deserialize_conversation(row),
+                trigger=ProcessingTrigger.SMART_UNMERGE,
+                persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
+            )
+            if not persistence['owned']:
+                raise SmartMergeIncomplete('restored_donor_processing_fenced')
+            save_structured_vector(uid, processed)
+            _rebuild_unmerge_audio(uid, cid)
+            conversations_db._sync_conversation_search_index(uid, cid)  # pyright: ignore[reportPrivateUsage]
+            checkpoint(completed_donor=cid)
+        conversations_db._sync_conversation_search_index(uid, survivor_id)  # pyright: ignore[reportPrivateUsage]
+        checkpoint(complete=True)
+    finally:
+        unmerge_db.release_unmerge(uid, survivor_id, owner=owner)

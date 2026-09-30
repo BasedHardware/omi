@@ -105,6 +105,11 @@ and background processing.
   processing budget can refuse the required refresh. Decisions are recorded as
   server-only `smart_merge_decision` before the absorb transaction.
   Constants and benchmark provenance live in `config/conversation_smart_merge.py`.
+  Admin-only `unmerge_conversation` restores a donor and its ledger suffix with
+  transactional revision checks and replayable follow-up. `SMART_UNMERGE` runs
+  each donor's first processing without JIT deferral; `unmerged` markers prevent
+  automatic donor admission. Audit retention and irreversible losses are documented
+  in `backend/docs/smart_merge_unmerge.md`.
 - `duplicate_capture.py` owns the advisory cross-source overlap policy (#3244).
   After durable finalization, it links the shorter completed capture using
   `external_data.duplicate_capture_of` plus structured overlap evidence. The

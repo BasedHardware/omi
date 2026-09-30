@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 SMART_MERGE_FIELD = 'smart_merge'
 DECISION_FIELD = 'smart_merge_decision'
+AUDIT_COLLECTION = 'smart_merge_audit'
 _CONVERSATIONS = 'conversations'
 _ALL_STATUSES = ('in_progress', 'processing', 'merging', 'completed', 'failed')
 # Metadata only: the predecessor's transcript is read separately, and only for
@@ -74,8 +75,32 @@ class AbsorbResult:
     reason: str
 
 
-def _collection(client: Any, uid: str) -> Any:
+def conversation_collection(client: Any, uid: str) -> Any:
     return client.collection('users').document(uid).collection(_CONVERSATIONS)
+
+
+def audit_ref(client: Any, uid: str, donor_id: str) -> Any:
+    # Sibling of conversations, deliberately outside every conversation cascade.
+    return client.collection('users').document(uid).collection(AUDIT_COLLECTION).document(donor_id)
+
+
+def merge_audit(donor_id: str, survivor_id: str, donor_update: Mapping[str, Any], source: Any) -> dict[str, Any]:
+    """Closed content-free projection; never copy arbitrary decision fields."""
+    decision = donor_update.get(DECISION_FIELD) or {}
+    merged_at = donor_update[SMART_MERGE_FIELD]['merged_at']
+    return {
+        'donor_id': donor_id,
+        'survivor_id': survivor_id,
+        'p_same': decision.get('p_same'),
+        'threshold': decision.get('threshold'),
+        'question_version': decision.get('question_version'),
+        'served_model': decision.get('served_model'),
+        'gap_seconds': decision.get('gap_seconds'),
+        'merged_at': merged_at,
+        'mode': decision.get('mode'),
+        'source': source,
+        'expire_at': merged_at + timedelta(days=60),
+    }
 
 
 def find_preceding_conversations(
@@ -94,7 +119,7 @@ def find_preceding_conversations(
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     query = CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY.build(
-        _collection(client, uid),
+        conversation_collection(client, uid),
         {
             'discarded': False,
             'source': source,
@@ -112,7 +137,7 @@ def find_preceding_conversations(
     return rows
 
 
-def _decode_row(uid: str, raw: Mapping[str, Any]) -> tuple[dict[str, Any], list[Any]]:
+def decode_merge_row(uid: str, raw: Mapping[str, Any]) -> tuple[dict[str, Any], list[Any]]:
     row = dict(raw)
     # The adapter's strict codec: an unreadable blob raises instead of becoming [].
     segments = conversations_db._decode_transcript_segments_strict(  # pyright: ignore[reportPrivateUsage]
@@ -125,7 +150,7 @@ def _decode_row(uid: str, raw: Mapping[str, Any]) -> tuple[dict[str, Any], list[
 def record_decision(uid: str, conversation_id: str, record: Mapping[str, Any], *, firestore_client: Any = None) -> bool:
     """Store the server-only decision record on a live (non-deleted) conversation."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    ref = _collection(client, uid).document(conversation_id)
+    ref = conversation_collection(client, uid).document(conversation_id)
 
     @firestore.transactional
     def write(transaction) -> bool:
@@ -153,7 +178,7 @@ def absorb_conversation(
     returns ``(reason, survivor_update, donor_update)``; a reason rejects.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    collection = _collection(client, uid)
+    collection = conversation_collection(client, uid)
     survivor_ref = collection.document(survivor_id)
     donor_ref = collection.document(donor_id)
 
@@ -172,8 +197,8 @@ def absorb_conversation(
             return AbsorbResult('rejected', 'survivor_changed')
         if int((survivor_raw.get(SMART_MERGE_FIELD) or {}).get('revision') or 0) != expected_revision:
             return AbsorbResult('rejected', 'survivor_changed')
-        survivor, survivor_segments = _decode_row(uid, dict(survivor_raw, id=survivor_id))
-        donor, donor_segments = _decode_row(uid, dict(donor_raw, id=donor_id))
+        survivor, survivor_segments = decode_merge_row(uid, dict(survivor_raw, id=survivor_id))
+        donor, donor_segments = decode_merge_row(uid, dict(donor_raw, id=donor_id))
         reason, survivor_update, donor_update = plan(survivor, survivor_segments, donor, donor_segments)
         if reason is not None or survivor_update is None or donor_update is None:
             return AbsorbResult('rejected', reason or 'survivor_changed')
@@ -183,6 +208,9 @@ def absorb_conversation(
         conversations_db._invalidate_client_processing(payload)  # pyright: ignore[reportPrivateUsage]
         transaction.update(survivor_ref, payload)
         transaction.update(donor_ref, donor_update)
+        transaction.set(
+            audit_ref(client, uid, donor_id), merge_audit(donor_id, survivor_id, donor_update, donor.get('source'))
+        )
         return AbsorbResult('absorbed', 'absorbed')
 
     result = run_transactional(client, absorb)
@@ -204,7 +232,7 @@ def claim_survivor_refresh(
 ) -> Optional[int]:
     """Take the refresh lease for an owed survivor refresh; the revision to refresh, or ``None``."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    ref = _collection(client, uid).document(survivor_id)
+    ref = conversation_collection(client, uid).document(survivor_id)
 
     @firestore.transactional
     def claim(transaction) -> Optional[int]:
@@ -231,7 +259,7 @@ def complete_survivor_refresh(
 ) -> bool:
     """Record a persisted refresh of ``revision``; only the current lease owner may."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    ref = _collection(client, uid).document(survivor_id)
+    ref = conversation_collection(client, uid).document(survivor_id)
 
     @firestore.transactional
     def complete(transaction) -> bool:

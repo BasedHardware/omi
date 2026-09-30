@@ -53,6 +53,7 @@ except ImportError:
 
 import logging
 from utils.conversations.capture_shadow_outcomes import record_capture_outcome
+from utils.metrics import record_smart_merge_survivor_deleted
 
 logger = logging.getLogger(__name__)
 
@@ -686,10 +687,27 @@ def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
 def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> None:
     """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
     row = conversations_db.get_conversation(uid, conversation_id) or {}
+    merged_at = None
+    try:
+        state = row.get('smart_merge') or {}
+        fragments = state.get('fragments') or []
+        if fragments:
+            merged_at = state.get('last_merged_at')
+            if not isinstance(merged_at, datetime) and len(fragments) > 1:
+                # Legacy survivors predate last_merged_at; their donor retains it.
+                donor = conversations_db.get_conversation(uid, fragments[-1]['id']) or {}
+                merged_at = (donor.get('smart_merge') or {}).get('merged_at')
+    except Exception:
+        pass  # Optional measurement cannot prevent deletion or source purging.
     for source_id in row.get('sync_merged_from', []):
         if source_id != conversation_id:
             _delete_conversation_and_related_data(uid, source_id, purge_sync_sources=False)
     conversations_db.delete_conversation(uid, conversation_id)
+    if isinstance(merged_at, datetime):
+        try:
+            record_smart_merge_survivor_deleted(merged_at)
+        except Exception:
+            pass
 
     folder_id = row.get('folder_id')
     if folder_id:

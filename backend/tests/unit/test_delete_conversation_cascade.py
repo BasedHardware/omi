@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from database import conversations as conversations_db
+from utils.conversations import merge_conversations
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -210,3 +211,22 @@ def test_failed_ancestor_purge_keeps_survivor_for_retry(store, monkeypatch):
     with pytest.raises(RuntimeError, match='retraction unavailable'):
         merge_conversations.delete_conversation_with_sync_sources('uid-1', 'conv-1')
     assert conversation.exists
+
+
+def test_smart_merge_audit_survives_real_survivor_and_donor_delete_primitives(store, monkeypatch):
+    survivor = _seed_conversation(store)
+    user = store.collection('users').document('uid-1')
+    donor = user.collection('conversations').document('donor-a')
+    donor.data = {'deleted': True, 'smart_merge': {'role': 'donor', 'survivor_id': 'conv-1'}}
+    audit = user.collection('smart_merge_audit').document('donor-a')
+    audit.data = {'donor_id': 'donor-a', 'survivor_id': 'conv-1', 'p_same': 0.5}
+    survivor.data['sync_merged_from'] = ['donor-a']
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda uid, cid: survivor.data)
+    monkeypatch.setattr(
+        merge_conversations,
+        '_delete_conversation_and_related_data',
+        lambda uid, cid, **kw: conversations_db.delete_conversation(uid, cid),
+    )
+    merge_conversations.delete_conversation_with_sync_sources('uid-1', 'conv-1')
+    assert not survivor.exists and not donor.exists
+    assert audit.exists and audit.data['p_same'] == 0.5

@@ -977,6 +977,19 @@ def list_audio_chunks(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
     return sorted(chunks, key=lambda x: x['timestamp'])
 
 
+def delete_copied_smart_merge_audio(uid: str, donor_id: str, survivor_id: str) -> None:
+    """Undo only copied filenames; retain every original donor blob. Replay-safe."""
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    for chunk in list_audio_chunks(uid, donor_id):
+        filename = chunk['path'].rsplit('/', 1)[-1]
+        blob = bucket.blob(f'chunks/{uid}/{survivor_id}/{filename}')
+        with owner_storage_write_gate(uid, bucket):
+            try:
+                blob.delete()
+            except NotFound:
+                pass
+
+
 def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
     """Delete all audio files (chunks and merged) for a conversation."""
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)

@@ -1,6 +1,7 @@
 import os
 import re
 import threading
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Response
@@ -610,6 +611,37 @@ def record_conversation_smart_merge_refresh(outcome: str) -> None:
         CONVERSATION_SMART_MERGE_REFRESH_TOTAL.labels(
             outcome=outcome if outcome in CONVERSATION_SMART_MERGE_REFRESH_OUTCOMES else 'other'
         ).inc()
+    except Exception:
+        pass
+
+
+SMART_MERGE_SURVIVOR_DELETED_TOTAL = Counter(
+    'smart_merge_survivor_deleted_total',
+    'User-deleted smart-merge survivors by age since their last merge. Never labeled by uid.',
+    ['age_bucket'],
+)
+SMART_MERGE_UNMERGE_TOTAL = Counter(
+    'smart_merge_unmerge_total', 'Administrative smart-unmerge outcomes. Never labeled by uid.', ['outcome']
+)
+
+
+def record_smart_merge_survivor_deleted(merged_at: datetime, *, now: datetime | None = None) -> None:
+    try:
+        age = ((now or datetime.now(timezone.utc)) - merged_at).total_seconds()
+        bucket = 'gte_7d'
+        for limit, label in ((3600, 'lt_1h'), (86400, 'lt_24h'), (604800, 'lt_7d')):
+            if age < limit:
+                bucket = label
+                break
+        SMART_MERGE_SURVIVOR_DELETED_TOTAL.labels(age_bucket=bucket).inc()
+    except Exception:
+        pass
+
+
+def record_smart_merge_unmerge(outcome: str) -> None:
+    try:
+        if outcome in ('ok', 'ineligible', 'dry_run', 'error'):
+            SMART_MERGE_UNMERGE_TOTAL.labels(outcome=outcome).inc()
     except Exception:
         pass
 

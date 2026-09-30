@@ -227,6 +227,8 @@ def predecessor_status_skip(row: Mapping[str, Any]) -> Optional[str]:
         return SkipReason.PREDECESSOR_NOT_COMPLETED
     if row.get('uses_custom_stt'):
         return SkipReason.REFRESH_UNAVAILABLE
+    if smart_merge_state(row).get('unmerge_pending'):
+        return SkipReason.PREDECESSOR_REFRESH_PENDING
     if user_managed(row):
         return SkipReason.USER_MANAGED
     if user_ended(row):
@@ -338,6 +340,7 @@ def absorb_payloads(
             'revision': next_revision,
             'refreshed_revision': refreshed_revision(survivor),
             'fragments': [fragment.as_ledger_entry() for fragment in fragments],
+            'last_merged_at': merged_at,
         }
     )
     state.pop('refresh_lease', None)
