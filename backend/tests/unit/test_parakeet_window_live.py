@@ -1250,7 +1250,7 @@ async def _fragment_session(monkeypatch, *, earlier_text=False, response_text=Fa
     original_run = previous.raw._run_job
 
     async def observed_run(job):
-        job_signals.append((job.start, job.duration, job.force, job.pause, job.terminal_silence))
+        job_signals.append((job.start, job.duration, job.force, job.pause, getattr(job, 'terminal_silence', False)))
         return await original_run(job)
 
     monkeypatch.setattr(previous.raw, '_run_job', observed_run)
@@ -1269,11 +1269,12 @@ async def _fragment_session(monkeypatch, *, earlier_text=False, response_text=Fa
     return actual, base, previous, client, replayed, callbacks, clock, sample
 
 
-async def _fragment_frame(actual, clock, sample, *, speech=False, wall_seconds=0.04):
+async def _fragment_frame(actual, clock, sample, *, speech=False, wall_seconds=0.04, yield_pump=True):
     pcm = (b'\x01\x00' if speech else b'\x00\x00') * 640
     clock[0] += wall_seconds
     await _flush_capture(actual, pcm, sample)
-    await _REAL_SLEEP(0)
+    if yield_pump:
+        await _REAL_SLEEP(0)
     return sample + 640
 
 
@@ -1291,7 +1292,8 @@ async def test_late_blip_after_full_silent_ring_flushes_once_without_capacity_fa
     for _ in range(4725 if earlier_text else 2250):
         sample = await _fragment_frame(actual, clock, sample)
     previous.raw._next_post = 0  # the long quiet interval outlives the wall pace
-    sample = await _fragment_frame(actual, clock, sample, speech=True)
+    # Two queued capture packets can be handled before the pump gets a turn.
+    sample = await _fragment_frame(actual, clock, sample, speech=True, yield_pump=False)
     assert actual.stt_socket is previous
     assert previous.raw._received_bytes >= int(0.28 * 16000) * 2
     if not earlier_text:
