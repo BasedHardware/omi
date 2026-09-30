@@ -333,8 +333,9 @@ def adjudicate_screen_frames(
         # A sibling may already have written its bytes; with no Firestore doc they would be
         # unreachable (not served, not found by conversation delete). Remove them first.
         for future in futures:
-            if future.exception() is None and future.result().written is not None:
-                _discard_orphaned_frame(uid, request.subject.id, future.result().written.frame_id)
+            written = future.result().written if future.exception() is None else None
+            if written is not None:
+                _discard_orphaned_frame(uid, request.subject.id, written.frame_id)
         if isinstance(failure, ScreenFrameWriteError):
             logger.error("screen_frame writer unavailable uid=%s error=%s", uid, failure)
             raise HTTPException(status_code=503, detail={"code": "writer_unavailable"}) from failure
