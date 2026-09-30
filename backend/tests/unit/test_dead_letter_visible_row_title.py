@@ -24,6 +24,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 from database import conversation_finalization_jobs as jobs
 from database import conversation_terminal_title as terminal_title
+from database import conversations as conversations_db
 from models.conversation import Conversation
 from utils import encryption
 
@@ -33,25 +34,26 @@ _NOW = datetime(2026, 9, 30, 23, 0, tzinfo=timezone.utc)
 
 
 class _Photos:
-    def __init__(self, has_photo: bool):
-        self.has_photo = has_photo
+    def __init__(self, photos: list[dict]):
+        self.photos = photos
         self.reads = 0
 
     def limit(self, count: int):
-        assert count == 1
+        assert count == terminal_title.PHOTO_DESCRIPTION_PROBE_LIMIT
         return self
 
     def stream(self, transaction=None):
         assert transaction is not None, 'photo probe must read inside the transaction'
         self.reads += 1
-        return iter([SimpleNamespace()] if self.has_photo else [])
+        return iter([SimpleNamespace(to_dict=lambda photo=photo: photo) for photo in self.photos])
 
 
 class _Ref:
-    def __init__(self, doc_id: str, data: dict | None, *, has_child_photo: bool = False):
+    def __init__(self, doc_id: str, data: dict | None, *, child_photos: list[dict] | None = None):
         self.id = doc_id
+        self.path = f'users/{_UID}/conversations/{doc_id}'
         self.data = data
-        self.photos = _Photos(has_child_photo)
+        self.photos = _Photos(child_photos or [])
 
     def get(self, transaction=None):
         del transaction
@@ -84,7 +86,7 @@ def _job() -> _Ref:
     )
 
 
-def _conversation(extra: dict | None = None, *, has_child_photo: bool = False) -> _Ref:
+def _conversation(extra: dict | None = None, *, child_photos: list[dict] | None = None) -> _Ref:
     return _Ref(
         'conversation-1',
         {
@@ -96,7 +98,7 @@ def _conversation(extra: dict | None = None, *, has_child_photo: bool = False) -
             'structured': {'title': '', 'overview': '', 'category': 'other'},
             **(extra or {}),
         },
-        has_child_photo=has_child_photo,
+        child_photos=child_photos,
     )
 
 
@@ -212,8 +214,28 @@ def test_undecodable_transcript_degrades_to_the_time_title_without_raising():
     assert 'summary_retryable' not in patch
 
 
-def test_photo_only_transient_failure_uses_the_user_zone_time_title_and_is_retryable():
-    conversation = _conversation({'transcript_segments': []}, has_child_photo=True)
+def test_failed_decryption_of_parseable_plaintext_is_not_a_transcript():
+    """decrypt returns its input when authentication fails; strict decode refuses it."""
+    parseable_hex = zlib.compress(json.dumps(_segments('Forged words become a title.')).encode()).hex()
+    conversation = _conversation(
+        {
+            'data_protection_level': 'enhanced',
+            'transcript_segments_compressed': True,
+            'transcript_segments': parseable_hex,
+        }
+    )
+
+    patch = _dead_letter(conversation, time_zone='America/Los_Angeles')
+
+    assert patch['structured']['title'] == 'Recording · 3:14 PM'
+    assert 'summary_retryable' not in patch
+
+
+def test_photo_only_transient_failure_with_a_described_photo_is_titled_and_retryable():
+    conversation = _conversation(
+        {'transcript_segments': []},
+        child_photos=[{'id': 'p0', 'description': ''}, {'id': 'p1', 'description': 'A whiteboard sketch'}],
+    )
 
     patch = _dead_letter(conversation, time_zone='America/Los_Angeles')
 
@@ -223,8 +245,21 @@ def test_photo_only_transient_failure_uses_the_user_zone_time_title_and_is_retry
     assert conversation.photos.reads == 1
 
 
-def test_photo_marker_counts_without_a_child_read():
-    conversation = _conversation({'has_photos': True})
+def test_undescribed_photos_give_the_summarizer_nothing_so_no_retry():
+    """The summarizer reads photo descriptions, never pixels."""
+    conversation = _conversation(
+        {'transcript_segments': [], 'has_photos': True, 'photos': [{'id': 'inline', 'description': '  '}]},
+        child_photos=[{'id': 'p0'}, {'id': 'p1', 'description': None}],
+    )
+
+    patch = _dead_letter(conversation)
+
+    assert patch['structured']['title'].startswith('Recording')
+    assert 'summary_retryable' not in patch
+
+
+def test_an_inline_described_photo_counts_without_a_child_read():
+    conversation = _conversation({'photos': [{'id': 'inline', 'description': 'Receipt from lunch'}]})
 
     patch = _dead_letter(conversation)
 
@@ -309,3 +344,83 @@ def test_wrapper_resolves_the_zone_with_a_plain_non_transactional_read():
 
     failing = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: SimpleNamespace(get=boom)))
     assert terminal_title.user_time_zone(failing, _UID) is None
+
+
+# ------------------------------------------------------------ blank user_title
+
+
+def test_blank_user_title_is_no_override_across_terminal_read_and_api():
+    """Terminal write -> read-path decode -> API model: the title survives."""
+    conversation = _conversation({'user_title': '   ', 'transcript_segments': _segments('Call the landlord.')})
+
+    patch = _dead_letter(conversation)
+    patch.pop('_zone_calls')
+    stored = {'id': 'conversation-1', 'created_at': _NOW, 'finished_at': _NOW, **conversation.data, **patch}
+
+    read = conversations_db.prepare_conversation_for_read(stored, _UID)
+    row = Conversation.model_validate(read)
+    assert row.structured.title == 'Call the landlord.'
+    assert row.model_dump(mode='json')['structured']['title'] == 'Call the landlord.'
+
+
+def test_a_real_user_title_still_wins_on_read():
+    read = conversations_db.prepare_conversation_for_read(
+        {'user_title': 'Mine', 'structured': {'title': 'Generated'}}, _UID
+    )
+    assert read['structured']['title'] == 'Mine'
+    assert conversations_db.effective_user_title('') is None
+    assert conversations_db.effective_user_title(' \n') is None
+    assert conversations_db.effective_user_title(None) is None
+    assert conversations_db.effective_user_title('Mine') == 'Mine'
+
+
+# ------------------------------------------------------------ 1 MiB ceiling
+
+
+def _near_limit_segments(slack: int) -> list[dict]:
+    """A transcript sized so the stored document sits ``slack`` bytes under the budget."""
+    probe = _conversation({'transcript_segments': _segments('Near the ceiling.')})
+    base = terminal_title.estimate_firestore_document_bytes(probe.data, probe.path)
+    filler = terminal_title.FIRESTORE_MAX_DOCUMENT_BYTES - terminal_title.TERMINAL_SIZE_HEADROOM_BYTES - base - slack
+    return _segments('Near the ceiling. ' + 'x' * filler)
+
+
+def test_dead_letter_at_the_document_limit_still_terminalizes_without_growth():
+    conversation = _conversation({'transcript_segments': _near_limit_segments(slack=8)})
+
+    patch = _dead_letter(conversation)
+    patch.pop('_zone_calls')
+
+    # Exactly the pre-existing status-only terminal: nothing that grows the document.
+    assert patch == {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'}
+
+
+def test_dead_letter_with_room_below_the_limit_keeps_title_and_retry():
+    conversation = _conversation({'transcript_segments': _near_limit_segments(slack=512)})
+
+    patch = _dead_letter(conversation)
+
+    assert patch['structured']['title'] == 'Near the ceiling.'
+    assert patch['summary_retryable'] is True
+
+
+def test_orphan_at_the_document_limit_still_terminalizes_without_growth():
+    admitted = _NOW
+    orphan = _conversation(
+        {'status': 'processing', 'processing_admitted_at': admitted, 'transcript_segments': _near_limit_segments(8)}
+    )
+    del orphan.data['finalization_job_id']
+    transaction = _Transaction()
+
+    assert jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, _NOW, _UID) is True
+    assert transaction.updates == [(orphan, {'status': 'completed'})]
+
+
+def test_estimator_follows_firestore_storage_rules():
+    size = terminal_title.estimate_firestore_document_bytes(
+        {'a': 'xyz', 'b': True, 'c': None, 'd': 7, 'e': [1.5, 'q'], 'f': {'g': b'12'}},
+        'users/u/conversations/c',
+    )
+    name = (5 + 1) + (1 + 1) + (13 + 1) + (1 + 1) + 16
+    fields = (2 + 4) + (2 + 1) + (2 + 1) + (2 + 8) + (2 + 8 + 2) + (2 + 2 + 2)
+    assert size == name + 32 + fields

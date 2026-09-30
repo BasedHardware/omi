@@ -13,10 +13,16 @@ local CPU work (uid-keyed AES-GCM plus zlib) on the snapshot the transaction
 already holds, so the title always describes the transcript that commits. The
 one IO, the user's time zone for a transcript-free row, is a plain
 non-transactional read that cannot fail the terminal write.
+
+A terminal must always be able to commit. The title and retry marker only ever
+grow the document, so they are added only when the estimated post-write size
+stays under Firestore's 1 MiB ceiling; a row at the ceiling still terminalizes
+with the pre-existing status-only write.
 """
 
 from __future__ import annotations
 
+import zlib
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping
@@ -31,62 +37,63 @@ from utils.conversations.recovery import structured_has_protected_content
 # to summarize, so a retry gives the same answer) and BYOK abandonment.
 SUMMARY_RETRYABLE_FAILURE_CODES = frozenset({'processing_failed', 'final_attempt_failed'})
 
+# Firestore's maximum document size, and the headroom kept for estimation error.
+FIRESTORE_MAX_DOCUMENT_BYTES = 1_048_576
+TERMINAL_SIZE_HEADROOM_BYTES = 4_096
+# Bounded probe for a described photo in the child collection.
+PHOTO_DESCRIPTION_PROBE_LIMIT = 64
+# Used when a test double exposes no document path.
+_FALLBACK_DOCUMENT_NAME_BYTES = 256
 
-def transcript_texts(uid: str, conversation: Mapping[str, Any]) -> list[str]:
-    """Non-blank segment texts of the transactional snapshot, or ``[]``.
 
-    Uses the read path's own decode (uid-keyed AES-GCM plus zlib for
-    ``enhanced`` rows, zlib for compressed ``standard`` rows). That is local CPU
-    work on the snapshot this transaction already holds, so the title always
-    describes exactly the transcript that commits, with no compare-and-set
-    window. An undecodable blob degrades to the time-based title; it must never
-    abort the terminal write that takes the row off ``processing``.
+def transcript_texts(uid: str, conversation: Mapping[str, Any]) -> tuple[list[str], bool]:
+    """``(non-blank segment texts, decoded)`` for the transactional snapshot.
+
+    Strict: an encrypted blob must actually decrypt. ``encryption.decrypt``
+    returns its input when authentication fails, and a tolerant decode would
+    then parse attacker- or corruption-controlled plaintext into a title and a
+    Retry offer. Any failure yields ``([], False)``: the caller degrades to the
+    time title with no Retry, and never aborts the terminal write.
     """
     raw_segments = conversation.get('transcript_segments')
     if not raw_segments:
-        return []
+        return [], True
     try:
-        decoded = conversations_db.prepare_conversation_for_read(
-            {
-                'transcript_segments': raw_segments,
-                'transcript_segments_compressed': conversation.get('transcript_segments_compressed'),
-                'data_protection_level': conversation.get('data_protection_level'),
-            },
+        segments = conversations_db._decode_transcript_segments_strict(
             uid,
+            raw_segments,
+            bool(conversation.get('transcript_segments_compressed')),
+            require_decryption=True,
         )
-    except Exception:
-        return []
-    segments = (decoded or {}).get('transcript_segments')
-    if not isinstance(segments, list):
-        return []
+    except (TypeError, ValueError, zlib.error):
+        return [], False
     texts: list[str] = []
     for segment in segments:
         text = segment.get('text') if isinstance(segment, Mapping) else None
         if isinstance(text, str) and text.strip():
             texts.append(text)
-    return texts
+    return texts, True
 
 
-def kept_row_title_update(
+def _title_update(
     uid: str,
     conversation: Mapping[str, Any],
+    texts: list[str],
     time_zone_for_uid: Callable[[str], str | None] | None,
-) -> tuple[dict[str, Any], list[str]]:
+) -> dict[str, Any]:
     """``{'structured': ...}`` giving an untitled row its deterministic title, or ``{}``.
 
-    Shared by every terminal that moves a ``processing`` row into the default
-    list (dead-letter, BYOK abandonment, orphan recovery), so none can leave a
-    kept row with an empty title. Only the title changes; the rest of the
-    stored ``structured`` map survives. A real generated title or a
-    ``user_title`` is never touched. Also returns the decoded transcript texts.
+    Only the title changes; the rest of the stored ``structured`` map
+    survives. A real generated title or a non-blank ``user_title`` is never
+    touched (a blank ``user_title`` is no override; see
+    ``conversations_db.effective_user_title``).
     """
     structured = conversation.get('structured')
     fields = dict(structured) if isinstance(structured, Mapping) else {'title': '', 'overview': ''}
-    texts = transcript_texts(uid, conversation)
     title = fields.get('title')
-    user_title = conversation.get('user_title')
-    has_user_title = isinstance(user_title, str) and bool(user_title.strip())
-    if not has_user_title and not (isinstance(title, str) and title.strip()):
+    if conversations_db.effective_user_title(conversation.get('user_title')) is None and not (
+        isinstance(title, str) and title.strip()
+    ):
         started_at = conversation.get('started_at')
         if not isinstance(started_at, datetime):
             started_at = conversation.get('created_at')
@@ -98,7 +105,138 @@ def kept_row_title_update(
             # Called only when the transcript is empty (photo-only rows).
             tz_name_provider=(lambda: time_zone_for_uid(uid)) if time_zone_for_uid is not None else None,
         )
-    return ({'structured': fields} if fields != structured else {}), texts
+    return {'structured': fields} if fields != structured else {}
+
+
+def kept_row_terminal_update(
+    uid: str,
+    conversation: Mapping[str, Any],
+    conversation_ref: Any,
+    base_update: Mapping[str, Any],
+    time_zone_for_uid: Callable[[str], str | None] | None,
+) -> dict[str, Any]:
+    """``base_update`` plus the deterministic title when the document can hold it.
+
+    Shared by BYOK abandonment and orphan recovery.
+    """
+    texts, _decoded = transcript_texts(uid, conversation)
+    extras = _title_update(uid, conversation, texts, time_zone_for_uid)
+    return fit_document_limit(conversation, conversation_ref, base_update, extras)
+
+
+def dead_letter_conversation_updates(
+    uid: str,
+    conversation: Mapping[str, Any],
+    conversation_ref: Any,
+    transaction: Any,
+    failure_code: str,
+    time_zone_for_uid: Callable[[str], str | None] | None,
+) -> dict[str, Any]:
+    """Close a still-bound ``processing`` row as a visible, titled conversation.
+
+    Matches BYOK abandonment and orphan recovery (``completed``, kept), and
+    also gives an untitled row its deterministic title.
+
+    ``summary_retryable=True`` is written only when a user reprocess can
+    succeed: the retry budget ran out on a transient failure, the summarizer
+    has usable input (decoded transcript text, or a photo with a description;
+    it reads descriptions, never pixels), and the row holds no earlier summary
+    that the failure chip would misdescribe.
+    """
+    had_summary = structured_has_protected_content(
+        conversation.get('structured'), conversations_db.effective_user_title(conversation.get('user_title'))
+    )
+    texts, _decoded = transcript_texts(uid, conversation)
+    base: dict[str, Any] = {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'}
+    if not isinstance(conversation.get('structured'), Mapping):
+        # The API model needs a structured map even to return the row.
+        base['structured'] = {'title': '', 'overview': ''}
+    extras = _title_update(uid, conversation, texts, time_zone_for_uid)
+    if (
+        failure_code in SUMMARY_RETRYABLE_FAILURE_CODES
+        and not had_summary
+        and (texts or _has_described_photo(conversation, conversation_ref, transaction))
+    ):
+        extras['summary_retryable'] = True
+    return fit_document_limit(conversation, conversation_ref, base, extras)
+
+
+def fit_document_limit(
+    conversation: Mapping[str, Any],
+    conversation_ref: Any,
+    base_update: Mapping[str, Any],
+    extras: Mapping[str, Any],
+) -> dict[str, Any]:
+    """``base_update`` with ``extras`` merged in, unless that could exceed 1 MiB.
+
+    ``base_update`` is the terminal's own status write, which the caller has
+    always committed. ``extras`` (title, retry marker) are optional growth: an
+    oversized update aborts the whole transaction and would strand the row on
+    ``processing``, so they are dropped rather than risk that.
+    """
+    combined = {**base_update, **extras}
+    if not extras:
+        return combined
+    after = {**conversation, **combined}
+    path = getattr(conversation_ref, 'path', None)
+    estimated = estimate_firestore_document_bytes(after, path if isinstance(path, str) else None)
+    if estimated + TERMINAL_SIZE_HEADROOM_BYTES > FIRESTORE_MAX_DOCUMENT_BYTES:
+        return dict(base_update)
+    return combined
+
+
+def estimate_firestore_document_bytes(data: Mapping[str, Any], document_path: str | None) -> int:
+    """Firestore's documented storage size of one document.
+
+    Document name: each path segment plus one byte, plus 16. Document: the
+    fields plus 32. Field: name (UTF-8 plus one) plus value. Strings are UTF-8
+    plus one; booleans and null one; numbers and timestamps eight; geo points
+    sixteen; bytes their length; arrays and maps the sum of their contents.
+    """
+    if document_path:
+        name_bytes = sum(len(part.encode('utf-8')) + 1 for part in document_path.split('/')) + 16
+    else:
+        name_bytes = _FALLBACK_DOCUMENT_NAME_BYTES
+    return name_bytes + 32 + sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(value) for key, value in data.items())
+
+
+def _value_bytes(value: Any) -> int:
+    if value is None or isinstance(value, bool):
+        return 1
+    if isinstance(value, (int, float, datetime)):
+        return 8
+    if isinstance(value, str):
+        return len(value.encode('utf-8')) + 1
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return len(value)
+    if isinstance(value, Mapping):
+        return sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(item) for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return sum(_value_bytes(item) for item in value)
+    if hasattr(value, 'latitude') and hasattr(value, 'longitude'):
+        return 16
+    # Unknown SDK value: over-estimate rather than under-estimate.
+    return len(str(value).encode('utf-8')) + 1
+
+
+def _has_described_photo(conversation: Mapping[str, Any], conversation_ref: Any, transaction: Any) -> bool:
+    """Whether the summarizer would receive at least one photo description."""
+    inline = conversation.get('photos')
+    if isinstance(inline, list) and any(_described(photo) for photo in inline):
+        return True
+    # Photo docs live in the child collection; probe a bounded prefix inside
+    # this transaction's snapshot. `has_photos` alone proves no description.
+    photos = conversation_ref.collection('photos').limit(PHOTO_DESCRIPTION_PROBE_LIMIT)
+    for snapshot in photos.stream(transaction=transaction):
+        to_dict = getattr(snapshot, 'to_dict', None)
+        if callable(to_dict) and _described(to_dict()):
+            return True
+    return False
+
+
+def _described(photo: Any) -> bool:
+    description = photo.get('description') if isinstance(photo, Mapping) else None
+    return isinstance(description, str) and bool(description.strip())
 
 
 def user_time_zone(client: Any, uid: str) -> str | None:
@@ -116,49 +254,3 @@ def user_time_zone(client: Any, uid: str) -> str | None:
         return None
     zone = (snapshot.to_dict() or {}).get('time_zone')
     return zone if isinstance(zone, str) and zone else None
-
-
-def dead_letter_conversation_updates(
-    uid: str,
-    conversation: Mapping[str, Any],
-    conversation_ref: Any,
-    transaction: Any,
-    failure_code: str,
-    time_zone_for_uid: Callable[[str], str | None] | None,
-) -> dict[str, Any]:
-    """Close a still-bound ``processing`` row as a visible, titled conversation.
-
-    Matches BYOK abandonment and orphan recovery (``completed``, kept), and
-    also guarantees every row it leaves in the default list carries something
-    useful: an empty generated title is replaced by the model-free
-    ``deterministic_minimum_title`` (first transcript sentence, else
-    ``"Recording · 3:14 PM"``). A real title or a user title is never touched.
-
-    ``summary_retryable=True`` is written only when a user reprocess
-    can succeed: the retry budget ran out on a transient failure, the row has
-    transcript text or photos to summarize, and it holds no earlier summary
-    that the failure chip would misdescribe.
-    """
-    had_summary = structured_has_protected_content(conversation.get('structured'), conversation.get('user_title'))
-    title_update, texts = kept_row_title_update(uid, conversation, time_zone_for_uid)
-    updates: dict[str, Any] = {
-        'status': 'completed',
-        'discarded': False,
-        'finalization_status': 'dead_letter',
-        **title_update,
-    }
-    if (
-        failure_code in SUMMARY_RETRYABLE_FAILURE_CODES
-        and not had_summary
-        and (texts or _has_photos(conversation, conversation_ref, transaction))
-    ):
-        updates['summary_retryable'] = True
-    return updates
-
-
-def _has_photos(conversation: Mapping[str, Any], conversation_ref: Any, transaction: Any) -> bool:
-    if conversation.get('photos') or conversation.get('has_photos'):
-        return True
-    # Photo-only rows written before `has_photos` keep their photos only in
-    # the child collection; read it inside this transaction's snapshot.
-    return next(iter(conversation_ref.collection('photos').limit(1).stream(transaction=transaction)), None) is not None

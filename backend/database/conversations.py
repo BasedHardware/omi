@@ -224,7 +224,9 @@ def _require_segment_list(parsed: Any) -> List[Any]:
     return parsed
 
 
-def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
+def _decode_transcript_segments_strict(
+    uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
+) -> List[Any]:
     """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
 
     The read path swallows decode failures into an empty list, which is safe for
@@ -236,6 +238,10 @@ def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: 
         return raw_segments
     if isinstance(raw_segments, str):
         payload = encryption.decrypt(raw_segments, uid)
+        if require_decryption and payload == raw_segments:
+            # decrypt's display fallback returns the input on authentication
+            # failure. Even parseable plaintext is not a successful decode.
+            raise ValueError('undecodable transcript_segments: decryption failed')
         if compressed:
             parsed = json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
         else:
@@ -352,6 +358,16 @@ def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool
     return bool(segments)
 
 
+def effective_user_title(user_title: Any) -> Optional[str]:
+    """The user's title override, or ``None`` when there is none.
+
+    A blank string is no override: applying it would erase the generated (or
+    deterministic) title and render the row "Untitled". Every reader and every
+    processing persist resolves ``user_title`` through this one rule.
+    """
+    return user_title if isinstance(user_title, str) and user_title.strip() else None
+
+
 def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
@@ -359,8 +375,8 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
     data = copy.deepcopy(conversation_data)
     # User titles are durable overrides. Conversation processing owns the
     # generated title, but must never erase an explicit user edit.
-    user_title = data.get('user_title')
-    if isinstance(user_title, str):
+    user_title = effective_user_title(data.get('user_title'))
+    if user_title is not None:
         structured = data.get('structured')
         if not isinstance(structured, dict):
             structured = {}
@@ -699,8 +715,8 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             if existing.get('folder_user_set'):
                 write_data['folder_id'] = existing.get('folder_id')
 
-            user_title = existing.get('user_title')
-            if isinstance(user_title, str):
+            user_title = effective_user_title(existing.get('user_title'))
+            if user_title is not None:
                 structured = write_data.get('structured')
                 if not isinstance(structured, dict):
                     structured = {}
@@ -821,8 +837,8 @@ def persist_processing_result_with_lifecycle(
         if existing.get('folder_user_set'):
             write_data['folder_id'] = existing.get('folder_id')
 
-        user_title = existing.get('user_title')
-        if isinstance(user_title, str):
+        user_title = effective_user_title(existing.get('user_title'))
+        if user_title is not None:
             structured = write_data.get('structured')
             if not isinstance(structured, dict):
                 structured = {}
@@ -1438,7 +1454,11 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     if not doc_snapshot.exists:
         return
 
-    conversation_ref.update({'structured.title': title, 'user_title': title})
+    if effective_user_title(title) is None:
+        # Clearing the title removes the override; the generated title returns.
+        conversation_ref.update({'user_title': firestore.DELETE_FIELD})
+    else:
+        conversation_ref.update({'structured.title': title, 'user_title': title})
     _sync_conversation_search_index(uid, conversation_id)
 
 

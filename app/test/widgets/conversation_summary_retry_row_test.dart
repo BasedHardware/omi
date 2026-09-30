@@ -150,6 +150,25 @@ void main() {
     expect(emitted.single.surface, ConversationUntitledRenderedSurface.list);
   });
 
+  testWidgets('a server-titled photo-only row decoded from the API renders its title, not Untitled', (tester) async {
+    // The API shape a dead-lettered photo-only row reaches the app with, after the backend
+    // resolves a blank user_title override as no override (test_dead_letter_visible_row_title.py).
+    final conversation = ServerConversation.fromJson({
+      'id': 'photo-only',
+      'created_at': '2026-09-30T22:14:00Z',
+      'started_at': '2026-09-30T22:14:00Z',
+      'finished_at': '2026-09-30T22:20:00Z',
+      'structured': {'title': 'Recording · 10:14 PM', 'overview': ''},
+      'transcript_segments': <Object>[],
+      'status': 'completed',
+    });
+    await _pumpRow(tester, conversation: conversation);
+
+    expect(find.text('Recording · 10:14 PM'), findsOneWidget);
+    expect(find.text(_l10n(tester).untitledConversation), findsNothing);
+    expect(emitted, isEmpty);
+  });
+
   testWidgets('Retry shows progress, then a processing result moves the row off the completed list', (tester) async {
     final gate = Completer<ServerConversation?>();
     final provider = await _pumpRow(tester, conversation: _conversation(), reprocess: (_) => gate.future);

@@ -20,7 +20,7 @@ from database import recording_sessions as recording_sessions_db
 from database._client import document_id_from_seed, get_firestore_client
 from database.conversation_terminal_title import (
     dead_letter_conversation_updates,
-    kept_row_title_update,
+    kept_row_terminal_update,
     user_time_zone,
 )
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
@@ -2082,7 +2082,7 @@ def _complete_orphan_conversation_txn(
     Only when every assumption still holds is the row moved to ``completed``. Any
     divergence is an expected CAS fencing (``False``), never a terminalization of
     live or durable-owned work. An untitled row also gets its deterministic title
-    (``kept_row_title_update``) so it never lands in the list untitled.
+    (``kept_row_terminal_update``) so it never lands in the list untitled.
     """
     del now  # the terminal write carries no timestamp; the fence is the generation
     snapshot = conversation_ref.get(transaction=transaction)
@@ -2097,8 +2097,10 @@ def _complete_orphan_conversation_txn(
     if not isinstance(admitted_at, datetime) or admitted_at != expected_admitted_at:
         return False
     uid = uid or _uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
-    title_update = kept_row_title_update(uid, data, time_zone_for_uid)[0] if uid else {}
-    transaction.update(conversation_ref, {'status': 'completed', **title_update})
+    terminal: dict[str, Any] = {'status': 'completed'}
+    if uid:
+        terminal = kept_row_terminal_update(uid, data, conversation_ref, terminal, time_zone_for_uid)
+    transaction.update(conversation_ref, terminal)
     return True
 
 
@@ -2388,9 +2390,9 @@ def _abandon_byok_finalization_job_txn(
         and not conversation.get('deferred')
     )
     # Pure decode of the snapshot already held; no transactional read after a write.
-    title_update: dict[str, Any] = {}
+    terminal: dict[str, Any] = {'status': 'completed', 'finalization_status': 'dead_letter'}
     if closes_conversation and isinstance(uid, str) and isinstance(conversation, Mapping):
-        title_update = kept_row_title_update(uid, conversation, time_zone_for_uid)[0]
+        terminal = kept_row_terminal_update(uid, conversation, conversation_ref, terminal, time_zone_for_uid)
 
     transaction.update(
         job_ref,
@@ -2432,7 +2434,7 @@ def _abandon_byok_finalization_job_txn(
         # A desktop lazy row intentionally stays on `processing` and is owned by
         # its own lane, exactly as the bare-`processing` sweep treats it.
         return _byok_abandonment('abandoned', 'deferred')
-    transaction.update(conversation_ref, {'status': 'completed', 'finalization_status': 'dead_letter', **title_update})
+    transaction.update(conversation_ref, terminal)
     return _byok_abandonment('abandoned', 'closed')
 
 

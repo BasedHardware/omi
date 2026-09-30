@@ -98,18 +98,19 @@ void main() {
   });
 
   group('transcriptFallbackTitle', () {
-    test('first non-blank segment, whitespace collapsed', () {
-      final conversation =
-          _conversation(segments: [_segment('   '), _segment('  We picked\nthe venue.  '), _segment('x')]);
-      expect(transcriptFallbackTitle(conversation), 'We picked the venue.');
+    // The full server-parity vectors live in contracts/parity/deterministic_title.json and run in
+    // test/parity/parity_contracts_test.dart; these pin the reviewed defects directly.
+    test('the first sentence spans segments', () {
+      final conversation = _conversation(segments: [_segment('We'), _segment('agreed on Friday.'), _segment('Next.')]);
+      expect(transcriptFallbackTitle(conversation), 'We agreed on Friday.');
     });
 
-    test('long text is cut at a word boundary with an ellipsis', () {
+    test('long text is cut at a word boundary within the server budget, with no ellipsis', () {
       final words = List.filled(20, 'venue').join(' ');
       final title = transcriptFallbackTitle(_conversation(segments: [_segment(words)]))!;
-      expect(title.endsWith('…'), isTrue);
-      expect(title.length, lessThanOrEqualTo(conversationFallbackTitleMaxChars + 1));
-      expect(title.substring(0, title.length - 1).split(' ').every((word) => word == 'venue'), isTrue);
+      expect(title.endsWith('…'), isFalse);
+      expect(title.runes.length, lessThanOrEqualTo(conversationFallbackTitleMaxChars));
+      expect(title.split(' ').every((word) => word == 'venue'), isTrue);
     });
 
     test('no transcript text is null', () {
@@ -160,6 +161,20 @@ void main() {
       expect(emitted.first.properties.keys.toSet(), {'surface', 'age_bucket', 'summary_retryable'});
       expect(emitted.first.properties.values.whereType<String>().any((value) => value.contains('c1')), isFalse);
     });
+  });
+
+  test('the session budget saturates: past the cap nothing reports, and no earlier row re-reports', () {
+    const cap = UntitledConversationTelemetry.maxReportsPerSession;
+    for (var i = 0; i < cap + 10; i++) {
+      conversationDisplayTitle(_conversation(id: 'row-$i'), l10n, surface: ConversationUntitledRenderedSurface.list);
+    }
+    expect(emitted, hasLength(cap));
+
+    // Revisit every row, including the first ones a size-bounded cache would have evicted.
+    for (var i = 0; i < cap + 10; i++) {
+      conversationDisplayTitle(_conversation(id: 'row-$i'), l10n, surface: ConversationUntitledRenderedSurface.list);
+    }
+    expect(emitted, hasLength(cap));
   });
 
   test('age buckets', () {

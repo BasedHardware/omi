@@ -11,7 +11,7 @@ from google.cloud import firestore
 
 from ._client import get_firestore_client, run_transactional
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
-from .conversations import conversations_collection
+from .conversations import conversations_collection, effective_user_title
 
 _RECEIPTS_COLLECTION = 'mutation_receipts'
 
@@ -45,8 +45,8 @@ def _sync_state(data: Dict[str, Any], revision: Any) -> Dict[str, Any]:
     """Build the bounded user-owned projection stored in mutation receipts."""
     structured = data.get('structured')
     generated_title = structured.get('title') if isinstance(structured, Mapping) else None
-    user_title = data.get('user_title')
-    title = user_title if isinstance(user_title, str) else generated_title if isinstance(generated_title, str) else None
+    user_title = effective_user_title(data.get('user_title'))
+    title = user_title if user_title is not None else generated_title if isinstance(generated_title, str) else None
     return {
         'revision': revision,
         'title': title,
@@ -80,6 +80,11 @@ def _apply_operation(current: Dict[str, Any], operation: Dict[str, Any]) -> tupl
         title = operation.get('title')
         if not isinstance(title, str):
             raise ValueError('set_title requires title')
+        if effective_user_title(title) is None:
+            # A blank title is no override: clear it so the generated title returns.
+            next_state.pop('user_title', None)
+            patch = {'user_title': firestore.DELETE_FIELD} if 'user_title' in current else {}
+            return next_state, patch
         structured = next_state.get('structured')
         current_structured_title = structured.get('title') if isinstance(structured, Mapping) else None
         patch = (

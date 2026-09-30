@@ -124,7 +124,7 @@ void main() {
       of: find.byType(ConversationTitleField),
       matching: find.byType(TextField),
     ));
-    expect(field.decoration!.hintText, 'Venue talk. We picked Friday.');
+    expect(field.decoration!.hintText, 'Venue talk.');
     expect(field.decoration!.hintText, isNot(l10n.untitledConversation));
   });
 }
