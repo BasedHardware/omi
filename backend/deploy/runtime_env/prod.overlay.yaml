@@ -150,8 +150,8 @@ overlay:
           value: '0'
           category: rollout
         # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
-        # the list for everyone. Keep this identical on backend-listen, backend, backend-sync and
-        # backend-sync-backfill; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+        # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
+        # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
         SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           category: rollout
@@ -420,8 +420,8 @@ overlay:
             value: '0'
             category: rollout
           # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
-          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync and
-          # backend-sync-backfill; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
+          # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
           SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
@@ -527,8 +527,8 @@ overlay:
             value: '0'
             category: rollout
           # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
-          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync and
-          # backend-sync-backfill; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
+          # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
           SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
@@ -613,8 +613,8 @@ overlay:
             value: '0'
             category: rollout
           # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
-          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync and
-          # backend-sync-backfill; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync,
+          # backend-sync-backfill and backend-integration; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
           SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
@@ -668,6 +668,9 @@ overlay:
             value: based-hardware
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
+            category: rollout
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
     jobs:
       notifications-job:

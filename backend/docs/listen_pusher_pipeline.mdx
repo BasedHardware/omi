@@ -34,12 +34,14 @@ empty admits everyone) limits per-segment binding, the pinned live origin, the
 live revision fence and the open-live enrichment deferral to listed owners; any
 other uid behaves exactly as with the kill switch off, and the kill switch wins.
 The listen origin stamp is metadata only and ignores the list, so widening finds
-lineage already stamped. Prod lists one uid on all four services (keep them
+lineage already stamped. Prod lists one uid on all five services (keep them
 identical; a service without the variable admits everyone); dev leaves it unset.
 Refused eligible uploads log `event=sync_lineage_resolve outcome=not_allowlisted`
 with no ids. The metric comes from backend-sync, which is not scraped, so logs are
 the watch source. Widen only after the 48 h log gates in `ARCHITECTURE.md`, by
-clearing the list on all four services together, then watch 24 h.
+clearing the list on all five services together, then watch 24 h.
+The full API `backend-integration` image also mounts sync and listen routes and carries the same gate. `desktop-backend` has a separate router set with neither site. Deploy renderers reject missing or divergent prod literals and chart drift. Persisted refresh debt from an admitted append survives narrowing without reappending speech; open live rows leave that refresh to finalization. Stage the chart before gated code, drain sync work across mixed writer revisions, and use only a compatible historical Helm release for rollback. See the deployment details in `utils/sync/ARCHITECTURE.md`.
+
 
 The bounded lookup filters by both start and finish so an old stamp-extended
 row cannot hide behind newer generations; a truncated overlap set proves no

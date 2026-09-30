@@ -141,10 +141,15 @@ def test_admitted_upload_binds_per_segment_without_a_gate_decision(monkeypatch, 
 
 
 def test_ineligible_upload_is_untouched_by_the_gate(monkeypatch, caplog):
-    for config in (OFF, ('', 'OTHER-A')):
-        configure(monkeypatch, config, 'u')
-        assert not lineage_resolution_requested('u', None, 1.0, 2.0)
-        assert not lineage_resolution_requested('u', ORIGIN, None, 2.0)
+    metrics = MagicMock()
+    monkeypatch.setattr(recording_lineage, 'OMI_SYNC_LINEAGE_RESOLVE_TOTAL', metrics)
+    with caplog.at_level(logging.INFO, logger=recording_lineage.__name__):
+        for config in (OFF, ('', 'OTHER-A')):
+            configure(monkeypatch, config, 'u')
+            assert not lineage_resolution_requested('u', None, 1.0, 2.0)
+            assert not lineage_resolution_requested('u', ORIGIN, None, 2.0)
+    metrics.labels.assert_not_called()
+    assert not any('event=sync_lineage_resolve' in r.getMessage() for r in caplog.records)
 
 
 def test_metric_help_names_every_bounded_outcome():
@@ -217,6 +222,22 @@ async def test_allowlist_change_between_attempts_reroutes_only_unlanded_segments
     widened, widened_intent = await _coordinate(module, stubs, monkeypatch, admitted, processed=landed, partial=partial)
     assert widened == ['SKIPPED'] * 2 + pure_on[2:]
     assert widened_intent == [{gen_id(L + 1): stubs['pipeline']._LINEAGE_RETRY_LANGUAGE}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('config', [('', 'OTHER-A'), OFF])
+async def test_narrowing_preserves_an_already_owed_refresh(coordinator, monkeypatch, config):
+    module, stubs = coordinator
+    landed = [chunk['id'] for chunk in upload_straddling_next_two()]
+    owed = gen_id(L + 1)
+    partial = {
+        'updated_memories': [owed, 'FENCED'],
+        'lineage_enrichment_pending': [owed, 'FENCED'],
+        'fenced_conversation_ids': ['FENCED'],
+    }
+    targets, intent = await _coordinate(module, stubs, monkeypatch, config, processed=landed, partial=partial)
+    assert targets == ['SKIPPED'] * 4
+    assert intent == [{owed: stubs['pipeline']._LINEAGE_RETRY_LANGUAGE}]
 
 
 # --- Site 2: pinned live origin on a sync append (assign_in_transaction) -------
@@ -316,11 +337,11 @@ def test_refused_owner_live_write_is_the_kill_switch_write(monkeypatch, name):
 # --- Site 4: open-live enrichment deferral (_reprocess_conversation_after_update)
 
 
-def _reprocess(pipeline, monkeypatch, config):
+def _reprocess(pipeline, monkeypatch, config, *, language='en', row_status='in_progress'):
     configure(monkeypatch, config, 'u')
     row = generation(
         L,
-        status='in_progress',
+        status=row_status,
         sync_live_target=True,
         sync_content_revision=1,
         created_at=at(gen_start(L)),
@@ -329,7 +350,7 @@ def _reprocess(pipeline, monkeypatch, config):
     monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_args: deepcopy(row))
     process = MagicMock()
     monkeypatch.setattr(pipeline, 'process_conversation', process)
-    pipeline._reprocess_conversation_after_update('u', row['id'], 'en')
+    pipeline._reprocess_conversation_after_update('u', row['id'], language)
     return process.call_args_list
 
 
@@ -343,6 +364,68 @@ def test_refused_owner_reprocesses_exactly_as_the_kill_switch(dependencies, monk
     off = _reprocess(dependencies, monkeypatch, OFF)
     assert len(off) == 1
     assert _reprocess(dependencies, monkeypatch, INACTIVE[name]) == off
+
+
+@pytest.mark.parametrize('config', [('', 'OTHER-A'), OFF])
+@pytest.mark.parametrize('status', ['completed', 'in_progress'])
+def test_owed_refresh_finishes_completed_rows_but_never_closes_live_rows(dependencies, monkeypatch, config, status):
+    calls = _reprocess(
+        dependencies, monkeypatch, config, language=dependencies._LINEAGE_RETRY_LANGUAGE, row_status=status
+    )
+    assert len(calls) == (1 if status == 'completed' else 0)
+    if calls:
+        assert calls[0].kwargs['language_code'] == 'en'
+
+
+def test_admitted_refresh_debt_survives_both_receipt_stores_and_excludes_fenced_rows():
+    response = {
+        'new_memories': {'NEW'},
+        'updated_memories': {'LIVE', 'FENCED'},
+        '_fenced_conversation_ids': {'FENCED'},
+        '_merged': {'LIVE': 'en', 'NEW': 'en', 'FENCED': 'en'},
+    }
+    off = recording_lineage.lineage_partial_result(response, False)
+    assert 'lineage_enrichment_pending' not in off
+    admitted = recording_lineage.lineage_partial_result(response, True)
+    assert admitted['lineage_enrichment_pending'] == ['LIVE']
+    durable = recording_lineage.merge_lineage_partial_results(off, admitted)
+    retry = dict(response, updated_memories={'LIVE'}, _merged={})
+    recording_lineage.restore_lineage_enrichment_intent(retry, durable, False, 'stored-language')
+    assert retry['_merged'] == {'LIVE': 'stored-language'}
+    assert recording_lineage.lineage_partial_result(retry, False)['lineage_enrichment_pending'] == ['LIVE']
+    retry['_fenced_conversation_ids'] = {'LIVE'}
+    assert 'lineage_enrichment_pending' not in recording_lineage.lineage_partial_result(retry, False)
+
+
+@pytest.mark.asyncio
+async def test_coordinator_checkpoints_admitted_refresh_debt_before_marking_audio_processed(coordinator, monkeypatch):
+    module, stubs = coordinator
+    configure(monkeypatch, ACTIVE['allowlisted'], 'uid')
+    captured, kwargs = _drive(module, stubs, upload_straddling_next_two(), monkeypatch, stamp=gen_id(L))
+    pipeline = stubs['pipeline']
+    original = pipeline.process_segment
+    events = []
+
+    def append(*args, **kw):
+        result = original(*args, **kw)
+        args[2].setdefault('_merged', {})[args[9]] = 'en'
+        return result
+
+    def checkpoint(_job_id, _token, updates):
+        if 'partial_result' in updates:
+            events.append(('receipt', deepcopy(updates['partial_result'])))
+        return updates
+
+    pipeline.process_segment = append
+    pipeline._update_sync_job_for_run = checkpoint
+    pipeline._add_processed_segment_for_run = lambda *_args: events.append(('processed', None))
+    pipeline._reprocess_merged_conversations = lambda *_a, **_k: None
+    await module._run_full_pipeline_background_async(
+        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
+    )
+    assert len(captured) == 4
+    assert [event[0] for event in events] == ['receipt', 'processed'] * 4
+    assert events[-2][1]['lineage_enrichment_pending'] == [gen_id(L + 1), gen_id(L + 2)]
 
 
 # --- Metadata-only origin stamp stays on the kill switch alone -----------------
@@ -367,6 +450,7 @@ GATED_SERVICES = (
     ('cloud_run', 'backend'),  # inline BYOK sync (routers/sync.py)
     ('cloud_run', 'backend-sync'),
     ('cloud_run', 'backend-sync-backfill'),
+    ('cloud_run', 'backend-integration'),  # full main:app also mounts sync and listen
     ('gke', 'backend-listen'),  # live revision fence
 )
 

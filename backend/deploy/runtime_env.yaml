@@ -3291,6 +3291,9 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout
+            SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: rollout
           forbidden_env:
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH

@@ -123,6 +123,43 @@ def lineage_resolution_requested(
     return True
 
 
+# Durable refresh debt is distinct from permission to append more live content.
+_PENDING_ENRICHMENT = 'lineage_enrichment_pending'
+
+
+def merge_lineage_partial_results(*partials: dict) -> dict:
+    keys = ('new_memories', 'updated_memories', 'fenced_conversation_ids', _PENDING_ENRICHMENT)
+    result = {key: sorted({cid for partial in partials for cid in partial.get(key) or []}) for key in keys}
+    if not result[_PENDING_ENRICHMENT]:
+        result.pop(_PENDING_ENRICHMENT)
+    return result
+
+
+def restore_lineage_enrichment_intent(response: dict, partial: dict, requested: bool, language: str) -> None:
+    pending = set(partial.get(_PENDING_ENRICHMENT) or []) & response['updated_memories']
+    if requested:
+        pending.update(response['updated_memories'])  # pre-marker admitted receipts
+    if pending:
+        response['_lineage_enrichment_pending'] = pending
+    if requested or pending:
+        response['_merged'] = {cid: language for cid in pending}
+
+
+def lineage_partial_result(response: dict, active_for_uid: bool) -> dict:
+    partial = {
+        'new_memories': sorted(response['new_memories']),
+        'updated_memories': sorted(response['updated_memories']),
+        'fenced_conversation_ids': sorted(response['_fenced_conversation_ids']),
+    }
+    pending = set(response.get('_lineage_enrichment_pending') or [])
+    if active_for_uid:
+        pending.update(response.get('_merged') or {})
+    pending &= response['updated_memories'] - response['_fenced_conversation_ids']
+    if pending:
+        partial[_PENDING_ENRICHMENT] = sorted(pending)
+    return partial
+
+
 def _chain_end(row_id: str, redirects: Mapping[str, str]) -> str:
     seen = set()
     current = row_id

@@ -146,7 +146,14 @@ from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_w
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
 from config.sync_lineage import sync_lineage_resolve_active_for
-from utils.sync.recording_lineage import fallback_segment_targets, lineage_resolution_requested, resolve_segment_targets
+from utils.sync.recording_lineage import (
+    fallback_segment_targets,
+    lineage_resolution_requested,
+    resolve_segment_targets,
+    merge_lineage_partial_results,
+    restore_lineage_enrichment_intent,
+    lineage_partial_result,
+)
 from utils.sync.bridge import finish_sync_segment
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
@@ -989,7 +996,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         return
 
     if (
-        sync_lineage_resolve_active_for(uid)
+        (sync_lineage_resolve_active_for(uid) or language == _LINEAGE_RETRY_LANGUAGE)
         and conversation_data.get('sync_live_target')
         and conversation_data.get('status') == 'in_progress'
     ):
@@ -1487,11 +1494,7 @@ async def _checkpoint_fenced_conversations_for_run(
     active_run_lock_epoch: int | None,
 ):
     """Persist a fence tombstone before the losing worker can finalize audio."""
-    partial = {
-        'new_memories': sorted(response['new_memories']),
-        'updated_memories': sorted(response['updated_memories']),
-        _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(response[_RESPONSE_FENCED_CONVERSATION_IDS]),
-    }
+    partial = lineage_partial_result(response, sync_lineage_resolve_active_for(uid))
     if content_id:
         checkpointed = await run_blocking(
             db_executor,
@@ -2353,32 +2356,14 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             partial_result = (current_job or {}).get('partial_result') or {}
             if content_id:
                 durable_partial = await run_blocking(db_executor, get_sync_content_partial_result, uid, content_id)
-                partial_result = {
-                    'new_memories': sorted(
-                        set(partial_result.get('new_memories') or []) | set(durable_partial.get('new_memories') or [])
-                    ),
-                    'updated_memories': sorted(
-                        set(partial_result.get('updated_memories') or [])
-                        | set(durable_partial.get('updated_memories') or [])
-                    ),
-                    _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(
-                        set(partial_result.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
-                        | set(durable_partial.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
-                    ),
-                }
+                partial_result = merge_lineage_partial_results(partial_result, durable_partial)
             fenced_conversation_ids = set(partial_result.get(_PARTIAL_RESULT_FENCED_CONVERSATION_IDS) or [])
             response = {
                 'updated_memories': set(partial_result.get('updated_memories') or []) - fenced_conversation_ids,
                 'new_memories': set(partial_result.get('new_memories') or []) - fenced_conversation_ids,
                 _RESPONSE_FENCED_CONVERSATION_IDS: fenced_conversation_ids,
             }
-            if use_lineage:
-                # The partial receipt precedes the processed-segment marker.
-                # A retry after append but before enrichment skips those WAVs;
-                # restore their enrichment intent as well as their response IDs.
-                # This marker asks enrichment for the persisted language and
-                # leaves every ordinary caller's language fallback unchanged.
-                response['_merged'] = {cid: _LINEAGE_RETRY_LANGUAGE for cid in response['updated_memories']}
+            restore_lineage_enrichment_intent(response, partial_result, use_lineage, _LINEAGE_RETRY_LANGUAGE)
             segment_errors = []
             # Segments that yielded a transcript, distinct from failed and
             # speech-free ones: only transcribed audio is billed, so a silent
@@ -2481,13 +2466,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     # conversation IDs available for response hydration.
                     with segment_lock:
                         content_segment_count[0] += 1
-                        partial = {
-                            'new_memories': sorted(response['new_memories']),
-                            'updated_memories': sorted(response['updated_memories']),
-                            _PARTIAL_RESULT_FENCED_CONVERSATION_IDS: sorted(
-                                response[_RESPONSE_FENCED_CONVERSATION_IDS]
-                            ),
-                        }
+                        partial = lineage_partial_result(response, sync_lineage_resolve_active_for(uid))
                         _update_sync_job_for_run(job_id, active_run_lock_token, {'partial_result': partial})
                         if content_id:
                             checkpointed = checkpoint_sync_content_partial_result(
