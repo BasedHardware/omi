@@ -39,7 +39,9 @@ SUMMARY_RETRYABLE_FAILURE_CODES = frozenset({'processing_failed', 'final_attempt
 
 # Firestore's maximum document size, and the headroom kept for estimation error.
 FIRESTORE_MAX_DOCUMENT_BYTES = 1_048_576
-TERMINAL_SIZE_HEADROOM_BYTES = 4_096
+# Generous on purpose: dropping a title near the ceiling costs nothing, while
+# an underestimate aborts the terminal write.
+TERMINAL_SIZE_HEADROOM_BYTES = 65_536
 # Bounded probe for a described photo in the child collection.
 PHOTO_DESCRIPTION_PROBE_LIMIT = 64
 # Used when a test double exposes no document path.
@@ -188,7 +190,9 @@ def estimate_firestore_document_bytes(data: Mapping[str, Any], document_path: st
     Document name: each path segment plus one byte, plus 16. Document: the
     fields plus 32. Field: name (UTF-8 plus one) plus value. Strings are UTF-8
     plus one; booleans and null one; numbers and timestamps eight; geo points
-    sixteen; bytes their length; arrays and maps the sum of their contents.
+    sixteen; bytes their length; arrays the sum of their values; maps are sized
+    like an embedded document (their fields plus 32). See
+    https://firebase.google.com/docs/firestore/storage-size.
     """
     if document_path:
         name_bytes = sum(len(part.encode('utf-8')) + 1 for part in document_path.split('/')) + 16
@@ -207,7 +211,8 @@ def _value_bytes(value: Any) -> int:
     if isinstance(value, (bytes, bytearray, memoryview)):
         return len(value)
     if isinstance(value, Mapping):
-        return sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(item) for key, item in value.items())
+        # A map is sized like an embedded document: its fields plus 32 bytes.
+        return 32 + sum(len(str(key).encode('utf-8')) + 1 + _value_bytes(item) for key, item in value.items())
     if isinstance(value, (list, tuple)):
         return sum(_value_bytes(item) for item in value)
     if hasattr(value, 'latitude') and hasattr(value, 'longitude'):

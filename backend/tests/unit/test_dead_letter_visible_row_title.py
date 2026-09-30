@@ -416,11 +416,76 @@ def test_orphan_at_the_document_limit_still_terminalizes_without_growth():
     assert transaction.updates == [(orphan, {'status': 'completed'})]
 
 
-def test_estimator_follows_firestore_storage_rules():
-    size = terminal_title.estimate_firestore_document_bytes(
-        {'a': 'xyz', 'b': True, 'c': None, 'd': 7, 'e': [1.5, 'q'], 'f': {'g': b'12'}},
-        'users/u/conversations/c',
+def _reference_size(value) -> int:
+    """Independent reference for https://firebase.google.com/docs/firestore/storage-size.
+
+    Written separately from the production estimator on purpose.
+    """
+    if isinstance(value, dict):
+        # A map is sized like an embedded document: field names + values + 32.
+        return 32 + sum(len(k.encode('utf-8')) + 1 + _reference_size(v) for k, v in value.items())
+    if isinstance(value, list):
+        return sum(_reference_size(v) for v in value)
+    if value is None or isinstance(value, bool):
+        return 1
+    if isinstance(value, (int, float, datetime)):
+        return 8
+    if isinstance(value, str):
+        return len(value.encode('utf-8')) + 1
+    if isinstance(value, bytes):
+        return len(value)
+    raise AssertionError(f'reference does not model {type(value)}')
+
+
+def _reference_document_size(data: dict, path: str) -> int:
+    name = sum(len(part.encode('utf-8')) + 1 for part in path.split('/')) + 16
+    # The document itself is a map of fields plus 32 bytes, plus its name.
+    return name + _reference_size(data)
+
+
+def test_estimator_matches_an_independent_reference_including_nested_maps_and_arrays():
+    data = {
+        'a': 'xyz',
+        'b': True,
+        'c': None,
+        'd': 7,
+        'e': [1.5, 'q', {'inner': [1, {'deep': 'é'}]}],
+        'f': {'g': b'12', 'h': {'i': []}},
+        'started_at': _NOW,
+        'structured': {
+            'title': '',
+            'action_items': [{'description': f'task {i}', 'completed': False} for i in range(128)],
+        },
+    }
+    path = 'users/u/conversations/c'
+    assert terminal_title.estimate_firestore_document_bytes(data, path) == _reference_document_size(data, path)
+    # Hand check of the small cases: map {'g': b'12', 'h': {'i': []}} is 32 + (2 + 2) + (2 + (32 + 2 + 0)).
+    assert _reference_size({'g': b'12', 'h': {'i': []}}) == 32 + 4 + 36
+
+
+def test_many_action_item_maps_near_the_limit_drop_the_title():
+    """Sol's repro: 128 action-item maps plus structured near 1 MiB.
+
+    Without the 32-byte-per-map overhead the old estimator under-counted by
+    ~4 KiB and admitted a title that pushed the document past the ceiling.
+    """
+    items = [{'description': f'task {i}', 'completed': False} for i in range(128)]
+    probe = _conversation(
+        {'structured': {'title': '', 'overview': '', 'action_items': items}, 'transcript_segments': _segments('Hi.')}
     )
-    name = (5 + 1) + (1 + 1) + (13 + 1) + (1 + 1) + 16
-    fields = (2 + 4) + (2 + 1) + (2 + 1) + (2 + 8) + (2 + 8 + 2) + (2 + 2 + 2)
-    assert size == name + 32 + fields
+    base = _reference_document_size(probe.data, probe.path)
+    # A few dozen bytes of room, like the 1,048,549-byte document in the review repro.
+    near_limit = _conversation(
+        {
+            'structured': {'title': '', 'overview': '', 'action_items': items},
+            'transcript_segments': _segments('Hi. ' + 'x' * (terminal_title.FIRESTORE_MAX_DOCUMENT_BYTES - base - 32)),
+        }
+    )
+    assert _reference_document_size(near_limit.data, near_limit.path) <= terminal_title.FIRESTORE_MAX_DOCUMENT_BYTES
+
+    patch = _dead_letter(near_limit)
+    patch.pop('_zone_calls')
+
+    assert patch == {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'}
+    after = {**near_limit.data, **patch}
+    assert _reference_document_size(after, near_limit.path) <= terminal_title.FIRESTORE_MAX_DOCUMENT_BYTES

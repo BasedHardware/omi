@@ -913,7 +913,8 @@ whose summarizer input is usable (decoded transcript text, or a photo with a
 description) and that has no earlier summary. The title and marker only grow
 the document, so they are added only when its estimated size stays under the
 1 MiB ceiling; a row at the ceiling still commits the status-only terminal. A
-blank `user_title` is no override on any read or processing persist. Clients then offer "Summary failed · Retry", which
+blank `user_title` is no override on read or in the processing persists that
+re-apply it; the user-facing title writes are unchanged. Clients then offer "Summary failed · Retry", which
 calls `/reprocess`. `recovery_structure_unavailable` never sets it, because the
 model ran and a retry gives the same answer. Enrichment and the free-tier
 terminal persist clear the marker with an explicit null.

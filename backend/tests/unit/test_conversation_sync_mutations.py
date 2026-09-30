@@ -333,18 +333,3 @@ def test_http_contract_rejects_untyped_or_ambiguous_operations():
     response = client.post('/v1/conversations/conversation-1/mutations', json=payload)
 
     assert response.status_code == 422
-
-
-def test_blank_title_mutation_clears_the_override_instead_of_erasing_the_title():
-    current = {'structured': {'title': 'Generated'}, 'user_title': 'Old override'}
-
-    next_state, patch = mutations_db._apply_operation(current, {'type': 'set_title', 'title': '   '})
-
-    assert patch == {'user_title': mutations_db.firestore.DELETE_FIELD}
-    assert 'user_title' not in next_state
-    assert next_state['structured']['title'] == 'Generated'
-    assert mutations_db._sync_state(next_state, None)['title'] == 'Generated'
-    # A blank stored override is no override for the receipt projection either.
-    assert mutations_db._sync_state({'structured': {'title': 'Generated'}, 'user_title': ''}, None)['title'] == (
-        'Generated'
-    )

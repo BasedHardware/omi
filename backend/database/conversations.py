@@ -375,8 +375,10 @@ def effective_user_title(user_title: Any) -> Optional[str]:
     """The user's title override, or ``None`` when there is none.
 
     A blank string is no override: applying it would erase the generated (or
-    deterministic) title and render the row "Untitled". Every reader and every
-    processing persist resolves ``user_title`` through this one rule.
+    deterministic) title and render the row "Untitled". Readers and the
+    processing persists that re-apply the override resolve ``user_title``
+    through this one rule, so the stored ``structured.title`` shows. The
+    user-facing title writes (PATCH, ``set_title``) are unchanged.
     """
     return user_title if isinstance(user_title, str) and user_title.strip() else None
 
@@ -1523,11 +1525,7 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     if not doc_snapshot.exists:
         return
 
-    if effective_user_title(title) is None:
-        # Clearing the title removes the override; the generated title returns.
-        conversation_ref.update({'user_title': firestore.DELETE_FIELD})
-    else:
-        conversation_ref.update({'structured.title': title, 'user_title': title})
+    conversation_ref.update({'structured.title': title, 'user_title': title})
     _sync_conversation_search_index(uid, conversation_id)
 
 
