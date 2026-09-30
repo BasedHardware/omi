@@ -394,4 +394,14 @@ void main() {
     expect(provider.people.map((p) => p.id), contains(person.id));
     expect(SharedPreferencesUtil().cachedPeople.map((p) => p.id), contains(person.id));
   });
+
+  testWidgets('Clean Up reacts when a reviewed person becomes pinned', (tester) async {
+    final provider = await _pump(tester);
+    await tester.tap(find.byKey(const Key('people_clean_up_review')));
+    await tester.pumpAndSettle();
+    await provider.setPinned('p-cs', true);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('people_clean_up_row_p-cs')), findsNothing);
+    expect(find.text('Delete 2 People'), findsOneWidget);
+  });
 }

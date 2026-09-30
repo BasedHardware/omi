@@ -260,6 +260,7 @@ class PeopleProvider extends BaseProvider {
   Future<int> deleteSelected() => deletePeople(selectedIds.toList());
 
   Future<int> deletePeople(List<String> personIds, {bool allowPinned = false}) async {
+    allowPinned = allowPinned && personIds.toSet().length == 1;
     personIds = personIds.toSet().where((id) => people.any((p) => p.id == id && (!p.pinned || allowPinned))).toList();
     final results = await Future.wait(personIds.map((id) async {
       try {

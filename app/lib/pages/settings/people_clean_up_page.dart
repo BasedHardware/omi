@@ -21,7 +21,7 @@ class PeopleCleanUpPage extends StatefulWidget {
 }
 
 class _PeopleCleanUpPageState extends State<PeopleCleanUpPage> {
-  late final List<Person> _candidates = context.read<PeopleProvider>().cleanUpCandidates;
+  List<Person> get _candidates => context.read<PeopleProvider>().cleanUpCandidates;
   late final Set<String> _ticked = {for (final p in _candidates) p.id};
 
   void _toggle(Person person) {
@@ -39,8 +39,10 @@ class _PeopleCleanUpPageState extends State<PeopleCleanUpPage> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<PeopleProvider>();
     final l10n = context.l10n;
-    final allTicked = _candidates.isNotEmpty && _ticked.length == _candidates.length;
+    final tickedCount = _candidates.where((p) => _ticked.contains(p.id)).length;
+    final allTicked = _candidates.isNotEmpty && tickedCount == _candidates.length;
     return Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: AppBar(
@@ -65,11 +67,11 @@ class _PeopleCleanUpPageState extends State<PeopleCleanUpPage> {
                 padding: const EdgeInsets.all(OmiSpacing.md),
                 child: OmiButton.destructive(
                   key: const Key('people_clean_up_delete'),
-                  label: _ticked.isEmpty ? l10n.delete : l10n.deletePeopleCountAction(_ticked.length),
+                  label: tickedCount == 0 ? l10n.delete : l10n.deletePeopleCountAction(tickedCount),
                   icon: Icons.delete_outline,
                   expand: true,
                   // Not awaited: the button must not spin behind the confirmation.
-                  onPressed: _ticked.isEmpty
+                  onPressed: tickedCount == 0
                       ? null
                       : () {
                           _delete();
