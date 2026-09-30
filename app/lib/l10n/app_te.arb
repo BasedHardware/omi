@@ -11228,5 +11228,9 @@
     "deviceNameInvalidCharacters": "పేరులో మద్దతు లేని అక్షరాలు ఉన్నాయి",
     "deviceNameTooLong": "పేరు చాలా పొడవుగా ఉంది (గరిష్ఠంగా {maxBytes} అక్షరాలు; ఎమోజీలు మరియు గుణింతాలు ఎక్కువగా లెక్కించబడతాయి)",
     "deviceRenamed": "పరికరం పేరు {name} గా మార్చబడింది",
-    "conversationSummaryFailed": "సారాంశం విఫలమైంది"
+    "conversationSummaryFailed": "సారాంశం విఫలమైంది",
+    "reconnectionsRecent": "తిరిగి కనెక్షన్లు (గత 7 రోజులు)",
+    "diagnosticsCountSincePairing": "జతచేసినప్పటినుండి {count}",
+    "failedConnections": "విఫలమైన కనెక్షన్లు",
+    "failedConnectionsRecent": "విఫలమైన కనెక్షన్లు (గత 7 రోజులు)"
 }

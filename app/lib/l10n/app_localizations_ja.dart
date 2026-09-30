@@ -11467,4 +11467,18 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => '要約に失敗しました';
+
+  @override
+  String get reconnectionsRecent => '再接続（過去7日間）';
+
+  @override
+  String get failedConnections => '接続の失敗';
+
+  @override
+  String get failedConnectionsRecent => '接続の失敗（過去7日間）';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return 'ペアリング以降 $count';
+  }
 }

@@ -11228,5 +11228,9 @@
     "deviceNameInvalidCharacters": "Името содржи неподдржани знаци",
     "deviceNameTooLong": "Името е предолго (до {maxBytes} знаци; емоџи и акценти се бројат повеќе)",
     "deviceRenamed": "Уредот е преименуван во {name}",
-    "conversationSummaryFailed": "Резимето не успеа"
+    "conversationSummaryFailed": "Резимето не успеа",
+    "reconnectionsRecent": "Повторни поврзувања (последните 7 дена)",
+    "diagnosticsCountSincePairing": "{count} од спарувањето",
+    "failedConnections": "Неуспешни поврзувања",
+    "failedConnectionsRecent": "Неуспешни поврзувања (последните 7 дена)"
 }

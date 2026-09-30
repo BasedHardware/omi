@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Enheten har fått navnet {name}",
     "tapToRename": "Trykk for å gi nytt navn",
     "deviceNameCannotBeEmpty": "Enhetsnavnet kan ikke være tomt",
-    "conversationSummaryFailed": "Sammendraget mislyktes"
+    "conversationSummaryFailed": "Sammendraget mislyktes",
+    "reconnectionsRecent": "Gjenforbindelser (siste 7 dager)",
+    "diagnosticsCountSincePairing": "{count} siden kobling",
+    "failedConnections": "Mislykkede tilkoblinger",
+    "failedConnectionsRecent": "Mislykkede tilkoblinger (siste 7 dager)"
 }

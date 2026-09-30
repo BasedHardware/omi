@@ -3703,5 +3703,9 @@
     "deviceRenamed": "Устройство переименовано в {name}",
     "tapToRename": "Нажмите, чтобы переименовать",
     "deviceNameCannotBeEmpty": "Имя устройства не может быть пустым",
-    "conversationSummaryFailed": "Не удалось создать сводку"
+    "conversationSummaryFailed": "Не удалось создать сводку",
+    "reconnectionsRecent": "Повторные подключения (последние 7 дней)",
+    "diagnosticsCountSincePairing": "{count} с момента сопряжения",
+    "failedConnections": "Неудачные подключения",
+    "failedConnectionsRecent": "Неудачные подключения (последние 7 дней)"
 }

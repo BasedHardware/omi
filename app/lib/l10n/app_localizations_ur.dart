@@ -11671,4 +11671,18 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'خلاصہ ناکام ہو گیا';
+
+  @override
+  String get reconnectionsRecent => 'دوبارہ کنکشن (پچھلے 7 دن)';
+
+  @override
+  String get failedConnections => 'ناکام کنکشن';
+
+  @override
+  String get failedConnectionsRecent => 'ناکام کنکشن (پچھلے 7 دن)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return 'جوڑنے کے بعد سے $count';
+  }
 }

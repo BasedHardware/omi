@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Peranti dinamakan semula kepada {name}",
     "tapToRename": "Ketik untuk menamakan semula",
     "deviceNameCannotBeEmpty": "Nama peranti tidak boleh kosong",
-    "conversationSummaryFailed": "Ringkasan gagal"
+    "conversationSummaryFailed": "Ringkasan gagal",
+    "reconnectionsRecent": "Sambungan semula (7 hari lepas)",
+    "diagnosticsCountSincePairing": "{count} sejak pemasangan",
+    "failedConnections": "Sambungan gagal",
+    "failedConnectionsRecent": "Sambungan gagal (7 hari lepas)"
 }

@@ -3668,5 +3668,9 @@
     "deviceRenamed": "デバイス名を{name}に変更しました",
     "tapToRename": "タップして名前を変更",
     "deviceNameCannotBeEmpty": "デバイス名を空にすることはできません",
-    "conversationSummaryFailed": "要約に失敗しました"
+    "conversationSummaryFailed": "要約に失敗しました",
+    "reconnectionsRecent": "再接続（過去7日間）",
+    "diagnosticsCountSincePairing": "ペアリング以降 {count}",
+    "failedConnections": "接続の失敗",
+    "failedConnectionsRecent": "接続の失敗（過去7日間）"
 }

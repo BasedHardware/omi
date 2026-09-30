@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Enheten har fått namnet {name}",
     "tapToRename": "Tryck för att byta namn",
     "deviceNameCannotBeEmpty": "Enhetsnamnet får inte vara tomt",
-    "conversationSummaryFailed": "Sammanfattningen misslyckades"
+    "conversationSummaryFailed": "Sammanfattningen misslyckades",
+    "reconnectionsRecent": "Återanslutningar (senaste 7 dagarna)",
+    "diagnosticsCountSincePairing": "{count} sedan kopplingen",
+    "failedConnections": "Misslyckade anslutningar",
+    "failedConnectionsRecent": "Misslyckade anslutningar (senaste 7 dagarna)"
 }

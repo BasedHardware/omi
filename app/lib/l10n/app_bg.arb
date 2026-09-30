@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Устройството е преименувано на {name}",
     "tapToRename": "Докоснете за преименуване",
     "deviceNameCannotBeEmpty": "Името на устройството не може да е празно",
-    "conversationSummaryFailed": "Резюмето не бе създадено"
+    "conversationSummaryFailed": "Резюмето не бе създадено",
+    "reconnectionsRecent": "Повторни свързвания (последните 7 дни)",
+    "diagnosticsCountSincePairing": "{count} от сдвояването",
+    "failedConnections": "Неуспешни връзки",
+    "failedConnectionsRecent": "Неуспешни връзки (последните 7 дни)"
 }

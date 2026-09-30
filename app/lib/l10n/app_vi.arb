@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Đã đổi tên thiết bị thành {name}",
     "tapToRename": "Chạm để đổi tên",
     "deviceNameCannotBeEmpty": "Tên thiết bị không được để trống",
-    "conversationSummaryFailed": "Tạo tóm tắt thất bại"
+    "conversationSummaryFailed": "Tạo tóm tắt thất bại",
+    "reconnectionsRecent": "Kết nối lại (7 ngày qua)",
+    "diagnosticsCountSincePairing": "{count} kể từ khi ghép đôi",
+    "failedConnections": "Kết nối thất bại",
+    "failedConnectionsRecent": "Kết nối thất bại (7 ngày qua)"
 }

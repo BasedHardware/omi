@@ -3703,5 +3703,9 @@
     "deviceRenamed": "Zmieniono nazwę urządzenia na {name}",
     "tapToRename": "Dotknij, aby zmienić nazwę",
     "deviceNameCannotBeEmpty": "Nazwa urządzenia nie może być pusta",
-    "conversationSummaryFailed": "Nie udało się utworzyć podsumowania"
+    "conversationSummaryFailed": "Nie udało się utworzyć podsumowania",
+    "reconnectionsRecent": "Ponowne połączenia (ostatnie 7 dni)",
+    "diagnosticsCountSincePairing": "{count} od sparowania",
+    "failedConnections": "Nieudane połączenia",
+    "failedConnectionsRecent": "Nieudane połączenia (ostatnie 7 dni)"
 }

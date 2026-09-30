@@ -11669,4 +11669,18 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'सारांश अयशस्वी झाला';
+
+  @override
+  String get reconnectionsRecent => 'पुन्हा कनेक्शन (गेल्या 7 दिवसांत)';
+
+  @override
+  String get failedConnections => 'अयशस्वी कनेक्शन';
+
+  @override
+  String get failedConnectionsRecent => 'अयशस्वी कनेक्शन (गेल्या 7 दिवसांत)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return 'जोडणीनंतर $count';
+  }
 }

@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Пристрій перейменовано на {name}",
     "tapToRename": "Торкніться, щоб перейменувати",
     "deviceNameCannotBeEmpty": "Ім'я пристрою не може бути порожнім",
-    "conversationSummaryFailed": "Не вдалося створити підсумок"
+    "conversationSummaryFailed": "Не вдалося створити підсумок",
+    "reconnectionsRecent": "Повторні підключення (останні 7 днів)",
+    "diagnosticsCountSincePairing": "{count} з моменту спарування",
+    "failedConnections": "Невдалі підключення",
+    "failedConnectionsRecent": "Невдалі підключення (останні 7 днів)"
 }

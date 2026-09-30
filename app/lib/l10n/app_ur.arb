@@ -11228,5 +11228,9 @@
     "deviceNameInvalidCharacters": "نام میں غیر معاون حروف شامل ہیں",
     "deviceNameTooLong": "نام بہت لمبا ہے (زیادہ سے زیادہ {maxBytes} حروف؛ ایموجی اور اعراب زیادہ شمار ہوتے ہیں)",
     "deviceRenamed": "ڈیوائس کا نام بدل کر {name} کر دیا گیا",
-    "conversationSummaryFailed": "خلاصہ ناکام ہو گیا"
+    "conversationSummaryFailed": "خلاصہ ناکام ہو گیا",
+    "reconnectionsRecent": "دوبارہ کنکشن (پچھلے 7 دن)",
+    "diagnosticsCountSincePairing": "جوڑنے کے بعد سے {count}",
+    "failedConnections": "ناکام کنکشن",
+    "failedConnectionsRecent": "ناکام کنکشن (پچھلے 7 دن)"
 }

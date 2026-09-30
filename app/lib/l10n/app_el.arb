@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Η συσκευή μετονομάστηκε σε {name}",
     "tapToRename": "Πατήστε για μετονομασία",
     "deviceNameCannotBeEmpty": "Το όνομα της συσκευής δεν μπορεί να είναι κενό",
-    "conversationSummaryFailed": "Η σύνοψη απέτυχε"
+    "conversationSummaryFailed": "Η σύνοψη απέτυχε",
+    "reconnectionsRecent": "Επανασυνδέσεις (τελευταίες 7 ημέρες)",
+    "diagnosticsCountSincePairing": "{count} από τη σύζευξη",
+    "failedConnections": "Αποτυχημένες συνδέσεις",
+    "failedConnectionsRecent": "Αποτυχημένες συνδέσεις (τελευταίες 7 ημέρες)"
 }

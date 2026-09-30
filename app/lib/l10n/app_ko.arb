@@ -3668,5 +3668,9 @@
     "deviceRenamed": "기기 이름 변경: {name}",
     "tapToRename": "탭하여 이름 변경",
     "deviceNameCannotBeEmpty": "기기 이름은 비워둘 수 없습니다",
-    "conversationSummaryFailed": "요약 실패"
+    "conversationSummaryFailed": "요약 실패",
+    "reconnectionsRecent": "재연결 (최근 7일)",
+    "diagnosticsCountSincePairing": "페어링 이후 {count}",
+    "failedConnections": "실패한 연결",
+    "failedConnectionsRecent": "실패한 연결 (최근 7일)"
 }

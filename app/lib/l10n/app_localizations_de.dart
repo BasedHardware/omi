@@ -11755,4 +11755,18 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Zusammenfassung fehlgeschlagen';
+
+  @override
+  String get reconnectionsRecent => 'Wiederverbindungen (letzte 7 Tage)';
+
+  @override
+  String get failedConnections => 'Fehlgeschlagene Verbindungen';
+
+  @override
+  String get failedConnectionsRecent => 'Fehlgeschlagene Verbindungen (letzte 7 Tage)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count seit Kopplung';
+  }
 }

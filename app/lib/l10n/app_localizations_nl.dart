@@ -11697,4 +11697,18 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Samenvatting mislukt';
+
+  @override
+  String get reconnectionsRecent => 'Herverbindingen (laatste 7 dagen)';
+
+  @override
+  String get failedConnections => 'Mislukte verbindingen';
+
+  @override
+  String get failedConnectionsRecent => 'Mislukte verbindingen (laatste 7 dagen)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count sinds koppeling';
+  }
 }

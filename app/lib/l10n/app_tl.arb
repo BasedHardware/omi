@@ -11228,5 +11228,9 @@
     "deviceNameInvalidCharacters": "May hindi sinusuportahang character ang pangalan",
     "deviceNameTooLong": "Masyadong mahaba ang pangalan (hanggang {maxBytes} character; mas malaki ang bilang ng emoji at accent)",
     "deviceRenamed": "Pinalitan ang pangalan ng device sa {name}",
-    "conversationSummaryFailed": "Nabigo ang buod"
+    "conversationSummaryFailed": "Nabigo ang buod",
+    "reconnectionsRecent": "Muling pagkonekta (nakaraang 7 araw)",
+    "diagnosticsCountSincePairing": "{count} mula nang ipares",
+    "failedConnections": "Mga bigong koneksyon",
+    "failedConnectionsRecent": "Mga bigong koneksyon (nakaraang 7 araw)"
 }

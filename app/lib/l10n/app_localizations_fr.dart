@@ -11759,4 +11759,18 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Échec du résumé';
+
+  @override
+  String get reconnectionsRecent => 'Reconnexions (7 derniers jours)';
+
+  @override
+  String get failedConnections => 'Échecs de connexion';
+
+  @override
+  String get failedConnectionsRecent => 'Échecs de connexion (7 derniers jours)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count depuis l\'appairage';
+  }
 }

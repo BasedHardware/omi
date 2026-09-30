@@ -11739,4 +11739,18 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'சுருக்கம் தோல்வியடைந்தது';
+
+  @override
+  String get reconnectionsRecent => 'மீண்டும் இணைப்புகள் (கடந்த 7 நாட்கள்)';
+
+  @override
+  String get failedConnections => 'தோல்வியுற்ற இணைப்புகள்';
+
+  @override
+  String get failedConnectionsRecent => 'தோல்வியுற்ற இணைப்புகள் (கடந்த 7 நாட்கள்)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return 'இணைத்ததிலிருந்து $count';
+  }
 }

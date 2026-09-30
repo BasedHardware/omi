@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Seade nimetati ümber: {name}",
     "tapToRename": "Puuduta ümbernimetamiseks",
     "deviceNameCannotBeEmpty": "Seadme nimi ei saa olla tühi",
-    "conversationSummaryFailed": "Kokkuvõtte loomine ebaõnnestus"
+    "conversationSummaryFailed": "Kokkuvõtte loomine ebaõnnestus",
+    "reconnectionsRecent": "Taasühendused (viimased 7 päeva)",
+    "diagnosticsCountSincePairing": "{count} pärast sidumist",
+    "failedConnections": "Ebaõnnestunud ühendused",
+    "failedConnectionsRecent": "Ebaõnnestunud ühendused (viimased 7 päeva)"
 }

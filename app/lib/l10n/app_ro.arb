@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Dispozitivul a fost redenumit în {name}",
     "tapToRename": "Atinge pentru a redenumi",
     "deviceNameCannotBeEmpty": "Numele dispozitivului nu poate fi gol",
-    "conversationSummaryFailed": "Rezumatul a eșuat"
+    "conversationSummaryFailed": "Rezumatul a eșuat",
+    "reconnectionsRecent": "Reconectări (ultimele 7 zile)",
+    "diagnosticsCountSincePairing": "{count} de la asociere",
+    "failedConnections": "Conexiuni eșuate",
+    "failedConnectionsRecent": "Conexiuni eșuate (ultimele 7 zile)"
 }

@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Įrenginys pervadintas į {name}",
     "tapToRename": "Palieskite, kad pervadintumėte",
     "deviceNameCannotBeEmpty": "Įrenginio pavadinimas negali būti tuščias",
-    "conversationSummaryFailed": "Santrauka nepavyko"
+    "conversationSummaryFailed": "Santrauka nepavyko",
+    "reconnectionsRecent": "Persijungimai iš naujo (paskutinės 7 dienos)",
+    "diagnosticsCountSincePairing": "{count} nuo susiejimo",
+    "failedConnections": "Nepavykę ryšiai",
+    "failedConnectionsRecent": "Nepavykę ryšiai (paskutinės 7 dienos)"
 }

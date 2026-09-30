@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Dispositivo renombrado a {name}",
     "tapToRename": "Toca para renombrar",
     "deviceNameCannotBeEmpty": "El nombre del dispositivo no puede estar vacío",
-    "conversationSummaryFailed": "No se pudo crear el resumen"
+    "conversationSummaryFailed": "No se pudo crear el resumen",
+    "reconnectionsRecent": "Reconexiones (últimos 7 días)",
+    "diagnosticsCountSincePairing": "{count} desde el emparejamiento",
+    "failedConnections": "Conexiones fallidas",
+    "failedConnectionsRecent": "Conexiones fallidas (últimos 7 días)"
 }

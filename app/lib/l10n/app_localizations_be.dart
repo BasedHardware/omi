@@ -11691,4 +11691,18 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Не ўдалося стварыць зводку';
+
+  @override
+  String get reconnectionsRecent => 'Перазлучэнні (апошнія 7 дзён)';
+
+  @override
+  String get failedConnections => 'Няўдалыя злучэнні';
+
+  @override
+  String get failedConnectionsRecent => 'Няўдалыя злучэнні (апошнія 7 дзён)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count з моманту спарвання';
+  }
 }

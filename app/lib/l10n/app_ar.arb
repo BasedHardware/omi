@@ -3668,5 +3668,9 @@
     "deviceRenamed": "تمت إعادة تسمية الجهاز إلى {name}",
     "tapToRename": "انقر لإعادة التسمية",
     "deviceNameCannotBeEmpty": "لا يمكن أن يكون اسم الجهاز فارغًا",
-    "conversationSummaryFailed": "فشل إنشاء الملخص"
+    "conversationSummaryFailed": "فشل إنشاء الملخص",
+    "reconnectionsRecent": "إعادة الاتصال (آخر 7 أيام)",
+    "diagnosticsCountSincePairing": "{count} منذ الاقتران",
+    "failedConnections": "اتصالات فاشلة",
+    "failedConnectionsRecent": "اتصالات فاشلة (آخر 7 أيام)"
 }

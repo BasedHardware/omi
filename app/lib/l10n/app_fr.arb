@@ -3703,5 +3703,9 @@
     "deviceRenamed": "Appareil renommé en {name}",
     "tapToRename": "Touchez pour renommer",
     "deviceNameCannotBeEmpty": "Le nom de l'appareil ne peut pas être vide",
-    "conversationSummaryFailed": "Échec du résumé"
+    "conversationSummaryFailed": "Échec du résumé",
+    "reconnectionsRecent": "Reconnexions (7 derniers jours)",
+    "diagnosticsCountSincePairing": "{count} depuis l'appairage",
+    "failedConnections": "Échecs de connexion",
+    "failedConnectionsRecent": "Échecs de connexion (7 derniers jours)"
 }

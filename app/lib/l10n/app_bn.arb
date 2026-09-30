@@ -11228,5 +11228,9 @@
     "deviceNameInvalidCharacters": "নামে অসমর্থিত অক্ষর রয়েছে",
     "deviceNameTooLong": "নামটি খুব দীর্ঘ (সর্বোচ্চ {maxBytes} অক্ষর; ইমোজি ও স্বরচিহ্ন অতিরিক্ত গণনা হয়)",
     "deviceRenamed": "ডিভাইসের নাম পরিবর্তন করে {name} রাখা হয়েছে",
-    "conversationSummaryFailed": "সারাংশ তৈরি করা যায়নি"
+    "conversationSummaryFailed": "সারাংশ তৈরি করা যায়নি",
+    "reconnectionsRecent": "পুনরায় সংযোগ (শেষ ৭ দিন)",
+    "diagnosticsCountSincePairing": "জোড়া হওয়ার পর থেকে {count}",
+    "failedConnections": "ব্যর্থ সংযোগ",
+    "failedConnectionsRecent": "ব্যর্থ সংযোগ (শেষ ৭ দিন)"
 }

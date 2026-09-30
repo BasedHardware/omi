@@ -3764,5 +3764,9 @@
     "deviceRenamed": "Az eszköz új neve: {name}",
     "tapToRename": "Koppints az átnevezéshez",
     "deviceNameCannotBeEmpty": "Az eszköz neve nem lehet üres",
-    "conversationSummaryFailed": "Az összefoglaló nem sikerült"
+    "conversationSummaryFailed": "Az összefoglaló nem sikerült",
+    "reconnectionsRecent": "Újracsatlakozások (elmúlt 7 nap)",
+    "diagnosticsCountSincePairing": "{count} a párosítás óta",
+    "failedConnections": "Sikertelen kapcsolatok",
+    "failedConnectionsRecent": "Sikertelen kapcsolatok (elmúlt 7 nap)"
 }

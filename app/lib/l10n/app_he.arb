@@ -11228,5 +11228,9 @@
     "deviceNameInvalidCharacters": "השם מכיל תווים שאינם נתמכים",
     "deviceNameTooLong": "השם ארוך מדי (עד {maxBytes} תווים; אמוג'י וניקוד נספרים יותר)",
     "deviceRenamed": "שם המכשיר שונה ל-{name}",
-    "conversationSummaryFailed": "יצירת הסיכום נכשלה"
+    "conversationSummaryFailed": "יצירת הסיכום נכשלה",
+    "reconnectionsRecent": "חיבורים מחדש (7 הימים האחרונים)",
+    "diagnosticsCountSincePairing": "{count} מאז ההתאמה",
+    "failedConnections": "חיבורים שנכשלו",
+    "failedConnectionsRecent": "חיבורים שנכשלו (7 הימים האחרונים)"
 }

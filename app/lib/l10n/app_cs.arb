@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Zařízení přejmenováno na {name}",
     "tapToRename": "Klepnutím přejmenujete",
     "deviceNameCannotBeEmpty": "Název zařízení nemůže být prázdný",
-    "conversationSummaryFailed": "Shrnutí se nepodařilo"
+    "conversationSummaryFailed": "Shrnutí se nepodařilo",
+    "reconnectionsRecent": "Opětovná připojení (posledních 7 dní)",
+    "diagnosticsCountSincePairing": "{count} od spárování",
+    "failedConnections": "Neúspěšná připojení",
+    "failedConnectionsRecent": "Neúspěšná připojení (posledních 7 dní)"
 }

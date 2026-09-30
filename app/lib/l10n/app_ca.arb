@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Dispositiu reanomenat a {name}",
     "tapToRename": "Toca per canviar el nom",
     "deviceNameCannotBeEmpty": "El nom del dispositiu no pot estar buit",
-    "conversationSummaryFailed": "No s'ha pogut crear el resum"
+    "conversationSummaryFailed": "No s'ha pogut crear el resum",
+    "reconnectionsRecent": "Reconnexions (últims 7 dies)",
+    "diagnosticsCountSincePairing": "{count} des de l'aparellament",
+    "failedConnections": "Connexions fallides",
+    "failedConnectionsRecent": "Connexions fallides (últims 7 dies)"
 }

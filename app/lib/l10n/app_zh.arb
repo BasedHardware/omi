@@ -3668,5 +3668,9 @@
     "deviceRenamed": "设备已重命名为 {name}",
     "tapToRename": "点按以重命名",
     "deviceNameCannotBeEmpty": "设备名称不能为空",
-    "conversationSummaryFailed": "摘要生成失败"
+    "conversationSummaryFailed": "摘要生成失败",
+    "reconnectionsRecent": "重新连接（过去 7 天）",
+    "diagnosticsCountSincePairing": "配对以来 {count}",
+    "failedConnections": "连接失败",
+    "failedConnectionsRecent": "连接失败（过去 7 天）"
 }

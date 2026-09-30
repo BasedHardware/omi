@@ -11228,5 +11228,9 @@
     "deviceNameInvalidCharacters": "ಹೆಸರಿನಲ್ಲಿ ಬೆಂಬಲವಿಲ್ಲದ ಅಕ್ಷರಗಳಿವೆ",
     "deviceNameTooLong": "ಹೆಸರು ತುಂಬಾ ಉದ್ದವಾಗಿದೆ (ಗರಿಷ್ಠ {maxBytes} ಅಕ್ಷರಗಳು; ಎಮೋಜಿ ಮತ್ತು ಒತ್ತಕ್ಷರಗಳು ಹೆಚ್ಚು ಎಣಿಸಲ್ಪಡುತ್ತವೆ)",
     "deviceRenamed": "ಸಾಧನದ ಹೆಸರನ್ನು {name} ಎಂದು ಬದಲಿಸಲಾಗಿದೆ",
-    "conversationSummaryFailed": "ಸಾರಾಂಶ ವಿಫಲವಾಗಿದೆ"
+    "conversationSummaryFailed": "ಸಾರಾಂಶ ವಿಫಲವಾಗಿದೆ",
+    "reconnectionsRecent": "ಮರುಸಂಪರ್ಕಗಳು (ಕಳೆದ 7 ದಿನಗಳು)",
+    "diagnosticsCountSincePairing": "ಜೋಡಿಯಾದಾಗಿನಿಂದ {count}",
+    "failedConnections": "ವಿಫಲ ಸಂಪರ್ಕಗಳು",
+    "failedConnectionsRecent": "ವಿಫಲ ಸಂಪರ್ಕಗಳು (ಕಳೆದ 7 ದಿನಗಳು)"
 }

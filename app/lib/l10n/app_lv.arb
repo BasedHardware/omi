@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Ierīce pārdēvēta uz {name}",
     "tapToRename": "Pieskarieties, lai pārdēvētu",
     "deviceNameCannotBeEmpty": "Ierīces nosaukums nevar būt tukšs",
-    "conversationSummaryFailed": "Kopsavilkums neizdevās"
+    "conversationSummaryFailed": "Kopsavilkums neizdevās",
+    "reconnectionsRecent": "Atkārtoti savienojumi (pēdējās 7 dienas)",
+    "diagnosticsCountSincePairing": "{count} kopš savienošanas pārī",
+    "failedConnections": "Neveiksmīgi savienojumi",
+    "failedConnectionsRecent": "Neveiksmīgi savienojumi (pēdējās 7 dienas)"
 }

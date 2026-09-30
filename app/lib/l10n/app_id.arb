@@ -3703,5 +3703,9 @@
     "deviceRenamed": "Nama perangkat diubah menjadi {name}",
     "tapToRename": "Ketuk untuk mengubah nama",
     "deviceNameCannotBeEmpty": "Nama perangkat tidak boleh kosong",
-    "conversationSummaryFailed": "Ringkasan gagal"
+    "conversationSummaryFailed": "Ringkasan gagal",
+    "reconnectionsRecent": "Sambungan ulang (7 hari terakhir)",
+    "diagnosticsCountSincePairing": "{count} sejak penyambungan",
+    "failedConnections": "Koneksi gagal",
+    "failedConnectionsRecent": "Koneksi gagal (7 hari terakhir)"
 }

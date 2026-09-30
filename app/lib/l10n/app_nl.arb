@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Apparaat hernoemd naar {name}",
     "tapToRename": "Tik om te hernoemen",
     "deviceNameCannotBeEmpty": "De apparaatnaam mag niet leeg zijn",
-    "conversationSummaryFailed": "Samenvatting mislukt"
+    "conversationSummaryFailed": "Samenvatting mislukt",
+    "reconnectionsRecent": "Herverbindingen (laatste 7 dagen)",
+    "diagnosticsCountSincePairing": "{count} sinds koppeling",
+    "failedConnections": "Mislukte verbindingen",
+    "failedConnectionsRecent": "Mislukte verbindingen (laatste 7 dagen)"
 }

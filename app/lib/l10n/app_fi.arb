@@ -3668,5 +3668,9 @@
     "deviceRenamed": "Laite nimettiin uudelleen: {name}",
     "tapToRename": "Napauta nimetäksesi uudelleen",
     "deviceNameCannotBeEmpty": "Laitteen nimi ei voi olla tyhjä",
-    "conversationSummaryFailed": "Yhteenveto epäonnistui"
+    "conversationSummaryFailed": "Yhteenveto epäonnistui",
+    "reconnectionsRecent": "Uudelleenyhdistykset (viimeiset 7 päivää)",
+    "diagnosticsCountSincePairing": "{count} parituksen jälkeen",
+    "failedConnections": "Epäonnistuneet yhteydet",
+    "failedConnectionsRecent": "Epäonnistuneet yhteydet (viimeiset 7 päivää)"
 }

@@ -3703,5 +3703,9 @@
     "deviceRenamed": "Cihaz adı {name} olarak değiştirildi",
     "tapToRename": "Yeniden adlandırmak için dokunun",
     "deviceNameCannotBeEmpty": "Cihaz adı boş olamaz",
-    "conversationSummaryFailed": "Özet oluşturulamadı"
+    "conversationSummaryFailed": "Özet oluşturulamadı",
+    "reconnectionsRecent": "Yeniden bağlantılar (son 7 gün)",
+    "diagnosticsCountSincePairing": "{count} eşleştirmeden beri",
+    "failedConnections": "Başarısız bağlantılar",
+    "failedConnectionsRecent": "Başarısız bağlantılar (son 7 gün)"
 }

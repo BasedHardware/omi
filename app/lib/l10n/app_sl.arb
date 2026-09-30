@@ -11228,5 +11228,9 @@
     "deviceNameInvalidCharacters": "Ime vsebuje nepodprte znake",
     "deviceNameTooLong": "Ime je predolgo (do {maxBytes} znakov; emojiji in šumniki štejejo več)",
     "deviceRenamed": "Naprava je preimenovana v {name}",
-    "conversationSummaryFailed": "Povzetek ni uspel"
+    "conversationSummaryFailed": "Povzetek ni uspel",
+    "reconnectionsRecent": "Ponovne povezave (zadnjih 7 dni)",
+    "diagnosticsCountSincePairing": "{count} od seznanitve",
+    "failedConnections": "Neuspešne povezave",
+    "failedConnectionsRecent": "Neuspešne povezave (zadnjih 7 dni)"
 }

@@ -11659,4 +11659,18 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Shrnutí se nepodařilo';
+
+  @override
+  String get reconnectionsRecent => 'Opětovná připojení (posledních 7 dní)';
+
+  @override
+  String get failedConnections => 'Neúspěšná připojení';
+
+  @override
+  String get failedConnectionsRecent => 'Neúspěšná připojení (posledních 7 dní)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count od spárování';
+  }
 }

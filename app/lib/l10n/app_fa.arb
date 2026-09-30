@@ -11228,5 +11228,9 @@
     "deviceNameInvalidCharacters": "نام شامل نویسه‌های پشتیبانی‌نشده است",
     "deviceNameTooLong": "نام خیلی طولانی است (حداکثر {maxBytes} نویسه؛ ایموجی و اعراب بیشتر حساب می‌شوند)",
     "deviceRenamed": "نام دستگاه به {name} تغییر یافت",
-    "conversationSummaryFailed": "خلاصه ایجاد نشد"
+    "conversationSummaryFailed": "خلاصه ایجاد نشد",
+    "reconnectionsRecent": "اتصال مجدد (7 روز گذشته)",
+    "diagnosticsCountSincePairing": "{count} از زمان جفت‌سازی",
+    "failedConnections": "اتصالات ناموفق",
+    "failedConnectionsRecent": "اتصالات ناموفق (7 روز گذشته)"
 }

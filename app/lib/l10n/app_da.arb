@@ -3710,5 +3710,9 @@
     "deviceRenamed": "Enheden er omdøbt til {name}",
     "tapToRename": "Tryk for at omdøbe",
     "deviceNameCannotBeEmpty": "Enhedsnavnet må ikke være tomt",
-    "conversationSummaryFailed": "Resuméet mislykkedes"
+    "conversationSummaryFailed": "Resuméet mislykkedes",
+    "reconnectionsRecent": "Genforbindelser (seneste 7 dage)",
+    "diagnosticsCountSincePairing": "{count} siden parring",
+    "failedConnections": "Mislykkede forbindelser",
+    "failedConnectionsRecent": "Mislykkede forbindelser (seneste 7 dage)"
 }

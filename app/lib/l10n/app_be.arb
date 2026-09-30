@@ -11228,5 +11228,9 @@
     "deviceNameInvalidCharacters": "Імя змяшчае непадтрымоўваныя сімвалы",
     "deviceNameTooLong": "Імя занадта доўгае (да {maxBytes} сімвалаў; эмодзі і дыякрытыка лічацца за больш)",
     "deviceRenamed": "Прылада перайменавана ў {name}",
-    "conversationSummaryFailed": "Не ўдалося стварыць зводку"
+    "conversationSummaryFailed": "Не ўдалося стварыць зводку",
+    "reconnectionsRecent": "Перазлучэнні (апошнія 7 дзён)",
+    "diagnosticsCountSincePairing": "{count} з моманту спарвання",
+    "failedConnections": "Няўдалыя злучэнні",
+    "failedConnectionsRecent": "Няўдалыя злучэнні (апошнія 7 дзён)"
 }
