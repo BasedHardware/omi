@@ -3660,5 +3660,9 @@
     "meetingScreenshotFallbackCaption": "本次会议的屏幕截图",
     "deleteMeetingScreenshotTitle": "删除屏幕截图？",
     "deleteMeetingScreenshotMessage": "这会从本次会议的笔记中移除该屏幕截图。此操作无法撤销。",
-    "conversationSummaryFailed": "摘要生成失败"
+    "conversationSummaryFailed": "摘要生成失败",
+    "reconnectionsRecent": "重新连接（过去 7 天）",
+    "failedConnections": "连接失败",
+    "failedConnectionsRecent": "连接失败（过去 7 天）",
+    "diagnosticsCountSincePairing": "配对以来 {count}"
 }

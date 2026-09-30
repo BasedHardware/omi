@@ -11732,4 +11732,18 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Nabigo ang buod';
+
+  @override
+  String get reconnectionsRecent => 'Muling pagkonekta (nakaraang 7 araw)';
+
+  @override
+  String get failedConnections => 'Mga bigong koneksyon';
+
+  @override
+  String get failedConnectionsRecent => 'Mga bigong koneksyon (nakaraang 7 araw)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count mula nang ipares';
+  }
 }

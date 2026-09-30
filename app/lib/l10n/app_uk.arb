@@ -3660,5 +3660,9 @@
     "meetingScreenshotFallbackCaption": "Знімок екрана з цієї зустрічі",
     "deleteMeetingScreenshotTitle": "Видалити знімок екрана?",
     "deleteMeetingScreenshotMessage": "Знімок екрана буде видалено з нотатки цієї зустрічі. Цю дію не можна скасувати.",
-    "conversationSummaryFailed": "Не вдалося створити підсумок"
+    "conversationSummaryFailed": "Не вдалося створити підсумок",
+    "reconnectionsRecent": "Повторні підключення (останні 7 днів)",
+    "failedConnections": "Невдалі підключення",
+    "failedConnectionsRecent": "Невдалі підключення (останні 7 днів)",
+    "diagnosticsCountSincePairing": "{count} з моменту спарування"
 }

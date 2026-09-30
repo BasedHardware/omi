@@ -11220,5 +11220,9 @@
     "meetingScreenshotFallbackCaption": "Слика од екранот од овој состанок",
     "deleteMeetingScreenshotTitle": "Да се избрише сликата од екранот?",
     "deleteMeetingScreenshotMessage": "Ова ја отстранува сликата од екранот од белешката на овој состанок. Не може да се врати.",
-    "conversationSummaryFailed": "Резимето не успеа"
+    "conversationSummaryFailed": "Резимето не успеа",
+    "reconnectionsRecent": "Повторни поврзувања (последните 7 дена)",
+    "failedConnections": "Неуспешни поврзувања",
+    "failedConnectionsRecent": "Неуспешни поврзувања (последните 7 дена)",
+    "diagnosticsCountSincePairing": "{count} од спарувањето"
 }

@@ -11539,4 +11539,18 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'יצירת הסיכום נכשלה';
+
+  @override
+  String get reconnectionsRecent => 'חיבורים מחדש (7 הימים האחרונים)';
+
+  @override
+  String get failedConnections => 'חיבורים שנכשלו';
+
+  @override
+  String get failedConnectionsRecent => 'חיבורים שנכשלו (7 הימים האחרונים)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count מאז ההתאמה';
+  }
 }

@@ -3660,5 +3660,9 @@
     "meetingScreenshotFallbackCaption": "Šio susitikimo ekrano kopija",
     "deleteMeetingScreenshotTitle": "Ištrinti ekrano kopiją?",
     "deleteMeetingScreenshotMessage": "Ekrano kopija bus pašalinta iš šio susitikimo užrašo. Šio veiksmo anuliuoti negalima.",
-    "conversationSummaryFailed": "Santrauka nepavyko"
+    "conversationSummaryFailed": "Santrauka nepavyko",
+    "reconnectionsRecent": "Persijungimai iš naujo (paskutinės 7 dienos)",
+    "failedConnections": "Nepavykę ryšiai",
+    "failedConnectionsRecent": "Nepavykę ryšiai (paskutinės 7 dienos)",
+    "diagnosticsCountSincePairing": "{count} nuo susiejimo"
 }

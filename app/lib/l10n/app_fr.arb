@@ -3695,5 +3695,9 @@
     "meetingScreenshotFallbackCaption": "Capture d'écran de cette réunion",
     "deleteMeetingScreenshotTitle": "Supprimer la capture d'écran ?",
     "deleteMeetingScreenshotMessage": "La capture d'écran sera retirée de la note de cette réunion. Cette action est irréversible.",
-    "conversationSummaryFailed": "Échec du résumé"
+    "conversationSummaryFailed": "Échec du résumé",
+    "reconnectionsRecent": "Reconnexions (7 derniers jours)",
+    "failedConnections": "Échecs de connexion",
+    "failedConnectionsRecent": "Échecs de connexion (7 derniers jours)",
+    "diagnosticsCountSincePairing": "{count} depuis l'appairage"
 }

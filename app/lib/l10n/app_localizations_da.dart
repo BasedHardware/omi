@@ -11616,4 +11616,18 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Resuméet mislykkedes';
+
+  @override
+  String get reconnectionsRecent => 'Genforbindelser (seneste 7 dage)';
+
+  @override
+  String get failedConnections => 'Mislykkede forbindelser';
+
+  @override
+  String get failedConnectionsRecent => 'Mislykkede forbindelser (seneste 7 dage)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count siden parring';
+  }
 }

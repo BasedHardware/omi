@@ -3660,5 +3660,9 @@
     "meetingScreenshotFallbackCaption": "Kuvakaappaus tästä kokouksesta",
     "deleteMeetingScreenshotTitle": "Poistetaanko kuvakaappaus?",
     "deleteMeetingScreenshotMessage": "Kuvakaappaus poistetaan tämän kokouksen muistiinpanosta. Toimintoa ei voi kumota.",
-    "conversationSummaryFailed": "Yhteenveto epäonnistui"
+    "conversationSummaryFailed": "Yhteenveto epäonnistui",
+    "reconnectionsRecent": "Uudelleenyhdistykset (viimeiset 7 päivää)",
+    "failedConnections": "Epäonnistuneet yhteydet",
+    "failedConnectionsRecent": "Epäonnistuneet yhteydet (viimeiset 7 päivää)",
+    "diagnosticsCountSincePairing": "{count} parituksen jälkeen"
 }

@@ -3660,5 +3660,9 @@
     "meetingScreenshotFallbackCaption": "لقطة شاشة من هذا الاجتماع",
     "deleteMeetingScreenshotTitle": "حذف لقطة الشاشة؟",
     "deleteMeetingScreenshotMessage": "سيؤدي هذا إلى إزالة لقطة الشاشة من ملاحظة هذا الاجتماع. لا يمكن التراجع عن ذلك.",
-    "conversationSummaryFailed": "فشل إنشاء الملخص"
+    "conversationSummaryFailed": "فشل إنشاء الملخص",
+    "reconnectionsRecent": "إعادة الاتصال (آخر 7 أيام)",
+    "failedConnections": "اتصالات فاشلة",
+    "failedConnectionsRecent": "اتصالات فاشلة (آخر 7 أيام)",
+    "diagnosticsCountSincePairing": "{count} منذ الاقتران"
 }

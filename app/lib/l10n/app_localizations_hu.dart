@@ -11675,4 +11675,18 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Az összefoglaló nem sikerült';
+
+  @override
+  String get reconnectionsRecent => 'Újracsatlakozások (elmúlt 7 nap)';
+
+  @override
+  String get failedConnections => 'Sikertelen kapcsolatok';
+
+  @override
+  String get failedConnectionsRecent => 'Sikertelen kapcsolatok (elmúlt 7 nap)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count a párosítás óta';
+  }
 }

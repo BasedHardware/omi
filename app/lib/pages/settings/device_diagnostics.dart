@@ -16,6 +16,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -41,6 +42,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   BleDeviceDiagnostics? _diagnostics;
   bool _isLoading = true;
   bool _isSending = false;
+
+  /// When native started counting reconnections / failed connects. Null while
+  /// extended diagnostics are unavailable; the page then shows lifetime counts.
+  int? _countersSinceMs;
   final _bleHostApi = BleHostApi();
   final GlobalKey _shareButtonKey = GlobalKey();
 
@@ -59,7 +64,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   }
 
   Future<void> _loadAll() async {
-    await Future.wait([_loadDiagnostics(), _loadBatteryHistory()]);
+    await Future.wait([_loadDiagnostics(), _loadBatteryHistory(), _loadCountersSince()]);
     if (mounted) {
       setState(() => _isLoading = false);
     }
@@ -72,6 +77,38 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         setState(() => _diagnostics = diagnostics);
       }
     } catch (_) {}
+  }
+
+  Future<void> _loadCountersSince() async {
+    num? since;
+    try {
+      final extended = jsonDecode(await _bleHostApi.getExtendedDeviceDiagnostics(widget.deviceId));
+      since = (extended as Map?)?['counters_since'] as num?;
+    } catch (_) {
+      // Extended diagnostics are best-effort; the page falls back to lifetime counts.
+    }
+    if (mounted) {
+      setState(() => _countersSinceMs = since?.toInt());
+    }
+  }
+
+  /// Recovered disconnects since [_countersSinceMs], bounded by the native
+  /// history's 7-day retention. Mirrors `reconnection_count_window` in
+  /// [_buildBundle]. Null when the window anchor is unavailable.
+  int? get _reconnectionCountWindow {
+    final since = _countersSinceMs;
+    final history = _diagnostics?.disconnectHistory;
+    if (since == null || history == null) return null;
+    return history.where((e) => e.timestamp >= since && e.timeToReconnectMs > 0).length;
+  }
+
+  /// Connect attempts that never established, since [_countersSinceMs]. Mirrors
+  /// `fail_to_connect_count_window` in [_buildBundle].
+  int? get _failToConnectCountWindow {
+    final since = _countersSinceMs;
+    final history = _diagnostics?.disconnectHistory;
+    if (since == null || history == null) return null;
+    return history.where((e) => e.timestamp >= since && e.eventType == 'fail_to_connect').length;
   }
 
   Future<void> _loadBatteryHistory() async {
@@ -206,56 +243,114 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     }
   }
 
+  /// Failure telemetry for the support send. Sizes and counts only — never
+  /// bundle content or device identifiers.
+  void _trackSendFailed(
+    DiagnosticsSendFailedFailureStage stage,
+    String json,
+    Map<String, dynamic> bundle, {
+    int statusCode = 0,
+  }) {
+    PlatformManager.instance.analytics.diagnosticsSendFailed(
+      failureStage: stage,
+      bundleBytes: utf8.encode(json).length,
+      disconnectCount: (bundle['disconnect_history'] as List?)?.length ?? 0,
+      schemaVersion: (bundle['schema_version'] as num?)?.toInt() ?? 0,
+      statusCode: statusCode,
+    );
+  }
+
+  void _trackSent(String json, Map<String, dynamic> bundle) {
+    PlatformManager.instance.analytics.diagnosticsSent(
+      bundleBytes: utf8.encode(json).length,
+      disconnectCount: (bundle['disconnect_history'] as List?)?.length ?? 0,
+      schemaVersion: (bundle['schema_version'] as num?)?.toInt() ?? 0,
+    );
+  }
+
   Future<void> _sendToSupport() async {
     if (_isSending) return;
+    Map<String, dynamic> bundle;
+    String json;
     try {
-      final bundle = await _buildBundle();
-      if (!mounted) return;
-      final json = const JsonEncoder.withIndent('  ').convert(bundle);
-      final send = await showDialog<bool>(
-        context: context,
-        builder: (context) => OmiAlertDialog(
-          title: context.l10n.sendToSupport,
-          content: SizedBox(
-            width: 520,
-            height: 400,
-            child: Column(children: [
-              Text(context.l10n.deviceDiagnosticsUploadDescription),
-              const SizedBox(height: 12),
-              Expanded(child: SingleChildScrollView(child: SelectableText(json))),
-            ]),
-          ),
-          actions: [
-            OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.pop(context, false)),
-            OmiDialogAction(label: context.l10n.send, isDefault: true, onPressed: () => Navigator.pop(context, true)),
-          ],
+      bundle = await _buildBundle();
+      json = const JsonEncoder.withIndent('  ').convert(bundle);
+    } catch (e) {
+      Logger.debug('Failed to build diagnostics bundle: $e');
+      PlatformManager.instance.analytics
+          .diagnosticsSendFailed(failureStage: DiagnosticsSendFailedFailureStage.buildBundle);
+      if (mounted) OmiFeedback.error(context, context.l10n.deviceDiagnosticsUploadFailed);
+      return;
+    }
+    if (!mounted) return;
+    final send = await showDialog<bool>(
+      context: context,
+      builder: (context) => OmiAlertDialog(
+        title: context.l10n.sendToSupport,
+        content: SizedBox(
+          width: 520,
+          height: 400,
+          child: Column(children: [
+            Text(context.l10n.deviceDiagnosticsUploadDescription),
+            const SizedBox(height: 12),
+            Expanded(child: SingleChildScrollView(child: SelectableText(json))),
+          ]),
         ),
-      );
-      if (send != true || !mounted) return;
-      setState(() => _isSending = true);
+        actions: [
+          OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.pop(context, false)),
+          OmiDialogAction(label: context.l10n.send, isDefault: true, onPressed: () => Navigator.pop(context, true)),
+        ],
+      ),
+    );
+    if (send != true) {
+      _trackSendFailed(DiagnosticsSendFailedFailureStage.dialogCancelled, json, bundle);
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _isSending = true);
+    String ticket;
+    try {
       final response = await makeApiCall(
         url: '${Env.apiBaseUrl}v1/mobile/device-diagnostics',
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'bundle_base64': base64Encode(utf8.encode(json))}),
         method: 'POST',
       );
-      if (response?.statusCode != 201) throw StateError('Support upload failed: ${response?.statusCode}');
-      final ticket = (jsonDecode(response!.body) as Map<String, dynamic>)['ticket'] as String;
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => OmiAlertDialog(
-          title: context.l10n.deviceDiagnosticsTicket,
-          content: SelectableText(ticket),
-          actions: [OmiDialogAction(label: context.l10n.ok, isDefault: true, onPressed: () => Navigator.pop(context))],
-        ),
-      );
-    } catch (e) {
-      Logger.debug('Failed to send diagnostics to support: $e');
+      if (response?.statusCode != 201) {
+        throw _SendFailure(DiagnosticsSendFailedFailureStage.upload, response?.statusCode ?? 0);
+      }
+      try {
+        ticket = (jsonDecode(response!.body) as Map<String, dynamic>)['ticket'] as String;
+      } catch (_) {
+        // A 201 whose body is not a ticket is not an HTTP failure.
+        throw const _SendFailure(DiagnosticsSendFailedFailureStage.ticketParse, 0);
+      }
+    } on _SendFailure catch (failure) {
+      // Single choke point: every failed send emits exactly one failure event,
+      // whichever branch discovered the failure.
+      Logger.debug('Failed to send diagnostics to support: ${failure.stage}');
+      _trackSendFailed(failure.stage, json, bundle, statusCode: failure.statusCode);
       if (mounted) OmiFeedback.error(context, context.l10n.deviceDiagnosticsUploadFailed);
+      return;
+    } catch (e) {
+      // A throw out of makeApiCall never produced an HTTP response.
+      Logger.debug('Failed to send diagnostics to support: $e');
+      _trackSendFailed(DiagnosticsSendFailedFailureStage.upload, json, bundle);
+      if (mounted) OmiFeedback.error(context, context.l10n.deviceDiagnosticsUploadFailed);
+      return;
     } finally {
       if (mounted) setState(() => _isSending = false);
     }
+    _trackSent(json, bundle);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => OmiAlertDialog(
+        title: context.l10n.deviceDiagnosticsTicket,
+        content: SelectableText(ticket),
+        actions: [OmiDialogAction(label: context.l10n.ok, isDefault: true, onPressed: () => Navigator.pop(context))],
+      ),
+    );
   }
 
   void _onRssiUpdate(int rssi) {
@@ -333,6 +428,12 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final battery = deviceProvider.batteryLevel;
     final connectedAt = _diagnostics?.connectedAt ?? 0;
     final reconnections = _diagnostics?.reconnectionCount ?? 0;
+    final failToConnect = _diagnostics?.failToConnectCount ?? 0;
+    // Lifetime counters read catastrophic after months of pairing (10k+
+    // reconnections); the 7-day window reflects the behavior users actually
+    // experience, so it leads and the lifetime number stays as context.
+    final reconnectsWindow = _reconnectionCountWindow;
+    final failsWindow = _failToConnectCountWindow;
     final latestRssi = _rssiPoints.isNotEmpty ? _rssiPoints.last.rssi : null;
 
     return Column(
@@ -350,9 +451,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             Expanded(
               child: _statusCard(
                 icon: FontAwesomeIcons.arrowsRotate,
-                label: context.l10n.reconnections,
-                value: '$reconnections',
-                valueColor: reconnections > 5 ? OmiColors.danger : null,
+                label: reconnectsWindow != null ? context.l10n.reconnectionsRecent : context.l10n.reconnections,
+                value: '${reconnectsWindow ?? reconnections}',
+                valueColor: (reconnectsWindow ?? reconnections) > 5 ? OmiColors.danger : null,
+                subtitle: reconnectsWindow != null ? context.l10n.diagnosticsCountSincePairing(reconnections) : null,
               ),
             ),
           ],
@@ -381,6 +483,14 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
               ),
             ],
           ),
+        ),
+        const SizedBox(height: OmiSpacing.sm),
+        _statusCard(
+          icon: FontAwesomeIcons.plugCircleXmark,
+          label: failsWindow != null ? context.l10n.failedConnectionsRecent : context.l10n.failedConnections,
+          value: '${failsWindow ?? failToConnect}',
+          valueColor: (failsWindow ?? failToConnect) > 0 ? OmiColors.warning : null,
+          subtitle: failsWindow != null ? context.l10n.diagnosticsCountSincePairing(failToConnect) : null,
         ),
       ],
     );
@@ -843,4 +953,17 @@ class _RssiPoint {
   final int rssi;
 
   _RssiPoint(this.time, this.rssi);
+}
+
+/// A failed support send whose failure event has not been emitted yet; the
+/// single catch in `_sendToSupport` emits exactly one per failure. [statusCode]
+/// is the real HTTP status, or 0 when no HTTP response was involved.
+class _SendFailure implements Exception {
+  const _SendFailure(this.stage, this.statusCode);
+
+  final DiagnosticsSendFailedFailureStage stage;
+  final int statusCode;
+
+  @override
+  String toString() => '_SendFailure($stage, statusCode: $statusCode)';
 }
