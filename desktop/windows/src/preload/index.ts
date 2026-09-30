@@ -33,6 +33,7 @@ import type {
   WhatsNewPayload,
   AutomationPlan,
   StepResult,
+  TranslationResult,
   CodingAgentCommandOverrides,
   CodingAgentEvent,
   CodingAgentId,
@@ -606,6 +607,15 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('conversations:changed', listener)
     return () => ipcRenderer.removeListener('conversations:changed', listener)
   },
+  onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, result: TranslationResult): void => cb(result)
+    ipcRenderer.on('omi-sign-update', listener)
+    return () => ipcRenderer.removeListener('omi-sign-update', listener)
+  },
+  signLanguageSetEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('integrations:signLanguage:setEnabled', enabled),
+  signLanguageGetEnabled: (): Promise<boolean> =>
+    ipcRenderer.invoke('integrations:signLanguage:getEnabled'),
   // --- Bar chat bridge (main-window side) ---
   onBarChatSend: (cb: (payload: { text: string; fromVoice: boolean }) => void) => {
     const listener = (
@@ -706,9 +716,10 @@ const omi: OmiBridgeApi = {
   resetWindowSize: () => ipcRenderer.invoke('window:resetSize'),
   // --- Track 1 (agent control plane) — trusted direct control ---
   agentControlCall: (name: string, input: Record<string, unknown> = {}) =>
-    ipcRenderer.invoke('agentControl:call', name, input),
+    ipcRenderer.invoke('agentControl:call', name, input)
   // No agentControlSetOwner: the renderer must not be able to repoint the
   // kernel's active owner. See src/main/ipc/agentControl.ts.
+  ,
   agentControlTools: () => ipcRenderer.invoke('agentControl:tools')
 }
 
