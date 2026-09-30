@@ -55,7 +55,7 @@ def _install_generation_fakes(monkeypatch, *, existing_by_date=None, tokens_unus
         lambda uid, date_str: existing_by_date.get(date_str),
     )
     monkeypatch.setattr(notif.conversations_db, 'get_conversations', lambda *a, **k: [{'is_locked': False, 'id': 'c1'}])
-    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _FakeConvo())
+    monkeypatch.setattr(notif, 'deserialize_conversations', lambda items: [_FakeConvo() for _ in items])
 
     def _generate(uid, conversations, date_str, *a, **k):
         generated_dates.append(date_str)
@@ -102,6 +102,39 @@ def test_tokenless_user_gets_a_record_and_no_push(monkeypatch):
     assert created, 'a tokenless user must still get a daily summary record'
     assert generated_dates, 'generation must run without an FCM token'
     assert sent == []
+
+
+def test_malformed_conversation_doc_is_skipped_not_fatal(monkeypatch):
+    # #19759 migrated batch readers to deserialize_conversations; this generation path was
+    # missed, so one malformed stored doc raised ValidationError — the on-demand recap 500'd
+    # (leaving the day's lock held) and the scheduled path counted a generation_error.
+    generated_dates, _created, _sent, _released, _webhooks = _install_generation_fakes(monkeypatch)
+    from utils.conversations.factory import deserialize_conversations as real_batch
+
+    now = datetime(2026, 6, 23, 12, 0)
+    monkeypatch.setattr(
+        notif.conversations_db,
+        'get_conversations',
+        lambda *a, **k: [
+            {
+                'id': 'valid-1',
+                'created_at': now,
+                'started_at': now,
+                'finished_at': now,
+                'structured': {'title': 'T', 'overview': 'You had a productive day.'},
+                'transcript_segments': [
+                    {'text': 'hello', 'speaker': 'SPEAKER_00', 'is_user': True, 'start': 0.0, 'end': 1.0}
+                ],
+            },
+            {'id': 'corrupt-no-structured', 'created_at': now},  # missing required 'structured'
+        ],
+    )
+    monkeypatch.setattr(notif, 'deserialize_conversations', real_batch)
+
+    record, declined = notif.generate_daily_summary_on_demand('u1', '2026-06-23', now, now + timedelta(hours=1))
+
+    assert record is not None, f'a valid conversation beside a malformed one must still generate (declined={declined})'
+    assert generated_dates == ['2026-06-23']
 
 
 def test_user_with_tokens_gets_record_and_push(monkeypatch):
@@ -303,7 +336,9 @@ def test_a_day_of_minimum_conversations_costs_zero_llm_calls_and_no_push(monkeyp
 
     monkeypatch.setattr(notif.conversations_db, 'get_conversations', _conversations)
     monkeypatch.setattr(
-        notif, 'deserialize_conversation', lambda d: _MinimumConvo() if d['id'] == 'thin' else _FakeConvo()
+        notif,
+        'deserialize_conversations',
+        lambda items: [_MinimumConvo() if d['id'] == 'thin' else _FakeConvo() for d in items],
     )
 
     record, created_flag, declined = notif._generate_and_store_daily_summary('u1', today_str, start_utc, end_utc)
@@ -338,7 +373,9 @@ def test_a_day_with_one_nonempty_overview_generates_exactly_once(monkeypatch):
 
     monkeypatch.setattr(notif.conversations_db, 'get_conversations', _conversations)
     monkeypatch.setattr(
-        notif, 'deserialize_conversation', lambda d: _MinimumConvo() if d['id'] == 'thin' else _FakeConvo()
+        notif,
+        'deserialize_conversations',
+        lambda items: [_MinimumConvo() if d['id'] == 'thin' else _FakeConvo() for d in items],
     )
 
     notif._send_summary_notification(('u1', ['tok1'], 'UTC'))
@@ -361,7 +398,7 @@ def test_an_app_result_content_alone_counts_as_summary_content(monkeypatch):
         def __init__(self) -> None:
             self.apps_results = [SimpleNamespace(content='A busy day of meetings.')]
 
-    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _AppResultConvo())
+    monkeypatch.setattr(notif, 'deserialize_conversations', lambda items: [_AppResultConvo() for _ in items])
     record, created, _declined = notif._generate_and_store_daily_summary(
         'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
     )
@@ -385,7 +422,7 @@ def test_blank_first_app_result_does_not_skip_later_summary_content(monkeypatch)
                 SimpleNamespace(content='A busy day of meetings.'),
             ]
 
-    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _BlankFirstAppResultConvo())
+    monkeypatch.setattr(notif, 'deserialize_conversations', lambda items: [_BlankFirstAppResultConvo() for _ in items])
     record, created, _declined = notif._generate_and_store_daily_summary(
         'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
     )
@@ -407,7 +444,7 @@ def test_action_items_alone_count_as_summary_content(monkeypatch):
         apps_results: list = []
         structured = SimpleNamespace(overview='', action_items=[object()], events=[])
 
-    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _ActionItemsConvo())
+    monkeypatch.setattr(notif, 'deserialize_conversations', lambda items: [_ActionItemsConvo() for _ in items])
     record, created_flag, declined = notif._generate_and_store_daily_summary(
         'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
     )
@@ -429,7 +466,7 @@ def test_events_alone_count_as_summary_content(monkeypatch):
         apps_results: list = []
         structured = SimpleNamespace(overview='', action_items=[], events=[object()])
 
-    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _EventsConvo())
+    monkeypatch.setattr(notif, 'deserialize_conversations', lambda items: [_EventsConvo() for _ in items])
     record, created, _declined = notif._generate_and_store_daily_summary(
         'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
     )
@@ -453,7 +490,7 @@ def test_empty_action_items_and_events_do_not_rescue_a_titles_only_day(monkeypat
         def __init__(self) -> None:
             self.structured = SimpleNamespace(overview='', action_items=[], events=[])
 
-    monkeypatch.setattr(notif, 'deserialize_conversation', lambda d: _EmptyListsConvo())
+    monkeypatch.setattr(notif, 'deserialize_conversations', lambda items: [_EmptyListsConvo() for _ in items])
     record, created_flag, declined = notif._generate_and_store_daily_summary(
         'u1', '2026-08-20', datetime.utcnow(), datetime.utcnow()
     )

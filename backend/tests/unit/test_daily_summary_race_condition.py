@@ -157,6 +157,7 @@ def notification_harness() -> Iterator[SimpleNamespace]:
     conversation_factory = _module(
         'utils.conversations.factory',
         deserialize_conversation=MagicMock(return_value=mock_conversation),
+        deserialize_conversations=MagicMock(return_value=[mock_conversation]),
     )
     generate_summary = MagicMock()
     external_integrations = _module(

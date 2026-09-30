@@ -124,7 +124,11 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
             'models.notification_message',
             NotificationMessage=notification_message,
         ),
-        'utils.conversations.factory': _module('utils.conversations.factory', deserialize_conversation=lambda v: v),
+        'utils.conversations.factory': _module(
+            'utils.conversations.factory',
+            deserialize_conversation=lambda v: v,
+            deserialize_conversations=lambda items: list(items),
+        ),
         'utils.llm.external_integrations': _module(
             'utils.llm.external_integrations',
             generate_comprehensive_daily_summary=lambda *_a, **_k: {},
@@ -529,7 +533,9 @@ def _loaded_send_path(
             r=FakeRedis(),
         ),
         'utils.conversations.factory': _module(
-            'utils.conversations.factory', deserialize_conversation=lambda _v: _FakeConversation()
+            'utils.conversations.factory',
+            deserialize_conversation=lambda _v: _FakeConversation(),
+            deserialize_conversations=lambda items: [_FakeConversation() for _ in items],
         ),
         'utils.conversations.render': _module('utils.conversations.render', conversations_to_string=lambda _c: 'text'),
         'utils.llm.external_integrations': _module(

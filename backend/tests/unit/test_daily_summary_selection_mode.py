@@ -78,7 +78,11 @@ def _loaded_notifications() -> Iterator[Tuple[ModuleType, ModuleType, ModuleType
             'models.notification_message',
             NotificationMessage=notification_message,
         ),
-        'utils.conversations.factory': _module('utils.conversations.factory', deserialize_conversation=lambda v: v),
+        'utils.conversations.factory': _module(
+            'utils.conversations.factory',
+            deserialize_conversation=lambda v: v,
+            deserialize_conversations=lambda items: list(items),
+        ),
         'utils.executors': _module(
             'utils.executors',
             db_executor=object(),
