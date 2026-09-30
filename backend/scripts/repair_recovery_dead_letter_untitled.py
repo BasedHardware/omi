@@ -16,6 +16,9 @@ Calendar safety protects nonempty rule discards: stored overlaps and connected
 Google Calendar accounts skip without provider calls/token-refresh writes. Empty
 transcript rule discards bypass calendars; photos and every other fence remain.
 Kept titles require nonempty text; protected rule discards never receive titles.
+Summary breakdowns group R/K and protected/empty skips by source, rule and summed
+audio_files.duration seconds: 0, (0,5), [5,30), [30,120], >120, or unknown.
+Missing/invalid duration metadata is unknown, never inferred from capture time.
 Calendar lookup errors are unclassifiable. Photo subcollections are checked even on
 legacy rows. Only Typesense converges after successful writes, like the existing
 discard_by_relevance choke point; finalization job counters remain unchanged.
@@ -34,6 +37,7 @@ import fcntl
 import importlib
 import json
 import logging
+import math
 import os
 from pathlib import Path
 import random
@@ -52,6 +56,7 @@ from google.api_core.exceptions import Aborted, Conflict, DeadlineExceeded, Serv
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from models.conversation_enums import ConversationSource
 from scripts.conversation_relevance_backfill import AUDIO_TRANSCRIPT_SOURCES
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
 from utils.conversations.fragment_visibility import is_user_curated
@@ -70,12 +75,56 @@ JOB_FILTERS = {
 }
 ALLOWED_FIELDS = {'discarded', 'relevance_decision', 'structured.title'}
 RETRYABLE = (Aborted, Conflict, DeadlineExceeded, ServiceUnavailable)
+AUDIO_DURATION_BUCKETS = ('0', '<5s', '5-30s', '30-120s', '>120s', 'unknown')
+BREAKDOWN_CATEGORIES = ('R', 'K', 'discard_protected', 'empty_not_discardable')
 logger = logging.getLogger('untitled_repair')
 _decode_state = threading.local()
 
 
 class CannotClassify(Exception):
     """Only bounded reason codes escape data-reading helpers."""
+
+    def __init__(self, reason: str, *, rule: str | None = None):
+        super().__init__(reason)
+        self.rule = rule
+
+
+def audio_duration_bucket(row: dict[str, Any]) -> str:
+    """Use stored audio duration only; partial or malformed totals are unknown."""
+    audio_files = row.get('audio_files')
+    if not isinstance(audio_files, list):
+        return 'unknown'
+    durations = []
+    for audio_file in audio_files:
+        duration = audio_file.get('duration') if isinstance(audio_file, dict) else None
+        if isinstance(duration, bool) or not isinstance(duration, (int, float)):
+            return 'unknown'
+        try:
+            seconds = float(duration)
+        except OverflowError:
+            return 'unknown'
+        if not math.isfinite(seconds) or seconds < 0:
+            return 'unknown'
+        durations.append(seconds)
+    try:
+        total = math.fsum(durations)
+    except OverflowError:
+        return 'unknown'
+    if total == 0:
+        return '0'
+    if total < 5:
+        return '<5s'
+    if total < 30:
+        return '5-30s'
+    if total <= 120:
+        return '30-120s'
+    return '>120s'
+
+
+def summary_source(row: dict[str, Any]) -> str:
+    """Never expose arbitrary stored source strings as summary/audit labels."""
+    source = row.get('source')
+    return ConversationSource(source).value if isinstance(source, str) else 'unknown'
 
 
 class PrivateHelperLogs(logging.Filter):
@@ -368,19 +417,19 @@ def classify(runtime: Runtime, row: dict[str, Any], job: dict[str, Any], ref: An
     verdict, rule = deterministic_relevance(texts, None)
     if find_wake_word_matches(wake_segments):
         if verdict == 'discard':
-            raise CannotClassify('discard_protected')
+            raise CannotClassify('discard_protected', rule=rule)
         verdict, rule = 'keep', 'wake_word'
     if verdict == 'discard':
         # External/workflow/screen imports can hold content outside transcripts;
         # the ordinary capture-end rule does not assess those source branches.
         if row.get('source') not in AUDIO_TRANSCRIPT_SOURCES:
-            raise CannotClassify('non_audio_source')
+            raise CannotClassify('non_audio_source', rule=rule)
         if rule != 'empty_transcript':
             protection = runtime.protect(ref, row, job)
         if protection == 'photos':
-            raise CannotClassify('photos')
+            raise CannotClassify('photos', rule=rule)
         if protection:
-            raise CannotClassify('discard_protected')
+            raise CannotClassify('discard_protected', rule=rule)
     if verdict == 'discard':
         return (
             'R',
@@ -393,7 +442,7 @@ def classify(runtime: Runtime, row: dict[str, Any], job: dict[str, Any], ref: An
             },
         )
     if not any(text.strip() for text in texts):
-        raise CannotClassify('empty_not_discardable')
+        raise CannotClassify('empty_not_discardable', rule=rule)
     conversation = SimpleNamespace(
         transcript_segments=[SimpleNamespace(**s) for s in segments], started_at=row.get('started_at')
     )
@@ -492,6 +541,8 @@ def evaluate(runtime: Runtime, log: RunLog, job_id: str, *, limiter: RateLimiter
             ref = runtime.client.document(f"users/{job['uid']}/conversations/{job['conversation_id']}")
             snapshot = ref.get()
             row = snapshot.to_dict() if snapshot.exists else None
+            if row is not None:
+                record.update({'source': summary_source(row), 'audio_duration_bucket': audio_duration_bucket(row)})
             reason = eligibility(row, job_id, job)
             if reason is None:
                 assert row is not None
@@ -535,6 +586,7 @@ def evaluate(runtime: Runtime, log: RunLog, job_id: str, *, limiter: RateLimiter
                     return dict(record, outcome=outcome)
     except CannotClassify as exc:
         reason = str(exc)
+        record['rule'] = exc.rule
     except Exception as exc:
         # Exception bodies can carry plaintext/customer IDs. Only the type is safe.
         reason = 'error'
@@ -602,6 +654,13 @@ def run(
     counts: Counter[str] = Counter()
     skips: Counter[str] = Counter()
     rules: Counter[str] = Counter()
+    breakdown: dict[str, dict[str, dict[str, dict[str, int]]]] = {category: {} for category in BREAKDOWN_CATEGORIES}
+
+    def count_breakdown(category: str, result: dict[str, Any]) -> None:
+        by_rule = breakdown[category].setdefault(result['source'], {})
+        buckets = by_rule.setdefault(result['rule'], dict.fromkeys(AUDIO_DURATION_BUCKETS, 0))
+        buckets[result['audio_duration_bucket']] += 1
+
     samples: dict[str, list[str]] = {'R': [], 'K': []}
     recent: deque[bool] = deque(maxlen=error_window)
     limiter = RateLimiter(max_writes_per_second)
@@ -637,10 +696,13 @@ def run(
                     if cls:
                         counts[cls] += 1
                         rules[result['rule']] += 1
+                        count_breakdown(cls, result)
                         if len(samples[cls]) < 20:
                             samples[cls].append(result['id_hash'])
                     if result['outcome'] not in ('written', 'dry_run'):
                         skips[result['outcome']] += 1
+                        if result['outcome'] in ('discard_protected', 'empty_not_discardable'):
+                            count_breakdown(result['outcome'], result)
                     else:
                         counts[result['outcome']] += 1
                     error = result['outcome'] == 'error'
@@ -659,6 +721,7 @@ def run(
         'classes': dict(counts),
         'rules': dict(rules),
         'skip_reasons': dict(skips),
+        'breakdown': breakdown,
         'samples': samples,
         'stopped_error_rate': stopped,
         'exit_code': 2 if frozen or stopped else 0,

@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from datetime import datetime, timezone
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -559,3 +560,96 @@ def test_empty_rule_keeps_other_protection_fences(tmp_path):
     result = evaluate(runtime, log)
     assert result['outcome'] == 'discard_protected' and result['class'] is None
     assert not client.transactions
+
+
+@pytest.mark.parametrize(
+    ('audio_files', 'bucket'),
+    [
+        ([], '0'),
+        ([{'duration': 0}], '0'),
+        ([{'duration': 0.01}], '<5s'),
+        ([{'duration': 4.999}], '<5s'),
+        ([{'duration': 2}, {'duration': 3}], '5-30s'),
+        ([{'duration': 29.999}], '5-30s'),
+        ([{'duration': 15}, {'duration': 15}], '30-120s'),
+        ([{'duration': 120}], '30-120s'),
+        ([{'duration': 60}, {'duration': 60.001}], '>120s'),
+        (None, 'unknown'),
+        ({'duration': 3}, 'unknown'),
+        ([None], 'unknown'),
+        ([{}], 'unknown'),
+        ([{'duration': 5}, {}], 'unknown'),
+        ([{'duration': -1}], 'unknown'),
+        ([{'duration': True}], 'unknown'),
+        ([{'duration': '5'}], 'unknown'),
+        ([{'duration': float('nan')}], 'unknown'),
+        ([{'duration': float('inf')}], 'unknown'),
+        ([{'duration': 10**400}], 'unknown'),
+        ([{'duration': 1e308}, {'duration': 1e308}], 'unknown'),
+    ],
+)
+def test_total_audio_duration_buckets(audio_files, bucket):
+    assert repair.audio_duration_bucket({'audio_files': audio_files}) == bucket
+
+
+def test_missing_audio_duration_is_unknown_even_with_capture_timestamps():
+    assert repair.audio_duration_bucket(row()) == 'unknown'
+
+
+@pytest.mark.parametrize('kept', [False, True])
+def test_dry_run_breakdown_source_rule_duration_shape(tmp_path, monkeypatch, kept):
+    client, runtime, log = setup(tmp_path, kept=kept)
+    # One R in every bucket, across several capture sources; K includes a known
+    # import source. Arbitrary legacy source text must never become a log label.
+    cases = [
+        ('omi', '', [], 'R', 'empty_transcript', '0'),
+        ('phone', '', [{'duration': 2}, {'duration': 2}], 'R', 'empty_transcript', '<5s'),
+        ('desktop', '', [{'duration': 2}, {'duration': 3}], 'R', 'empty_transcript', '5-30s'),
+        ('omi', '', [{'duration': 15}, {'duration': 15}], 'R', 'empty_transcript', '30-120s'),
+        ('phone', '', [{'duration': 121}], 'R', 'empty_transcript', '>120s'),
+        ('desktop', '', None, 'R', 'empty_transcript', 'unknown'),
+        ('external_integration', TEXT, [{'duration': 60}, {'duration': 61}], 'K', 'ambiguous', '>120s'),
+        ('omi', 'yeah okay', None, 'discard_protected', 'filler_only', 'unknown'),
+        (TEXT, ' \t ', [{'duration': 0}], 'empty_not_discardable', 'synthetic_unknown', '0'),
+    ]
+    client.rows.clear()
+    original_rule = repair.deterministic_relevance
+    monkeypatch.setattr(
+        repair,
+        'deterministic_relevance',
+        lambda texts, seconds: (None, 'synthetic_unknown') if texts == [' \t '] else original_rule(texts, seconds),
+    )
+    runtime.protections = lambda ref, data, job, tx: (
+        'calendar_overlap' if data['transcript_segments'][0]['text'] == 'yeah okay' else None
+    )
+    expected = {'R': {}, 'K': {}, 'discard_protected': {}, 'empty_not_discardable': {}}
+    for i, (source, text, audio_files, category, rule, bucket) in enumerate(cases):
+        jid = f'job-{i}'
+        client.rows[(repair.JOBS, jid)] = dict(job(), conversation_id=jid)
+        data = dict(row(text), source=source, finalization_job_id=jid)
+        if audio_files is not None:
+            data['audio_files'] = audio_files
+        client.rows[('users', UID, 'conversations', jid)] = data
+        source_label = 'unknown' if source == TEXT else source
+        buckets = (
+            expected[category]
+            .setdefault(source_label, {})
+            .setdefault(rule, {'0': 0, '<5s': 0, '5-30s': 0, '30-120s': 0, '>120s': 0, 'unknown': 0})
+        )
+        buckets[bucket] += 1
+    original = deepcopy(client.rows)
+    summary = repair.run(runtime, log, workers=3, page_size=4)
+    assert summary['processed'] == len(cases) and summary['exit_code'] == 0
+    assert summary['classes'] == {'R': 6, 'K': 1, 'dry_run': 7 if kept else 6}
+    assert summary['skip_reasons'] == dict(
+        {'discard_protected': 1, 'empty_not_discardable': 1}, **({} if kept else {'kept_titles_disabled': 1})
+    )
+    assert summary['breakdown'] == expected
+    for category in expected:
+        total = sum(sum(buckets.values()) for by_rule in expected[category].values() for buckets in by_rule.values())
+        counts = summary['classes'] if category in ('R', 'K') else summary['skip_reasons']
+        assert total == counts[category]
+    assert json.loads((log.path / 'summary.json').read_text()) == summary
+    serialized = (log.path / 'summary.json').read_text() + (log.path / 'audit.jsonl').read_text()
+    assert TEXT not in serialized and UID not in serialized
+    assert client.rows == original and not client.transactions
