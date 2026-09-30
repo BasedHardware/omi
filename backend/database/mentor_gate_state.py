@@ -103,11 +103,11 @@ def clear_local_cache() -> None:
 
 
 def _redis_key(uid: str) -> str:
-    return f"{uid}:mentor_gate_eval_state"
+    return f'{uid}:mentor_gate_eval_state'
 
 
 def _claim_key(uid: str) -> str:
-    return f"{uid}:mentor_gate_eval_claim"
+    return f'{uid}:mentor_gate_eval_claim'
 
 
 def _read_local(uid: str) -> Optional[Dict[str, Any]]:
@@ -163,7 +163,7 @@ def _write_shared(uid: str, state: Dict[str, Any], ttl: int, redis_client: Any =
         r = _resolve_redis(redis_client)
         if r is None:
             return False
-        payload = json.dumps(clean_state, default=str)
+        payload = json.dumps(clean_state)
         r.set(_redis_key(clean_uid), payload, ex=valid_ttl)
         return True
     except Exception as e:
@@ -181,7 +181,7 @@ def _claim_shared(uid: str, ttl: int = CLAIM_TTL_SECONDS, redis_client: Any = No
         if r is None:
             # Fall open on cache outage: do not block mentor
             return True
-        return bool(r.set(_claim_key(clean_uid), "1", nx=True, ex=valid_ttl))
+        return bool(r.set(_claim_key(clean_uid), '1', nx=True, ex=valid_ttl))
     except Exception as e:
         logger.warning("mentor_gate_state claim failed, falling open: %s", e)
         return True
@@ -207,7 +207,7 @@ def read(uid: str, *, redis_client: Any = None) -> Optional[Dict[str, Any]]:
     state = _read_local(clean_uid)
     if state is not None:
         return state
-    remote = _read_shared(clean_uid, redis_client=redis_client) if redis_client is not None else _read_shared(clean_uid)
+    remote = _read_shared(clean_uid, redis_client=redis_client)
     if remote is not None:
         _write_local(clean_uid, remote, STATE_TTL_SECONDS)
     return remote
@@ -224,7 +224,7 @@ def read_authoritative(uid: str, *, redis_client: Any = None) -> Optional[Dict[s
     clean_uid = _clean_id(uid)
     if not clean_uid:
         return None
-    remote = _read_shared(clean_uid, redis_client=redis_client) if redis_client is not None else _read_shared(clean_uid)
+    remote = _read_shared(clean_uid, redis_client=redis_client)
     if remote is not None:
         _write_local(clean_uid, remote, STATE_TTL_SECONDS)
     return remote
@@ -236,11 +236,7 @@ def claim(uid: str, ttl: int = CLAIM_TTL_SECONDS, *, redis_client: Any = None) -
     if not clean_uid:
         return False
     valid_ttl = _clean_ttl(ttl, CLAIM_TTL_SECONDS)
-    return (
-        _claim_shared(clean_uid, valid_ttl, redis_client=redis_client)
-        if redis_client is not None
-        else _claim_shared(clean_uid, valid_ttl)
-    )
+    return _claim_shared(clean_uid, valid_ttl, redis_client=redis_client)
 
 
 def release(uid: str, *, redis_client: Any = None) -> None:
@@ -248,10 +244,7 @@ def release(uid: str, *, redis_client: Any = None) -> None:
     clean_uid = _clean_id(uid)
     if not clean_uid:
         return
-    if redis_client is not None:
-        _release_shared(clean_uid, redis_client=redis_client)
-    else:
-        _release_shared(clean_uid)
+    _release_shared(clean_uid, redis_client=redis_client)
 
 
 def record(uid: str, state: Dict[str, Any], ttl: int = STATE_TTL_SECONDS, *, redis_client: Any = None) -> None:
@@ -266,11 +259,7 @@ def record(uid: str, state: Dict[str, Any], ttl: int = STATE_TTL_SECONDS, *, red
     if not clean_uid or clean_state is None:
         return
     valid_ttl = _clean_ttl(ttl, STATE_TTL_SECONDS)
-    write_ok = (
-        _write_shared(clean_uid, clean_state, valid_ttl, redis_client=redis_client)
-        if redis_client is not None
-        else _write_shared(clean_uid, clean_state, valid_ttl)
-    )
+    write_ok = _write_shared(clean_uid, clean_state, valid_ttl, redis_client=redis_client)
     if write_ok:
         _write_local(clean_uid, clean_state, valid_ttl)
     else:

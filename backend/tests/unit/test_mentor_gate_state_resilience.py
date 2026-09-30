@@ -187,3 +187,21 @@ def test_record_failed_shared_write_evicts_local_mirror():
     record(uid, {"eval_count": 2}, redis_client=broken_redis)
     # Since write failed, local mirror must be cleared for this key
     assert read(uid, redis_client=fake) == state  # local had been cleared, read falls through to shared tier
+
+
+def test_record_non_serializable_payload_fails_safely_and_evicts_mirror():
+    fake = FakeRedis()
+    uid = "test-uid-5"
+    state = {"eval_count": 1}
+
+    # Successful write mirrors locally
+    record(uid, state, redis_client=fake)
+    assert read(uid, redis_client=fake) == state
+
+    # Attempting to record a payload with non-serializable objects (e.g. object()) fails write safely
+    # and evicts the local mirror, avoiding persisting corrupt or silently lossy data.
+    bad_state = {"eval_count": 2, "unserializable": object()}
+    record(uid, bad_state, redis_client=fake)
+
+    # Local mirror was evicted, so read falls back to the previous shared tier state
+    assert read(uid, redis_client=fake) == state
