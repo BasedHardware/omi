@@ -7,6 +7,7 @@ No transcript, credential, request header, or raw exception is stored here.
 
 from __future__ import annotations
 
+import math
 import os
 from hashlib import sha256
 from datetime import datetime, timedelta, timezone
@@ -115,6 +116,37 @@ class FinalizationClaim(TypedDict):
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    """Parse aware/naive datetimes, ISO-8601 strings, and numeric epoch timestamps to UTC."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        clean = value.strip()
+        if not clean:
+            return None
+        try:
+            dt = datetime.fromisoformat(clean.replace('Z', '+00:00'))
+            return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+        try:
+            sec = float(clean)
+            if not math.isnan(sec) and not math.isinf(sec) and 0 <= sec <= 253402300799:
+                return datetime.fromtimestamp(sec, timezone.utc)
+        except (ValueError, TypeError, OverflowError):
+            pass
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            sec = float(value)
+            if not math.isnan(sec) and not math.isinf(sec) and 0 <= sec <= 253402300799:
+                return datetime.fromtimestamp(sec, timezone.utc)
+        except (ValueError, TypeError, OverflowError):
+            pass
+        return None
+    return None
 
 
 def get_finalization_reconcile_stale_after() -> timedelta:
@@ -1603,7 +1635,11 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
     client = _client(firestore_client)
     result: list[dict[str, Any]] = []
     collection = client.collection(FINALIZATION_JOBS_COLLECTION)
-    query = collection.where('reconcile_after_at', '<=', _now()).limit(max(1, min(limit, 100)))
+    try:
+        safe_limit = max(1, min(int(limit), 500))
+    except (ValueError, TypeError):
+        safe_limit = 100
+    query = collection.where('reconcile_after_at', '<=', _now()).limit(max(1, min(safe_limit, 100)))
     for snapshot in query.stream():
         job = snapshot.to_dict() or {}
         if job.get('status') in {'queued', 'leased'}:
@@ -1653,7 +1689,15 @@ def get_stale_processing_orphan_candidates(
     """
     client = _client(firestore_client)
     cutoff = _now() - stale_after
-    page_size = max(1, min(limit, 100))
+    try:
+        safe_limit = max(1, min(int(limit), 500))
+    except (ValueError, TypeError):
+        safe_limit = 100
+    try:
+        safe_max_scan = max(1, min(int(max_scan), 10000))
+    except (ValueError, TypeError):
+        safe_max_scan = 2000
+    page_size = max(1, min(safe_limit, 100))
     collected: list[dict[str, Any]] = []
     scanned = 0
     last_path: str | None = None
@@ -1666,7 +1710,7 @@ def get_stale_processing_orphan_candidates(
             cursor_snapshot = fetched  # resume the collection-group scan
         # A vanished cursor document wraps the sweep back to the top (safe re-scan).
 
-    while len(collected) < limit and scanned < max_scan:
+    while len(collected) < safe_limit and scanned < safe_max_scan:
         query = client.collection_group(CONVERSATIONS_COLLECTION).where(
             filter=firestore.FieldFilter('status', '==', 'processing')
         )
@@ -1679,7 +1723,7 @@ def get_stale_processing_orphan_candidates(
             break
         for snapshot in page:
             scanned += 1
-            if scanned > max_scan:
+            if scanned > safe_max_scan:
                 break
             last_path = snapshot.reference.path
             uid = _uid_from_conversation_path(snapshot.reference.path)
@@ -1688,8 +1732,8 @@ def get_stale_processing_orphan_candidates(
             data = snapshot.to_dict() or {}
             if data.get('deferred') or data.get('finalization_job_id'):
                 continue
-            admitted_at = data.get('processing_admitted_at')
-            if isinstance(admitted_at, datetime):
+            admitted_at = _parse_timestamp(data.get('processing_admitted_at'))
+            if admitted_at is not None:
                 if admitted_at > cutoff:
                     continue  # fresh admission still under the conservative threshold
                 collected.append(
@@ -1699,9 +1743,9 @@ def get_stale_processing_orphan_candidates(
                 collected.append(
                     {'uid': uid, 'conversation_id': snapshot.id, 'processing_admitted_at': None, 'legacy': True}
                 )
-            if len(collected) >= limit:
+            if len(collected) >= safe_limit:
                 break
-        if scanned > max_scan:
+        if scanned > safe_max_scan:
             break  # bounded work for this invocation; the cursor persists progress
         if len(page) < page_size:
             exhausted = True  # partial page => reached the tail
@@ -2037,10 +2081,10 @@ def _complete_unstampable_orphan_conversation_txn(
         return False
     if data.get('discarded') or data.get('deferred') or data.get('finalization_job_id'):
         return False
-    if isinstance(data.get('processing_admitted_at'), datetime):
+    if _parse_timestamp(data.get('processing_admitted_at')) is not None:
         return False  # no longer a legacy row: the admission-fenced path owns it
-    last_written = getattr(snapshot, 'update_time', None)
-    if not isinstance(last_written, datetime) or last_written > stale_before:
+    last_written = _parse_timestamp(getattr(snapshot, 'update_time', None))
+    if last_written is None or last_written > stale_before:
         return False
     transaction.update(conversation_ref, {'status': 'completed'})
     return True
@@ -2082,8 +2126,9 @@ def _complete_orphan_conversation_txn(
         return False
     if data.get('discarded') or data.get('deferred') or data.get('finalization_job_id'):
         return False
-    admitted_at = data.get('processing_admitted_at')
-    if not isinstance(admitted_at, datetime) or admitted_at != expected_admitted_at:
+    admitted_at = _parse_timestamp(data.get('processing_admitted_at'))
+    expected_admitted = _parse_timestamp(expected_admitted_at)
+    if admitted_at is None or admitted_at != expected_admitted:
         return False
     transaction.update(conversation_ref, {'status': 'completed'})
     return True
@@ -2179,9 +2224,9 @@ def recover_deferred_processing_failure(uid: str, conversation_id: str, *, fires
 def _job_last_activity_at(job: Mapping[str, Any]) -> datetime | None:
     """Return the most recent server-owned activity instant on a job."""
     for field in ('updated_at', 'created_at'):
-        value = job.get(field)
-        if isinstance(value, datetime):
-            return value
+        parsed = _parse_timestamp(job.get(field))
+        if parsed is not None:
+            return parsed
     return None
 
 
@@ -2227,7 +2272,15 @@ def get_abandoned_byok_job_candidates(
     client = _client(firestore_client)
     now = _now()
     cutoff = now - abandoned_after
-    page_size = max(1, min(limit, 100))
+    try:
+        safe_limit = max(1, min(int(limit), 500))
+    except (ValueError, TypeError):
+        safe_limit = 100
+    try:
+        safe_max_scan = max(1, min(int(max_scan), 10000))
+    except (ValueError, TypeError):
+        safe_max_scan = 2000
+    page_size = max(1, min(safe_limit, 100))
     collection = client.collection(FINALIZATION_JOBS_COLLECTION)
     collected: list[dict[str, Any]] = []
     scanned = 0
@@ -2241,7 +2294,7 @@ def get_abandoned_byok_job_candidates(
             cursor_snapshot = fetched
         # A vanished cursor document wraps the sweep back to the top (safe re-scan).
 
-    while len(collected) < limit and scanned < max_scan:
+    while len(collected) < safe_limit and scanned < safe_max_scan:
         query = collection.where(filter=firestore.FieldFilter('requires_byok', '==', True)).limit(page_size)
         if cursor_snapshot is not None:
             query = query.start_after(cursor_snapshot)
@@ -2251,7 +2304,7 @@ def get_abandoned_byok_job_candidates(
             break
         for snapshot in page:
             scanned += 1
-            if scanned > max_scan:
+            if scanned > safe_max_scan:
                 break
             reference = getattr(snapshot, 'reference', None)
             last_path = getattr(reference, 'path', None) or f'{FINALIZATION_JOBS_COLLECTION}/{snapshot.id}'
@@ -2260,16 +2313,16 @@ def get_abandoned_byok_job_candidates(
             if status not in ('queued', 'leased'):
                 continue
             if status == 'leased':
-                lease_expires_at = job.get('lease_expires_at')
-                if isinstance(lease_expires_at, datetime) and lease_expires_at > now:
+                lease_expires_at = _parse_timestamp(job.get('lease_expires_at'))
+                if lease_expires_at is not None and lease_expires_at > now:
                     continue  # a live worker still owns this lease
             last_activity = _job_last_activity_at(job)
             if last_activity is None or last_activity > cutoff:
                 continue  # unknown age, or still inside the reconnect window
             collected.append(job | {'job_id': snapshot.id, 'last_activity_at': last_activity})
-            if len(collected) >= limit:
+            if len(collected) >= safe_limit:
                 break
-        if scanned > max_scan:
+        if scanned > safe_max_scan:
             break  # bounded work for this invocation; the cursor persists progress
         if len(page) < page_size:
             exhausted = True  # partial page => reached the tail
@@ -2331,8 +2384,8 @@ def _abandon_byok_finalization_job_txn(
     if int(job.get('lease_epoch') or 0) != expected_lease_epoch:
         return _byok_abandonment('fenced')
     if status == 'leased':
-        lease_expires_at = job.get('lease_expires_at')
-        if isinstance(lease_expires_at, datetime) and lease_expires_at > now:
+        lease_expires_at = _parse_timestamp(job.get('lease_expires_at'))
+        if lease_expires_at is not None and lease_expires_at > now:
             return _byok_abandonment('fenced')
     last_activity = _job_last_activity_at(job)
     if last_activity is None or last_activity > cutoff:
@@ -2497,8 +2550,13 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
             continue
         for name in totals:
             value = data.get(name, 0)
-            if isinstance(value, (int, float)):
-                totals[name] += int(value)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                try:
+                    f_val = float(value)
+                    if not math.isnan(f_val) and not math.isinf(f_val):
+                        totals[name] += int(f_val)
+                except (ValueError, TypeError, OverflowError):
+                    pass
 
     # The age of the oldest unfinished job is asked of ``status`` directly, one
     # ordered single-document read per nonterminal status.  The previous
@@ -2520,8 +2578,8 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
             .limit(1)
         )
         for snapshot in oldest_query.stream():
-            created_at = (snapshot.to_dict() or {}).get('created_at')
-            if isinstance(created_at, datetime):
+            created_at = _parse_timestamp((snapshot.to_dict() or {}).get('created_at'))
+            if created_at is not None:
                 oldest_age_seconds = max(oldest_age_seconds, max(0.0, (now - created_at).total_seconds()))
     return {
         'accepted': totals['accepted'],
