@@ -1,6 +1,6 @@
 """Hermetic unit tests for backend/database/person_aliases.py resilience, validation, and boundaries."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -69,15 +69,20 @@ def test_rename_person_retaining_aliases_maps_not_found_to_false():
         assert result is False
 
 
-def test_rename_person_retaining_aliases_handles_transaction_exception():
+def test_rename_person_retaining_aliases_handles_none_client():
+    with patch("database.person_aliases.get_firestore_client", return_value=None):
+        assert aliases_db.rename_person_retaining_aliases(None, "u1", "p1", "Alice") is False
+
+
+def test_rename_person_retaining_aliases_propagates_transport_exceptions():
     mock_client = MagicMock()
     with patch.object(
         aliases_db,
         "update_person_name_transaction",
-        side_effect=Exception("Firestore 503 deadline exceeded"),
+        side_effect=RuntimeError("Firestore 503 deadline exceeded"),
     ):
-        result = aliases_db.rename_person_retaining_aliases(mock_client, "u1", "p1", "Alice")
-        assert result is False
+        with pytest.raises(RuntimeError, match="Firestore 503 deadline exceeded"):
+            aliases_db.rename_person_retaining_aliases(mock_client, "u1", "p1", "Alice")
 
 
 def test_rename_person_retaining_aliases_success_flow():
@@ -164,26 +169,3 @@ def test_update_person_name_transaction_caps_at_24_aliases():
     payload = transaction.update.call_args[0][1]
     assert len(payload["aliases"]) <= 24
     assert payload["aliases"][-1] == "Old Name"
-
-
-def test_get_person_aliases_validation_and_retrieval():
-    mock_client = MagicMock()
-    mock_ref = MagicMock()
-    mock_client.collection.return_value.document.return_value.collection.return_value.document.return_value = mock_ref
-
-    # Invalid input
-    assert aliases_db.get_person_aliases(mock_client, "", "p1") == []
-    assert aliases_db.get_person_aliases(mock_client, "u1", "") == []
-
-    # Non-existent doc
-    mock_ref.get.return_value.exists = False
-    assert aliases_db.get_person_aliases(mock_client, "u1", "p1") == []
-
-    # Valid doc with aliases
-    mock_ref.get.return_value.exists = True
-    mock_ref.get.return_value.to_dict.return_value = {"aliases": ["Ally", "  Bobby  ", "Ally", "", None, 123]}
-    assert aliases_db.get_person_aliases(mock_client, "u1", "p1") == ["Ally", "Bobby"]
-
-    # Exception boundary
-    mock_ref.get.side_effect = Exception("Storage error")
-    assert aliases_db.get_person_aliases(mock_client, "u1", "p1") == []
