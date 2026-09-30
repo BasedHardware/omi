@@ -6,7 +6,7 @@ import os
 import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
-from utils.observability.fallback import record_fallback
+from utils.observability.fallback import ReplayLagDiagnostics, record_fallback
 from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
@@ -346,6 +346,20 @@ class LiveLegSocket(STTSocket):
         if provider_sample is None:
             return None
         return self._send_tracker.send_map.map_sample(provider_sample)
+
+    def window_replay_diagnostics(self, first: int, end: int, projected_samples: int) -> ReplayLagDiagnostics | None:
+        from utils.stt.parakeet_window import WindowedParakeetSocket
+
+        if not isinstance(self.raw, WindowedParakeetSocket) or self._send_tracker is None:
+            return None
+        send_map = self._send_tracker.send_map
+        admitted = send_map.accepted_samples_in_capture_range(first, end)
+        rate = send_map.provider_sample_rate
+        return self.raw.replay_diagnostics(projected_samples / rate, admitted / rate)
+
+    @property
+    def replay_lag_diagnostics(self) -> ReplayLagDiagnostics | None:
+        return getattr(self.raw, 'replay_lag_diagnostics', None)
 
     @property
     def capacity_subtype(self) -> str | None:

@@ -71,6 +71,8 @@ overlay:
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-prod-screen-frames
           category: storage_retention
+        MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+          value: '25'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
         HOSTED_PARAKEET_API_URL:
@@ -185,6 +187,8 @@ overlay:
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-prod-screen-frames
           category: storage_retention
+        MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+          value: '25'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -322,6 +326,8 @@ overlay:
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
             category: storage_retention
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
           BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
@@ -451,6 +457,8 @@ overlay:
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
             category: storage_retention
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
           LISTEN_FINALIZATION_DISPATCH_MODE:

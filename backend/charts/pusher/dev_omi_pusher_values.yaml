@@ -198,6 +198,8 @@ env:
     value: "true"
   - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
     value: "true"
+  - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
+    value: "25"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "true"
   - name: CONVERSATION_RELEVANCE_JEV_ENABLED

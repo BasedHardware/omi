@@ -186,6 +186,8 @@ env:
     value: "true"
   - name: BUCKET_SCREEN_FRAMES
     value: "based-hardware-prod-screen-frames"
+  - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
+    value: "25"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
   # Phase-1 final-pass shadow runs only for the owner UID on this pusher.

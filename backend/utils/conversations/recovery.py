@@ -73,7 +73,7 @@ def verified_recovery_discard(discarded: Any, decision: Any) -> bool:
 def structured_has_protected_content(structured: Any, user_title: Any = None) -> bool:
     """Whether regenerating the row could overwrite content worth keeping.
 
-    Admission-only predicate: unlike ``structured_is_rich`` (which verifies new
+    Admission and discard-commit predicate: unlike ``structured_is_rich`` (which verifies new
     enrichment actually landed), a real ``title`` — set by the user or by an
     earlier successful pass — and the user-authored ``user_title`` field each
     make the row ineligible even with no overview, so recovery never clobbers

@@ -444,8 +444,11 @@ class TestConcurrentJudging:
         monkeypatch.setattr(screen_frames_mod, "canonicalize_for_judging", lambda **kw: MagicMock(name="canonical"))
         monkeypatch.setattr(screen_frames_mod, "judge_canonical", judge)
         monkeypatch.setattr(screen_frames_mod, "commit_approved", commit)
-        enforce = MagicMock(return_value=(screen_frames_mod.EMPTY_FRAME_SET, False))
-        monkeypatch.setattr(screen_frames_mod.enforcement, "enforce_and_persist", enforce)
+        enforce = MagicMock(return_value=False)
+        monkeypatch.setattr(screen_frames_mod.enforcement, "persist_enforced_frames", enforce)
+        monkeypatch.setattr(
+            screen_frames_mod.enforcement, "build_frame_set_response", lambda *a: screen_frames_mod.EMPTY_FRAME_SET
+        )
         return enforce
 
     def test_judging_is_concurrent_and_writes_stay_off_the_llm_pool(self, _stub_admission_dependencies, monkeypatch):
@@ -608,3 +611,99 @@ class TestTrustedSelectionFingerprint:
         result = screen_frames_mod.get_shared_conversation_screenshots(CONVERSATION_ID)
 
         assert result.revision == 1 and result.trusted_selection_fingerprint is None
+
+
+class TestEmptyEvidencePass:
+    """An empty candidate list means "evidence pass done, nothing to offer"."""
+
+    def test_it_stamps_this_buckets_marker_without_judging_or_writing(self, _stub_admission_dependencies, monkeypatch):
+        fake_conversations_db, _fake_users_db, _fake_redis_db = _stub_admission_dependencies
+        live = _live_meeting(ConversationStatus.in_progress.value)
+        fake_conversations_db.get_conversation.return_value = live
+        judge, commit = MagicMock(), MagicMock()
+        monkeypatch.setattr(screen_frames_mod, "judge_canonical", judge)
+        monkeypatch.setattr(screen_frames_mod, "commit_approved", commit)
+        enforce = MagicMock(return_value=False)
+        monkeypatch.setattr(screen_frames_mod.enforcement, "persist_enforced_frames", enforce)
+        monkeypatch.setattr(
+            screen_frames_mod.enforcement, "build_frame_set_response", lambda *a: screen_frames_mod.EMPTY_FRAME_SET
+        )
+
+        response = screen_frames_mod.adjudicate_screen_frames(_request(candidates=[]), uid=UID)
+
+        assert response.outcome == "no_approved_frames"
+        judge.assert_not_called()
+        commit.assert_not_called()
+        fake_conversations_db.mark_conversation_screen_frames_adjudicated.assert_called_once_with(
+            UID,
+            CONVERSATION_ID,
+            selection_fingerprint="meeting-content-v1:1767225610000:1767225920000",
+            bucket="test-screen-frames",
+        )
+        assert enforce.call_args.args[3] == []
+
+    def test_it_keeps_the_admission_checks(self, _stub_admission_dependencies):
+        _fake_conversations_db, fake_users_db, _fake_redis_db = _stub_admission_dependencies
+        fake_users_db.get_meeting_note_screenshots_enabled.return_value = False
+
+        with pytest.raises(HTTPException) as exc_info:
+            screen_frames_mod.adjudicate_screen_frames(_request(candidates=[]), uid=UID)
+
+        assert exc_info.value.status_code == 409
+
+    def test_more_than_eight_candidates_is_still_rejected(self):
+        import pydantic
+
+        with pytest.raises(pydantic.ValidationError):
+            _request(candidates=[_candidate(client_frame_id=f"c{i}") for i in range(9)])
+
+
+def _ordered_pass(deps, monkeypatch, *, build):
+    fake_conversations_db, _fake_users_db, _fake_redis_db = deps
+    fake_conversations_db.get_conversation.return_value = _live_meeting(ConversationStatus.in_progress.value)
+    order = []
+    fake_conversations_db.mark_conversation_screen_frames_adjudicated.side_effect = lambda *a, **k: order.append(
+        "stamp"
+    )
+
+    def persist(*_args):
+        order.append("persist")
+        return False
+
+    def respond(*_args):
+        order.append("respond")
+        return build()
+
+    monkeypatch.setattr(screen_frames_mod.enforcement, "persist_enforced_frames", persist)
+    monkeypatch.setattr(screen_frames_mod.enforcement, "build_frame_set_response", respond)
+    return order
+
+
+def test_the_marker_is_stamped_after_persistence_and_before_the_response(_stub_admission_dependencies, monkeypatch):
+    """The notes finalizer proceeds on this marker; it must never precede readable frame docs."""
+    from models.screen_frame import ConversationScreenFrameSet
+
+    stamp = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
+    built = ConversationScreenFrameSet(revision=1, adjudicated_at=stamp, selection_fingerprint="fp")
+    order = _ordered_pass(_stub_admission_dependencies, monkeypatch, build=lambda: built)
+
+    response = screen_frames_mod.adjudicate_screen_frames(_request(candidates=[]), uid=UID)
+
+    assert order == ["persist", "stamp", "respond"]
+    assert response.frame_set is built
+
+
+def test_a_response_failure_after_persistence_still_leaves_the_pass_marked(_stub_admission_dependencies, monkeypatch):
+    """URL signing can fail while building the response; the frames are persisted and the
+    pass is done, so the client must not re-upload (privacy rejects included) and notes must
+    not wait out the bound."""
+
+    def signing_fails():
+        raise RuntimeError("signer unavailable")
+
+    order = _ordered_pass(_stub_admission_dependencies, monkeypatch, build=signing_fails)
+
+    with pytest.raises(RuntimeError):
+        screen_frames_mod.adjudicate_screen_frames(_request(candidates=[]), uid=UID)
+
+    assert order == ["persist", "stamp", "respond"]
