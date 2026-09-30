@@ -361,18 +361,21 @@ def adjudicate_screen_frames(
             raise HTTPException(status_code=503, detail={"code": "writer_unavailable"}) from failure
         raise
 
-    # Mark the attempt BEFORE building the response, and unconditionally — an all-rejected pass
+    # Mark the attempt unconditionally (below, once the docs are persisted) — an all-rejected pass
     # is exactly the case this exists for. `revision` cannot record it, because nothing was
     # approved to bump it, so without this the client cannot tell that it already offered these
     # frames and had them refused, and re-uploads them on every reopen.
-    screen_frames_db.mark_conversation_screen_frames_adjudicated(
+    frame_set, committed = enforcement.enforce_and_persist(uid, request.subject.id, policy.max_persisted, new_frames)
+    # Stamped only after the frame docs are persisted: the notes finalizer treats this marker
+    # as "the evidence is readable" (utils/conversations/meeting_evidence_admission.py), so it
+    # must never precede the docs. The response carries the stamp so the client sees it now.
+    stamp = screen_frames_db.mark_conversation_screen_frames_adjudicated(
         uid,
         request.subject.id,
         selection_fingerprint=selection_fingerprint,
         bucket=bucket,
     )
-
-    frame_set, committed = enforcement.enforce_and_persist(uid, request.subject.id, policy.max_persisted, new_frames)
+    frame_set = frame_set.model_copy(update={'adjudicated_at': stamp, 'selection_fingerprint': selection_fingerprint})
     response = ScreenFrameAdjudicationResponse(
         attempt_id=request.attempt_id,
         outcome="committed" if committed else "no_approved_frames",

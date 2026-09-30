@@ -43,7 +43,7 @@ def clock():
 def _environment(monkeypatch):
     monkeypatch.setenv('MEETING_NOTES_EVIDENCE_WAIT_SECONDS', '25')
     monkeypatch.setenv('BUCKET_SCREEN_FRAMES', BUCKET)
-    monkeypatch.setattr(admission, 'get_meeting_note_screenshots_enabled', lambda uid: True)
+    monkeypatch.setattr(admission, 'get_meeting_note_screenshots_enabled', lambda uid, **kw: True)
 
     async def inline(_pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -55,7 +55,8 @@ def _marker(monkeypatch, stamps):
     """Adjudication marker reads return successive values (None = not yet)."""
     reads = []
 
-    def read(uid, conversation_id, *, bucket):
+    def read(uid, conversation_id, *, bucket, rpc_timeout):
+        assert 0 < rpc_timeout <= 25.0  # every RPC is bounded by what is left of the wait
         reads.append(bucket)
         return stamps[min(len(reads) - 1, len(stamps) - 1)]
 
@@ -131,18 +132,50 @@ def test_no_screen_frame_bucket_means_no_evidence_to_wait_for(monkeypatch, clock
 
 
 def test_screenshot_setting_off_never_waits(monkeypatch, clock):
-    monkeypatch.setattr(admission, 'get_meeting_note_screenshots_enabled', lambda uid: False)
+    monkeypatch.setattr(admission, 'get_meeting_note_screenshots_enabled', lambda uid, **kw: False)
     reads = _marker(monkeypatch, [None])
     assert _run(clock) == 'not_applicable'
     assert reads == []
 
 
-def test_a_read_failure_proceeds_instead_of_failing_finalization(monkeypatch, clock):
+def test_a_read_failure_proceeds_degraded_instead_of_failing_finalization(monkeypatch, clock):
     def boom(*_args, **_kwargs):
         raise RuntimeError('firestore unavailable')
 
+    fallbacks = []
     monkeypatch.setattr(admission, 'get_conversation_screen_frames_adjudicated_at', boom)
+    monkeypatch.setattr(admission, 'record_fallback', lambda **kw: fallbacks.append(kw))
     assert _run(clock) == 'error'
+    assert fallbacks and fallbacks[0]['outcome'] == 'degraded'
+    assert fallbacks[0]['component'] == 'conversation_finalization'
+
+
+def test_a_hung_read_cannot_outlive_the_bound(monkeypatch):
+    """The await is cut at the remaining budget even when the RPC never returns."""
+    monkeypatch.setenv('MEETING_NOTES_EVIDENCE_WAIT_SECONDS', '0.2')
+    seen_timeouts = []
+
+    async def hung(_pool, fn, *args, rpc_timeout=None, **kwargs):
+        seen_timeouts.append(rpc_timeout)
+        if fn is admission.get_meeting_note_screenshots_enabled:
+            return True
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(admission, 'run_blocking', hung)
+    started = asyncio.get_event_loop_policy().new_event_loop()
+    try:
+        import time as _time
+
+        began = _time.monotonic()
+        outcome = started.run_until_complete(
+            admission.await_meeting_evidence('u', 'c', MEETING, trigger=ProcessingTrigger.CAPTURE_END)
+        )
+        elapsed = _time.monotonic() - began
+    finally:
+        started.close()
+    assert outcome == 'timed_out'
+    assert elapsed < 1.0
+    assert all(timeout is not None and timeout <= 0.2 for timeout in seen_timeouts)
 
 
 def test_the_bound_is_capped(monkeypatch):

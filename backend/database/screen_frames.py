@@ -252,11 +252,17 @@ def _state_payload(bucket: str, field: str, value: Any) -> Dict[str, Any]:
     return {_ENV_STATE_FIELD: {_state_key(bucket): {field: value}}}
 
 
-def _read_state(conversation_ref: Any, bucket: str, field: str) -> Any:
+def _rpc_bounds(rpc_timeout: Optional[float]) -> Dict[str, Any]:
+    # A caller with a deadline gets one attempt within it: no library retry past the bound.
+    return {'timeout': rpc_timeout, 'retry': None} if rpc_timeout is not None else {}
+
+
+def _read_state(conversation_ref: Any, bucket: str, field: str, rpc_timeout: Optional[float] = None) -> Any:
+    bounds = _rpc_bounds(rpc_timeout)
     if bucket == LEGACY_SCREEN_FRAMES_BUCKET:
-        snapshot = conversation_ref.get(field_paths=[_LEGACY_STATE_FIELDS[field]])
+        snapshot = conversation_ref.get(field_paths=[_LEGACY_STATE_FIELDS[field]], **bounds)
         return (snapshot.to_dict() or {}).get(_LEGACY_STATE_FIELDS[field])
-    snapshot = conversation_ref.get(field_paths=[_ENV_STATE_FIELD])
+    snapshot = conversation_ref.get(field_paths=[_ENV_STATE_FIELD], **bounds)
     state = (snapshot.to_dict() or {}).get(_ENV_STATE_FIELD)
     scoped = state.get(_state_key(bucket)) if isinstance(state, dict) else None
     return scoped.get(field) if isinstance(scoped, dict) else None
@@ -314,8 +320,10 @@ def mark_conversation_screen_frames_adjudicated(
     return stamp
 
 
-def get_conversation_screen_frames_adjudicated_at(uid: str, conversation_id: str, *, bucket: str):
-    return _read_state(_conversation_ref(uid, conversation_id), bucket, 'adjudicated_at')
+def get_conversation_screen_frames_adjudicated_at(
+    uid: str, conversation_id: str, *, bucket: str, rpc_timeout: Optional[float] = None
+):
+    return _read_state(_conversation_ref(uid, conversation_id), bucket, 'adjudicated_at', rpc_timeout)
 
 
 def get_conversation_screen_frames_selection_fingerprint(uid: str, conversation_id: str, *, bucket: str):

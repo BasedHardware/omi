@@ -21,13 +21,14 @@ import asyncio
 import logging
 import os
 import time
-from typing import Any, Awaitable, Callable, Mapping, Optional
+from typing import Any, Awaitable, Callable, Mapping
 
 from database.screen_frames import get_conversation_screen_frames_adjudicated_at
 from database.users import get_meeting_note_screenshots_enabled
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import db_executor, run_blocking
 from utils.metrics import MEETING_NOTES_EVIDENCE_WAIT_TOTAL
+from utils.observability.fallback import record_fallback
 from utils.other.storage import configured_screen_frames_bucket
 
 logger = logging.getLogger(__name__)
@@ -91,21 +92,36 @@ async def await_meeting_evidence(
         return 'not_applicable'
     outcome = 'timed_out'
     started = monotonic()
+
+    def remaining() -> float:
+        return bound - (monotonic() - started)
+
     try:
-        if not await run_blocking(db_executor, get_meeting_note_screenshots_enabled, uid):
+        if not await _bounded(get_meeting_note_screenshots_enabled, uid, budget=remaining()):
             return 'not_applicable'
         first = True
         while True:
-            if await _evidence_landed(uid, conversation_id, bucket):
+            if await _bounded(
+                get_conversation_screen_frames_adjudicated_at, uid, conversation_id, bucket=bucket, budget=remaining()
+            ):
                 outcome = 'present' if first else 'arrived'
                 break
             first = False
-            remaining = bound - (monotonic() - started)
-            if remaining <= 0:
+            if remaining() <= 0:
                 break
-            await sleep(min(EVIDENCE_POLL_SECONDS, remaining))
+            await sleep(min(EVIDENCE_POLL_SECONDS, remaining()))
+    except asyncio.TimeoutError:
+        outcome = 'timed_out'  # a read that outlived the bound: proceed without evidence
     except Exception as error:  # noqa: BLE001 - evidence is optional; notes must proceed
         logger.warning('meeting notes evidence wait failed uid=%s error_type=%s', uid, type(error).__name__)
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='screen_evidence',
+            to_mode='notes_without_evidence',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
         outcome = 'error'
     waited = monotonic() - started
     MEETING_NOTES_EVIDENCE_WAIT_TOTAL.labels(outcome=outcome).inc()
@@ -119,8 +135,12 @@ async def await_meeting_evidence(
     return outcome
 
 
-async def _evidence_landed(uid: str, conversation_id: str, bucket: str) -> bool:
-    stamp: Optional[Any] = await run_blocking(
-        db_executor, get_conversation_screen_frames_adjudicated_at, uid, conversation_id, bucket=bucket
+async def _bounded(fn: Callable[..., Any], *args: Any, budget: float, **kwargs: Any) -> Any:
+    """One Firestore read within what is left of the bound: the await is cut at
+    the deadline and the RPC itself gets one attempt with that timeout."""
+    if budget <= 0:
+        raise asyncio.TimeoutError()
+    return await asyncio.wait_for(
+        run_blocking(db_executor, fn, *args, rpc_timeout=budget, **kwargs),
+        timeout=budget,
     )
-    return stamp is not None

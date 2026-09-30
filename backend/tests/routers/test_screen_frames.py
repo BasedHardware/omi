@@ -650,3 +650,26 @@ class TestEmptyEvidencePass:
 
         with pytest.raises(pydantic.ValidationError):
             _request(candidates=[_candidate(client_frame_id=f"c{i}") for i in range(9)])
+
+
+def test_the_adjudication_marker_is_stamped_only_after_frame_docs_persist(_stub_admission_dependencies, monkeypatch):
+    """The notes finalizer proceeds on this marker; it must never precede readable frame docs."""
+    fake_conversations_db, _fake_users_db, _fake_redis_db = _stub_admission_dependencies
+    fake_conversations_db.get_conversation.return_value = _live_meeting(ConversationStatus.in_progress.value)
+    order = []
+    stamp = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
+    fake_conversations_db.mark_conversation_screen_frames_adjudicated.side_effect = (
+        lambda *a, **k: order.append("stamp") or stamp
+    )
+
+    def persist(*_args):
+        order.append("persist")
+        return screen_frames_mod.EMPTY_FRAME_SET, False
+
+    monkeypatch.setattr(screen_frames_mod.enforcement, "enforce_and_persist", persist)
+
+    response = screen_frames_mod.adjudicate_screen_frames(_request(candidates=[]), uid=UID)
+
+    assert order == ["persist", "stamp"]
+    assert response.frame_set.adjudicated_at == stamp
+    assert response.frame_set.selection_fingerprint == "meeting-content-v1:1767225610000:1767225920000"
