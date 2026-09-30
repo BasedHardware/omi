@@ -221,6 +221,11 @@ coalesce the closest adjacent spans at the 1,024-entry bound rather than
 ending an otherwise healthy session. Coalescing retains every speech sample
 and may conservatively include the short silence between two spans. The PCM
 buffer's 60-second bound still fails over when un-emitted audio outgrows it.
+Near the 60-second PCM buffer limit, a 24-second context with a short emitted
+prefix followed by a long unfinished TDT segment is forced out if the prefix
+would advance the anchor by less than one 6-second pace. Earlier windows keep
+their sentence boundary, and windows with enough progress still hold the last
+segment. This extends the forced cut already used for one unfinished segment.
 Fallback logs keep `reason=capacity_full` and add a bounded `subtype` of
 `buffer_cap`, `replay_ring_cap`, or `admission` (or `unknown`); the shared
 fallback metric gains no new label.

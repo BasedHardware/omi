@@ -1048,6 +1048,22 @@ class UnpunctuatedClient(ProgressThenHoldClient):
         )
 
 
+class LongTailClient(ProgressThenHoldClient):
+    async def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        duration = _wav_duration(kwargs)
+        return httpx.Response(
+            200,
+            json={
+                'segments': [
+                    {'text': 'short prefix', 'start': 0.0, 'end': 0.5},
+                    {'text': 'continuing speech', 'start': 0.5, 'end': duration - 0.1},
+                ]
+            },
+            request=httpx.Request('POST', url),
+        )
+
+
 async def _receiver_for_anchor_replay(monkeypatch, client):
     monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '60')
     monkeypatch.setenv('PARAKEET_WINDOW_POST_TIMEOUT_SECONDS', '60')
@@ -1136,6 +1152,31 @@ async def test_unpunctuated_continuous_speech_forces_context_cut_before_buffer_c
     assert len(base.emitted) > 0
     assert replayed == [] and callbacks == []
     await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_long_unfinished_tdt_tail_cuts_at_context_cap_instead_of_filling_pcm_buffer(monkeypatch):
+    client = LongTailClient()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    emitted = []
+    sock = window.WindowedParakeetSocket(emitted.extend, 'http://tdt.invalid', 16000, lambda: None)
+    pcm = b'\x01\x00' * 16000 * 6
+    anchors = []
+    for _ in range(50):
+        sock.mark_speech()
+        assert sock.send(pcm)
+        job = sock._next_job()
+        assert job is not None
+        await sock._run_job(job)
+        anchors.append(sock._anchor_bytes)
+        assert len(sock._buf) <= sock._buffer_cap()
+    assert len(client.requests) == 50
+    assert anchors[3] < sock._pace_bytes  # early cuts keep the sentence anchor
+    assert any(right - left > sock._pace_bytes for left, right in zip(anchors, anchors[1:]))
+    assert emitted
+    assert not sock.is_connection_dead
+    sock.finish()
 
 
 @pytest.mark.asyncio
@@ -2060,6 +2101,17 @@ def test_decide_window_hold_empty_trailing_complete_and_forced_cut():
     assert cap_two.emit == (first,)
     assert cap_two.new_anchor == 2.0
     assert cap_two.forced_cut is False
+    tiny = RawSegment('short prefix', 0.0, 0.5)
+    long_tail = RawSegment('continuing speech', 0.5, 23.9)
+    stalled_cap = decide_window([tiny, long_tail], 24.0, 24.0, force=False, min_cap_progress=6.0)
+    assert stalled_cap.emit == (tiny, long_tail)
+    assert stalled_cap.new_anchor == 23.9
+    assert stalled_cap.forced_cut is True
+    progressed = RawSegment('complete prefix.', 0.0, 18.0)
+    healthy_cap = decide_window([progressed, long_tail], 24.0, 24.0, force=False, min_cap_progress=6.0)
+    assert healthy_cap.emit == (progressed,)
+    assert healthy_cap.new_anchor == 18.0
+    assert healthy_cap.forced_cut is False
     forced = decide_window([held], 24.0, 24.0, force=False)
     assert forced.emit == (held,)
     assert forced.new_anchor == 5.0

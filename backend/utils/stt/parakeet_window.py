@@ -728,6 +728,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             force=job.force,
             pause=job.pause,
             empty_cap_slide=EMPTY_CAP_SLIDE_SECONDS,
+            # Preserve sentence anchoring while the buffer has room. Force
+            # the long held tail only when another pace of audio would leave
+            # too little room for the next POST to make progress.
+            min_cap_progress=(self._pace_seconds if len(self._buf) >= self._buffer_cap() - self._pace_bytes else 0.0),
         )
         if decision.forced_cut:
             WINDOW_FORCED_CUTS.inc()
