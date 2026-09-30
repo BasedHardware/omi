@@ -691,7 +691,10 @@ def upsert_app_payment_link(
         logger.warning(f"App is not found, app_id: {app_id}")
         return None
 
-    app = App(**app_data)
+    app = _safe_build_app(app_data)
+    if not app:
+        logger.warning(f"Cannot upsert payment link for malformed app, app_id: {app_id}")
+        return None
 
     if previous_price and previous_price == price:
         logger.info(f"App price is existing, app_id: {app_id}")
