@@ -363,6 +363,11 @@ struct MeetingScreenshotTile: View {
   @State private var reportedUnavailable = false
   @State private var isHovering = false
   @State private var isConfirmingDelete = false
+
+  private static func isFailure(_ phase: AsyncImagePhase) -> Bool {
+    if case .failure = phase { return true }
+    return false
+  }
   @State private var isDeleting = false
 
   private var shape: RoundedRectangle {
@@ -395,19 +400,17 @@ struct MeetingScreenshotTile: View {
                   .aspectRatio(contentMode: .fill)
                   .frame(width: SpineMetrics.thumbnailWidth, height: SpineMetrics.thumbnailHeight)
                   .clipped()
-              case .failure:
-                Image(systemName: glyphName)
-                  .scaledFont(size: 20)
-                  .foregroundColor(Ink.secondary)
-                  .onAppear {
-                    guard !reportedUnavailable else { return }
-                    reportedUnavailable = true
-                    onContentUnavailable?()
-                  }
               default:
                 Image(systemName: glyphName)
                   .scaledFont(size: 20)
                   .foregroundColor(Ink.secondary)
+                  // Keyed on failure, not on appearance: the placeholder is already on screen
+                  // while loading, so it does not re-appear when the load then fails.
+                  .task(id: Self.isFailure(phase)) {
+                    guard Self.isFailure(phase), !reportedUnavailable else { return }
+                    reportedUnavailable = true
+                    onContentUnavailable?()
+                  }
               }
             }
           }
