@@ -3242,8 +3242,6 @@
     "tagSpeakerIncludingLaterSpeech": "Etiqueta també la parla posterior d'aquest parlant",
     "updateSummaryWithNewNames": "Actualitza el resum amb els noms nous",
     "syncStatusUnsupportedAudio": "No s'ha pogut llegir l'àudio — no es pot sincronitzar",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Què pots fer per mi?} goal{Ajuda’m a fixar un objectiu} activity{Resumeix la meva activitat recent} improve{Com puc millorar?} other{}}",
     "nextWeek": "La setmana que ve",
     "clearSearch": "Esborra la cerca",
@@ -3665,5 +3663,6 @@
     "meetingScreenshotsTitle": "Què hi havia a la pantalla",
     "meetingScreenshotFallbackCaption": "Captura de pantalla d'aquesta reunió",
     "deleteMeetingScreenshotTitle": "Vols suprimir la captura de pantalla?",
-    "deleteMeetingScreenshotMessage": "Això elimina la captura de pantalla de la nota d'aquesta reunió. No es pot desfer."
+    "deleteMeetingScreenshotMessage": "Això elimina la captura de pantalla de la nota d'aquesta reunió. No es pot desfer.",
+    "conversationSummaryFailed": "No s'ha pogut crear el resum"
 }

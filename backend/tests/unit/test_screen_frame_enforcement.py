@@ -338,7 +338,7 @@ class TestEnvironmentScoping:
         monkeypatch.setattr(enforcement_mod, "screen_frame_store", store)
 
         new = [_new_frame("p1", 100, 0.9)]
-        _frame_set, committed = enforcement_mod.enforce_and_persist(UID, CONVERSATION_ID, 7, new)
+        committed = enforcement_mod.persist_enforced_frames(UID, CONVERSATION_ID, 7, new)
 
         assert committed is True
         store.delete_screen_frame.assert_not_called()

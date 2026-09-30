@@ -3284,8 +3284,6 @@
     "tagSpeakerIncludingLaterSpeech": "Mærk også senere tale fra denne taler",
     "updateSummaryWithNewNames": "Opdater resuméet med de nye navne",
     "syncStatusUnsupportedAudio": "Lyden kunne ikke læses — kan ikke synkroniseres",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Hvad kan du gøre for mig?} goal{Hjælp mig med at sætte et mål} activity{Opsummer mine seneste aktiviteter} improve{Hvordan kan jeg blive bedre?} other{}}",
     "nextWeek": "Næste uge",
     "clearSearch": "Ryd søgning",
@@ -3707,5 +3705,6 @@
     "meetingScreenshotsTitle": "Hvad der var på skærmen",
     "meetingScreenshotFallbackCaption": "Skærmbillede fra dette møde",
     "deleteMeetingScreenshotTitle": "Slet skærmbillede?",
-    "deleteMeetingScreenshotMessage": "Dette fjerner skærmbilledet fra mødets note. Det kan ikke fortrydes."
+    "deleteMeetingScreenshotMessage": "Dette fjerner skærmbilledet fra mødets note. Det kan ikke fortrydes.",
+    "conversationSummaryFailed": "Resuméet mislykkedes"
 }

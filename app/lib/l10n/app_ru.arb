@@ -3277,8 +3277,6 @@
     "tagSpeakerIncludingLaterSpeech": "Также отметить последующую речь этого говорящего",
     "updateSummaryWithNewNames": "Обновить сводку с новыми именами",
     "syncStatusUnsupportedAudio": "Не удалось прочитать аудио — синхронизация невозможна",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Что ты можешь для меня сделать?} goal{Помоги мне поставить цель} activity{Подведи итог моей недавней активности} improve{Как мне стать лучше?} other{}}",
     "nextWeek": "На следующей неделе",
     "clearSearch": "Очистить поиск",
@@ -3700,5 +3698,6 @@
     "meetingScreenshotsTitle": "Что было на экране",
     "meetingScreenshotFallbackCaption": "Снимок экрана с этой встречи",
     "deleteMeetingScreenshotTitle": "Удалить снимок экрана?",
-    "deleteMeetingScreenshotMessage": "Снимок экрана будет удалён из заметки этой встречи. Это действие нельзя отменить."
+    "deleteMeetingScreenshotMessage": "Снимок экрана будет удалён из заметки этой встречи. Это действие нельзя отменить.",
+    "conversationSummaryFailed": "Не удалось создать сводку"
 }

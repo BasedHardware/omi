@@ -10200,12 +10200,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Audio nicht lesbar — Synchronisierung nicht möglich';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11742,4 +11736,7 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get deleteMeetingScreenshotMessage =>
       'Das Bildschirmfoto wird aus der Notiz dieses Meetings entfernt. Dies kann nicht rückgängig gemacht werden.';
+
+  @override
+  String get conversationSummaryFailed => 'Zusammenfassung fehlgeschlagen';
 }

@@ -3277,8 +3277,6 @@
     "tagSpeakerIncludingLaterSpeech": "Oznacz też późniejszą mowę tego mówcy",
     "updateSummaryWithNewNames": "Zaktualizuj podsumowanie o nowe imiona",
     "syncStatusUnsupportedAudio": "Nie można odczytać dźwięku — synchronizacja niemożliwa",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Co możesz dla mnie zrobić?} goal{Pomóż mi wyznaczyć cel} activity{Podsumuj moje ostatnie aktywności} improve{Jak mogę się poprawić?} other{}}",
     "nextWeek": "W przyszłym tygodniu",
     "clearSearch": "Wyczyść wyszukiwanie",
@@ -3700,5 +3698,6 @@
     "meetingScreenshotsTitle": "Co było na ekranie",
     "meetingScreenshotFallbackCaption": "Zrzut ekranu z tego spotkania",
     "deleteMeetingScreenshotTitle": "Usunąć zrzut ekranu?",
-    "deleteMeetingScreenshotMessage": "Zrzut ekranu zostanie usunięty z notatki tego spotkania. Tej operacji nie można cofnąć."
+    "deleteMeetingScreenshotMessage": "Zrzut ekranu zostanie usunięty z notatki tego spotkania. Tej operacji nie można cofnąć.",
+    "conversationSummaryFailed": "Nie udało się utworzyć podsumowania"
 }

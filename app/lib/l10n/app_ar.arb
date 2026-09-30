@@ -3242,8 +3242,6 @@
     "tagSpeakerIncludingLaterSpeech": "وسم الكلام اللاحق من هذا المتحدث أيضًا",
     "updateSummaryWithNewNames": "تحديث الملخص بالأسماء الجديدة",
     "syncStatusUnsupportedAudio": "تعذّرت قراءة الصوت — لا يمكن مزامنته",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{ماذا يمكنك أن تفعل من أجلي؟} goal{ساعدني في تحديد هدف} activity{لخّص نشاطي الأخير} improve{كيف يمكنني التحسّن؟} other{}}",
     "nextWeek": "الأسبوع القادم",
     "clearSearch": "مسح البحث",
@@ -3665,5 +3663,6 @@
     "meetingScreenshotsTitle": "ما كان على الشاشة",
     "meetingScreenshotFallbackCaption": "لقطة شاشة من هذا الاجتماع",
     "deleteMeetingScreenshotTitle": "حذف لقطة الشاشة؟",
-    "deleteMeetingScreenshotMessage": "سيؤدي هذا إلى إزالة لقطة الشاشة من ملاحظة هذا الاجتماع. لا يمكن التراجع عن ذلك."
+    "deleteMeetingScreenshotMessage": "سيؤدي هذا إلى إزالة لقطة الشاشة من ملاحظة هذا الاجتماع. لا يمكن التراجع عن ذلك.",
+    "conversationSummaryFailed": "فشل إنشاء الملخص"
 }

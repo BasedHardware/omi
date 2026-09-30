@@ -3242,8 +3242,6 @@
     "tagSpeakerIncludingLaterSpeech": "Маркирай и по-късната реч на този говорител",
     "updateSummaryWithNewNames": "Актуализирай резюмето с новите имена",
     "syncStatusUnsupportedAudio": "Звукът не може да се прочете — синхронизирането е невъзможно",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Какво можеш да направиш за мен?} goal{Помогни ми да си поставя цел} activity{Обобщи последните ми дейности} improve{Как мога да се подобря?} other{}}",
     "nextWeek": "Следващата седмица",
     "clearSearch": "Изчистване на търсенето",
@@ -3665,5 +3663,6 @@
     "meetingScreenshotsTitle": "Какво имаше на екрана",
     "meetingScreenshotFallbackCaption": "Екранна снимка от тази среща",
     "deleteMeetingScreenshotTitle": "Изтриване на екранната снимка?",
-    "deleteMeetingScreenshotMessage": "Екранната снимка ще бъде премахната от бележката за тази среща. Това не може да бъде отменено."
+    "deleteMeetingScreenshotMessage": "Екранната снимка ще бъде премахната от бележката за тази среща. Това не може да бъде отменено.",
+    "conversationSummaryFailed": "Резюмето не бе създадено"
 }

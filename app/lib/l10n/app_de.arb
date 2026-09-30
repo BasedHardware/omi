@@ -3242,8 +3242,6 @@
     "tagSpeakerIncludingLaterSpeech": "Spätere Sprache dieses Sprechers ebenfalls markieren",
     "updateSummaryWithNewNames": "Zusammenfassung mit neuen Namen aktualisieren",
     "syncStatusUnsupportedAudio": "Audio nicht lesbar — Synchronisierung nicht möglich",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Was kannst du für mich tun?} goal{Hilf mir, ein Ziel zu setzen} activity{Fasse meine letzten Aktivitäten zusammen} improve{Wie kann ich mich verbessern?} other{}}",
     "nextWeek": "Nächste Woche",
     "clearSearch": "Suche löschen",
@@ -3665,5 +3663,6 @@
     "meetingScreenshotsTitle": "Was auf dem Bildschirm war",
     "meetingScreenshotFallbackCaption": "Bildschirmfoto aus diesem Meeting",
     "deleteMeetingScreenshotTitle": "Bildschirmfoto löschen?",
-    "deleteMeetingScreenshotMessage": "Das Bildschirmfoto wird aus der Notiz dieses Meetings entfernt. Dies kann nicht rückgängig gemacht werden."
+    "deleteMeetingScreenshotMessage": "Das Bildschirmfoto wird aus der Notiz dieses Meetings entfernt. Dies kann nicht rückgängig gemacht werden.",
+    "conversationSummaryFailed": "Zusammenfassung fehlgeschlagen"
 }

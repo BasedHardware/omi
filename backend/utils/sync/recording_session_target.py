@@ -22,21 +22,21 @@ _CANDIDATE_LIMIT = 5
 # differ slightly). finished_at is the last recognized word, while the WAL can
 # contain trailing silence. A 60-second tail is less than the 120-second
 # silence-rollover gap; larger spans remain unbound.
-_START_SKEW_SECONDS = 5
-_TRAILING_AUDIO_SECONDS = 60
+START_SKEW_SECONDS = 5
+TRAILING_AUDIO_SECONDS = 60
 
 
-def _text(value: Any) -> str:
+def clean_text(value: Any) -> str:
     if not isinstance(value, str):
         return ''
     return value.strip()
 
 
-def _source_value(source: Any) -> str:
-    return _text(getattr(source, 'value', source))
+def source_value(source: Any) -> str:
+    return clean_text(getattr(source, 'value', source))
 
 
-def _unix_seconds(value: Any) -> float | None:
+def unix_seconds(value: Any) -> float | None:
     if isinstance(value, datetime):
         normalized = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
         return normalized.timestamp()
@@ -60,10 +60,10 @@ def select_recording_session_target(
     Zero matches, an ambiguous id, a provenance mismatch, or an audio interval
     that crosses a generation boundary keeps the existing unbound sync path.
     """
-    session_id = _text(recording_session_id)
-    device_id = _text(client_device_id)
-    source_value = _source_value(source)
-    if not session_id or not device_id or not source_value:
+    session_id = clean_text(recording_session_id)
+    device_id = clean_text(client_device_id)
+    wanted_source = source_value(source)
+    if not session_id or not device_id or not wanted_source:
         return None
     if (
         audio_start_seconds is None
@@ -78,27 +78,27 @@ def select_recording_session_target(
         if row.get('deleted'):
             continue
         external = row.get('external_data') or {}
-        if _text(external.get('recording_session_id') if isinstance(external, Mapping) else None) != session_id:
+        if clean_text(external.get('recording_session_id') if isinstance(external, Mapping) else None) != session_id:
             continue
-        if _source_value(row.get('source')) != source_value:
+        if source_value(row.get('source')) != wanted_source:
             continue
-        if _text(row.get('client_device_id')) != device_id:
+        if clean_text(row.get('client_device_id')) != device_id:
             continue
         if bool(row.get('is_locked')) != bool(is_locked):
             continue
-        conversation_start = _unix_seconds(row.get('started_at'))
-        conversation_end = _unix_seconds(row.get('finished_at'))
+        conversation_start = unix_seconds(row.get('started_at'))
+        conversation_end = unix_seconds(row.get('finished_at'))
         if (
             conversation_start is None
             or conversation_end is None
             or conversation_end < conversation_start
             or audio_start_seconds > conversation_end
             or audio_end_seconds < conversation_start
-            or audio_start_seconds < conversation_start - _START_SKEW_SECONDS
-            or audio_end_seconds > conversation_end + _TRAILING_AUDIO_SECONDS
+            or audio_start_seconds < conversation_start - START_SKEW_SECONDS
+            or audio_end_seconds > conversation_end + TRAILING_AUDIO_SECONDS
         ):
             continue
-        conversation_id = _text(row.get('id'))
+        conversation_id = clean_text(row.get('id'))
         if conversation_id:
             matches.append(conversation_id)
     if len(matches) != 1:
@@ -152,7 +152,7 @@ def resolve_recording_session_sync_target(
     A lookup failure is unbound sync, not a failed upload. Old clients omit the
     id and never reach the query.
     """
-    session_id = _text(recording_session_id)
+    session_id = clean_text(recording_session_id)
     if not session_id:
         return None
     try:

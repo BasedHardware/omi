@@ -10814,8 +10814,6 @@
     "tagSpeakerIncludingLaterSpeech": "Таксама пазначыць пазнейшую мову гэтага спікера",
     "updateSummaryWithNewNames": "Абнавіць зводку з новымі імёнамі",
     "syncStatusUnsupportedAudio": "Не ўдалося прачытаць аўдыя — сінхранізацыя немагчымая",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Што ты можаш зрабіць для мяне?} goal{Дапамажы мне паставіць мэту} activity{Падсумуй маю нядаўнюю дзейнасць} improve{Як я магу палепшыцца?} other{}}",
     "nextWeek": "На наступным тыдні",
     "clearSearch": "Ачысціць пошук",
@@ -11237,5 +11235,6 @@
     "meetingScreenshotsTitle": "Што было на экране",
     "meetingScreenshotFallbackCaption": "Здымак экрана з гэтай сустрэчы",
     "deleteMeetingScreenshotTitle": "Выдаліць здымак экрана?",
-    "deleteMeetingScreenshotMessage": "Здымак экрана будзе выдалены з нататкі гэтай сустрэчы. Гэта нельга адрабіць."
+    "deleteMeetingScreenshotMessage": "Здымак экрана будзе выдалены з нататкі гэтай сустрэчы. Гэта нельга адрабіць.",
+    "conversationSummaryFailed": "Не ўдалося стварыць зводку"
 }

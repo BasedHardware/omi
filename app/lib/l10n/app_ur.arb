@@ -10814,8 +10814,6 @@
     "tagSpeakerIncludingLaterSpeech": "اس اسپیکر کی بعد کی گفتگو بھی ٹیگ کریں",
     "updateSummaryWithNewNames": "نئے ناموں کے ساتھ خلاصہ اپ ڈیٹ کریں",
     "syncStatusUnsupportedAudio": "آڈیو پڑھی نہیں جا سکی — سنک نہیں ہو سکتی",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{تم میرے لیے کیا کر سکتے ہو؟} goal{مجھے ایک مقصد طے کرنے میں مدد کرو} activity{میری حالیہ سرگرمیوں کا خلاصہ دو} improve{میں کیسے بہتر ہو سکتا ہوں؟} other{}}",
     "nextWeek": "اگلے ہفتے",
     "clearSearch": "تلاش صاف کریں",
@@ -11237,5 +11235,6 @@
     "meetingScreenshotsTitle": "اسکرین پر کیا تھا",
     "meetingScreenshotFallbackCaption": "اس میٹنگ کا اسکرین شاٹ",
     "deleteMeetingScreenshotTitle": "اسکرین شاٹ حذف کریں؟",
-    "deleteMeetingScreenshotMessage": "یہ اس میٹنگ کے نوٹ سے اسکرین شاٹ ہٹا دے گا۔ اسے واپس نہیں کیا جا سکتا۔"
+    "deleteMeetingScreenshotMessage": "یہ اس میٹنگ کے نوٹ سے اسکرین شاٹ ہٹا دے گا۔ اسے واپس نہیں کیا جا سکتا۔",
+    "conversationSummaryFailed": "خلاصہ ناکام ہو گیا"
 }

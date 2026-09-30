@@ -1058,6 +1058,18 @@ export interface ChatRatingResponse {
   status: string;
 }
 
+export interface ChatSessionResponse {
+  app_id?: string | null;
+  created_at: string;
+  id: string;
+  message_count: number;
+  plugin_id?: string | null;
+  preview?: string | null;
+  starred: boolean;
+  title: string;
+  updated_at: string;
+}
+
 export interface ChatTool {
   auth_required?: boolean;
   description: string;
@@ -1220,6 +1232,7 @@ export interface Conversation {
   status?: ConversationStatus | null;
   structured: Structured;
   suggested_summarization_apps?: Array<string>;
+  summary_retryable?: boolean | null;
   sync_content_revision?: number | null;
   sync_relevance?: "keep" | "review" | null;
   transcript_segments?: Array<TranscriptSegment>;
@@ -1408,6 +1421,7 @@ export interface ConversationSearchItem {
   status?: ConversationStatus | null;
   structured: Structured;
   suggested_summarization_apps?: Array<string>;
+  summary_retryable?: boolean | null;
   sync_content_revision?: number | null;
   sync_relevance?: "keep" | "review" | null;
   transcript_segments?: Array<TranscriptSegment>;
@@ -1502,6 +1516,11 @@ export interface CreateAnnouncementRequest {
   id: string;
   targeting?: Targeting | null;
   type: AnnouncementType;
+}
+
+export interface CreateChatSessionRequest {
+  app_id?: string | null;
+  title?: string | null;
 }
 
 export interface CreateCheckoutRequest {
@@ -4907,6 +4926,11 @@ export interface UpdateAssistantSettingsRequest {
   web_search?: WebSearchAssistantSettings | null;
 }
 
+export interface UpdateChatSessionRequest {
+  starred?: boolean | null;
+  title?: string | null;
+}
+
 export interface UpdateConversationRequest {
   discarded?: boolean | null;
   title?: string | null;
@@ -5405,6 +5429,7 @@ export interface OmiApiSchemas {
   "ChatMessageCountResponse": ChatMessageCountResponse;
   "ChatQuotaUnit": ChatQuotaUnit;
   "ChatRatingResponse": ChatRatingResponse;
+  "ChatSessionResponse": ChatSessionResponse;
   "ChatTool": ChatTool;
   "ChatUsageQuota": ChatUsageQuota;
   "CheckVerificationRequest": CheckVerificationRequest;
@@ -5459,6 +5484,7 @@ export interface OmiApiSchemas {
   "ConversationsCountResponse": ConversationsCountResponse;
   "CreateActionItemRequest": CreateActionItemRequest;
   "CreateAnnouncementRequest": CreateAnnouncementRequest;
+  "CreateChatSessionRequest": CreateChatSessionRequest;
   "CreateCheckoutRequest": CreateCheckoutRequest;
   "CreateConversationFromTranscriptRequest": CreateConversationFromTranscriptRequest;
   "CreateConversationRequest": CreateConversationRequest;
@@ -5923,6 +5949,7 @@ export interface OmiApiSchemas {
   "UpdateActionItemRequest": UpdateActionItemRequest;
   "UpdateAnnouncementRequest": UpdateAnnouncementRequest;
   "UpdateAssistantSettingsRequest": UpdateAssistantSettingsRequest;
+  "UpdateChatSessionRequest": UpdateChatSessionRequest;
   "UpdateConversationRequest": UpdateConversationRequest;
   "UpdateFolderRequest": UpdateFolderRequest;
   "UpdateGoalRequest": UpdateGoalRequest;
@@ -10161,6 +10188,53 @@ export interface OmiApiPaths {
       responses: {
         "200": AppSearchResponse;
         "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/chat-sessions": {
+    get: {
+      operationId: "get_chat_sessions_v2_chat_sessions_get";
+      responses: {
+        "200": Array<ChatSessionResponse>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "create_chat_session_v2_chat_sessions_post";
+      responses: {
+        "200": ChatSessionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/chat-sessions/{session_id}": {
+    get: {
+      operationId: "get_chat_session_v2_chat_sessions__session_id__get";
+      responses: {
+        "200": ChatSessionResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "update_chat_session_v2_chat_sessions__session_id__patch";
+      responses: {
+        "200": ChatSessionResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_chat_session_v2_chat_sessions__session_id__delete";
+      responses: {
+        "200": StatusResponse;
+        "401": void;
+        "404": void;
         "422": HTTPValidationError;
       };
     };
@@ -18861,6 +18935,108 @@ export async function search_apps_v2_apps_search_get(query: { q?: string | null,
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_chat_sessions_v2_chat_sessions_get(query: { app_id?: string | null, limit?: number, offset?: number, starred?: boolean | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<ChatSessionResponse>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/chat-sessions`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function create_chat_session_v2_chat_sessions_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CreateChatSessionRequest, init?: OmiApiClientInit): Promise<ChatSessionResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/chat-sessions`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_chat_session_v2_chat_sessions__session_id__get(path: { session_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChatSessionResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/chat-sessions/${path.session_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function update_chat_session_v2_chat_sessions__session_id__patch(path: { session_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: UpdateChatSessionRequest, init?: OmiApiClientInit): Promise<ChatSessionResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/chat-sessions/${path.session_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function delete_chat_session_v2_chat_sessions__session_id__delete(path: { session_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<StatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/chat-sessions/${path.session_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function materialize_prompts_v2_chat_materialize_prompts_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MaterializePromptsRequest, init?: OmiApiClientInit): Promise<MaterializePromptsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/chat/materialize-prompts`;
@@ -19714,4 +19890,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 459 client methods generated.
+// Total: 464 client methods generated.

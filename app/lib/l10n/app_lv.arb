@@ -3242,8 +3242,6 @@
     "tagSpeakerIncludingLaterSpeech": "Atzīmēt arī šī runātāja turpmāko runu",
     "updateSummaryWithNewNames": "Atjaunināt kopsavilkumu ar jaunajiem vārdiem",
     "syncStatusUnsupportedAudio": "Neizdevās nolasīt audio — nevar sinhronizēt",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Ko tu vari manā labā darīt?} goal{Palīdzi man izvirzīt mērķi} activity{Apkopo manas nesenās aktivitātes} improve{Kā es varu pilnveidoties?} other{}}",
     "nextWeek": "Nākamnedēļ",
     "clearSearch": "Notīrīt meklēšanu",
@@ -3665,5 +3663,6 @@
     "meetingScreenshotsTitle": "Kas bija ekrānā",
     "meetingScreenshotFallbackCaption": "Ekrānuzņēmums no šīs sapulces",
     "deleteMeetingScreenshotTitle": "Dzēst ekrānuzņēmumu?",
-    "deleteMeetingScreenshotMessage": "Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt."
+    "deleteMeetingScreenshotMessage": "Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt.",
+    "conversationSummaryFailed": "Kopsavilkums neizdevās"
 }

@@ -180,6 +180,7 @@ class TranscriptSegment(BaseModel):
         delta_seconds: int = 0,
         *,
         protected_segment_ids: Optional[set[str]] = None,
+        speaker_bound_ids: Optional[set[int]] = None,
     ) -> CombineSegmentsResult:
         if not new_segments or len(new_segments) == 0:
             return CombineSegmentsResult(segments, [], [], {})
@@ -245,11 +246,15 @@ class TranscriptSegment(BaseModel):
             return (
                 (a.speaker == b.speaker or (a.is_user and b.is_user))
                 and a.speech_profile_processed == b.speech_profile_processed
-                and (b.start - a.end < 3)
+                and _is_chronological_continuation(a, b)
                 and (len(a.text) < 125 or a.text[-1] not in SENTENCE_ENDERS)
             )
 
         def _should_merge_lowercase_continuation(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
+            # No gap bound here by design: an incomplete lowercase sentence still belongs
+            # to its speaker's next word no matter how long the pause was. But it must
+            # still be b's predecessor, not a late arrival from an earlier batch -- that
+            # ordering check is the part shared with _is_chronological_continuation.
             return (
                 bool(a.text)
                 and bool(b.text)
@@ -257,7 +262,35 @@ class TranscriptSegment(BaseModel):
                 and a.text[-1] not in SENTENCE_ENDERS
                 and _starts_with_lowercase_cased(b.text)
                 and a.speech_profile_processed == b.speech_profile_processed
+                and b.start >= a.start
+                and b.end >= a.end
             )
+
+        def _join_translations(a: 'TranscriptSegment', b: 'TranscriptSegment') -> List[Translation]:
+            # A language translated on only one side would describe part of the merged
+            # text; drop it so the translation path treats the segment as a miss.
+            theirs = {t.lang: t.text for t in b.translations or []}
+            return [
+                Translation(lang=t.lang, text=f'{t.text} {theirs[t.lang]}')
+                for t in a.translations or []
+                if t.lang in theirs
+            ]
+
+        def _append_decided_speaker(
+            a: 'TranscriptSegment', b: 'TranscriptSegment'
+        ) -> Tuple[Optional['TranscriptSegment'], Optional['TranscriptSegment']]:
+            # Both sides carry the same decided speaker_id (the caller refused any other
+            # pair), though their SPEAKER_ spellings may differ. Only append in order:
+            # sentence repair would retire a saved ID, and a late arrival would invert the span.
+            if not _is_chronological_continuation(a, b) or a.speech_profile_processed != b.speech_profile_processed:
+                return a, b
+            if len(a.text) >= 125 and a.text[-1:] in SENTENCE_ENDERS and not _starts_with_lowercase_cased(b.text):
+                return a, b
+            a.text += f' {b.text}'
+            a.end = b.end
+            a.translations = _join_translations(a, b)
+            _absorb(b, a)
+            return a, None
 
         absorbed_into: Dict[str, str] = {}
         removed_ids: List[str] = []
@@ -278,6 +311,14 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if protected_segment_ids and (a.id in protected_segment_ids or b.id in protected_segment_ids):
                 return a, b
+            # A speaker-wide decision covers every segment of that speaker, so its
+            # segments may merge with each other but never trade words across it.
+            if (
+                speaker_bound_ids
+                and a.speaker_id != b.speaker_id
+                and (a.speaker_id in speaker_bound_ids or b.speaker_id in speaker_bound_ids)
+            ):
+                return a, b
             if b.stt_provider != a.stt_provider:
                 return a, b
             if b.speaker_match_source != a.speaker_match_source:
@@ -290,6 +331,8 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if b.audio_capture_run != a.audio_capture_run:
                 return a, b
+            if speaker_bound_ids and a.speaker_id in speaker_bound_ids:
+                return _append_decided_speaker(a, b)
 
             if (
                 a.speaker != b.speaker

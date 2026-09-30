@@ -10814,8 +10814,6 @@
     "tagSpeakerIncludingLaterSpeech": "Означи го и подоцнежниот говор на овој говорник",
     "updateSummaryWithNewNames": "Ажурирај го резимето со новите имиња",
     "syncStatusUnsupportedAudio": "Аудиото не може да се прочита — не може да се синхронизира",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Што можеш да направиш за мене?} goal{Помогни ми да поставам цел} activity{Сумирај ги моите неодамнешни активности} improve{Како можам да се подобрам?} other{}}",
     "nextWeek": "Следната недела",
     "clearSearch": "Исчисти го пребарувањето",
@@ -11237,5 +11235,6 @@
     "meetingScreenshotsTitle": "Што имаше на екранот",
     "meetingScreenshotFallbackCaption": "Слика од екранот од овој состанок",
     "deleteMeetingScreenshotTitle": "Да се избрише сликата од екранот?",
-    "deleteMeetingScreenshotMessage": "Ова ја отстранува сликата од екранот од белешката на овој состанок. Не може да се врати."
+    "deleteMeetingScreenshotMessage": "Ова ја отстранува сликата од екранот од белешката на овој состанок. Не може да се врати.",
+    "conversationSummaryFailed": "Резимето не успеа"
 }

@@ -10814,8 +10814,6 @@
     "tagSpeakerIncludingLaterSpeech": "תייג גם דיבור מאוחר יותר של הדובר הזה",
     "updateSummaryWithNewNames": "עדכן את הסיכום עם השמות החדשים",
     "syncStatusUnsupportedAudio": "לא ניתן לקרוא את האודיו — אי אפשר לסנכרן",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{מה אפשר לעשות בשבילי?} goal{עזור לי להגדיר מטרה} activity{סכם את הפעילות האחרונה שלי} improve{איך אוכל להשתפר?} other{}}",
     "nextWeek": "בשבוע הבא",
     "clearSearch": "ניקוי החיפוש",
@@ -11237,5 +11235,6 @@
     "meetingScreenshotsTitle": "מה היה על המסך",
     "meetingScreenshotFallbackCaption": "צילום מסך מהפגישה הזו",
     "deleteMeetingScreenshotTitle": "למחוק את צילום המסך?",
-    "deleteMeetingScreenshotMessage": "צילום המסך יוסר מהסיכום של הפגישה הזו. לא ניתן לבטל פעולה זו."
+    "deleteMeetingScreenshotMessage": "צילום המסך יוסר מהסיכום של הפגישה הזו. לא ניתן לבטל פעולה זו.",
+    "conversationSummaryFailed": "יצירת הסיכום נכשלה"
 }
