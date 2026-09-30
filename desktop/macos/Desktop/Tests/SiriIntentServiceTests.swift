@@ -201,6 +201,7 @@ final class SiriIntentServiceTests: XCTestCase {
   func testClassicShortcutsUseTheCorrectExecutionProcess() {
     XCTAssertFalse(RememberIntent.openAppWhenRun)
     XCTAssertFalse(AskOmiIntent.openAppWhenRun)
+    XCTAssertEqual(AskOmiIntent.authenticationPolicy, .requiresAuthentication)
     XCTAssertFalse(OpenOmiChatIntent.isDiscoverable)
     XCTAssertTrue(OpenOmiChatActionIntent.isDiscoverable)
     XCTAssertTrue(OpenOmiChatActionIntent.openAppWhenRun)

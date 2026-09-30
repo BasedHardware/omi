@@ -158,6 +158,26 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                         onChanged: _setSiriEnabled,
                       ),
                     ),
+                    const SizedBox(height: OmiSpacing.md),
+                    Container(
+                      key: const Key('siri_shortcuts_settings'),
+                      padding: const EdgeInsets.all(OmiSpacing.md),
+                      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(context.l10n.askOmi, style: OmiType.body),
+                          const SizedBox(height: OmiSpacing.xs),
+                          Text(
+                            // omi-ux-allow: hardcoded-text -- Siri invocation phrases are registered in English only
+                            'Turn on Omi in Shortcuts → Siri. Say “Ask Omi” or “Question for Omi,” then speak your question. You can also say “Search Omi for what I did today.”',
+                            style: OmiType.body.copyWith(color: OmiColors.textSecondary),
+                          ),
+                          const SizedBox(height: OmiSpacing.md),
+                          const SizedBox(height: 50, child: UiKitView(viewType: 'omi/shortcuts_button')),
+                        ],
+                      ),
+                    ),
                   ],
                   const SizedBox(height: OmiSpacing.xxl),
                   Consumer<AppProvider>(

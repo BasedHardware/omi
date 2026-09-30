@@ -156,7 +156,13 @@ class SiriIntegration extends SiriEventsApi {
   final Duration _retryBase;
   final Future<void> Function(Duration) _delay;
   void installEvents() {
-    if (_isIOS) SiriEventsApi.setUp(this);
+    if (!_isIOS) return;
+    SiriEventsApi.setUp(this);
+    // Intents can finish while Flutter is absent; drain the native buffer on
+    // every launch, then again after the signed-in session mirror is refreshed.
+    unawaited(_flushTelemetry().catchError((Object error) {
+      Logger.debug('Siri launch telemetry drain failed: $error');
+    }));
   }
 
   int _accountGeneration = 0;

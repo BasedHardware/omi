@@ -6,6 +6,29 @@ import AppIntents
 import FirebaseAuth
 import FirebaseCore
 
+/// Native Shortcuts link embedded in Flutter Settings. Apple's button opens
+/// this app's Shortcuts page, including the per-app Siri enable switch.
+@available(iOS 16.0, *)
+final class OmiShortcutsButtonFactory: NSObject, FlutterPlatformViewFactory {
+    func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
+        OmiShortcutsButton(frame: frame)
+    }
+}
+
+@available(iOS 16.0, *)
+private final class OmiShortcutsButton: NSObject, FlutterPlatformView {
+    private let button: ShortcutsUIButton
+
+    init(frame: CGRect) {
+        button = ShortcutsUIButton(style: .automatic)
+        button.frame = frame
+        button.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        super.init()
+    }
+
+    func view() -> UIView { button }
+}
+
 enum SiriListeningFailure: Error {
     case deviceAlreadyListening
     case recordingOff

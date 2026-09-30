@@ -29,6 +29,7 @@ enum SiriDebugProbe {
             discoverySafe = true
         }
         return shortcuts.count == 5 && !RememberIntent.openAppWhenRun && !AskOmiIntent.openAppWhenRun &&
+            AskOmiIntent.authenticationPolicy == .requiresAuthentication &&
             discoverySafe && OpenOmiChatActionIntent.openAppWhenRun &&
             StartOmiListeningIntent.openAppWhenRun && StopOmiListeningIntent.openAppWhenRun
     }
