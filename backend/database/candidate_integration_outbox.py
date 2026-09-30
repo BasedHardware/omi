@@ -10,6 +10,10 @@ from uuid import uuid4
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+try:
+    from database._client import db
+except Exception:
+    db = None
 from database.durable_queue import ProcessOutcome, QueuePolicy, decide_attempt, redrive_patch
 from database.read_boundary import parse_snapshot_strict
 from models.task_intelligence import TaskWorkflowControl
@@ -58,22 +62,17 @@ def _ensure_utc(dt: Any) -> datetime | None:
 
 
 def _resolve_client(firestore_client: Any = None) -> Any:
-    """Resolve Firestore client with DI precedence and lazy fallback."""
+    """Resolve Firestore client with DI precedence and module/lazy fallback."""
     if firestore_client is not None:
         return firestore_client
+    if db is not None:
+        return db
     try:
-        from database._client import db, get_firestore_client
+        from database._client import get_firestore_client
 
         c = get_firestore_client()
         if c is not None:
             return c
-        return db
-    except Exception:
-        pass
-    try:
-        from database._client import db
-
-        return db
     except Exception:
         pass
     return None
@@ -451,6 +450,7 @@ __all__ = [
     'CANDIDATE_INTEGRATION_POLICY',
     'claim_candidate_integration_dispatch',
     'complete_candidate_integration_dispatch',
+    'db',
     'dead_letter_malformed_candidate_integration',
     'list_candidate_integration_dispatches',
     'redrive_candidate_integration_dead_letter',
