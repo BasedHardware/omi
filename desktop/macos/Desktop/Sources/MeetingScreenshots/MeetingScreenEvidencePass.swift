@@ -58,7 +58,12 @@ struct MeetingScreenEvidencePass: Sendable {
       case .conversationUnavailable: return "other"
       // An unsealed Rewind chunk is not an upload failure; keep the two apart in the bucket.
       case .settled(.failed(let detail)):
-        return detail == MeetingScreenshotsStore.activeChunkRetryDetail ? "other" : "upload_failed"
+        // Local conditions (an unsealed chunk, an unreadable screen history) are not upload
+        // failures; keep them apart in the bucket.
+        let local = [
+          MeetingScreenshotsStore.activeChunkRetryDetail, MeetingScreenshotsStore.screenHistoryUnavailableDetail,
+        ]
+        return local.contains(detail) ? "other" : "upload_failed"
       default: return nil
       }
     }

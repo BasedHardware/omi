@@ -223,12 +223,21 @@ enum MeetingFrameSelector {
     /// Why frames were dropped, for the diagnostics surface. A gate nobody can see the workings of
     /// is a gate nobody can debug when it silently returns nothing.
     var drops: [String: Int] = [:]
+    /// The local Rewind store could not be read (no pool yet, or the query failed). Distinct from
+    /// an empty result: "found nothing" may be stamped as final, "could not look" never is.
+    var localReadFailed = false
+
+    static let unavailable: Outcome = {
+      var outcome = Outcome()
+      outcome.localReadFailed = true
+      return outcome
+    }()
   }
 
   /// Every frame captured inside a conversation's window, narrowed to a bounded candidate set.
   static func selectCandidates(from start: Date, to end: Date) async -> Outcome {
     guard end > start else { return Outcome() }
-    guard let pool = await SpineScreenIndex.poolWhenReady() else { return Outcome() }
+    guard let pool = await SpineScreenIndex.poolWhenReady() else { return .unavailable }
 
     // A frame in the chunk still being written has no moov atom yet and cannot be decoded.
     let unfinalizedChunk = await VideoChunkEncoder.shared.currentChunkPath
@@ -248,7 +257,7 @@ enum MeetingFrameSelector {
           arguments: [start, end])
       }
     } catch {
-      return Outcome()
+      return .unavailable
     }
 
     let frames = rows.compactMap { row -> MeetingFrameCandidate? in

@@ -469,6 +469,58 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     XCTAssertEqual(offersAfterReopen, [0])
   }
 
+  @MainActor
+  func testAFailedEmptyStampIsUncachedSoTheRetryStampsAgain() async throws {
+    let window = MeetingScreenshotSelectionWindow(
+      start: Date(timeIntervalSince1970: 8_000), end: Date(timeIntervalSince1970: 8_600))
+    let server = StampServer(fingerprint: window.fingerprint, failuresBeforeSuccess: 1)
+    let conversationID = "stamp-fails-\(UUID().uuidString)"
+    func makeStore() -> MeetingScreenshotsStore {
+      MeetingScreenshotsStore(
+        featureEnabled: { true },
+        selectCandidates: { _ in MeetingFrameSelector.Outcome() },
+        adjudicateAndCommit: { candidates, _ in try await server.adjudicateOrFail(candidateCount: candidates.count) },
+        fetchPersistedSet: { _ in await server.persisted() },
+        deleteFrameRemote: { _, _ in })
+    }
+
+    let failed = await makeStore().loadAndWait(conversationID: conversationID, selectionWindow: window)
+    guard case .failed = failed else { return XCTFail("a failed stamp must be a retryable failure, got \(failed)") }
+    XCTAssertTrue(MeetingScreenEvidencePass.Outcome.settled(failed).needsRetryAfterFinalize)
+    XCTAssertEqual(MeetingScreenEvidencePass.Fallback.reason(for: .settled(failed)), "upload_failed")
+
+    let retried = await makeStore().loadAndWait(conversationID: conversationID, selectionWindow: window)
+    XCTAssertEqual(retried, .noCapture, "not cached as .noCapture: the retry sends the stamp again")
+    let offers = await server.offers
+    XCTAssertEqual(offers, [0, 0])
+  }
+
+  @MainActor
+  func testAnUnreadableScreenHistoryIsNeverStampedAsEmpty() async throws {
+    let window = MeetingScreenshotSelectionWindow(
+      start: Date(timeIntervalSince1970: 9_000), end: Date(timeIntervalSince1970: 9_600))
+    let server = StampServer(fingerprint: window.fingerprint)
+    let store = MeetingScreenshotsStore(
+      featureEnabled: { true },
+      selectCandidates: { _ in .unavailable },
+      adjudicateAndCommit: { candidates, _ in await server.adjudicate(candidateCount: candidates.count) },
+      fetchPersistedSet: { _ in await server.persisted() },
+      deleteFrameRemote: { _, _ in })
+
+    let phase = await store.loadAndWait(conversationID: "unreadable-\(UUID().uuidString)", selectionWindow: window)
+
+    XCTAssertEqual(phase, .failed(MeetingScreenshotsStore.screenHistoryUnavailableDetail))
+    let offers = await server.offers
+    XCTAssertEqual(offers, [], "could not look must not be recorded as looked and found nothing")
+    XCTAssertTrue(MeetingScreenEvidencePass.Outcome.settled(phase).needsRetryAfterFinalize)
+    XCTAssertEqual(MeetingScreenEvidencePass.Fallback.reason(for: .settled(phase)), "other")
+  }
+
+  func testTheSelectorReportsAnUnavailableStoreAsAFailedReadNotAnEmptyOne() {
+    XCTAssertTrue(MeetingFrameSelector.Outcome.unavailable.localReadFailed)
+    XCTAssertFalse(MeetingFrameSelector.Outcome().localReadFailed)
+  }
+
   func testTheFlushPrecedesAdjudicationAndAnUntrustedWindowStillStamps() async {
     let events = EventLog()
     let pass = MeetingScreenEvidencePass(
@@ -784,9 +836,22 @@ private actor EventLog {
 private actor StampServer {
   private let fingerprint: String
   private var stored = ConversationScreenFrameSet.empty
+  private var failuresBeforeSuccess: Int
   private(set) var offers: [Int] = []
 
-  init(fingerprint: String) { self.fingerprint = fingerprint }
+  init(fingerprint: String, failuresBeforeSuccess: Int = 0) {
+    self.fingerprint = fingerprint
+    self.failuresBeforeSuccess = failuresBeforeSuccess
+  }
+
+  func adjudicateOrFail(candidateCount: Int) throws -> ConversationScreenFrameSet {
+    if failuresBeforeSuccess > 0 {
+      failuresBeforeSuccess -= 1
+      offers.append(candidateCount)
+      throw URLError(.networkConnectionLost)
+    }
+    return adjudicate(candidateCount: candidateCount)
+  }
 
   func adjudicate(candidateCount: Int) -> ConversationScreenFrameSet {
     offers.append(candidateCount)

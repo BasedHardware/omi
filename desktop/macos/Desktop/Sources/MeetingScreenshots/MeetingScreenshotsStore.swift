@@ -119,6 +119,8 @@ final class MeetingScreenshotsStore: ObservableObject {
   /// Phase detail when the meeting's last frames are still in Rewind's unsealed chunk and sealing
   /// it did not release them. Not cached and nothing uploaded, so the next load selects again.
   nonisolated static let activeChunkRetryDetail = "meeting frames still being recorded"
+  /// Phase detail when the local Rewind store could not be read at all.
+  nonisolated static let screenHistoryUnavailableDetail = "screen history unavailable"
 
   init(
     featureEnabled: @escaping () -> Bool = { MeetingNoteScreenshotsFeature.isEnabled },
@@ -393,6 +395,15 @@ final class MeetingScreenshotsStore: ObservableObject {
       "MeetingScreenshots: \(outcome.framesInWindow) frame(s) in window, "
         + "\(outcome.candidates.count) candidate(s), drops=\(outcome.drops)")
 
+    if outcome.localReadFailed {
+      // Could not look is not "found nothing": never stamp it as final. Uncached, so the next load
+      // (or the post-finalize retry) selects again; the server's bounded wait covers the notes.
+      log("MeetingScreenshots: screen history unavailable for \(conversationID); will retry")
+      publish(notes: ["screen history could not be read"])
+      phase = .failed(Self.screenHistoryUnavailableDetail)
+      return
+    }
+
     guard !outcome.candidates.isEmpty else {
       // Nothing to offer, but the pass is done: send the empty stamp (no bytes, no judging). It is
       // what the backend's notes admission waits for, and it records this window as looked at.
@@ -403,9 +414,10 @@ final class MeetingScreenshotsStore: ObservableObject {
       } catch {
         guard self.selectionWindow == selectionWindow else { return }
         log("MeetingScreenshots: empty evidence stamp failed for \(conversationID) — \(error.localizedDescription)")
+        // Uncached failure, like any other adjudication failure: the retry and the next open
+        // must be able to stamp again, and the pass records the degraded fallback.
         publish(notes: notes)
-        phase = .noCapture
-        Self.cache[cacheKey] = ([], nil, notes)
+        phase = .failed(error.localizedDescription)
       }
       return
     }
