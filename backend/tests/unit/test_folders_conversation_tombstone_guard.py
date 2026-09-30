@@ -115,6 +115,7 @@ class TestFolderConversationTombstoneGuard:
 
     def test_bulk_move_conversations_rejects_deleted(self, monkeypatch):
         """POST /v1/folders/{id}/conversations/bulk-move must return 404 when a conversation is soft-deleted."""
+
         def fake_get_conv(uid, conv_id):
             if conv_id == 'conv-deleted':
                 return _make_conversation(deleted=True, conversation_id=conv_id)
@@ -135,6 +136,7 @@ class TestFolderConversationTombstoneGuard:
 
     def test_bulk_move_conversations_rejects_locked(self, monkeypatch):
         """POST /v1/folders/{id}/conversations/bulk-move must return 402 when a conversation is locked."""
+
         def fake_get_conv(uid, conv_id):
             if conv_id == 'conv-locked':
                 return _make_conversation(deleted=False, locked=True, conversation_id=conv_id)
@@ -155,6 +157,7 @@ class TestFolderConversationTombstoneGuard:
 
     def test_bulk_move_conversations_rejects_nonexistent(self, monkeypatch):
         """POST /v1/folders/{id}/conversations/bulk-move must return 404 when a conversation does not exist."""
+
         def fake_get_conv(uid, conv_id):
             if conv_id == 'conv-none':
                 return None
