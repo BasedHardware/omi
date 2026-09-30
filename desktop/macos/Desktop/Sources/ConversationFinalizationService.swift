@@ -170,11 +170,6 @@ actor ConversationFinalizationService {
       let meetingTreatmentEligible: Bool?
       switch strategy {
       case .localSegments:
-        if session.conversationRole == .meeting {
-          // `/from-segments` writes the notes synchronously, so the OCR flush must precede it.
-          _ = await screenEvidencePass.beforeNotes(
-            captureInterval: Self.captureInterval(of: session), conversationID: nil, fetchSelectionWindow: nil)
-        }
         meetingTreatmentEligible = try await uploadLocalSegments(sessionId: sessionId)
       case .cloudReconcile:
         guard let latestSession = try await TranscriptionStorage.shared.getSession(id: sessionId) else {
@@ -254,6 +249,12 @@ actor ConversationFinalizationService {
       log("ConversationFinalization: Deleting empty local session \(sessionId)")
       try await TranscriptionStorage.shared.deleteSession(id: sessionId)
       return false
+    }
+    if bundle.session.conversationRole == .meeting {
+      // `/from-segments` writes the notes synchronously, so the bounded OCR flush must precede it —
+      // on every path that uploads local segments, including exhausted cloud reconciliation.
+      _ = await screenEvidencePass.beforeNotes(
+        captureInterval: Self.captureInterval(of: bundle.session), conversationID: nil, fetchSelectionWindow: nil)
     }
 
     var merged: [APIClient.UploadSegment] = []

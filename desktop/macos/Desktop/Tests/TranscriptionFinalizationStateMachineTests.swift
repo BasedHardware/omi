@@ -597,8 +597,19 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     let client = APIClient(session: URLSession(configuration: config))
     await client.setTestAuthHeader("Bearer test-token")
     await ConversationFinalizationService.shared.setAPIClientForTesting(client)
+    let events = EvidenceEventRecorder()
+    await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(
+      MeetingScreenEvidencePass(
+        screenshotsEnabled: { false },
+        flushScreenActivity: { _ in
+          let posts = FinalizationRecoveryURLStub.requests.filter { $0.method == "POST" }.count
+          await events.record("flush posts=\(posts)")
+        },
+        adjudicate: { _, _ in .ready },
+        sleep: boundThatNeverFires))
     addTeardownBlock {
       await ConversationFinalizationService.shared.setAPIClientForTesting(nil)
+      await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(nil)
     }
     defer {
       unsetenv("OMI_PYTHON_API_URL")
@@ -627,6 +638,10 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
 
     await ConversationFinalizationService.shared.recoverPendingFinalizations()
 
+    let flushes = await events.events
+    XCTAssertEqual(
+      flushes, ["flush posts=0"],
+      "the exhausted-reconciliation upload writes notes too, so the meeting OCR flush must precede it")
     let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
     let session = try XCTUnwrap(storedSession)
     XCTAssertEqual(session.status, .completed)

@@ -22,6 +22,10 @@ struct MeetingScreenEvidencePass: Sendable {
     case disabled
     /// The conversation's transcript does not yet give a window the server would trust.
     case untrustedWindow
+    /// The conversation id is not known yet (force-process, `/from-segments`): only the OCR flush
+    /// ran. Expected, so it records nothing.
+    case unbound
+    /// The side-effect-free window read failed. Degraded: the retry or the note view covers it.
     case conversationUnavailable
     case settled(MeetingScreenshotsStore.Phase)
     /// The bound expired first; the work continues in the background.
@@ -51,6 +55,7 @@ struct MeetingScreenEvidencePass: Sendable {
     static func reason(for outcome: Outcome) -> String? {
       switch outcome {
       case .timedOut: return "timeout"
+      case .conversationUnavailable: return "other"
       // An unsealed Rewind chunk is not an upload failure; keep the two apart in the bucket.
       case .settled(.failed(let detail)):
         return detail == MeetingScreenshotsStore.activeChunkRetryDetail ? "other" : "upload_failed"
@@ -110,7 +115,7 @@ struct MeetingScreenEvidencePass: Sendable {
         } else if let conversationID, let fetchSelectionWindow {
           outcome = await pass.adjudicate(conversationID: conversationID, fetchSelectionWindow: fetchSelectionWindow)
         } else {
-          outcome = .conversationUnavailable
+          outcome = .unbound
         }
         await flushed
         return outcome

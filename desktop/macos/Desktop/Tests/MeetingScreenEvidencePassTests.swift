@@ -175,7 +175,7 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
       captureInterval: interval, conversationID: "id", fetchSelectionWindow: { throw URLError(.timedOut) })
     XCTAssertEqual(unavailable, .conversationUnavailable)
     let unbound = await pass.beforeNotes(captureInterval: interval, conversationID: nil, fetchSelectionWindow: nil)
-    XCTAssertEqual(unbound, .conversationUnavailable)
+    XCTAssertEqual(unbound, .unbound)
     let egressOff = await pass.beforeNotes(
       captureInterval: interval, conversationID: "id",
       fetchSelectionWindow: { Self.sampleWindow })
@@ -406,6 +406,35 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
       set.trustedSelectionFingerprint.flatMap(MeetingScreenshotSelectionWindow.init(serverFingerprint:))?.fingerprint,
       "meeting-content-v1:1783418401623:1783418458373")
     XCTAssertNil(try decoder.decode(ConversationScreenFrameSet.self, from: untrusted).trustedSelectionFingerprint)
+  }
+
+  func testAFailedWindowReadIsDegradedButAnUnboundCallIsNot() async {
+    let fallbacks = FallbackRecorder()
+    let pass = MeetingScreenEvidencePass(
+      screenshotsEnabled: { true },
+      flushScreenActivity: { _ in },
+      adjudicate: { _, _ in .ready },
+      sleep: boundThatNeverFires,
+      recordFallback: { fallbacks.record($0) })
+    let interval = DateInterval(start: Date(timeIntervalSince1970: 0), duration: 10)
+
+    let unbound = await pass.beforeNotes(captureInterval: interval, conversationID: nil, fetchSelectionWindow: nil)
+    XCTAssertEqual(unbound, .unbound)
+    XCTAssertTrue(fallbacks.recorded.isEmpty, "no conversation id yet is the expected shape, not a degradation")
+
+    let failedRead = await pass.beforeNotes(
+      captureInterval: interval, conversationID: "read-fails", fetchSelectionWindow: { throw URLError(.timedOut) })
+    XCTAssertEqual(failedRead, .conversationUnavailable)
+    let failedRetryRead = await pass.afterFinalize(
+      conversationID: "read-fails", fetchSelectionWindow: { throw URLError(.timedOut) })
+    XCTAssertEqual(failedRetryRead, .conversationUnavailable)
+
+    XCTAssertEqual(
+      fallbacks.recorded,
+      [
+        .init(reason: "other", from: "before_notes", to: "after_finalize"),
+        .init(reason: "other", from: "after_finalize", to: "note_open"),
+      ])
   }
 
   func testAfterFinalizeFailureRecordsDegradedFallbackToNoteOpen() async {
