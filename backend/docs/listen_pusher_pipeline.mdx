@@ -821,9 +821,11 @@ admits finalization at once. So the shared finalizer (pusher, Cloud Tasks, and
 therefore `POST /finalize`) waits, bounded by `MEETING_NOTES_EVIDENCE_WAIT_SECONDS`
 (code default 0; 25 on dev and prod finalizer hosts), before processing a desktop
 `conversation_role == 'meeting'` capture on `capture_end`/`client_finalize`. It
-proceeds as soon as this bucket's adjudication marker is set. It skips the wait
-when the host has no `BUCKET_SCREEN_FRAMES` or the account's screenshot setting
-is off. The wait is async (a poll is one `db_executor` read), fails open, and
+proceeds as soon as this bucket's adjudication marker is set for the
+conversation's current trusted content window. It skips the wait when the host
+has no `BUCKET_SCREEN_FRAMES`, the account's screenshot setting is off, or the
+conversation has no trusted content window at the first poll (`no_window`: no
+pass can be stamped for it). The wait is async (a poll is one `db_executor` read), fails open, and
 counts `meeting_notes_evidence_wait_total{outcome}`.
 
 ### 2.1 Durable finalization ownership
