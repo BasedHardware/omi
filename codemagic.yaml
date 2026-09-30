@@ -396,6 +396,7 @@ workflows:
         - app_env
         - firebase
         - shorebird
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for collect_mobile_release_admission.py
       vars:
         APP_ID: 6502156163
       flutter: 3.44.5
@@ -762,6 +763,7 @@ workflows:
         - firebase
         - google_play
         - shorebird
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for collect_mobile_release_admission.py
       vars:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
