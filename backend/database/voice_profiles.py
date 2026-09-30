@@ -1,6 +1,7 @@
 """Voice-profile preferences, tag-prompt pacing state, and owner voice confirmations."""
 
 from datetime import datetime, timedelta, timezone
+import math
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from google.cloud import firestore
@@ -15,6 +16,40 @@ OWNER_VOICE_CONFIRMATIONS_MAX = 5
 ANSWERED_PROMPT_RETENTION = timedelta(days=7)
 _STATE_COLLECTION = 'speaker_tag_prompts'
 _STATE_DOCUMENT = 'state'
+
+
+def _validate_uid(uid: str) -> str:
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    return uid.strip()
+
+
+def _validate_str_id(val: str, name: str) -> str:
+    if not isinstance(val, str) or not val.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    return val.strip()
+
+
+def _sanitize_embedding(embedding: Sequence[float]) -> List[float]:
+    if not isinstance(embedding, (list, tuple, Sequence)) or len(embedding) == 0:
+        raise ValueError("embedding must be a non-empty sequence")
+    sanitized = []
+    for item in embedding:
+        if not isinstance(item, (int, float)) or isinstance(item, bool) or not math.isfinite(item):
+            raise ValueError(f"embedding contains invalid or non-finite coordinate: {item!r}")
+        sanitized.append(float(item))
+    return sanitized
+
+
+def _sanitize_pooled_vector(vector: Sequence[float]) -> List[float]:
+    if not isinstance(vector, (list, tuple, Sequence)) or len(vector) == 0:
+        raise ValueError("pooled vector must be a non-empty sequence")
+    sanitized = []
+    for item in vector:
+        if not isinstance(item, (int, float)) or isinstance(item, bool) or not math.isfinite(item):
+            raise ValueError(f"pooled vector contains invalid or non-finite coordinate: {item!r}")
+        sanitized.append(float(item))
+    return sanitized
 
 
 def _client(firestore_client: Any = None) -> Any:
@@ -37,17 +72,20 @@ def _resolve_settings(data: Dict[str, Any]) -> Dict[str, bool]:
 
 
 def get_voice_profile_settings(uid: str, *, firestore_client: Any = None) -> Dict[str, bool]:
+    uid = _validate_uid(uid)
     data = _client(firestore_client).collection('users').document(uid).get().to_dict() or {}
     return _resolve_settings(data)
 
 
 def get_voice_profile_context(uid: str, *, firestore_client: Any = None) -> Tuple[Dict[str, bool], bool]:
     """Settings plus whether the owner has a voiceprint, from one user-document read."""
+    uid = _validate_uid(uid)
     data = _client(firestore_client).collection('users').document(uid).get().to_dict() or {}
     return _resolve_settings(data), bool(data.get('speaker_embedding'))
 
 
 def set_voice_profile_settings(uid: str, updates: Dict[str, bool], *, firestore_client: Any = None) -> None:
+    uid = _validate_uid(uid)
     unknown = set(updates) - set(SETTINGS_DEFAULTS)
     if unknown:
         raise ValueError(f'Unknown voice profile setting(s): {", ".join(sorted(unknown))}')
@@ -58,6 +96,7 @@ def set_voice_profile_settings(uid: str, updates: Dict[str, bool], *, firestore_
 
 
 def _state_ref(uid: str, firestore_client: Any = None) -> Any:
+    uid = _validate_uid(uid)
     return (
         _client(firestore_client)
         .collection('users')
@@ -79,8 +118,8 @@ def _pruned_answers(state: Dict[str, Any], now: datetime) -> Dict[str, Any]:
 
 def record_tag_prompts_shown(uid: str, now: datetime, *, firestore_client: Any = None) -> bool:
     """Stamp a shown set. Returns True when this was the first set ever shown."""
+    ref = _state_ref(uid, firestore_client)
     client = _client(firestore_client)
-    ref = _state_ref(uid, client)
 
     @firestore.transactional
     def stamp(transaction: Any) -> bool:
@@ -111,8 +150,8 @@ def mark_tag_prompts_empty(uid: str, now: datetime, *, firestore_client: Any = N
 
 def record_tag_prompts_dismissed(uid: str, now: datetime, *, firestore_client: Any = None) -> int:
     """Count a set closed without any answer. Returns the new streak length."""
+    ref = _state_ref(uid, firestore_client)
     client = _client(firestore_client)
-    ref = _state_ref(uid, client)
 
     @firestore.transactional
     def bump(transaction: Any) -> int:
@@ -130,8 +169,9 @@ def record_tag_prompts_dismissed(uid: str, now: datetime, *, firestore_client: A
 
 
 def record_tag_prompt_answered(uid: str, prompt_id: str, now: datetime, *, firestore_client: Any = None) -> None:
+    prompt_id = _validate_str_id(prompt_id, "prompt_id")
+    ref = _state_ref(uid, firestore_client)
     client = _client(firestore_client)
-    ref = _state_ref(uid, client)
 
     @firestore.transactional
     def record(transaction: Any) -> None:
@@ -160,6 +200,9 @@ def add_owner_voice_confirmation(
     firestore_client: Any = None,
 ) -> int:
     """Pool a confirmed owner clip into the owner's voiceprint in one transaction."""
+    uid = _validate_uid(uid)
+    conversation_id = _validate_str_id(conversation_id, "conversation_id")
+    clean_embedding = _sanitize_embedding(embedding)
     client = _client(firestore_client)
     ref = client.collection('users').document(uid)
 
@@ -175,11 +218,13 @@ def add_owner_voice_confirmation(
             base = current
         now = datetime.now(timezone.utc)
         confirmations = list(data.get('owner_voice_confirmations') or [])
-        confirmations.append({'embedding': list(embedding), 'conversation_id': conversation_id, 'at': now})
+        confirmations.append({'embedding': clean_embedding, 'conversation_id': conversation_id, 'at': now})
         confirmations = confirmations[-OWNER_VOICE_CONFIRMATIONS_MAX:]
         vectors = ([list(base)] if base else []) + [list(item['embedding']) for item in confirmations]
+        pooled_result = pool(vectors)
+        speaker_embedding = _sanitize_pooled_vector(pooled_result)
         update: Dict[str, Any] = {
-            'speaker_embedding': pool(vectors),
+            'speaker_embedding': speaker_embedding,
             'speaker_embedding_updated_at': now,
             'owner_voice_pooled_at': now,
             'owner_voice_confirmations': confirmations,
