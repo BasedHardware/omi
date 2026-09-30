@@ -181,6 +181,7 @@ MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
 _NON_ERROR_SEGMENT_OUTCOMES = frozenset({TranscriptionOutcome.SUCCESS, TranscriptionOutcome.EXPECTED_SILENCE})
 _PARTIAL_RESULT_FENCED_CONVERSATION_IDS = 'fenced_conversation_ids'
 _RESPONSE_FENCED_CONVERSATION_IDS = '_fenced_conversation_ids'
+_LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
 _SYNC_FAILURE_REASON_CODES = {
     'backfill_capacity',
     'backfill_paced',
@@ -1009,6 +1010,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
 
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
+    if language == _LINEAGE_RETRY_LANGUAGE:
+        language = conversation.language or 'en'
 
     was_discarded = conversation.discarded
     processed_conversation = process_conversation(
@@ -2369,6 +2372,13 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 'new_memories': set(partial_result.get('new_memories') or []) - fenced_conversation_ids,
                 _RESPONSE_FENCED_CONVERSATION_IDS: fenced_conversation_ids,
             }
+            if use_lineage:
+                # The partial receipt precedes the processed-segment marker.
+                # A retry after append but before enrichment skips those WAVs;
+                # restore their enrichment intent as well as their response IDs.
+                # This marker asks enrichment for the persisted language and
+                # leaves every ordinary caller's language fallback unchanged.
+                response['_merged'] = {cid: _LINEAGE_RETRY_LANGUAGE for cid in response['updated_memories']}
             segment_errors = []
             # Segments that yielded a transcript, distinct from failed and
             # speech-free ones: only transcribed audio is billed, so a silent

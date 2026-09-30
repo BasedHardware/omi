@@ -840,6 +840,35 @@ async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(
     assert sum('event=sync_lineage_resolve' in r.getMessage() for r in caplog.records) == 1
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('flag', ['', 'off'])
+async def test_retry_after_append_before_enrichment_reprocesses_the_landed_row(coordinator, monkeypatch, flag):
+    module, stubs = coordinator
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
+    chunks = upload_straddling_next_two()[:1]
+    captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
+    pipeline = stubs['pipeline']
+    pipeline.get_sync_job = MagicMock(
+        return_value={
+            'partial_result': {'updated_memories': [gen_id(L + 1), 'FENCED'], 'fenced_conversation_ids': ['FENCED']}
+        }
+    )
+    pipeline.get_processed_segments = MagicMock(
+        return_value={f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav" for chunk in chunks}
+    )
+    enriched = []
+
+    def reprocess(_uid, response, *_args, **_kwargs):
+        enriched.append(dict(response.pop('_merged', {})))
+
+    pipeline._reprocess_merged_conversations = reprocess
+    await module._run_full_pipeline_background_async(
+        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
+    )
+    assert captured == {}  # landed audio never returns to STT or assignment
+    assert enriched == ([{gen_id(L + 1): pipeline._LINEAGE_RETRY_LANGUAGE}] if flag == '' else [{}])
+
+
 def test_sync_reprocess_does_not_complete_an_open_live_recording(dependencies, monkeypatch):
     pipeline = dependencies
     row = generation(
@@ -874,6 +903,19 @@ def test_finalized_and_processing_targets_and_off_keep_reprocessing(dependencies
     monkeypatch.setattr(pipeline, 'process_conversation', process)
     pipeline._reprocess_conversation_after_update('u', row['id'], 'en')
     process.assert_called_once()
+
+
+@pytest.mark.parametrize('flag', ['', 'off'])
+def test_resumed_enrichment_uses_stored_language(dependencies, monkeypatch, flag):
+    pipeline = dependencies
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
+    row = generation(L, created_at=at(gen_start(L)), structured={'title': 'Synthetic review'}, language='es')
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_args: row)
+    process = MagicMock()
+    monkeypatch.setattr(pipeline, 'process_conversation', process)
+    language = pipeline._LINEAGE_RETRY_LANGUAGE if flag == '' else ''
+    pipeline._reprocess_conversation_after_update('u', row['id'], language)
+    assert process.call_args.kwargs['language_code'] == ('es' if flag == '' else 'en')
 
 
 # --- Live origin stamp ----------------------------------------------------------
