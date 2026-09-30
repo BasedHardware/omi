@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Associa un secondo dispositivo",
     "secondDevice": "Secondo dispositivo",
     "forgetSecondDevice": "Dimentica il secondo dispositivo",
-    "conversationSummaryFailed": "Riepilogo non riuscito"
+    "conversationSummaryFailed": "Riepilogo non riuscito",
+    "reconnectionsRecent": "Riconnessioni (ultimi 7 giorni)",
+    "diagnosticsCountSincePairing": "{count} dall'associazione",
+    "failedConnections": "Connessioni non riuscite",
+    "failedConnectionsRecent": "Connessioni non riuscite (ultimi 7 giorni)"
 }

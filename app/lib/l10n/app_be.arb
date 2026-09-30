@@ -11224,5 +11224,9 @@
     "secondDevice": "Другая прылада",
     "pairSecondDeviceDescription": "Падключыце OmiGlass разам з Omi, каб фота і аўдыя траплялі ў адну размову.",
     "forgetSecondDevice": "Забыць другую прыладу",
-    "conversationSummaryFailed": "Не ўдалося стварыць зводку"
+    "conversationSummaryFailed": "Не ўдалося стварыць зводку",
+    "reconnectionsRecent": "Перазлучэнні (апошнія 7 дзён)",
+    "diagnosticsCountSincePairing": "{count} з моманту спарвання",
+    "failedConnections": "Няўдалыя злучэнні",
+    "failedConnectionsRecent": "Няўдалыя злучэнні (апошнія 7 дзён)"
 }

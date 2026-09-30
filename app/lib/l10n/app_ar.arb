@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "إقران جهاز ثانٍ",
     "secondDevice": "الجهاز الثاني",
     "forgetSecondDevice": "نسيان الجهاز الثاني",
-    "conversationSummaryFailed": "فشل إنشاء الملخص"
+    "conversationSummaryFailed": "فشل إنشاء الملخص",
+    "reconnectionsRecent": "إعادة الاتصال (آخر 7 أيام)",
+    "diagnosticsCountSincePairing": "{count} منذ الاقتران",
+    "failedConnections": "اتصالات فاشلة",
+    "failedConnectionsRecent": "اتصالات فاشلة (آخر 7 أيام)"
 }

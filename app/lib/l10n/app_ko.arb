@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "두 번째 기기 페어링",
     "secondDevice": "두 번째 기기",
     "forgetSecondDevice": "두 번째 기기 삭제",
-    "conversationSummaryFailed": "요약 실패"
+    "conversationSummaryFailed": "요약 실패",
+    "reconnectionsRecent": "재연결 (최근 7일)",
+    "diagnosticsCountSincePairing": "페어링 이후 {count}",
+    "failedConnections": "실패한 연결",
+    "failedConnectionsRecent": "실패한 연결 (최근 7일)"
 }

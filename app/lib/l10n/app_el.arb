@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Σύζευξη δεύτερης συσκευής",
     "secondDevice": "Δεύτερη συσκευή",
     "forgetSecondDevice": "Διαγραφή δεύτερης συσκευής",
-    "conversationSummaryFailed": "Η σύνοψη απέτυχε"
+    "conversationSummaryFailed": "Η σύνοψη απέτυχε",
+    "reconnectionsRecent": "Επανασυνδέσεις (τελευταίες 7 ημέρες)",
+    "diagnosticsCountSincePairing": "{count} από τη σύζευξη",
+    "failedConnections": "Αποτυχημένες συνδέσεις",
+    "failedConnectionsRecent": "Αποτυχημένες συνδέσεις (τελευταίες 7 ημέρες)"
 }

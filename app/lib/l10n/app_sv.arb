@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Para ihop en andra enhet",
     "secondDevice": "Andra enhet",
     "forgetSecondDevice": "Glöm andra enhet",
-    "conversationSummaryFailed": "Sammanfattningen misslyckades"
+    "conversationSummaryFailed": "Sammanfattningen misslyckades",
+    "reconnectionsRecent": "Återanslutningar (senaste 7 dagarna)",
+    "diagnosticsCountSincePairing": "{count} sedan kopplingen",
+    "failedConnections": "Misslyckade anslutningar",
+    "failedConnectionsRecent": "Misslyckade anslutningar (senaste 7 dagarna)"
 }

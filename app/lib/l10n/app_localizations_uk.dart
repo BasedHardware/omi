@@ -11665,4 +11665,18 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Не вдалося створити підсумок';
+
+  @override
+  String get reconnectionsRecent => 'Повторні підключення (останні 7 днів)';
+
+  @override
+  String get failedConnections => 'Невдалі підключення';
+
+  @override
+  String get failedConnectionsRecent => 'Невдалі підключення (останні 7 днів)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count з моменту спарування';
+  }
 }

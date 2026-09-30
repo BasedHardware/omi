@@ -3706,5 +3706,9 @@
     "pairSecondDevice": "Par en anden enhed",
     "secondDevice": "Anden enhed",
     "forgetSecondDevice": "Glem anden enhed",
-    "conversationSummaryFailed": "Resuméet mislykkedes"
+    "conversationSummaryFailed": "Resuméet mislykkedes",
+    "reconnectionsRecent": "Genforbindelser (seneste 7 dage)",
+    "diagnosticsCountSincePairing": "{count} siden parring",
+    "failedConnections": "Mislykkede forbindelser",
+    "failedConnectionsRecent": "Mislykkede forbindelser (seneste 7 dage)"
 }

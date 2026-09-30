@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Підключити другий пристрій",
     "secondDevice": "Другий пристрій",
     "forgetSecondDevice": "Забути другий пристрій",
-    "conversationSummaryFailed": "Не вдалося створити підсумок"
+    "conversationSummaryFailed": "Не вдалося створити підсумок",
+    "reconnectionsRecent": "Повторні підключення (останні 7 днів)",
+    "diagnosticsCountSincePairing": "{count} з моменту спарування",
+    "failedConnections": "Невдалі підключення",
+    "failedConnectionsRecent": "Невдалі підключення (останні 7 днів)"
 }

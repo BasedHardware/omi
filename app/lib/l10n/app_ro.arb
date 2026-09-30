@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Asociază un al doilea dispozitiv",
     "secondDevice": "Al doilea dispozitiv",
     "forgetSecondDevice": "Uită al doilea dispozitiv",
-    "conversationSummaryFailed": "Rezumatul a eșuat"
+    "conversationSummaryFailed": "Rezumatul a eșuat",
+    "reconnectionsRecent": "Reconectări (ultimele 7 zile)",
+    "diagnosticsCountSincePairing": "{count} de la asociere",
+    "failedConnections": "Conexiuni eșuate",
+    "failedConnectionsRecent": "Conexiuni eșuate (ultimele 7 zile)"
 }

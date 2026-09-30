@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Zweites Gerät koppeln",
     "secondDevice": "Zweites Gerät",
     "forgetSecondDevice": "Zweites Gerät vergessen",
-    "conversationSummaryFailed": "Zusammenfassung fehlgeschlagen"
+    "conversationSummaryFailed": "Zusammenfassung fehlgeschlagen",
+    "reconnectionsRecent": "Wiederverbindungen (letzte 7 Tage)",
+    "diagnosticsCountSincePairing": "{count} seit Kopplung",
+    "failedConnections": "Fehlgeschlagene Verbindungen",
+    "failedConnectionsRecent": "Fehlgeschlagene Verbindungen (letzte 7 Tage)"
 }

@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Vincula un segon dispositiu",
     "secondDevice": "Segon dispositiu",
     "forgetSecondDevice": "Oblida el segon dispositiu",
-    "conversationSummaryFailed": "No s'ha pogut crear el resum"
+    "conversationSummaryFailed": "No s'ha pogut crear el resum",
+    "reconnectionsRecent": "Reconnexions (últims 7 dies)",
+    "diagnosticsCountSincePairing": "{count} des de l'aparellament",
+    "failedConnections": "Connexions fallides",
+    "failedConnectionsRecent": "Connexions fallides (últims 7 dies)"
 }

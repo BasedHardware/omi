@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Emparejar un segundo dispositivo",
     "secondDevice": "Segundo dispositivo",
     "forgetSecondDevice": "Olvidar segundo dispositivo",
-    "conversationSummaryFailed": "No se pudo crear el resumen"
+    "conversationSummaryFailed": "No se pudo crear el resumen",
+    "reconnectionsRecent": "Reconexiones (últimos 7 días)",
+    "diagnosticsCountSincePairing": "{count} desde el emparejamiento",
+    "failedConnections": "Conexiones fallidas",
+    "failedConnectionsRecent": "Conexiones fallidas (últimos 7 días)"
 }

@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "จับคู่อุปกรณ์เครื่องที่สอง",
     "secondDevice": "อุปกรณ์เครื่องที่สอง",
     "forgetSecondDevice": "ลืมอุปกรณ์เครื่องที่สอง",
-    "conversationSummaryFailed": "สร้างสรุปไม่สำเร็จ"
+    "conversationSummaryFailed": "สร้างสรุปไม่สำเร็จ",
+    "reconnectionsRecent": "การเชื่อมต่อใหม่ (7 วันที่ผ่านมา)",
+    "diagnosticsCountSincePairing": "{count} ตั้งแต่จับคู่",
+    "failedConnections": "การเชื่อมต่อที่ล้มเหลว",
+    "failedConnectionsRecent": "การเชื่อมต่อที่ล้มเหลว (7 วันที่ผ่านมา)"
 }

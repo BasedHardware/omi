@@ -11578,4 +11578,18 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'สร้างสรุปไม่สำเร็จ';
+
+  @override
+  String get reconnectionsRecent => 'การเชื่อมต่อใหม่ (7 วันที่ผ่านมา)';
+
+  @override
+  String get failedConnections => 'การเชื่อมต่อที่ล้มเหลว';
+
+  @override
+  String get failedConnectionsRecent => 'การเชื่อมต่อที่ล้มเหลว (7 วันที่ผ่านมา)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count ตั้งแต่จับคู่';
+  }
 }

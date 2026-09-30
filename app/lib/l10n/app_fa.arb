@@ -11224,5 +11224,9 @@
     "secondDevice": "دستگاه دوم",
     "pairSecondDeviceDescription": "OmiGlass را در کنار Omi خود متصل کنید تا عکس‌ها و صدا در همان گفتگو قرار بگیرند.",
     "forgetSecondDevice": "فراموش‌کردن دستگاه دوم",
-    "conversationSummaryFailed": "خلاصه ایجاد نشد"
+    "conversationSummaryFailed": "خلاصه ایجاد نشد",
+    "reconnectionsRecent": "اتصال مجدد (7 روز گذشته)",
+    "diagnosticsCountSincePairing": "{count} از زمان جفت‌سازی",
+    "failedConnections": "اتصالات ناموفق",
+    "failedConnectionsRecent": "اتصالات ناموفق (7 روز گذشته)"
 }

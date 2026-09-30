@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "配对第二台设备",
     "secondDevice": "第二台设备",
     "forgetSecondDevice": "忘记第二台设备",
-    "conversationSummaryFailed": "摘要生成失败"
+    "conversationSummaryFailed": "摘要生成失败",
+    "reconnectionsRecent": "重新连接（过去 7 天）",
+    "diagnosticsCountSincePairing": "配对以来 {count}",
+    "failedConnections": "连接失败",
+    "failedConnectionsRecent": "连接失败（过去 7 天）"
 }

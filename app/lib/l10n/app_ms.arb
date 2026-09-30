@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Pasangkan peranti kedua",
     "secondDevice": "Peranti kedua",
     "forgetSecondDevice": "Lupakan peranti kedua",
-    "conversationSummaryFailed": "Ringkasan gagal"
+    "conversationSummaryFailed": "Ringkasan gagal",
+    "reconnectionsRecent": "Sambungan semula (7 hari lepas)",
+    "diagnosticsCountSincePairing": "{count} sejak pemasangan",
+    "failedConnections": "Sambungan gagal",
+    "failedConnectionsRecent": "Sambungan gagal (7 hari lepas)"
 }

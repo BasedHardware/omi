@@ -11692,4 +11692,18 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'సారాంశం విఫలమైంది';
+
+  @override
+  String get reconnectionsRecent => 'తిరిగి కనెక్షన్లు (గత 7 రోజులు)';
+
+  @override
+  String get failedConnections => 'విఫలమైన కనెక్షన్లు';
+
+  @override
+  String get failedConnectionsRecent => 'విఫలమైన కనెక్షన్లు (గత 7 రోజులు)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return 'జతచేసినప్పటినుండి $count';
+  }
 }

@@ -13857,5 +13857,26 @@
     "conversationSummaryFailed": "Summary failed",
     "@conversationSummaryFailed": {
         "description": "Conversation list row chip: the server could not summarize this conversation after its retries, and retrying can still succeed. Shown next to a Retry button."
+    },
+    "reconnectionsRecent": "Reconnections (last 7 days)",
+    "@reconnectionsRecent": {
+        "description": "Reconnect count within the retained 7-day diagnostics window; headline value on Device Diagnostics"
+    },
+    "failedConnections": "Failed connections",
+    "@failedConnections": {
+        "description": "Lifetime count of connect attempts that never established a connection"
+    },
+    "failedConnectionsRecent": "Failed connections (last 7 days)",
+    "@failedConnectionsRecent": {
+        "description": "Connect attempts that never established a connection, within the retained 7-day diagnostics window"
+    },
+    "diagnosticsCountSincePairing": "{count} since pairing",
+    "@diagnosticsCountSincePairing": {
+        "description": "Lifetime counter shown as secondary context under a 7-day window value",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

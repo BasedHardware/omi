@@ -11655,4 +11655,18 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Ringkasan gagal';
+
+  @override
+  String get reconnectionsRecent => 'Sambungan ulang (7 hari terakhir)';
+
+  @override
+  String get failedConnections => 'Koneksi gagal';
+
+  @override
+  String get failedConnectionsRecent => 'Koneksi gagal (7 hari terakhir)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count sejak penyambungan';
+  }
 }

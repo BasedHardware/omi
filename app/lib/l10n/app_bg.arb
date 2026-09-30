@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Сдвояване на второ устройство",
     "secondDevice": "Второ устройство",
     "forgetSecondDevice": "Забрави второто устройство",
-    "conversationSummaryFailed": "Резюмето не бе създадено"
+    "conversationSummaryFailed": "Резюмето не бе създадено",
+    "reconnectionsRecent": "Повторни свързвания (последните 7 дни)",
+    "diagnosticsCountSincePairing": "{count} от сдвояването",
+    "failedConnections": "Неуспешни връзки",
+    "failedConnectionsRecent": "Неуспешни връзки (последните 7 дни)"
 }

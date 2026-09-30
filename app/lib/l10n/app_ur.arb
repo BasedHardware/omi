@@ -11224,5 +11224,9 @@
     "secondDevice": "دوسرا ڈیوائس",
     "pairSecondDeviceDescription": "اپنے Omi کے ساتھ OmiGlass کو کنیکٹ کریں تاکہ تصاویر اور آڈیو ایک ہی گفتگو میں جائیں۔",
     "forgetSecondDevice": "دوسرا ڈیوائس بھول جائیں",
-    "conversationSummaryFailed": "خلاصہ ناکام ہو گیا"
+    "conversationSummaryFailed": "خلاصہ ناکام ہو گیا",
+    "reconnectionsRecent": "دوبارہ کنکشن (پچھلے 7 دن)",
+    "diagnosticsCountSincePairing": "جوڑنے کے بعد سے {count}",
+    "failedConnections": "ناکام کنکشن",
+    "failedConnectionsRecent": "ناکام کنکشن (پچھلے 7 دن)"
 }

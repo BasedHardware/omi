@@ -11658,4 +11658,18 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Резиме није успео';
+
+  @override
+  String get reconnectionsRecent => 'Поновна повезивања (последњих 7 дана)';
+
+  @override
+  String get failedConnections => 'Неуспеле везе';
+
+  @override
+  String get failedConnectionsRecent => 'Неуспеле везе (последњих 7 дана)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count од упаривања';
+  }
 }

@@ -3699,5 +3699,9 @@
     "pairSecondDevice": "Sparuj drugie urządzenie",
     "secondDevice": "Drugie urządzenie",
     "forgetSecondDevice": "Zapomnij drugie urządzenie",
-    "conversationSummaryFailed": "Nie udało się utworzyć podsumowania"
+    "conversationSummaryFailed": "Nie udało się utworzyć podsumowania",
+    "reconnectionsRecent": "Ponowne połączenia (ostatnie 7 dni)",
+    "diagnosticsCountSincePairing": "{count} od sparowania",
+    "failedConnections": "Nieudane połączenia",
+    "failedConnectionsRecent": "Nieudane połączenia (ostatnie 7 dni)"
 }

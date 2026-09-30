@@ -11656,4 +11656,18 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Özet oluşturulamadı';
+
+  @override
+  String get reconnectionsRecent => 'Yeniden bağlantılar (son 7 gün)';
+
+  @override
+  String get failedConnections => 'Başarısız bağlantılar';
+
+  @override
+  String get failedConnectionsRecent => 'Başarısız bağlantılar (son 7 gün)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count eşleştirmeden beri';
+  }
 }

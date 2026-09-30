@@ -11224,5 +11224,9 @@
     "secondDevice": "מכשיר שני",
     "pairSecondDeviceDescription": "חברו את OmiGlass לצד ה-Omi שלכם כדי שתמונות ואודיו ייכנסו לאותה שיחה.",
     "forgetSecondDevice": "שכח את המכשיר השני",
-    "conversationSummaryFailed": "יצירת הסיכום נכשלה"
+    "conversationSummaryFailed": "יצירת הסיכום נכשלה",
+    "reconnectionsRecent": "חיבורים מחדש (7 הימים האחרונים)",
+    "diagnosticsCountSincePairing": "{count} מאז ההתאמה",
+    "failedConnections": "חיבורים שנכשלו",
+    "failedConnectionsRecent": "חיבורים שנכשלו (7 הימים האחרונים)"
 }

@@ -11683,4 +11683,18 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Не удалось создать сводку';
+
+  @override
+  String get reconnectionsRecent => 'Повторные подключения (последние 7 дней)';
+
+  @override
+  String get failedConnections => 'Неудачные подключения';
+
+  @override
+  String get failedConnectionsRecent => 'Неудачные подключения (последние 7 дней)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count с момента сопряжения';
+  }
 }

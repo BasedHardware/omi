@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Par en annen enhet",
     "secondDevice": "Andre enhet",
     "forgetSecondDevice": "Glem andre enhet",
-    "conversationSummaryFailed": "Sammendraget mislyktes"
+    "conversationSummaryFailed": "Sammendraget mislyktes",
+    "reconnectionsRecent": "Gjenforbindelser (siste 7 dager)",
+    "diagnosticsCountSincePairing": "{count} siden kobling",
+    "failedConnections": "Mislykkede tilkoblinger",
+    "failedConnectionsRecent": "Mislykkede tilkoblinger (siste 7 dager)"
 }

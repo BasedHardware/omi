@@ -11224,5 +11224,9 @@
     "secondDevice": "दुसरे डिव्हाइस",
     "pairSecondDeviceDescription": "फोटो आणि ऑडिओ एकाच संभाषणात जाण्यासाठी तुमच्या Omi सोबत OmiGlass कनेक्ट करा.",
     "forgetSecondDevice": "दुसरे डिव्हाइस विसरा",
-    "conversationSummaryFailed": "सारांश अयशस्वी झाला"
+    "conversationSummaryFailed": "सारांश अयशस्वी झाला",
+    "reconnectionsRecent": "पुन्हा कनेक्शन (गेल्या 7 दिवसांत)",
+    "diagnosticsCountSincePairing": "जोडणीनंतर {count}",
+    "failedConnections": "अयशस्वी कनेक्शन",
+    "failedConnectionsRecent": "अयशस्वी कनेक्शन (गेल्या 7 दिवसांत)"
 }

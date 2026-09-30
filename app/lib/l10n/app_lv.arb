@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Savienot pārī otro ierīci",
     "secondDevice": "Otrā ierīce",
     "forgetSecondDevice": "Aizmirst otro ierīci",
-    "conversationSummaryFailed": "Kopsavilkums neizdevās"
+    "conversationSummaryFailed": "Kopsavilkums neizdevās",
+    "reconnectionsRecent": "Atkārtoti savienojumi (pēdējās 7 dienas)",
+    "diagnosticsCountSincePairing": "{count} kopš savienošanas pārī",
+    "failedConnections": "Neveiksmīgi savienojumi",
+    "failedConnectionsRecent": "Neveiksmīgi savienojumi (pēdējās 7 dienas)"
 }

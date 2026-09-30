@@ -11224,5 +11224,9 @@
     "secondDevice": "Ikalawang device",
     "pairSecondDeviceDescription": "Ikonekta ang OmiGlass kasama ng iyong Omi para mapunta sa iisang usapan ang mga larawan at audio.",
     "forgetSecondDevice": "Kalimutan ang ikalawang device",
-    "conversationSummaryFailed": "Nabigo ang buod"
+    "conversationSummaryFailed": "Nabigo ang buod",
+    "reconnectionsRecent": "Muling pagkonekta (nakaraang 7 araw)",
+    "diagnosticsCountSincePairing": "{count} mula nang ipares",
+    "failedConnections": "Mga bigong koneksyon",
+    "failedConnectionsRecent": "Mga bigong koneksyon (nakaraang 7 araw)"
 }

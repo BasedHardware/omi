@@ -3664,5 +3664,9 @@
     "pairSecondDevice": "Seo teine seade",
     "secondDevice": "Teine seade",
     "forgetSecondDevice": "Unusta teine seade",
-    "conversationSummaryFailed": "Kokkuvõtte loomine ebaõnnestus"
+    "conversationSummaryFailed": "Kokkuvõtte loomine ebaõnnestus",
+    "reconnectionsRecent": "Taasühendused (viimased 7 päeva)",
+    "diagnosticsCountSincePairing": "{count} pärast sidumist",
+    "failedConnections": "Ebaõnnestunud ühendused",
+    "failedConnectionsRecent": "Ebaõnnestunud ühendused (viimased 7 päeva)"
 }

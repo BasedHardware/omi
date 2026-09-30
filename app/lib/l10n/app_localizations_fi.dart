@@ -11647,4 +11647,18 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Yhteenveto epäonnistui';
+
+  @override
+  String get reconnectionsRecent => 'Uudelleenyhdistykset (viimeiset 7 päivää)';
+
+  @override
+  String get failedConnections => 'Epäonnistuneet yhteydet';
+
+  @override
+  String get failedConnectionsRecent => 'Epäonnistuneet yhteydet (viimeiset 7 päivää)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count parituksen jälkeen';
+  }
 }

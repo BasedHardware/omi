@@ -11224,5 +11224,9 @@
     "secondDevice": "Други уређај",
     "pairSecondDeviceDescription": "Повежите OmiGlass уз свој Omi како би фотографије и звук ишли у исти разговор.",
     "forgetSecondDevice": "Заборави други уређај",
-    "conversationSummaryFailed": "Резиме није успео"
+    "conversationSummaryFailed": "Резиме није успео",
+    "reconnectionsRecent": "Поновна повезивања (последњих 7 дана)",
+    "diagnosticsCountSincePairing": "{count} од упаривања",
+    "failedConnections": "Неуспеле везе",
+    "failedConnectionsRecent": "Неуспеле везе (последњих 7 дана)"
 }
