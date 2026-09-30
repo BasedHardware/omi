@@ -206,6 +206,15 @@ Once text has been emitted, these startup bounds are disarmed. No sentence ancho
 or emitted text is changed. `omi_stt_window_session_outcome_total` retains
 `outcome=text|no_text` and adds bounded `reason=none|first_text_deadline|empty_streak`;
 the matching recovered failover uses the same reason on `omi_fallback_total`.
+The 90-second replay ring follows the window's last emitted sentence anchor.
+The accepted-send map translates that provider anchor to a capture sample, so
+VAD-gated gaps cannot shift the cut. Audio before the anchor is already text;
+speech from the anchor onward stays available even while a POST is in flight.
+The ring never evicts that pending span solely because capture time passed.
+Speech-free capture can still roll off, and the current chunk must fit. The
+`omi_stt_window_replay_safe_trims_total` counter records actual anchor and
+speech-free trims. If pending audio itself exceeds the ring, the leg fails
+with `capacity_full` and replays from the anchor onto the next vendor.
 Growing windows re-post overlapping context. A minimum 6 s interval between
 POST starts bounds sustained requests to eight per listen pod per 6 s, with
 up to 216–320 synchronized sessions fleet-wide at the current pod count.

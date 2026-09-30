@@ -51,6 +51,7 @@ _KNOWN_FAILURE_REASONS = frozenset(
         'soniox_idle_timeout',
         'soniox_rotation',
         'provider_5xx',
+        'capacity_full',
         'first_text_deadline',
         'empty_streak',
         'soniox_invalid_hint',
@@ -71,6 +72,7 @@ _FAILURE_PHASE_BY_REASON = {
     'soniox_idle_timeout': 'connection',
     'soniox_rotation': 'connection',
     'provider_5xx': 'connection',
+    'capacity_full': 'connection',
     'first_text_deadline': 'connection',
     'empty_streak': 'connection',
     # The config frame was rejected after the WebSocket upgrade succeeded:

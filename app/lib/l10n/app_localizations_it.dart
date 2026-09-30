@@ -11572,4 +11572,119 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Impossibile caricare alcuni risultati';
+
+  @override
+  String get peopleSearchPlaceholder => 'Cerca persone';
+
+  @override
+  String get peopleNotHeardYet => 'Non ancora ascoltato';
+
+  @override
+  String get peopleRecent => 'Recenti';
+
+  @override
+  String get deletePeopleMessage =>
+      'Questo rimuove i loro campioni vocali e non può essere annullato. Le loro battute nelle conversazioni passate diventano interlocutori senza nome.';
+
+  @override
+  String get personTalkTime => 'Tempo di parola';
+
+  @override
+  String get personLastHeard => 'Ultimo ascolto';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Eliminare $count persone?',
+      one: 'Eliminare 1 persona?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Voce mancante';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count persone',
+      one: '1 persona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Nessuna Persona Corrispondente';
+
+  @override
+  String get deselectAll => 'Deseleziona Tutto';
+
+  @override
+  String get voiceRecognitionSettings => 'Riconoscimento Vocale';
+
+  @override
+  String get greetingMorning => 'Buongiorno';
+
+  @override
+  String get greetingAfternoon => 'Buon pomeriggio';
+
+  @override
+  String get greetingEvening => 'Buonasera';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Cosa vuoi sapere?';
+
+  @override
+  String get askSuggestDecide => 'Cosa ho deciso oggi?';
+
+  @override
+  String get askSuggestOwe => 'Cosa devo ancora agli altri?';
+
+  @override
+  String get askSuggestNotice => 'Cosa ha notato Omi?';
+
+  @override
+  String get pastChats => 'Chat precedenti';
+
+  @override
+  String get newChat => 'Nuova chat';
+
+  @override
+  String get startFresh => 'Ricomincia da capo';
+
+  @override
+  String get noPastChats => 'Le tue chat con Omi compaiono qui.';
+
+  @override
+  String get deleteChatQuestion => 'Eliminare questa chat?';
+
+  @override
+  String get deleteChatMessage => 'Sparirà per sempre dalle chat precedenti.';
+
+  @override
+  String get deleteChat => 'Elimina chat';
+
+  @override
+  String get appsAskWith => 'Chiedi a Omi con';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversazioni oggi.',
+      one: '1 conversazione oggi.',
+      zero: 'Nessuna conversazione oggi.',
+    );
+    return '$_temp0';
+  }
 }
