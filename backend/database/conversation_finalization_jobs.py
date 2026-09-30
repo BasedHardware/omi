@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 from hashlib import sha256
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from typing import Any, Callable, Literal, Mapping, TypedDict
 
 from google.cloud import firestore
@@ -19,13 +18,13 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from database._client import document_id_from_seed, get_firestore_client
+from database.conversation_terminal_title import kept_row_title_update, user_time_zone
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_index_registry import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
 )
 from models.client_processing import PROJECTION_FAMILY_FIELDS
-from utils.conversations.deterministic_minimum import deterministic_minimum_title
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.recovery import (
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
@@ -1207,41 +1206,6 @@ def _mark_finalization_dead_letter_txn(
     return True
 
 
-def _dead_letter_transcript_texts(uid: str, conversation: Mapping[str, Any]) -> list[str]:
-    """Non-blank segment texts of the transactional snapshot, or ``[]``.
-
-    Uses the read path's own decode (uid-keyed AES-GCM plus zlib for
-    ``enhanced`` rows, zlib for compressed ``standard`` rows). That is local CPU
-    work on the snapshot this transaction already holds, so the title always
-    describes exactly the transcript that commits, with no compare-and-set
-    window. An undecodable blob degrades to the time-based title; it must never
-    abort the terminal write that takes the row off ``processing``.
-    """
-    raw_segments = conversation.get('transcript_segments')
-    if not raw_segments:
-        return []
-    try:
-        decoded = conversations_db.prepare_conversation_for_read(
-            {
-                'transcript_segments': raw_segments,
-                'transcript_segments_compressed': conversation.get('transcript_segments_compressed'),
-                'data_protection_level': conversation.get('data_protection_level'),
-            },
-            uid,
-        )
-    except Exception:
-        return []
-    segments = (decoded or {}).get('transcript_segments')
-    if not isinstance(segments, list):
-        return []
-    texts: list[str] = []
-    for segment in segments:
-        text = segment.get('text') if isinstance(segment, Mapping) else None
-        if isinstance(text, str) and text.strip():
-            texts.append(text)
-    return texts
-
-
 def _dead_letter_has_photos(conversation: Mapping[str, Any], conversation_ref: Any, transaction: Any) -> bool:
     if conversation.get('photos') or conversation.get('has_photos'):
         return True
@@ -1272,7 +1236,7 @@ def _dead_letter_conversation_updates(
     that the failure chip would misdescribe.
     """
     had_summary = structured_has_protected_content(conversation.get('structured'), conversation.get('user_title'))
-    title_update, texts = _kept_row_title_update(uid, conversation, time_zone_for_uid)
+    title_update, texts = kept_row_title_update(uid, conversation, time_zone_for_uid)
     updates: dict[str, Any] = {
         'status': 'completed',
         'discarded': False,
@@ -1286,40 +1250,6 @@ def _dead_letter_conversation_updates(
     ):
         updates['summary_retryable'] = True
     return updates
-
-
-def _kept_row_title_update(
-    uid: str,
-    conversation: Mapping[str, Any],
-    time_zone_for_uid: Callable[[str], str | None] | None,
-) -> tuple[dict[str, Any], list[str]]:
-    """``{'structured': ...}`` giving an untitled row its deterministic title, or ``{}``.
-
-    Shared by every terminal that moves a ``processing`` row into the default
-    list (dead-letter, BYOK abandonment, orphan recovery), so none can leave a
-    kept row with an empty title. Only the title changes; the rest of the
-    stored ``structured`` map survives. A real generated title or a
-    ``user_title`` is never touched. Also returns the decoded transcript texts.
-    """
-    structured = conversation.get('structured')
-    fields = dict(structured) if isinstance(structured, Mapping) else {'title': '', 'overview': ''}
-    texts = _dead_letter_transcript_texts(uid, conversation)
-    title = fields.get('title')
-    user_title = conversation.get('user_title')
-    has_user_title = isinstance(user_title, str) and bool(user_title.strip())
-    if not has_user_title and not (isinstance(title, str) and title.strip()):
-        started_at = conversation.get('started_at')
-        if not isinstance(started_at, datetime):
-            started_at = conversation.get('created_at')
-        fields['title'] = deterministic_minimum_title(
-            SimpleNamespace(
-                transcript_segments=[SimpleNamespace(text=text) for text in texts],
-                started_at=started_at if isinstance(started_at, datetime) else None,
-            ),
-            # Called only when the transcript is empty (photo-only rows).
-            tz_name_provider=(lambda: time_zone_for_uid(uid)) if time_zone_for_uid is not None else None,
-        )
-    return ({'structured': fields} if fields != structured else {}), texts
 
 
 def mark_finalization_dead_letter(
@@ -1344,25 +1274,8 @@ def mark_finalization_dead_letter(
         lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         failure_code,
-        lambda uid: _user_time_zone(client, uid),
+        lambda uid: user_time_zone(client, uid),
     )
-
-
-def _user_time_zone(client: Any, uid: str) -> str | None:
-    """The user's IANA zone for the photo-only fallback title; ``None`` on any miss.
-
-    A plain read, not a transactional one: the zone only renders the
-    ``"Recording · 3:14 PM"`` label, so it must neither join the transaction's
-    read set nor be able to fail the terminal write.
-    """
-    try:
-        snapshot = client.collection('users').document(uid).get()
-    except Exception:
-        return None
-    if not getattr(snapshot, 'exists', False):
-        return None
-    zone = (snapshot.to_dict() or {}).get('time_zone')
-    return zone if isinstance(zone, str) and zone else None
 
 
 def get_finalization_job(job_id: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
@@ -2216,7 +2129,7 @@ def _complete_orphan_conversation_txn(
     Only when every assumption still holds is the row moved to ``completed``. Any
     divergence is an expected CAS fencing (``False``), never a terminalization of
     live or durable-owned work. An untitled row also gets its deterministic title
-    (``_kept_row_title_update``) so it never lands in the list untitled.
+    (``kept_row_title_update``) so it never lands in the list untitled.
     """
     del now  # the terminal write carries no timestamp; the fence is the generation
     snapshot = conversation_ref.get(transaction=transaction)
@@ -2231,7 +2144,7 @@ def _complete_orphan_conversation_txn(
     if not isinstance(admitted_at, datetime) or admitted_at != expected_admitted_at:
         return False
     uid = uid or _uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
-    title_update = _kept_row_title_update(uid, data, time_zone_for_uid)[0] if uid else {}
+    title_update = kept_row_title_update(uid, data, time_zone_for_uid)[0] if uid else {}
     transaction.update(conversation_ref, {'status': 'completed', **title_update})
     return True
 
@@ -2249,7 +2162,7 @@ def complete_orphan_conversation(
         expected_admitted_at,
         _now(),
         uid,
-        lambda zone_uid: _user_time_zone(client, zone_uid),
+        lambda zone_uid: user_time_zone(client, zone_uid),
     )
 
 
@@ -2522,7 +2435,7 @@ def _abandon_byok_finalization_job_txn(
         and not conversation.get('deferred')
     )
     # Pure decode of the snapshot already held; no transactional read after a write.
-    title_update = _kept_row_title_update(uid, conversation, time_zone_for_uid)[0] if closes_conversation else {}
+    title_update = kept_row_title_update(uid, conversation, time_zone_for_uid)[0] if closes_conversation else {}
 
     transaction.update(
         job_ref,
@@ -2592,7 +2505,7 @@ def abandon_byok_finalization_job(
         now,
         lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
-        lambda uid: _user_time_zone(client, uid),
+        lambda uid: user_time_zone(client, uid),
     )
 
 

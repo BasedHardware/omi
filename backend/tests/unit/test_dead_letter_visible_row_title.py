@@ -23,6 +23,7 @@ import pytest
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 from database import conversation_finalization_jobs as jobs
+from database import conversation_terminal_title as terminal_title
 from models.conversation import Conversation
 from utils import encryption
 
@@ -300,11 +301,11 @@ def test_wrapper_resolves_the_zone_with_a_plain_non_transactional_read():
             return SimpleNamespace(get=lambda: user)
 
     client = SimpleNamespace(collection=lambda name: _Users() if name == 'users' else None)
-    assert jobs._user_time_zone(client, _UID) == 'Europe/Paris'
+    assert terminal_title.user_time_zone(client, _UID) == 'Europe/Paris'
     assert reads == [_UID]
 
     def boom():
         raise RuntimeError('firestore unavailable')
 
     failing = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: SimpleNamespace(get=boom)))
-    assert jobs._user_time_zone(failing, _UID) is None
+    assert terminal_title.user_time_zone(failing, _UID) is None
