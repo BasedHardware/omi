@@ -730,7 +730,12 @@ class FollowupQuestionResponse(BaseModel):
     result: str = Field(description='Generated follow-up question prompt text.')
 
 
-@router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], response_model=FollowupQuestionResponse)
+@router.delete(
+    '/v1/joan/{memory_id}/followup-question',
+    tags=['v1'],
+    response_model=FollowupQuestionResponse,
+    operation_id='delete_person_endpoint_v1_joan__memory_id__followup_question_delete',
+)
 def get_joan_followup_question_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if memory_id == '0':
         memory = get_in_progress_conversation(uid)
