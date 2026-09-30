@@ -100,7 +100,7 @@ async def finalize_persisted_conversation(
     conversation for a third-party endpoint that is down.
     """
     fenced, conversation_data, conversation = await _load_admitted_conversation(
-        uid, conversation_id, finalization_job_id, dispatch_generation, lease_epoch
+        uid, conversation_id, finalization_job_id, dispatch_generation, lease_epoch, trigger
     )
     if fenced is not None:
         return fenced
@@ -112,7 +112,7 @@ async def finalize_persisted_conversation(
             # is now, never the pre-wait snapshot: stale segments would be summarized and could
             # overwrite the newer live transcript on persist.
             fenced, conversation_data, conversation = await _load_admitted_conversation(
-                uid, conversation_id, finalization_job_id, dispatch_generation, lease_epoch
+                uid, conversation_id, finalization_job_id, dispatch_generation, lease_epoch, trigger
             )
             if fenced is not None:
                 return fenced
@@ -162,6 +162,8 @@ async def finalize_persisted_conversation(
                 resolved_language,
                 conversation,
                 trigger=trigger,
+                user_kept=bool(conversation_data.get('sync_relevance_user_kept')),
+                recovery_transcript_decoded=conversation_data.get('_recovery_transcript_decoded') is True,
                 defer_derived_effects=True,
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 derived_effects_observer=derived_effects.append,
@@ -377,6 +379,7 @@ async def _load_admitted_conversation(
     finalization_job_id: str,
     dispatch_generation: int,
     lease_epoch: int,
+    trigger: ProcessingTrigger,
 ) -> tuple[ConversationFinalizationDisposition | None, Any, Any]:
     """Read the durable conversation and admit it to processing.
 
@@ -389,6 +392,7 @@ async def _load_admitted_conversation(
         uid,
         conversation_id,
         read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
+        include_transcript_decode_status=trigger is ProcessingTrigger.SERVER_RECOVERY,
     )
     if not conversation_data:
         # A prior delivery can have durably completed fanout just before the
