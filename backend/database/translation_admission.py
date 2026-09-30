@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
-import math
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
+import math
 from typing import Any
+import uuid
 
 from database import redis_db
 
@@ -37,6 +37,72 @@ end
 return 1
 """
 
+MAX_ID_LENGTH = 128
+MAX_REVISION_LENGTH = 256
+MAX_POLICY_LENGTH = 64
+MAX_TARGET_LENGTH = 32
+
+
+def _clean_id(value: Any, max_len: int = MAX_ID_LENGTH) -> str:
+    """Normalize and validate identifier strings against delimiter injection and overflow."""
+    if not isinstance(value, str):
+        return ""
+    cleaned = value.strip()
+    if not cleaned or len(cleaned) > max_len or any(c in cleaned for c in ("\0", "\r", "\n", " ", ":")):
+        return ""
+    return cleaned
+
+
+def _clean_str(value: Any, max_len: int = 128) -> str:
+    """Normalize general string parameter."""
+    if not isinstance(value, str):
+        return ""
+    cleaned = value.strip()
+    if not cleaned or len(cleaned) > max_len or "\0" in cleaned:
+        return ""
+    return cleaned
+
+
+def _clean_date(day: Any) -> str:
+    """Normalize or generate UTC YYYYMMDD date string."""
+    if isinstance(day, str):
+        cleaned = day.strip()
+        if len(cleaned) == 8 and cleaned.isdigit():
+            return cleaned
+    return datetime.now(timezone.utc).strftime("%Y%m%d")
+
+
+def _clean_int(value: Any, min_val: int = 1, max_val: int = 10_000_000) -> int | None:
+    """Sanitize integer ensuring strictly integer (not bool), within safe bounds."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    if value < min_val or value > max_val:
+        return None
+    return value
+
+
+def _clean_deadline(seconds: Any, default: float = 3.0, min_val: float = 0.1, max_val: float = 300.0) -> float:
+    """Sanitize provider deadline seconds, guarding against NaN, Inf, and out-of-range values."""
+    if isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
+        return default
+    if math.isnan(seconds) or math.isinf(seconds):
+        return default
+    if seconds < min_val:
+        return min_val
+    if seconds > max_val:
+        return max_val
+    return float(seconds)
+
+
+def _resolve_redis(client: Any = None) -> Any:
+    """Resolve Redis client instance with dependency injection fallback."""
+    if client is not None:
+        return client
+    try:
+        return redis_db.r
+    except Exception:
+        return None
+
 
 @dataclass(frozen=True)
 class TranslationReservation:
@@ -59,53 +125,118 @@ def reserve_translation(
     day: str | None = None,
     provider_deadline_seconds: float = 3.0,
 ) -> tuple[TranslationReservation | None, str]:
-    if not uid or not conversation_id or reserved_chars <= 0 or uid_daily_limit <= 0 or global_daily_limit <= 0:
-        return None, 'budget_denied'
-    date = day or datetime.now(timezone.utc).strftime('%Y%m%d')
+    clean_uid = _clean_id(uid)
+    clean_cid = _clean_id(conversation_id)
+    clean_target = _clean_str(target, max_len=MAX_TARGET_LENGTH)
+    clean_rev = _clean_str(source_revision, max_len=MAX_REVISION_LENGTH)
+    clean_policy = _clean_str(policy_version, max_len=MAX_POLICY_LENGTH)
+
+    clean_reserved = _clean_int(reserved_chars, min_val=1)
+    clean_uid_limit = _clean_int(uid_daily_limit, min_val=1)
+    clean_global_limit = _clean_int(global_daily_limit, min_val=1)
+
+    if (
+        not clean_uid
+        or not clean_cid
+        or clean_reserved is None
+        or clean_uid_limit is None
+        or clean_global_limit is None
+    ):
+        return None, "budget_denied"
+
+    store = _resolve_redis(client)
+    if store is None or not hasattr(store, "eval"):
+        return None, "redis_unavailable"
+
+    date = _clean_date(day)
     digest = hashlib.sha256(
-        f'{uid}\0{conversation_id}\0{target}\0{source_revision}\0{policy_version}'.encode('utf-8')
+        f"{clean_uid}\0{clean_cid}\0{clean_target}\0{clean_rev}\0{clean_policy}".encode("utf-8")
     ).hexdigest()
     keys = (
-        f'translation:viewed:v1:uid:{uid}:inflight',
-        f'translation:viewed:v1:content:{digest}',
-        f'translation:viewed:v1:budget:uid:{uid}:{date}',
-        f'translation:viewed:v1:budget:global:{date}',
+        f"translation:viewed:v1:uid:{clean_uid}:inflight",
+        f"translation:viewed:v1:content:{digest}",
+        f"translation:viewed:v1:budget:uid:{clean_uid}:{date}",
+        f"translation:viewed:v1:budget:global:{date}",
     )
     token = uuid.uuid4().hex
+    deadline = _clean_deadline(provider_deadline_seconds)
+    ttl = math.ceil(deadline + 12)
+
     try:
-        result = int(
-            (client or redis_db.r).eval(
-                _RESERVE,
-                4,
-                *keys,
-                token,
-                math.ceil(provider_deadline_seconds + 12),
-                reserved_chars,
-                uid_daily_limit,
-                global_daily_limit,
-                172800,
-            )
+        raw_result = store.eval(
+            _RESERVE,
+            4,
+            *keys,
+            token,
+            ttl,
+            clean_reserved,
+            clean_uid_limit,
+            clean_global_limit,
+            172800,
         )
+        result = int(raw_result)
     except Exception:
-        return None, 'redis_unavailable'
+        return None, "redis_unavailable"
+
     if result != 1:
-        return None, 'duplicate_suppressed' if result == 0 else 'budget_denied'
-    return TranslationReservation(keys, token, reserved_chars), 'admitted'
+        return None, "duplicate_suppressed" if result == 0 else "budget_denied"
+    return TranslationReservation(keys, token, clean_reserved), "admitted"
 
 
 def release_translation(reservation: TranslationReservation, actual_chars: int, *, client: Any = None) -> bool:
-    refund = max(0, reservation.reserved_chars - max(0, actual_chars))
     try:
-        return bool((client or redis_db.r).eval(_RELEASE, 4, *reservation.keys, reservation.token, refund))
+        keys = reservation.keys
+        token = reservation.token
+        reserved = reservation.reserved_chars
+        if not keys or len(keys) != 4 or not token:
+            return False
+    except (AttributeError, TypeError):
+        return False
+
+    if type(actual_chars) is bool:
+        safe_actual = 0
+    else:
+        try:
+            val = float(actual_chars)
+            safe_actual = 0 if math.isnan(val) else max(0, int(val))
+        except (TypeError, ValueError):
+            safe_actual = 0
+
+    refund = max(0, reserved - safe_actual)
+    try:
+        store = _resolve_redis(client)
+        if store is None or not hasattr(store, "eval"):
+            return False
+        res = store.eval(_RELEASE, 4, *keys, token, refund)
+        return bool(res)
     except Exception:
         return False
 
 
 def reservation_is_current(reservation: TranslationReservation, *, client: Any = None) -> bool:
     try:
-        store = client or redis_db.r
-        return store.get(reservation.keys[0]) == reservation.token.encode('utf-8') and store.get(
-            reservation.keys[1]
-        ) == reservation.token.encode('utf-8')
+        keys = reservation.keys
+        token = reservation.token
+        if not keys or len(keys) < 2 or not token:
+            return False
+        key0, key1 = keys[0], keys[1]
+    except (AttributeError, TypeError, IndexError):
+        return False
+
+    try:
+        store = _resolve_redis(client)
+        if store is None or not hasattr(store, "get"):
+            return False
+
+        expected_str = token
+        expected_bytes = token.encode("utf-8")
+
+        val1 = store.get(key0)
+        val2 = store.get(key1)
+
+        match1 = val1 == expected_str or val1 == expected_bytes
+        match2 = val2 == expected_str or val2 == expected_bytes
+
+        return bool(match1 and match2)
     except Exception:
         return False
