@@ -235,6 +235,87 @@ actor ScreenActivitySyncService {
     }
   }
 
+  /// Push a just-finished meeting's OCR text now, before its notes are written.
+  ///
+  /// The periodic lossless path holds a row until its five-minute bucket has closed plus five
+  /// minutes of slack (fifteen without an embedding), so at finalization the backend's screen-text
+  /// digest is missing the last ten to twenty minutes of the call — usually where the decisions
+  /// are. This closes the meeting's own rows early: one winner per `(app, window, bucket)` inside
+  /// the meeting interval, shipped text-first like any other winner. Rows of the same bucket
+  /// captured after the meeting ended stay pending and may later ship one more winner for that
+  /// bucket; that bounded extra document is the price of notes that see the end of the call.
+  /// Legacy (cursor) sync is left alone. Best effort: every failure leaves the periodic path to it.
+  func flushMeetingWindow(_ interval: DateInterval, limit: Int = 200) async {
+    let losslessEnabled = await MainActor.run { ScreenActivityLosslessSyncFeature.isEnabled }
+    guard losslessEnabled, let dbPool = await getDBPool() else { return }
+    do {
+      let candidates = try await dbPool.write { db in
+        try Self.compactMeetingWindow(db: db, interval: interval)
+        return try Self.fetchMeetingWindowCandidates(db: db, interval: interval, limit: limit)
+      }
+      guard !candidates.isEmpty else { return }
+      guard await pushRows(candidates.map(\.payload)) else {
+        log("ScreenActivitySync: meeting flush push failed; periodic sync will retry")
+        return
+      }
+      try await dbPool.write { db in
+        try Self.markCandidatesSynced(db: db, candidates: candidates)
+      }
+      log("ScreenActivitySync: meeting flush synced \(candidates.count) rows")
+    } catch {
+      log("ScreenActivitySync: meeting flush read/write error — \(error.localizedDescription)")
+    }
+  }
+
+  /// `compactClosedBuckets` restricted to one meeting interval, without waiting for the bucket to
+  /// close. Same partition and ranking, so a row it keeps is a row the periodic path would rank.
+  static func compactMeetingWindow(db: Database, interval: DateInterval) throws {
+    try db.execute(
+      sql: """
+        WITH ranked AS (
+          SELECT id,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY appName, COALESCE(windowTitle, ''),
+                                CAST(strftime('%s', timestamp) AS INTEGER) / 300
+                   ORDER BY LENGTH(ocrText) DESC, id DESC
+                 ) AS bucketRank
+          FROM screenshots
+          WHERE screenActivitySyncState = ?
+            AND ocrText IS NOT NULL
+            AND LENGTH(TRIM(ocrText)) > 0
+            AND timestamp >= ? AND timestamp <= ?
+        )
+        UPDATE screenshots
+        SET screenActivitySyncState = ?
+        WHERE id IN (SELECT id FROM ranked WHERE bucketRank > 1)
+        """,
+      arguments: [
+        ScreenActivitySyncState.pending.rawValue,
+        interval.start, interval.end,
+        ScreenActivitySyncState.compacted.rawValue,
+      ])
+  }
+
+  static func fetchMeetingWindowCandidates(
+    db: Database, interval: DateInterval, limit: Int
+  ) throws -> [ScreenActivitySyncCandidate] {
+    let rows = try Row.fetchAll(
+      db,
+      sql: """
+        SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName, clientDeviceId,
+               screenActivitySyncState
+        FROM screenshots
+        WHERE screenActivitySyncState = ?
+          AND ocrText IS NOT NULL
+          AND LENGTH(TRIM(ocrText)) > 0
+          AND timestamp >= ? AND timestamp <= ?
+        ORDER BY id ASC
+        LIMIT ?
+        """,
+      arguments: [ScreenActivitySyncState.pending.rawValue, interval.start, interval.end, limit])
+    return rows.compactMap(syncCandidate(from:))
+  }
+
   private func recordPushFailure(path: String) {
     consecutiveFailures += 1
     if consecutiveFailures == 1 || consecutiveFailures % 10 == 0 {
@@ -327,17 +408,19 @@ actor ScreenActivitySyncService {
         ScreenActivitySyncState.textSynced.rawValue, limit,
       ])
 
-    return rows.compactMap { row in
-      guard let id = row["id"] as? Int64,
-        let stateRaw = row["screenActivitySyncState"] as? Int64,
-        let state = ScreenActivitySyncState(rawValue: Int(stateRaw)),
-        let payload = payloadRow(from: row)
-      else { return nil }
-      let blobValue = row["embedding"] as DatabaseValue
-      let hasEmbedding: Bool
-      if case .blob = blobValue.storage { hasEmbedding = true } else { hasEmbedding = false }
-      return ScreenActivitySyncCandidate(id: id, priorState: state, hasEmbedding: hasEmbedding, payload: payload)
-    }
+    return rows.compactMap(syncCandidate(from:))
+  }
+
+  static func syncCandidate(from row: Row) -> ScreenActivitySyncCandidate? {
+    guard let id = row["id"] as? Int64,
+      let stateRaw = row["screenActivitySyncState"] as? Int64,
+      let state = ScreenActivitySyncState(rawValue: Int(stateRaw)),
+      let payload = payloadRow(from: row)
+    else { return nil }
+    let blobValue = row["embedding"] as DatabaseValue
+    let hasEmbedding: Bool
+    if case .blob = blobValue.storage { hasEmbedding = true } else { hasEmbedding = false }
+    return ScreenActivitySyncCandidate(id: id, priorState: state, hasEmbedding: hasEmbedding, payload: payload)
   }
 
   static func markCandidatesSynced(db: Database, candidates: [ScreenActivitySyncCandidate]) throws {

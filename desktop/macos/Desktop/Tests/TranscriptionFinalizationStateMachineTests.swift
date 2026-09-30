@@ -162,6 +162,37 @@ private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendabl
           """.utf8
         )
       )
+    } else if path == "/v1/conversations/evidence-recording-id"
+      || path == "/v1/conversations/evidence-recording-id/finalize"
+    {
+      guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) else {
+        return
+      }
+      let finalized = path.hasSuffix("/finalize")
+      let conversation = """
+        {
+          "id": "evidence-recording-id",
+          "created_at": "2026-07-07T10:00:00.123456Z",
+          "started_at": "2026-07-07T10:00:00.123456Z",
+          "finished_at": "2026-07-07T10:01:00Z",
+          "structured": {
+            "title": "", "overview": "", "emoji": "", "category": "other", "action_items": [], "events": []
+          },
+          "transcript_segments": [
+            {"id": "s0", "text": "hello", "speaker": "SPEAKER_00", "is_user": false, "start": 1.5, "end": 58.25}
+          ],
+          "audio_timeline": {"version": 2},
+          "status": "\(finalized ? "completed" : "in_progress")",
+          "source": "desktop",
+          "discarded": false,
+          "deleted": false,
+          "starred": false,
+          "deferred": false
+        }
+        """
+      client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+      client?.urlProtocol(
+        self, didLoad: Data((finalized ? "{\"conversation\": \(conversation)}" : conversation).utf8))
     } else if path.hasSuffix("/finalization"), let body = Self.nextFinalizationStatusBody() {
       guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) else {
         return
@@ -686,6 +717,14 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
       FinalizationRecoveryURLStub.reset()
     }
 
+    await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(
+      MeetingScreenEvidencePass(
+        screenshotsEnabled: { false }, flushScreenActivity: { _ in }, adjudicate: { _, _ in .idle },
+        sleep: { _ in }))
+    addTeardownBlock {
+      await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(nil)
+    }
+
     let sessionId = try await TranscriptionStorage.shared.startSession(
       source: "desktop",
       clientConversationId: "client-recording-id",
@@ -725,6 +764,59 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         "/v1/conversations/client-recording-id/finalization",
       ]
     )
+  }
+
+  func testMeetingScreenEvidenceIsGatheredBeforeTheBackendWritesNotes() async throws {
+    FinalizationRecoveryURLStub.reset()
+    setenv("OMI_PYTHON_API_URL", "https://finalization-recovery.test/", 1)
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [FinalizationRecoveryURLStub.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+    await ConversationFinalizationService.shared.setAPIClientForTesting(client)
+    let events = EvidenceEventRecorder()
+    await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(
+      MeetingScreenEvidencePass(
+        screenshotsEnabled: { true },
+        flushScreenActivity: { _ in await events.record("flush") },
+        adjudicate: { conversationID, window in
+          let posts = FinalizationRecoveryURLStub.requests.filter { $0.method == "POST" }.count
+          await events.record("adjudicate \(conversationID) \(window.fingerprint) posts=\(posts)")
+          return .ready
+        },
+        sleep: boundThatNeverFires))
+    addTeardownBlock {
+      await ConversationFinalizationService.shared.setAPIClientForTesting(nil)
+      await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(nil)
+    }
+    defer {
+      unsetenv("OMI_PYTHON_API_URL")
+      FinalizationRecoveryURLStub.reset()
+    }
+
+    let sessionId = try await TranscriptionStorage.shared.startSession(
+      source: "desktop",
+      clientConversationId: "evidence-recording-id",
+      conversationRole: .meeting,
+      finalizationStrategy: .cloudReconcile
+    )
+    try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .meetingEnded)
+
+    await ConversationFinalizationService.shared.finalizeSession(
+      id: sessionId, reason: .meetingEnded, allowCloudForceProcess: true)
+
+    let recorded = await events.events
+    XCTAssertTrue(recorded.contains("flush"))
+    // 10:00:00.123456 + 1.5s and + 58.25s, in the server's arithmetic.
+    XCTAssertTrue(
+      recorded.contains("adjudicate evidence-recording-id meeting-content-v1:1783418401623:1783418458373 posts=0"),
+      "adjudication must run on the server's window before any finalize request: \(recorded)")
+    let requests = FinalizationRecoveryURLStub.requests.map { "\($0.method) \($0.url.path)" }
+    let read = try XCTUnwrap(requests.firstIndex(of: "GET /v1/conversations/evidence-recording-id"))
+    let finalize = try XCTUnwrap(requests.firstIndex(of: "POST /v1/conversations/evidence-recording-id/finalize"))
+    XCTAssertLessThan(read, finalize, "screen evidence must be gathered before the backend is asked to write notes")
+    let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
+    XCTAssertEqual(storedSession?.backendId, "evidence-recording-id")
   }
 
   func testFreshUploadingSessionWaitsForStaleRecoveryWindow() async throws {
@@ -1094,4 +1186,20 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
       deferred: false
     )
   }
+}
+
+private actor EvidenceEventRecorder {
+  private(set) var events: [String] = []
+
+  func record(_ event: String) {
+    events.append(event)
+  }
+}
+
+/// A pass bound that never fires on its own: it ends only when the work finishes first and the pass
+/// cancels it, so these tests never wait on wall-clock time.
+private let boundThatNeverFires: @Sendable (Duration) async -> Void = { _ in
+  let (stream, continuation) = AsyncStream<Void>.makeStream()
+  for await _ in stream {}
+  continuation.finish()
 }

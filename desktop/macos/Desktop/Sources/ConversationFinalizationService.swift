@@ -13,6 +13,7 @@ actor ConversationFinalizationService {
   private var isNetworkReachable: @Sendable () async -> Bool =
     ConversationFinalizationService.systemNetworkReachability
   private var clock: @Sendable () -> Date = { Date() }
+  private var screenEvidencePass = MeetingScreenEvidencePass.production
   private var isDeferredForOffline = false
 
   private static let systemNetworkReachability: @Sendable () async -> Bool = {
@@ -40,6 +41,10 @@ actor ConversationFinalizationService {
 
   func setClockForTesting(_ clock: (@Sendable () -> Date)?) {
     self.clock = clock ?? { Date() }
+  }
+
+  func setScreenEvidencePassForTesting(_ pass: MeetingScreenEvidencePass?) {
+    screenEvidencePass = pass ?? .production
   }
 
   func finalizeSession(
@@ -164,6 +169,11 @@ actor ConversationFinalizationService {
       let meetingTreatmentEligible: Bool?
       switch strategy {
       case .localSegments:
+        if session.conversationRole == .meeting {
+          // `/from-segments` writes the notes synchronously, so the OCR flush must precede it.
+          _ = await screenEvidencePass.beforeNotes(
+            captureInterval: Self.captureInterval(of: session), conversationID: nil, fetchConversation: nil)
+        }
         meetingTreatmentEligible = try await uploadLocalSegments(sessionId: sessionId)
       case .cloudReconcile:
         guard let latestSession = try await TranscriptionStorage.shared.getSession(id: sessionId) else {
@@ -340,7 +350,13 @@ actor ConversationFinalizationService {
         "from-segments returned \(response.id) but local completion was rejected"
       )
     }
-    await hydrateUploadedLocalConversation(id: response.id)
+    let hydrated = await hydrateUploadedLocalConversation(id: response.id)
+    if bundle.session.conversationRole == .meeting, let hydrated {
+      // Notes are already written by `/from-segments`; adjudicate now so the screenshots exist on
+      // every surface before anyone opens the note. Nothing waits for it.
+      let pass = screenEvidencePass
+      Task { _ = await pass.afterCreation(conversation: hydrated) }
+    }
     log("ConversationFinalization: Uploaded local session \(sessionId) -> backend conversation \(response.id)")
     return response.meetingTreatmentEligible
   }
@@ -388,17 +404,41 @@ actor ConversationFinalizationService {
     )
   }
 
-  private func hydrateUploadedLocalConversation(id conversationId: String) async {
+  @discardableResult
+  private func hydrateUploadedLocalConversation(id conversationId: String) async -> ServerConversation? {
     do {
       let conversation = try await apiClient.getConversation(id: conversationId)
       _ = try await TranscriptionStorage.shared.syncServerConversation(conversation)
       log("ConversationFinalization: Hydrated uploaded local conversation \(conversationId)")
+      return conversation
     } catch {
       logError(
         "ConversationFinalization: Failed to hydrate uploaded local conversation \(conversationId)",
         error: error
       )
+      return nil
     }
+  }
+
+  static func captureInterval(of session: TranscriptionSessionRecord) -> DateInterval {
+    let end = max(session.finishedAt ?? Date(), session.startedAt.addingTimeInterval(1))
+    return DateInterval(start: session.startedAt, end: end)
+  }
+
+  /// Ask the backend to process one conversation, gathering the meeting's screen evidence first so
+  /// the notes it writes can use it. Bounded and fail-open (`MeetingScreenEvidencePass`).
+  private func finalizeBackendConversation(
+    id conversationId: String,
+    session: TranscriptionSessionRecord
+  ) async throws -> ServerConversation {
+    if session.conversationRole == .meeting {
+      let client = apiClient
+      _ = await screenEvidencePass.beforeNotes(
+        captureInterval: Self.captureInterval(of: session),
+        conversationID: conversationId,
+        fetchConversation: { try await client.getConversation(id: conversationId) })
+    }
+    return try await apiClient.finalizeConversation(id: conversationId)
   }
 
   static func compactSegmentsForBackendLimit(
@@ -452,7 +492,7 @@ actor ConversationFinalizationService {
         )
         if try await completeCloudConversation(
           id: clientConversationId,
-          sessionId: sessionId,
+          session: session,
           allowForceProcess: allowForceProcess,
           allowBackendIdOverride: true
         ) {
@@ -463,7 +503,7 @@ actor ConversationFinalizationService {
       }
       let conversation: ServerConversation
       if allowForceProcess {
-        conversation = try await apiClient.finalizeConversation(id: backendId)
+        conversation = try await finalizeBackendConversation(id: backendId, session: session)
       } else {
         conversation = try await apiClient.getConversation(id: backendId)
       }
@@ -488,13 +528,19 @@ actor ConversationFinalizationService {
     if let clientConversationId = session.clientConversationId, !clientConversationId.isEmpty {
       if try await completeCloudConversation(
         id: clientConversationId,
-        sessionId: sessionId,
+        session: session,
         allowForceProcess: true
       ) {
         return nil
       }
     }
 
+    if allowForceProcess, session.conversationRole == .meeting {
+      // The conversation id is unknown until force-process answers, so only the OCR flush can
+      // precede it here.
+      _ = await screenEvidencePass.beforeNotes(
+        captureInterval: Self.captureInterval(of: session), conversationID: nil, fetchConversation: nil)
+    }
     if allowForceProcess, let conversation = try await apiClient.forceProcessConversation() {
       if DesktopConversationMatchPolicy.matchesDesktopConversation(
         startedAt: conversation.startedAt,
@@ -528,7 +574,7 @@ actor ConversationFinalizationService {
       )
     }
     for match in timestampMatches {
-      if try await completeTimestampMatchedConversation(match, sessionId: sessionId) {
+      if try await completeTimestampMatchedConversation(match, session: session) {
         return nil
       }
     }
@@ -537,7 +583,7 @@ actor ConversationFinalizationService {
       if let clientConversationId = session.clientConversationId, !clientConversationId.isEmpty {
         if try await completeCloudConversation(
           id: clientConversationId,
-          sessionId: sessionId,
+          session: session,
           allowForceProcess: true
         ) {
           return nil
@@ -554,11 +600,12 @@ actor ConversationFinalizationService {
 
   private func completeTimestampMatchedConversation(
     _ match: ServerConversation,
-    sessionId: Int64
+    session: TranscriptionSessionRecord
   ) async throws -> Bool {
+    guard let sessionId = session.id else { return false }
     let conversation: ServerConversation
     if DesktopConversationMatchPolicy.shouldFinalizeTimestampMatchedConversation(status: match.status) {
-      conversation = try await apiClient.finalizeConversation(id: match.id)
+      conversation = try await finalizeBackendConversation(id: match.id, session: session)
     } else {
       conversation = match
     }
@@ -643,14 +690,15 @@ actor ConversationFinalizationService {
 
   private func completeCloudConversation(
     id conversationId: String,
-    sessionId: Int64,
+    session: TranscriptionSessionRecord,
     allowForceProcess: Bool,
     allowBackendIdOverride: Bool = false
   ) async throws -> Bool {
+    guard let sessionId = session.id else { return false }
     let conversation: ServerConversation
     do {
       if allowForceProcess {
-        conversation = try await apiClient.finalizeConversation(id: conversationId)
+        conversation = try await finalizeBackendConversation(id: conversationId, session: session)
       } else {
         conversation = try await apiClient.getConversation(id: conversationId)
       }

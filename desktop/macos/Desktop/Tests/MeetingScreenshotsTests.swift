@@ -123,20 +123,20 @@ final class MeetingScreenshotsTests: XCTestCase {
     XCTAssertEqual(outcome.candidates.map(\.id), [2])
   }
 
-  func testLegacyTranscriptWindowAllowsSTTLatencyUpToSixtySeconds() throws {
+  func testLegacyTranscriptWindowAllowsSTTLatencyUpToTheServersThirtySeconds() throws {
     let lifecycleStart = Date(timeIntervalSince1970: 20_000)
     let transcriptEnd = 10 * 60.0
 
     let withinTolerance = MeetingScreenshotSelectionWindow.resolve(
       startedAt: lifecycleStart,
-      finishedAt: lifecycleStart.addingTimeInterval(transcriptEnd - 60),
+      finishedAt: lifecycleStart.addingTimeInterval(transcriptEnd - 30),
       segmentSpans: [(0, transcriptEnd)],
       hasTrustedOrigin: false)
     XCTAssertEqual(withinTolerance?.end, lifecycleStart.addingTimeInterval(transcriptEnd))
 
     let outsideTolerance = MeetingScreenshotSelectionWindow.resolve(
       startedAt: lifecycleStart,
-      finishedAt: lifecycleStart.addingTimeInterval(transcriptEnd - 61),
+      finishedAt: lifecycleStart.addingTimeInterval(transcriptEnd - 31),
       segmentSpans: [(0, transcriptEnd)],
       hasTrustedOrigin: false)
     XCTAssertNil(outsideTolerance)

@@ -30,17 +30,36 @@ import GRDB
 /// listen conversations can retain an early socket origin across a rollover. Transcript offsets
 /// are only projected onto that origin when the origin is independently trustworthy (desktop
 /// `/from-segments`, audio-timeline v2) or when the projection agrees with `finished_at`.
+///
+/// The server recomputes this window (`routers/screen_frames.py` `_trusted_content_window`) and
+/// stamps its fingerprint on the adjudicated set. The two must agree to the millisecond, or a note
+/// opened after finalization re-selects and re-uploads a set the server already judged. So the
+/// arithmetic here follows the server's exactly: microsecond origin, offsets rounded to whole
+/// microseconds half-to-even (`timedelta(seconds=)`), and milliseconds rounded half-to-even
+/// (`round(dt.timestamp() * 1000)`). The tolerance is the server's too.
 struct MeetingScreenshotSelectionWindow: Equatable, Sendable {
   static let policy = "meeting-content-v1"
-  static let legacyConsistencyTolerance: TimeInterval = 60
+  /// `LEGACY_CONTENT_WINDOW_TOLERANCE_SECONDS`. A looser client bound trusts windows the server
+  /// does not, and the server then stamps its legacy fingerprint, which never matches.
+  static let legacyConsistencyTolerance: TimeInterval = 30
 
   let start: Date
   let end: Date
 
   var fingerprint: String {
-    let startMilliseconds = Int64((start.timeIntervalSince1970 * 1_000).rounded())
-    let endMilliseconds = Int64((end.timeIntervalSince1970 * 1_000).rounded())
-    return "\(Self.policy):\(startMilliseconds):\(endMilliseconds)"
+    "\(Self.policy):\(Self.serverMilliseconds(start)):\(Self.serverMilliseconds(end))"
+  }
+
+  /// `round(datetime.timestamp() * 1000)` for a microsecond-precise instant.
+  static func serverMilliseconds(_ date: Date) -> Int64 {
+    let microseconds = (date.timeIntervalSince1970 * 1_000_000).rounded()
+    return Int64((microseconds / 1_000_000 * 1_000).rounded(.toNearestOrEven))
+  }
+
+  /// `timedelta(seconds=value)` in whole microseconds.
+  static func serverMicroseconds(offset value: Double) -> Int64 {
+    let whole = value.rounded(.towardZero)
+    return Int64(whole) * 1_000_000 + Int64(((value - whole) * 1_000_000).rounded(.toNearestOrEven))
   }
 
   func contains(_ date: Date) -> Bool { date >= start && date <= end }
@@ -75,8 +94,11 @@ struct MeetingScreenshotSelectionWindow: Equatable, Sendable {
       return nil
     }
 
-    let start = startedAt.addingTimeInterval(firstOffset)
-    let end = startedAt.addingTimeInterval(lastOffset)
+    let originMicroseconds = Int64((startedAt.timeIntervalSince1970 * 1_000_000).rounded())
+    let start = Date(
+      timeIntervalSince1970: Double(originMicroseconds + serverMicroseconds(offset: firstOffset)) / 1_000_000)
+    let end = Date(
+      timeIntervalSince1970: Double(originMicroseconds + serverMicroseconds(offset: lastOffset)) / 1_000_000)
     if !hasTrustedOrigin {
       guard let finishedAt,
         abs(end.timeIntervalSince(finishedAt)) <= legacyConsistencyTolerance

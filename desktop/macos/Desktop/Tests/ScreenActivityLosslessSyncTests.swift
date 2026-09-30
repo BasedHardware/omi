@@ -136,6 +136,55 @@ final class ScreenActivityLosslessSyncTests: XCTestCase {
     }
   }
 
+  /// A meeting's own rows must reach the backend before its notes are written, even though their
+  /// bucket is still open — one winner per bucket inside the meeting, nothing outside it.
+  func testMeetingFlushShipsTheOpenBucketsWinnerInsideTheMeetingOnly() throws {
+    let queue = try makeLegacyQueue()
+    let bucketStart = Date(timeIntervalSince1970: 1_700_000_100)
+    let meeting = DateInterval(start: bucketStart, end: bucketStart.addingTimeInterval(200))
+    try queue.write { db in
+      try RewindDatabase.installScreenActivitySyncStateSchema(db)
+      let rows: [(Double, String, String)] = [
+        (-60, "SyntheticApp", "before the meeting"),
+        (10, "SyntheticApp", "short"),
+        (120, "SyntheticApp", "the longest text in the open bucket"),
+        (150, "OtherApp", "other window"),
+        (250, "SyntheticApp", "after the meeting ended"),
+      ]
+      for (offset, app, text) in rows {
+        try db.execute(
+          sql: "INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText) VALUES (?, ?, ?, ?)",
+          arguments: [bucketStart.addingTimeInterval(offset), app, "SyntheticWindow", text])
+      }
+
+      // The periodic path ships nothing yet: the bucket is still open.
+      let now = bucketStart.addingTimeInterval(210)
+      try ScreenActivitySyncService.compactClosedBuckets(db: db, now: now, slack: 300)
+      XCTAssertTrue(
+        try ScreenActivitySyncService.fetchSyncCandidates(
+          db: db, limit: 100, now: now, slack: 300, embeddingGrace: 900
+        ).isEmpty)
+
+      try ScreenActivitySyncService.compactMeetingWindow(db: db, interval: meeting)
+      let candidates = try ScreenActivitySyncService.fetchMeetingWindowCandidates(
+        db: db, interval: meeting, limit: 100)
+      XCTAssertEqual(candidates.map(\.id), [3, 4], "one winner per (app, window, bucket) inside the meeting")
+      try ScreenActivitySyncService.markCandidatesSynced(db: db, candidates: candidates)
+
+      let states = try Row.fetchAll(db, sql: "SELECT id, screenActivitySyncState FROM screenshots ORDER BY id")
+        .map { ($0["id"] as Int64, $0["screenActivitySyncState"] as Int) }
+      XCTAssertEqual(
+        states.map(\.1),
+        [
+          ScreenActivitySyncState.pending.rawValue,
+          ScreenActivitySyncState.compacted.rawValue,
+          ScreenActivitySyncState.textSynced.rawValue,
+          ScreenActivitySyncState.textSynced.rawValue,
+          ScreenActivitySyncState.pending.rawValue,
+        ])
+    }
+  }
+
   /// A row whose vector is still pending must not ship text-only and then ship again unchanged:
   /// the second push is a byte-identical Firestore document write plus a full index rewrite.
   func testARowWaitsForItsEmbeddingRatherThanShippingTwice() throws {

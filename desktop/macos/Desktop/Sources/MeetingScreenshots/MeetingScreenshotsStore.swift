@@ -82,6 +82,12 @@ final class MeetingScreenshotsStore: ObservableObject {
   /// means the second view awaits the first result rather than repeating it.
   private static var inFlight: [String: Task<Void, Never>] = [:]
 
+  /// Forget the session cache, as an app relaunch does, so a test can prove the persisted set is
+  /// what a later note reads.
+  static func resetSessionCacheForTesting() {
+    cache.removeAll()
+  }
+
   private var conversationID = ""
   private var cacheKey = ""
   private var selectionWindow: MeetingScreenshotSelectionWindow?
@@ -194,6 +200,16 @@ final class MeetingScreenshotsStore: ObservableObject {
         self?.task = nil
       }
     }
+  }
+
+  /// `load`, then wait for it to settle. The finalization pass uses this so the one run it starts
+  /// is the same shared, de-duplicated run a note opened mid-flight joins, and its result lands in
+  /// the same session cache the note reads.
+  @discardableResult
+  func loadAndWait(conversationID: String, selectionWindow: MeetingScreenshotSelectionWindow) async -> Phase {
+    load(conversationID: conversationID, selectionWindow: selectionWindow)
+    if let task { await task.value }
+    return phase
   }
 
   // MARK: - Full size
