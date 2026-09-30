@@ -10,9 +10,8 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
-  const ChatHeader({super.key, required this.provider, required this.onHistory});
+  const ChatHeader({super.key, required this.provider});
   final MessageProvider provider;
-  final VoidCallback? onHistory;
   @override
   Size get preferredSize => Size.fromHeight(kToolbarHeight + (provider.isLoadingMessages ? 32 : 0));
 
@@ -42,14 +41,8 @@ class ChatHeader extends StatelessWidget implements PreferredSizeWidget {
                   const SizedBox(width: OmiSpacing.xs),
                   Flexible(child: Text(app.getName(), overflow: TextOverflow.ellipsis, style: OmiType.callout)),
                 ])),
-      actions: [
-        OmiIconButton.filled(
-            key: const Key('chat_history'),
-            icon: const Icon(Icons.history),
-            label: context.l10n.pastChats,
-            onPressed: onHistory),
-        const SizedBox(width: OmiSpacing.xs),
-      ],
+      // Balance the close control so the dismissal handle stays centered without a history button.
+      actions: const [SizedBox(width: kToolbarHeight)],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
               preferredSize: const Size.fromHeight(32),

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -25,16 +24,21 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-// Keep real navigation, session decoding and provider state; only I/O is replaced.
+// Keep real popup navigation, composer and send state; only backend I/O is replaced.
 class _Messages extends MessageProvider {
   _Messages(ChatSessionsApi api) : super(sessionsApi: api);
   @override
   Future<void> fetchChatApps() async {}
+
+  int refreshCalls = 0;
+  @override
+  Future<void> refreshMessages({bool dropdownSelected = false}) async {
+    refreshCalls++; // The current-thread read is empty in this widget fixture.
+  }
 }
 
 class _HistoryServer {
   final requests = <ApiRequest>[];
-  Completer<http.Response>? pendingRead;
   int readStatus = 200;
 
   http.Response transcript(String id) => http.Response(
@@ -72,7 +76,6 @@ class _HistoryServer {
           200);
     }
     if (uri.path == '/v2/messages') {
-      if (pendingRead != null) return pendingRead!.future;
       return transcript(uri.queryParameters['chat_session_id']!);
     }
     throw StateError('Unexpected request: ${uri.path}');
@@ -87,13 +90,13 @@ void main() {
     PlatformManager.initializeForLocalHarness();
   });
 
-  Future<_Messages> pumpChat(WidgetTester tester, _HistoryServer server, {String? draft, bool fresh = false}) async {
+  Future<_Messages> pumpChat(WidgetTester tester, _HistoryServer server, {String? draft, bool empty = false}) async {
     final provider = _Messages(ChatSessionsApi(baseUrl: 'https://example.invalid/', send: server.send))
       ..messages = [
         ServerMessage('current', DateTime.utc(2026), 'Current conversation', MessageSender.human, MessageType.text,
             null, false, [], [], []),
       ];
-    if (fresh) provider.startFreshChat();
+    if (empty) provider.messages.clear();
     await tester.pumpWidget(MultiProvider(
       providers: [
         ChangeNotifierProvider<MessageProvider>(create: (_) => provider),
@@ -116,7 +119,7 @@ void main() {
         home: Builder(
             builder: (context) => Scaffold(
                 body: TextButton(
-                    onPressed: () => openChatSheet<void>(context, ChatPage(initialDraft: draft, startFresh: fresh)),
+                    onPressed: () => openChatSheet<void>(context, ChatPage(initialDraft: draft)),
                     child: const Text('Open chat')))),
       ),
     ));
@@ -125,42 +128,57 @@ void main() {
     return provider;
   }
 
-  Future<void> choose(WidgetTester tester, String id) async {
-    await tester.tap(find.byKey(const Key('chat_history')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(ValueKey('past_chat_$id')));
+  Future<void> seedReply(WidgetTester tester) async {
+    final provider = tester.element(find.byType(ChatPage)).read<MessageProvider>();
+    provider.messages = (jsonDecode(_HistoryServer().transcript('first').body) as List)
+        .map((row) => ServerMessage.fromJson(row as Map<String, dynamic>))
+        .toList();
+    provider.notifyListeners();
     await tester.pumpAndSettle();
   }
 
-  testWidgets('tapping each saved chat opens its transcript and never deletes it', (tester) async {
+  testWidgets('closing and reopening chat keeps the same messages without creating a session', (tester) async {
     final server = _HistoryServer();
     final provider = await pumpChat(tester, server);
-    for (final id in ['first', 'second', 'first']) {
-      await choose(tester, id);
-      expect(provider.chatSessionId, id);
-      expect(find.text('Question from $id'), findsOneWidget);
-      expect(find.text('Answer from $id'), findsOneWidget);
-      expect(provider.messages, hasLength(2));
-      expect(tester.takeException(), isNull);
+    final messages = provider.messages;
+    for (var i = 0; i < 3; i++) {
+      await tester.tap(find.byKey(const Key('chat_close')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open chat'));
+      await tester.pumpAndSettle();
+      expect(identical(provider.messages, messages), isTrue);
+      expect(find.text('Current conversation'), findsOneWidget);
+      expect(provider.isFreshChat, isFalse);
+      expect(provider.chatSessionId, isNull);
     }
-    expect(server.requests.every((r) => r.method == 'GET'), isTrue);
+    expect(server.requests, isEmpty);
+    expect(provider.refreshCalls, 0);
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('failed history read retains the current conversation', (tester) async {
-    final server = _HistoryServer()..readStatus = 503;
-    final provider = await pumpChat(tester, server);
-    await choose(tester, 'first');
+  testWidgets('single chat has no history control and keeps its dismissal handle centered', (tester) async {
+    await pumpChat(tester, _HistoryServer());
+    expect(find.byKey(const Key('chat_history')), findsNothing);
+    expect(find.text('Past chats'), findsNothing);
+    expect(find.text('New Chat'), findsNothing);
+    expect(tester.getCenter(find.byKey(const Key('chat_drag_handle'))).dx,
+        closeTo(tester.getCenter(find.byType(ChatPage)).dx, 1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('an empty provider reloads the current chat without marking it as a new session', (tester) async {
+    final server = _HistoryServer();
+    final provider = await pumpChat(tester, server, empty: true);
+    expect(provider.refreshCalls, 1);
+    expect(provider.isFreshChat, isFalse);
     expect(provider.chatSessionId, isNull);
-    expect(provider.messages.single.text, 'Current conversation');
-    expect(find.text('Current conversation'), findsOneWidget);
-    expect(server.requests.every((r) => r.method == 'GET'), isTrue);
+    expect(server.requests, isEmpty);
     await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('a starter and typed draft survive tapping the composer and keyboard resizing', (tester) async {
     final server = _HistoryServer();
-    await pumpChat(tester, server, fresh: true);
+    await pumpChat(tester, server, empty: true);
     await tester.tap(find.byKey(const Key('chat_starter_goal')));
     await tester.pumpAndSettle();
     final input = find.byKey(const ValueKey('omi.chat.input'));
@@ -178,29 +196,28 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('opening a slow saved chat never erases text typed while it loads', (tester) async {
-    final server = _HistoryServer()..pendingRead = Completer<http.Response>();
+  testWidgets('reopening during a send preserves the active reply and conversation', (tester) async {
+    final server = _HistoryServer();
     final provider = await pumpChat(tester, server);
-    await tester.tap(find.byKey(const Key('chat_history')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('past_chat_first')));
+    provider.setSendingMessage(true);
     await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    final input = find.byKey(const ValueKey('omi.chat.input'));
-    await tester.enterText(input, 'A new question while history loads');
-    server.pendingRead!.complete(server.transcript('first'));
+    await tester.tap(find.byKey(const Key('chat_close')));
     await tester.pumpAndSettle();
-    expect(provider.chatSessionId, 'first');
-    expect(tester.widget<TextField>(input).controller!.text, 'A new question while history loads');
-    expect(provider.messages, hasLength(2));
+    await tester.tap(find.text('Open chat'));
+    await tester.pumpAndSettle();
+    expect(provider.sendingMessage, isTrue);
+    expect(provider.messages.single.text, 'Current conversation');
+    expect(provider.isFreshChat, isFalse);
+    expect(server.requests, isEmpty);
+    provider.setSendingMessage(false);
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('tapping a follow-up sends it once in the selected chat and retains the previous messages',
+  testWidgets('tapping a follow-up sends it once in the continuous chat and retains the previous messages',
       (tester) async {
     final server = _HistoryServer();
     final provider = await pumpChat(tester, server);
-    await choose(tester, 'first');
+    await seedReply(tester);
     final sends = <(String, String?)>[];
     provider.replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
       sends.add((text, chatSessionId));
@@ -211,7 +228,7 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('chat_followup_chip')));
     await tester.tap(find.byKey(const Key('chat_followup_chip')));
     await tester.pumpAndSettle();
-    expect(sends, [('What should I do next?', 'first')]);
+    expect(sends, [('What should I do next?', null)]);
     expect(provider.messages.map((m) => m.text), [
       'Question from first',
       'Answer from first',
@@ -233,7 +250,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final server = _HistoryServer();
     final provider = await pumpChat(tester, server);
-    await choose(tester, 'first');
+    await seedReply(tester);
     final older = ServerMessage('older-reply', DateTime.utc(2026), 'An earlier answer', MessageSender.ai,
         MessageType.text, null, false, [], [], [],
         contentBlocks: [
@@ -265,7 +282,7 @@ void main() {
       (tester) async {
     final server = _HistoryServer();
     final provider = await pumpChat(tester, server);
-    await choose(tester, 'first');
+    await seedReply(tester);
     provider.setSendingMessage(true);
     await tester.pump();
     expect(find.byKey(const Key('chat_followup_chip')), findsNothing);
@@ -300,7 +317,7 @@ void main() {
     addTearDown(tester.view.resetViewInsets);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final provider = await pumpChat(tester, _HistoryServer());
-    await choose(tester, 'first');
+    await seedReply(tester);
     await tester.tap(find.byKey(const ValueKey('omi.chat.input')));
     tester.view.viewInsets = const FakeViewPadding(bottom: 220);
     const question = 'What was still undecided about the apps and\n\n'
@@ -328,7 +345,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.tap(chip);
     await tester.pumpAndSettle();
-    expect(sends, [(question, 'first')], reason: 'An abbreviated preview must send the complete original question');
+    expect(sends, [(question, null)], reason: 'An abbreviated preview must send the complete original question');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

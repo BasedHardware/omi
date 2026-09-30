@@ -1,4 +1,6 @@
 // Ask Omi: starters, composing, a reply and its actions, the Chat Apps drawer and Clear Chat.
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -28,6 +30,35 @@ Future<void> _ask(AuditRun a, String question) async {
 
 final chatScenarios = <AuditScenario>[
   AuditScenario(
+    id: 'chat-current-thread',
+    title: 'Ask Omi resumes the current conversation after a provider restart',
+    page: _page,
+    state: 'The existing current-thread endpoint returns one saved assistant reply',
+    run: (a) async {
+      final saved = ServerMessage('saved-answer', DateTime.utc(2026, 9, 29), 'Your existing conversation',
+          MessageSender.ai, MessageType.text, null, false, [], [], []);
+      final body = jsonEncode([saved.toJson()]);
+      a.server.failNext('GET', '/v2/messages', status: 200, body: body);
+      await a.pump(const ChatPage());
+      expect(find.text(saved.text), findsOneWidget);
+      expect(find.byKey(const Key('chat_history')), findsNothing);
+      await a.shot('Load the existing current conversation', step: 'loaded');
+      // Dispose the page and provider, as an app restart does; reload the same server-current thread.
+      await a.tester.pumpWidget(const SizedBox.shrink());
+      await a.settle();
+      a.server.failNext('GET', '/v2/messages', status: 200, body: body);
+      await a.pump(const ChatPage());
+      expect(find.text(saved.text), findsOneWidget);
+      expect(a.server.countOf('GET', '/v2/messages'), 2);
+      await _ask(a, 'Continue this conversation');
+      expect(find.text(saved.text), findsOneWidget);
+      expect(a.server.countOf('POST', '/v2/messages'), 1);
+      expect(a.server.countOf('POST', '/v2/chat-sessions'), 0);
+      expect(a.server.countOf('GET', '/v2/chat-sessions'), 0);
+      await a.shot('Continue the same conversation after restarting', step: 'continued');
+    },
+  ),
+  AuditScenario(
     id: 'chat-ask',
     title: 'Ask Omi: empty, starter, draft, reply and copy',
     page: _page,
@@ -35,7 +66,7 @@ final chatScenarios = <AuditScenario>[
     run: (a) async {
       a.server.assistantReplyText =
           'You agreed to send Alex the revised design notes on Friday. Start with the recording flow and memory search.';
-      await a.pump(const ChatPage(startFresh: true));
+      await a.pump(const ChatPage());
       expect(find.text('What can you do for me?'), findsOneWidget);
       expect(find.text('Summarize my recent activity'), findsNothing);
       await a.shot('Open Ask Omi with no saved personal data', step: 'empty');
@@ -46,10 +77,11 @@ final chatScenarios = <AuditScenario>[
       await a.enterText(find.byKey(_input), 'What did I agree to send Alex?');
       await a.shot('Compose a question', step: 'draft');
       await a.tap(find.byKey(_send));
-      // The completed reply names the new chat in the background; let that request finish too.
+      // A normal send continues the server-current conversation without creating or naming a session.
       await a.settle();
       expect(a.server.countOf('POST', '/v2/messages'), 1);
-      expect(a.server.countOf('POST', '/v2/chat/generate-title'), 1);
+      expect(a.server.countOf('POST', '/v2/chat/generate-title'), 0);
+      expect(a.server.countOf('POST', '/v2/chat-sessions'), 0);
       await a.shot('Send and receive the fixture reply', step: 'reply');
       mockCommonPlatformChannels();
       await a.tester.tap(find.bySemanticsLabel('Copy Message'));
@@ -67,7 +99,7 @@ final chatScenarios = <AuditScenario>[
       final memories = MemoriesProvider();
       await a.tester.runAsync(() => memories.createMemory('I prefer morning meetings.', MemoryVisibility.private));
       await a.pump(
-        const ChatPage(startFresh: true),
+        const ChatPage(),
         providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)],
       );
       expect(find.text('What did I decide today?'), findsOneWidget);
@@ -86,7 +118,7 @@ final chatScenarios = <AuditScenario>[
     page: _page,
     state: 'No saved personal data and no enabled chat apps',
     run: (a) async {
-      await a.pump(const ChatPage(startFresh: true));
+      await a.pump(const ChatPage());
       await a.tap(find.bySemanticsLabel('Chat Apps'));
       await a.shot('Open the Chat Apps drawer', step: 'drawer');
       await a.tap(find.text('Clear Chat').first);
@@ -100,7 +132,7 @@ final chatScenarios = <AuditScenario>[
     state: 'One question answered by the fixture backend',
     run: (a) async {
       a.server.assistantReplyText = 'You agreed to send Alex the revised design notes on Friday.';
-      await a.pump(const ChatPage(startFresh: true));
+      await a.pump(const ChatPage());
       await _ask(a, 'What did I agree to?');
       await a.tap(find.bySemanticsLabel('Not Helpful'));
       await a.shot('Tap Not Helpful on the reply: the feedback reason sheet');
@@ -132,7 +164,7 @@ final chatScenarios = <AuditScenario>[
           ),
           const ChatSheetTransition(
             animation: AlwaysStoppedAnimation(0.7),
-            child: ChatPage(startFresh: true),
+            child: ChatPage(),
           ),
         ]),
         scaffold: false,

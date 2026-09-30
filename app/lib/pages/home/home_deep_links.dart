@@ -150,7 +150,7 @@ Future<void> openHomeDeepLink(
       await _prepareChat(context, id);
       if (!context.mounted) return;
       unawaited(
-        openChatSheet(context, ChatPage(isPivotBottom: false, startFresh: true, initialDraft: link.query['draft'])),
+        openChatSheet(context, ChatPage(isPivotBottom: false, initialDraft: link.query['draft'])),
       );
     case 'settings':
       // The sheet is pushed synchronously, so a page pushed next lands on top of it.

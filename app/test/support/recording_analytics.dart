@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 
-import 'package:omi/utils/analytics/analytics_manager.dart';
-
 /// In-memory [AnalyticsAdapter] plus event lookup helpers for tests that
 /// assert on PostHog wire traffic without a real SDK.
 class _RecordingAdapter implements AnalyticsAdapter {
