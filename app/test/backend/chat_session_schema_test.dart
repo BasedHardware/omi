@@ -26,11 +26,8 @@ void main() {
   });
 
   test('updated_at wins over created_at when both are present', () {
-    final s = ChatSessionSummary.fromJson({
-      'id': 's',
-      'created_at': '2026-09-28T01:00:00Z',
-      'updated_at': '2026-09-29T01:00:00Z',
-    });
+    final s = ChatSessionSummary.fromJson(
+        {'id': 's', 'created_at': '2026-09-28T01:00:00Z', 'updated_at': '2026-09-29T01:00:00Z'});
     expect(s.updatedAt.isAtSameMomentAs(DateTime.utc(2026, 9, 29, 1)), isTrue);
   });
 
@@ -68,7 +65,7 @@ void main() {
     ('no timestamp', {'id': 's'}),
     (
       'an unparseable updated_at (no fallback past a present value)',
-      {'id': 's', 'updated_at': 'yesterday', 'created_at': '2026-09-29T01:00:00Z'},
+      {'id': 's', 'updated_at': 'yesterday', 'created_at': '2026-09-29T01:00:00Z'}
     ),
   ]) {
     test('a row with $name is rejected', () {

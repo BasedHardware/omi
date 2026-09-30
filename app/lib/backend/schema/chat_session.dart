@@ -2,13 +2,8 @@ import 'package:omi/backend/schema/gen/chat_sessions_wire.g.dart' as wire;
 
 /// A server-owned chat thread. This is a list projection, not a second transcript store.
 class ChatSessionSummary {
-  const ChatSessionSummary({
-    required this.id,
-    required this.title,
-    required this.updatedAt,
-    this.preview = '',
-    this.messageCount = 0,
-  });
+  const ChatSessionSummary(
+      {required this.id, required this.title, required this.updatedAt, this.preview = '', this.messageCount = 0});
 
   final String id;
   final String title;
