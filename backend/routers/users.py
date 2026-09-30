@@ -671,7 +671,15 @@ def update_person_name(
 
 
 @router.delete('/v1/users/people/{person_id}', tags=['v1'], status_code=204)
-def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def delete_person_endpoint(
+    person_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
+    memory_id: Optional[str] = None,
+):
+    if memory_id is not None and person_id is None:
+        return get_joan_followup_question_endpoint(memory_id=memory_id, uid=uid)
+    if not person_id:
+        raise HTTPException(status_code=400, detail='Person ID required')
     delete_person(uid, person_id)
     delete_user_person_speech_samples(uid, person_id)
 
@@ -723,18 +731,22 @@ class FollowupQuestionResponse(BaseModel):
 
 
 @router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], response_model=FollowupQuestionResponse)
-def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_joan_followup_question_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if memory_id == '0':
         memory = get_in_progress_conversation(uid)
         if not memory:
-            raise HTTPException(status_code=400, detail='No memory in progres')
+            raise HTTPException(status_code=400, detail='No memory in progress')
     else:
         memory = get_conversation(uid, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail='Conversation not found')
     if memory.get('is_locked', False):
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
-    memory = deserialize_conversation(memory)
+    try:
+        memory = deserialize_conversation(memory)
+    except Exception as exc:
+        logger.error('Failed to deserialize memory for Joan followup question: %s', exc)
+        raise HTTPException(status_code=500, detail='Failed to generate followup question')
     return {'result': followup_question_prompt(uid, memory.transcript_segments)}
 
 

@@ -1,8 +1,8 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Union
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
@@ -26,14 +26,85 @@ class MessageType(str, Enum):
 
 
 class MessageConversationStructured(BaseModel):
-    title: str
-    emoji: str
+    title: str = ''
+    emoji: str = ''
 
 
 class MessageConversation(BaseModel):
     id: str
     structured: MessageConversationStructured
     created_at: datetime
+
+    @classmethod
+    def from_memory_safe(cls, item: Any) -> Optional['MessageConversation']:
+        """Safely build a MessageConversation from a dict, Conversation, or mapping.
+
+        Returns None if the item is missing an id or fails conversion, ensuring
+        that legacy or malformed conversation records never crash message persistence.
+        """
+        if item is None:
+            return None
+        if isinstance(item, cls):
+            return item
+
+        try:
+            if isinstance(item, dict):
+                mid = str(item.get('id') or '').strip()
+                if not mid:
+                    return None
+                raw_created = item.get('created_at') or item.get('started_at')
+                raw_struct = item.get('structured')
+            else:
+                mid = str(getattr(item, 'id', '') or '').strip()
+                if not mid:
+                    return None
+                raw_created = getattr(item, 'created_at', None) or getattr(item, 'started_at', None)
+                raw_struct = getattr(item, 'structured', None)
+
+            if isinstance(raw_created, str):
+                try:
+                    created_at = datetime.fromisoformat(raw_created.replace('Z', '+00:00'))
+                except Exception:
+                    created_at = datetime.now(timezone.utc)
+            elif isinstance(raw_created, datetime):
+                created_at = raw_created
+            else:
+                created_at = datetime.now(timezone.utc)
+
+            title = ''
+            emoji = ''
+            if isinstance(raw_struct, dict):
+                title = str(raw_struct.get('title') or '')
+                emoji = str(raw_struct.get('emoji') or '')
+            elif raw_struct is not None:
+                title = str(getattr(raw_struct, 'title', '') or '')
+                emoji = str(getattr(raw_struct, 'emoji', '') or '')
+
+            return cls(
+                id=mid,
+                created_at=created_at,
+                structured=MessageConversationStructured(title=title, emoji=emoji),
+            )
+        except Exception:
+            return None
+
+    @classmethod
+    def safe_build_many(cls, memories: Optional[Sequence[Any]], limit: int = 5) -> List['MessageConversation']:
+        """Safely deserialize a sequence of memory items up to limit.
+
+        Skips unparseable or malformed records so a single bad memory cannot break
+        chat message generation or persistence.
+        """
+        if not memories:
+            return []
+        result: List['MessageConversation'] = []
+        for m in memories:
+            if len(result) >= limit:
+                break
+            card = cls.from_memory_safe(m)
+            if card is not None:
+                result.append(card)
+        return result
 
 
 # Chat Completions `file` content parts (purpose=user_data) accept these document

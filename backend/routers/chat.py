@@ -585,7 +585,7 @@ def send_message(
             chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
 
         chat_db.add_message(uid, ai_message.model_dump())
-        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        ai_message.memories = MessageConversation.safe_build_many(memories)
         usage_app_id = app_id_from_app or compat_app_id
         if usage_app_id:
             try:
