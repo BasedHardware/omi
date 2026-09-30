@@ -10,13 +10,23 @@ Contract fields (same mental model as desktop Swift/Rust emitters):
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Literal, TypedDict
 
 from utils.metrics import OMI_FALLBACK_TOTAL
 
 logger = logging.getLogger(__name__)
 
 FallbackOutcome = Literal['recovered', 'degraded', 'exhausted']
+
+
+class CapacityFallbackKwargs(TypedDict, total=False):
+    capacity_subtype: str
+
+
+def capacity_fallback_kwargs(subtype: str | None) -> CapacityFallbackKwargs:
+    """Add capacity detail only when present; other fallback calls stay unchanged."""
+    return {'capacity_subtype': subtype} if subtype is not None else {}
+
 
 FALLBACK_EVENT = 'omi_fallback_event'
 

@@ -49,7 +49,6 @@ async def test_capacity_rejection_falls_back_to_modulate_without_poisoning_circu
         to_mode='modulate',
         reason='capacity_full',
         outcome='recovered',
-        capacity_subtype=None,
     )
 
 
@@ -110,7 +109,6 @@ async def test_fallback_failure_is_reported_as_exhausted():
         to_mode='modulate',
         reason='circuit_open',
         outcome='exhausted',
-        capacity_subtype=None,
     )
 
 

@@ -54,7 +54,7 @@ from utils.stt.speaker_embedding import (
     compare_embeddings,
 )
 from utils.stt.speaker_clustering import select_speaker_cluster
-from utils.observability.fallback import record_fallback
+from utils.observability.fallback import capacity_fallback_kwargs, record_fallback
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
@@ -526,7 +526,7 @@ async def connect_stt_socket_with_fallback(
                 to_mode=service.value,
                 reason=reason,
                 outcome='exhausted',
-                capacity_subtype=capacity_subtype,
+                **capacity_fallback_kwargs(capacity_subtype),
             )
             if service == candidates[-1][0]:
                 raise
@@ -540,7 +540,7 @@ async def connect_stt_socket_with_fallback(
                 to_mode=service.value,
                 reason=reason,
                 outcome='exhausted',
-                capacity_subtype=capacity_subtype,
+                **capacity_fallback_kwargs(capacity_subtype),
             )
             if service == candidates[-1][0]:
                 raise
@@ -555,7 +555,7 @@ async def connect_stt_socket_with_fallback(
             to_mode=service.value,
             reason=reason,
             outcome='recovered',
-            capacity_subtype=capacity_subtype,
+            **capacity_fallback_kwargs(capacity_subtype),
         )
         return fallback_socket, service
 

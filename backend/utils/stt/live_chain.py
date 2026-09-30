@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from utils.stt.streaming import STTService
 
 from config.stt_provider_policy import DEEPGRAM_PROVIDERS, provider_for_model_token, provider_for_service
-from utils.observability.fallback import record_fallback
+from utils.observability.fallback import capacity_fallback_kwargs, record_fallback
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_failure import PendingLiveFailover, fallback_reason_for_typed_death
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS, ROUTING_DECISION_LATENCY
@@ -220,7 +220,7 @@ async def connect_configured_chain(
                     to_mode=service.value,
                     reason=fallback_reason,
                     outcome='degraded',
-                    capacity_subtype=capacity_subtype,
+                    **capacity_fallback_kwargs(capacity_subtype),
                 )
             origin, prior_reason, prior_capacity_subtype = service.value, fallback_reason, capacity_subtype
             return None
@@ -250,7 +250,7 @@ async def connect_configured_chain(
                     to_mode=service.value,
                     reason=prior_reason,
                     outcome='recovered',
-                    capacity_subtype=prior_capacity_subtype,
+                    **capacity_fallback_kwargs(prior_capacity_subtype),
                 )
         return socket, service
 
@@ -318,6 +318,6 @@ async def connect_configured_chain(
         to_mode='unavailable',
         reason=prior_reason,
         outcome='exhausted',
-        capacity_subtype=prior_capacity_subtype,
+        **capacity_fallback_kwargs(prior_capacity_subtype),
     )
     raise RuntimeError('Configured STT chain exhausted')
