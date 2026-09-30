@@ -78,7 +78,9 @@ void main() {
     await pump(tester);
     final node = tester.getSemantics(find.bySemanticsLabel('Is this Maya Chen?'));
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
-    tester.binding.pipelineOwner.semanticsOwner!.performAction(node.id, SemanticsAction.tap);
+    tester.binding.platformDispatcher.onSemanticsActionEvent!(
+      SemanticsActionEvent(viewId: tester.view.viewId, nodeId: node.id, type: SemanticsAction.tap),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('speaker_suggestion_panel')), findsOneWidget);
     handle.dispose();

@@ -169,7 +169,9 @@ class SpeakerLabelSuggestionEvent extends MessageEvent {
         json['person_name'] is! String ||
         (json['person_name'] as String).trim().isEmpty ||
         json['segment_id'] is! String ||
-        (json['segment_id'] as String).isEmpty) return SpeakerLabelSuggestionEvent.empty();
+        (json['segment_id'] as String).isEmpty) {
+      return SpeakerLabelSuggestionEvent.empty();
+    }
     return SpeakerLabelSuggestionEvent(
       speakerId: json['speaker_id'],
       personId: json['person_id'],

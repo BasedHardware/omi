@@ -20,7 +20,6 @@ import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/search/global_search.dart';
 import 'package:omi/backend/http/api/search.dart';
-import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
