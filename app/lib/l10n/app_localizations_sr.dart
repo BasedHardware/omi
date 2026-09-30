@@ -11635,4 +11635,17 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Шта је било на екрану';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Снимак екрана са овог састанка';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Избрисати снимак екрана?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Ово уклања снимак екрана из белешке овог састанка. Не може се опозвати.';
 }

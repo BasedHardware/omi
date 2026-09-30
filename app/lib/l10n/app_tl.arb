@@ -11217,5 +11217,9 @@
     "deleteChatMessage": "Mawawala ito sa mga nakaraang chat nang tuluyan.",
     "deleteChat": "Burahin ang chat",
     "appsAskWith": "Tanungin si Omi gamit ang",
-    "conversationsTodayCount": "{count, plural, =0{Walang usapan ngayon.} =1{1 usapan ngayon.} other{{count} usapan ngayon.}}"
+    "conversationsTodayCount": "{count, plural, =0{Walang usapan ngayon.} =1{1 usapan ngayon.} other{{count} usapan ngayon.}}",
+    "meetingScreenshotsTitle": "Ano ang nasa screen",
+    "meetingScreenshotFallbackCaption": "Screenshot mula sa meeting na ito",
+    "deleteMeetingScreenshotTitle": "Burahin ang Screenshot?",
+    "deleteMeetingScreenshotMessage": "Aalisin nito ang screenshot sa note ng meeting na ito. Hindi na ito maibabalik."
 }

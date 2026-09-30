@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from database.firestore_read_metrics import FirestoreReadSite
 from models.conversation import Conversation
@@ -591,13 +591,35 @@ class LiveConversationController:
         # work. Returning here dropped both (pre-split this was an unconditional sleep).
         await self.host.wait(7)
         if timed_out_id:
-            await self.process_conversation(timed_out_id)
+            await self._finalize_isolated(self.process_conversation, timed_out_id, stage='timed_out')
         processing = await self.host.persistence.call(
             conversations_db.get_processing_conversations, self.host.request.uid
         )
         for conversation in processing or []:
-            await self.schedule_finalization(conversation['id'])
+            await self._finalize_isolated(self.schedule_finalization, conversation['id'], stage='processing')
         await self.recover_stale_in_progress()
+
+    async def _finalize_isolated(
+        self, finalize: Callable[[str], Awaitable[bool]], conversation_id: str, *, stage: str
+    ) -> None:
+        """Finalize one earlier conversation without letting its failure end the live session.
+
+        process_pending runs as a supervised finite task, so an exception escaping it is a
+        supervisor crash that tears down the socket. A conversation whose finalization write
+        fails every time (a document already at Firestore's 1 MiB limit) was retried by each
+        reconnect and ended each session seconds after it started, so the client reconnected
+        in a loop and its live transcription never ran. The row keeps its status and the next
+        session's sweep retries it; unrelated rows in the same sweep still run.
+        """
+        try:
+            await finalize(conversation_id)
+        except Exception as error:
+            logger.error(
+                'Listen pending finalization failed stage=%s conversation=%s type=%s',
+                stage,
+                conversation_id,
+                type(error).__name__,
+            )
 
     async def recover_stale_in_progress(self) -> None:
         """Route orphaned `in_progress` conversations through normal finalization (#9809).
@@ -624,7 +646,7 @@ class LiveConversationController:
                 conversation['id'],
                 conversation.get('finished_at'),
             )
-            await self.process_conversation(conversation['id'])
+            await self._finalize_isolated(self.process_conversation, conversation['id'], stage='stale_in_progress')
 
     async def lifecycle_loop(self) -> None:
         while self.host.state.active:

@@ -3657,5 +3657,9 @@
     "deleteChatMessage": "Θα φύγει οριστικά από τις προηγούμενες συνομιλίες.",
     "deleteChat": "Διαγραφή συνομιλίας",
     "appsAskWith": "Ρωτήστε το Omi με",
-    "conversationsTodayCount": "{count, plural, =0{Καμία συζήτηση σήμερα.} =1{1 συζήτηση σήμερα.} other{{count} συζητήσεις σήμερα.}}"
+    "conversationsTodayCount": "{count, plural, =0{Καμία συζήτηση σήμερα.} =1{1 συζήτηση σήμερα.} other{{count} συζητήσεις σήμερα.}}",
+    "meetingScreenshotsTitle": "Τι υπήρχε στην οθόνη",
+    "meetingScreenshotFallbackCaption": "Στιγμιότυπο οθόνης από αυτή τη σύσκεψη",
+    "deleteMeetingScreenshotTitle": "Διαγραφή στιγμιότυπου οθόνης;",
+    "deleteMeetingScreenshotMessage": "Το στιγμιότυπο οθόνης θα αφαιρεθεί από τη σημείωση αυτής της σύσκεψης. Δεν είναι δυνατή η αναίρεση."
 }

@@ -11687,4 +11687,17 @@ class AppLocalizationsIt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Cosa c\'era sullo schermo';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Screenshot di questa riunione';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Eliminare lo screenshot?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Lo screenshot verrà rimosso dalla nota di questa riunione. L\'operazione non può essere annullata.';
 }

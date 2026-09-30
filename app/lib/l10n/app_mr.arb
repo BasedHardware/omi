@@ -11217,5 +11217,9 @@
     "deleteChatMessage": "ते मागील चॅट्समधून कायमचे जाईल.",
     "deleteChat": "चॅट हटवा",
     "appsAskWith": "यासह Omi ला विचारा",
-    "conversationsTodayCount": "{count, plural, =0{आज कोणतेही संभाषण नाही.} =1{आज 1 संभाषण.} other{आज {count} संभाषणे.}}"
+    "conversationsTodayCount": "{count, plural, =0{आज कोणतेही संभाषण नाही.} =1{आज 1 संभाषण.} other{आज {count} संभाषणे.}}",
+    "meetingScreenshotsTitle": "स्क्रीनवर काय होते",
+    "meetingScreenshotFallbackCaption": "या मीटिंगचा स्क्रीनशॉट",
+    "deleteMeetingScreenshotTitle": "स्क्रीनशॉट हटवायचा?",
+    "deleteMeetingScreenshotMessage": "यामुळे या मीटिंगच्या नोटमधून स्क्रीनशॉट काढला जाईल. हे पूर्ववत करता येणार नाही."
 }

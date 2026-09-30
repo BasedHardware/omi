@@ -1180,6 +1180,57 @@ async def test_long_unfinished_tdt_tail_cuts_at_context_cap_instead_of_filling_p
 
 
 @pytest.mark.asyncio
+async def test_partial_vad_admission_unfinished_tdt_tail_keeps_replay_anchor_within_ninety_seconds(monkeypatch):
+    client = LongTailClient()
+    pump_release = asyncio.Event()
+
+    async def parked_pump(_self):
+        await pump_release.wait()
+
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_pump', parked_pump)
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    ring = actual._window_ring()
+    pcm = b'\x01\x00' * 16000 * 6
+    assert previous.gate is not None and not previous.passthrough
+
+    def admit_half(data, _wall_time, _score_pcm, start_sample):
+        assert start_sample is not None
+        return vad_gate.GateOutput(
+            audio_to_send=data[: len(data) // 2],
+            is_speech=True,
+            send_spans=((start_sample, len(data) // 4),),
+        )
+
+    monkeypatch.setattr(previous.gate, 'process_audio', admit_half)
+    before_cuts = WINDOW_FORCED_CUTS._value.get()
+
+    for step in range(50):  # Five capture minutes, half admitted to the provider after VAD.
+        await _flush_capture(actual, pcm, step * len(pcm) // 2)
+        assert actual.stt_socket is previous, (step, previous.capacity_subtype, previous.raw.death_reason)
+        assert previous.capacity_subtype is None
+        assert ring.buffered_bytes <= 90 * 16000 * 2
+        job = previous.raw._next_job()
+        if job is not None:
+            await previous.raw._run_job(job)
+
+    assert base.emitted
+    ends = [float(item['end']) for item in base.emitted]
+    assert ends == sorted(set(ends))  # Re-posted context never duplicates emitted text.
+    assert WINDOW_FORCED_CUTS._value.get() > before_cuts
+    assert replayed == [] and callbacks == []
+    trim_window_replay_to_anchor(ring, previous)
+    replay_snapshot = ring.snapshot()
+    assert replay_snapshot and replay_snapshot[0][0] == previous.window_replay_anchor_sample()
+    previous.raw.fail('timeout')
+    assert await actual._failover_stt_socket()
+    assert b''.join(replayed) == b''.join(data for _, data in replay_snapshot)
+    assert len(callbacks) == 1
+    assert [float(item['end']) for item in base.emitted] == ends
+    pump_release.set()
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
 async def test_stalled_window_post_fails_once_and_replays_exactly_from_emit_anchor(monkeypatch):
     client = ProgressThenHoldClient(hold_after=2)
     actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
@@ -2083,6 +2134,11 @@ def test_decide_window_hold_empty_trailing_complete_and_forced_cut():
     assert held_decision.emit == (first,)
     assert held_decision.new_anchor == 2.0
     assert held_decision.forced_cut is False
+    replay_cut = decide_window([first, held], 6.0, 24.0, force=False, force_replay_cut=True)
+    assert replay_cut.emit == (first, held)
+    assert replay_cut.new_anchor == 5.0
+    assert replay_cut.forced_cut is True
+    assert decide_window([], 6.0, 24.0, force=False, force_replay_cut=True).emit == ()
 
     done = RawSegment('Done.', 0.0, 4.5)
     assert is_trailing_complete(done, 6.0)

@@ -3657,5 +3657,9 @@
     "deleteChatMessage": "Jis visam laikui dings iš ankstesnių pokalbių.",
     "deleteChat": "Ištrinti pokalbį",
     "appsAskWith": "Klauskite Omi su",
-    "conversationsTodayCount": "{count, plural, =0{Šiandien pokalbių nėra.} =1{1 pokalbis šiandien.} other{{count} pokalbiai šiandien.}}"
+    "conversationsTodayCount": "{count, plural, =0{Šiandien pokalbių nėra.} =1{1 pokalbis šiandien.} other{{count} pokalbiai šiandien.}}",
+    "meetingScreenshotsTitle": "Kas buvo ekrane",
+    "meetingScreenshotFallbackCaption": "Šio susitikimo ekrano kopija",
+    "deleteMeetingScreenshotTitle": "Ištrinti ekrano kopiją?",
+    "deleteMeetingScreenshotMessage": "Ekrano kopija bus pašalinta iš šio susitikimo užrašo. Šio veiksmo anuliuoti negalima."
 }

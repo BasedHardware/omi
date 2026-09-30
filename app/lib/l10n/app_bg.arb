@@ -3657,5 +3657,9 @@
     "deleteChatMessage": "Ще изчезне от предишните чатове завинаги.",
     "deleteChat": "Изтрий чата",
     "appsAskWith": "Питай Omi с",
-    "conversationsTodayCount": "{count, plural, =0{Днес няма разговори.} =1{1 разговор днес.} other{{count} разговора днес.}}"
+    "conversationsTodayCount": "{count, plural, =0{Днес няма разговори.} =1{1 разговор днес.} other{{count} разговора днес.}}",
+    "meetingScreenshotsTitle": "Какво имаше на екрана",
+    "meetingScreenshotFallbackCaption": "Екранна снимка от тази среща",
+    "deleteMeetingScreenshotTitle": "Изтриване на екранната снимка?",
+    "deleteMeetingScreenshotMessage": "Екранната снимка ще бъде премахната от бележката за тази среща. Това не може да бъде отменено."
 }

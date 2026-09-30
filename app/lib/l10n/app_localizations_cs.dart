@@ -11619,4 +11619,17 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Co bylo na obrazovce';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Snímek obrazovky z této schůzky';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Smazat snímek obrazovky?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'Snímek obrazovky bude odebrán z poznámky této schůzky. Tuto akci nelze vrátit.';
 }

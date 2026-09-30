@@ -11217,5 +11217,9 @@
     "deleteChatMessage": "এটি আগের চ্যাট থেকে চিরতরে মুছে যাবে।",
     "deleteChat": "চ্যাট মুছুন",
     "appsAskWith": "যার সঙ্গে Omi-কে জিজ্ঞাসা করবেন",
-    "conversationsTodayCount": "{count, plural, =0{আজ কোনো কথোপকথন নেই।} =1{আজ ১টি কথোপকথন।} other{আজ {count}টি কথোপকথন।}}"
+    "conversationsTodayCount": "{count, plural, =0{আজ কোনো কথোপকথন নেই।} =1{আজ ১টি কথোপকথন।} other{আজ {count}টি কথোপকথন।}}",
+    "meetingScreenshotsTitle": "স্ক্রিনে যা ছিল",
+    "meetingScreenshotFallbackCaption": "এই মিটিংয়ের স্ক্রিনশট",
+    "deleteMeetingScreenshotTitle": "স্ক্রিনশট মুছবেন?",
+    "deleteMeetingScreenshotMessage": "এটি এই মিটিংয়ের নোট থেকে স্ক্রিনশটটি সরিয়ে দেবে। এটি পূর্বাবস্থায় ফেরানো যাবে না।"
 }

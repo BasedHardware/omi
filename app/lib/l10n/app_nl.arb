@@ -3657,5 +3657,9 @@
     "deleteChatMessage": "Hij verdwijnt voorgoed uit eerdere chats.",
     "deleteChat": "Chat verwijderen",
     "appsAskWith": "Omi vragen met",
-    "conversationsTodayCount": "{count, plural, =0{Vandaag geen gesprekken.} =1{1 gesprek vandaag.} other{{count} gesprekken vandaag.}}"
+    "conversationsTodayCount": "{count, plural, =0{Vandaag geen gesprekken.} =1{1 gesprek vandaag.} other{{count} gesprekken vandaag.}}",
+    "meetingScreenshotsTitle": "Wat er op het scherm stond",
+    "meetingScreenshotFallbackCaption": "Schermafbeelding van deze vergadering",
+    "deleteMeetingScreenshotTitle": "Schermafbeelding verwijderen?",
+    "deleteMeetingScreenshotMessage": "Hiermee wordt de schermafbeelding uit de notitie van deze vergadering verwijderd. Dit kan niet ongedaan worden gemaakt."
 }

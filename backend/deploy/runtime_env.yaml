@@ -230,6 +230,9 @@ environments:
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
             category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
@@ -334,6 +337,9 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://api.omiapi.com
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-dev-screen-frames
+            category: storage_retention
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -436,12 +442,18 @@ environments:
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
             category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omiapi.com:80
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-dev-screen-frames
+            category: storage_retention
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'true'
             category: rollout
@@ -812,6 +824,9 @@ environments:
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
               value: 'true'
               category: rollout
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'true'
@@ -1101,6 +1116,9 @@ environments:
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
               value: 'true'
               category: rollout
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'true'
@@ -1111,6 +1129,9 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            BUCKET_SCREEN_FRAMES:
+              value: based-hardware-dev-screen-frames
+              category: storage_retention
             TRANSCRIPTION_SHADOW_ENABLED:
               value: 'false'
               category: rollout
@@ -2041,6 +2062,9 @@ environments:
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'false'
             category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'false'
@@ -2261,6 +2285,9 @@ environments:
             value: 'false'
             category: rollout
           MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'false'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
@@ -2522,6 +2549,9 @@ environments:
               value: 'false'
               category: rollout
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
               value: 'false'
               category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
@@ -2819,6 +2849,9 @@ environments:
               value: 'false'
               category: rollout
             MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
+            MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
               value: 'false'
               category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:

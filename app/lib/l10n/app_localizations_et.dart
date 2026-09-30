@@ -11617,4 +11617,17 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Mis oli ekraanil';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Ekraanipilt sellelt koosolekult';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Kas kustutada ekraanipilt?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'See eemaldab ekraanipildi selle koosoleku märkmest. Seda ei saa tagasi võtta.';
 }
