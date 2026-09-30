@@ -100,6 +100,12 @@ APP_CLIENT_PREFIXES = (
     '/v1/what-matters-now',
     '/v2/apps',
     '/v2/chat/materialize-prompts',
+    # The Flutter app's chat-history client reads the v2 chat-session list, detail,
+    # and mutation routes (app/lib/backend/http/api/chat_sessions.dart), so the
+    # chat-session DTO belongs on the app-client contract instead of a hand-written
+    # Dart decoder. Only the chat-session routes are listed: the sibling
+    # /v2/desktop/* message routes remain out of scope until a client needs them.
+    '/v2/chat-sessions',
     '/v2/files',
     '/v2/firmware',
     '/v2/initial-message',

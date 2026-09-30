@@ -107,6 +107,10 @@ SCHEMA_GROUPS = {
             'VoiceMessageTranscriptionResponse',
         ),
     },
+    'chat_sessions': {
+        'output': DEFAULT_OUTPUT_DIR / 'chat_sessions_wire.g.dart',
+        'schemas': ('ChatSessionResponse',),
+    },
     'action_items_folders': {
         'output': DEFAULT_OUTPUT_DIR / 'action_items_folders_wire.g.dart',
         'schemas': (
