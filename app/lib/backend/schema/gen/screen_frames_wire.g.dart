@@ -136,6 +136,7 @@ class GeneratedConversationScreenFrameSet {
   final int revision;
   final String? selectionFingerprint;
   final List<GeneratedConversationScreenFrame>? strip;
+  final String? trustedSelectionFingerprint;
 
   const GeneratedConversationScreenFrameSet({
     this.adjudicatedAt,
@@ -143,6 +144,7 @@ class GeneratedConversationScreenFrameSet {
     required this.revision,
     this.selectionFingerprint,
     this.strip,
+    this.trustedSelectionFingerprint,
   });
 
   factory GeneratedConversationScreenFrameSet.fromJson(Map<String, dynamic> json) {
@@ -152,6 +154,7 @@ class GeneratedConversationScreenFrameSet {
       revision: _required(_readFieldValue<int>(_readField(json, const ["revision"]), "revision", _readInt, requiredField: true, nullable: false), "revision"),
       selectionFingerprint: _readFieldValue<String>(_readField(json, const ["selection_fingerprint"]), "selection_fingerprint", _readString, requiredField: false, nullable: true),
       strip: _readFieldValue<List<GeneratedConversationScreenFrame>>(_readField(json, const ["strip"]), "strip", (value) => _readObjectList(value, GeneratedConversationScreenFrame.fromJson), requiredField: false, nullable: true),
+      trustedSelectionFingerprint: _readFieldValue<String>(_readField(json, const ["trusted_selection_fingerprint"]), "trusted_selection_fingerprint", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -162,6 +165,7 @@ class GeneratedConversationScreenFrameSet {
       'revision': revision,
       'selection_fingerprint': selectionFingerprint,
       'strip': strip?.map((value) => value.toJson()).toList(),
+      'trusted_selection_fingerprint': trustedSelectionFingerprint,
     };
   }
 }
