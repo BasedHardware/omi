@@ -6,6 +6,7 @@ networks in 400+ cities worldwide using the CityBikes API (api.citybik.es).
 """
 
 from collections import OrderedDict
+import logging
 import math
 import os
 import time
@@ -35,6 +36,7 @@ except ImportError:
 BASE_API_URL = "https://api.citybik.es/v2"
 API_TIMEOUT = 12.0
 USER_AGENT = "OmiCityBikesApp/1.0 (https://github.com/BasedHardware/omi)"
+logger = logging.getLogger(__name__)
 
 # Caching Configuration
 NETWORKS_CACHE_TTL = 3600.0  # 1 hour for network list
@@ -410,9 +412,10 @@ async def search_bike_networks(request: SearchNetworksRequest, raw_request: Requ
 
         return ChatToolResponse(result="\n".join(lines))
 
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error while searching bike networks")
         return ChatToolResponse(
-            error=f"Failed to search bike networks: {str(e)}"
+            error="Unable to search bike networks right now. Please try again later."
         )
 
 
@@ -490,9 +493,10 @@ async def get_nearby_bike_stations(request: NearbyStationsRequest, raw_request: 
         return ChatToolResponse(
             error=f"Bike network '{request.network_id}' not found. Use search_bike_networks to find valid network IDs."
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error while retrieving bike stations")
         return ChatToolResponse(
-            error=f"Failed to retrieve bike stations: {str(e)}"
+            error="Unable to retrieve bike stations right now. Please try again later."
         )
 
 
@@ -563,9 +567,10 @@ async def check_bike_station_status(request: StationStatusRequest, raw_request: 
         return ChatToolResponse(
             error=f"Bike network '{request.network_id}' not found."
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error while checking bike station status")
         return ChatToolResponse(
-            error=f"Failed to check station status: {str(e)}"
+            error="Unable to check bike station status right now. Please try again later."
         )
 
 
@@ -634,7 +639,8 @@ async def get_city_bike_overview(request: CityOverviewRequest, raw_request: Requ
 
         return ChatToolResponse(result="\n".join(lines))
 
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error while generating city bike overview")
         return ChatToolResponse(
-            error=f"Failed to generate city overview: {str(e)}"
+            error="Unable to generate a city bike overview right now. Please try again later."
         )
