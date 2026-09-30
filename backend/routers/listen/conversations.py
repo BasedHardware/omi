@@ -683,7 +683,7 @@ class LiveConversationController:
                 await self.create_new_in_progress_conversation(rollover=True)
             elif action == ConversationLifecycleAction.process_and_create_new:
                 await self.host.transcripts.flush_speaker_assignments(conversation_id)
-                await self.process_conversation(conversation_id)
+                await self._finalize_isolated(self.process_conversation, conversation_id, stage='lifecycle_rollover')
                 await self.create_new_in_progress_conversation(rollover=True)
 
     async def send_last_conversation(self) -> None:

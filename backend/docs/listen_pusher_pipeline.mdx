@@ -1448,6 +1448,49 @@ over before replay audio is evicted. `capacity_full` fallback logs carry a
 bounded `subtype` identifying PCM buffer, replay ring, or admission capacity
 without adding a metric label.
 
+When no admitted speech is awaiting an answer, the ring retains **15 seconds**
+of recent VAD-negative capture before trimming settled silence. This is the
+full default streaming replay horizon, rather than the 300 ms VAD pre-roll,
+and preserves a generous recent margin for VAD misses. Silence alone cannot
+fill the 90-second window ring. A fresh 40 ms blip after a full silence ring
+previously admitted 280 ms with pre-roll and failed on the next packet,
+before the 12-second first-text deadline (armed on speech send) was due.
+
+Managed window sessions flush a stranded fragment only after **5 seconds of
+trailing capture silence**. This exceeds ordinary 1.5–4 second pauses and
+leaves seven seconds of the startup budget for pacing and the POST. VAD
+end-of-speech, 1.5 seconds of admitted silence, and the legacy 2-second
+wall-idle timer do not flush a managed fragment. If speech resumes before
+selection, it stays in the same sentence-anchored context. Direct socket
+callers retain their explicit finalize, idle and close behavior.
+
+A stranded clip shorter than 1.5 seconds receives zero padding for its POST;
+timestamp validation, embeddings and replay still use its original duration
+and PCM. A successful **empty** answer advances only pending-speech accounting,
+not the POST or emitted-text anchor. Its PCM remains in TDT context for later
+speech, and its capture audio remains in fallback replay until the normal
+90-second capture age expires it. Answered-empty TDT context expires
+conservatively 90 capture seconds after the answer, preventing repeated noisy
+blips from growing the PCM buffer indefinitely. A short pause does not authorize
+any of these transitions. No unposted speech floor is discarded.
+
+Replay retention and pending capacity have separate sample boundaries, both
+mapped through the provider epoch's accepted-send spans. Answered history can
+age out while new speech is pending, but no unresolved sample can be evicted
+to make room. Ring-pressure cuts use the pending span, excluding retained
+answered history. A stalled POST still fails through the existing replay path,
+and a late answer from the dead leg emits nothing. Startup deadline and
+empty-streak budgets are unchanged.
+
+A stranded flush is one-shot for each silence period, re-armed only by new VAD
+speech. Thus the additional flush rate is bounded by one per blip plus at least
+five seconds of capture silence, as well as the existing wall POST pacing.
+`omi_stt_window_stranded_flushes_total{outcome}` counts `performed`,
+`answered_empty`, and `answered_text`; answers describe parsed server output,
+not necessarily emitted text. These three fixed values have no user/session
+labels. A failed/cancelled attempt has no answer increment. Retained empty
+history and its context-expiry endpoints remain bounded by the capture horizon.
+
 Replay-cut diagnostics count coalesced requests
 (`omi_stt_window_replay_cut_requests_total`), forced tails actually emitted with
 replay-anchor progress (`omi_stt_window_replay_cut_performed_total`), and skipped
@@ -1476,9 +1519,11 @@ audio, user or session identifier is recorded by these diagnostics.
 the current POST anchor; it does not mean the audio has never been posted, nor
 is it a ledger of every capture sample retained behind an empty-result slide.
 An answered-empty POST is not proof that admitted audio contains no words:
-TDT can return empty on a mid-utterance start. Retaining that audio for the
-replacement leg preserves the opportunity to recover words; dropping it based
-only on the empty response would weaken transcript completeness. Ownership of recent
+TDT can return empty on a mid-utterance start. A long-silence stranded answer
+therefore settles capacity without eagerly discarding its context or replay
+copy. Other empty context-cap slides retain their existing pending-speech
+protection. Retaining replay gives the replacement leg an opportunity to recover
+words that Parakeet never emitted. Ownership of recent
 capture ranges is retained as coalesced same-conversation *runs* for 120 s of
 capture time (a hard run cap is a pathological bound, not the working limit),
 so a provider final trailing its audio by tens of seconds still resolves its

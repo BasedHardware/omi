@@ -88,11 +88,16 @@ def runtime(monkeypatch):
         yield
 
     monkeypatch.setattr(window, 'get_stt_semaphore', semaphore)
+
     # Window scheduling uses loop-time pacing; the repro feeds audio as fast
-    # as the pump can post, so pacing sleeps collapse to a yield. The idle
+    # as the pump can post, so pacing waits collapse to a yield. The idle
     # flush is real-time based and would fire mid-feed depending on host
     # speed; pin it out so the post sequence is exactly: pace post, drain post.
-    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: REAL_SLEEP(0))
+    async def pacing(_event, _delay):
+        await REAL_SLEEP(0)
+        return False
+
+    monkeypatch.setattr(window, 'wait_for_event', pacing)
     monkeypatch.setattr(window, 'IDLE_FLUSH_SECONDS', 3600.0)
 
 
@@ -151,8 +156,8 @@ async def _feed(receiver, socket, pattern, *, chunk=0.5):
     exactly the way ``flush_live_stt_buffer`` does.
     """
     timeline = receiver.capture_timeline
-    wall = T0
-    mono = 0.0
+    mono = timeline.last_monotonic or 0.0
+    wall = T0 + mono
     for seconds, speech in pattern:
         pcm = (b'\x01\x00' if speech else b'\x00\x00') * int(chunk * RATE)
         for _ in range(int(seconds / chunk)):
@@ -180,12 +185,10 @@ async def _wait_posts(client, count: int) -> None:
 async def _drive_window_session(monkeypatch, *, v2: bool):
     """Real receiver -> managed chain -> window leg -> fake TDT server.
 
-    Post sequence is deterministic: pace pinned far above the audio length, so
-    the only posts are the gate's hangover-finalize pause post (triggered on
-    the second silence chunk, running just after speech resumes) and the drain
-    post. Audio: 6 s speech, 1 s delivered silence, 3 s speech -> gated spans
-    [0, 6.5] and [6.5, 9.5] over capture [0, 6.5] and [7.0, 9.5], anchor 4.5
-    after the pause post emits the first sentence.
+    Pace is pinned above the audio length. Explicit raw-socket finalize
+    selects the pause job, followed by the drain job. Automatic VAD finalize
+    does not select a managed window job. Gated audio remains [0, 6.5] then
+    [6.5, 9.5], with capture gap [6.5, 7]. The sentence anchor advances to 4.5.
     """
     receiver = _receiver(monkeypatch, v2=v2)
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '600')
@@ -208,8 +211,10 @@ async def _drive_window_session(monkeypatch, *, v2: bool):
     assert await receiver.initialize_stt()
     socket = receiver.stt_socket
     assert isinstance(socket.raw, window.WindowedParakeetSocket)
-    await _feed(receiver, socket, [(6, True), (1, False), (3, True)])
+    await _feed(receiver, socket, [(6, True), (1, False)])
+    socket.raw.finalize()  # Explicit pause isolates timestamp handling from VAD flush policy.
     await _wait_posts(client, 1)
+    await _feed(receiver, socket, [(3, True)])
     await socket.drain_and_close()
     assert len(client.requests) == 2
     return receiver
@@ -273,16 +278,12 @@ def _window_drops(reason: str) -> float:
 async def _drive_beyond_window_session(monkeypatch, *, v2: bool):
     """A later window whose ONLY phrase is timestamped past the posted dur.
 
-    Audio: 6 s speech, 1 s silence, 3 s speech, 1 s silence, 3 s speech (0.5 s
-    chunks). The gate re-sends its pre-roll when speech resumes, so the
-    forwarded stream is contiguous with capture time 1:1. Post sequence:
-    pause post over [0, 7.5] emits 'One.' (anchor 4.5); pause post over
-    [4.5, 11.5] whose only response segment is drifted past the 7 s duration;
-    drain post over [4.5, 13]. With the anchor held after the drift drop the
-    drain re-posts the dropped audio and the phrase is located in-window;
-    without the hold the pause post's decision consumed the audio at 11.5 s
-    and the drain's own response then fell beyond ITS window — the text was
-    gone for good and the drop metric counted twice.
+    Explicit raw-socket finalize selects each pause job. The
+    first post covers [0, 6.5] and emits 'One.' (anchor 4.5). The second
+    covers [4.5, 10], with its sole phrase beyond the 5.5 s duration. The
+    drain re-posts [4.5, 13], locating the dropped phrase inside the window.
+    Holding the anchor preserves that audio; advancing after the drift drop
+    would permanently lose it. Capture gaps are [6.5, 7] and [10.5, 11].
     """
     receiver = _receiver(monkeypatch, v2=v2)
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '600')
@@ -293,7 +294,7 @@ async def _drive_beyond_window_session(monkeypatch, *, v2: bool):
     client = SeqClient(
         [
             {'segments': [{'text': 'One.', 'start': 0.3, 'end': 4.5}]},
-            # Window [4.5, 11.5], dur 7: the only phrase is drifted past dur.
+            # Window [4.5, 10], dur 5.5: the sole phrase drifts past duration.
             {'segments': [{'text': 'Three.', 'start': 7.5, 'end': 9.0}]},
             # Drain post over the re-posted window: the phrase is located
             # window-relative [2.5, 3.4] -> stream [7.0, 7.9].
@@ -305,8 +306,13 @@ async def _drive_beyond_window_session(monkeypatch, *, v2: bool):
     assert await receiver.initialize_stt()
     socket = receiver.stt_socket
     assert isinstance(socket.raw, window.WindowedParakeetSocket)
-    await _feed(receiver, socket, [(6, True), (1, False), (3, True), (1, False), (3, True)])
+    await _feed(receiver, socket, [(6, True), (1, False)])
+    socket.raw.finalize()  # Explicit pause isolates timestamp handling from VAD flush policy.
+    await _wait_posts(client, 1)
+    await _feed(receiver, socket, [(3, True), (1, False)])
+    socket.raw.finalize()
     await _wait_posts(client, 2)
+    await _feed(receiver, socket, [(3, True)])
     await socket.drain_and_close()
     assert len(client.requests) == 3
     return receiver
@@ -333,11 +339,11 @@ async def test_window_beyond_window_phrase_is_reposted_not_lost(monkeypatch):
     first = receiver.collected[0]
     assert first['start'] == pytest.approx(timeline.wall(int(0.3 * RATE)))
     assert first['end'] == pytest.approx(timeline.wall(int(4.5 * RATE)))
-    # The drain response locates the phrase at stream [7.0, 7.9]; the gate's
-    # pre-roll re-sends keep the forwarded stream contiguous with capture.
+    # The drain response locates provider [7.0, 7.9] in the second speech
+    # span, mapping through the first capture-silence gap to [7.5, 8.4].
     phrase = receiver.collected[1]
-    assert phrase['start'] == pytest.approx(timeline.wall(int(7.0 * RATE)))
-    assert phrase['end'] == pytest.approx(timeline.wall(int(7.9 * RATE)))
+    assert phrase['start'] == pytest.approx(timeline.wall(int(7.5 * RATE)))
+    assert phrase['end'] == pytest.approx(timeline.wall(int(8.4 * RATE)))
     # The drop stays counted: the hold recovers the text, it does not hide
     # the decoder drift.
     assert _window_drops('timestamp_beyond_window') == drops_before + 1
