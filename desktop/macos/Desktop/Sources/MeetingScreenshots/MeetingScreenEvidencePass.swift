@@ -100,11 +100,18 @@ struct MeetingScreenEvidencePass: Sendable {
       sleep: sleep,
       timeoutValue: .timedOut)
     log("MeetingScreenEvidence: before-notes pass for \(conversationID ?? "unbound") -> \(outcome)")
+    if !enabled {
+      // Only the OCR flush ran; a late flush is worth telemetry but never a screenshot retry.
+      if outcome == .timedOut { recordFallback(Fallback(reason: "timeout")) }
+      return .disabled
+    }
     switch outcome {
     case .timedOut:
       recordFallback(Fallback(reason: "timeout"))
-    case .settled(.failed):
-      recordFallback(Fallback(reason: "upload_failed"))
+    case .settled(.failed(let detail)):
+      // An unsealed Rewind chunk is not an upload failure; keep the two apart in the bucket.
+      recordFallback(
+        Fallback(reason: detail == MeetingScreenshotsStore.activeChunkRetryDetail ? "other" : "upload_failed"))
     default:
       break
     }

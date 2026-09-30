@@ -192,6 +192,10 @@ enum MeetingFrameSelector {
   /// Kept equal here so nothing is silently trimmed a second time at the upload boundary.
   static let candidateCeiling = MeetingFrameJudge.maxCandidatesPerRequest
 
+  /// The drop reason for frames in Rewind's active chunk. Unlike every other drop it is temporary:
+  /// the chunk seals within about a minute, and those frames are usually the end of the meeting.
+  static let activeChunkDropReason = "chunk still being written"
+
   struct Outcome: Sendable {
     var candidates: [MeetingFrameCandidate] = []
     var framesInWindow = 0
@@ -279,7 +283,7 @@ enum MeetingFrameSelector {
         continue
       }
       if let chunk = frame.videoChunkPath, let unfinalizedChunk, chunk == unfinalizedChunk {
-        outcome.drops["chunk still being written", default: 0] += 1
+        outcome.drops[activeChunkDropReason, default: 0] += 1
         continue
       }
       kept.append(frame)

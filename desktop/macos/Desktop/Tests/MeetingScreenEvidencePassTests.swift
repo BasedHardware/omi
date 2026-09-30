@@ -251,6 +251,58 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     XCTAssertEqual(adjudications, 1, "the retry must join the in-flight run, not judge the frames twice")
   }
 
+  @MainActor
+  func testFramesInTheUnsealedChunkAreSealedAndReselectedBeforeJudging() async throws {
+    let window = MeetingScreenshotSelectionWindow(
+      start: Date(timeIntervalSince1970: 1_000), end: Date(timeIntervalSince1970: 1_600))
+    let server = FakeScreenFrameServer(stampedFingerprint: window.fingerprint)
+    let chunk = ActiveChunk()
+    let store = MeetingScreenshotsStore(
+      featureEnabled: { true },
+      selectCandidates: { window in await chunk.select(in: window) },
+      adjudicateAndCommit: { candidates, _ in try await server.adjudicate(capturedAt: candidates[0].timestamp) },
+      fetchPersistedSet: { _ in await server.persisted() },
+      deleteFrameRemote: { _, _ in },
+      sealActiveRecording: { await chunk.seal() })
+
+    let phase = await store.loadAndWait(conversationID: "seal-\(UUID().uuidString)", selectionWindow: window)
+
+    XCTAssertEqual(phase, .ready)
+    let seals = await chunk.seals
+    XCTAssertEqual(seals, 1)
+    let adjudications = await server.adjudications
+    XCTAssertEqual(adjudications, 1)
+  }
+
+  @MainActor
+  func testAnUnsealableChunkIsRetryableNotCachedAsNoCapture() async throws {
+    let window = MeetingScreenshotSelectionWindow(
+      start: Date(timeIntervalSince1970: 2_000), end: Date(timeIntervalSince1970: 2_600))
+    let server = FakeScreenFrameServer(stampedFingerprint: window.fingerprint)
+    let chunk = ActiveChunk(sealable: false)
+    let conversationID = "unsealed-\(UUID().uuidString)"
+    func makeStore() -> MeetingScreenshotsStore {
+      MeetingScreenshotsStore(
+        featureEnabled: { true },
+        selectCandidates: { window in await chunk.select(in: window) },
+        adjudicateAndCommit: { candidates, _ in try await server.adjudicate(capturedAt: candidates[0].timestamp) },
+        fetchPersistedSet: { _ in await server.persisted() },
+        deleteFrameRemote: { _, _ in },
+        sealActiveRecording: { await chunk.seal() })
+    }
+
+    let first = await makeStore().loadAndWait(conversationID: conversationID, selectionWindow: window)
+    XCTAssertEqual(first, .failed(MeetingScreenshotsStore.activeChunkRetryDetail))
+    let judgedWhileUnsealed = await server.adjudications
+    XCTAssertEqual(judgedWhileUnsealed, 0, "a set missing the meeting's end must not be judged and stamped")
+
+    await chunk.makeSealable()
+    let second = await makeStore().loadAndWait(conversationID: conversationID, selectionWindow: window)
+    XCTAssertEqual(second, .ready, "the next load selects again instead of reading a cached .noCapture")
+    let adjudications = await server.adjudications
+    XCTAssertEqual(adjudications, 1)
+  }
+
   // MARK: - Helpers
 
   @MainActor
@@ -405,5 +457,39 @@ private final class FallbackRecorder: @unchecked Sendable {
     lock.lock()
     recorded.append(fallback.reason)
     lock.unlock()
+  }
+}
+
+/// Rewind's active chunk, reduced to what selection sees: until sealed, the meeting's last frame
+/// is dropped as still being written.
+private actor ActiveChunk {
+  private var sealable: Bool
+  private var sealed = false
+  private(set) var seals = 0
+
+  init(sealable: Bool = true) {
+    self.sealable = sealable
+  }
+
+  func seal() {
+    seals += 1
+    if sealable { sealed = true }
+  }
+
+  func makeSealable() { sealable = true }
+
+  func select(in window: MeetingScreenshotSelectionWindow) -> MeetingFrameSelector.Outcome {
+    var outcome = MeetingFrameSelector.Outcome()
+    outcome.framesInWindow = 1
+    if sealed {
+      outcome.candidates = [
+        MeetingFrameCandidate(
+          id: 7, timestamp: window.end, appName: "Keynote", windowTitle: "Decisions", imagePath: nil,
+          videoChunkPath: "chunk.mp4", frameOffset: 0, ocrText: nil)
+      ]
+    } else {
+      outcome.drops[MeetingFrameSelector.activeChunkDropReason] = 1
+    }
+    return outcome
   }
 }

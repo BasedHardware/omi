@@ -9,6 +9,7 @@ actor ConversationFinalizationService {
   private var meetingCompletionNotificationTask: Task<Void, Never>?
   private var pendingMeetingCompletionConversationIDs = Set<String>()
   private var pendingFinalizationProjectionPolls = Set<String>()
+  private var pendingScreenEvidenceRetries = Set<String>()
   private var localProjectionHooks: LocalProjectionTestHooks?
   private var isNetworkReachable: @Sendable () async -> Bool =
     ConversationFinalizationService.systemNetworkReachability
@@ -446,15 +447,48 @@ actor ConversationFinalizationService {
     return conversation
   }
 
-  /// Not awaited: finalization and the meeting-completion wake never wait on screen evidence.
+  /// Adjudicate again once the backend's finalization is terminal. `/finalize` can answer while the
+  /// Cloud Tasks worker is still processing, so the POST response is not the signal: this follows
+  /// the same durable finalization projection, on the same schedule, as the meeting-completion
+  /// wake. Not awaited — finalization and the wake never wait on screen evidence — and coalesced
+  /// per conversation.
   private func retryScreenEvidenceAfterFinalize(conversationID: String) {
+    guard pendingScreenEvidenceRetries.insert(conversationID).inserted else { return }
     let pass = screenEvidencePass
     let client = apiClient
-    Task {
-      _ = await pass.afterFinalize(
-        conversationID: conversationID,
-        fetchConversation: { try await client.getConversation(id: conversationID) })
+    Task { [weak self] in
+      if await Self.awaitTerminalFinalization(conversationID: conversationID, client: client) {
+        _ = await pass.afterFinalize(
+          conversationID: conversationID,
+          fetchConversation: { try await client.getConversation(id: conversationID) })
+      }
+      await self?.clearScreenEvidenceRetry(conversationID: conversationID)
     }
+  }
+
+  private func clearScreenEvidenceRetry(conversationID: String) {
+    pendingScreenEvidenceRetries.remove(conversationID)
+  }
+
+  /// Whether the finalization projection reached `completed` within the projection-poll budget.
+  /// A missing projection (404) is an inline finalization, already terminal when `/finalize`
+  /// returned; `dead_letter` never produced notes worth attaching screenshots to.
+  static func awaitTerminalFinalization(conversationID: String, client: APIClient) async -> Bool {
+    for delay in finalizationProjectionForegroundDelays + finalizationProjectionBackgroundDelays {
+      if delay > 0 {
+        try? await Task.sleep(nanoseconds: delay)
+      }
+      do {
+        let status = try await client.getConversationFinalizationStatus(id: conversationID)
+        if status.status == "completed" { return true }
+        if status.status == "dead_letter" { return false }
+      } catch APIError.httpError(statusCode: 404, detail: _) {
+        return true
+      } catch {
+        continue
+      }
+    }
+    return false
   }
 
   static func compactSegmentsForBackendLimit(
@@ -935,8 +969,7 @@ actor ConversationFinalizationService {
     // The first probe is immediate; subsequent bounded delays cover the normal
     // Cloud Tasks admission/worker/fanout path without keeping recovery alive
     // indefinitely. A missing projection is an older inline-finalization path.
-    let delays: [UInt64] = [0, 250_000_000, 500_000_000, 1_000_000_000, 2_000_000_000, 4_000_000_000]
-    for delay in delays {
+    for delay in Self.finalizationProjectionForegroundDelays {
       if delay > 0 {
         try? await Task.sleep(nanoseconds: delay)
       }
@@ -974,8 +1007,7 @@ actor ConversationFinalizationService {
           await self?.clearFinalizationProjectionPoll(conversationID: conversationID)
         }
       }
-      let delays: [UInt64] = [5_000_000_000, 15_000_000_000, 30_000_000_000, 60_000_000_000, 120_000_000_000]
-      for delay in delays {
+      for delay in Self.finalizationProjectionBackgroundDelays {
         try? await Task.sleep(nanoseconds: delay)
         guard !Task.isCancelled else { return }
         do {
@@ -995,6 +1027,16 @@ actor ConversationFinalizationService {
       }
     }
   }
+
+  /// The finalization-projection poll schedule, shared by the meeting-completion wake and the
+  /// post-finalization screen-evidence retry: an immediate probe plus short foreground delays, then
+  /// a slower background tail for a slow Cloud Tasks fanout.
+  static let finalizationProjectionForegroundDelays: [UInt64] = [
+    0, 250_000_000, 500_000_000, 1_000_000_000, 2_000_000_000, 4_000_000_000,
+  ]
+  static let finalizationProjectionBackgroundDelays: [UInt64] = [
+    5_000_000_000, 15_000_000_000, 30_000_000_000, 60_000_000_000, 120_000_000_000,
+  ]
 
   private func clearFinalizationProjectionPoll(conversationID: String) {
     pendingFinalizationProjectionPolls.remove(conversationID)

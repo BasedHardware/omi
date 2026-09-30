@@ -98,6 +98,11 @@ final class MeetingScreenshotsStore: ObservableObject {
     @Sendable ([MeetingFrameCandidate], String) async throws -> ConversationScreenFrameSet
   private let fetchPersistedSet: @Sendable (String) async throws -> ConversationScreenFrameSet
   private let deleteFrameRemote: @Sendable (String, String) async throws -> Void
+  private let sealActiveRecording: @Sendable () async -> Void
+
+  /// Phase detail when the meeting's last frames are still in Rewind's unsealed chunk and sealing
+  /// it did not release them. Not cached and nothing uploaded, so the next load selects again.
+  nonisolated static let activeChunkRetryDetail = "meeting frames still being recorded"
 
   init(
     featureEnabled: @escaping () -> Bool = { MeetingNoteScreenshotsFeature.isEnabled },
@@ -115,8 +120,14 @@ final class MeetingScreenshotsStore: ObservableObject {
     },
     deleteFrameRemote: @escaping @Sendable (String, String) async throws -> Void = {
       try await APIClient.shared.deleteConversationScreenFrame(conversationID: $0, frameID: $1)
+    },
+    sealActiveRecording: @escaping @Sendable () async -> Void = {
+      // The same finalize-and-continue flush Rewind uses for power and memory transitions; the
+      // next captured frame opens a fresh chunk.
+      _ = try? await RewindStorage.shared.flushCurrentVideoChunk()
     }
   ) {
+    self.sealActiveRecording = sealActiveRecording
     self.featureEnabled = featureEnabled
     self.selectCandidates = selectCandidates
     self.adjudicateAndCommit = adjudicateAndCommit
@@ -322,8 +333,21 @@ final class MeetingScreenshotsStore: ObservableObject {
       "MeetingScreenshots: selecting for \(conversationID) trusted window "
         + "\(selectionWindow.start) -> \(selectionWindow.end)")
 
-    let outcome = await selectCandidates(selectionWindow)
+    var outcome = await selectCandidates(selectionWindow)
     guard self.selectionWindow == selectionWindow else { return }
+    if outcome.drops[MeetingFrameSelector.activeChunkDropReason, default: 0] > 0 {
+      // The end of the meeting is still in the chunk being written. Seal it and select once more,
+      // rather than judge — and have the server stamp as final — a set missing the last minute.
+      await sealActiveRecording()
+      outcome = await selectCandidates(selectionWindow)
+      guard self.selectionWindow == selectionWindow else { return }
+      if outcome.drops[MeetingFrameSelector.activeChunkDropReason, default: 0] > 0 {
+        log("MeetingScreenshots: active chunk still unsealed for \(conversationID); will retry")
+        publish(notes: ["the meeting's last frames are still being recorded"])
+        phase = .failed(Self.activeChunkRetryDetail)
+        return
+      }
+    }
     var notes: [String] = []
     notes.append("\(outcome.framesInWindow) frame(s) captured during this conversation")
     for (reason, count) in outcome.drops.sorted(by: { $0.value > $1.value }) {

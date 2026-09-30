@@ -165,6 +165,7 @@ enum OnDeviceMeetingIdentityExtractor {
     let metadata = "\(snapshot.appName) \(snapshot.windowTitle ?? "")".lowercased()
     if metadata.contains("google meet") || metadata.contains("meet.google")
       || firstMatch(meetCodeTitle, in: cleanLine(snapshot.windowTitle ?? "")) != nil
+      || firstMatch(meetTabTitle, in: cleanLine(snapshot.windowTitle ?? "")) != nil
       || snapshot.combinedText.lowercased().contains("meet.google.com/")
     {
       return "Google Meet"
@@ -307,7 +308,7 @@ enum OnDeviceMeetingIdentityExtractor {
     ownerNames: [String] = [],
     ownerEmails: [String] = []
   ) -> [String] {
-    let callRows = snapshots.filter { conferencingPlatform(for: $0) != nil }
+    let callRows = snapshots.filter(isCallWindowRow)
     guard callRows.count >= minimumTileRows else { return [] }
     var owners = Set(ownerNames.map { cleanLine($0).lowercased() }.filter { !$0.isEmpty })
     let ownerLocals = Set(
@@ -324,7 +325,7 @@ enum OnDeviceMeetingIdentityExtractor {
       let title = cleanLine(row.windowTitle ?? "")
       for part in split(titleSeparator, text: title)
       where !part.trimmingCharacters(in: .whitespaces).isEmpty {
-        titleParts.insert(cleanLine(part).lowercased())
+        titleParts.insert(titlePart(part))
       }
       var seen = Set<String>()
       for rawLine in (row.ocrText ?? "").components(separatedBy: .newlines) {
@@ -342,7 +343,9 @@ enum OnDeviceMeetingIdentityExtractor {
       }
     }
 
-    let nonCallRows = snapshots.filter { conferencingPlatform(for: $0) == nil }
+    // Browser chrome (tab strip, bookmarks) recurs in the same app's other windows.
+    let callApps = Set(callRows.map { $0.appName.lowercased() })
+    let nonCallRows = snapshots.filter { !isCallWindowRow($0) && callApps.contains($0.appName.lowercased()) }
     let minimum = max(Double(minimumTileRows), minimumTileRowShare * Double(callRows.count))
     var accepted: [String] = []
     for key in order {
@@ -365,6 +368,36 @@ enum OnDeviceMeetingIdentityExtractor {
     }
     accepted = ranked.map(\.element)
     return Array(accepted.prefix(maximumTileNames))
+  }
+
+  /// A joined Meet tab is titled "Meet - <code>" or "Meet - <meeting name>".
+  private static let meetTabTitle = regex("(?i)^meet\\s*[-\u{2013}\u{2014}]\\s*\\S")
+  private static let unreadTitlePrefix = regex("^\\(\\d+\\)\\s*")
+  private static let titleTrailingNoise = regex("[^\\w)]+$")
+  private static let tileMessagingApps = ["telegram", "discord", "slack", "whatsapp"]
+  private static let nativeVideoApps = ["zoom", "microsoft teams", "webex", "facetime"]
+  private static let conferencingMarkers = [
+    "zoom", "microsoft teams", "webex", "facetime", "google meet", "meet.google",
+  ]
+
+  /// A row whose own window is the video call, the only place a tile label shows. Narrower than
+  /// `conferencingPlatform`: a row recognised only by a Meet URL in its OCR is often another page
+  /// (a LinkedIn profile, a tab strip), and a messaging app's recurring lines are its chat list.
+  /// Messaging calls keep their own window-title rule (`messagingCallParticipants`).
+  private static func isCallWindowRow(_ snapshot: MeetingScreenActivitySnapshot) -> Bool {
+    let app = snapshot.appName.lowercased()
+    if tileMessagingApps.contains(where: app.contains) { return false }
+    if nativeVideoApps.contains(where: app.contains) { return true }
+    let title = cleanLine(snapshot.windowTitle ?? "").lowercased()
+    return firstMatch(meetTabTitle, in: title) != nil
+      || conferencingMarkers.contains(where: "\(app) \(title)".contains)
+  }
+
+  /// A window-title segment as it would read on screen: no unread counter, no trailing icon.
+  private static func titlePart(_ part: String) -> String {
+    let cleaned = replacingMatches(unreadTitlePrefix, in: cleanLine(part), with: "")
+    return replacingMatches(titleTrailingNoise, in: cleaned, with: "")
+      .trimmingCharacters(in: .whitespaces).lowercased()
   }
 
   static func isAIAgentTileName(_ name: String) -> Bool {

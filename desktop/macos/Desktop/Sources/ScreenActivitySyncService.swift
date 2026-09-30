@@ -248,22 +248,56 @@ actor ScreenActivitySyncService {
   func flushMeetingWindow(_ interval: DateInterval, limit: Int = 200) async {
     let losslessEnabled = await MainActor.run { ScreenActivityLosslessSyncFeature.isEnabled }
     guard losslessEnabled, let dbPool = await getDBPool() else { return }
+    await Self.flushMeetingWindow(
+      interval, limit: limit, database: dbPool,
+      push: { await self.pushRows($0) },
+      recordFallback: { reason in
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "meeting_screen_evidence", from: "ocr_flush", to: "periodic_sync", reason: reason,
+          outcome: .degraded)
+      })
+  }
+
+  /// Result of one meeting flush, for the caller's log and for tests.
+  enum MeetingFlushResult: Equatable {
+    case nothingPending
+    case synced(Int)
+    /// Degraded: notes are written without these rows, which the periodic path ships later.
+    case pushFailed
+    case databaseFailed
+  }
+
+  /// The flush itself, over any database and transport. A failure is a fail-open path — the notes
+  /// proceed without the end of the call's screen text — so it records degraded telemetry.
+  @discardableResult
+  static func flushMeetingWindow(
+    _ interval: DateInterval,
+    limit: Int,
+    database: any DatabaseWriter,
+    push: ([[String: Any]]) async -> Bool,
+    recordFallback: (String) -> Void,
+    isolation: isolated (any Actor)? = #isolation
+  ) async -> MeetingFlushResult {
     do {
-      let candidates = try await dbPool.write { db in
-        try Self.compactMeetingWindow(db: db, interval: interval)
-        return try Self.fetchMeetingWindowCandidates(db: db, interval: interval, limit: limit)
+      let candidates = try await database.write { db in
+        try compactMeetingWindow(db: db, interval: interval)
+        return try fetchMeetingWindowCandidates(db: db, interval: interval, limit: limit)
       }
-      guard !candidates.isEmpty else { return }
-      guard await pushRows(candidates.map(\.payload)) else {
+      guard !candidates.isEmpty else { return .nothingPending }
+      guard await push(candidates.map(\.payload)) else {
         log("ScreenActivitySync: meeting flush push failed; periodic sync will retry")
-        return
+        recordFallback("upload_failed")
+        return .pushFailed
       }
-      try await dbPool.write { db in
-        try Self.markCandidatesSynced(db: db, candidates: candidates)
+      try await database.write { db in
+        try markCandidatesSynced(db: db, candidates: candidates)
       }
       log("ScreenActivitySync: meeting flush synced \(candidates.count) rows")
+      return .synced(candidates.count)
     } catch {
       log("ScreenActivitySync: meeting flush read/write error — \(error.localizedDescription)")
+      recordFallback("other")
+      return .databaseFailed
     }
   }
 

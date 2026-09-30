@@ -185,6 +185,39 @@ final class ScreenActivityLosslessSyncTests: XCTestCase {
     }
   }
 
+  /// A failed meeting flush is a fail-open path: notes go ahead without the end of the call's
+  /// screen text, so it must record degraded telemetry and leave the rows for the periodic path.
+  func testMeetingFlushFailuresRecordDegradedFallbackAndLeaveRowsPending() async throws {
+    let queue = try makeLegacyQueue()
+    let start = Date(timeIntervalSince1970: 1_700_000_100)
+    let meeting = DateInterval(start: start, duration: 200)
+    try await queue.write { db in
+      try RewindDatabase.installScreenActivitySyncStateSchema(db)
+      try db.execute(
+        sql: "INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText) VALUES (?, ?, ?, ?)",
+        arguments: [start.addingTimeInterval(30), "SyntheticApp", "SyntheticWindow", "decision slide"])
+    }
+    var reasons: [String] = []
+
+    let pushFailed = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, limit: 100, database: queue, push: { _ in false }, recordFallback: { reasons.append($0) })
+    XCTAssertEqual(pushFailed, .pushFailed)
+    let state = try await queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT screenActivitySyncState FROM screenshots WHERE id = 1")
+    }
+    XCTAssertEqual(state, ScreenActivitySyncState.pending.rawValue)
+
+    let brokenDatabase = try DatabaseQueue()  // no screenshots table
+    let databaseFailed = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, limit: 100, database: brokenDatabase, push: { _ in true }, recordFallback: { reasons.append($0) })
+    XCTAssertEqual(databaseFailed, .databaseFailed)
+
+    let synced = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, limit: 100, database: queue, push: { _ in true }, recordFallback: { reasons.append($0) })
+    XCTAssertEqual(synced, .synced(1))
+    XCTAssertEqual(reasons, ["upload_failed", "other"], "a successful flush records nothing")
+  }
+
   /// A row whose vector is still pending must not ship text-only and then ship again unchanged:
   /// the second push is a byte-identical Firestore document write plus a full index rewrite.
   func testARowWaitsForItsEmbeddingRatherThanShippingTwice() throws {

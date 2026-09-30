@@ -871,6 +871,67 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
       "a failed pre-notes pass must be retried once the backend has finalized")
   }
 
+  func testScreenEvidenceRetryWaitsForTheTerminalFinalizationStatus() async throws {
+    FinalizationRecoveryURLStub.reset()
+    // `/finalize` answered, but the Cloud Tasks worker is still processing on the first probe.
+    FinalizationRecoveryURLStub.setFinalizationStatusBodies([
+      Data(
+        #"{"job_id":"job-1","status":"queued","terminal":false,"retryable":true,"attempt_count":1,"task_retry_count":0}"#
+          .utf8),
+      Data(
+        #"{"job_id":"job-1","status":"completed","terminal":true,"retryable":false,"attempt_count":1,"task_retry_count":0}"#
+          .utf8),
+    ])
+    setenv("OMI_PYTHON_API_URL", "https://finalization-recovery.test/", 1)
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [FinalizationRecoveryURLStub.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+    await ConversationFinalizationService.shared.setAPIClientForTesting(client)
+    let events = EvidenceEventRecorder()
+    let retried = expectation(description: "screen evidence is retried once finalization is terminal")
+    await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(
+      MeetingScreenEvidencePass(
+        screenshotsEnabled: { true },
+        flushScreenActivity: { _ in },
+        adjudicate: { _, _ in
+          let probes = FinalizationRecoveryURLStub.requests.filter { $0.url.path.hasSuffix("/finalization") }.count
+          await events.record("adjudicate probes=\(probes)")
+          if probes == 0 {
+            return .failed("409 conversation_not_completed")
+          }
+          retried.fulfill()
+          return .ready
+        },
+        sleep: boundThatNeverFires))
+    addTeardownBlock {
+      await ConversationFinalizationService.shared.setAPIClientForTesting(nil)
+      await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(nil)
+    }
+    defer {
+      unsetenv("OMI_PYTHON_API_URL")
+      FinalizationRecoveryURLStub.reset()
+    }
+
+    // A rotation fragment: no meeting-completion wake competes for the finalization probes.
+    let sessionId = try await TranscriptionStorage.shared.startSession(
+      source: "desktop",
+      clientConversationId: "evidence-recording-id",
+      conversationRole: .meeting,
+      finalizationStrategy: .cloudReconcile
+    )
+    try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
+
+    await ConversationFinalizationService.shared.finalizeSession(
+      id: sessionId, reason: .maxDurationRotation, allowCloudForceProcess: true)
+    await fulfillment(of: [retried], timeout: 5)
+
+    let recorded = await events.events
+    XCTAssertEqual(
+      recorded, ["adjudicate probes=0", "adjudicate probes=2"],
+      "the retry must follow the terminal projection, not the /finalize response or a queued probe")
+  }
+
   func testFreshUploadingSessionWaitsForStaleRecoveryWindow() async throws {
     let sessionId = try await TranscriptionStorage.shared.startSession(source: "desktop")
     try await TranscriptionStorage.shared.finishSession(
