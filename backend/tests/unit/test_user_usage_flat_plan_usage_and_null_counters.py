@@ -188,3 +188,14 @@ def test_null_counters_and_malformed_bucket_coordinates_do_not_crash_usage_aggre
     all_time = user_usage.get_current_user_usage('uid', 'all_time', now=NOW)
     assert all_time['all_time']['transcription_seconds'] == 70
     assert [row['date'] for row in all_time['history']] == ['2026-01-01']
+
+
+def test_usage_plan_ids_never_contain_a_field_separator():
+    # `_extract_plan_usage` reconstructs flat `plan_usage.<plan>.<...>` keys by splitting on '.',
+    # so a plan id containing a dot would be misparsed. Plan ids are the catalog enum (or the
+    # explicit unattributed sentinel), which are all dot-free by construction.
+    from config.plan_catalog import PlanType
+    from database.llm_usage import _UNATTRIBUTED_PLAN
+
+    plan_ids = {plan.value for plan in PlanType} | {_UNATTRIBUTED_PLAN}
+    assert all('.' not in plan_id for plan_id in plan_ids)
