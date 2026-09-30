@@ -1404,14 +1404,23 @@ async def test_stalled_fragment_post_replays_once_without_late_text(monkeypatch,
         unsent = bytes(640 * 2)
         sample = await _fragment_frame(actual, clock, sample, wall_seconds=0)
     else:
-        for _ in range(2300):
-            snapshot = ring.snapshot()
-            unsent = bytes(640 * 2)
-            sample = await _fragment_frame(actual, clock, sample, wall_seconds=0)
-            if actual.stt_socket is not previous:
-                break
-        else:
-            pytest.fail('stalled fragment must fail over before protected audio is evicted')
+        # The VAD transition and POST selection above used real 40ms packets.
+        # With the pump held in-flight, batch settled silence up to the exact
+        # ring capacity; snapshot once at the overflow boundary rather than
+        # repeatedly copying an ever-growing ring on every silent packet.
+        protected_start = ring.capture_bounds[0]
+        cap_samples = 90 * 16000
+        while (ring.capture_bounds[1] - ring.capture_bounds[0]) < cap_samples:
+            count = min(10 * 16000, cap_samples - (ring.capture_bounds[1] - ring.capture_bounds[0]))
+            await _flush_capture(actual, bytes(count * 2), sample)
+            sample += count
+            assert actual.stt_socket is previous
+            assert ring.capture_bounds[0] == protected_start
+            assert previous.raw._post_in_flight
+        snapshot = ring.snapshot()
+        unsent = bytes(640 * 2)
+        sample = await _fragment_frame(actual, clock, sample, wall_seconds=0)
+        assert actual.stt_socket is not previous
         assert previous.raw.capacity_subtype == 'replay_ring_cap'
     expected_reason = 'capacity_full' if failure == 'replay_ring_cap' else failure
     assert previous.raw.death_reason == expected_reason
