@@ -22,7 +22,7 @@ def _resolve_safe_timezone(uid: str) -> ZoneInfo:
         tz_name = notification_db.resolve_user_timezone(uid)
         if tz_name:
             return ZoneInfo(tz_name)
-    except (ZoneInfoNotFoundError, ValueError, KeyError, Exception) as exc:
+    except Exception as exc:
         logger.warning("Falling back to UTC for uid=%s due to invalid or unresolvable timezone: %s", uid, exc)
     return ZoneInfo("UTC")
 

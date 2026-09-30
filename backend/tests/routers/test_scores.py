@@ -287,50 +287,48 @@ class TestActionItemsScoreDatabase:
 
     def test_get_scores_default_tab_resolution(self):
         """Verify tab selection logic: daily > weekly > overall precedence on ties."""
-        # Case A: Daily highest
-        daily = {"score": 80.0, "total_tasks": 5, "completed_tasks": 4}
-        weekly = {"score": 70.0, "total_tasks": 10, "completed_tasks": 7}
-        overall = {"score": 60.0, "total_tasks": 20, "completed_tasks": 12}
-        if daily["total_tasks"] > 0 and daily["score"] >= weekly["score"] and daily["score"] >= overall["score"]:
-            tab = "daily"
-        elif weekly["score"] >= overall["score"]:
-            tab = "weekly"
-        else:
-            tab = "overall"
-        assert tab == "daily"
 
-        # Case B: Weekly highest
-        daily = {"score": 50.0, "total_tasks": 5, "completed_tasks": 2}
-        weekly = {"score": 85.0, "total_tasks": 10, "completed_tasks": 8}
-        overall = {"score": 60.0, "total_tasks": 20, "completed_tasks": 12}
-        if daily["total_tasks"] > 0 and daily["score"] >= weekly["score"] and daily["score"] >= overall["score"]:
-            tab = "daily"
-        elif weekly["score"] >= overall["score"]:
-            tab = "weekly"
-        else:
-            tab = "overall"
-        assert tab == "weekly"
+        def make_client(counts):
+            mock_client = MagicMock()
+            mock_col = MagicMock()
+            mock_client.collection.return_value.document.return_value.collection.return_value = mock_col
+            mock_col.where.return_value.order_by.return_value.limit.return_value.stream.return_value = []
+            mock_col.order_by.return_value.limit.return_value.stream.return_value = []
 
-        # Case C: Overall highest
-        daily = {"score": 40.0, "total_tasks": 5, "completed_tasks": 2}
-        weekly = {"score": 50.0, "total_tasks": 10, "completed_tasks": 5}
-        overall = {"score": 90.0, "total_tasks": 20, "completed_tasks": 18}
-        if daily["total_tasks"] > 0 and daily["score"] >= weekly["score"] and daily["score"] >= overall["score"]:
-            tab = "daily"
-        elif weekly["score"] >= overall["score"]:
-            tab = "weekly"
-        else:
-            tab = "overall"
-        assert tab == "overall"
+            count_iter = iter(counts)
 
-        # Case D: Daily has 0 tasks, ties go to weekly
-        daily = {"score": 0.0, "total_tasks": 0, "completed_tasks": 0}
-        weekly = {"score": 75.0, "total_tasks": 8, "completed_tasks": 6}
-        overall = {"score": 75.0, "total_tasks": 16, "completed_tasks": 12}
-        if daily["total_tasks"] > 0 and daily["score"] >= weekly["score"] and daily["score"] >= overall["score"]:
-            tab = "daily"
-        elif weekly["score"] >= overall["score"]:
-            tab = "weekly"
-        else:
-            tab = "overall"
-        assert tab == "weekly"
+            def mock_count():
+                cq = MagicMock()
+                val = next(count_iter, 0)
+                cq.get.return_value = [[MagicMock(value=val)]]
+                return cq
+
+            mock_col.count = mock_count
+            mock_col.where.return_value.count = mock_count
+            mock_col.where.return_value.where.return_value.count = mock_count
+            mock_col.where.return_value.where.return_value.where.return_value.count = mock_count
+            return mock_client
+
+        # Case A: Daily highest (daily: 4/5 = 80%, weekly: 7/10 = 70%, overall: 12/20 = 60%)
+        client_a = make_client([5, 4, 10, 7, 20, 12])
+        res_a = action_items_db.get_scores("user-1", date="2026-09-29", firestore_client=client_a)
+        assert res_a["default_tab"] == "daily"
+        assert res_a["daily"]["score"] == 80.0
+
+        # Case B: Weekly highest (daily: 2/5 = 40%, weekly: 8/10 = 80%, overall: 12/20 = 60%)
+        client_b = make_client([5, 2, 10, 8, 20, 12])
+        res_b = action_items_db.get_scores("user-1", date="2026-09-29", firestore_client=client_b)
+        assert res_b["default_tab"] == "weekly"
+        assert res_b["weekly"]["score"] == 80.0
+
+        # Case C: Overall highest (daily: 2/5 = 40%, weekly: 5/10 = 50%, overall: 18/20 = 90%)
+        client_c = make_client([5, 2, 10, 5, 20, 18])
+        res_c = action_items_db.get_scores("user-1", date="2026-09-29", firestore_client=client_c)
+        assert res_c["default_tab"] == "overall"
+        assert res_c["overall"]["score"] == 90.0
+
+        # Case D: Daily has 0 tasks, ties between weekly & overall go to weekly
+        client_d = make_client([0, 0, 8, 6, 16, 12])
+        res_d = action_items_db.get_scores("user-1", date="2026-09-29", firestore_client=client_d)
+        assert res_d["default_tab"] == "weekly"
+        assert res_d["weekly"]["score"] == 75.0

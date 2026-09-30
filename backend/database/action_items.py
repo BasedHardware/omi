@@ -1483,8 +1483,6 @@ def get_daily_score(
         if data.get('completed') is True:
             completed += 1
 
-    total = max(0, total)
-    completed = max(0, min(total, completed))
     score = max(0, min(100, round((completed / total * 100) if total > 0 else 0)))
     return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed_tasks': completed, 'total_tasks': total}
 
