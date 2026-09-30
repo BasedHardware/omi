@@ -368,6 +368,16 @@ class FleetHealth:
                 result[provider] = ProviderState(cached.score, cached.samples, kind or None, until)
             return result
 
+    def has_fresh_fleet_snapshot(self) -> bool:
+        """Whether cached routing state came from a recent successful fleet read."""
+        now = self._clock()
+        with self._lock:
+            return (
+                self._cache_at is not None
+                and now - self._cache_at <= CACHE_STALE_SECONDS
+                and now >= self._redis_retry_at
+            )
+
     async def refresh_once(self) -> None:
         """One bounded Redis batch off the connection path, including probe leases."""
         if mode() == 'off':

@@ -391,17 +391,17 @@ env:
   - name: SONIOX_CONTEXT_TERMS
     value: "false"
   - name: STT_LEARNED_LANGUAGE_PROFILE
-    value: "false"
+    value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
-    value: "25"
+    value: "100"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
-    value: "1"
+    value: "5"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
-    value: "1"
+    value: "8"
   - name: PARAKEET_BATCH_PRESSURE_POOL_HOST
     value: "prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local"
   - name: PARAKEET_BATCH_PRESSURE_MIN_REPLICAS
-    value: "2"
+    value: "3"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
   - name: PARAKEET_WINDOW_DIARIZATION
@@ -410,12 +410,18 @@ env:
     value: "6"
   - name: PARAKEET_WINDOW_MAX_CONTEXT_SECONDS
     value: "24"
+  - name: PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS
+    value: "12"
+  - name: PARAKEET_WINDOW_MAX_EMPTY_STREAK
+    value: "4"
   - name: STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS
     value: "1800"
   - name: LISTEN_RECONNECT_BUDGET_PER_MIN
     value: "6"
   - name: STT_CIRCUIT_HALF_OPEN_PROBES
     value: "1"
+  - name: STT_SHED_CONNECT_FAILURES
+    value: "3"
   - name: SONIOX_CIRCUIT_FAILURE_THRESHOLD
     value: "3"
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
@@ -426,6 +432,34 @@ env:
     value: "http://nllb.omi.me"
   - name: TRANSLATION_SERVICE_MODELS
     value: "nllb,gemini"
+  - name: TRANSLATION_DEMAND_SHADOW_ENABLED
+    value: "false"
+  - name: TRANSLATION_DEMAND_GATE_ENABLED
+    value: "true"
+  - name: TRANSLATION_DEMAND_LEASE_V1_ENABLED
+    value: "true"
+  - name: TRANSLATION_ONDEMAND_GEMINI_ENABLED
+    value: "true"
+  - name: TRANSLATION_ONOPEN_ENABLED
+    value: "true"
+  - name: TRANSLATION_ONDEMAND_COHORT_PERCENT
+    value: "100"
+  - name: TRANSLATION_ONDEMAND_UID_ALLOWLIST
+    value: ""
+  - name: TRANSLATION_ONDEMAND_MAX_SEGMENTS
+    value: "50"
+  - name: TRANSLATION_ONDEMAND_MAX_CHARS
+    value: "12000"
+  - name: TRANSLATION_ONDEMAND_DEADLINE_SECONDS
+    value: "3"
+  - name: TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS
+    value: "4096"
+  - name: TRANSLATION_ONDEMAND_UID_DAILY_CHARS
+    value: "10000000"
+  - name: TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS
+    value: "1000000000"
+  - name: TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES
+    value: "4"
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:

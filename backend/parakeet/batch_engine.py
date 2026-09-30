@@ -27,6 +27,7 @@ class PendingRequest:
     owns_file: bool = False
     submitted_at: float = field(default_factory=time.monotonic)
     duration_sec: Optional[float] = None
+    lane: str = 'backfill'
 
 
 class QueueFullError(Exception):
@@ -46,6 +47,7 @@ class BatchEngine:
         vram_bytes_per_t2: float = 136.6,
         starvation_timeout_sec: float = 5.0,
         max_inflight: int = 2,
+        on_queue_wait: Optional[Callable[[str, float], None]] = None,
     ) -> None:
         self._gpu_worker = gpu_worker
         self._max_batch_size = max_batch_size
@@ -62,6 +64,8 @@ class BatchEngine:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._shutting_down = False
         self._on_batch_complete = on_batch_complete
+        self._on_queue_wait = on_queue_wait
+        self._live_batches_since_backfill = 0
         self._on_gpu_oom = on_gpu_oom
         self._vram_safety_factor = vram_safety_factor
         self._vram_bytes_per_t2 = vram_bytes_per_t2
@@ -165,7 +169,11 @@ class BatchEngine:
             return req.duration_sec
         return self._auto_threshold_sec
 
-    async def submit(self, audio_path: str, timestamps: bool = True, owns_file: bool = False) -> Dict[str, Any]:
+    async def submit(
+        self, audio_path: str, timestamps: bool = True, owns_file: bool = False, lane: str = 'backfill'
+    ) -> Dict[str, Any]:
+        if lane not in ('live', 'backfill'):
+            raise ValueError('Unknown Parakeet batch lane')
         enqueued = False
         duration = self._get_audio_duration(audio_path)
         try:
@@ -182,6 +190,7 @@ class BatchEngine:
                         future=future,
                         owns_file=owns_file,
                         duration_sec=duration,
+                        lane=lane,
                     )
                 )
                 enqueued = True
@@ -263,6 +272,38 @@ class BatchEngine:
             n -= 1
         return sorted_candidates[:n]
 
+    def _select_batch(self) -> List[PendingRequest]:
+        """Prefer live work, admitting one aged backfill after four live batches.
+
+        The backfill turn is a single item while live is waiting, so a long
+        historical recording cannot expand into a large mixed GPU batch.
+        The existing VRAM selection still sizes every normal lane batch.
+        """
+        live = [r for r in self._pending if r.lane == 'live']
+        if not live:
+            self._live_batches_since_backfill = 0
+            return self._form_vram_safe_batch(self._pending)
+        backfill = [r for r in self._pending if r.lane == 'backfill']
+        if backfill and self._live_batches_since_backfill >= 4:
+            oldest = min(backfill, key=lambda r: r.submitted_at)
+            if time.monotonic() - oldest.submitted_at >= self._starvation_timeout:
+                self._live_batches_since_backfill = 0
+                return [oldest]
+        self._live_batches_since_backfill += 1
+        return self._form_vram_safe_batch(live)
+
+    def pressure_snapshot(self) -> Dict[str, float | int]:
+        """One event-loop snapshot of waiting requests, excluding in-flight work."""
+        now = time.monotonic()
+        live = [r for r in self._pending if r.lane == 'live']
+        return {
+            'pending_requests': len(self._pending),
+            'oldest_pending_seconds': max((now - r.submitted_at for r in self._pending), default=0.0),
+            'live_pending_requests': len(live),
+            'live_oldest_pending_seconds': max((now - r.submitted_at for r in live), default=0.0),
+            'backfill_pending_requests': len(self._pending) - len(live),
+        }
+
     async def _flush_batch(self) -> None:
         sem = cast(asyncio.Semaphore, self._inflight_sem)
         await sem.acquire()
@@ -272,7 +313,7 @@ class BatchEngine:
             async with self._lock:
                 if not self._pending:
                     return
-                batch = self._form_vram_safe_batch(self._pending)
+                batch = self._select_batch()
                 batch_set = set(id(r) for r in batch)
                 self._pending = [r for r in self._pending if id(r) not in batch_set]
             self._flush_pending = False
@@ -295,6 +336,9 @@ class BatchEngine:
 
             batch_start = time.monotonic()
             queue_durations = [batch_start - req.submitted_at for req in batch]
+            if self._on_queue_wait:
+                for req, wait in zip(batch, queue_durations):
+                    self._on_queue_wait(req.lane, wait)
 
             audio_paths = [r.audio_path for r in batch]
             timestamps = batch[0].timestamps if batch else True

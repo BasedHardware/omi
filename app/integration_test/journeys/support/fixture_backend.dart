@@ -50,6 +50,7 @@ class JourneyFixtureBackend {
   final List<Map<String, dynamic>> conversations = [];
   final List<Map<String, dynamic>> memories = [];
   final List<Map<String, dynamic>> actionItems = [];
+  final List<Map<String, dynamic>> chatSessions = [];
 
   /// Request journal: method + path -> count. Journeys assert on it (e.g.
   /// "the send request actually reached the server") — the structural
@@ -157,6 +158,32 @@ class JourneyFixtureBackend {
         await req.response.close();
         return;
 
+      case 'POST /v2/chat-sessions':
+        final session = {
+          'id': 'fixture-chat-${chatSessions.length}',
+          'title': 'New Chat',
+          'created_at': DateTime.utc(2026, 9, 29).toIso8601String(),
+          'updated_at': DateTime.utc(2026, 9, 29).toIso8601String(),
+          'message_count': 0
+        };
+        chatSessions.insert(0, session);
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(session));
+        await req.response.close();
+        return;
+      case 'GET /v2/chat-sessions':
+        final offset = int.tryParse(req.uri.queryParameters['offset'] ?? '') ?? 0;
+        final limit = int.tryParse(req.uri.queryParameters['limit'] ?? '') ?? 50;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(chatSessions.skip(offset).take(limit).toList()));
+        await req.response.close();
+        return;
+      case 'POST /v2/chat/generate-title':
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({'title': 'Fixture chat'}));
+        await req.response.close();
+        return;
+
       case 'POST /v2/messages':
         await _handleChatSend(req);
         return;
@@ -174,6 +201,14 @@ class JourneyFixtureBackend {
         req.response.statusCode = 200;
         req.response.headers.contentType = ContentType.json;
         req.response.write(jsonEncode(conversations));
+        await req.response.close();
+        return;
+
+      case 'POST /v1/conversations/search':
+        // One page of every seeded conversation (the person page's speaker filter included).
+        req.response.statusCode = 200;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({'items': conversations, 'current_page': 1, 'per_page': 20, 'total_pages': 1}));
         await req.response.close();
         return;
 

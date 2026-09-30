@@ -11539,6 +11539,121 @@ class AppLocalizationsMs extends AppLocalizations {
   String get searchPartialFailure => 'Sesetengah hasil tidak dapat dimuatkan';
 
   @override
+  String get peopleSearchPlaceholder => 'Cari orang';
+
+  @override
+  String get peopleNotHeardYet => 'Belum didengar';
+
+  @override
+  String get peopleRecent => 'Terkini';
+
+  @override
+  String get deletePeopleMessage =>
+      'Ini akan mengalih keluar sampel suara mereka dan tidak boleh dibuat asal. Ucapan mereka dalam perbualan lalu menjadi penutur tanpa nama.';
+
+  @override
+  String get personTalkTime => 'Masa bercakap';
+
+  @override
+  String get personLastHeard => 'Terakhir didengar';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Padam $count orang?',
+      one: 'Padam 1 orang?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Perlu Suara';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count orang',
+      one: '1 orang',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Tiada Orang yang Sepadan';
+
+  @override
+  String get deselectAll => 'Nyahpilih Semua';
+
+  @override
+  String get voiceRecognitionSettings => 'Pengecaman Suara';
+
+  @override
+  String get greetingMorning => 'Selamat pagi';
+
+  @override
+  String get greetingAfternoon => 'Selamat petang';
+
+  @override
+  String get greetingEvening => 'Selamat malam';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Apa yang anda ingin tahu?';
+
+  @override
+  String get askSuggestDecide => 'Apa yang saya putuskan hari ini?';
+
+  @override
+  String get askSuggestOwe => 'Apa yang masih saya berhutang kepada orang?';
+
+  @override
+  String get askSuggestNotice => 'Apa yang Omi perasan?';
+
+  @override
+  String get pastChats => 'Sembang lepas';
+
+  @override
+  String get newChat => 'Sembang baharu';
+
+  @override
+  String get startFresh => 'Mula semula';
+
+  @override
+  String get noPastChats => 'Sembang anda dengan Omi dipaparkan di sini.';
+
+  @override
+  String get deleteChatQuestion => 'Padam sembang ini?';
+
+  @override
+  String get deleteChatMessage => 'Ia hilang daripada sembang lepas buat selamanya.';
+
+  @override
+  String get deleteChat => 'Padam sembang';
+
+  @override
+  String get appsAskWith => 'Tanya Omi dengan';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count perbualan hari ini.',
+      one: '1 perbualan hari ini.',
+      zero: 'Tiada perbualan hari ini.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get renameDevice => 'Namakan Semula Peranti';
 
   @override

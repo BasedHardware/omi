@@ -608,6 +608,7 @@ class TestFinalizationDiagnostics:
                 attempt_ref='uid-leaked-abc123',
                 failure_phase='/tmp/private/audio.wav',
                 failure_class='user-uid-abc123 detail',
+                failure_subtype='uid-leaked-abc123',
             )
 
         assert finalized is not None
@@ -617,10 +618,11 @@ class TestFinalizationDiagnostics:
         assert 'attempt_ref=none' in message
         assert 'failure_phase=unknown' in message
         assert 'failure_class=OtherException' in message
+        assert 'failure_subtype=other' in message
         for leaked in ('uid-leaked-abc123', '/tmp/private/audio.wav', 'user-uid-abc123'):
             assert leaked not in message
         stored = sync_jobs.get_sync_job(job_id)
-        for diagnostic in ('attempt_ref', 'failure_phase', 'failure_class'):
+        for diagnostic in ('attempt_ref', 'failure_phase', 'failure_class', 'failure_subtype'):
             assert diagnostic not in stored['result']
 
     def test_diagnostic_kwargs_survive_closed_tokens_and_non_str(self, caplog):
@@ -653,6 +655,7 @@ class TestFinalizationDiagnostics:
                 attempt_ref=attempt_ref,
                 failure_phase='provider_call',
                 failure_class='TimeoutError',
+                failure_subtype='provenance_mismatch',
             )
             sync_jobs._log_sync_job_finalized(
                 finalized={'lane': 'fresh'},
@@ -664,6 +667,7 @@ class TestFinalizationDiagnostics:
                 attempt_ref=42,
                 failure_phase=object(),
                 failure_class=object(),
+                failure_subtype=object(),
             )
 
         records = [r.getMessage() for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage()]
@@ -671,8 +675,10 @@ class TestFinalizationDiagnostics:
         assert f'attempt_ref={attempt_ref}' in records[0]
         assert 'failure_phase=provider_call' in records[0]
         assert 'failure_class=TimeoutError' in records[0]
+        assert 'failure_subtype=provenance_mismatch' in records[0]
         assert 'failure_phase=unknown' in records[1]
         assert 'failure_class=OtherException' in records[1]
+        assert 'failure_subtype=other' in records[1]
         assert 'attempt_ref=none' in records[1]
 
 

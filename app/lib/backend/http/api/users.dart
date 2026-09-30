@@ -357,9 +357,10 @@ Future<Person?> createPerson(String name) async {
   return null;
 }
 
-Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true}) async {
+Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true, bool includeStats = false}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples',
+    url:
+        '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples${includeStats ? '&include_stats=true' : ''}',
     headers: {},
     method: 'GET',
     body: '',

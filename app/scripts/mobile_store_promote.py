@@ -48,7 +48,9 @@ def require_notes(path: Path, version: str, platform: str) -> str:
     try:
         from importlib.util import module_from_spec, spec_from_file_location
 
-        spec = spec_from_file_location("mobile_changelog", Path(__file__).resolve().parents[2] / ".github/scripts/mobile-changelog.py")
+        spec = spec_from_file_location(
+            "mobile_changelog", Path(__file__).resolve().parents[2] / ".github/scripts/mobile-changelog.py"
+        )
         if spec is None or spec.loader is None:
             raise PromotionError("mobile changelog tooling unavailable")
         module = module_from_spec(spec)
@@ -65,7 +67,9 @@ def require_notes(path: Path, version: str, platform: str) -> str:
 
 
 def check_live_ios_version(version: str) -> None:
-    request = urllib.request.Request(f"https://itunes.apple.com/lookup?id={APP_ID}", headers={"Accept": "application/json"})
+    request = urllib.request.Request(
+        f"https://itunes.apple.com/lookup?id={APP_ID}", headers={"Accept": "application/json"}
+    )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
             listing = json.load(response)
@@ -123,8 +127,16 @@ def prepare_ios(version: str, build_number: str) -> IOSBuild:
             raise PromotionError(f"missing Codemagic iOS integration credential: {name}")
     check_live_ios_version(version)
     builds = cli_json(
-        "builds", "list", "--app-id", APP_ID, "--platform", "IOS", "--pre-release-version", version,
-        "--build-version-number", build_number,
+        "builds",
+        "list",
+        "--app-id",
+        APP_ID,
+        "--platform",
+        "IOS",
+        "--pre-release-version",
+        version,
+        "--build-version-number",
+        build_number,
     )
     selected = select_ios_build(builds, version, build_number)
     prerelease = cli_json("builds", "pre-release-version", selected.id)
@@ -136,9 +148,20 @@ def prepare_ios(version: str, build_number: str) -> IOSBuild:
 
 def submit_ios(build: IOSBuild, notes: str) -> None:
     command = [
-        "app-store-connect", "builds", "submit-to-app-store", "--max-build-processing-wait", "0",
-        "--platform", "IOS", "--release-type", "MANUAL", "--version-string", build.version,
-        "--whats-new", notes, build.id,
+        "app-store-connect",
+        "builds",
+        "submit-to-app-store",
+        "--max-build-processing-wait",
+        "0",
+        "--platform",
+        "IOS",
+        "--release-type",
+        "MANUAL",
+        "--version-string",
+        build.version,
+        "--whats-new",
+        notes,
+        build.id,
     ]
     try:
         subprocess.run(command, capture_output=True, text=True, check=True, timeout=120)
@@ -168,7 +191,11 @@ def select_play_release(alpha: object, production: object, version: str, build_n
             raise PromotionError("Play alpha release is invalid")
         codes = release_codes(release)
         if build_number in codes:
-            if codes != [build_number] or release.get("name") != version or release.get("status") not in ("completed", "inProgress"):
+            if (
+                codes != [build_number]
+                or release.get("name") != version
+                or release.get("status") not in ("completed", "inProgress")
+            ):
                 raise PromotionError("Play alpha build does not match the exact version and code")
             matches.append(release)
     if len(matches) != 1:
@@ -177,8 +204,25 @@ def select_play_release(alpha: object, production: object, version: str, build_n
         if not isinstance(release, dict) or not isinstance(release.get("name"), str):
             raise PromotionError("Play public release lacks a marketing version")
         release_codes(release)
-        if version_parts(version) < version_parts(release["name"]):
+        live_version = production_release_version(release["name"])
+        if live_version is not None and version_parts(version) < version_parts(live_version):
             raise PromotionError("Android target is older than the live public version")
+
+
+PRODUCTION_NAME_VERSION_RE = re.compile(
+    r"^\s*((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))(?:\s*\(.*\))?\s*$"
+)
+
+
+def production_release_version(name: str) -> str | None:
+    """Return the X.Y.Z a Play production release name carries, if any.
+
+    Play Console labels a production release by its build name and may suffix the
+    version code ("1.0.552 (1246)"); older or hand-named releases may carry no
+    version at all. Only a recognised version participates in the ordering check.
+    """
+    match = PRODUCTION_NAME_VERSION_RE.fullmatch(name)
+    return match.group(1) if match else None
 
 
 def prepare_android(version: str, build_number: str) -> tuple[object, str]:
@@ -211,7 +255,9 @@ def submit_android(client: object, edit_id: str, version: str, build_number: str
     }
     try:
         client.edits().tracks().update(
-            packageName=PACKAGE_NAME, editId=edit_id, track="production",
+            packageName=PACKAGE_NAME,
+            editId=edit_id,
+            track="production",
             body={"track": "production", "releases": [release]},
         ).execute()
         client.edits().commit(packageName=PACKAGE_NAME, editId=edit_id).execute()

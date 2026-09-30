@@ -11508,6 +11508,121 @@ class AppLocalizationsNo extends AppLocalizations {
   String get searchPartialFailure => 'Noen resultater kunne ikke lastes inn';
 
   @override
+  String get peopleSearchPlaceholder => 'Søk etter personer';
+
+  @override
+  String get peopleNotHeardYet => 'Ikke hørt ennå';
+
+  @override
+  String get peopleRecent => 'Nylige';
+
+  @override
+  String get deletePeopleMessage =>
+      'Dette fjerner stemmeprøvene deres og kan ikke angres. Replikkene deres i tidligere samtaler blir til navnløse talere.';
+
+  @override
+  String get personTalkTime => 'Taletid';
+
+  @override
+  String get personLastHeard => 'Sist hørt';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Slette $count personer?',
+      one: 'Slette 1 person?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Mangler stemme';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personer',
+      one: '1 person',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Ingen samsvarende personer';
+
+  @override
+  String get deselectAll => 'Fjern alle valg';
+
+  @override
+  String get voiceRecognitionSettings => 'Stemmegjenkjenning';
+
+  @override
+  String get greetingMorning => 'God morgen';
+
+  @override
+  String get greetingAfternoon => 'God ettermiddag';
+
+  @override
+  String get greetingEvening => 'God kveld';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Hva vil du vite?';
+
+  @override
+  String get askSuggestDecide => 'Hva bestemte jeg i dag?';
+
+  @override
+  String get askSuggestOwe => 'Hva skylder jeg fortsatt folk?';
+
+  @override
+  String get askSuggestNotice => 'Hva la Omi merke til?';
+
+  @override
+  String get pastChats => 'Tidligere chatter';
+
+  @override
+  String get newChat => 'Ny chat';
+
+  @override
+  String get startFresh => 'Start på nytt';
+
+  @override
+  String get noPastChats => 'Chattene dine med Omi vises her.';
+
+  @override
+  String get deleteChatQuestion => 'Slette denne chatten?';
+
+  @override
+  String get deleteChatMessage => 'Den forsvinner fra tidligere chatter for godt.';
+
+  @override
+  String get deleteChat => 'Slett chat';
+
+  @override
+  String get appsAskWith => 'Spør Omi med';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtaler i dag.',
+      one: '1 samtale i dag.',
+      zero: 'Ingen samtaler i dag.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get renameDevice => 'Gi enheten nytt navn';
 
   @override

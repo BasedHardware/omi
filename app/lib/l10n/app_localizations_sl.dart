@@ -11538,6 +11538,121 @@ class AppLocalizationsSl extends AppLocalizations {
   String get searchPartialFailure => 'Nekaterih rezultatov ni bilo mogoče naložiti';
 
   @override
+  String get peopleSearchPlaceholder => 'Iskanje oseb';
+
+  @override
+  String get peopleNotHeardYet => 'Še ni slišano';
+
+  @override
+  String get peopleRecent => 'Nedavne';
+
+  @override
+  String get deletePeopleMessage =>
+      'S tem odstranite njihove glasovne vzorce, dejanja ni mogoče razveljaviti. Njihove izjave v preteklih pogovorih postanejo neimenovani govorci.';
+
+  @override
+  String get personTalkTime => 'Čas govorjenja';
+
+  @override
+  String get personLastHeard => 'Nazadnje slišano';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Izbrišem osebe: $count?',
+      one: 'Izbrišem 1 osebo?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Potreben glas';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Oseb: $count',
+      one: '1 oseba',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Ni ujemajočih se oseb';
+
+  @override
+  String get deselectAll => 'Prekliči izbor vseh';
+
+  @override
+  String get voiceRecognitionSettings => 'Prepoznavanje glasu';
+
+  @override
+  String get greetingMorning => 'Dobro jutro';
+
+  @override
+  String get greetingAfternoon => 'Dober dan';
+
+  @override
+  String get greetingEvening => 'Dober večer';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Kaj želite izvedeti?';
+
+  @override
+  String get askSuggestDecide => 'Kaj sem danes odločil?';
+
+  @override
+  String get askSuggestOwe => 'Kaj sem ljudem še dolžan?';
+
+  @override
+  String get askSuggestNotice => 'Kaj je opazil Omi?';
+
+  @override
+  String get pastChats => 'Prejšnji klepeti';
+
+  @override
+  String get newChat => 'Nov klepet';
+
+  @override
+  String get startFresh => 'Začni znova';
+
+  @override
+  String get noPastChats => 'Tu se prikažejo vaši klepeti z Omijem.';
+
+  @override
+  String get deleteChatQuestion => 'Izbrišem ta klepet?';
+
+  @override
+  String get deleteChatMessage => 'Iz prejšnjih klepetov bo za vedno izginil.';
+
+  @override
+  String get deleteChat => 'Izbriši klepet';
+
+  @override
+  String get appsAskWith => 'Vprašajte Omi z';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pogovorov danes.',
+      one: '1 pogovor danes.',
+      zero: 'Danes ni pogovorov.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get renameDevice => 'Preimenuj napravo';
 
   @override

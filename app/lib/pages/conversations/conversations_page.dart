@@ -10,7 +10,6 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
-import 'package:omi/pages/conversations/widgets/pending_transcriptions_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -437,10 +436,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 highlightColor: OmiColors.surface3,
                 child: Container(
                   height: 80,
-                  decoration: BoxDecoration(
-                    color: OmiColors.surface1,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ),
@@ -577,8 +573,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               const SliverToBoxAdapter(child: SpeakerTagPromptCard()),
-              // Local recordings waiting to be uploaded for transcription.
-              const SliverToBoxAdapter(child: PendingTranscriptionsBanner()),
               const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
               SliverToBoxAdapter(
                 child: widget.loadRecaps == null

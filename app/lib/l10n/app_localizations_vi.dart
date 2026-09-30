@@ -11503,6 +11503,121 @@ class AppLocalizationsVi extends AppLocalizations {
   String get searchPartialFailure => 'Không thể tải một số kết quả';
 
   @override
+  String get peopleSearchPlaceholder => 'Tìm người';
+
+  @override
+  String get peopleNotHeardYet => 'Chưa nghe';
+
+  @override
+  String get peopleRecent => 'Gần đây';
+
+  @override
+  String get deletePeopleMessage =>
+      'Thao tác này sẽ xóa các mẫu giọng nói của họ và không thể hoàn tác. Lời họ nói trong các cuộc trò chuyện trước sẽ thành người nói không tên.';
+
+  @override
+  String get personTalkTime => 'Thời gian nói';
+
+  @override
+  String get personLastHeard => 'Nghe gần nhất';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Xóa $count người?',
+      one: 'Xóa 1 người?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Cần giọng nói';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count người',
+      one: '1 người',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Không có người phù hợp';
+
+  @override
+  String get deselectAll => 'Bỏ chọn tất cả';
+
+  @override
+  String get voiceRecognitionSettings => 'Nhận dạng giọng nói';
+
+  @override
+  String get greetingMorning => 'Chào buổi sáng';
+
+  @override
+  String get greetingAfternoon => 'Chào buổi chiều';
+
+  @override
+  String get greetingEvening => 'Chào buổi tối';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Bạn muốn biết điều gì?';
+
+  @override
+  String get askSuggestDecide => 'Hôm nay tôi đã quyết định gì?';
+
+  @override
+  String get askSuggestOwe => 'Tôi còn nợ ai điều gì?';
+
+  @override
+  String get askSuggestNotice => 'Omi nhận thấy điều gì?';
+
+  @override
+  String get pastChats => 'Các cuộc trò chuyện trước';
+
+  @override
+  String get newChat => 'Cuộc trò chuyện mới';
+
+  @override
+  String get startFresh => 'Bắt đầu lại';
+
+  @override
+  String get noPastChats => 'Các cuộc trò chuyện của bạn với Omi xuất hiện ở đây.';
+
+  @override
+  String get deleteChatQuestion => 'Xóa cuộc trò chuyện này?';
+
+  @override
+  String get deleteChatMessage => 'Nó sẽ biến mất khỏi các cuộc trò chuyện trước vĩnh viễn.';
+
+  @override
+  String get deleteChat => 'Xóa cuộc trò chuyện';
+
+  @override
+  String get appsAskWith => 'Hỏi Omi bằng';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hôm nay có $count cuộc trò chuyện.',
+      one: 'Hôm nay có 1 cuộc trò chuyện.',
+      zero: 'Hôm nay chưa có cuộc trò chuyện.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get renameDevice => 'Đổi tên thiết bị';
 
   @override

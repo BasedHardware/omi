@@ -39,32 +39,56 @@ def get_screen_activity_ids(uid: str) -> List[str]:
     """Return all screen activity document IDs for a user (IDs-only projection).
 
     Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
-    coll = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
+    if not uid or not str(uid).strip():
+        return []
+    coll = db.collection(USERS_COLLECTION).document(uid.strip()).collection(SCREEN_ACTIVITY_COLLECTION)
     return [str(doc.id) for doc in coll.select([]).stream()]
 
 
 def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
     """Batch write screen activity rows to Firestore users/{uid}/screen_activity/{id}."""
+    if not uid or not str(uid).strip():
+        raise ValueError('uid must not be empty')
     if not rows:
         return 0
 
-    collection_ref = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
+    collection_ref = db.collection(USERS_COLLECTION).document(uid.strip()).collection(SCREEN_ACTIVITY_COLLECTION)
     written = 0
 
-    # Firestore batch limit is 500
-    for i in range(0, len(rows), 500):
-        chunk = rows[i : i + 500]
+    # Deduplicate rows by document ID preserving the latest row state,
+    # preventing Firestore "400 Multiple operations on document in a single commit" errors.
+    deduped_rows: List[Tuple[str, Dict[str, Any]]] = []
+    seen_ids: set[str] = set()
+    for row in reversed(rows):
+        raw_row: Any = row
+        if not isinstance(raw_row, dict):
+            continue
+        raw_id = row.get('storageId') or row.get('id')
+        if raw_id is None:
+            continue
+        doc_id = str(raw_id).strip()
+        if not doc_id or '/' in doc_id or doc_id in seen_ids:
+            continue
+        seen_ids.add(doc_id)
+        deduped_rows.append((doc_id, row))
+    deduped_rows.reverse()
+
+    if not deduped_rows:
+        return 0
+
+    # Firestore batch limit is 500; cap chunks at 499 operations to avoid boundary overflow
+    for i in range(0, len(deduped_rows), 499):
+        chunk = deduped_rows[i : i + 499]
         batch = db.batch()
-        for row in chunk:
-            doc_id = str(row.get('storageId') or row['id'])
-            doc_data = {
-                'timestamp': row['timestamp'],
-                'appName': row.get('appName', ''),
-                'windowTitle': row.get('windowTitle', ''),
-                'ocrText': (row.get('ocrText') or '')[:1000],
+        for doc_id, row in chunk:
+            doc_data: Dict[str, Any] = {
+                'timestamp': str(row.get('timestamp') or ''),
+                'appName': str(row.get('appName') or ''),
+                'windowTitle': str(row.get('windowTitle') or ''),
+                'ocrText': (str(row.get('ocrText') or ''))[:1000],
                 # The Firestore/vector ID is device-qualified, while the desktop
                 # frame database is addressed by this original numeric ID.
-                'localScreenshotId': str(row['id']),
+                'localScreenshotId': str(row.get('id') or doc_id),
                 # The desktop only creates sync rows from captures admitted by
                 # Rewind's local exclusion policy; persist that attestation so
                 # automatic selection remains fail closed.
@@ -93,7 +117,9 @@ def get_screen_activity(
     limit: int = 500,
 ) -> List[Dict[str, Any]]:
     """Query screen activity by date range with optional app filter."""
-    collection_ref = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
+    if not uid or not str(uid).strip():
+        return []
+    collection_ref = db.collection(USERS_COLLECTION).document(uid.strip()).collection(SCREEN_ACTIVITY_COLLECTION)
 
     query = collection_ref.order_by('timestamp', direction=firestore.Query.ASCENDING)
 
@@ -139,7 +165,9 @@ def get_screen_activity_page(
     Fetches ``limit + 1`` rows and returns ``(rows[:limit], has_more)`` so the
     caller can emit a next_cursor only when another row actually exists.
     """
-    collection_ref = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
+    if not uid or not str(uid).strip():
+        return [], False
+    collection_ref = db.collection(USERS_COLLECTION).document(uid.strip()).collection(SCREEN_ACTIVITY_COLLECTION)
 
     query = collection_ref.order_by('timestamp', direction=firestore.Query.ASCENDING).order_by('__name__')
 
@@ -180,6 +208,17 @@ def get_screen_activity_summary(
     estimating elapsed usage. One lookahead row detects a truncated query;
     it never contributes to the aggregate or its observation bounds.
     """
+    if not uid or not str(uid).strip():
+        return {
+            'apps': {},
+            'total_screenshots': 0,
+            'coverage': ScreenActivityCoverage(
+                row_limit=SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT,
+                truncated=False,
+                first_observed_at=None,
+                last_observed_at=None,
+            ).model_dump(),
+        }
     rows = get_screen_activity(
         uid, start_date=start_date, end_date=end_date, limit=SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT + 1
     )

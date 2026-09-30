@@ -11586,6 +11586,121 @@ class AppLocalizationsTa extends AppLocalizations {
   String get searchPartialFailure => 'சில முடிவுகளை ஏற்ற முடியவில்லை';
 
   @override
+  String get peopleSearchPlaceholder => 'நபர்களைத் தேடு';
+
+  @override
+  String get peopleNotHeardYet => 'இன்னும் கேட்கப்படவில்லை';
+
+  @override
+  String get peopleRecent => 'சமீபத்தியவை';
+
+  @override
+  String get deletePeopleMessage =>
+      'இது அவர்களின் குரல் மாதிரிகளை நீக்கும்; இதைச் செயல்தவிர்க்க முடியாது. கடந்த உரையாடல்களில் அவர்களின் பேச்சு பெயரற்ற பேச்சாளர்களாக மாறும்.';
+
+  @override
+  String get personTalkTime => 'பேசிய நேரம்';
+
+  @override
+  String get personLastHeard => 'கடைசியாகக் கேட்டது';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count நபர்களை நீக்கவா?',
+      one: '1 நபரை நீக்கவா?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'குரல் தேவை';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count நபர்கள்',
+      one: '1 நபர்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'பொருந்தும் நபர்கள் இல்லை';
+
+  @override
+  String get deselectAll => 'அனைத்தையும் தேர்வுநீக்கு';
+
+  @override
+  String get voiceRecognitionSettings => 'குரல் அடையாளம்';
+
+  @override
+  String get greetingMorning => 'காலை வணக்கம்';
+
+  @override
+  String get greetingAfternoon => 'மதிய வணக்கம்';
+
+  @override
+  String get greetingEvening => 'மாலை வணக்கம்';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'நீங்கள் என்ன தெரிந்துகொள்ள விரும்புகிறீர்கள்?';
+
+  @override
+  String get askSuggestDecide => 'இன்று நான் என்ன முடிவு செய்தேன்?';
+
+  @override
+  String get askSuggestOwe => 'இன்னும் மக்களுக்கு நான் என்ன செய்ய வேண்டும்?';
+
+  @override
+  String get askSuggestNotice => 'Omi என்ன கவனித்தது?';
+
+  @override
+  String get pastChats => 'முந்தைய அரட்டைகள்';
+
+  @override
+  String get newChat => 'புதிய அரட்டை';
+
+  @override
+  String get startFresh => 'புதிதாகத் தொடங்குங்கள்';
+
+  @override
+  String get noPastChats => 'Omi உடனான உங்கள் அரட்டைகள் இங்கே தோன்றும்.';
+
+  @override
+  String get deleteChatQuestion => 'இந்த அரட்டையை நீக்கவா?';
+
+  @override
+  String get deleteChatMessage => 'இது முந்தைய அரட்டைகளிலிருந்து நிரந்தரமாக நீங்கும்.';
+
+  @override
+  String get deleteChat => 'அரட்டையை நீக்கு';
+
+  @override
+  String get appsAskWith => 'இதனுடன் Omi-யிடம் கேளுங்கள்';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'இன்று $count உரையாடல்கள்.',
+      one: 'இன்று 1 உரையாடல்.',
+      zero: 'இன்று உரையாடல்கள் இல்லை.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get renameDevice => 'சாதனத்தின் பெயரை மாற்று';
 
   @override

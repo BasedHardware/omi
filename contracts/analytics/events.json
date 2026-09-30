@@ -2522,7 +2522,8 @@
             "complete_task",
             "create_task",
             "start_listening",
-            "stop_listening"
+            "stop_listening",
+            "open_chat"
           ]
         },
         "platform": {
