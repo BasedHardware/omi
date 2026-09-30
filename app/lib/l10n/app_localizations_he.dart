@@ -11553,4 +11553,468 @@ class AppLocalizationsHe extends AppLocalizations {
   String diagnosticsCountSincePairing(int count) {
     return '$count מאז ההתאמה';
   }
+
+  @override
+  String get peopleFilterLowConfidence => 'ביטחון נמוך';
+
+  @override
+  String get peopleFilterPinned => 'מוצמדים';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count מוצמדים',
+      one: '1 מוצמד',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'מאושר';
+
+  @override
+  String get confidenceLikely => 'סביר';
+
+  @override
+  String get confidenceUnverified => 'לא מאומת';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'רמת ביטחון: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'תייגת $count פעמים',
+      one: 'תייגת פעם אחת',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'נבחר ב-$count הצעות',
+      one: 'נבחר בהצעה אחת',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'אישרת $count התאמות',
+      one: 'אישרת התאמה אחת',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'רק התאמה אוטומטית, מעולם לא אושר';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'מעולם לא אושר';
+
+  @override
+  String get confidenceReasonCorrected => 'תיקנת את ההתאמה שלו';
+
+  @override
+  String get confidenceReasonVoiceReady => 'הקול מוכן';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'נדרש קול';
+
+  @override
+  String get confidenceReasonNotHeard => 'עוד לא נשמע';
+
+  @override
+  String get confidenceSheetTitle => 'רמת ביטחון';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi מזהה את הקול של $name, ואישרת אותו.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi בדרך כלל מזהה את הקול של $name, אבל אישרת אותו רק כמה פעמים.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'עדיין שום פעולה שלך לא מגבה את $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'ראיות';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'תויג על ידך ב-$count שיחות',
+      one: 'תויג על ידך בשיחה אחת',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'כן ב-$count הצעות',
+      one: 'כן בהצעה אחת',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'נבחר ב-$count הצעות',
+      one: 'נבחר בהצעה אחת',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'אושרו $count התאמות אוטומטיות',
+      one: 'אושרה התאמה אוטומטית אחת',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count התאמות הועברו למישהו אחר',
+      one: 'התאמה אחת הועברה למישהו אחר',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count התאמות אוטומטיות שאף אחד לא אישר',
+      one: 'התאמה אוטומטית אחת שאף אחד לא אישר',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'דגימת קול מוכנה';
+
+  @override
+  String get evidenceNoVoice => 'עדיין אין דגימת קול';
+
+  @override
+  String get evidenceNotHeard => 'עוד לא נשמע בשיחה';
+
+  @override
+  String get evidenceNothing => 'עדיין לא תייגת ולא אישרת את האדם הזה';
+
+  @override
+  String get effectCountsALot => 'נחשב הרבה';
+
+  @override
+  String get effectCounts => 'נחשב';
+
+  @override
+  String get effectCountsALittle => 'נחשב מעט';
+
+  @override
+  String get effectBarelyCounts => 'כמעט לא נחשב';
+
+  @override
+  String get effectCountsAgainst => 'נחשב לרעה';
+
+  @override
+  String get effectNeeded => 'נדרש כדי להיות מאושר';
+
+  @override
+  String get confidenceToReachConfirmed => 'כדי להגיע למאושר';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi צריך גם דגימת קול של $name. תייג אותו כשהאפשרות \"זכירת קולות\" פעילה.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return 'רמת הביטחון של $name: מאושר. Omi ממשיך ללמוד מכל תיוג.';
+  }
+
+  @override
+  String get confidenceFootnote => 'רק התשובות שלך משפיעות באמת על רמת הביטחון. התאמות אוטומטיות לבדן כמעט לא נחשבות.';
+
+  @override
+  String get personWhyConfidence => 'למה?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'הצמדת $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'השאר את $name בראש הרשימה וצפה לו בשיחות שלך';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi יבקש ממך לאשר התאמות קרובות במקום לנחש.';
+
+  @override
+  String get pinAction => 'הצמד';
+
+  @override
+  String get unpinAction => 'בטל הצמדה';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'הוצמד: $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'הצמדה הוסרה: $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'למה $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'למחוק את $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name מוצמד. דגימות הקול שלו יימחקו, Omi יפסיק לזהות אותו, ובתמלולים קודמים הוא יופיע כדובר ללא שם. אי אפשר לבטל פעולה זו.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'מחק את $name';
+  }
+
+  @override
+  String get selectPeople => 'בחירת אנשים';
+
+  @override
+  String get cleanUpEllipsis => 'ניקוי…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count אנשים ש-Omi לא בטוח לגביהם',
+      one: 'אדם אחד ש-Omi לא בטוח לגביו',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'ברובם שמות ששמעו לא נכון. עבור עליהם ומחק את אלה שאינם אמיתיים.';
+
+  @override
+  String get reviewAction => 'סקירה';
+
+  @override
+  String get cleanUpTitle => 'ניקוי';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi לא בטוח לגבי $count האנשים האלה. רובם שמות ששמעו לא נכון בתמלולים. בטל את הסימון של מי שאתה רוצה לשמור.',
+      one: 'Omi לא בטוח לגבי האדם הזה. בטל את הסימון כדי לשמור אותו.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'אנשים מוצמדים לעולם לא נכללים בניקוי.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'מחק $count אנשים',
+      one: 'מחק אדם אחד',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count אנשים נמחקו',
+      one: 'אדם אחד נמחק',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'אין מה לנקות';
+
+  @override
+  String get cleanUpNothingMessage => 'כרגע Omi בטוח לגבי כולם.';
+
+  @override
+  String get selectAllSkipsPinned => '\"בחר הכול\" מדלג על אנשים מוצמדים. מחק אותם אחד־אחד מהדף שלהם.';
+
+  @override
+  String get pinnedNotSelectable => 'מוצמד, לא ניתן לבחירה';
+
+  @override
+  String get ignoredVoicesTitle => 'קולות שהתעלמו מהם';
+
+  @override
+  String get ignoredVoicesSubtitle => 'טלוויזיה, פודקאסטים וקולות אחרים שסימנת \"לא אדם\"';
+
+  @override
+  String get ignoredVoicesEmpty => 'אין קולות שהתעלמו מהם';
+
+  @override
+  String get restoreAction => 'שחזור';
+
+  @override
+  String get voiceRestoredToast => 'ייתכן ש-Omi ישאל שוב על הקול הזה';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'מישהו אחר…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'לא אדם';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'לא בטוח';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'זה אני';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'הקולות הקרובים ביותר';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'אנשים שדיברת איתם לאחרונה';
+
+  @override
+  String get voiceMatchClose => 'התאמה קרובה';
+
+  @override
+  String get voiceMatchPossible => 'התאמה אפשרית';
+
+  @override
+  String get voiceMatchWeak => 'התאמה חלשה';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'התאמת קול: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'כל תשובה מלמדת את Omi קול ומעלה את רמת הביטחון באותו אדם.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '\"כן\" מעלה את רמת הביטחון ב-$name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner => 'שומר על פרופיל הקול שלך מדויק, כך ש-Omi לעולם לא יתייג אותך כמישהו אחר.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'נשמר בשם $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'נשמר כקול שלך';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi לא ישאל שוב על הקול הזה';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'תויג כ-$name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'תויג כקול שלך';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'סומן כ\"לא אדם\"';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'התיוג הוסר';
+
+  @override
+  String get whoIsItTitle => 'מי זה?';
+
+  @override
+  String get newPersonEllipsis => 'אדם חדש…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'הוסף “$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'כולם';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'חל על כל השורות של דובר זה';
+
+  @override
+  String get collapseAction => 'כווץ';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'לא אני';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'תייגו אותם בעוד $count שיחות.',
+      one: 'תייגו אותם בעוד שיחה 1.',
+    );
+    return '$_temp0';
+  }
 }

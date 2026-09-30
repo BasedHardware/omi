@@ -91,3 +91,18 @@ Future<ApiResult<wire.GeneratedVoiceProfileSettings>> updateVoiceProfileSettings
     },
   );
 }
+
+/// Voices the user marked Not a Person, newest first.
+Future<ApiResult<wire.GeneratedIgnoredVoicesResponse>> getIgnoredVoices() => executeApi(
+      request: ApiRequest(url: '${Env.apiBaseUrl}v1/speaker-tag-prompts/ignored-voices', method: 'GET'),
+      decode: (body) => wire.GeneratedIgnoredVoicesResponse.fromJson(_object(body)),
+    );
+
+/// Undo Not a Person for one conversation speaker; Omi may ask about it again.
+Future<ApiResult<void>> restoreIgnoredVoice(String conversationId, int speakerId) => executeApi<void>(
+      request: ApiRequest(
+        url: '${Env.apiBaseUrl}v1/speaker-tag-prompts/ignored-voices/${Uri.encodeComponent(conversationId)}/$speakerId',
+        method: 'DELETE',
+      ),
+      decode: (_) {},
+    );

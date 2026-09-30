@@ -58,6 +58,7 @@ class Harness {
     bool firstTime = true,
     bool answerOk = true,
     bool settingsOk = true,
+    Duration answeredHold = Duration.zero,
   }) {
     provider = SpeakerTagPromptsProvider(
       fetchPrompts: () async {
@@ -117,6 +118,7 @@ class Harness {
       playClip: (id, wav) async => true,
       emit: events.add,
       now: () => clock,
+      answeredHold: answeredHold,
     );
   }
 
@@ -132,6 +134,32 @@ class Harness {
 }
 
 void main() {
+  testWidgets('disposing after commit cancels the answered-state timer', (tester) async {
+    final h = Harness(answeredHold: const Duration(minutes: 1));
+    await h.provider.loadIfDue();
+    h.provider.stage(SpeakerTagAnswer.me);
+    var completed = false;
+    unawaited(h.provider.commitPending().then((_) => completed = true));
+    await tester.pump();
+    expect(h.provider.pending?.committed, isTrue);
+    h.provider.dispose();
+    await tester.pump();
+    expect(completed, isTrue);
+  });
+
+  testWidgets('a late refresh cannot arm an answered-state timer after disposal', (tester) async {
+    final h = Harness(answeredHold: const Duration(minutes: 1));
+    await h.provider.loadIfDue();
+    h.provider.stage(SpeakerTagAnswer.me);
+    final saved = Completer<void>();
+    var completed = false;
+    unawaited(h.provider.commitPending(onSaved: (_) => saved.future).then((_) => completed = true));
+    await tester.pump();
+    h.provider.dispose();
+    saved.complete();
+    await tester.pump();
+    expect(completed, isTrue);
+  });
   test('loads a set, reports it once, and throttles refetches', () async {
     final h = Harness();
     await h.provider.loadIfDue();
@@ -579,4 +607,63 @@ void main() {
       }
     },
   );
+
+  test('a staged answer shows as pending and sends nothing until it commits', () async {
+    final h = Harness();
+    await h.provider.loadIfDue();
+    h.provider.stage(SpeakerTagAnswer.person, personId: 'p1', displayName: 'Sam');
+    expect(h.provider.pending?.displayName, 'Sam');
+    expect(h.answers, isEmpty);
+    // A second stage while one is pending is ignored.
+    h.provider.stage(SpeakerTagAnswer.me);
+    expect(h.provider.pending?.answer, SpeakerTagAnswer.person);
+
+    String? savedFor;
+    expect(await h.provider.commitPending(onSaved: (id) async => savedFor = id), isTrue);
+    expect(h.answers.single.answer, 'person');
+    expect(h.answers.single.personId, 'p1');
+    expect(savedFor, 'p1');
+    expect(h.provider.pending, isNull);
+    expect(h.provider.current!.id, 'b');
+  });
+
+  test('Undo drops a staged answer and a committed one cannot be undone', () async {
+    final h = Harness(answeredHold: const Duration(milliseconds: 50));
+    await h.provider.loadIfDue();
+    h.provider.stage(SpeakerTagAnswer.notAPerson);
+    h.provider.undoPending();
+    expect(h.provider.pending, isNull);
+    expect(await h.provider.commitPending(), isFalse);
+    expect(h.answers, isEmpty);
+    expect(h.provider.current!.id, 'a');
+
+    h.provider.stage(SpeakerTagAnswer.notAPerson);
+    final commit = h.provider.commitPending();
+    await Future<void>.delayed(Duration.zero);
+    h.provider.undoPending();
+    expect(await commit, isTrue);
+    expect(h.answers.single.answer, 'not_a_person');
+    expect(h.events.whereType<SpeakerTagPromptAnswerSubmitted>().single.properties['answer'], 'not_a_person');
+  });
+
+  test('a failed commit clears the staged answer and keeps the question', () async {
+    final h = Harness(answerOk: false);
+    await h.provider.loadIfDue();
+    h.provider.stage(SpeakerTagAnswer.me);
+    expect(await h.provider.commitPending(), isFalse);
+    expect(h.provider.pending, isNull);
+    expect(h.provider.answerFailed, isTrue);
+    expect(h.provider.current!.id, 'a');
+  });
+
+  test('closing the card keeps a staged answer', () async {
+    final h = Harness();
+    await h.provider.loadIfDue();
+    await h.provider.reportShown();
+    h.provider.stage(SpeakerTagAnswer.me);
+    await h.provider.close();
+    await Future<void>.delayed(Duration.zero);
+    expect(h.answers.single.answer, 'me');
+    expect(h.dismissals, 0, reason: 'an answered set is not a dismissal');
+  });
 }

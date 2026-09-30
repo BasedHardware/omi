@@ -2406,7 +2406,8 @@
             "new_person",
             "someone_else",
             "skip",
-            "unknown"
+            "unknown",
+            "not_a_person"
           ]
         },
         "clipPlayed": {

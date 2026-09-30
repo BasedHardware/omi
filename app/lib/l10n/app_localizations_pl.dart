@@ -11681,4 +11681,470 @@ class AppLocalizationsPl extends AppLocalizations {
   String diagnosticsCountSincePairing(int count) {
     return '$count od sparowania';
   }
+
+  @override
+  String get peopleFilterLowConfidence => 'Niska pewność';
+
+  @override
+  String get peopleFilterPinned => 'Przypięte';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count przypiętych',
+      one: '1 przypięta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Potwierdzone';
+
+  @override
+  String get confidenceLikely => 'Prawdopodobne';
+
+  @override
+  String get confidenceUnverified => 'Niezweryfikowane';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Pewność: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Oznaczone przez Ciebie $count razy',
+      one: 'Oznaczone przez Ciebie raz',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Wybrane w $count sugestiach',
+      one: 'Wybrane w 1 sugestii',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Potwierdzonych przez Ciebie dopasowań: $count',
+      one: '1 dopasowanie potwierdzone przez Ciebie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Tylko dopasowane automatycznie, nigdy niepotwierdzone';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Nigdy niepotwierdzone';
+
+  @override
+  String get confidenceReasonCorrected => 'Dopasowanie poprawione przez Ciebie';
+
+  @override
+  String get confidenceReasonVoiceReady => 'głos gotowy';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'potrzebny głos';
+
+  @override
+  String get confidenceReasonNotHeard => 'jeszcze nie słyszano';
+
+  @override
+  String get confidenceSheetTitle => 'Pewność';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi rozpoznaje głos osoby $name i zostało to przez Ciebie potwierdzone.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi zwykle rozpoznaje głos osoby $name, ale potwierdzono to tylko kilka razy.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Żadne Twoje działanie nie potwierdza jeszcze osoby $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Dowody';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Oznaczone przez Ciebie w $count rozmowach',
+      one: 'Oznaczone przez Ciebie w 1 rozmowie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Tak w $count sugestiach',
+      one: 'Tak w 1 sugestii',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Wybrane w $count sugestiach',
+      one: 'Wybrane w 1 sugestii',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Potwierdzono automatycznych dopasowań: $count',
+      one: 'Potwierdzono 1 automatyczne dopasowanie',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dopasowań przeniesionych na kogoś innego: $count',
+      one: '1 dopasowanie przeniesione na kogoś innego',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Automatycznych dopasowań bez potwierdzenia: $count',
+      one: '1 automatyczne dopasowanie bez potwierdzenia',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Próbka głosu gotowa';
+
+  @override
+  String get evidenceNoVoice => 'Brak próbki głosu';
+
+  @override
+  String get evidenceNotHeard => 'Jeszcze nie słyszano w rozmowie';
+
+  @override
+  String get evidenceNothing => 'Ta osoba nie została jeszcze oznaczona ani potwierdzona przez Ciebie';
+
+  @override
+  String get effectCountsALot => 'Bardzo się liczy';
+
+  @override
+  String get effectCounts => 'Liczy się';
+
+  @override
+  String get effectCountsALittle => 'Trochę się liczy';
+
+  @override
+  String get effectBarelyCounts => 'Prawie się nie liczy';
+
+  @override
+  String get effectCountsAgainst => 'Liczy się na minus';
+
+  @override
+  String get effectNeeded => 'Potrzebne, by było potwierdzone';
+
+  @override
+  String get confidenceToReachConfirmed => 'Jak osiągnąć poziom „Potwierdzone”';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi potrzebuje też próbki głosu osoby $name. Oznacz ją przy włączonym „Zapamiętuj głosy”.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return '$name: Potwierdzone. Omi uczy się z każdego oznaczenia.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Pewność zmieniają głównie Twoje odpowiedzi. Same automatyczne dopasowania prawie się nie liczą.';
+
+  @override
+  String get personWhyConfidence => 'Dlaczego?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Przypnij: $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Zachowaj osobę $name i oczekuj jej w rozmowach';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi poprosi o potwierdzenie bliskich dopasowań zamiast zgadywać.';
+
+  @override
+  String get pinAction => 'Przypnij';
+
+  @override
+  String get unpinAction => 'Odepnij';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Przypięto: $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Odpięto: $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Dlaczego: $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Usunąć: $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Osoba $name jest przypięta. Jej próbki głosu zostaną usunięte, Omi przestanie ją rozpoznawać, a dawne transkrypcje pokażą ją jako nienazwanego mówcę. Tej czynności nie można cofnąć.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Usuń: $name';
+  }
+
+  @override
+  String get selectPeople => 'Wybierz osoby';
+
+  @override
+  String get cleanUpEllipsis => 'Uporządkuj…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Osób, co do których Omi nie ma pewności: $count',
+      one: '1 osoba, co do której Omi nie ma pewności',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'Głównie źle usłyszane imiona. Przejrzyj je i usuń te, które nie są prawdziwe.';
+
+  @override
+  String get reviewAction => 'Przejrzyj';
+
+  @override
+  String get cleanUpTitle => 'Uporządkuj';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi nie ma pewności co do tych osób ($count). Większość to imiona źle usłyszane w transkrypcjach. Odznacz każdego, kogo chcesz zachować.',
+      one: 'Omi nie ma pewności co do tej osoby. Odznacz ją, aby ją zachować.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Przypięte osoby nigdy nie są uwzględniane w porządkowaniu.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Usuń osoby: $count',
+      one: 'Usuń 1 osobę',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Usunięto osoby: $count',
+      one: 'Usunięto 1 osobę',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Nie ma nic do uporządkowania';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi na razie nie ma wątpliwości co do nikogo.';
+
+  @override
+  String get selectAllSkipsPinned => '„Zaznacz wszystko” pomija przypięte osoby. Usuwaj je pojedynczo na ich stronie.';
+
+  @override
+  String get pinnedNotSelectable => 'Przypięta, nie można wybrać';
+
+  @override
+  String get ignoredVoicesTitle => 'Ignorowane głosy';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcasty i inne głosy oznaczone jako „To nie osoba”';
+
+  @override
+  String get ignoredVoicesEmpty => 'Brak ignorowanych głosów';
+
+  @override
+  String get restoreAction => 'Przywróć';
+
+  @override
+  String get voiceRestoredToast => 'Omi może znowu zapytać o ten głos';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Ktoś inny…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'To nie osoba';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Nie wiem';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'To ja';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Najbliższe głosy';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Osoby z ostatnich rozmów';
+
+  @override
+  String get voiceMatchClose => 'Bliskie dopasowanie';
+
+  @override
+  String get voiceMatchPossible => 'Możliwe dopasowanie';
+
+  @override
+  String get voiceMatchWeak => 'Słabe dopasowanie';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Dopasowanie głosu: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Każda odpowiedź uczy Omi głosu i zwiększa pewność co do tej osoby.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Odpowiedź „Tak” zwiększa pewność co do osoby $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Utrzymuje dokładność Twojego profilu głosowego, dzięki czemu Omi nigdy nie uzna Cię za kogoś innego.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Zapisano jako $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Zapisano jako Ty';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi nie zapyta ponownie o ten głos';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Oznaczono jako $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Oznaczono jako Ty';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Oznaczono jako „To nie osoba”';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Usunięto oznaczenie';
+
+  @override
+  String get whoIsItTitle => 'Kto to?';
+
+  @override
+  String get newPersonEllipsis => 'Nowa osoba…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Dodaj „$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Wszyscy';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Dotyczy każdej wypowiedzi tego mówcy';
+
+  @override
+  String get collapseAction => 'Zwiń';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'To nie ja';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Oznacz je jeszcze w $count rozmowach.',
+      one: 'Oznacz je jeszcze w 1 rozmowie.',
+    );
+    return '$_temp0';
+  }
 }

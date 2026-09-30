@@ -11681,4 +11681,471 @@ class AppLocalizationsHr extends AppLocalizations {
   String diagnosticsCountSincePairing(int count) {
     return '$count od uparivanja';
   }
+
+  @override
+  String get peopleFilterLowConfidence => 'Niska pouzdanost';
+
+  @override
+  String get peopleFilterPinned => 'Prikvačeno';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count prikvačeno',
+      one: '1 prikvačeno',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Potvrđeno';
+
+  @override
+  String get confidenceLikely => 'Vjerojatno';
+
+  @override
+  String get confidenceUnverified => 'Neprovjereno';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Pouzdanost: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ručno označeno $count puta',
+      one: 'Ručno označeno jednom',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Odabrano u prijedlozima: $count',
+      one: 'Odabrano u 1 prijedlogu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ručno potvrđena podudaranja: $count',
+      one: 'Ručno potvrđeno 1 podudaranje',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Samo automatski povezano, nikad potvrđeno';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Nikad potvrđeno';
+
+  @override
+  String get confidenceReasonCorrected => 'Podudaranje je ručno ispravljeno';
+
+  @override
+  String get confidenceReasonVoiceReady => 'glas spreman';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'treba glas';
+
+  @override
+  String get confidenceReasonNotHeard => 'još nije čuto';
+
+  @override
+  String get confidenceSheetTitle => 'Pouzdanost';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi prepoznaje glas osobe $name, a glas je potvrđen.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi obično prepoznaje glas osobe $name, ali je potvrđen tek nekoliko puta.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Ništa u tvojim odgovorima još ne potvrđuje osobu $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Dokazi';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ručno označeno u $count razgovora',
+      one: 'Ručno označeno u 1 razgovoru',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Da na $count prijedloga',
+      one: 'Da na 1 prijedlog',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Odabrano u prijedlozima: $count',
+      one: 'Odabrano u 1 prijedlogu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Potvrđeno automatskih podudaranja: $count',
+      one: 'Potvrđeno 1 automatsko podudaranje',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Podudaranja premještena na nekog drugog: $count',
+      one: '1 podudaranje premješteno na nekog drugog',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nepotvrđenih automatskih podudaranja: $count',
+      one: '1 automatsko podudaranje nije potvrđeno',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Uzorak glasa spreman';
+
+  @override
+  String get evidenceNoVoice => 'Još nema uzorka glasa';
+
+  @override
+  String get evidenceNotHeard => 'Još nije čuto u razgovoru';
+
+  @override
+  String get evidenceNothing => 'Još nema tvojih oznaka ni potvrda';
+
+  @override
+  String get effectCountsALot => 'Puno vrijedi';
+
+  @override
+  String get effectCounts => 'Vrijedi';
+
+  @override
+  String get effectCountsALittle => 'Malo vrijedi';
+
+  @override
+  String get effectBarelyCounts => 'Jedva da vrijedi';
+
+  @override
+  String get effectCountsAgainst => 'Vrijedi protiv';
+
+  @override
+  String get effectNeeded => 'Potrebno za Potvrđeno';
+
+  @override
+  String get confidenceToReachConfirmed => 'Za dostizanje statusa Potvrđeno';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi treba i uzorak glasa osobe $name. Označi je uz uključeno „Zapamti glasove”.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return 'Osoba $name: Potvrđeno. Omi uči iz svake oznake.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Pouzdanost bitno mijenjaju samo tvoji odgovori. Automatska podudaranja sama jedva da vrijede.';
+
+  @override
+  String get personWhyConfidence => 'Zašto?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Prikvači $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Zadrži osobu $name i očekuj je u svojim razgovorima';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi će te tražiti da potvrdiš bliska podudaranja umjesto da nagađa.';
+
+  @override
+  String get pinAction => 'Prikvači';
+
+  @override
+  String get unpinAction => 'Otkvači';
+
+  @override
+  String personPinnedToast(String name) {
+    return 'Prikvačeno: $name';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return 'Otkvačeno: $name';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Zašto $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Obrisati $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return 'Osoba $name je prikvačena. Njezini uzorci glasa bit će uklonjeni, Omi je više neće prepoznavati, a u prošlim transkriptima prikazivat će se kao govornik bez imena. Ovo se ne može poništiti.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Obriši $name';
+  }
+
+  @override
+  String get selectPeople => 'Odaberi osobe';
+
+  @override
+  String get cleanUpEllipsis => 'Očisti…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Osobe u koje Omi nije siguran: $count',
+      one: '1 osoba u koju Omi nije siguran',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody => 'Uglavnom krivo čuta imena. Pregledaj ih i ukloni ona koja nisu stvarna.';
+
+  @override
+  String get reviewAction => 'Pregledaj';
+
+  @override
+  String get cleanUpTitle => 'Čišćenje';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi nije siguran u ovih $count osoba. Većinom su to krivo čuta imena iz transkripata. Odznači one koje želiš zadržati.',
+      one: 'Omi nije siguran u ovu osobu. Odznači je da je zadržiš.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Prikvačene osobe nikad nisu uključene u čišćenje.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Obriši osoba: $count',
+      one: 'Obriši 1 osobu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Obrisano osoba: $count',
+      one: '1 osoba obrisana',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Nema se što čistiti';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi trenutno nema nedoumica ni oko koga.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      '„Odaberi sve” preskače prikvačene osobe. Obriši ih jednu po jednu na njihovoj stranici.';
+
+  @override
+  String get pinnedNotSelectable => 'Prikvačeno, ne može se odabrati';
+
+  @override
+  String get ignoredVoicesTitle => 'Zanemareni glasovi';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcasti i drugi glasovi označeni kao „Nije osoba”';
+
+  @override
+  String get ignoredVoicesEmpty => 'Nema zanemarenih glasova';
+
+  @override
+  String get restoreAction => 'Vrati';
+
+  @override
+  String get voiceRestoredToast => 'Omi bi opet mogao pitati o ovom glasu';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Netko drugi…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Nije osoba';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'Ne znam';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'To sam ja';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Najbliži glasovi';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Osobe iz nedavnih razgovora';
+
+  @override
+  String get voiceMatchClose => 'Blisko podudaranje';
+
+  @override
+  String get voiceMatchPossible => 'Moguće podudaranje';
+
+  @override
+  String get voiceMatchWeak => 'Slabo podudaranje';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Podudaranje glasa: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Svaki odgovor uči Omi jedan glas i povećava pouzdanost te osobe.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '„Da” povećava pouzdanost osobe $name.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Održava tvoj glasovni profil točnim da te Omi nikad ne označi kao nekog drugog.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Spremljeno kao $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Spremljeno kao ti';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi više neće pitati o ovom glasu';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Označeno kao $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Označeno kao ti';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Označeno kao „nije osoba”';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Oznaka uklonjena';
+
+  @override
+  String get whoIsItTitle => 'Tko je to?';
+
+  @override
+  String get newPersonEllipsis => 'Nova osoba…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Dodaj „$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Svi';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Primjenjuje se na sve retke ovog govornika';
+
+  @override
+  String get collapseAction => 'Sažmi';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'Nisam ja';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Označite ih u još $count razgovora.',
+      one: 'Označite ih u još 1 razgovoru.',
+    );
+    return '$_temp0';
+  }
 }
