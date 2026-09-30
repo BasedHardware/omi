@@ -260,6 +260,11 @@ def _decode_transcript_segments_strict(
     raise ValueError(f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}')
 
 
+def decode_transcript_segments_verified(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
+    """Strict decode for callers outside this module: raises unless the blob decodes and decrypts."""
+    return _decode_transcript_segments_strict(uid, raw_segments, compressed, require_decryption=True)
+
+
 def _decode_public_transcript_segments_bounded(
     uid: str,
     raw_segments: Any,

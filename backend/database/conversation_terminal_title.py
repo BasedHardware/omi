@@ -59,17 +59,14 @@ def transcript_texts(uid: str, conversation: Mapping[str, Any]) -> tuple[list[st
     if not raw_segments:
         return [], True
     try:
-        segments = conversations_db._decode_transcript_segments_strict(
-            uid,
-            raw_segments,
-            bool(conversation.get('transcript_segments_compressed')),
-            require_decryption=True,
+        segments = conversations_db.decode_transcript_segments_verified(
+            uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
         )
     except (TypeError, ValueError, zlib.error):
         return [], False
     texts: list[str] = []
     for segment in segments:
-        text = segment.get('text') if isinstance(segment, Mapping) else None
+        text: Any = segment.get('text') if isinstance(segment, Mapping) else None
         if isinstance(text, str) and text.strip():
             texts.append(text)
     return texts, True
