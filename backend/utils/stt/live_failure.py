@@ -143,9 +143,16 @@ class PendingLiveFailover:
     """
 
     def __init__(
-        self, *, from_mode: str, to_mode: str, component: str = 'stt_live_session', reason: str = 'connection_lost'
+        self,
+        *,
+        from_mode: str,
+        to_mode: str,
+        component: str = 'stt_live_session',
+        reason: str = 'connection_lost',
+        capacity_subtype: str | None = None,
     ) -> None:
         self.component, self.reason = component, reason
+        self.capacity_subtype = capacity_subtype
         self.from_mode = from_mode
         self.to_mode = to_mode
         self._settled = False
@@ -166,6 +173,7 @@ class PendingLiveFailover:
             to_mode=self.to_mode,
             reason=self.reason,
             outcome='recovered',
+            **({'capacity_subtype': self.capacity_subtype} if self.capacity_subtype is not None else {}),
         )
 
     def note_failure(self, typed_reason: str | None) -> None:

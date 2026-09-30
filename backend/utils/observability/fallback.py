@@ -57,6 +57,10 @@ ALLOWED_REASONS = frozenset(
     }
 )
 
+# Diagnostic detail in the log only. The shared metric's reason vocabulary and
+# label dimensions remain unchanged.
+ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'replay_ring_cap'})
+
 ALLOWED_COMPONENTS = frozenset(
     {
         'sync_dispatch',
@@ -94,6 +98,7 @@ def record_fallback(
     reason: str,
     outcome: str,
     log: logging.Logger | None = None,
+    capacity_subtype: str | None = None,
 ) -> None:
     """Increment ``omi_fallback_total`` and emit a matching warning log.
 
@@ -119,15 +124,12 @@ def record_fallback(
 
     emit_log = log or logger
     try:
-        emit_log.warning(
-            '%s component=%s from=%s to=%s reason=%s outcome=%s',
-            FALLBACK_EVENT,
-            component_label,
-            from_label,
-            to_label,
-            reason_label,
-            outcome_label,
-        )
+        fields = (FALLBACK_EVENT, component_label, from_label, to_label, reason_label, outcome_label)
+        if reason_label == 'capacity_full':
+            subtype = capacity_subtype if capacity_subtype in ALLOWED_CAPACITY_SUBTYPES else 'unknown'
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s subtype=%s', *fields, subtype)
+        else:
+            emit_log.warning('%s component=%s from=%s to=%s reason=%s outcome=%s', *fields)
     except Exception:
         pass
 

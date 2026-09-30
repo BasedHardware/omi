@@ -215,6 +215,15 @@ Speech-free capture can still roll off, and the current chunk must fit. The
 `omi_stt_window_replay_safe_trims_total` counter records actual anchor and
 speech-free trims. If pending audio itself exceeds the ring, the leg fails
 with `capacity_full` and replays from the anchor onto the next vendor.
+The window socket separately retains PCM from its POST anchor. Its VAD speech
+spans are pruned on each POST-anchor advance; rapid speech/silence toggles
+coalesce the closest adjacent spans at the 1,024-entry bound rather than
+ending an otherwise healthy session. Coalescing retains every speech sample
+and may conservatively include the short silence between two spans. The PCM
+buffer's 60-second bound still fails over when un-emitted audio outgrows it.
+Fallback logs keep `reason=capacity_full` and add a bounded `subtype` of
+`buffer_cap`, `replay_ring_cap`, or `admission` (or `unknown`); the shared
+fallback metric gains no new label.
 Growing windows re-post overlapping context. A minimum 6 s interval between
 POST starts bounds sustained requests to eight per listen pod per 6 s, with
 up to 216–320 synchronized sessions fleet-wide at the current pod count.

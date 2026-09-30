@@ -156,12 +156,13 @@ async def connect_configured_chain(
             raise ProviderChainUnavailable(retry_after)
     origin = primary_service.value
     prior_reason = 'circuit_open'
+    prior_capacity_subtype: str | None = None
     attempted = False
     primary_open = False
     probes = max(1, int(os.getenv('STT_CIRCUIT_HALF_OPEN_PROBES', '1')))
 
     async def attempt(service: STTService, connect: Connect) -> tuple[STTSocket, STTService] | None:
-        nonlocal origin, prior_reason, attempted
+        nonlocal origin, prior_reason, prior_capacity_subtype, attempted
         attempted = True
         circuit = _circuit_for_primary(service)
         on_success, on_close = circuit.deferred_result_callbacks()
@@ -197,6 +198,7 @@ async def connect_configured_chain(
             # omi_fallback_total keeps its bounded vocabulary: the typed account
             # deaths fold onto quota/auth exactly like the socket path does.
             fallback_reason = fallback_reason_for_typed_death(reason) if account_rejection else reason
+            capacity_subtype = getattr(error, 'capacity_subtype', None) if reason == 'capacity_full' else None
             failed.add(provider_for_service(service) or service.value)
             record_stt_provider_connect(provider=service.value, outcome=CONNECT_FAILURE, reason=reason)
             if reason == 'auth' or account_rejection:
@@ -218,8 +220,9 @@ async def connect_configured_chain(
                     to_mode=service.value,
                     reason=fallback_reason,
                     outcome='degraded',
+                    **({'capacity_subtype': capacity_subtype} if capacity_subtype is not None else {}),
                 )
-            origin, prior_reason = service.value, fallback_reason
+            origin, prior_reason, prior_capacity_subtype = service.value, fallback_reason, capacity_subtype
             return None
         LEG_ATTEMPTS.labels(to_mode=service.value, outcome='success').inc()
         _note_connect_result(failed_provider=None)
@@ -231,7 +234,11 @@ async def connect_configured_chain(
             on_success()
         if service != primary_service or primary_open:
             pending = PendingLiveFailover(
-                component='stt_selection', from_mode=origin, to_mode=service.value, reason=prior_reason
+                component='stt_selection',
+                from_mode=origin,
+                to_mode=service.value,
+                reason=prior_reason,
+                capacity_subtype=prior_capacity_subtype,
             )
             attach_outcome = getattr(socket, 'set_selection_outcome', None)
             if callable(attach_outcome):
@@ -243,6 +250,7 @@ async def connect_configured_chain(
                     to_mode=service.value,
                     reason=prior_reason,
                     outcome='recovered',
+                    **({'capacity_subtype': prior_capacity_subtype} if prior_capacity_subtype is not None else {}),
                 )
         return socket, service
 
@@ -282,6 +290,7 @@ async def connect_configured_chain(
         circuit = _circuit_for_primary(primary_service)
         if circuit.allow_request(max_probes=1, force=True):
             prior_reason = 'last_resort'
+            prior_capacity_subtype = None
             result = await attempt(primary_service, connect_primary)
             if result is not None:
                 return result
@@ -297,6 +306,7 @@ async def connect_configured_chain(
                 continue
             if _circuit_for_primary(service).allow_request(max_probes=1, force=True):
                 prior_reason = 'last_resort'
+                prior_capacity_subtype = None
                 result = await attempt(service, connect)
                 if result is not None:
                     return result
@@ -308,5 +318,6 @@ async def connect_configured_chain(
         to_mode='unavailable',
         reason=prior_reason,
         outcome='exhausted',
+        **({'capacity_subtype': prior_capacity_subtype} if prior_capacity_subtype is not None else {}),
     )
     raise RuntimeError('Configured STT chain exhausted')
