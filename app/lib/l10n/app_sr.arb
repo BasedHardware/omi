@@ -11217,5 +11217,9 @@
     "deleteChatMessage": "Trajno nestaje iz prethodnih razgovora.",
     "deleteChat": "Izbriši razgovor",
     "appsAskWith": "Pitaj Omi uz",
-    "conversationsTodayCount": "{count, plural, =0{Danas nema razgovora.} =1{1 razgovor danas.} other{{count} razgovora danas.}}"
+    "conversationsTodayCount": "{count, plural, =0{Danas nema razgovora.} =1{1 razgovor danas.} other{{count} razgovora danas.}}",
+    "meetingScreenshotsTitle": "Шта је било на екрану",
+    "meetingScreenshotFallbackCaption": "Снимак екрана са овог састанка",
+    "deleteMeetingScreenshotTitle": "Избрисати снимак екрана?",
+    "deleteMeetingScreenshotMessage": "Ово уклања снимак екрана из белешке овог састанка. Не може се опозвати."
 }

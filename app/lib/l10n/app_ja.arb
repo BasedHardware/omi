@@ -3657,5 +3657,9 @@
     "deleteChatMessage": "過去のチャットから完全に消えます。",
     "deleteChat": "チャットを削除",
     "appsAskWith": "Omiに聞くときに使う",
-    "conversationsTodayCount": "{count, plural, =0{今日の会話はまだありません。} =1{今日の会話は1件。} other{今日の会話は{count}件。}}"
+    "conversationsTodayCount": "{count, plural, =0{今日の会話はまだありません。} =1{今日の会話は1件。} other{今日の会話は{count}件。}}",
+    "meetingScreenshotsTitle": "画面に表示されていた内容",
+    "meetingScreenshotFallbackCaption": "このミーティングのスクリーンショット",
+    "deleteMeetingScreenshotTitle": "スクリーンショットを削除しますか？",
+    "deleteMeetingScreenshotMessage": "このミーティングのメモからスクリーンショットを削除します。この操作は取り消せません。"
 }

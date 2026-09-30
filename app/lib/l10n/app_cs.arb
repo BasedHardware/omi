@@ -3657,5 +3657,9 @@
     "deleteChatMessage": "Z předchozích chatů zmizí natrvalo.",
     "deleteChat": "Smazat chat",
     "appsAskWith": "Ptejte se Omi s",
-    "conversationsTodayCount": "{count, plural, =0{Dnes žádné rozhovory.} =1{1 rozhovor dnes.} other{{count} rozhovorů dnes.}}"
+    "conversationsTodayCount": "{count, plural, =0{Dnes žádné rozhovory.} =1{1 rozhovor dnes.} other{{count} rozhovorů dnes.}}",
+    "meetingScreenshotsTitle": "Co bylo na obrazovce",
+    "meetingScreenshotFallbackCaption": "Snímek obrazovky z této schůzky",
+    "deleteMeetingScreenshotTitle": "Smazat snímek obrazovky?",
+    "deleteMeetingScreenshotMessage": "Snímek obrazovky bude odebrán z poznámky této schůzky. Tuto akci nelze vrátit."
 }

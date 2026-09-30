@@ -11719,4 +11719,17 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get meetingScreenshotsTitle => 'Ce qui était à l\'écran';
+
+  @override
+  String get meetingScreenshotFallbackCaption => 'Capture d\'écran de cette réunion';
+
+  @override
+  String get deleteMeetingScreenshotTitle => 'Supprimer la capture d\'écran ?';
+
+  @override
+  String get deleteMeetingScreenshotMessage =>
+      'La capture d\'écran sera retirée de la note de cette réunion. Cette action est irréversible.';
 }

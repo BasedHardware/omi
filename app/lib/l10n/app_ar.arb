@@ -3657,5 +3657,9 @@
     "deleteChatMessage": "ستُحذف من المحادثات السابقة نهائيًا.",
     "deleteChat": "حذف المحادثة",
     "appsAskWith": "اسأل Omi مع",
-    "conversationsTodayCount": "{count, plural, =0{لا محادثات اليوم.} =1{محادثة واحدة اليوم.} other{{count} محادثات اليوم.}}"
+    "conversationsTodayCount": "{count, plural, =0{لا محادثات اليوم.} =1{محادثة واحدة اليوم.} other{{count} محادثات اليوم.}}",
+    "meetingScreenshotsTitle": "ما كان على الشاشة",
+    "meetingScreenshotFallbackCaption": "لقطة شاشة من هذا الاجتماع",
+    "deleteMeetingScreenshotTitle": "حذف لقطة الشاشة؟",
+    "deleteMeetingScreenshotMessage": "سيؤدي هذا إلى إزالة لقطة الشاشة من ملاحظة هذا الاجتماع. لا يمكن التراجع عن ذلك."
 }

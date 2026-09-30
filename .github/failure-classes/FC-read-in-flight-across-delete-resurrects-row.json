@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-read-in-flight-across-delete-resurrects-row",
+  "violated_contract": "A client that both re-reads a collection (a timer, a focus, an expiry refresh) and mutates it (a delete) must not adopt a read that was issued before the mutation committed. A GET in flight across a delete answers with the pre-delete set; applied after the delete's response it brings the deleted item back on screen until the next read, which reads to the user as the delete not having worked.",
+  "canonical_prevention": "Fence adoption with a generation counter bumped when a read starts and again when a mutation commits; a read's response is applied only if its generation is still current. Prove it with controllable futures in both orderings (read issued before the delete starts, and after it starts), each resolving after the delete commits, asserting the deleted item stays gone.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/conversation_detail/widgets/**",
+    "web/app/src/hooks/**"
+  ],
+  "status": "open"
+}

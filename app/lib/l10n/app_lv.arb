@@ -3657,5 +3657,9 @@
     "deleteChatMessage": "Tā uz visiem laikiem pazudīs no iepriekšējām tērzēšanām.",
     "deleteChat": "Dzēst tērzēšanu",
     "appsAskWith": "Jautājiet Omi ar",
-    "conversationsTodayCount": "{count, plural, =0{Šodien sarunu nav.} =1{1 saruna šodien.} other{{count} sarunas šodien.}}"
+    "conversationsTodayCount": "{count, plural, =0{Šodien sarunu nav.} =1{1 saruna šodien.} other{{count} sarunas šodien.}}",
+    "meetingScreenshotsTitle": "Kas bija ekrānā",
+    "meetingScreenshotFallbackCaption": "Ekrānuzņēmums no šīs sapulces",
+    "deleteMeetingScreenshotTitle": "Dzēst ekrānuzņēmumu?",
+    "deleteMeetingScreenshotMessage": "Ekrānuzņēmums tiks noņemts no šīs sapulces piezīmes. To nevar atsaukt."
 }
