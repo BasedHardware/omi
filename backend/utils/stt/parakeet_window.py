@@ -632,9 +632,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             # previous utterance, not this new fragment.
             self._pause_requested = False
         self._next_send_speech = True
-        if self._stranded_fragment_answered:
-            # Retained empty context must be eligible again within the original
-            # first-text budget when a new utterance arrives.
+        if self._stranded_flush_used or self._stranded_fragment_answered:
+            # Re-arm within the original first-text budget even when speech
+            # resumes before the stranded POST's empty answer has landed.
             self._next_post = 0.0
         self._stranded_fragment_answered = False
 

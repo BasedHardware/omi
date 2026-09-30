@@ -1563,6 +1563,68 @@ async def test_resumed_speech_after_empty_stranded_answer_posts_before_first_tex
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('answer_after_finalize', [False, True])
+async def test_resumed_speech_before_empty_stranded_answer_posts_before_first_text_deadline(
+    monkeypatch, answer_after_finalize
+):
+    monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '15')
+    actual, base, previous, _client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+
+    def joined_response(_n, kwargs):
+        return {'segments': [{'text': 'Joined.', 'start': 0.24, 'end': _wav_duration(kwargs) - 0.1}]}
+
+    client = GateFirstClient([{'text': ''}, joined_response])
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.asyncio, 'sleep', _REAL_SLEEP)
+    loop = asyncio.get_running_loop()
+    real_time = loop.time
+    clock[0] = real_time()
+    monkeypatch.setattr(loop, 'time', lambda: clock[0])
+    try:
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+        timer = previous.raw._first_text_timer
+        assert timer is not None
+        sample = await _settled_fragment_silence(actual, clock, sample, 130)
+        assert client.started.is_set() and client.gate is not None
+        assert len(client.requests) == 1
+        assert previous.raw._post_in_flight
+        assert not previous.raw._stranded_fragment_answered
+        assert previous.raw._next_post > timer.when()
+        retained_pcm = _posted_pcm(client.requests[0][1])[: previous.raw._received_bytes]
+
+        # The real VAD/receiver calls mark_speech while the empty POST is held.
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+        assert previous.raw._post_in_flight
+        assert not previous.raw._stranded_fragment_answered
+        if not answer_after_finalize:
+            client.gate.set_result(None)
+            await _REAL_SLEEP(0)
+        sample = await _settled_fragment_silence(actual, clock, sample, 130)
+        if answer_after_finalize:
+            assert previous.raw._post_in_flight
+            assert previous.raw._capture_silence_flush
+            previous.raw.finalize()
+            client.gate.set_result(None)
+        for _ in range(100):
+            if base.emitted:
+                break
+            await _REAL_SLEEP(0)
+        assert loop.time() < timer.when()
+        assert len(client.requests) == 2
+        assert _posted_pcm(client.requests[1][1]).startswith(retained_pcm)
+        assert [item['text'] for item in base.emitted] == ['Joined.']
+        assert previous.raw._first_text_timer is None
+        assert timer.cancelled()
+        assert not previous.is_connection_dead
+        assert not replayed and not callbacks
+    finally:
+        if client.gate is not None and not client.gate.done():
+            client.gate.set_result(None)
+        monkeypatch.setattr(loop, 'time', real_time)
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('close_path', ['socket', 'receiver'])
 async def test_empty_stranded_answer_drains_promptly_without_post_pacing(monkeypatch, close_path):
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '15')
