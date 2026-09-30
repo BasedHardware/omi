@@ -235,11 +235,13 @@ def record_ignored_voice(
         kept = [
             e
             for e in ignored_voices(state)
-            if ignored_voice_key(e['conversation_id'], e['speaker_id'])
+            if ignored_voice_key(str(e['conversation_id']), int(e['speaker_id']))
             != ignored_voice_key(conversation_id, speaker_id)
         ]
         kept = [entry, *kept][:IGNORED_VOICES_LIMIT]
-        update = {'ignored_voices': {ignored_voice_key(e['conversation_id'], e['speaker_id']): e for e in kept}}
+        update = {
+            'ignored_voices': {ignored_voice_key(str(e['conversation_id']), int(e['speaker_id'])): e for e in kept}
+        }
         if snapshot.exists:
             transaction.update(ref, update)
         else:

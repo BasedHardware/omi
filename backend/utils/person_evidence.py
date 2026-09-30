@@ -86,7 +86,7 @@ def merge_backfill(
     if not changed:
         return None
     # A backfill does not know when the user labeled; keep any real timestamp.
-    if evidence and isinstance(evidence, Mapping) and evidence.get('last_labeled_at'):
+    if evidence and evidence.get('last_labeled_at'):
         current['last_labeled_at'] = evidence['last_labeled_at']
     else:
         current.pop('last_labeled_at', None)
