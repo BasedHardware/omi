@@ -8,14 +8,20 @@ its original mode and cohort. --limit bounds newly evaluated jobs per invocation
 Audit field states are Fernet-encrypted with the local audit.key (0600), including
 missing-field information. Keep that key with audit.jsonl for rollback. The
 append-only audit is a write-ahead decision log; results.jsonl records outcomes.
-An interrupted commit is reconciled using the entire expected after-row digest,
-never retried blindly. Cursor checkpoints advance only after a page drains;
+Ambiguous commits and error receipts are reconciled using the entire expected
+after-row digest, never retried blindly. Written receipts persist pending/complete
+projection status; resume retries pending indexing independently of mutations and
+exits nonzero while convergence remains pending. An incomplete journal tail is
+preserved separately and dropped with a counted warning; other corruption fails.
+Cursor checkpoints advance only after a page drains;
 processed IDs cover crashes mid-page. Errors remain retryable on resume.
 
 Calendar safety protects nonempty rule discards: stored overlaps and connected
 Google Calendar accounts skip without provider calls/token-refresh writes. Empty
 transcript rule discards bypass calendars; photos and every other fence remain.
 Kept titles require nonempty text; protected rule discards never receive titles.
+Client display titles, notes, events and tasks are protected, including late
+projections arriving between classification and the transaction.
 Summary breakdowns group R/K and protected/empty skips by source, rule and summed
 audio_files.duration seconds: 0, (0,5), [5,30), [30,120], >120, or unknown.
 Missing/invalid duration metadata is unknown, never inferred from capture time.
@@ -56,6 +62,7 @@ from google.api_core.exceptions import Aborted, Conflict, DeadlineExceeded, Serv
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationSource
 from scripts.conversation_relevance_backfill import AUDIO_TRANSCRIPT_SOURCES
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
@@ -194,6 +201,17 @@ def eligibility(row: dict[str, Any] | None, job_id: str, job: dict[str, Any]) ->
         return 'user_title'
     if structured_has_protected_content(structured, row.get('user_title')):
         return 'protected_structure'
+    for field in PROJECTION_FAMILY_FIELDS:
+        projection = row.get(field)
+        if projection is not None and (
+            not isinstance(projection, dict)
+            or not isinstance(projection.get('structure'), dict)
+            # Reuse the server's protected-structure predicate; projection tasks
+            # live outside structure, unlike canonical structured.action_items.
+            or structured_has_protected_content(projection['structure'])
+            or projection.get('action_items')
+        ):
+            return 'client_processing_content'
     if row.get('photos') or row.get('has_photos'):
         return 'photos'
     if row.get('sync_relevance_user_kept'):
@@ -273,7 +291,8 @@ class RateLimiter:
 class RunLog:
     def __init__(self, path: Path, config: dict[str, Any], *, resume: bool = False):
         self.path = path
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
+        self.journal_warnings: Counter[str] = Counter()
         if not path.is_absolute():
             raise ValueError('run directory must be absolute')
         if resume:
@@ -297,7 +316,44 @@ class RunLog:
 
     def read(self, name: str) -> list[dict[str, Any]]:
         path = self.path / name
-        return [json.loads(line) for line in path.read_text().splitlines() if line] if path.exists() else []
+        with self.lock:
+            if not path.exists():
+                return []
+            data = path.read_bytes()
+            lines = data.splitlines(keepends=True)
+            records = []
+            offset = 0
+            for i, line in enumerate(lines):
+                try:
+                    record = json.loads(line)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    if i != len(lines) - 1 or line.endswith(b'\n'):
+                        raise ValueError(f'malformed journal: {name}, line {i + 1}') from None
+                    # Only an unterminated final record can be crash debris.
+                    # Preserve its bytes before removing it from the append path.
+                    tail = self.path / f'{name}.torn-{uuid.uuid4().hex}'
+                    with tail.open('xb') as file:
+                        file.write(line)
+                        file.flush()
+                        os.fsync(file.fileno())
+                    with path.open('r+b') as file:
+                        file.truncate(offset)
+                        file.flush()
+                        os.fsync(file.fileno())
+                    self.journal_warnings[name] += 1
+                    logger.warning('journal_tail_dropped journal=%s count=%d', name, self.journal_warnings[name])
+                    break
+                if not isinstance(record, dict):
+                    raise ValueError(f'malformed journal: {name}, line {i + 1}')
+                records.append(record)
+                offset += len(line)
+            if lines and len(records) == len(lines) and not lines[-1].endswith(b'\n'):
+                # A complete final JSON object still needs a separator for append.
+                with path.open('ab') as file:
+                    file.write(b'\n')
+                    file.flush()
+                    os.fsync(file.fileno())
+            return records
 
     def save(self, name: str, value: Any) -> None:
         temporary = self.path / f'{name}.{uuid.uuid4().hex}.tmp'
@@ -321,17 +377,30 @@ class RunLog:
         return json.loads(self.cipher.decrypt(token.encode()))
 
     def finish(self, record: dict[str, Any], outcome: str) -> None:
-        result = {
-            'decision_id': record['decision_id'],
-            'job_id': record['job_id'],
-            'outcome': outcome,
-            'commit_revision': record.get('commit_revision'),
-            'at': utc_now(),
-        }
-        self.append('results.jsonl', result)
-        self.results[result['decision_id']] = result
-        if outcome != 'error':
-            self.processed.add(result['job_id'])
+        with self.lock:
+            existing = self.results.get(record['decision_id'], {})
+            result = {
+                'decision_id': record['decision_id'],
+                'job_id': record['job_id'],
+                'outcome': outcome,
+                'commit_revision': record.get('commit_revision'),
+                'projection_status': (
+                    record.get('projection_status', existing.get('projection_status', 'pending'))
+                    if outcome == 'written'
+                    else None
+                ),
+            }
+            if result != {k: v for k, v in existing.items() if k != 'at'}:
+                result['at'] = utc_now()
+                self.append('results.jsonl', result)
+                self.results[result['decision_id']] = result
+            if outcome != 'error':
+                self.processed.add(result['job_id'])
+
+    def pending_projections(self) -> list[dict[str, Any]]:
+        return [
+            r for r in self.results.values() if r['outcome'] == 'written' and r.get('projection_status') != 'complete'
+        ]
 
     def checkpoint(self, cursor: str) -> None:
         self.cursor = cursor
@@ -391,17 +460,23 @@ class Runtime:
         snapshot = self.client.document(f'users/{uid}').get()
         return (snapshot.to_dict() or {}).get('time_zone') if snapshot.exists else None
 
-    def sync(self, job: dict[str, Any]) -> None:
+    def sync(self, job: dict[str, Any]) -> bool:
+        if not valid_binding(job):
+            return False
         try:
             if self.converge is not None:
-                self.converge(job['uid'], job['conversation_id'])
+                success = self.converge(job['uid'], job['conversation_id'])
             else:
                 module = importlib.import_module('utils.conversations.typesense_index')
-                module.sync_conversation_index_after_write(
+                success = module.sync_conversation_index_after_write(
                     job['uid'], job['conversation_id'], firestore_client=self.client, db_client=self.client
                 )
+            if success is True:
+                return True
         except Exception:
-            logger.warning('projection_sync_failed id=%s', safe_id(job['uid'], job['conversation_id']))
+            pass
+        logger.warning('projection_sync_pending id=%s', safe_id(job['uid'], job['conversation_id']))
+        return False
 
 
 def classify(runtime: Runtime, row: dict[str, Any], job: dict[str, Any], ref: Any) -> tuple[str, str, dict[str, Any]]:
@@ -503,20 +578,88 @@ def write_cas(
     return {'outcome': outcome, 'commit_revision': revision}
 
 
-def retry_write(limiter: RateLimiter, operation: Callable[[], Any], attempts: int = 5) -> Any:
+def retry_write(
+    limiter: RateLimiter,
+    operation: Callable[[], Any],
+    attempts: int = 5,
+    *,
+    reconcile: Callable[[], dict[str, Any] | None] | None = None,
+) -> Any:
+    ambiguous = False
     for attempt in range(attempts):
         limiter.acquire()
         try:
-            return operation()
+            result = operation()
         except Exception as exc:
             # The SDK wraps exhausted ABORTED attempts in ValueError.
             cause = exc.__cause__
             if not isinstance(exc, RETRYABLE) and not isinstance(cause, RETRYABLE):
                 raise
+            ambiguous = True
+            if reconcile is not None:
+                recovered = reconcile()
+                if recovered is not None:
+                    return recovered
             if attempt + 1 == attempts:
                 raise
             time.sleep(min(8.0, 0.25 * 2**attempt) + random.uniform(0, 0.2))
+            continue
+        # A previously timed-out commit may become visible between attempts.
+        # Never record the second attempt's eligibility refusal before checking.
+        if ambiguous and reconcile is not None and result['outcome'] != 'written':
+            recovered = reconcile()
+            if recovered is not None:
+                return recovered
+        return result
     raise RuntimeError('unreachable')
+
+
+def reconcile_intent(runtime: Runtime, record: dict[str, Any]) -> dict[str, Any] | None:
+    """Read-only commit recovery: only an exact intended after-row proves a write."""
+    job = runtime.client.collection(JOBS).document(record['job_id']).get().to_dict() or {}
+    if not valid_binding(job) or safe_id(job['uid'], job['conversation_id']) != record.get('id_hash'):
+        return {'outcome': 'interrupted_binding_missing', 'commit_revision': None}
+    snapshot = runtime.client.document(f"users/{job['uid']}/conversations/{job['conversation_id']}").get()
+    current = snapshot.to_dict() if snapshot.exists else None
+    if current is not None and digest(current) == record['after_digest']:
+        revision = getattr(snapshot, 'update_time', None)
+        return {'outcome': 'written', 'commit_revision': revision.isoformat() if revision is not None else None}
+    if current is not None and digest(current) == record['before_digest']:
+        return None  # unchanged, so another CAS attempt is safe
+    return {'outcome': 'interrupted_cas_changed', 'commit_revision': None}
+
+
+def converge_written(
+    runtime: Runtime, log: RunLog, record: dict[str, Any], job: dict[str, Any], limiter: RateLimiter
+) -> None:
+    # Persist the mutation receipt before touching the independently fallible
+    # projection. A crash anywhere from here retains a pending convergence task.
+    record['projection_status'] = 'pending'
+    log.finish(record, 'written')
+    limiter.acquire()
+    record['projection_status'] = 'complete' if runtime.sync(job) else 'pending'
+    log.finish(record, 'written')
+
+
+def retry_pending_projections(runtime: Runtime, log: RunLog, limiter: RateLimiter, workers: int) -> None:
+    intents = {record['decision_id']: record for record in log.read('audit.jsonl')}
+
+    def converge(result: dict[str, Any]) -> None:
+        record = dict(intents[result['decision_id']], commit_revision=result.get('commit_revision'))
+        try:
+            job = runtime.client.collection(JOBS).document(record['job_id']).get().to_dict() or {}
+            if not valid_binding(job) or safe_id(job['uid'], job['conversation_id']) != record.get('id_hash'):
+                return  # cannot safely identify the projection; leave it pending
+            converge_written(runtime, log, record, job, limiter)
+        except Exception:
+            logger.warning('projection_retry_pending job_hash=%s', digest(record['job_id'])[:20])
+
+    pending = log.pending_projections()
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for offset in range(0, len(pending), workers):
+            futures = [pool.submit(converge, result) for result in pending[offset : offset + workers]]
+            for future in futures:
+                future.result()
 
 
 def evaluate(runtime: Runtime, log: RunLog, job_id: str, *, limiter: RateLimiter) -> dict[str, Any]:
@@ -531,6 +674,7 @@ def evaluate(runtime: Runtime, log: RunLog, job_id: str, *, limiter: RateLimiter
         'apply': log.config['apply'],
     }
     audit_written = False
+    job: dict[str, Any] = {}
     try:
         job_snapshot = runtime.client.collection(JOBS).document(job_id).get()
         job = job_snapshot.to_dict() or {}
@@ -576,13 +720,14 @@ def evaluate(runtime: Runtime, log: RunLog, job_id: str, *, limiter: RateLimiter
                                 getattr(snapshot, 'update_time', None),
                                 getattr(job_snapshot, 'update_time', None),
                             ),
+                            reconcile=lambda: reconcile_intent(runtime, record),
                         )
                         outcome = write_result['outcome']
                         record['commit_revision'] = write_result['commit_revision']
                     else:
                         outcome = 'dry_run'
                     if outcome == 'written':
-                        runtime.sync(job)
+                        converge_written(runtime, log, record, job, limiter)
                     return dict(record, outcome=outcome)
     except CannotClassify as exc:
         reason = str(exc)
@@ -591,6 +736,16 @@ def evaluate(runtime: Runtime, log: RunLog, job_id: str, *, limiter: RateLimiter
         # Exception bodies can carry plaintext/customer IDs. Only the type is safe.
         reason = 'error'
         record['error_type'] = type(exc).__name__
+        if audit_written and log.config['apply']:
+            try:
+                recovered = reconcile_intent(runtime, record)
+                if recovered is not None:
+                    record['commit_revision'] = recovered['commit_revision']
+                    if recovered['outcome'] == 'written':
+                        converge_written(runtime, log, record, job, limiter)
+                    return dict(record, outcome=recovered['outcome'])
+            except Exception:
+                pass  # error receipt stays retryable; resume reconciles it again
     record['skip_reason'] = reason
     if not audit_written:
         log.append('audit.jsonl', record)
@@ -614,28 +769,24 @@ def discovery_pages(client: Any, cursor: str | None, page_size: int) -> Iterable
             return
 
 
-def reconcile_pending(runtime: Runtime, log: RunLog, *, allow_projection: bool = False) -> None:
+def reconcile_pending(runtime: Runtime, log: RunLog) -> None:
     for record in log.read('audit.jsonl'):
-        if record['decision_id'] in log.results:
+        existing = log.results.get(record['decision_id'])
+        if existing and existing['outcome'] == 'written':
+            continue
+        has_intent = record['apply'] and record.get('after_digest')
+        if existing and not has_intent:
             continue
         outcome = record.get('skip_reason', 'dry_run')
-        if record['apply'] and record.get('after_digest'):
-            job = runtime.client.collection(JOBS).document(record['job_id']).get().to_dict() or {}
-            if not valid_binding(job) or safe_id(job['uid'], job['conversation_id']) != record.get('id_hash'):
-                outcome = 'interrupted_binding_missing'
+        if has_intent:
+            recovered = reconcile_intent(runtime, record)
+            if recovered is None:
+                if existing and existing['outcome'] != 'error':
+                    continue  # a deliberate CAS refusal, with no observed write
+                outcome = 'error'  # not committed; retry on resume
             else:
-                snapshot = runtime.client.document(f"users/{job['uid']}/conversations/{job['conversation_id']}").get()
-                current = snapshot.to_dict() if snapshot.exists else None
-                if current is not None and digest(current) == record['after_digest']:
-                    outcome = 'written'
-                    revision = getattr(snapshot, 'update_time', None)
-                    record['commit_revision'] = revision.isoformat() if revision is not None else None
-                    if allow_projection:
-                        runtime.sync(job)
-                elif current is not None and digest(current) == record['before_digest']:
-                    outcome = 'error'  # not committed; retry on resume
-                else:
-                    outcome = 'interrupted_cas_changed'
+                outcome = recovered['outcome']
+                record['commit_revision'] = recovered['commit_revision']
         log.finish(record, outcome)
 
 
@@ -650,7 +801,10 @@ def run(
     error_threshold: float = 0.2,
     error_window: int = 50,
 ) -> dict[str, Any]:
-    reconcile_pending(runtime, log, allow_projection=log.config['apply'])
+    limiter = RateLimiter(max_writes_per_second)
+    reconcile_pending(runtime, log)
+    if log.config['apply']:
+        retry_pending_projections(runtime, log, limiter, workers)
     counts: Counter[str] = Counter()
     skips: Counter[str] = Counter()
     rules: Counter[str] = Counter()
@@ -663,7 +817,6 @@ def run(
 
     samples: dict[str, list[str]] = {'R': [], 'K': []}
     recent: deque[bool] = deque(maxlen=error_window)
-    limiter = RateLimiter(max_writes_per_second)
     processed = 0
     frozen = False
     stopped = False
@@ -723,8 +876,10 @@ def run(
         'skip_reasons': dict(skips),
         'breakdown': breakdown,
         'samples': samples,
+        'projection_pending': len(log.pending_projections()),
+        'journal_warnings': dict(log.journal_warnings),
         'stopped_error_rate': stopped,
-        'exit_code': 2 if frozen or stopped else 0,
+        'exit_code': 2 if frozen or stopped or log.pending_projections() else 0,
     }
     log.save('summary.json', summary)
     return summary
@@ -744,14 +899,20 @@ def rollback(
     limiter = RateLimiter(qps)
     counts: Counter[str] = Counter()
     recent: deque[bool] = deque(maxlen=error_window)
-    reconcile_pending(runtime, source, allow_projection=target.config['apply'])
-    reconcile_pending(runtime, target, allow_projection=target.config['apply'])
-    candidates = [
-        record
-        for record in source.read('audit.jsonl')
-        if source.results.get(record['decision_id'], {}).get('outcome') == 'written'
-        and record['job_id'] not in target.processed
-    ]
+    reconcile_pending(runtime, source)
+    reconcile_pending(runtime, target)
+    if target.config['apply']:
+        retry_pending_projections(runtime, target, limiter, workers)
+    # An old error receipt and a later successful retry can identify the same
+    # row as written. Undo each job once, using the latest written intent.
+    candidates = list(
+        {
+            record['job_id']: record
+            for record in source.read('audit.jsonl')
+            if source.results.get(record['decision_id'], {}).get('outcome') == 'written'
+            and record['job_id'] not in target.processed
+        }.values()
+    )
     if limit is not None:
         candidates = candidates[:limit]
 
@@ -765,6 +926,8 @@ def rollback(
             decision_id=uuid.uuid4().hex,
             timestamp=utc_now(),
             apply=target.config['apply'],
+            projection_status='pending',
+            commit_revision=None,
             before=target.seal(after),
             after=target.seal(before),
             before_digest=record['after_digest'],
@@ -772,6 +935,7 @@ def rollback(
         )
         # Write-ahead rollback intent supports the same crash reconciliation.
         target.append('audit.jsonl', entry)
+        job: dict[str, Any] = {}
         try:
             job_ref = runtime.client.collection(JOBS).document(record['job_id'])
             job = job_ref.get().to_dict() or {}
@@ -806,20 +970,38 @@ def rollback(
                     return 'written'
                 return 'dry_run'
 
-            def operation() -> str:
+            def operation() -> dict[str, Any]:
                 if not target.config['apply']:
-                    return restore(None)
+                    return {'outcome': restore(None), 'commit_revision': None}
                 transaction = runtime.client.transaction(max_attempts=1)
                 outcome = firestore.transactional(restore)(transaction)
                 receipts = getattr(transaction, '_write_results', [])
-                entry['commit_revision'] = receipts[-1].update_time.isoformat() if receipts else None
-                return outcome
+                return {
+                    'outcome': outcome,
+                    'commit_revision': receipts[-1].update_time.isoformat() if receipts else None,
+                }
 
-            outcome = retry_write(limiter, operation) if target.config['apply'] else operation()
+            write_result = (
+                retry_write(limiter, operation, reconcile=lambda: reconcile_intent(runtime, entry))
+                if target.config['apply']
+                else operation()
+            )
+            outcome = write_result['outcome']
+            entry['commit_revision'] = write_result['commit_revision']
             if outcome == 'written':
-                runtime.sync(job)
+                converge_written(runtime, target, entry, job, limiter)
             return dict(entry, outcome=outcome)
         except Exception as exc:
+            if target.config['apply']:
+                try:
+                    recovered = reconcile_intent(runtime, entry)
+                    if recovered is not None:
+                        entry['commit_revision'] = recovered['commit_revision']
+                        if recovered['outcome'] == 'written':
+                            converge_written(runtime, target, entry, job, limiter)
+                        return dict(entry, outcome=recovered['outcome'])
+                except Exception:
+                    pass
             return dict(entry, outcome='error', error_type=type(exc).__name__)
 
     stopped = False
@@ -834,12 +1016,21 @@ def rollback(
             if len(recent) == error_window and sum(recent) / error_window > error_threshold:
                 stopped = True
                 break
+    if target.config['apply']:
+        # A source receipt may have been recovered during rollback. Index the
+        # current durable row (including any restored state), without mutation.
+        retry_pending_projections(runtime, source, limiter, workers)
     summary = {
         'rollback': True,
         'apply': target.config['apply'],
         'outcomes': dict(counts),
+        'projection_pending': len(target.pending_projections()) + len(source.pending_projections()),
+        'source_projection_pending': len(source.pending_projections()),
+        'journal_warnings': {'source': dict(source.journal_warnings), 'target': dict(target.journal_warnings)},
         'stopped_error_rate': stopped,
-        'exit_code': 2 if counts['error'] or stopped else 0,
+        'exit_code': (
+            2 if counts['error'] or stopped or target.pending_projections() or source.pending_projections() else 0
+        ),
     }
     target.save('summary.json', summary)
     return summary
@@ -884,11 +1075,19 @@ def main() -> int:
         'rollback': str(args.rollback) if args.rollback else None,
     }
     path = args.resume or args.run_dir
-    log = RunLog(path, config, resume=bool(args.resume))
+    if not path.is_absolute():
+        parser.error('run directory must be absolute')
     install_private_log_filters()
     logging.basicConfig(level=logging.WARNING, format='%(levelname)s %(name)s %(message)s')
-    lock_file = (path / 'run.lock').open('a')
-    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    if args.resume:
+        # Journal reads can repair a torn tail: acquire ownership before them.
+        lock_file = (path / 'run.lock').open('a')
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        log = RunLog(path, config, resume=True)
+    else:
+        log = RunLog(path, config)
+        lock_file = (path / 'run.lock').open('a')
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     runtime = Runtime(importlib.import_module('database._client').get_firestore_client())
     if args.rollback:
         if args.rollback.name != 'audit.jsonl' or not args.rollback.is_absolute():

@@ -8,9 +8,15 @@ from types import SimpleNamespace
 import pytest
 
 from scripts import repair_recovery_dead_letter_untitled as repair
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+from models.client_processing import ClientProcessing
+from tests.unit.fixtures.strict_firestore_transaction import (
+    StrictFirestore,
+    StrictFirestoreDocument,
+    StrictFirestoreTransaction,
+)
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
 from utils.conversations.recovery import verified_recovery_discard
+from utils.conversations.transcript_hash import transcript_sha256_for_binding
 
 UID = 'private-full-user-id'
 CID = 'conversation-one'
@@ -94,7 +100,7 @@ def setup(tmp_path, *, apply=False, kept=False, text='', name='run'):
         client,
         decode=lambda data, uid: data['transcript_segments'],
         protections=lambda ref, data, job, tx: None,
-        converge=lambda uid, cid: None,
+        converge=lambda uid, cid: True,
     )
     config = {'apply': apply, 'include_kept_titles': kept, 'uids': [], 'conversation_ids': [], 'rollback': None}
     log = repair.RunLog(tmp_path / name, config)
@@ -171,7 +177,7 @@ def test_class_r_writes_verified_discard_and_only_two_fields(tmp_path):
     client, runtime, log = setup(tmp_path, apply=True)
     original = deepcopy(client.rows[ROW_PATH])
     calls = []
-    runtime.converge = lambda uid, cid: calls.append((uid, cid))
+    runtime.converge = lambda uid, cid: calls.append((uid, cid)) or True
     result = evaluate(runtime, log)
     assert result['class'] == 'R' and result['outcome'] == 'written'
     current = client.rows[ROW_PATH]
@@ -207,6 +213,348 @@ def test_dry_run_writes_nothing_including_projection(tmp_path):
     summary = repair.run(runtime, log, workers=2)
     assert summary['classes']['R'] == 1
     assert client.rows == original and not client.transactions
+
+
+def bound_projection(data):
+    digest = transcript_sha256_for_binding(data['transcript_segments'])
+    assert digest is not None
+    return ClientProcessing.model_validate(
+        {
+            'schema_version': 1,
+            'transcript_sha256': digest,
+            'structure': {'title': 'Local saved title', 'overview': TEXT},
+            'action_items': [{'description': 'Send the release plan', 'completed': False}],
+            'provenance': {
+                'model_id': 'local-model',
+                'runtime': 'local',
+                'device_class': 'desktop',
+                'generated_at': '2026-02-01T00:00:00Z',
+            },
+        }
+    ).model_dump(mode='json')
+
+
+def test_bound_client_projection_protects_filler_capture(tmp_path):
+    client, runtime, log = setup(tmp_path, apply=True, kept=True, text='yeah okay')
+    client.rows[ROW_PATH]['client_processing'] = bound_projection(client.rows[ROW_PATH])
+    original = deepcopy(client.rows)
+    assert evaluate(runtime, log)['outcome'] == 'client_processing_content'
+    assert client.rows == original and not client.transactions
+
+
+@pytest.mark.parametrize(
+    'projection',
+    [
+        {'structure': {'title': 'Saved title'}},
+        {'structure': {'overview': TEXT}},
+        {'structure': {'sections': [{'heading': 'Notes', 'body_markdown': TEXT}]}},
+        {'structure': {}, 'action_items': [{'description': 'Saved task'}]},
+        {'structure': {'events': [{'title': 'Saved meeting'}]}},
+        'undecodable',
+    ],
+)
+def test_client_projection_display_fields_protected(tmp_path, projection):
+    client, runtime, log = setup(tmp_path, apply=True)
+    client.rows[ROW_PATH]['client_processing'] = projection
+    assert evaluate(runtime, log)['outcome'] == 'client_processing_content'
+    assert not client.transactions
+
+
+def test_late_client_projection_is_rechecked_inside_transaction(tmp_path):
+    client, runtime, log = setup(tmp_path, apply=True, text='yeah okay')
+    transaction = client.transaction
+
+    def late_projection(**kwargs):
+        client.rows[ROW_PATH]['client_processing'] = bound_projection(client.rows[ROW_PATH])
+        return transaction(**kwargs)
+
+    client.transaction = late_projection
+    assert evaluate(runtime, log)['outcome'] == 'client_processing_content'
+    assert client.rows[ROW_PATH]['discarded'] is False
+    assert all(not tx.updates for tx in client.transactions)
+
+
+def fault_after_mutation(monkeypatch, client):
+    write = repair.write_cas
+    attempts = []
+
+    def committed_then_timeout(*args, **kwargs):
+        attempts.append(1)
+        receipt = write(*args, **kwargs)
+        assert receipt['outcome'] == 'written'
+        # Model the SDK's field-path result without extending the strict fake.
+        if 'structured.title' in client.rows[ROW_PATH]:
+            client.rows[ROW_PATH]['structured']['title'] = client.rows[ROW_PATH].pop('structured.title')
+        raise repair.DeadlineExceeded('commit response lost')
+
+    monkeypatch.setattr(repair, 'write_cas', committed_then_timeout)
+    return attempts
+
+
+@pytest.mark.parametrize('text', ['', TEXT])
+def test_commit_response_timeout_reconciles_before_retry_and_rollback(tmp_path, monkeypatch, text):
+    client, runtime, log = setup(tmp_path, apply=True, kept=True, text=text)
+    calls = []
+    runtime.converge = lambda *args: calls.append(1) or True
+    attempts = fault_after_mutation(monkeypatch, client)
+    result = evaluate(runtime, log)
+    assert result['outcome'] == 'written' and len(attempts) == 1
+    assert log.results[result['decision_id']]['projection_status'] == 'complete'
+    assert calls == [1]
+    resumed = repair.RunLog(log.path, log.config, resume=True)
+    assert repair.run(runtime, resumed)['processed'] == 0
+    assert len(client.transactions) == 1 and calls == [1]
+    target = repair.RunLog(tmp_path / 'rollback', log.config)
+    assert repair.rollback(runtime, resumed, target)['outcomes'] == {'written': 1}
+    assert client.rows[ROW_PATH]['discarded'] is False
+    if text:
+        assert client.transactions[-1].updates[0][1] == {'structured.title': ''}
+
+
+def test_error_receipt_after_ambiguous_commit_recovers_on_resume(tmp_path, monkeypatch):
+    client, runtime, log = setup(tmp_path, apply=True)
+    calls = []
+    runtime.converge = lambda *args: calls.append(1) or True
+    attempts = fault_after_mutation(monkeypatch, client)
+    reconcile = repair.reconcile_intent
+    monkeypatch.setattr(
+        repair, 'reconcile_intent', lambda *args: (_ for _ in ()).throw(repair.DeadlineExceeded('read unavailable'))
+    )
+    result = evaluate(runtime, log)
+    assert result['outcome'] == 'error' and len(attempts) == 1 and not calls
+    assert client.rows[ROW_PATH]['discarded'] is True
+    monkeypatch.setattr(repair, 'reconcile_intent', reconcile)
+    resumed = repair.RunLog(log.path, log.config, resume=True)
+    summary = repair.run(runtime, resumed)
+    assert summary['exit_code'] == 0 and summary['processed'] == 0
+    assert resumed.results[result['decision_id']]['outcome'] == 'written'
+    assert resumed.results[result['decision_id']]['projection_status'] == 'complete'
+    assert calls == [1] and len(client.transactions) == 1
+    target = repair.RunLog(tmp_path / 'rollback', log.config)
+    assert repair.rollback(runtime, resumed, target)['outcomes'] == {'written': 1}
+
+
+def test_retry_refusal_reconciles_a_commit_that_became_visible_later(tmp_path, monkeypatch):
+    client, runtime, source = setup(tmp_path, apply=True)
+    write, reconcile = repair.write_cas, repair.reconcile_intent
+    attempts, observations = [], []
+    monkeypatch.setattr(repair.time, 'sleep', lambda *args: None)
+
+    def operation(*args, **kwargs):
+        attempts.append(1)
+        result = write(*args, **kwargs)
+        if len(attempts) == 1:
+            raise repair.DeadlineExceeded('commit still in flight')
+        assert result['outcome'] == 'not_visible'
+        return result
+
+    def observe(*args):
+        observations.append(1)
+        return None if len(observations) == 1 else reconcile(*args)
+
+    monkeypatch.setattr(repair, 'write_cas', operation)
+    monkeypatch.setattr(repair, 'reconcile_intent', observe)
+    result = evaluate(runtime, source)
+    assert result['outcome'] == 'written' and len(attempts) == 2
+    assert source.results[result['decision_id']]['projection_status'] == 'complete'
+    assert sum(bool(tx.updates) for tx in client.transactions) == 1
+
+
+def test_crash_during_projection_keeps_durable_pending_receipt(tmp_path):
+    client, runtime, source = setup(tmp_path, apply=True)
+    runtime.converge = lambda *args: (_ for _ in ()).throw(SystemExit('simulated crash'))
+    with pytest.raises(SystemExit):
+        evaluate(runtime, source)
+    assert client.rows[ROW_PATH]['discarded'] is True
+    resumed = repair.RunLog(source.path, source.config, resume=True)
+    assert len(resumed.pending_projections()) == 1
+    runtime.converge = lambda *args: True
+    summary = repair.run(runtime, resumed)
+    assert summary['processed'] == 0 and summary['projection_pending'] == 0 and summary['exit_code'] == 0
+    assert len(client.transactions) == 1
+
+
+@pytest.mark.parametrize('receipt', ['error', 'not_visible'])
+def test_rollback_recovers_prior_error_or_terminal_refusal_receipt(tmp_path, receipt):
+    client, runtime, source = setup(tmp_path, apply=True)
+    result = evaluate(runtime, source)
+    source.finish(result, receipt)  # old script's incorrect response classification
+    target = repair.RunLog(tmp_path / 'rollback', source.config)
+    assert repair.rollback(runtime, source, target)['outcomes'] == {'written': 1}
+    assert source.results[result['decision_id']]['outcome'] == 'written'
+    assert client.rows[ROW_PATH]['discarded'] is False
+
+
+@pytest.mark.parametrize('failure', ['false', 'exception', 'none'])
+def test_pending_projection_retried_on_resume_without_mutation(tmp_path, failure, caplog):
+    client, runtime, log = setup(tmp_path, apply=True)
+    calls = []
+
+    def converge(*args):
+        calls.append(1)
+        # The mutation receipt must already be durable before indexing starts.
+        assert log.pending_projections()
+        if failure == 'exception':
+            raise RuntimeError(f'{TEXT} {UID}')
+        return False if failure == 'false' else None
+
+    runtime.converge = converge
+    summary = repair.run(runtime, log)
+    assert summary['classes']['written'] == 1
+    assert summary['projection_pending'] == 1 and summary['exit_code'] == 2
+    assert len(client.transactions) == 1 and calls == [1]
+    resumed = repair.RunLog(log.path, log.config, resume=True)
+    runtime.converge = lambda *args: calls.append(1) or False
+    summary = repair.run(runtime, resumed)
+    assert summary['processed'] == 0 and summary['projection_pending'] == 1 and summary['exit_code'] == 2
+    runtime.converge = lambda *args: calls.append(1) or True
+    resumed = repair.RunLog(log.path, log.config, resume=True)
+    summary = repair.run(runtime, resumed)
+    assert summary['processed'] == 0 and summary['projection_pending'] == 0 and summary['exit_code'] == 0
+    assert calls == [1, 1, 1] and len(client.transactions) == 1
+    assert next(iter(resumed.results.values()))['projection_status'] == 'complete'
+    assert TEXT not in caplog.text and UID not in caplog.text
+
+
+def test_real_sync_helper_false_is_pending(tmp_path, monkeypatch):
+    _, runtime, log = setup(tmp_path, apply=True)
+    runtime.converge = None
+    monkeypatch.setattr(
+        repair.importlib,
+        'import_module',
+        lambda name: SimpleNamespace(sync_conversation_index_after_write=lambda *args, **kwargs: False),
+    )
+    summary = repair.run(runtime, log)
+    assert summary['projection_pending'] == 1 and summary['exit_code'] == 2
+
+
+def test_legacy_written_receipt_without_projection_status_retries(tmp_path):
+    client, runtime, source = setup(tmp_path, apply=True)
+    evaluate(runtime, source)
+    legacy = dict(next(iter(source.results.values())))
+    legacy.pop('projection_status')
+    source.append('results.jsonl', legacy)
+    resumed = repair.RunLog(source.path, source.config, resume=True)
+    calls = []
+    runtime.converge = lambda *args: calls.append(1) or True
+    summary = repair.run(runtime, resumed)
+    assert summary['processed'] == 0 and summary['projection_pending'] == 0
+    assert summary['exit_code'] == 0 and calls == [1] and len(client.transactions) == 1
+
+
+def test_rollback_pending_projection_resumes_without_repeat_restore(tmp_path):
+    client, runtime, source = setup(tmp_path, apply=True)
+    evaluate(runtime, source)
+    target = repair.RunLog(tmp_path / 'rollback', source.config)
+    runtime.converge = lambda *args: False
+    summary = repair.rollback(runtime, source, target)
+    assert summary['outcomes'] == {'written': 1}
+    assert summary['projection_pending'] == 1 and summary['exit_code'] == 2
+    resumed = repair.RunLog(target.path, target.config, resume=True)
+    runtime.converge = lambda *args: True
+    summary = repair.rollback(runtime, source, resumed)
+    assert summary['outcomes'] == {} and summary['projection_pending'] == 0 and summary['exit_code'] == 0
+    assert len(client.transactions) == 2
+
+
+def test_rollback_commit_response_timeout_reconciles_restored_state(tmp_path, monkeypatch):
+    client, runtime, source = setup(tmp_path, apply=True)
+    original = deepcopy(client.rows[ROW_PATH])
+    evaluate(runtime, source)
+    target = repair.RunLog(tmp_path / 'rollback', source.config)
+
+    def commit_response_lost(transaction):
+        # The fake records the SDK delete sentinel literally. Supply the
+        # actual server after-state before injecting a lost commit response.
+        client.rows[ROW_PATH] = deepcopy(original)
+        raise repair.DeadlineExceeded('rollback response lost')
+
+    monkeypatch.setattr(StrictFirestoreTransaction, '_commit', commit_response_lost)
+    summary = repair.rollback(runtime, source, target, qps=100000)
+    assert summary['outcomes'] == {'written': 1} and summary['exit_code'] == 0
+    assert len(client.transactions) == 2 and client.rows[ROW_PATH] == original
+    assert next(iter(target.results.values()))['projection_status'] == 'complete'
+
+
+@pytest.mark.parametrize('journal', ['audit.jsonl', 'results.jsonl'])
+@pytest.mark.parametrize('mode', ['resume', 'rollback'])
+@pytest.mark.parametrize('tail', [b'{"decision_id":"torn', b'{"title":"\xe2\x82'])
+def test_torn_journal_tail_recovers_with_counted_warning(tmp_path, caplog, journal, mode, tail):
+    client, runtime, source = setup(tmp_path, apply=True)
+    result = evaluate(runtime, source)
+    prefix = (source.path / journal).read_bytes()
+    with (source.path / journal).open('ab') as file:
+        file.write(tail)
+    resumed = repair.RunLog(source.path, source.config, resume=True)
+    if mode == 'resume':
+        # New decisions must append after recovery without corrupting the journal.
+        jid = 'job-two'
+        client.rows[(repair.JOBS, jid)] = dict(job(), conversation_id=jid)
+        client.rows[('users', UID, 'conversations', jid)] = dict(row(), finalization_job_id=jid)
+        summary = repair.run(runtime, resumed)
+        assert summary['processed'] == 1 and summary['journal_warnings'] == {journal: 1}
+    else:
+        target = repair.RunLog(tmp_path / 'rollback', source.config)
+        summary = repair.rollback(runtime, resumed, target)
+        assert summary['outcomes'] == {'written': 1}
+        assert summary['journal_warnings']['source'] == {journal: 1}
+    assert summary['exit_code'] == 0
+    assert resumed.results[result['decision_id']]['outcome'] == 'written'
+    assert (source.path / journal).read_bytes().startswith(prefix)
+    assert all(isinstance(json.loads(line), dict) for line in (source.path / journal).read_bytes().splitlines())
+    assert [path.read_bytes() for path in source.path.glob(f'{journal}.torn-*')] == [tail]
+    assert caplog.text.count('journal_tail_dropped') == 1
+
+
+@pytest.mark.parametrize('journal', ['audit.jsonl', 'results.jsonl'])
+@pytest.mark.parametrize('corruption', ['middle', 'terminated_tail', 'non_object'])
+def test_malformed_journal_is_rejected_except_unterminated_tail(tmp_path, journal, corruption):
+    _, _, source = setup(tmp_path, apply=True)
+    evaluate(repair.Runtime(None), source)  # an ordinary bounded error receipt
+    path = source.path / journal
+    with path.open('ab') as file:
+        file.write(b'[]\n' if corruption == 'non_object' else b'not-json\n')
+        if corruption == 'middle':
+            file.write(b'{}\n')
+    with pytest.raises(ValueError, match='malformed journal'):
+        source.read(journal)
+    assert not source.journal_warnings
+
+
+@pytest.mark.parametrize('journal', ['audit.jsonl', 'results.jsonl'])
+def test_complete_json_without_newline_can_be_appended_safely(tmp_path, journal):
+    _, runtime, source = setup(tmp_path)
+    evaluate(runtime, source)
+    path = source.path / journal
+    path.write_bytes(path.read_bytes()[:-1])
+    records = source.read(journal)
+    source.append(journal, records[0])
+    assert source.read(journal) == records * 2
+    assert not source.journal_warnings
+
+
+def test_cli_resume_locks_run_before_recovering_journals(tmp_path, monkeypatch, capsys):
+    client, runtime, source = setup(tmp_path)
+    evaluate(runtime, source)
+    with (source.path / 'results.jsonl').open('ab') as file:
+        file.write(b'{"decision_id":"torn')
+    run_log = repair.RunLog
+
+    def locked_log(path, config, *, resume=False):
+        assert resume
+        with (path / 'run.lock').open('a') as probe:
+            with pytest.raises(BlockingIOError):
+                repair.fcntl.flock(probe.fileno(), repair.fcntl.LOCK_EX | repair.fcntl.LOCK_NB)
+        return run_log(path, config, resume=resume)
+
+    monkeypatch.setattr(repair, 'RunLog', locked_log)
+    monkeypatch.setattr(repair.sys, 'argv', ['repair', '--resume', str(source.path)])
+    monkeypatch.setattr(
+        repair.importlib, 'import_module', lambda name: SimpleNamespace(get_firestore_client=lambda: client)
+    )
+    assert repair.main() == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary['processed'] == 0 and summary['journal_warnings'] == {'results.jsonl': 1}
 
 
 @pytest.mark.parametrize('mutation', ['transcript', 'restore', 'job', 'structure', 'photos'])
@@ -416,11 +764,15 @@ def test_wrapped_aborted_retries(monkeypatch):
     assert len(attempts) == 2
 
 
-def test_resume_pending_before_commit_retries(tmp_path):
+def test_resume_pending_before_commit_retries(tmp_path, monkeypatch):
     client, runtime, source = setup(tmp_path, apply=True)
+    write = repair.write_cas
+    monkeypatch.setattr(repair.time, 'sleep', lambda *args: None)
+    monkeypatch.setattr(repair, 'write_cas', lambda *args, **kwargs: (_ for _ in ()).throw(repair.Aborted('no commit')))
     result = repair.evaluate(runtime, source, JOB_ID, limiter=repair.RateLimiter(100000))
-    # Simulate a lost intent before the commit reached Firestore.
-    client.rows[ROW_PATH] = row()
+    # Durable intent exists, but no mutation or result receipt was persisted.
+    assert result['outcome'] == 'error' and client.rows[ROW_PATH] == row()
+    monkeypatch.setattr(repair, 'write_cas', write)
     resumed = repair.RunLog(source.path, source.config, resume=True)
     assert repair.run(runtime, resumed)['classes']['written'] == 1
 
