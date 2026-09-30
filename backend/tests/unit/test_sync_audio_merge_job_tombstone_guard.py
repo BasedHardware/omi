@@ -18,9 +18,7 @@ os.environ.setdefault('TYPESENSE_HOST', 'localhost')
 os.environ.setdefault('TYPESENSE_HOST_PORT', '8108')
 os.environ.setdefault('TYPESENSE_PROTOCOL', 'http')
 os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
-os.environ.setdefault(
-    'ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv'
-)
+os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 import routers.sync as routers_sync
 
@@ -58,13 +56,17 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         mock_upload = MagicMock()
         mock_update = MagicMock()
 
-        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), \
-             patch.object(routers_sync, 'release_job_run_lock'), \
-             patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), \
-             patch.object(routers_sync.conversations_db, 'get_conversation', return_value=deleted_conv), \
-             patch.object(routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build), \
-             patch.object(routers_sync, 'upload_conversation_playback_artifact', mock_upload), \
-             patch.object(routers_sync.conversations_db, 'update_conversation', mock_update):
+        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
+            routers_sync, 'release_job_run_lock'
+        ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync.conversations_db, 'get_conversation', return_value=deleted_conv
+        ), patch.object(
+            routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build
+        ), patch.object(
+            routers_sync, 'upload_conversation_playback_artifact', mock_upload
+        ), patch.object(
+            routers_sync.conversations_db, 'update_conversation', mock_update
+        ):
 
             resp = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
 
@@ -86,11 +88,13 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         }
         mock_build = MagicMock()
 
-        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), \
-             patch.object(routers_sync, 'release_job_run_lock'), \
-             patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), \
-             patch.object(routers_sync.conversations_db, 'get_conversation', return_value=None), \
-             patch.object(routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build):
+        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
+            routers_sync, 'release_job_run_lock'
+        ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync.conversations_db, 'get_conversation', return_value=None
+        ), patch.object(
+            routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build
+        ):
 
             resp = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
 
@@ -111,11 +115,13 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         }
         mock_build = MagicMock()
 
-        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), \
-             patch.object(routers_sync, 'release_job_run_lock'), \
-             patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), \
-             patch.object(routers_sync.conversations_db, 'get_conversation', return_value=conv_no_audio), \
-             patch.object(routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build):
+        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
+            routers_sync, 'release_job_run_lock'
+        ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync.conversations_db, 'get_conversation', return_value=conv_no_audio
+        ), patch.object(
+            routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build
+        ):
 
             resp = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
 
@@ -138,15 +144,21 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         mock_upload = MagicMock()
         mock_update = MagicMock()
 
-        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), \
-             patch.object(routers_sync, 'release_job_run_lock'), \
-             patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), \
-             patch.object(routers_sync.conversations_db, 'get_conversation', return_value=active_conv), \
-             patch.object(routers_sync, 'compute_audio_files_fingerprint', return_value='fp-active'), \
-             patch.object(routers_sync, 'get_conversation_playback_signed_url', return_value=None), \
-             patch.object(routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build), \
-             patch.object(routers_sync, 'upload_conversation_playback_artifact', mock_upload), \
-             patch.object(routers_sync.conversations_db, 'update_conversation', mock_update):
+        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
+            routers_sync, 'release_job_run_lock'
+        ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync.conversations_db, 'get_conversation', return_value=active_conv
+        ), patch.object(
+            routers_sync, 'compute_audio_files_fingerprint', return_value='fp-active'
+        ), patch.object(
+            routers_sync, 'get_conversation_playback_signed_url', return_value=None
+        ), patch.object(
+            routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build
+        ), patch.object(
+            routers_sync, 'upload_conversation_playback_artifact', mock_upload
+        ), patch.object(
+            routers_sync.conversations_db, 'update_conversation', mock_update
+        ):
 
             resp = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
 
@@ -179,11 +191,13 @@ class TestV1SingleFileAudioMergeTombstoneGuard:
         }
         mock_build = MagicMock()
 
-        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), \
-             patch.object(routers_sync, 'release_job_run_lock'), \
-             patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), \
-             patch.object(routers_sync.conversations_db, 'get_conversation', return_value=deleted_conv), \
-             patch.object(routers_sync.sync_playback, 'build_playback_artifact', mock_build):
+        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
+            routers_sync, 'release_job_run_lock'
+        ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync.conversations_db, 'get_conversation', return_value=deleted_conv
+        ), patch.object(
+            routers_sync.sync_playback, 'build_playback_artifact', mock_build
+        ):
 
             resp = await routers_sync.run_audio_merge_job(self._FakeRequest(payload), task_retry_count=0)
 
@@ -203,11 +217,13 @@ class TestV1SingleFileAudioMergeTombstoneGuard:
         }
         mock_build = MagicMock()
 
-        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), \
-             patch.object(routers_sync, 'release_job_run_lock'), \
-             patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), \
-             patch.object(routers_sync.conversations_db, 'get_conversation', return_value=None), \
-             patch.object(routers_sync.sync_playback, 'build_playback_artifact', mock_build):
+        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
+            routers_sync, 'release_job_run_lock'
+        ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync.conversations_db, 'get_conversation', return_value=None
+        ), patch.object(
+            routers_sync.sync_playback, 'build_playback_artifact', mock_build
+        ):
 
             resp = await routers_sync.run_audio_merge_job(self._FakeRequest(payload), task_retry_count=0)
 
