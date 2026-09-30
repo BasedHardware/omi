@@ -11,10 +11,13 @@ void main() {
     expect(PlatformService.iosMajorVersion('Version 16.4.1'), 16);
   });
 
-  test('parses Darwin uname strings conservatively', () {
-    // Some builds report a Darwin kernel string; the leading kernel major is
-    // the only integer available, so gates stay on the conservative side.
-    expect(PlatformService.iosMajorVersion('Darwin Kernel Version 24.5.0: Tue Apr  8 2026'), 24);
+  test('fails closed on Darwin kernel strings instead of over-reporting', () {
+    // Darwin strings lead with the kernel major, not the iOS major
+    // (Darwin 21 is iOS 15, Darwin 24 is iOS 18), so treating that integer
+    // as the marketing version would let a device pass `isIOSAtLeast(16)`
+    // or `isIOSAtLeast(27)` gates it does not satisfy. Fail closed to 0.
+    expect(PlatformService.iosMajorVersion('Darwin Kernel Version 24.5.0: Tue Apr  8 2026'), 0);
+    expect(PlatformService.iosMajorVersion('Darwin Kernel Version 21.6.0: Wed Aug 10 13:17:20 PDT 2022'), 0);
   });
 
   test('returns 0 when no integer is present', () {
