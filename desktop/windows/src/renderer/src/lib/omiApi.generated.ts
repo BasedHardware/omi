@@ -1712,13 +1712,21 @@ export interface DailySummaryResponse {
 }
 
 export interface DailySummarySettingsResponse {
+  depth?: "brief" | "normal" | "deep";
   enabled: boolean;
   hour: number;
 }
 
 export interface DailySummarySettingsUpdate {
+  depth?: "brief" | "normal" | "deep" | null;
   enabled?: boolean | null;
   hour?: number | null;
+}
+
+export interface DailySummarySettingsUpdateResponse {
+  depth?: "brief" | "normal" | "deep" | null;
+  message?: string | null;
+  status: string;
 }
 
 export interface DailySummaryTestResponse {
@@ -5511,6 +5519,7 @@ export interface OmiApiSchemas {
   "DailySummaryResponse": DailySummaryResponse;
   "DailySummarySettingsResponse": DailySummarySettingsResponse;
   "DailySummarySettingsUpdate": DailySummarySettingsUpdate;
+  "DailySummarySettingsUpdateResponse": DailySummarySettingsUpdateResponse;
   "DailySummaryTestResponse": DailySummaryTestResponse;
   "DailySummaryTopicHighlight": DailySummaryTopicHighlight;
   "DailySummaryUnresolvedQuestion": DailySummaryUnresolvedQuestion;
@@ -9420,7 +9429,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "update_daily_summary_settings_v1_users_daily_summary_settings_patch";
       responses: {
-        "200": UserStatusResponse;
+        "200": DailySummarySettingsUpdateResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -17280,7 +17289,7 @@ export async function get_daily_summary_settings_v1_users_daily_summary_settings
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function update_daily_summary_settings_v1_users_daily_summary_settings_patch(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DailySummarySettingsUpdate, init?: OmiApiClientInit): Promise<UserStatusResponse> {
+export async function update_daily_summary_settings_v1_users_daily_summary_settings_patch(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DailySummarySettingsUpdate, init?: OmiApiClientInit): Promise<DailySummarySettingsUpdateResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/daily-summary-settings`;
   const _search = "";

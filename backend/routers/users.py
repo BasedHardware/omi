@@ -53,6 +53,7 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
+from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from config.stt_provider_policy import supports_live_multilingual_mode
 from models.users import AvailableLanguage, AvailableLanguagesResponse
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
@@ -1585,11 +1586,19 @@ def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
 class DailySummarySettingsResponse(BaseModel):
     enabled: bool
     hour: int  # Local hour (0-23) in user's timezone
+    depth: DailySummaryDepth = DEFAULT_DAILY_SUMMARY_DEPTH
 
 
 class DailySummarySettingsUpdate(BaseModel):
     enabled: Optional[bool] = None
     hour: Optional[int] = None  # Local hour (0-23), e.g., 22 for 10 PM, 8 for 8 AM
+    depth: Optional[DailySummaryDepth] = None
+
+
+class DailySummarySettingsUpdateResponse(UserStatusResponse):
+    # An echo lets a new desktop client detect an older backend that silently
+    # ignores the additive PATCH field instead of falsely claiming it was saved.
+    depth: Optional[DailySummaryDepth] = None
 
 
 @router.get('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsResponse)
@@ -1600,6 +1609,7 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
     Returns:
         - enabled: Whether daily summary notifications are enabled (default: True)
         - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)
+        - depth: Recap detail level (brief by default)
     """
     enabled = notification_db.get_daily_summary_enabled(uid)
     local_hour = notification_db.get_daily_summary_hour_local(uid)
@@ -1608,10 +1618,12 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
     if local_hour is None:
         local_hour = notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
 
-    return DailySummarySettingsResponse(enabled=enabled, hour=local_hour)
+    return DailySummarySettingsResponse(
+        enabled=enabled, hour=local_hour, depth=notification_db.get_daily_summary_depth(uid)
+    )
 
 
-@router.patch('/v1/users/daily-summary-settings', tags=['v1'], response_model=UserStatusResponse)
+@router.patch('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsUpdateResponse)
 def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = Depends(auth.get_current_user_uid)):
     """
     Update user's daily summary notification settings.
@@ -1620,6 +1632,7 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
         - enabled: Enable/disable daily summary notifications
         - hour: Preferred hour in local timezone (0-23).
                 Examples: 22 (10 PM), 8 (8 AM), 18 (6 PM)
+        - depth: brief, normal, or deep for newly generated recaps
 
     Note: Hour is stored as local time. The system determines when to send
     based on the user's timezone and will send the summary at the correct local time
@@ -1637,7 +1650,10 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
             logger.error(f"Failed to set daily summary hour: {sanitize(str(e))}", exc_info=True)
             raise HTTPException(status_code=400, detail="Invalid hour. Must be between 0 and 23.")
 
-    return {'status': 'ok'}
+    if data.depth is not None:
+        notification_db.set_daily_summary_depth(uid, data.depth)
+
+    return {'status': 'ok', 'depth': data.depth}
 
 
 def _memories_learned_payload(uid, conversations, start_date_utc, end_date_utc):

@@ -11053,6 +11053,16 @@
       },
       "DailySummarySettingsResponse": {
         "properties": {
+          "depth": {
+            "default": "brief",
+            "enum": [
+              "brief",
+              "normal",
+              "deep"
+            ],
+            "title": "Depth",
+            "type": "string"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
@@ -11071,6 +11081,22 @@
       },
       "DailySummarySettingsUpdate": {
         "properties": {
+          "depth": {
+            "anyOf": [
+              {
+                "enum": [
+                  "brief",
+                  "normal",
+                  "deep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth"
+          },
           "enabled": {
             "anyOf": [
               {
@@ -11095,6 +11121,46 @@
           }
         },
         "title": "DailySummarySettingsUpdate",
+        "type": "object"
+      },
+      "DailySummarySettingsUpdateResponse": {
+        "properties": {
+          "depth": {
+            "anyOf": [
+              {
+                "enum": [
+                  "brief",
+                  "normal",
+                  "deep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "DailySummarySettingsUpdateResponse",
         "type": "object"
       },
       "DailySummaryTestResponse": {
@@ -61908,7 +61974,7 @@
     },
     "/v1/users/daily-summary-settings": {
       "get": {
-        "description": "Get user's daily summary notification settings.\n\nReturns:\n    - enabled: Whether daily summary notifications are enabled (default: True)\n    - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)",
+        "description": "Get user's daily summary notification settings.\n\nReturns:\n    - enabled: Whether daily summary notifications are enabled (default: True)\n    - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)\n    - depth: Recap detail level (brief by default)",
         "operationId": "get_daily_summary_settings_v1_users_daily_summary_settings_get",
         "parameters": [
           {
@@ -61984,7 +62050,7 @@
         ]
       },
       "patch": {
-        "description": "Update user's daily summary notification settings.\n\nParameters:\n    - enabled: Enable/disable daily summary notifications\n    - hour: Preferred hour in local timezone (0-23).\n            Examples: 22 (10 PM), 8 (8 AM), 18 (6 PM)\n\nNote: Hour is stored as local time. The system determines when to send\nbased on the user's timezone and will send the summary at the correct local time",
+        "description": "Update user's daily summary notification settings.\n\nParameters:\n    - enabled: Enable/disable daily summary notifications\n    - hour: Preferred hour in local timezone (0-23).\n            Examples: 22 (10 PM), 8 (8 AM), 18 (6 PM)\n    - depth: brief, normal, or deep for newly generated recaps\n\nNote: Hour is stored as local time. The system determines when to send\nbased on the user's timezone and will send the summary at the correct local time",
         "operationId": "update_daily_summary_settings_v1_users_daily_summary_settings_patch",
         "parameters": [
           {
@@ -62039,7 +62105,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserStatusResponse"
+                  "$ref": "#/components/schemas/DailySummarySettingsUpdateResponse"
                 }
               }
             },

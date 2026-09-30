@@ -11,15 +11,26 @@ extension APIClient {
   }
 
   /// Updates daily summary settings
-  func updateDailySummarySettings(enabled: Bool? = nil, hour: Int? = nil) async throws
-    -> DailySummarySettings
-  {
+  func updateDailySummarySettings(
+    enabled: Bool? = nil, hour: Int? = nil, depth: DailySummaryDepth? = nil
+  ) async throws {
     struct UpdateRequest: Encodable {
       let enabled: Bool?
       let hour: Int?
+      let depth: DailySummaryDepth?
     }
-    let body = UpdateRequest(enabled: enabled, hour: hour)
-    return try await patch("v1/users/daily-summary-settings", body: body)
+    struct StatusResponse: Decodable {
+      let status: String
+      let depth: DailySummaryDepth?
+    }
+    let body = UpdateRequest(enabled: enabled, hour: hour, depth: depth)
+    let response: StatusResponse = try await patch("v1/users/daily-summary-settings", body: body)
+    guard response.status == "ok" else {
+      throw DailySummaryDepthSaveError.notConfirmed
+    }
+    if let depth, response.depth != depth {
+      throw DailySummaryDepthSaveError.notConfirmed
+    }
   }
 
   /// Fetches transcription preferences
@@ -288,10 +299,32 @@ extension APIClient {
 
 // MARK: - User Settings Models
 
-/// Daily summary notification settings
-struct DailySummarySettings: Codable {
+enum DailySummaryDepth: String, Codable, CaseIterable {
+  case brief
+  case normal
+  case deep
+}
+
+enum DailySummaryDepthSaveError: Error {
+  case notConfirmed
+}
+
+/// Daily summary notification settings. Older backends omit depth; brief remains the default.
+struct DailySummarySettings: Decodable {
   let enabled: Bool
   let hour: Int
+  let depth: DailySummaryDepth
+
+  private enum CodingKeys: String, CodingKey {
+    case enabled, hour, depth
+  }
+
+  init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    enabled = try values.decode(Bool.self, forKey: .enabled)
+    hour = try values.decode(Int.self, forKey: .hour)
+    depth = (try? values.decode(DailySummaryDepth.self, forKey: .depth)) ?? .brief
+  }
 }
 
 /// Transcription preferences
