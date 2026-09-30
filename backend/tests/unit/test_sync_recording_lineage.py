@@ -627,6 +627,31 @@ def test_planning_error_fails_open_and_never_raises(lineage_db, monkeypatch):
     assert set(resolve(chunks, stamp='STAMP').values()) == {'STAMP'}
 
 
+@pytest.mark.parametrize('flag', ['', 'off'])
+def test_decision_logging_cannot_fail_an_upload(lineage_db, monkeypatch, flag):
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
+
+    def broken_handler(*_args, **_kwargs):
+        raise RuntimeError('synthetic logging handler failure')
+
+    monkeypatch.setattr(recording_lineage.logger, 'info', broken_handler)
+    if flag == 'off':
+        assert not lineage_resolution_requested(ORIGIN, 1.0, 2.0)
+    else:
+        chunks = upload_straddling_next_two()
+        assert list(resolve(chunks).values()) == [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2
+
+
+def test_lookup_logging_failure_still_falls_back(lineage_db, monkeypatch):
+    lineage_db.failing = {'generations', 'origin'}
+
+    def broken_handler(*_args, **_kwargs):
+        raise RuntimeError('synthetic logging handler failure')
+
+    monkeypatch.setattr(recording_lineage.logger, 'warning', broken_handler)
+    assert set(resolve(upload_straddling_next_two(), stamp='STAMP').values()) == {'STAMP'}
+
+
 def test_decision_log_is_bounded_and_carries_no_ids(lineage_db, caplog):
     chunks = upload_straddling_next_two()
     with caplog.at_level(logging.INFO, logger=recording_lineage.__name__):

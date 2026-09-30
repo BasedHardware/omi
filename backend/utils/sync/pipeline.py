@@ -2426,15 +2426,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
 
                 try:
                     segment_targets = await run_blocking(db_executor, _segment_targets)
-                except Exception as exc:
+                except Exception:
                     # Span construction and the executor call are also part of
                     # planning. Keep the stamp if either fails, then ingest
                     # siblings normally under the existing persistence fences.
                     segment_targets = fallback_segment_targets(segment_list, target_conversation_id, job_id=job_id)
-                    logger.warning(
-                        'event=sync_lineage_plan outcome=failed exception_type=%s',
-                        _bounded_exception_type(exc),
-                    )
 
             def _process_one_segment(path: str):
                 segment_target = segment_targets.get(path, target_conversation_id)

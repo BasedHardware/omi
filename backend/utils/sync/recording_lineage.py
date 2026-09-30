@@ -48,6 +48,14 @@ from utils.sync.recording_session_target import (
 
 logger = logging.getLogger(__name__)
 
+
+def _warning(message: str, *args: Any) -> None:
+    try:
+        logger.warning(message, *args)
+    except Exception:
+        pass
+
+
 # Bound the potentially overlapping rows, rather than assuming older rows ended
 # before newer ones started: stamp appends and smart merge can extend old rows.
 GENERATION_LIMIT = 8
@@ -284,7 +292,7 @@ def _load_lineage(
     except Exception as exc:
         # E.g. the composite index is still building: keep the origin-row read,
         # the same candidate set the whole-batch resolver has always used.
-        logger.warning('event=sync_lineage_lookup outcome=degraded exception_type=%s', bounded_exception_class(exc))
+        _warning('event=sync_lineage_lookup outcome=degraded exception_type=%s', bounded_exception_class(exc))
         rows, degraded = [], True
     truncated_before = None
     if len(rows) > GENERATION_LIMIT:
@@ -334,7 +342,7 @@ def resolve_segment_targets(
             )
             failed = False
         except Exception as exc:
-            logger.warning('event=sync_lineage_lookup outcome=failed exception_type=%s', bounded_exception_class(exc))
+            _warning('event=sync_lineage_lookup outcome=failed exception_type=%s', bounded_exception_class(exc))
             rows, truncated_before, degraded, failed = [], None, False, True
         plan = select_segment_targets(
             rows,
@@ -348,7 +356,7 @@ def resolve_segment_targets(
             lookup_failed=failed,
         )
     except Exception as exc:
-        logger.warning('event=sync_lineage_plan outcome=failed exception_type=%s', bounded_exception_class(exc))
+        _warning('event=sync_lineage_plan outcome=failed exception_type=%s', bounded_exception_class(exc))
         plan = LineagePlan(
             targets={key: stamped_target for key in spans}, outcome='lookup_failed', reason='lookup_failed'
         )
@@ -395,18 +403,21 @@ def _emit(plan: LineagePlan, job_id: Optional[str]) -> None:
     except Exception:
         pass
     counts = plan.counts
-    logger.info(
-        'event=sync_lineage_resolve outcome=%s reason=%s segments=%d bound=%d stamp_overridden=%d '
-        'stamp_fallback=%d unbound=%d generations=%d rows=%d window=%s job_ref=%s',
-        outcome,
-        plan.reason,
-        len(plan.targets),
-        counts.get('bound', 0),
-        counts.get('stamp_overridden', 0),
-        counts.get('stamp_fallback', 0),
-        counts.get('unbound', 0),
-        plan.generations,
-        plan.rows,
-        'origin_row_only' if plan.degraded else 'lineage',
-        bounded_correlation_ref(job_id),
-    )
+    try:
+        logger.info(
+            'event=sync_lineage_resolve outcome=%s reason=%s segments=%d bound=%d stamp_overridden=%d '
+            'stamp_fallback=%d unbound=%d generations=%d rows=%d window=%s job_ref=%s',
+            outcome,
+            plan.reason,
+            len(plan.targets),
+            counts.get('bound', 0),
+            counts.get('stamp_overridden', 0),
+            counts.get('stamp_fallback', 0),
+            counts.get('unbound', 0),
+            plan.generations,
+            plan.rows,
+            'origin_row_only' if plan.degraded else 'lineage',
+            bounded_correlation_ref(job_id),
+        )
+    except Exception:
+        pass
