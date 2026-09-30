@@ -239,3 +239,57 @@ def test_recording_quality_explicit_recording_target_does_not_fallback_to_conver
     with pytest.raises(Exception) as error:
         mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
     assert getattr(error.value, 'status_code', None) == 404
+
+
+def test_record_feedback_validation_guards(monkeypatch):
+    firestore = FakeFirestore()
+    monkeypatch.setattr(feedback_db, 'get_firestore_client', lambda: firestore)
+
+    # 1. Blank uid raises ValueError
+    with pytest.raises(ValueError, match='uid is required'):
+        feedback_db.record_feedback_event_idempotent(
+            '',
+            FeedbackSurface.conversation_summary,
+            FeedbackTargetKind.conversation,
+            'conv-1',
+            1,
+            feedback_id='f-1',
+        )
+
+    # 2. Blank target_id raises ValueError
+    with pytest.raises(ValueError, match='target_id is required'):
+        feedback_db.record_feedback_event_idempotent(
+            'uid-1',
+            FeedbackSurface.conversation_summary,
+            FeedbackTargetKind.conversation,
+            '   ',
+            1,
+            feedback_id='f-1',
+        )
+
+    # 3. Blank event_id or date in queries returns None
+    assert feedback_db.get_feedback_event('') is None
+    assert feedback_db.get_feedback_event('   ') is None
+    assert feedback_db.get_report('') is None
+    assert feedback_db.get_report('   ') is None
+
+
+def test_submit_mobile_feedback_value_error_maps_to_400(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-1',
+        kind=MobileFeedbackKind.summary_helpfulness,
+        target_id='conversation-1',
+        value=1,
+    )
+    monkeypatch.setattr(mobile_feedback.conversations_db, 'get_conversation', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(
+        mobile_feedback.feedback_db,
+        'record_feedback_event_idempotent',
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError('uid is required')),
+    )
+
+    with pytest.raises(mobile_feedback.HTTPException) as exc_info:
+        mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+    assert exc_info.value.status_code == 400
+    assert 'uid is required' in exc_info.value.detail
+
