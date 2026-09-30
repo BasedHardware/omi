@@ -47,36 +47,35 @@ def run_smoke_tests():
     # 1. Health check
     print("\n[1/8] Testing GET /health...")
     resp = client.get("/health")
-    assert resp.status_code == 200, f"Health check failed: {resp.text}"
+    assert resp.status_code == 200, f"Health check failed with HTTP {resp.status_code}"
     assert resp.json().get("status") == "ok"
-    print(f"  PASS: {resp.json()}")
+    print("  PASS: Health endpoint responded")
 
     # 2. Omi manifest
     print("\n[2/8] Testing GET /.well-known/omi-tools.json...")
     resp = client.get("/.well-known/omi-tools.json")
-    assert resp.status_code == 200, f"Manifest failed: {resp.text}"
+    assert resp.status_code == 200, f"Manifest request failed with HTTP {resp.status_code}"
     manifest = resp.json()
     assert len(manifest["tools"]) == 4, "Expected 4 tools registered"
     assert manifest.get("schema_version") == "v1"
-    print(f"  PASS: {manifest['name']} ({len(manifest['tools'])} tools registered)")
+    print("  PASS: Manifest exposes the expected tools")
 
     # 3. Search bike networks (by city name)
     print("\n[3/8] Testing POST /tools/search_bike_networks (query='Paris')...")
     resp = client.post("/tools/search_bike_networks", json={"query": "Paris", "limit": 3})
-    assert resp.status_code == 200, f"Search networks failed: {resp.text}"
+    assert resp.status_code == 200, f"Network search failed with HTTP {resp.status_code}"
     data = resp.json()
-    assert data["error"] is None, f"Unexpected error: {data['error']}"
+    assert data["error"] is None, "Network search returned an error"
     assert "bike network(s) matching 'Paris'" in data["result"]
     assert "- Network ID:" in data["result"]
-    print("  PASS: Formatted network listing received:")
-    print("  " + "\n  ".join(data["result"].split("\n")[:3]))
+    print("  PASS: Formatted network listing received")
 
     # 4. Search bike networks (by stable network_id)
     print("\n[4/8] Testing POST /tools/search_bike_networks (query='citi-bike-nyc')...")
     resp = client.post("/tools/search_bike_networks", json={"query": "citi-bike-nyc", "limit": 1})
-    assert resp.status_code == 200, f"Search networks failed: {resp.text}"
+    assert resp.status_code == 200, f"Network search failed with HTTP {resp.status_code}"
     data = resp.json()
-    assert data["error"] is None, f"Unexpected error: {data['error']}"
+    assert data["error"] is None, "Network search returned an error"
     assert "citi-bike-nyc" in data["result"]
     assert "- Network ID: `citi-bike-nyc`" in data["result"]
     print("  PASS: Verified stable network ID lookup")
@@ -92,44 +91,41 @@ def run_smoke_tests():
             "limit": 3,
         },
     )
-    assert resp.status_code == 200, f"Nearby stations failed: {resp.text}"
+    assert resp.status_code == 200, f"Nearby stations failed with HTTP {resp.status_code}"
     data = resp.json()
-    assert data["error"] is None, f"Unexpected error: {data['error']}"
+    assert data["error"] is None, "Nearby stations returned an error"
     assert "### 🚲 Bike Stations:" in data["result"]
     assert "bikes available" in data["result"]
-    print("  PASS: Stations located with live counts and distance labels:")
-    print("  " + "\n  ".join(data["result"].split("\n")[:4]))
+    print("  PASS: Station listing includes availability and distance labels")
 
     # Dynamically extract the first station name from results for step 6
     station_lines = [l.strip() for l in data["result"].split("\n") if l.strip().startswith("1. **")]
     target_station = station_lines[0].split("**")[1] if station_lines else "Broadway"
 
     # 6. Station detailed status (dynamically queried)
-    print(f"\n[6/8] Testing POST /tools/check_bike_station_status ('{target_station}')...")
+    print("\n[6/8] Testing POST /tools/check_bike_station_status for the selected station...")
     resp = client.post(
         "/tools/check_bike_station_status",
         json={"network_id": "citi-bike-nyc", "station_id_or_name": target_station},
     )
-    assert resp.status_code == 200, f"Station status failed: {resp.text}"
+    assert resp.status_code == 200, f"Station status failed with HTTP {resp.status_code}"
     data = resp.json()
-    assert data["error"] is None, f"Unexpected error: {data['error']}"
+    assert data["error"] is None, "Station status returned an error"
     assert "## 🚲 Station Status:" in data["result"]
     assert "- **Available Bikes**:" in data["result"]
-    print("  PASS: Live station availability details confirmed:")
-    print("  " + "\n  ".join(data["result"].split("\n")[:4]))
+    print("  PASS: Live station availability details confirmed")
 
     # 7. City overview (using stable network_id)
     print("\n[7/8] Testing POST /tools/get_city_bike_overview (network='citi-bike-nyc')...")
     resp = client.post("/tools/get_city_bike_overview", json={"city_or_network": "citi-bike-nyc"})
-    assert resp.status_code == 200, f"City overview failed: {resp.text}"
+    assert resp.status_code == 200, f"City overview failed with HTTP {resp.status_code}"
     data = resp.json()
-    assert data["error"] is None, f"Unexpected error: {data['error']}"
+    assert data["error"] is None, "City overview returned an error"
     assert "## 🚲 Micro-Mobility Overview:" in data["result"]
     assert "- **Active Stations**:" in data["result"]
     assert "- **Available Bikes Fleet**:" in data["result"]
     assert "- **Network Availability**:" in data["result"]
-    print("  PASS: Citywide fleet statistics verified:")
-    print("  " + "\n  ".join(data["result"].split("\n")[:5]))
+    print("  PASS: Citywide fleet statistics verified")
 
     # 8. In-memory caching speedup verification
     print("\n[8/8] Testing In-Memory Cache Performance...")
