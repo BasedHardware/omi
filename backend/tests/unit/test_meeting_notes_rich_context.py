@@ -870,6 +870,11 @@ class TestMeetingContextPack:
             return [_Record('Ash Kalb prefers async updates'), _Record('locked: do not surface', locked=True)]
 
         monkeypatch.setattr(pack_module, 'MemoryService', lambda **kw: SimpleNamespace(read=_read))
+        # Every other source stays hermetic: without these the pack reached live Firestore
+        # (meetings, prior conversations, goals) and the test spent minutes on network timeouts.
+        monkeypatch.setattr(pack_module.calendar_db, 'list_meetings', lambda *a, **k: [])
+        monkeypatch.setattr(pack_module.conversations_db, 'get_conversations_without_photos', lambda *a, **k: [])
+        monkeypatch.setattr(pack_module.goals_db, 'get_user_goals', lambda *a, **k: [])
         roster = _roster([_entry('Ash Kalb', 'ash@fulcra.com')])
         conversation = SimpleNamespace(started_at=START, finished_at=START + timedelta(minutes=30), id='c1')
 

@@ -473,3 +473,27 @@ class TestConcurrentJudging:
         with pytest.raises(HTTPException) as exc_info:
             screen_frames_mod.adjudicate_screen_frames(_request(candidates=candidates), uid=UID)
         assert exc_info.value.status_code == 503
+
+
+class TestPerFrameDeleteHonoursTheAccountSetting:
+    def test_setting_off_returns_the_gated_empty_set(self, _stub_admission_dependencies, monkeypatch):
+        _fake_conversations_db, fake_users_db, _fake_redis_db = _stub_admission_dependencies
+        fake_users_db.get_meeting_note_screenshots_enabled.return_value = False
+        monkeypatch.setattr(screen_frames_mod.screen_frame_store, "delete_screen_frame", lambda *a: True)
+        remaining = MagicMock(name="remaining_frame_set")
+        promote = MagicMock(return_value=remaining)
+        monkeypatch.setattr(screen_frames_mod.enforcement, "promote_banner_after_deletion", promote)
+
+        result = screen_frames_mod.delete_conversation_screenshot(CONVERSATION_ID, "frame-a", uid=UID)
+
+        promote.assert_called_once_with(UID, CONVERSATION_ID)  # the delete itself still happens
+        assert result == screen_frames_mod.EMPTY_FRAME_SET and result.revision == 0
+
+    def test_setting_on_returns_the_remaining_set(self, _stub_admission_dependencies, monkeypatch):
+        monkeypatch.setattr(screen_frames_mod.screen_frame_store, "delete_screen_frame", lambda *a: True)
+        remaining = MagicMock(name="remaining_frame_set")
+        monkeypatch.setattr(
+            screen_frames_mod.enforcement, "promote_banner_after_deletion", MagicMock(return_value=remaining)
+        )
+
+        assert screen_frames_mod.delete_conversation_screenshot(CONVERSATION_ID, "frame-a", uid=UID) is remaining

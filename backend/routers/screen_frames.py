@@ -377,7 +377,9 @@ def delete_conversation_screenshot(conversation_id: str, frame_id: str, uid: str
     existed = screen_frame_store.delete_screen_frame(uid, conversation_id, frame_id)
     if not existed:
         raise HTTPException(status_code=404, detail="Screenshot not found")
-    return enforcement.promote_banner_after_deletion(uid, conversation_id)
+    frame_set = enforcement.promote_banner_after_deletion(uid, conversation_id)
+    # Same gate as GET: with the account setting off, no surface shows the remaining frames.
+    return frame_set if users_db.get_meeting_note_screenshots_enabled(uid) else EMPTY_FRAME_SET
 
 
 @router.delete(
