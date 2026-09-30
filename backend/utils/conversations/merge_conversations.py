@@ -32,6 +32,7 @@ from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.smart_merge_unmerge_audio import cleanup_restored_donor
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
     compute_audio_files_fingerprint,
@@ -687,6 +688,7 @@ def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
 def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> None:
     """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
     row = conversations_db.get_conversation(uid, conversation_id) or {}
+    cleanup_restored_donor(uid, row)
     merged_at = None
     try:
         state = row.get('smart_merge') or {}
@@ -742,6 +744,8 @@ def _delete_conversation_and_related_data(
     - Vector embedding
     - Conversation document
     """
+    if not retain_capture and purge_sync_sources:
+        cleanup_restored_donor(uid, conversations_db.get_conversation(uid, conversation_id) or {})
     # Import here to avoid circular imports
     import database.action_items as action_items_db
 

@@ -84,6 +84,10 @@ def audit_ref(client: Any, uid: str, donor_id: str) -> Any:
     return client.collection('users').document(uid).collection(AUDIT_COLLECTION).document(donor_id)
 
 
+def get_merge_audit(uid: str, donor_id: str) -> dict[str, Any]:
+    return audit_ref(get_firestore_client(), uid, donor_id).get().to_dict() or {}
+
+
 def merge_audit(donor_id: str, survivor_id: str, donor_update: Mapping[str, Any], source: Any) -> dict[str, Any]:
     """Closed content-free projection; never copy arbitrary decision fields."""
     decision = donor_update.get(DECISION_FIELD) or {}

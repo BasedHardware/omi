@@ -24,7 +24,9 @@ all rows, checks the preview's smart-merge and content revisions, removes segmen
 by original id (time windows for missing ids), truncates the ledger, recomputes
 the end time, and advances both survivor revisions. Donors retain their original
 content and audio and become visible with `smart_merge.role=unmerged`; that marker
-prevents them becoming automatic donors again.
+prevents them becoming automatic donors again, including in sync assignment.
+Restore persists `sync_live_target`; repair uploads keep live-capture text dedup
+even after their first content-revision bump and with a capture clock offset.
 
 A persisted `smart_merge.unmerge_pending` receipt blocks new absorbs until the
 follow-up completes. It coordinates a leased replay: remove only the donor's
@@ -33,13 +35,28 @@ the survivor using its existing lease/revision fence (including wholesale memory
 replacement); process each donor with `SMART_UNMERGE` through the normal initial
 processing path, bypassing first-open deferral and retaining the restored row.
 Embedding, audio and search projection are explicitly rebuilt before each donor
-receipt is checkpointed. The normal processing path also owns tasks, memories,
-goals, folder assignment, integrations and webhooks. As on ordinary initial
+receipt is checkpointed. Installed external integration apps also run before the
+checkpoint, with required delivery and a stable `smart-unmerge:SURVIVOR:REVISION:DONOR`
+idempotency key across retries. The original donor's finalizer completed via the
+absorb branch, so this fanout cannot rely on that original finalization job.
+The normal processing path also owns tasks, memories,
+goals, folder assignment, processing apps and webhooks. As on ordinary initial
 processing, some external effects are background/best-effort; a crash before a
 checkpoint can replay them. The receipt is a convergence protocol, not an
 exactly-once guarantee across external systems. Repeating `--apply` resumes a
 pending follow-up; after completion it returns `already_unmerged` without effects.
 A crashed owner's lease expires after ten minutes.
+
+Before restoring visibility, the undo receipt and each donor retain the exact
+copied audio filenames. The snapshot is fenced by donor content revisions as
+well as the survivor revision. User/source deletion removes these survivor copies
+and rebuilds playback metadata/cache before deleting the donor's original audio;
+storage failure leaves originals available for retry. Replay uses the receipt's
+filenames even after a donor document or its original blobs are gone. Missing or
+deleted donors are terminal (`deleted_ids`), skip processing/integrations, and
+do not prevent completion of the survivor refresh or removal of `unmerge_pending`.
+The retained audit pointer lets the original admin invocation resume a pending
+undo after its selected donor is hard-deleted. Deletion never restores content.
 
 Undo cannot recover earlier survivor tasks/events/apps, task completions, speaker
 relabels, prior protection/private-sync flag values, or chat answers given while

@@ -71,7 +71,7 @@ def auto_mergeable(row: dict) -> bool:
     remain intact rather than exposing private donors or orphaning user edits.
     """
     return bool(row.get('sync_content_revision')) and not (
-        (row.get('smart_merge') or {}).get('role') == 'survivor'
+        (row.get('smart_merge') or {}).get('role') in ('survivor', 'unmerged')
         or row.get('sync_live_target')
         or row.get('has_photos')
         or row.get('user_title')
@@ -196,7 +196,7 @@ def assign_in_transaction(
     records = [decode(raw) for _, raw in sorted(matched.items())]
     result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
     result['id'] = canonical
-    smart_live_target = bool(target and (target.get('smart_merge') or {}).get('role') == 'survivor')
+    smart_live_target = bool(target and (target.get('smart_merge') or {}).get('role') in ('survivor', 'unmerged'))
     result['sync_live_target'] = bool(
         target and (target.get('sync_live_target') or smart_live_target or not target.get('sync_content_revision'))
     )

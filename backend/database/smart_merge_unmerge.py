@@ -34,6 +34,8 @@ def unmerge_transaction(
     suffix: Callable[[Mapping[str, Any], str], list[str]],
     eligibility: Callable[[Mapping[str, Any], Sequence[Mapping[str, Any]]], str | None],
     payload: Callable[..., tuple[dict[str, Any], int]],
+    audio_filenames: Mapping[str, Sequence[str]] | None = None,
+    expected_donor_revisions: Mapping[str, Any] | None = None,
     firestore_client: Any = None,
 ) -> UnmergeResult:
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -76,7 +78,23 @@ def unmerge_transaction(
         reason = eligibility(survivor, [row for row, _ in donors])
         if reason is not None:
             return UnmergeResult('ineligible', reason, survivor_id, tuple(donor_ids))
+        if not dry_run and (
+            expected_donor_revisions is None
+            or set(expected_donor_revisions) != set(donor_ids)
+            or any(
+                expected_donor_revisions[cid] != row.get('sync_content_revision')
+                for cid, (row, _) in zip(donor_ids, donors)
+            )
+            or audio_filenames is None
+            or set(audio_filenames) != set(donor_ids)
+        ):
+            return UnmergeResult('ineligible', 'revision_conflict', survivor_id, tuple(donor_ids))
         update, removed = payload(survivor, segments, donors, now=now)
+        if not dry_run:
+            assert audio_filenames is not None
+            update['smart_merge']['unmerge_pending']['audio_filenames'] = {
+                cid: list(audio_filenames[cid]) for cid in donor_ids
+            }
         result = UnmergeResult(
             'dry_run' if dry_run else 'ok',
             'eligible',
@@ -96,11 +114,13 @@ def unmerge_transaction(
             cid = str(donor['id'])
             state = dict(donor.get('smart_merge') or {})
             state.update(role='unmerged', unmerged_at=now, unmerge_actor='admin', unmerge_root=donor_id)
+            state['unmerge_audio_filenames'] = list((audio_filenames or {}).get(cid, []))
             patch = {
                 'deleted': False,
                 'discarded': False,
                 'sync_merged_into': firestore.DELETE_FIELD,
                 'sync_content_revision': int(donor.get('sync_content_revision') or 0) + 1,
+                'sync_live_target': True,
                 'smart_merge': state,
             }
             # Older merges predate the sibling audit. Reconstruct only its closed
@@ -148,12 +168,23 @@ def checkpoint_unmerge(
         if complete:
             if int(state.get('refreshed_revision') or 0) < pending['revision']:
                 return None
-            if set(pending.get('processed_ids') or []) != set(pending['donor_ids']):
+            if set(pending.get('processed_ids') or []) | set(pending.get('deleted_ids') or []) != set(
+                pending['donor_ids']
+            ):
                 return None
             state.pop('unmerge_pending')
         else:
             if completed_donor:
-                pending['processed_ids'] = sorted({*(pending.get('processed_ids') or []), completed_donor})
+                if completed_donor not in pending['donor_ids']:
+                    return None
+                donor = (
+                    conversation_collection(client, uid)
+                    .document(completed_donor)
+                    .get(transaction=transaction)
+                    .to_dict()
+                )
+                field = 'deleted_ids' if not donor or donor.get('deleted') else 'processed_ids'
+                pending[field] = sorted({*(pending.get(field) or []), completed_donor})
             pending['lease'] = {'owner': owner, 'until': now + timedelta(seconds=lease_seconds)}
             state['unmerge_pending'] = pending
         transaction.update(ref, {'smart_merge': state})

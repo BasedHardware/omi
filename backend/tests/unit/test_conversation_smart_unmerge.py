@@ -10,11 +10,13 @@ import pytest
 from database import smart_merge_unmerge as unmerge_db
 from scripts import smart_merge_unmerge as cli
 from tests.unit.test_conversation_smart_merge import T0, UID, World, _path
-from utils import metrics
+from utils import app_integrations, metrics
 from utils.conversations import merge_conversations, smart_merge
+from utils.conversations import smart_merge_unmerge_audio as unmerge_audio
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.smart_merge_policy import new_conversation_skip, predecessor_status_skip
 from utils.other import storage
+from utils.sync.assignment import assign_in_transaction, auto_mergeable
 
 
 @pytest.fixture
@@ -28,12 +30,21 @@ def world(monkeypatch):
     world.rebuilt_audio = []
     world.restored = []
     world.cached = []
+    world.integrations = []
+
+    async def fanout(uid, conversation, **kwargs):
+        world.integrations.append((conversation.id, kwargs))
+        return []
+
+    monkeypatch.setattr(app_integrations, 'trigger_external_integrations', fanout)
     monkeypatch.setattr(
         smart_merge,
         'delete_copied_smart_merge_audio',
-        lambda uid, donor, survivor: world.removed_audio.append((donor, survivor)),
+        lambda uid, donor, survivor, **kwargs: world.removed_audio.append((donor, survivor)),
     )
-    monkeypatch.setattr(smart_merge, 'delete_cached_merged_audio', lambda uid, cid: world.cached.append(cid))
+    monkeypatch.setattr(unmerge_audio, 'delete_cached_merged_audio', lambda uid, cid: world.cached.append(cid))
+    monkeypatch.setattr(unmerge_audio, 'list_audio_chunks', lambda uid, cid: [])
+    monkeypatch.setattr(unmerge_audio, 'is_audio_merge_dispatch_enabled', lambda: False)
     monkeypatch.setattr(
         smart_merge.conversations_db,
         'create_audio_files_from_chunks',
@@ -161,6 +172,162 @@ def test_middle_donor_restores_suffix(world):
     assert audit(world, 'later')['unmerge_actor'] == 'admin'
 
 
+def test_restored_live_donor_repair_with_clock_offset_deduplicates(world):
+    assert not world.raw('n').get('sync_live_target')
+    smart_merge.unmerge_conversation(UID, 'n', dry_run=False)
+    # Model the actual DELETE_FIELD operation without extending the strict fake.
+    world.raw('n').pop('sync_merged_into')
+    incoming = deepcopy(world.get(UID, 'n'))
+    incoming.update(id='repair', started_at=incoming['started_at'] + timedelta(seconds=10))
+    incoming['finished_at'] += timedelta(seconds=10)
+    incoming.pop('smart_merge')
+    for segment in incoming['transcript_segments']:
+        segment.pop('id', None)
+    for _ in range(2):
+        result, _, added = assign_in_transaction(
+            world.store.transaction(),
+            world.store.collection('users').document(UID),
+            incoming,
+            target_id='n',
+            decode=lambda raw: world.get(UID, raw['id']),
+            encode=lambda row: smart_merge.conversations_db.encode_conversation_for_write(UID, row, 'enhanced'),
+            invalidate=lambda row: None,
+        )
+        assert len(result['transcript_segments']) == 2
+        assert added == []
+        assert result['sync_live_target']
+
+
+def test_restored_donor_cannot_be_automatically_absorbed_by_sync(world):
+    smart_merge.unmerge_conversation(UID, 'n', dry_run=False)
+    assert world.raw('n')['sync_live_target']
+    assert not auto_mergeable(world.get(UID, 'n'))
+    # The role also protects previously restored rows without the new marker.
+    world.raw('n').pop('sync_live_target')
+    assert not auto_mergeable(world.get(UID, 'n'))
+
+
+def test_restored_donor_external_integrations_precede_checkpoint_and_retry_with_same_key(world, monkeypatch):
+    calls = []
+
+    async def fanout(uid, conversation, **kwargs):
+        pending = world.raw('p')['smart_merge']['unmerge_pending']
+        assert conversation.id not in pending.get('processed_ids', [])
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise RuntimeError('synthetic transient integration failure')
+        return []
+
+    monkeypatch.setattr(app_integrations, 'trigger_external_integrations', fanout)
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        smart_merge.unmerge_conversation(UID, 'n', dry_run=False)
+    assert not world.raw('p')['smart_merge']['unmerge_pending'].get('processed_ids')
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).outcome == 'ok'
+    assert len(calls) == 2
+    assert calls[0]['idempotency_key'] == calls[1]['idempotency_key']
+    assert calls[0]['require_delivery'] is True
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).reason == 'already_unmerged'
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize('hard_delete', [False, True])
+def test_deleted_restored_donor_is_terminal_and_does_not_block_survivor(world, hard_delete):
+    world.process_error = RuntimeError('synthetic follow-up failure')
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        smart_merge.unmerge_conversation(UID, 'n', dry_run=False)
+    if hard_delete:
+        world.store.rows.pop(_path('n'))
+    else:
+        world.raw('n')['deleted'] = True
+    world.process_error = None
+    smart_merge.finish_unmerge(UID, 'p')
+    assert 'unmerge_pending' not in world.raw('p')['smart_merge']
+    assert predecessor_status_skip(world.raw('p')) is None
+    assert not world.restored and not world.integrations
+    assert (_path('n') not in world.store.rows) if hard_delete else world.raw('n')['deleted']
+
+
+def test_delete_cleans_copies_before_originals_and_replay_uses_retained_manifest(world, monkeypatch):
+    names = ['100.000.opus.enc', '101.000-110.000.batch.bin']
+    originals, copies = set(names), {*names, 'survivor-original.opus.enc'}
+    monkeypatch.setattr(
+        unmerge_audio,
+        'list_audio_chunks',
+        lambda uid, cid: [{'path': f'chunks/{uid}/{cid}/{name}'} for name in originals],
+    )
+
+    def remove(uid, donor, survivor, *, filenames=None):
+        assert filenames == names
+        copies.difference_update(filenames)
+
+    def fail_audio(*args, **kwargs):
+        raise RuntimeError('synthetic storage outage')
+
+    monkeypatch.setattr(smart_merge, 'delete_copied_smart_merge_audio', fail_audio)
+    monkeypatch.setattr(unmerge_audio, 'delete_copied_smart_merge_audio', fail_audio)
+    with pytest.raises(smart_merge.SmartMergeIncomplete):
+        smart_merge.unmerge_conversation(UID, 'n', dry_run=False)
+    pending = world.raw('p')['smart_merge']['unmerge_pending']
+    assert pending['audio_filenames'] == {'n': names}
+    assert world.raw('n')['smart_merge']['unmerge_audio_filenames'] == names
+
+    def delete(uid, cid):
+        assert copies == {'survivor-original.opus.enc'}
+        assert world.rebuilt_audio == ['p'] and world.cached == ['p']
+        originals.clear()
+        world.store.rows.pop(_path(cid))
+
+    monkeypatch.setattr(merge_conversations.conversations_db, 'delete_conversation', delete)
+    with pytest.raises(RuntimeError):
+        merge_conversations.delete_conversation_with_sync_sources(UID, 'n')
+    assert originals == set(names) and _path('n') in world.store.rows
+    monkeypatch.setattr(unmerge_audio, 'delete_copied_smart_merge_audio', remove)
+    merge_conversations.delete_conversation_with_sync_sources(UID, 'n')
+    assert not originals
+    monkeypatch.setattr(smart_merge, 'delete_copied_smart_merge_audio', remove)
+    # The sibling audit lets the original admin invocation resume after hard deletion.
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).reason == 'followup_pending'
+    assert 'unmerge_pending' not in world.raw('p')['smart_merge']
+    assert copies == {'survivor-original.opus.enc'}
+    assert _path('n') not in world.store.rows
+    assert not world.restored and not world.integrations
+
+
+@pytest.mark.parametrize('hard_delete', [False, True])
+def test_deletion_during_restored_processing_is_terminal(world, monkeypatch, hard_delete):
+    process = smart_merge.process_conversation
+
+    def delete_during_processing(uid, language, conversation, **kwargs):
+        if kwargs['trigger'] is ProcessingTrigger.SMART_UNMERGE:
+            if hard_delete:
+                world.store.rows.pop(_path(conversation.id))
+            else:
+                world.raw(conversation.id)['deleted'] = True
+            kwargs['persistence_observer'](False)
+            return conversation
+        return process(uid, language, conversation, **kwargs)
+
+    monkeypatch.setattr(smart_merge, 'process_conversation', delete_during_processing)
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).outcome == 'ok'
+    assert 'unmerge_pending' not in world.raw('p')['smart_merge']
+    assert 'n' not in world.rebuilt_audio
+    assert not world.integrations
+
+
+def test_audio_manifest_is_fenced_by_donor_content_revision(world, monkeypatch):
+    undo = unmerge_db.unmerge_transaction
+
+    def race(*args, **kwargs):
+        world.raw('n')['sync_content_revision'] += 1
+        world.raw('n')['sync_bridge_cleaned_revision'] = world.raw('n')['sync_content_revision']
+        return undo(*args, **kwargs)
+
+    monkeypatch.setattr(unmerge_db, 'unmerge_transaction', race)
+    assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).reason == 'revision_conflict'
+    assert world.raw('n')['deleted']
+    assert 'unmerge_pending' not in world.raw('p')['smart_merge']
+
+
 def test_select_last_keeps_middle(world):
     world.add('later', 20, 5)
     assert world.finish('later')
@@ -268,6 +435,7 @@ def test_suffix_followup_checkpoints_each_donor_and_resumes(world, monkeypatch):
     monkeypatch.setattr(smart_merge, 'process_conversation', original)
     assert smart_merge.unmerge_conversation(UID, 'later', dry_run=False).outcome == 'ok'
     assert world.restored == ['n', 'later']
+    assert [cid for cid, _ in world.integrations] == ['n', 'later']
     assert smart_merge.unmerge_conversation(UID, 'n', dry_run=False).reason == 'already_unmerged'
 
 
@@ -416,3 +584,7 @@ def test_audio_removal_uses_exact_copied_filenames(monkeypatch):
     monkeypatch.setattr(storage, 'owner_storage_write_gate', lambda uid, bucket: nullcontext())
     storage.delete_copied_smart_merge_audio(UID, 'n', 'p')
     assert deleted == [f'chunks/{UID}/p/100.000.opus.enc', f'chunks/{UID}/p/101.000-110.000.batch.bin']
+    deleted.clear()
+    monkeypatch.setattr(storage, 'list_audio_chunks', lambda uid, cid: [])
+    storage.delete_copied_smart_merge_audio(UID, 'n', 'p', filenames=['100.000.opus.enc'])
+    assert deleted == [f'chunks/{UID}/p/100.000.opus.enc']

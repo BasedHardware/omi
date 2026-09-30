@@ -28,6 +28,7 @@ persists a transcript older than the latest absorb.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import uuid
@@ -54,6 +55,7 @@ from database import smart_merge_unmerge as unmerge_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable
 from database.sync_bridges import mark_sync_bridge_cleaned
+from utils import app_integrations
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
@@ -79,6 +81,7 @@ from utils.conversations.smart_merge_policy import (
 )
 from utils.conversations.smart_merge_state import QUESTION_NAME, QUESTIONS, build_state, state_sha256
 from utils.conversations.smart_merge_unmerge_policy import unmerge_ineligible, unmerge_payload, unmerge_suffix
+from utils.conversations import smart_merge_unmerge_audio as unmerge_audio
 from utils.executors import postprocess_executor, run_blocking
 from utils.llm.jev_client import ask_jev
 from utils.metrics import (
@@ -90,7 +93,6 @@ from utils.observability.fallback import record_fallback
 from utils.other.storage import (
     compute_audio_files_fingerprint,
     delete_copied_smart_merge_audio,
-    delete_cached_merged_audio,
     enqueue_conversation_artifact_build,
 )
 
@@ -556,6 +558,10 @@ def unmerge_conversation(
     try:
         donor = conversations_db.get_conversation(uid, donor_id, read_site=FirestoreReadSite.SMART_MERGE) or {}
         state = smart_merge_state(donor)
+        if not donor:
+            audit = smart_merge_db.get_merge_audit(uid, donor_id)
+            if audit.get('unmerged_at'):
+                state = {'role': 'unmerged', 'survivor_id': audit.get('survivor_id')}
         survivor_id = str(state.get('survivor_id') or '')
         survivor = (
             conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
@@ -578,6 +584,12 @@ def unmerge_conversation(
                 result = unmerge_db.UnmergeResult('noop', 'already_unmerged', survivor_id)
         else:
             now = datetime.now(timezone.utc)
+            audio_filenames, donor_revisions = {}, {}
+            if not dry_run:
+                for cid in unmerge_suffix(survivor or {}, donor_id):
+                    row = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE) or {}
+                    audio_filenames[cid] = unmerge_audio.copied_audio_filenames(uid, row, survivor_id)
+                    donor_revisions[cid] = row.get('sync_content_revision')
             result = unmerge_db.unmerge_transaction(
                 uid,
                 donor_id,
@@ -588,6 +600,8 @@ def unmerge_conversation(
                 suffix=unmerge_suffix,
                 eligibility=lambda row, donors: unmerge_ineligible(row, donors, force=force, now=now),
                 payload=unmerge_payload,
+                audio_filenames=audio_filenames,
+                expected_donor_revisions=donor_revisions,
             )
             if result.outcome == 'ok':
                 finish_unmerge(uid, result.survivor_id)
@@ -597,17 +611,6 @@ def unmerge_conversation(
         record_smart_merge_unmerge('error')
         # Exception messages from providers may contain content. Expose only type.
         raise SmartMergeIncomplete(type(error).__name__) from error
-
-
-def _rebuild_unmerge_audio(uid: str, conversation_id: str) -> None:
-    files = conversations_db.create_audio_files_from_chunks(uid, conversation_id)
-    payload = [item.dict() for item in files]
-    conversations_db.update_conversation(uid, conversation_id, {'audio_files': payload})
-    delete_cached_merged_audio(uid, conversation_id)
-    if payload and is_audio_merge_dispatch_enabled():
-        enqueue_conversation_artifact_build(
-            uid, conversation_id, compute_audio_files_fingerprint(payload), caller='smart_merge'
-        )
 
 
 def finish_unmerge(uid: str, survivor_id: str) -> None:
@@ -626,32 +629,51 @@ def finish_unmerge(uid: str, survivor_id: str) -> None:
         pending = checkpoint()
         for cid in pending['donor_ids']:
             donor = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
-            if not donor or donor.get('deleted') or smart_merge_state(donor).get('role') != 'unmerged':
-                raise SmartMergeIncomplete('restored_donor_missing_or_deleted')
-            if donor.get('sync_bridge_audio_target') == survivor_id:
-                delete_copied_smart_merge_audio(uid, cid, survivor_id)
-        _rebuild_unmerge_audio(uid, survivor_id)
+            filenames = (pending.get('audio_filenames') or {}).get(cid)
+            if filenames is not None or (donor and donor.get('sync_bridge_audio_target') == survivor_id):
+                delete_copied_smart_merge_audio(uid, cid, survivor_id, filenames=filenames)
+        unmerge_audio.rebuild_audio(uid, survivor_id)
         refresh_survivor(uid, survivor_id, owner=owner)
         for cid in pending['donor_ids']:
             pending = checkpoint()
-            if cid in pending.get('processed_ids', []):
+            if cid in pending.get('processed_ids', []) or cid in pending.get('deleted_ids', []):
                 continue
             row = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
-            if not row or row.get('deleted') or smart_merge_state(row).get('role') != 'unmerged':
-                raise SmartMergeIncomplete('restored_donor_missing_or_deleted')
-            persistence = {'owned': False}
-            processed = process_conversation(
-                uid,
-                row.get('language') or 'en',
-                deserialize_conversation(row),
-                trigger=ProcessingTrigger.SMART_UNMERGE,
-                persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
-            )
-            if not persistence['owned']:
-                raise SmartMergeIncomplete('restored_donor_processing_fenced')
-            save_structured_vector(uid, processed)
-            _rebuild_unmerge_audio(uid, cid)
-            conversations_db._sync_conversation_search_index(uid, cid)  # pyright: ignore[reportPrivateUsage]
+            if not row or row.get('deleted'):
+                checkpoint(completed_donor=cid)
+                continue
+            if smart_merge_state(row).get('role') != 'unmerged':
+                raise SmartMergeIncomplete('restored_donor_role_changed')
+            try:
+                persistence = {'owned': False}
+                processed = process_conversation(
+                    uid,
+                    row.get('language') or 'en',
+                    deserialize_conversation(row),
+                    trigger=ProcessingTrigger.SMART_UNMERGE,
+                    persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
+                )
+                if not persistence['owned']:
+                    raise SmartMergeIncomplete('restored_donor_processing_fenced')
+                current = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
+                if current and not current.get('deleted'):
+                    save_structured_vector(uid, processed)
+                    unmerge_audio.rebuild_audio(uid, cid)
+                    conversations_db._sync_conversation_search_index(uid, cid)  # pyright: ignore[reportPrivateUsage]
+                    asyncio.run(
+                        app_integrations.trigger_external_integrations(
+                            uid,
+                            processed,
+                            idempotency_key=f"smart-unmerge:{survivor_id}:{pending['revision']}:{cid}",
+                            require_delivery=True,
+                        )
+                    )
+            except Exception:
+                # Deletion is terminal even if it races processing or audio work;
+                # failures on a still-live donor retain the receipt for retry.
+                current = conversations_db.get_conversation(uid, cid, read_site=FirestoreReadSite.SMART_MERGE)
+                if current and not current.get('deleted'):
+                    raise
             checkpoint(completed_donor=cid)
         conversations_db._sync_conversation_search_index(uid, survivor_id)  # pyright: ignore[reportPrivateUsage]
         checkpoint(complete=True)
