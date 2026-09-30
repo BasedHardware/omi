@@ -4,6 +4,10 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: api-key-management-sanitization-tests
+    command: ["python3", "backend/tests/unit/test_api_key_management_error_sanitization.py"]
+    triggers: ["backend/routers/api_key_management.py", "backend/tests/unit/test_api_key_management_error_sanitization.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
   - id: feature-flag-registry
     command: ["python3", "scripts/check_feature_flag_registry.py"]
     triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/render_feature_flag_registry.py", "scripts/posthog_flag_sync.py", "scripts/test_posthog_flag_sync.py", "backend/docs/feature-flag-registry.md", "backend/**/*.py", "backend/deploy/runtime_env/**", "backend/charts/**", "desktop/macos/Desktop/Sources/**/*.swift", "app/lib/services/experiments/**", "web/**/*.ts", "web/**/*.tsx", "desktop/windows/src/**/*.ts", "desktop/windows/src/**/*.tsx", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py"]
