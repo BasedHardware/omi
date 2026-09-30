@@ -230,7 +230,7 @@ async def root():
     <div class="container">
         <h1>Omi CityBikes Integration App <span class="badge">Active</span></h1>
         <p>Real-time micro-mobility and bike-share intelligence across 800+ networks in 400+ cities worldwide (Citi Bike NYC, Vélib' Paris, Santander Cycles London, BIXI Montreal, etc.).</p>
-        
+
         <div class="tools">
             <h3>Registered Chat Tools:</h3>
             <div class="tool-card">
