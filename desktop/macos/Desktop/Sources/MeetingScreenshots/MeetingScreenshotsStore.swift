@@ -394,9 +394,19 @@ final class MeetingScreenshotsStore: ObservableObject {
         + "\(outcome.candidates.count) candidate(s), drops=\(outcome.drops)")
 
     guard !outcome.candidates.isEmpty else {
-      publish(notes: notes)
-      phase = .noCapture
-      Self.cache[cacheKey] = ([], nil, notes)
+      // Nothing to offer, but the pass is done: send the empty stamp (no bytes, no judging). It is
+      // what the backend's notes admission waits for, and it records this window as looked at.
+      do {
+        let stamped = try await adjudicateAndCommit([], conversationID)
+        guard self.selectionWindow == selectionWindow else { return }
+        apply(frameSet: stamped, within: selectionWindow, notes: notes)
+      } catch {
+        guard self.selectionWindow == selectionWindow else { return }
+        log("MeetingScreenshots: empty evidence stamp failed for \(conversationID) — \(error.localizedDescription)")
+        publish(notes: notes)
+        phase = .noCapture
+        Self.cache[cacheKey] = ([], nil, notes)
+      }
       return
     }
 

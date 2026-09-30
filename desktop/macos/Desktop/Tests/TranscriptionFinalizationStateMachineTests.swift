@@ -810,9 +810,13 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
           return .ready
         },
         sleep: boundThatNeverFires))
+    await ConversationFinalizationService.shared.setMeetingContextSyncForTesting { _ in
+      await events.record("identity")
+    }
     addTeardownBlock {
       await ConversationFinalizationService.shared.setAPIClientForTesting(nil)
       await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(nil)
+      await ConversationFinalizationService.shared.setMeetingContextSyncForTesting(nil)
     }
     defer {
       unsetenv("OMI_PYTHON_API_URL")
@@ -831,11 +835,15 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
       id: sessionId, reason: .meetingEnded, allowCloudForceProcess: true)
 
     let recorded = await events.events
-    XCTAssertTrue(recorded.contains("flush"))
+    // The backend admission contract: identity upload, then OCR flush, then the adjudication call
+    // whose marker says both have landed — all before the backend is asked to write notes.
     // 10:00:00.123456 + 1.5s and + 58.25s, in the server's arithmetic.
-    XCTAssertTrue(
-      recorded.contains("adjudicate evidence-recording-id meeting-content-v1:1783418401623:1783418458373 posts=0"),
-      "adjudication must run on the server's window before any finalize request: \(recorded)")
+    XCTAssertEqual(
+      recorded,
+      [
+        "identity", "flush",
+        "adjudicate evidence-recording-id meeting-content-v1:1783418401623:1783418458373 posts=0",
+      ])
     let requests = FinalizationRecoveryURLStub.requests.map { "\($0.method) \($0.url.path)" }
     XCTAssertFalse(
       requests.contains("GET /v1/conversations/evidence-recording-id"),

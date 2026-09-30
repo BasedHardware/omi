@@ -437,6 +437,64 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
       ])
   }
 
+  @MainActor
+  func testAnEmptySelectionSendsTheEmptyStampAndTheNoteReadsItBack() async throws {
+    let window = MeetingScreenshotSelectionWindow(
+      start: Date(timeIntervalSince1970: 7_000), end: Date(timeIntervalSince1970: 7_600))
+    let server = StampServer(fingerprint: window.fingerprint)
+    let selections = SelectionCounter()
+    let conversationID = "empty-\(UUID().uuidString)"
+    func makeStore() -> MeetingScreenshotsStore {
+      MeetingScreenshotsStore(
+        featureEnabled: { true },
+        selectCandidates: { _ in
+          selections.count += 1
+          return MeetingFrameSelector.Outcome()
+        },
+        adjudicateAndCommit: { candidates, _ in await server.adjudicate(candidateCount: candidates.count) },
+        fetchPersistedSet: { _ in await server.persisted() },
+        deleteFrameRemote: { _, _ in })
+    }
+
+    let first = await makeStore().loadAndWait(conversationID: conversationID, selectionWindow: window)
+    XCTAssertEqual(first, .noCapture)
+    let offers = await server.offers
+    XCTAssertEqual(offers, [0], "nothing to offer still sends one empty adjudication: the evidence stamp")
+
+    MeetingScreenshotsStore.resetSessionCacheForTesting()
+    let reopened = await makeStore().loadAndWait(conversationID: conversationID, selectionWindow: window)
+    XCTAssertEqual(reopened, .noCapture)
+    XCTAssertEqual(selections.count, 1, "the stamped window is read back, not selected again")
+    let offersAfterReopen = await server.offers
+    XCTAssertEqual(offersAfterReopen, [0])
+  }
+
+  func testTheFlushPrecedesAdjudicationAndAnUntrustedWindowStillStamps() async {
+    let events = EventLog()
+    let pass = MeetingScreenEvidencePass(
+      screenshotsEnabled: { true },
+      flushScreenActivity: { _ in await events.append("flush") },
+      adjudicate: { _, _ in
+        await events.append("adjudicate")
+        return .noCapture
+      },
+      sleep: boundThatNeverFires,
+      stampEmpty: { id in await events.append("stamp \(id)") })
+    let interval = DateInterval(start: Date(timeIntervalSince1970: 0), duration: 10)
+
+    let trusted = await pass.beforeNotes(
+      captureInterval: interval, conversationID: "trusted", fetchSelectionWindow: { Self.sampleWindow })
+    XCTAssertEqual(trusted, .settled(.noCapture))
+    let untrusted = await pass.beforeNotes(
+      captureInterval: interval, conversationID: "untrusted", fetchSelectionWindow: { nil })
+    XCTAssertEqual(untrusted, .untrustedWindow)
+    let unbound = await pass.beforeNotes(captureInterval: interval, conversationID: nil, fetchSelectionWindow: nil)
+    XCTAssertEqual(unbound, .unbound)
+
+    let log = await events.entries
+    XCTAssertEqual(log, ["flush", "adjudicate", "flush", "stamp untrusted", "flush"])
+  }
+
   func testAfterFinalizeFailureRecordsDegradedFallbackToNoteOpen() async {
     let fallbacks = FallbackRecorder()
     let pass = MeetingScreenEvidencePass(
@@ -699,4 +757,27 @@ private final class SigningServer: @unchecked Sendable {
     return ConversationScreenFrameSet(
       revision: 1, banner: nil, strip: [frame], adjudicatedAt: capturedAt, selectionFingerprint: fingerprint)
   }
+}
+
+private actor EventLog {
+  private(set) var entries: [String] = []
+  func append(_ entry: String) { entries.append(entry) }
+}
+
+/// The adjudication route's empty-offer contract: it stamps the window's marker and judges nothing.
+private actor StampServer {
+  private let fingerprint: String
+  private var stored = ConversationScreenFrameSet.empty
+  private(set) var offers: [Int] = []
+
+  init(fingerprint: String) { self.fingerprint = fingerprint }
+
+  func adjudicate(candidateCount: Int) -> ConversationScreenFrameSet {
+    offers.append(candidateCount)
+    stored = ConversationScreenFrameSet(
+      revision: 0, banner: nil, strip: [], adjudicatedAt: Date(), selectionFingerprint: fingerprint)
+    return stored
+  }
+
+  func persisted() -> ConversationScreenFrameSet { stored }
 }

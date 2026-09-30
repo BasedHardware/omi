@@ -67,20 +67,26 @@ struct MeetingScreenEvidencePass: Sendable {
   /// Long enough for the server's serial judge over the eight-candidate ceiling on a normal link;
   /// short enough that a meeting's notes are never held hostage by screen evidence.
   static let defaultTimeout: Duration = .seconds(20)
+  /// The OCR flush's share of `defaultTimeout`; adjudication runs after it. The backend waits up to
+  /// 25 s for the adjudication marker, so the whole pass fits inside that.
+  static let ocrFlushBudgetSeconds: TimeInterval = 8
 
   var timeout: Duration = Self.defaultTimeout
   var screenshotsEnabled: @Sendable () async -> Bool
   var flushScreenActivity: @Sendable (DateInterval) async -> Void
   var adjudicate: @Sendable (String, MeetingScreenshotSelectionWindow) async -> MeetingScreenshotsStore.Phase
   var sleep: @Sendable (Duration) async -> Void
+  /// The empty adjudication call: "evidence pass done, nothing to offer" (no bytes, no judging).
+  var stampEmpty: @Sendable (String) async -> Void = { _ in }
   var recordFallback: @Sendable (Fallback) -> Void = { _ in }
 
   static let production = MeetingScreenEvidencePass(
     screenshotsEnabled: { MeetingNoteScreenshotsFeature.isEnabled },
     flushScreenActivity: {
-      // Drain within the pass bound; whatever is left ships on the periodic path.
-      let seconds = Double(defaultTimeout.components.seconds)
-      await ScreenActivitySyncService.shared.flushMeetingWindow($0, deadline: Date().addingTimeInterval(seconds))
+      // Part of the pass bound, leaving the rest for selection and adjudication, which must follow
+      // it; whatever is left ships on the periodic path.
+      await ScreenActivitySyncService.shared.flushMeetingWindow(
+        $0, deadline: Date().addingTimeInterval(ocrFlushBudgetSeconds))
     },
     adjudicate: { @MainActor conversationID, window in
       // A fresh store shares the static cache and in-flight map with every note view, so this is
@@ -88,6 +94,13 @@ struct MeetingScreenEvidencePass: Sendable {
       await MeetingScreenshotsStore().loadAndWait(conversationID: conversationID, selectionWindow: window)
     },
     sleep: { try? await Task.sleep(for: $0) },
+    stampEmpty: { conversationID in
+      do {
+        _ = try await MeetingFrameJudge.shared.adjudicateAndCommit(candidates: [], subjectID: conversationID)
+      } catch {
+        log("MeetingScreenEvidence: empty evidence stamp failed for \(conversationID)")
+      }
+    },
     recordFallback: { fallback in
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "meeting_screen_evidence",
@@ -106,18 +119,20 @@ struct MeetingScreenEvidencePass: Sendable {
   ) async -> Outcome {
     let enabled = await screenshotsEnabled()
     let pass = self
-    let outcome = await Self.first(
-      of: {
-        async let flushed: Void = pass.flushScreenActivity(captureInterval)
-        let outcome: Outcome
-        if !enabled {
-          outcome = .disabled
-        } else if let conversationID, let fetchSelectionWindow {
-          outcome = await pass.adjudicate(conversationID: conversationID, fetchSelectionWindow: fetchSelectionWindow)
-        } else {
-          outcome = .unbound
+    let outcome: Outcome = await Self.first(
+      of: { () async -> Outcome in
+        // Order is the backend admission contract: the identity upload has already run (the
+        // finalization service does it first), then the OCR flush, and only then the adjudication
+        // call, because its marker is what tells the server that all of this evidence has landed.
+        await pass.flushScreenActivity(captureInterval)
+        guard enabled else { return .disabled }
+        guard let conversationID, let fetchSelectionWindow else { return .unbound }
+        let outcome = await pass.adjudicate(conversationID: conversationID, fetchSelectionWindow: fetchSelectionWindow)
+        if outcome == .untrustedWindow {
+          // No window to select in, so nothing to offer: stamp the marker anyway, or the server
+          // holds the notes for its full bound waiting for evidence that cannot come.
+          await pass.stampEmpty(conversationID)
         }
-        await flushed
         return outcome
       },
       orAfter: timeout,

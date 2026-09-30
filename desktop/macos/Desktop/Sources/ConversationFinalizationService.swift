@@ -15,6 +15,7 @@ actor ConversationFinalizationService {
     ConversationFinalizationService.systemNetworkReachability
   private var clock: @Sendable () -> Date = { Date() }
   private var screenEvidencePass = MeetingScreenEvidencePass.production
+  private var meetingContextSyncForTesting: (@Sendable (DateInterval) async -> Void)?
   private var isDeferredForOffline = false
 
   private static let systemNetworkReachability: @Sendable () async -> Bool = {
@@ -46,6 +47,11 @@ actor ConversationFinalizationService {
 
   func setScreenEvidencePassForTesting(_ pass: MeetingScreenEvidencePass?) {
     screenEvidencePass = pass ?? .production
+  }
+
+  /// Replaces the calendar/on-device identity upload so a test can observe its order.
+  func setMeetingContextSyncForTesting(_ sync: (@Sendable (DateInterval) async -> Void)?) {
+    meetingContextSyncForTesting = sync
   }
 
   func finalizeSession(
@@ -195,8 +201,15 @@ actor ConversationFinalizationService {
     }
   }
 
+  /// The identity upload. It runs first in every finalization attempt, so it precedes the screen
+  /// evidence pass, whose adjudication marker tells the backend that identity, OCR, and frames
+  /// have all landed (the backend's bounded notes admission waits on that marker).
   private func storeMeetingContextIfEnabled(for session: TranscriptionSessionRecord) async {
     guard session.conversationRole == .meeting else { return }
+    if let meetingContextSyncForTesting {
+      await meetingContextSyncForTesting(Self.captureInterval(of: session))
+      return
+    }
     let enabled = await MainActor.run {
       (
         systemCalendar: SystemCalendarMeetingContextFeature.isEnabled,

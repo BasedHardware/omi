@@ -73,14 +73,15 @@ final class MeetingScreenshotsTests: XCTestCase {
         didSelect = true
         return MeetingFrameSelector.Outcome()
       },
+      adjudicateAndCommit: { _, _ in
+        ConversationScreenFrameSet(
+          revision: 1, banner: nil, strip: [], adjudicatedAt: Date(), selectionFingerprint: window.fingerprint)
+      },
       fetchPersistedSet: { _ in oldSet })
 
-    store.load(
+    await store.loadAndWait(
       conversationID: "changed-policy-\(UUID().uuidString)",
       selectionWindow: window)
-    for _ in 0..<100 where !didSelect {
-      await Task.yield()
-    }
 
     XCTAssertTrue(didSelect, "an adjudication from a different window policy must be re-selected")
     XCTAssertEqual(store.phase, .noCapture)

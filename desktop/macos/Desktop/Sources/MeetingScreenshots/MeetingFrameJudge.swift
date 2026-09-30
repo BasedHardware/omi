@@ -28,19 +28,6 @@ actor MeetingFrameJudge {
   /// the primary enforcement point.
   static let maxCandidatesPerRequest = 8
 
-  enum MeetingFrameJudgeError: Error, LocalizedError, Equatable {
-    /// None of the selected candidates had pixels this process could still read (a chunk aged
-    /// out between selection and upload, or a zero-byte abandoned chunk). Normal, not a bug.
-    case noReadablePixels
-
-    var errorDescription: String? {
-      switch self {
-      case .noReadablePixels:
-        return "None of this meeting's candidate frames still had readable pixels."
-      }
-    }
-  }
-
   /// Upload every candidate's canonical bytes and commit whatever the server approves.
   ///
   /// - Parameters:
@@ -51,7 +38,9 @@ actor MeetingFrameJudge {
     candidates: [MeetingFrameCandidate],
     subjectID: String
   ) async throws -> ConversationScreenFrameSet {
-    guard !candidates.isEmpty else { return .empty }
+    // An empty offer is still sent: it is the "evidence pass done, nothing to show" stamp the
+    // backend's notes admission waits for (no bytes, no judging), and it records that this window
+    // was looked at so a later open reads the persisted result instead of selecting again.
     let bounded =
       candidates.count > Self.maxCandidatesPerRequest
       ? Array(candidates.prefix(Self.maxCandidatesPerRequest))
@@ -67,7 +56,10 @@ actor MeetingFrameJudge {
       else { continue }
       wire.append(entry)
     }
-    guard !wire.isEmpty else { throw MeetingFrameJudgeError.noReadablePixels }
+    if wire.isEmpty && !bounded.isEmpty {
+      // Chunks aged out between selection and upload: nothing to offer, but the pass is done.
+      log("MeetingFrameJudge: no candidate had readable pixels; sending the empty evidence stamp")
+    }
 
     let request = ScreenFrameAdjudicationRequestWire(subjectID: subjectID, candidates: wire)
     let response = try await APIClient.shared.adjudicateScreenFrames(request)
