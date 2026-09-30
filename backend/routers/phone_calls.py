@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import traceback
@@ -11,6 +12,7 @@ from pydantic import BaseModel, Field
 from twilio.base.exceptions import TwilioRestException
 from twilio.twiml.voice_response import VoiceResponse, Dial
 
+from utils.log_sanitizer import sanitize
 import database.phone_calls as phone_calls_db
 from utils.phone_calls import check_call_access, check_destination_allowed, get_quota_snapshot, reserve_phone_call_quota
 from utils.other import endpoints as auth
@@ -25,6 +27,8 @@ from utils.twilio_service import (
     get_caller_id,
     validate_twilio_signature,
 )
+
+logger = logging.getLogger(__name__)
 
 E164_PATTERN = re.compile(r'^\+[1-9]\d{1,14}$')
 
@@ -144,11 +148,11 @@ def verify_phone_number(
                     status_code=409,
                     detail="A verification call is already in progress for this number. Please answer the call and enter the code.",
                 )
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
+        logger.error(f"Failed to start verification for user {uid}: {sanitize(str(e))}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to start verification. Please try again later.")
     except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
+        logger.error(f"Unexpected error starting verification for user {uid}: {sanitize(str(e))}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to start verification. Please try again later.")
 
 
 @router.post("/v1/phone/numbers/verify/check", response_model=CheckVerificationResponse, tags=['phone-calls'])
@@ -239,7 +243,8 @@ def get_phone_token(uid: str = Depends(auth.get_current_user_uid)):
         token_data = generate_access_token(uid)
         return TokenResponse(**token_data)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate token: {str(e)}")
+        logger.error(f"Failed to generate phone token for user {uid}: {sanitize(str(e))}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate token. Please try again later.")
 
 
 # ************************************************
