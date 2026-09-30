@@ -21,6 +21,7 @@ identity; when the signing secret is absent the OAuth path fails closed.
 """
 
 import hashlib
+import math
 import time
 from typing import Any, Dict, List, Optional
 
@@ -120,6 +121,10 @@ def read_access_token(access_token: str, resource: str) -> Optional[Dict[str, An
     runs the Firestore path. A missing signing secret fails closed: unsigned
     cache data can never be trusted.
     """
+    if not isinstance(access_token, str) or not access_token.strip():
+        return None
+    if not isinstance(resource, str) or not resource.strip():
+        return None
     if not mcp_cache_integrity.integrity_available():
         raise McpTokenStoreUnavailable("MCP OAuth token cache signing secret unavailable")
     client = _redis()
@@ -160,21 +165,48 @@ def fill_access_token(
     """Cache a fully validated identity with TTL min(60s, token time-to-live),
     and index the token hash under its grant for targeted revocation.
     ``index_ttl_seconds`` is the access-token TTL the caller guarantees."""
-    remaining = expires_at_epoch - time.time()
-    ttl = min(ACCESS_TOKEN_CACHE_TTL_CAP_SECONDS, int(remaining))
+    if not isinstance(access_token, str) or not access_token.strip():
+        return
+    if not isinstance(identity, dict):
+        return
+    uid = identity.get("uid")
+    client_id = identity.get("client_id")
+    resource = identity.get("resource")
+    scopes = identity.get("scopes")
+    grant_id = str(identity.get("grant_id") or "").strip()
+    if (
+        not isinstance(uid, str)
+        or not uid.strip()
+        or not isinstance(client_id, str)
+        or not client_id.strip()
+        or not isinstance(resource, str)
+        or not resource.strip()
+        or not isinstance(scopes, (list, tuple))
+        or not scopes
+        or not grant_id
+    ):
+        return
+    try:
+        remaining = float(expires_at_epoch) - time.time()
+        if not math.isfinite(remaining) or remaining <= 0:
+            return
+        ttl = min(ACCESS_TOKEN_CACHE_TTL_CAP_SECONDS, int(remaining))
+    except (ValueError, OverflowError, TypeError):
+        return
     if ttl <= 0:
         return
-    grant_id = str(identity.get("grant_id") or "")
-    if not grant_id:
-        return
+    try:
+        clamped_index_ttl = max(1, int(index_ttl_seconds))
+    except (ValueError, OverflowError, TypeError):
+        clamped_index_ttl = 3600
     token_hash = _sha256(access_token)
     entry = {
-        "uid": identity["uid"],
-        "client_id": identity["client_id"],
-        "resource": identity["resource"],
-        "scopes": list(identity["scopes"]),
+        "uid": uid.strip(),
+        "client_id": client_id.strip(),
+        "resource": resource.strip(),
+        "scopes": list(scopes),
         "grant_id": grant_id,
-        "expires_at": expires_at_epoch,
+        "expires_at": float(expires_at_epoch),
         "token_hash": token_hash,
     }
     if not mcp_cache_integrity.integrity_available():
@@ -187,7 +219,7 @@ def fill_access_token(
     try:
         client.set(_access_token_key(access_token), blob, ex=ttl)
         client.sadd(grant_index_key, token_hash)
-        client.expire(grant_index_key, index_ttl_seconds)
+        client.expire(grant_index_key, clamped_index_ttl)
     except Exception as exc:
         raise McpTokenStoreUnavailable("MCP OAuth token cache unavailable") from exc
 
@@ -199,15 +231,26 @@ def invalidate_grant(grant_id: str, *, marker_ttl_seconds: int) -> None:
     the marker write is the mandatory part — if it cannot be written the
     caller must not report a successful revoke, and once written it keeps
     blocking cached entries even when a later purge step fails."""
+    if not isinstance(grant_id, str) or not grant_id.strip():
+        return
+    grant_id = grant_id.strip()
+    try:
+        clamped_marker_ttl = max(1, int(marker_ttl_seconds))
+    except (ValueError, OverflowError, TypeError):
+        clamped_marker_ttl = 86400
     client = _redis()
     try:
         # A falsy SET that does not raise is still an unwritten marker — the
         # caller must never pretend the grant is revoked.
-        if not client.set(_revoked_grant_key(grant_id), "1", ex=marker_ttl_seconds):
+        if not client.set(_revoked_grant_key(grant_id), "1", ex=clamped_marker_ttl):
             raise McpTokenStoreUnavailable("MCP OAuth revocation marker write rejected")
         index_key = _grant_tokens_key(grant_id)
         token_hashes = client.smembers(index_key)
-        keys = [_access_token_key_from_hash(_decode(token_hash) or "") for token_hash in token_hashes or ()]
+        keys = [
+            _access_token_key_from_hash(decoded)
+            for token_hash in (token_hashes or ())
+            if (decoded := (_decode(token_hash) or "").strip())
+        ]
         if keys:
             client.delete(*keys)
         client.delete(index_key)
@@ -224,6 +267,8 @@ def _access_token_key_from_hash(token_hash: str) -> str:
 def claim_last_used_write(access_token: str) -> bool:
     """Throttle ``last_used_at`` writes to one per token per 600s: only the
     caller whose ``SET NX EX`` claim lands may write Firestore."""
+    if not isinstance(access_token, str) or not access_token.strip():
+        return False
     try:
         return bool(_redis().set(_last_used_key(access_token), "1", nx=True, ex=LAST_USED_THROTTLE_SECONDS))
     except Exception as exc:
