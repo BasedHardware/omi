@@ -7,13 +7,18 @@ conversation; this app turns it into structured tasting cards.
 Two ways to capture:
   1. Chat tools (explicit): ask Omi to "log this tasting" and dictate or
      confirm the structured fields.
-  2. Ambient webhook (implicit): POST a conversation transcript to
-     /webhook/tasting-candidate and the app scores it for tasting signals.
-     Strong matches are stored as candidates flagged `needs_review` so you
-     can confirm them later with the `confirm_candidate` chat tool.
+  2. Ambient webhook (implicit): Omi posts the finished Conversation to
+     /webhook/tasting-candidate?uid=<user-id> and the app scores the
+     transcript for tasting signals. Strong matches are stored as candidates
+     flagged `needs_review` so you can confirm them later with the
+     `confirm_candidate` chat tool (list them with `list_candidates`).
 
 Beverage types: wine, coffee, whiskey, beer, other.
 Scores are normalized to a 100-point scale.
+
+Security note: there is no authentication — anyone who knows a uid can
+read and write that user's tastings. The data is low-sensitivity tasting
+notes, but treat uids as bearer tokens and don't share them.
 """
 
 import json
@@ -24,16 +29,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from omi_plugin_sdk.models import Conversation
 
 APP_TITLE = "Omi Tasting Notes Integration"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 
+# Created lazily on first write so importing this module (e.g. repo-wide
+# import checks) never touches the disk.
 DATA_DIR = Path(os.environ.get("TASTING_DATA_DIR", Path(__file__).parent / "data"))
-DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 BEVERAGE_TYPES = ("wine", "coffee", "whiskey", "beer", "other")
 VERDICTS = ("buy", "skip", "cellar")
@@ -57,9 +65,10 @@ TASTING_KEYWORDS: dict[str, dict[str, int]] = {
         "oaky": 2, "oaked": 2, "full-bodied": 2, "fruit-forward": 2,
     },
     "coffee": {
-        "coffee": 3, "espresso": 4, "barista": 4, "pour over": 4, "pour-over": 4,
+        "coffee": 3, "espresso": 4, "roast": 2,
+        "barista": 4, "pour over": 4, "pour-over": 4,
         "single origin": 4, "french press": 3, "aeropress": 3, "cold brew": 3,
-        "crema": 3, "roast": 2, "roastery": 4, "cupping": 5, "chemex": 3,
+        "crema": 3, "roastery": 4, "cupping": 5, "chemex": 3,
         "v60": 3, "latte art": 2,
     },
     "whiskey": {
@@ -74,7 +83,16 @@ TASTING_KEYWORDS: dict[str, dict[str, int]] = {
     },
 }
 
-TASTING_DETECT_THRESHOLD = 6
+# Coffee's generic words ("coffee", "espresso", "roast") appear in ordinary
+# chatter ("grabbed a coffee, then we talked roadmap"), so coffee additionally
+# requires at least one tasting-specific term before it can be detected.
+COFFEE_TASTING_TERMS = {
+    "barista", "pour over", "pour-over", "single origin", "french press",
+    "aeropress", "cold brew", "crema", "roastery", "cupping", "chemex",
+    "v60", "latte art",
+}
+
+TASTING_DETECT_THRESHOLD = 8
 
 BUY_SIGNALS = (
     "would buy", "will buy", "buy a case", "buying a case", "take home",
@@ -82,28 +100,50 @@ BUY_SIGNALS = (
 )
 SKIP_SIGNALS = (
     "wouldn't buy", "would not buy", "not buying", "skip this",
-    "pass on this", "not worth",
+    "pass on this",
 )
+# "not worth" is a skip signal on its own, but not in "not worth missing".
+_SKIP_NOT_WORTH_RE = re.compile(r"not worth\b(?!\s+missing)")
+
+# Words that negate a nearby buy signal ("no way we're buying a case").
+_BUY_NEGATORS = (
+    "not", "no", "never", "don't", "dont", "didn't", "didnt",
+    "wouldn't", "wouldnt", "can't", "cant", "won't", "wont",
+)
+_BUY_NEGATOR_RES = [re.compile(r"\b" + re.escape(n) + r"\b") for n in _BUY_NEGATORS]
+_BUY_NEGATION_WINDOW = 40  # characters before the buy signal to scan
 
 _SCORE_100_RE = re.compile(r"(?<!\d)(\d{2,3}(?:\.\d+)?)(?!\d)\s*(?:points|/100|out of 100)")
-_SCORE_5_RE = re.compile(r"(\d(?:\.\d+)?)\s*stars?")
+_SCORE_5_RE = re.compile(r"(?<!\d)(\d(?:\.\d+)?)\s*stars?")
 _SCORE_10_RE = re.compile(r"\b(\d{1,2}(?:\.\d+)?)\s*/\s*10\b")
+
+
+def _keyword_hits(text: str, beverage: str) -> tuple[int, set[str]]:
+    """Return (weighted score, matched phrases) for one beverage vocabulary."""
+    total = 0
+    hits: set[str] = set()
+    for phrase, weight in TASTING_KEYWORDS[beverage].items():
+        # Word-boundary match so "winery" doesn't fire on "swinery".
+        if re.search(r"\b" + re.escape(phrase) + r"\b", text):
+            total += weight
+            hits.add(phrase)
+    return total, hits
 
 
 def detect_tasting(text: str) -> tuple[Optional[str], int]:
     """Return (beverage_type, score) for the best-matching tasting vocabulary.
 
     Returns (None, 0) when the text does not clear the detection threshold.
+    Coffee additionally requires a tasting-specific term so ordinary coffee
+    chatter ("grabbed a coffee, then we talked roadmap") is not filed.
     """
     lowered = text.lower()
     best: Optional[str] = None
     best_score = 0
-    for beverage, keywords in TASTING_KEYWORDS.items():
-        total = 0
-        for phrase, weight in keywords.items():
-            # Word-boundary match so "winery" doesn't fire on "swinery".
-            if re.search(r"\b" + re.escape(phrase) + r"\b", lowered):
-                total += weight
+    for beverage in TASTING_KEYWORDS:
+        total, hits = _keyword_hits(lowered, beverage)
+        if beverage == "coffee" and not (hits & COFFEE_TASTING_TERMS):
+            continue
         if total > best_score:
             best_score = total
             best = beverage
@@ -120,7 +160,7 @@ def parse_score(text: str) -> Optional[float]:
         return _clamp_score(float(match.group(1)))
     match = _SCORE_5_RE.search(lowered)
     if match:
-        return _clamp_score(float(match.group(1)) * 20.0)
+        return _clamp_score(min(float(match.group(1)), 5.0) * 20.0)
     match = _SCORE_10_RE.search(lowered)
     if match:
         return _clamp_score(float(match.group(1)) * 10.0)
@@ -131,21 +171,39 @@ def _clamp_score(value: float) -> float:
     return max(0.0, min(100.0, round(value, 1)))
 
 
+def _buy_signal_negated(lowered: str, signal_start: int) -> bool:
+    """Check the window before a buy signal for negating words."""
+    window_start = max(0, signal_start - _BUY_NEGATION_WINDOW)
+    before = lowered[window_start:signal_start]
+    return any(neg.search(before) for neg in _BUY_NEGATOR_RES)
+
+
 def infer_verdict(text: str) -> Optional[str]:
-    """Infer a buy/skip verdict from explicit purchase language only."""
+    """Infer a buy/skip verdict from explicit purchase language only.
+
+    Skip signals are checked first ("wouldn't buy" contains "buy"). Buy
+    signals are ignored when a negator (not/no/never/don't/...) appears
+    shortly before them, so "no way we're buying a case" is not a buy.
+    """
     lowered = text.lower()
-    # Check skip signals first: "wouldn't buy" contains "buy".
     for signal in SKIP_SIGNALS:
         if signal in lowered:
             return "skip"
+    if _SKIP_NOT_WORTH_RE.search(lowered):
+        return "skip"
     for signal in BUY_SIGNALS:
-        if signal in lowered:
-            return "buy"
+        for match in re.finditer(re.escape(signal), lowered):
+            if not _buy_signal_negated(lowered, match.start()):
+                return "buy"
     return None
 
 
 # ---------------------------------------------------------------------------
 # Storage (per-user JSON files, no external DB)
+#
+# NOTE: hosts with ephemeral disks (Fly.io machines, Railway without a
+# volume) wipe these files on every deploy/restart. Run with a persistent
+# volume mounted and TASTING_DATA_DIR pointing at it (see README).
 # ---------------------------------------------------------------------------
 
 def _user_path(uid: str) -> Path:
@@ -167,6 +225,7 @@ def _load_user(uid: str) -> dict[str, Any]:
 
 
 def _save_user(uid: str, data: dict[str, Any]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
     _user_path(uid).write_text(json.dumps(data, indent=2))
 
 
@@ -174,9 +233,79 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _new_tasting(uid: str, source: str, **fields: Any) -> dict[str, Any]:
+    now = _now_iso()
+    return {
+        "id": uuid.uuid4().hex[:8],
+        "uid": uid,
+        "beverage_type": fields.get("beverage_type", "wine"),
+        "name": fields.get("name"),
+        "producer": fields.get("producer"),
+        "vintage": fields.get("vintage"),
+        "region": fields.get("region"),
+        "varietal": fields.get("varietal"),
+        "nose": fields.get("nose"),
+        "palate": fields.get("palate"),
+        "finish": fields.get("finish"),
+        "score_100": fields.get("score_100"),
+        "verdict": fields.get("verdict"),
+        "notes": fields.get("notes"),
+        "source": source,
+        "needs_review": bool(fields.get("needs_review", False)),
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def _store_tasting(uid: str, source: str, **fields: Any) -> dict[str, Any]:
+    data = _load_user(uid)
+    tasting = _new_tasting(uid, source, **fields)
+    data["tastings"].append(tasting)
+    _save_user(uid, data)
+    return tasting
+
+
+def _conversation_text(conversation: Conversation) -> str:
+    """Build plain transcript text from a Conversation.
+
+    Prefers the SDK's get_transcript(); falls back to reading
+    transcript_segments directly so dict-shaped segments keep working.
+    """
+    get_transcript = getattr(conversation, "get_transcript", None)
+    if callable(get_transcript):
+        try:
+            text = get_transcript()
+        except Exception:
+            text = ""
+        if text:
+            return text
+    parts: list[str] = []
+    for segment in getattr(conversation, "transcript_segments", None) or []:
+        if isinstance(segment, dict):
+            text = segment.get("text")
+        else:
+            text = getattr(segment, "text", None)
+        if text:
+            parts.append(str(text))
+    return "\n".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # API models
 # ---------------------------------------------------------------------------
+
+class _NullMeansDefault(BaseModel):
+    """The Omi backend sends every optional tool parameter the model did not
+    supply as JSON null (langchain-core forwards defaulted fields), so a null
+    must mean 'use the default', not 'invalid request'."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_nulls(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if v is not None}
+        return data
+
 
 class ChatToolResponse(BaseModel):
     """Response model for Omi chat tool endpoints."""
@@ -206,9 +335,9 @@ class Tasting(BaseModel):
     updated_at: str
 
 
-class LogTastingRequest(BaseModel):
+class LogTastingRequest(_NullMeansDefault):
     uid: str = Field(..., min_length=1)
-    beverage_type: str = Field(default="wine")
+    beverage_type: Optional[str] = Field(default="wine")
     name: Optional[str] = None
     producer: Optional[str] = None
     vintage: Optional[str] = None
@@ -224,6 +353,8 @@ class LogTastingRequest(BaseModel):
     @field_validator("beverage_type", mode="before")
     @classmethod
     def normalize_beverage(cls, value: Any) -> str:
+        if value is None:
+            return "wine"
         normalized = str(value).strip().lower()
         if normalized not in BEVERAGE_TYPES:
             raise ValueError(f"beverage_type must be one of {', '.join(BEVERAGE_TYPES)}")
@@ -240,10 +371,10 @@ class LogTastingRequest(BaseModel):
         return normalized
 
 
-class ListTastingsRequest(BaseModel):
+class ListTastingsRequest(_NullMeansDefault):
     uid: str = Field(..., min_length=1)
     beverage_type: Optional[str] = None
-    limit: int = Field(default=10, ge=1, le=50)
+    limit: Optional[int] = Field(default=10, ge=1, le=50)
 
     @field_validator("beverage_type", mode="before")
     @classmethod
@@ -255,17 +386,48 @@ class ListTastingsRequest(BaseModel):
             raise ValueError(f"beverage_type must be one of {', '.join(BEVERAGE_TYPES)}")
         return normalized
 
+    @field_validator("limit", mode="before")
+    @classmethod
+    def coerce_limit(cls, value: Any) -> int:
+        if value is None:
+            return 10
+        try:
+            coerced = int(value)
+        except (TypeError, ValueError):
+            raise ValueError("limit must be an integer between 1 and 50")
+        if not 1 <= coerced <= 50:
+            raise ValueError("limit must be an integer between 1 and 50")
+        return coerced
 
-class GetTastingRequest(BaseModel):
+
+class ListCandidatesRequest(_NullMeansDefault):
+    uid: str = Field(..., min_length=1)
+    limit: Optional[int] = Field(default=10, ge=1, le=50)
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def coerce_limit(cls, value: Any) -> int:
+        if value is None:
+            return 10
+        try:
+            coerced = int(value)
+        except (TypeError, ValueError):
+            raise ValueError("limit must be an integer between 1 and 50")
+        if not 1 <= coerced <= 50:
+            raise ValueError("limit must be an integer between 1 and 50")
+        return coerced
+
+
+class GetTastingRequest(_NullMeansDefault):
     uid: str = Field(..., min_length=1)
     tasting_id: str = Field(..., min_length=1)
 
 
-class StatsRequest(BaseModel):
+class StatsRequest(_NullMeansDefault):
     uid: str = Field(..., min_length=1)
 
 
-class ConfirmCandidateRequest(BaseModel):
+class ConfirmCandidateRequest(_NullMeansDefault):
     uid: str = Field(..., min_length=1)
     candidate_id: str = Field(..., min_length=1)
     # Optional corrections applied at confirm time.
@@ -279,6 +441,7 @@ class ConfirmCandidateRequest(BaseModel):
     finish: Optional[str] = None
     score_100: Optional[float] = Field(default=None, ge=0, le=100)
     verdict: Optional[str] = None
+    notes: Optional[str] = None
 
     @field_validator("verdict", mode="before")
     @classmethod
@@ -289,15 +452,6 @@ class ConfirmCandidateRequest(BaseModel):
         if normalized not in VERDICTS:
             raise ValueError(f"verdict must be one of {', '.join(VERDICTS)}")
         return normalized
-
-
-class TastingCandidateWebhook(BaseModel):
-    """Payload posted by the ambient capture path (Omi memory webhook)."""
-
-    uid: str = Field(..., min_length=1)
-    text: str = Field(..., min_length=1, description="Conversation transcript text")
-    conversation_id: Optional[str] = None
-    occurred_at: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -340,32 +494,19 @@ def _format_tasting(tasting: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _store_tasting(uid: str, source: str, **fields: Any) -> dict[str, Any]:
-    data = _load_user(uid)
-    now = _now_iso()
-    tasting = {
-        "id": uuid.uuid4().hex[:8],
-        "uid": uid,
-        "beverage_type": fields.get("beverage_type", "wine"),
-        "name": fields.get("name"),
-        "producer": fields.get("producer"),
-        "vintage": fields.get("vintage"),
-        "region": fields.get("region"),
-        "varietal": fields.get("varietal"),
-        "nose": fields.get("nose"),
-        "palate": fields.get("palate"),
-        "finish": fields.get("finish"),
-        "score_100": fields.get("score_100"),
-        "verdict": fields.get("verdict"),
-        "notes": fields.get("notes"),
-        "source": source,
-        "needs_review": bool(fields.get("needs_review", False)),
-        "created_at": now,
-        "updated_at": now,
-    }
-    data["tastings"].append(tasting)
-    _save_user(uid, data)
-    return tasting
+def _format_candidate(candidate: dict[str, Any]) -> str:
+    title = candidate.get("name") or "Untitled candidate"
+    score = (
+        f" — {candidate['score_100']}/100"
+        if candidate.get("score_100") is not None
+        else ""
+    )
+    verdict = f" [{candidate['verdict']}]" if candidate.get("verdict") else ""
+    excerpt = (candidate.get("excerpt") or "")[:120]
+    return (
+        f"- {title} ({candidate.get('beverage_type', 'other')}){score}{verdict} "
+        f"(id: {candidate['id']})\n  \"{excerpt}...\""
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -404,15 +545,34 @@ async def list_tastings(request: ListTastingsRequest) -> ChatToolResponse:
     tastings = sorted(tastings, key=lambda t: t.get("created_at", ""), reverse=True)
     if not tastings:
         return ChatToolResponse(result="No tastings logged yet.")
+    limit = request.limit or 10
     lines = ["Your tastings:"]
-    for tasting in tastings[: request.limit]:
+    for tasting in tastings[:limit]:
         title = tasting.get("name") or "Untitled tasting"
         score = f" — {tasting['score_100']}/100" if tasting.get("score_100") is not None else ""
         verdict = f" [{tasting['verdict']}]" if tasting.get("verdict") else ""
         review = " (needs review)" if tasting.get("needs_review") else ""
         lines.append(f"- {title}{score}{verdict}{review} (id: {tasting['id']})")
-    if len(tastings) > request.limit:
-        lines.append(f"... {len(tastings) - request.limit} more")
+    if len(tastings) > limit:
+        lines.append(f"... {len(tastings) - limit} more")
+    return ChatToolResponse(result="\n".join(lines))
+
+
+@app.post("/tools/list_candidates", response_model=ChatToolResponse)
+async def list_candidates(request: ListCandidatesRequest) -> ChatToolResponse:
+    """List ambient-detected candidates awaiting review, newest first."""
+    data = _load_user(request.uid)
+    candidates = sorted(
+        data["candidates"], key=lambda c: c.get("created_at", ""), reverse=True
+    )
+    if not candidates:
+        return ChatToolResponse(result="No candidates awaiting review.")
+    limit = request.limit or 10
+    lines = ["Candidates awaiting review (confirm with confirm_candidate):"]
+    for candidate in candidates[:limit]:
+        lines.append(_format_candidate(candidate))
+    if len(candidates) > limit:
+        lines.append(f"... {len(candidates) - limit} more")
     return ChatToolResponse(result="\n".join(lines))
 
 
@@ -455,8 +615,11 @@ async def confirm_candidate(request: ConfirmCandidateRequest) -> ChatToolRespons
     )
     if candidate is None:
         return ChatToolResponse(error=f"no candidate found with id {request.candidate_id}")
+    # Single load/save round-trip: remove the candidate and append the
+    # confirmed tasting to the same in-memory data before persisting, so the
+    # new tasting is never overwritten by a stale save.
     data["candidates"] = [c for c in data["candidates"] if c.get("id") != request.candidate_id]
-    tasting = _store_tasting(
+    tasting = _new_tasting(
         request.uid,
         "webhook",
         beverage_type=candidate.get("beverage_type", "wine"),
@@ -472,9 +635,10 @@ async def confirm_candidate(request: ConfirmCandidateRequest) -> ChatToolRespons
         if request.score_100 is not None
         else candidate.get("score_100"),
         verdict=request.verdict or candidate.get("verdict"),
-        notes=candidate.get("excerpt"),
+        notes=request.notes or candidate.get("excerpt"),
         needs_review=False,
     )
+    data["tastings"].append(tasting)
     _save_user(request.uid, data)
     return ChatToolResponse(result="Candidate confirmed:\n" + _format_tasting(tasting))
 
@@ -484,32 +648,46 @@ async def confirm_candidate(request: ConfirmCandidateRequest) -> ChatToolRespons
 # ---------------------------------------------------------------------------
 
 @app.post("/webhook/tasting-candidate")
-async def tasting_candidate(payload: TastingCandidateWebhook) -> dict[str, Any]:
-    """Score a conversation transcript for tasting signals.
+async def tasting_candidate(
+    conversation: Conversation,
+    uid: str = Query(..., description="Omi user id"),
+) -> dict[str, Any]:
+    """Score a finished Omi conversation for tasting signals.
 
-    Strong matches are stored as candidates flagged `needs_review`; weak or
-    non-matches are ignored. Returns what was detected so the caller can log it.
+    Omi posts the Conversation model; the uid arrives as a query parameter
+    (e.g. /webhook/tasting-candidate?uid=<user-id>). Strong matches are
+    stored as candidates flagged `needs_review`; weak or non-matches are
+    ignored. Returns what was detected so the caller can log it.
     """
-    beverage, signal_score = detect_tasting(payload.text)
+    if getattr(conversation, "discarded", False):
+        return {"detected": False, "reason": "discarded conversation"}
+
+    text = _conversation_text(conversation)
+    beverage, signal_score = detect_tasting(text)
     if beverage is None:
         return {"detected": False, "beverage_type": None, "signal_score": signal_score}
 
-    data = _load_user(payload.uid)
+    data = _load_user(uid)
     candidate = {
         "id": uuid.uuid4().hex[:8],
-        "uid": payload.uid,
+        "uid": uid,
         "beverage_type": beverage,
         "signal_score": signal_score,
-        "score_100": parse_score(payload.text),
-        "verdict": infer_verdict(payload.text),
+        "score_100": parse_score(text),
+        "verdict": infer_verdict(text),
         "name": None,
-        "excerpt": payload.text[:500],
-        "conversation_id": payload.conversation_id,
-        "occurred_at": payload.occurred_at or _now_iso(),
+        "excerpt": text[:500],
+        "conversation_id": getattr(conversation, "id", None),
+        "occurred_at": (
+            conversation.created_at.isoformat()
+            if getattr(conversation, "created_at", None) is not None
+            and not isinstance(getattr(conversation, "created_at", None), str)
+            else getattr(conversation, "created_at", None)
+        ) or _now_iso(),
         "created_at": _now_iso(),
     }
     data["candidates"].append(candidate)
-    _save_user(payload.uid, data)
+    _save_user(uid, data)
     return {
         "detected": True,
         "beverage_type": beverage,
@@ -597,6 +775,23 @@ async def omi_tools() -> dict[str, Any]:
                 },
             },
             {
+                "name": "list_candidates",
+                "description": (
+                    "List ambient-detected tasting candidates awaiting review, "
+                    "newest first. Confirm one with confirm_candidate."
+                ),
+                "endpoint": "/tools/list_candidates",
+                "method": "POST",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "uid": uid_schema,
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
+                    },
+                    "required": ["uid"],
+                },
+            },
+            {
                 "name": "get_tasting",
                 "description": "Fetch one tasting by id with full structured details.",
                 "endpoint": "/tools/get_tasting",
@@ -624,8 +819,9 @@ async def omi_tools() -> dict[str, Any]:
             {
                 "name": "confirm_candidate",
                 "description": (
-                    "Confirm an ambient-detected tasting candidate (from the webhook), "
-                    "applying optional corrections to name, producer, notes, score, or verdict."
+                    "Confirm an ambient-detected tasting candidate (listed by "
+                    "list_candidates), applying optional corrections to name, "
+                    "producer, notes, score, or verdict."
                 ),
                 "endpoint": "/tools/confirm_candidate",
                 "method": "POST",
@@ -633,7 +829,7 @@ async def omi_tools() -> dict[str, Any]:
                     "type": "object",
                     "properties": {
                         "uid": uid_schema,
-                        "candidate_id": {"type": "string", "description": "Candidate id from the webhook response."},
+                        "candidate_id": {"type": "string", "description": "Candidate id from list_candidates."},
                         "name": optional_str("Corrected name."),
                         "producer": optional_str("Corrected producer."),
                         "vintage": optional_str("Corrected vintage."),
@@ -653,6 +849,7 @@ async def omi_tools() -> dict[str, Any]:
                             "enum": list(VERDICTS),
                             "description": "Corrected verdict.",
                         },
+                        "notes": optional_str("Corrected freeform notes."),
                     },
                     "required": ["uid", "candidate_id"],
                 },

@@ -59,6 +59,11 @@ checks:
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "optional tool parameters sent as JSON null must take defaults and validation errors must return ChatToolResponse HTTP 200"
+  - id: tasting-notes-app-tests
+    command: ["python3", "plugins/omi-tasting-notes-app/test_main.py"]
+    triggers: ["plugins/omi-tasting-notes-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Tasting Notes tool params sent as JSON null must take defaults, the ambient webhook must accept the SDK Conversation payload, and confirmed candidates must persist as tastings"
   - id: linear-exact-issue-lookup-tests
     command: ["python3", "plugins/omi-linear-app/test_issue_lookup.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
