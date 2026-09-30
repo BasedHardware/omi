@@ -1913,9 +1913,26 @@ _OPEN_LOOP_SNAPSHOT = OpenLoopSnapshot(
 
 
 def _seed_outcome_chain(client, combo, trial):
-    client.queue_results(
-        [client.snapshot(f'users/{UID}/task_interventions/iv-1', {'subject_kind': 'task', 'subject_id': 'task-1'})]
-    )
+    """Trial 0 serves the chain from ``task_interventions``.
+
+    Trial 1 empties the interventions lookup so ``create_outcome`` falls back
+    to ``task_feedback`` (``database/task_recommendations.py`` ``create_outcome``),
+    recording the fallback collection's distinct query shape.
+    """
+    if trial == 0:
+        client.queue_results(
+            [client.snapshot(f'users/{UID}/task_interventions/iv-1', {'subject_kind': 'task', 'subject_id': 'task-1'})]
+        )
+    else:
+        client.queue_results([])
+        client.queue_results(
+            [
+                client.snapshot(
+                    f'users/{UID}/task_feedback/fb-1',
+                    {'feedback_subject_kind': 'task', 'feedback_subject_id': 'task-1'},
+                )
+            ]
+        )
 
 
 def _seed_expired_context_snapshot(client, combo, trial):
@@ -1966,6 +1983,7 @@ _add(
             'account_generation': (0, 'generation fence; fixed seeded scope, same filter set for any value'),
         },
         setup=_seed_outcome_chain,
+        trials=2,
     )
 )
 _add(

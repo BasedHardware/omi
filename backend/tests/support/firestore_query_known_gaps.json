@@ -107296,6 +107296,68 @@
       }
     },
     {
+      "id": "4c1b755f8365ca37",
+      "reason": "equality/array index merging may serve this query without the full candidate index",
+      "required_index": {
+        "collectionGroup": "task_feedback",
+        "composite": true,
+        "equality_fields": [
+          "account_generation",
+          "attribution_chain_id"
+        ],
+        "fields": [
+          {
+            "fieldPath": "account_generation",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "attribution_chain_id",
+            "order": "ASCENDING"
+          },
+          {
+            "fieldPath": "__name__",
+            "order": "ASCENDING"
+          }
+        ],
+        "queryScope": "COLLECTION",
+        "reason": "equality/array index merging may serve this query without the full candidate index",
+        "uncertain": true
+      },
+      "shape": {
+        "aggregations": [],
+        "calling_function": "database.task_recommendations._first_chain_record",
+        "collection_group": "task_feedback",
+        "cursors": [],
+        "driver_function": "database.task_recommendations.create_outcome",
+        "filter_tree": {
+          "filters": [
+            {
+              "field": "attribution_chain_id",
+              "operator": "=="
+            },
+            {
+              "field": "account_generation",
+              "operator": "=="
+            }
+          ],
+          "op": "AND"
+        },
+        "filters": [
+          {
+            "field": "attribution_chain_id",
+            "operator": "=="
+          },
+          {
+            "field": "account_generation",
+            "operator": "=="
+          }
+        ],
+        "limit_to_last": false,
+        "orders": [],
+        "scope": "COLLECTION"
+      }
+    },
+    {
       "id": "4c3cebe99d47bc8a",
       "reason": "equality/array index merging may serve this query without the full candidate index",
       "required_index": {
