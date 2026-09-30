@@ -120,6 +120,8 @@ def group_chunks_by_coverage(
     """
     if not chunks or not isinstance(chunks, list):
         return []
+    # Non-finite/negative gap_threshold fails safe to 0.0 (splitting conservatively on any gap),
+    # while tolerance defaults back to the authoritative COVERAGE_TOLERANCE_SECONDS constant.
     if not math.isfinite(gap_threshold) or gap_threshold < 0:
         gap_threshold = 0.0
     if not math.isfinite(tolerance) or tolerance < 0:
