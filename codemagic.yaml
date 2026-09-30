@@ -2912,12 +2912,9 @@ workflows:
     environment:
       groups:
         - google_play
-      vars:
-        CONFIRM: ""
-        PROMOTE_PLATFORM: ""
-        PROMOTE_VERSION: ""
-        PROMOTE_IOS_BUILD: ""
-        PROMOTE_ANDROID_BUILD: ""
+      # CONFIRM, PROMOTE_PLATFORM, PROMOTE_VERSION, PROMOTE_IOS_BUILD and PROMOTE_ANDROID_BUILD are
+      # supplied per run (Codemagic API `environment.variables` or the start-build dialog). Declaring
+      # them here with empty defaults failed Codemagic's yaml validation, so the workflow never started.
     working_directory: app
     scripts:
       - name: Submit explicitly selected existing builds
