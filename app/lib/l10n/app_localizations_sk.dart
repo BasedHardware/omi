@@ -11622,4 +11622,18 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Zhrnutie zlyhalo';
+
+  @override
+  String get reconnectionsRecent => 'Opätovné pripojenia (posledných 7 dní)';
+
+  @override
+  String get failedConnections => 'Neúspešné pripojenia';
+
+  @override
+  String get failedConnectionsRecent => 'Neúspešné pripojenia (posledných 7 dní)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count od spárovania';
+  }
 }

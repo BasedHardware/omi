@@ -11655,4 +11655,18 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Kopsavilkums neizdevās';
+
+  @override
+  String get reconnectionsRecent => 'Atkārtoti savienojumi (pēdējās 7 dienas)';
+
+  @override
+  String get failedConnections => 'Neveiksmīgi savienojumi';
+
+  @override
+  String get failedConnectionsRecent => 'Neveiksmīgi savienojumi (pēdējās 7 dienas)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count kopš savienošanas pārī';
+  }
 }

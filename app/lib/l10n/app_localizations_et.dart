@@ -11627,4 +11627,18 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Kokkuvõtte loomine ebaõnnestus';
+
+  @override
+  String get reconnectionsRecent => 'Taasühendused (viimased 7 päeva)';
+
+  @override
+  String get failedConnections => 'Ebaõnnestunud ühendused';
+
+  @override
+  String get failedConnectionsRecent => 'Ebaõnnestunud ühendused (viimased 7 päeva)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count pärast sidumist';
+  }
 }

@@ -3695,5 +3695,9 @@
     "meetingScreenshotFallbackCaption": "Zrzut ekranu z tego spotkania",
     "deleteMeetingScreenshotTitle": "Usunąć zrzut ekranu?",
     "deleteMeetingScreenshotMessage": "Zrzut ekranu zostanie usunięty z notatki tego spotkania. Tej operacji nie można cofnąć.",
-    "conversationSummaryFailed": "Nie udało się utworzyć podsumowania"
+    "conversationSummaryFailed": "Nie udało się utworzyć podsumowania",
+    "reconnectionsRecent": "Ponowne połączenia (ostatnie 7 dni)",
+    "failedConnections": "Nieudane połączenia",
+    "failedConnectionsRecent": "Nieudane połączenia (ostatnie 7 dni)",
+    "diagnosticsCountSincePairing": "{count} od sparowania"
 }

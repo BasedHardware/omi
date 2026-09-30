@@ -11418,4 +11418,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => '摘要生成失败';
+
+  @override
+  String get reconnectionsRecent => '重新连接（过去 7 天）';
+
+  @override
+  String get failedConnections => '连接失败';
+
+  @override
+  String get failedConnectionsRecent => '连接失败（过去 7 天）';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '配对以来 $count';
+  }
 }

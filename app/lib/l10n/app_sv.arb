@@ -3660,5 +3660,9 @@
     "meetingScreenshotFallbackCaption": "Skärmbild från det här mötet",
     "deleteMeetingScreenshotTitle": "Radera skärmbilden?",
     "deleteMeetingScreenshotMessage": "Skärmbilden tas bort från anteckningen för det här mötet. Det går inte att ångra.",
-    "conversationSummaryFailed": "Sammanfattningen misslyckades"
+    "conversationSummaryFailed": "Sammanfattningen misslyckades",
+    "reconnectionsRecent": "Återanslutningar (senaste 7 dagarna)",
+    "failedConnections": "Misslyckade anslutningar",
+    "failedConnectionsRecent": "Misslyckade anslutningar (senaste 7 dagarna)",
+    "diagnosticsCountSincePairing": "{count} sedan kopplingen"
 }
