@@ -34,13 +34,15 @@ from models.screen_frame import (
     ScreenFrameSharingUpdateRequest,
 )
 import utils.other.storage as storage
-from utils.executors import llm_executor, submit_with_context
+from utils.executors import llm_executor, storage_executor, submit_with_context
 from utils.other import endpoints as auth
 from utils.screen_frames import enforcement, store as screen_frame_store
 from utils.screen_frames.availability import screen_frame_egress_enabled
 from utils.screen_frames.pipeline import (
     ScreenFrameDigestMismatch,
-    adjudicate_candidate,
+    canonicalize_for_judging,
+    commit_approved,
+    judge_canonical,
     decode_and_verify_transport_digest,
 )
 from utils.screen_frames.policy import get_purpose_policy
@@ -310,37 +312,54 @@ def adjudicate_screen_frames(
         # mid-request) — nothing safe to replay yet.
         raise HTTPException(status_code=503, detail={"code": "adjudication_in_progress_retry"})
 
-    # Candidates are judged concurrently on the bounded LLM pool: the Mac waits on
-    # this pass before finalizing a meeting, and eight serial judge calls do not fit
-    # its bound. Each candidate stays isolated (its own canonicalization, verdict,
-    # one-use approval, and writer call); results keep request order.
-    futures = [
-        submit_with_context(
-            llm_executor,
-            adjudicate_candidate,
-            uid=uid,
-            purpose=request.purpose,
-            subject_id=request.subject.id,
-            policy=policy,
-            candidate=candidate,
-            raw_bytes=decoded_by_id[candidate.client_frame_id],
+    # Only the judge call runs on the bounded LLM pool, concurrently: the Mac waits on this
+    # pass before finalizing a meeting, and eight serial judge calls do not fit its bound.
+    # Canonicalization (CPU) runs before it and the writer (signing, Redis, GCS) after it,
+    # here on the request thread, so storage I/O never holds an LLM worker. Each candidate
+    # keeps its own canonical bytes, verdict, one-use approval, and writer call.
+    canonicals = [
+        (
+            candidate,
+            canonicalize_for_judging(uid=uid, candidate=candidate, raw_bytes=decoded_by_id[candidate.client_frame_id]),
         )
         for candidate in request.candidates
     ]
-    wait(futures)
-    failure = next((future.exception() for future in futures if future.exception() is not None), None)
-    if failure is not None:
-        # A sibling may already have written its bytes; with no Firestore doc they would be
-        # unreachable (not served, not found by conversation delete). Remove them first.
-        for future in futures:
-            written = future.result().written if future.exception() is None else None
-            if written is not None:
-                _discard_orphaned_frame(uid, request.subject.id, written.frame_id)
+    judging = [
+        (
+            candidate,
+            canonical,
+            submit_with_context(llm_executor, judge_canonical, uid=uid, candidate=candidate, canonical=canonical),
+        )
+        for candidate, canonical in canonicals
+        if canonical is not None
+    ]
+    wait([future for _candidate, _canonical, future in judging])
+    new_frames = []
+    try:
+        for candidate, canonical, future in judging:
+            judgement = future.result()
+            if judgement is None:
+                continue
+            new_frames.append(
+                commit_approved(
+                    uid=uid,
+                    purpose=request.purpose,
+                    subject_id=request.subject.id,
+                    policy=policy,
+                    candidate=candidate,
+                    canonical=canonical,
+                    judgement=judgement,
+                )
+            )
+    except Exception as failure:
+        # Frames already written have no Firestore doc yet; left alone they would be
+        # unreachable (never served, never found by conversation delete). Remove them first.
+        for written in new_frames:
+            _discard_orphaned_frame(uid, request.subject.id, written.frame_id)
         if isinstance(failure, ScreenFrameWriteError):
             logger.error("screen_frame writer unavailable uid=%s error=%s", uid, failure)
             raise HTTPException(status_code=503, detail={"code": "writer_unavailable"}) from failure
-        raise failure
-    new_frames = [outcome.written for outcome in (future.result() for future in futures) if outcome.written]
+        raise
 
     # Mark the attempt BEFORE building the response, and unconditionally — an all-rejected pass
     # is exactly the case this exists for. `revision` cannot record it, because nothing was
@@ -378,6 +397,9 @@ def adjudicate_screen_frames(
 )
 def get_conversation_screenshots(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_owned_conversation(uid, conversation_id)
+    # Opportunistic, bounded: bytes the other environment recorded as undeletable in this
+    # environment's bucket (utils/screen_frames/store.py). No scheduled job owns this bucket.
+    submit_with_context(storage_executor, screen_frame_store.drain_screen_frame_cleanups)
     # Contract §9: the account setting off means existing frames stay hidden. Enforced here
     # rather than in each client so every surface hides them the way the macOS gate already
     # does locally — without this, turning the setting off on desktop leaves the web banner

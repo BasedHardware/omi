@@ -115,19 +115,72 @@ class TestFramesBelongToTheBucketThatHoldsTheirBytes:
         assert store_mod.delete_screen_frame(UID, CONVERSATION_ID, "frame-a") is True
         fake_storage.delete_screen_frame_blobs.assert_called_once_with(UID, CONVERSATION_ID, "frame-a")
 
-    def test_conversation_delete_reaches_foreign_bytes_best_effort(self, monkeypatch):
+    def test_undeletable_foreign_bytes_leave_a_durable_record_before_docs_go(self, monkeypatch):
         frames = [{"id": "own", "storage_bucket": PROD_BUCKET}, {"id": "legacy"}]
         fake_db, fake_storage = self._fakes(monkeypatch, configured=PROD_BUCKET, frames=frames)
+        calls = []
 
         def delete(uid, cid, fid, **kwargs):
             if kwargs.get("bucket"):
                 raise PermissionError("no access to the dev bucket")
 
         fake_storage.delete_screen_frame_blobs.side_effect = delete
+        fake_storage.screen_frame_object_paths.side_effect = lambda uid, cid, fid: [f"{uid}/{cid}/{fid}.jpg"]
+        fake_db.record_screen_frame_cleanup.side_effect = lambda *a: calls.append(("record", a))
+        fake_db.delete_conversation_screen_frame_docs.side_effect = lambda *a: calls.append(("docs", a)) or 2
 
         assert store_mod.delete_conversation_screen_frames(UID, CONVERSATION_ID) == 2
         fake_storage.delete_screen_frame_blobs.assert_any_call(UID, CONVERSATION_ID, "own")
-        fake_storage.delete_screen_frame_blobs.assert_any_call(
+        assert calls == [
+            (
+                "record",
+                (LEGACY_SCREEN_FRAMES_BUCKET, UID, CONVERSATION_ID, "legacy", [f"{UID}/{CONVERSATION_ID}/legacy.jpg"]),
+            ),
+            ("docs", (UID, CONVERSATION_ID)),
+        ]
+
+    def test_a_failed_record_write_keeps_the_docs(self, monkeypatch):
+        fake_db, fake_storage = self._fakes(monkeypatch, configured=PROD_BUCKET, frames=[{"id": "legacy"}])
+        fake_storage.delete_screen_frame_blobs.side_effect = PermissionError("no access")
+        fake_db.record_screen_frame_cleanup.side_effect = RuntimeError("firestore down")
+
+        try:
+            store_mod.delete_conversation_screen_frames(UID, CONVERSATION_ID)
+        except RuntimeError:
+            pass
+        fake_db.delete_conversation_screen_frame_docs.assert_not_called()
+
+
+class TestCleanupDrain:
+    def _fakes(self, monkeypatch, records, configured=LEGACY_SCREEN_FRAMES_BUCKET):
+        fake_db = MagicMock()
+        fake_db.list_screen_frame_cleanups.return_value = records
+        monkeypatch.setattr(store_mod, "screen_frames_db", fake_db)
+        fake_storage = MagicMock()
+        fake_storage.configured_screen_frames_bucket.return_value = configured
+        monkeypatch.setattr(store_mod, "storage", fake_storage)
+        return fake_db, fake_storage
+
+    def test_the_owning_environment_deletes_the_bytes_then_the_record(self, monkeypatch):
+        record = {"id": "r1", "uid": UID, "conversation_id": CONVERSATION_ID, "frame_id": "legacy"}
+        fake_db, fake_storage = self._fakes(monkeypatch, [record])
+
+        assert store_mod.drain_screen_frame_cleanups() == 1
+        fake_db.list_screen_frame_cleanups.assert_called_once_with(LEGACY_SCREEN_FRAMES_BUCKET, 5)
+        fake_storage.delete_screen_frame_blobs.assert_called_once_with(
             UID, CONVERSATION_ID, "legacy", bucket=LEGACY_SCREEN_FRAMES_BUCKET
         )
-        fake_db.delete_conversation_screen_frame_docs.assert_called_once_with(UID, CONVERSATION_ID)
+        fake_db.delete_screen_frame_cleanup.assert_called_once_with("r1")
+
+    def test_a_failed_delete_keeps_the_record(self, monkeypatch):
+        record = {"id": "r1", "uid": UID, "conversation_id": CONVERSATION_ID, "frame_id": "legacy"}
+        fake_db, fake_storage = self._fakes(monkeypatch, [record])
+        fake_storage.delete_screen_frame_blobs.side_effect = RuntimeError("gcs 503")
+
+        assert store_mod.drain_screen_frame_cleanups() == 0
+        fake_db.delete_screen_frame_cleanup.assert_not_called()
+
+    def test_no_bucket_drains_nothing(self, monkeypatch):
+        fake_db, _fake_storage = self._fakes(monkeypatch, [], configured=None)
+        assert store_mod.drain_screen_frame_cleanups() == 0
+        fake_db.list_screen_frame_cleanups.assert_not_called()

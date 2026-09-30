@@ -23,10 +23,10 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from models.screen_frame import ScreenFrameCandidateIn
+from models.screen_frame import ScreenFrameCandidateIn, ScreenFrameJudgement
 from utils.screen_frames import palette
 from utils.screen_frames.approval import build_approval_claims, mint_approval
-from utils.screen_frames.canonicalize import ScreenFrameCanonicalizationError, canonicalize_candidate
+from utils.screen_frames.canonicalize import CanonicalFrame, ScreenFrameCanonicalizationError, canonicalize_candidate
 from utils.screen_frames.enforcement import NewPersistedFrame
 from utils.screen_frames.judge import ScreenFrameJudgeError, judge_frame
 from utils.screen_frames.policy import ScreenFramePurposePolicy
@@ -72,17 +72,12 @@ def decode_and_verify_transport_digest(candidate: ScreenFrameCandidateIn) -> byt
     return raw_bytes
 
 
-def adjudicate_candidate(
-    *,
-    uid: str,
-    purpose: str,
-    subject_id: str,
-    policy: ScreenFramePurposePolicy,
-    candidate: ScreenFrameCandidateIn,
-    raw_bytes: bytes,
-) -> CandidateOutcome:
+def canonicalize_for_judging(
+    *, uid: str, candidate: ScreenFrameCandidateIn, raw_bytes: bytes
+) -> Optional[CanonicalFrame]:
+    """Step 2 (CPU): the exact bytes the judge will see, or None (fail closed, nothing stored)."""
     try:
-        canonical = canonicalize_candidate(raw_bytes)
+        return canonicalize_candidate(raw_bytes)
     except ScreenFrameCanonicalizationError as error:
         logger.info(
             "screen_frame candidate failed canonicalization uid=%s client_frame_id=%s reason=%s",
@@ -90,8 +85,16 @@ def adjudicate_candidate(
             candidate.client_frame_id,
             error.reason,
         )
-        return CandidateOutcome(client_frame_id=candidate.client_frame_id, written=None)
+        return None
 
+
+def judge_canonical(
+    *, uid: str, candidate: ScreenFrameCandidateIn, canonical: CanonicalFrame
+) -> Optional[ScreenFrameJudgement]:
+    """Steps 3-4 (the model call, the only step that belongs on the LLM pool).
+
+    Returns the judgement only when it is approved_clean; any failure fails closed to None.
+    """
     try:
         judgement = judge_frame(uid, canonical.jpeg_bytes)
     except ScreenFrameJudgeError as error:
@@ -101,11 +104,21 @@ def adjudicate_candidate(
             candidate.client_frame_id,
             error,
         )
-        return CandidateOutcome(client_frame_id=candidate.client_frame_id, written=None)
+        return None
+    return judgement if judgement.outcome == "approved_clean" else None
 
-    if judgement.outcome != "approved_clean":
-        return CandidateOutcome(client_frame_id=candidate.client_frame_id, written=None)
 
+def commit_approved(
+    *,
+    uid: str,
+    purpose: str,
+    subject_id: str,
+    policy: ScreenFramePurposePolicy,
+    candidate: ScreenFrameCandidateIn,
+    canonical: CanonicalFrame,
+    judgement: ScreenFrameJudgement,
+) -> NewPersistedFrame:
+    """Mint the approval and hand it to the writer (signing, Redis, GCS). Raises ScreenFrameWriteError."""
     # Extracted once, here, at approval time — never recomputed per read.
     ground = palette.compute_ground(canonical.jpeg_bytes)
 
@@ -129,21 +142,44 @@ def adjudicate_candidate(
         token, jpeg_bytes=canonical.jpeg_bytes, thumbnail_jpeg_bytes=canonical.thumbnail_jpeg_bytes
     )
 
-    return CandidateOutcome(
-        client_frame_id=candidate.client_frame_id,
-        written=NewPersistedFrame(
-            frame_id=written.frame_id,
-            captured_at=candidate.captured_at,
-            caption=judgement.caption,
-            labels=list(judgement.labels),
-            source_badge=judgement.source_badge,
-            banner_suitability=judgement.banner_suitability,
-            width=canonical.width,
-            height=canonical.height,
-            canonical_sha256=canonical.sha256_hex,
-            ground=ground,
-            visible_participant_names=list(judgement.visible_participant_names),
-            screen_summary=judgement.screen_summary,
-            storage_bucket=written.storage_bucket,
-        ),
+    return NewPersistedFrame(
+        frame_id=written.frame_id,
+        captured_at=candidate.captured_at,
+        caption=judgement.caption,
+        labels=list(judgement.labels),
+        source_badge=judgement.source_badge,
+        banner_suitability=judgement.banner_suitability,
+        width=canonical.width,
+        height=canonical.height,
+        canonical_sha256=canonical.sha256_hex,
+        ground=ground,
+        visible_participant_names=list(judgement.visible_participant_names),
+        screen_summary=judgement.screen_summary,
+        storage_bucket=written.storage_bucket,
     )
+
+
+def adjudicate_candidate(
+    *,
+    uid: str,
+    purpose: str,
+    subject_id: str,
+    policy: ScreenFramePurposePolicy,
+    candidate: ScreenFrameCandidateIn,
+    raw_bytes: bytes,
+) -> CandidateOutcome:
+    """The three steps in sequence for one candidate."""
+    canonical = canonicalize_for_judging(uid=uid, candidate=candidate, raw_bytes=raw_bytes)
+    judgement = None if canonical is None else judge_canonical(uid=uid, candidate=candidate, canonical=canonical)
+    if canonical is None or judgement is None:
+        return CandidateOutcome(client_frame_id=candidate.client_frame_id, written=None)
+    written = commit_approved(
+        uid=uid,
+        purpose=purpose,
+        subject_id=subject_id,
+        policy=policy,
+        candidate=candidate,
+        canonical=canonical,
+        judgement=judgement,
+    )
+    return CandidateOutcome(client_frame_id=candidate.client_frame_id, written=written)

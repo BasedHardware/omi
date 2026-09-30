@@ -92,6 +92,8 @@ def _stub_admission_dependencies(monkeypatch):
     fake_redis_db = MagicMock()
     fake_redis_db.reserve_screen_frame_adjudication_attempt.return_value = None
     monkeypatch.setattr(screen_frames_mod, "redis_db", fake_redis_db)
+    # The owner GET route drains cross-environment cleanup records in the background.
+    monkeypatch.setattr(screen_frames_mod.screen_frame_store, "drain_screen_frame_cleanups", MagicMock(return_value=0))
 
     return fake_conversations_db, fake_users_db, fake_redis_db
 
@@ -134,7 +136,7 @@ class TestEgressDisabled:
         fake_conversations_db, _fake_users_db, _fake_redis_db = _stub_admission_dependencies
         monkeypatch.delenv("SCREEN_FRAME_EGRESS_ENABLED", raising=False)
         judged = MagicMock()
-        monkeypatch.setattr(screen_frames_mod, "adjudicate_candidate", judged)
+        monkeypatch.setattr(screen_frames_mod, "judge_canonical", judged)
 
         with pytest.raises(HTTPException):
             screen_frames_mod.adjudicate_screen_frames(_request(), uid=UID)
@@ -428,51 +430,78 @@ class TestOnePassAdmission:
 
 
 class TestConcurrentJudging:
-    def test_candidates_are_judged_concurrently_and_results_keep_request_order(
-        self, _stub_admission_dependencies, monkeypatch
-    ):
-        import threading
+    """Only the judge call runs on the LLM pool, concurrently; the writer runs after it."""
 
-        from utils.screen_frames.pipeline import CandidateOutcome
+    def _candidates(self, count):
+        return [
+            _candidate(client_frame_id=f"c{i}", captured_at=datetime(2026, 1, 1, 0, i + 1, tzinfo=timezone.utc))
+            for i in range(count)
+        ]
 
-        barrier = threading.Barrier(3, timeout=5)
-
-        def judged(*, candidate, **_kwargs):
-            barrier.wait()  # deadlocks (and times out) if candidates ran one at a time
-            return CandidateOutcome(client_frame_id=candidate.client_frame_id, written=None)
-
-        monkeypatch.setattr(screen_frames_mod, "adjudicate_candidate", judged)
+    def _stub_seams(self, monkeypatch, *, judge, commit):
+        monkeypatch.setattr(screen_frames_mod, "canonicalize_for_judging", lambda **kw: MagicMock(name="canonical"))
+        monkeypatch.setattr(screen_frames_mod, "judge_canonical", judge)
+        monkeypatch.setattr(screen_frames_mod, "commit_approved", commit)
         enforce = MagicMock(return_value=(screen_frames_mod.EMPTY_FRAME_SET, False))
         monkeypatch.setattr(screen_frames_mod.enforcement, "enforce_and_persist", enforce)
-        raw = b"some fake candidate bytes"
-        candidates = [
-            _candidate(client_frame_id=f"c{i}", captured_at=datetime(2026, 1, 1, 0, i + 1, tzinfo=timezone.utc))
-            for i in range(3)
-        ]
-        assert all(c.bytes_base64 == base64.b64encode(raw).decode() for c in candidates)
+        return enforce
 
-        response = screen_frames_mod.adjudicate_screen_frames(_request(candidates=candidates), uid=UID)
+    def test_judging_is_concurrent_and_writes_stay_off_the_llm_pool(self, _stub_admission_dependencies, monkeypatch):
+        import threading
 
-        assert response.outcome == "no_approved_frames"
-        enforce.assert_called_once()
+        barrier = threading.Barrier(3, timeout=5)
+        commit_threads = []
 
-    def test_a_writer_failure_on_any_candidate_is_503(self, _stub_admission_dependencies, monkeypatch):
-        from utils.screen_frames.pipeline import CandidateOutcome
+        def judge(*, candidate, **_kwargs):
+            barrier.wait()  # times out if the judge calls ran one at a time
+            return MagicMock(name=f"judgement-{candidate.client_frame_id}")
+
+        def commit(*, candidate, **_kwargs):
+            commit_threads.append(threading.current_thread().name)
+            return MagicMock(frame_id=f"frame-{candidate.client_frame_id}")
+
+        enforce = self._stub_seams(monkeypatch, judge=judge, commit=commit)
+
+        screen_frames_mod.adjudicate_screen_frames(_request(candidates=self._candidates(3)), uid=UID)
+
+        assert len(commit_threads) == 3
+        assert not any(name.startswith("llm") for name in commit_threads)
+        persisted = enforce.call_args.args[3]
+        assert [frame.frame_id for frame in persisted] == ["frame-c0", "frame-c1", "frame-c2"]
+
+    def test_a_writer_failure_is_503_and_removes_bytes_already_written(self, _stub_admission_dependencies, monkeypatch):
+        """Frames written before the failure have no Firestore doc and no delete path
+        would ever find them; they are removed before the error returns."""
         from utils.screen_frames.writer import ScreenFrameWriteError
 
-        def judged(*, candidate, **_kwargs):
+        def commit(*, candidate, **_kwargs):
             if candidate.client_frame_id == "c1":
                 raise ScreenFrameWriteError("upload_failed")
-            return CandidateOutcome(client_frame_id=candidate.client_frame_id, written=None)
+            return MagicMock(frame_id=f"landed-{candidate.client_frame_id}")
 
-        monkeypatch.setattr(screen_frames_mod, "adjudicate_candidate", judged)
-        candidates = [
-            _candidate(client_frame_id=f"c{i}", captured_at=datetime(2026, 1, 1, 0, i + 1, tzinfo=timezone.utc))
-            for i in range(2)
-        ]
+        enforce = self._stub_seams(monkeypatch, judge=lambda **kw: MagicMock(), commit=commit)
+        deleted = []
+        monkeypatch.setattr(
+            screen_frames_mod.storage,
+            "delete_screen_frame_blobs",
+            lambda uid, cid, fid: deleted.append((uid, cid, fid)),
+        )
+
         with pytest.raises(HTTPException) as exc_info:
-            screen_frames_mod.adjudicate_screen_frames(_request(candidates=candidates), uid=UID)
+            screen_frames_mod.adjudicate_screen_frames(_request(candidates=self._candidates(2)), uid=UID)
+
         assert exc_info.value.status_code == 503
+        assert deleted == [(UID, CONVERSATION_ID, "landed-c0")]
+        enforce.assert_not_called()
+
+    def test_rejected_candidates_are_never_written(self, _stub_admission_dependencies, monkeypatch):
+        commit = MagicMock()
+        self._stub_seams(monkeypatch, judge=lambda **kw: None, commit=commit)
+
+        response = screen_frames_mod.adjudicate_screen_frames(_request(candidates=self._candidates(2)), uid=UID)
+
+        commit.assert_not_called()
+        assert response.outcome == "no_approved_frames"
 
 
 class TestPerFrameDeleteHonoursTheAccountSetting:
@@ -499,32 +528,13 @@ class TestPerFrameDeleteHonoursTheAccountSetting:
         assert screen_frames_mod.delete_conversation_screenshot(CONVERSATION_ID, "frame-a", uid=UID) is remaining
 
 
-def test_a_failed_sibling_write_removes_the_bytes_already_written(_stub_admission_dependencies, monkeypatch):
-    """Concurrent judging: if one candidate's write fails after another's upload landed, that
-    upload has no Firestore doc and no delete path would ever find it. It is removed before 503."""
-    from utils.screen_frames.pipeline import CandidateOutcome
-    from utils.screen_frames.writer import ScreenFrameWriteError
+def test_owner_read_drains_cleanup_records_for_this_bucket(_stub_admission_dependencies, monkeypatch):
+    drain = screen_frames_mod.screen_frame_store.drain_screen_frame_cleanups
+    monkeypatch.setattr(screen_frames_mod.enforcement, "build_frame_set_response", MagicMock())
 
-    def judged(*, candidate, **_kwargs):
-        if candidate.client_frame_id == "c1":
-            raise ScreenFrameWriteError("upload_failed")
-        return CandidateOutcome(client_frame_id=candidate.client_frame_id, written=MagicMock(frame_id="landed-frame"))
+    submitted = []
+    monkeypatch.setattr(screen_frames_mod, "submit_with_context", lambda pool, fn: submitted.append((pool, fn)))
 
-    monkeypatch.setattr(screen_frames_mod, "adjudicate_candidate", judged)
-    deleted = []
-    monkeypatch.setattr(
-        screen_frames_mod.storage, "delete_screen_frame_blobs", lambda uid, cid, fid: deleted.append((uid, cid, fid))
-    )
-    enforce = MagicMock()
-    monkeypatch.setattr(screen_frames_mod.enforcement, "enforce_and_persist", enforce)
-    candidates = [
-        _candidate(client_frame_id=f"c{i}", captured_at=datetime(2026, 1, 1, 0, i + 1, tzinfo=timezone.utc))
-        for i in range(2)
-    ]
+    screen_frames_mod.get_conversation_screenshots(CONVERSATION_ID, uid=UID)
 
-    with pytest.raises(HTTPException) as exc_info:
-        screen_frames_mod.adjudicate_screen_frames(_request(candidates=candidates), uid=UID)
-
-    assert exc_info.value.status_code == 503
-    assert deleted == [(UID, CONVERSATION_ID, "landed-frame")]
-    enforce.assert_not_called()
+    assert submitted == [(screen_frames_mod.storage_executor, drain)]

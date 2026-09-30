@@ -211,6 +211,37 @@ def own_frames(frames: Iterable[Dict[str, Any]], bucket: Optional[str]) -> List[
     return [frame for frame in frames if frame_storage_bucket(frame) == bucket]
 
 
+# Durable record of screen-frame bytes one environment could not delete from
+# another environment's bucket (dev and prod lack access to each other's). The
+# owning environment drains the records for its bucket.
+_CLEANUP_COLLECTION = 'screen_frame_cleanup'
+
+
+def record_screen_frame_cleanup(
+    bucket: str, uid: str, conversation_id: str, frame_id: str, object_paths: List[str]
+) -> None:
+    doc_id = f'{_state_key(bucket)}__{frame_id}'
+    get_firestore_client().collection(_CLEANUP_COLLECTION).document(doc_id).set(
+        {
+            'bucket': bucket,
+            'uid': uid,
+            'conversation_id': conversation_id,
+            'frame_id': frame_id,
+            'object_paths': list(object_paths),
+            'created_at': datetime.now(timezone.utc),
+        }
+    )
+
+
+def list_screen_frame_cleanups(bucket: str, limit: int) -> List[Dict[str, Any]]:
+    query = get_firestore_client().collection(_CLEANUP_COLLECTION).where('bucket', '==', bucket).limit(limit)
+    return [{**(doc.to_dict() or {}), 'id': doc.id} for doc in query.stream()]
+
+
+def delete_screen_frame_cleanup(doc_id: str) -> None:
+    get_firestore_client().collection(_CLEANUP_COLLECTION).document(doc_id).delete()
+
+
 def _state_key(bucket: str) -> str:
     return re.sub(r'[^A-Za-z0-9_]', '_', bucket)
 

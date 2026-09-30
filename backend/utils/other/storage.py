@@ -2032,8 +2032,18 @@ def delete_screen_frame_blobs(uid: str, conversation_id: str, frame_id: str, *, 
     """
     content_path = _screen_frame_blob_path(uid, conversation_id, frame_id)
     thumb_path = _screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id)
-    bucket_name = bucket or _require_screen_frames_bucket()
-    delete_blob(bucket_name, content_path)
-    delete_blob(bucket_name, thumb_path)
-    delete_cached_signed_url(content_path)
-    delete_cached_signed_url(thumb_path)
+    try:
+        bucket_name = bucket or _require_screen_frames_bucket()
+        delete_blob(bucket_name, content_path)
+        delete_blob(bucket_name, thumb_path)
+    finally:
+        # A signed URL must stop being handed out even when the object delete failed.
+        delete_cached_signed_url(content_path)
+        delete_cached_signed_url(thumb_path)
+
+
+def screen_frame_object_paths(uid: str, conversation_id: str, frame_id: str) -> List[str]:
+    return [
+        _screen_frame_blob_path(uid, conversation_id, frame_id),
+        _screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id),
+    ]

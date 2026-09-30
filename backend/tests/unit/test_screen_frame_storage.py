@@ -136,3 +136,17 @@ def test_frame_download_disables_the_library_retry_so_the_caller_budget_holds(mo
 
     assert storage_mod.download_screen_frame_bytes(UID, CONVERSATION_ID, FRAME_ID, timeout=2.5) == b"jpeg"
     blob.download_as_bytes.assert_called_once_with(timeout=2.5, retry=None)
+
+
+def test_cached_urls_are_evicted_even_when_the_object_delete_fails(monkeypatch):
+    evicted = []
+    monkeypatch.setattr(storage_mod, "delete_blob", MagicMock(side_effect=PermissionError("403")))
+    monkeypatch.setattr(storage_mod, "delete_cached_signed_url", evicted.append)
+
+    with pytest.raises(PermissionError):
+        storage_mod.delete_screen_frame_blobs(UID, CONVERSATION_ID, FRAME_ID, bucket="other-bucket")
+
+    assert evicted == [
+        storage_mod._screen_frame_blob_path(UID, CONVERSATION_ID, FRAME_ID),
+        storage_mod._screen_frame_thumbnail_blob_path(UID, CONVERSATION_ID, FRAME_ID),
+    ]
