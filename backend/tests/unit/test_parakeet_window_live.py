@@ -1523,6 +1523,70 @@ async def test_empty_stranded_answer_stays_in_replay_and_context_until_age(monke
 
 
 @pytest.mark.asyncio
+async def test_resumed_speech_after_empty_stranded_answer_posts_before_first_text_deadline(monkeypatch):
+    monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '15')
+    actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    # Restore real pacing and advance the event-loop clock with capture so the
+    # production 12s timer competes with the production 15s POST deadline.
+    monkeypatch.setattr(window.asyncio, 'sleep', _REAL_SLEEP)
+    loop = asyncio.get_running_loop()
+    real_time = loop.time
+    clock[0] = real_time()
+    monkeypatch.setattr(loop, 'time', lambda: clock[0])
+    try:
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+        timer = previous.raw._first_text_timer
+        assert timer is not None
+        sample = await _settled_fragment_silence(actual, clock, sample, 130)
+        assert len(client.requests) == 1
+        assert previous.raw._stranded_fragment_answered
+        assert previous.raw._next_post > timer.when()
+        retained_pcm = _posted_pcm(client.requests[0][1])[: previous.raw._received_bytes]
+
+        def joined_response(_n, kwargs):
+            return {'segments': [{'text': 'Joined.', 'start': 0.24, 'end': _wav_duration(kwargs) - 0.1}]}
+
+        client.payloads = [joined_response]
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+        sample = await _settled_fragment_silence(actual, clock, sample, 130)
+        assert loop.time() < timer.when()
+        assert len(client.requests) == 2
+        assert _posted_pcm(client.requests[1][1]).startswith(retained_pcm)
+        assert [item['text'] for item in base.emitted] == ['Joined.']
+        assert previous.raw._first_text_timer is None
+        assert timer.cancelled()
+        assert not previous.is_connection_dead
+        assert not replayed and not callbacks
+    finally:
+        monkeypatch.setattr(loop, 'time', real_time)
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('close_path', ['socket', 'receiver'])
+async def test_empty_stranded_answer_drains_promptly_without_post_pacing(monkeypatch, close_path):
+    monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '15')
+    actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    monkeypatch.setattr(window.asyncio, 'sleep', _REAL_SLEEP)
+    try:
+        sample = await _fragment_frame(actual, clock, sample, speech=True)
+        sample = await _settled_fragment_silence(actual, clock, sample, 130)
+        assert len(client.requests) == 1
+        assert previous.raw._stranded_fragment_answered
+        assert previous.raw._has_unemitted_speech()  # answered PCM is still retained
+        assert previous.raw._next_post - asyncio.get_running_loop().time() > 14
+        close = previous.raw.drain_and_close if close_path == 'socket' else actual._drain_stt_sockets
+        await asyncio.wait_for(close(), timeout=0.5)
+        assert previous.raw._pump_task.done()
+        assert not previous.raw._pump_task.cancelled()
+        assert len(client.requests) == 1
+        assert not base.emitted and not replayed and not callbacks
+        assert window.admission.active == 0
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
 async def test_periodic_noise_flushes_once_per_long_silence_with_bounded_context(monkeypatch):
     actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(
         monkeypatch, earlier_text=True

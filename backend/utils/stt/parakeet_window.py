@@ -632,6 +632,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             # previous utterance, not this new fragment.
             self._pause_requested = False
         self._next_send_speech = True
+        if self._stranded_fragment_answered:
+            # Retained empty context must be eligible again within the original
+            # first-text budget when a new utterance arrives.
+            self._next_post = 0.0
         self._stranded_fragment_answered = False
 
     def _buffer_cap(self) -> int:
@@ -789,7 +793,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     pass
                 self._wake.clear()
                 posted = False
-                while not self._dead and self._has_unemitted_speech():
+                # Answered-empty PCM is retained context, not another pending POST.
+                while not self._dead and not self._stranded_fragment_answered and self._has_unemitted_speech():
                     if not self._closed:
                         # Pace before selecting: a context captured before the wait would be stale.
                         delay = self._next_post - asyncio.get_running_loop().time()
