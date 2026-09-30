@@ -564,6 +564,31 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     XCTAssertTrue(MeetingScreenEvidencePass.Outcome.settled(switched).needsRetryAfterFinalize)
   }
 
+  func testATransientPixelReadFailsRetryablyInsteadOfStampingEmpty() async throws {
+    let candidate = MeetingFrameCandidate(
+      id: 1, timestamp: Date(timeIntervalSince1970: 1_000), appName: "Keynote", windowTitle: "Roadmap",
+      imagePath: "frame.jpg", videoChunkPath: nil, frameOffset: 0, ocrText: nil)
+    do {
+      // Storage not initialized yet (startup recovery): nothing may be sent, empty stamp included.
+      _ = try await MeetingFrameJudge.shared.adjudicateAndCommit(
+        candidates: [candidate], subjectID: "conversation", authorization: .forTesting(),
+        loadPixels: { _ in throw RewindError.storageError("Storage not initialized") })
+      XCTFail("a transient read must fail rather than send an empty offer")
+    } catch {
+      XCTAssertEqual(error as? MeetingFramePixelsError, .temporarilyUnreadable)
+      let detail = MeetingScreenshotsStore.failureDetail(error)
+      XCTAssertEqual(detail, MeetingScreenshotsStore.screenHistoryUnavailableDetail)
+      XCTAssertTrue(MeetingScreenEvidencePass.Outcome.settled(.failed(detail)).needsRetryAfterFinalize)
+    }
+
+    XCTAssertTrue(MeetingFrameJudge.pixelsArePermanentlyGone(RewindError.screenshotNotFound))
+    XCTAssertTrue(MeetingFrameJudge.pixelsArePermanentlyGone(RewindError.corruptedVideoChunk("chunk.mp4")))
+    XCTAssertTrue(MeetingFrameJudge.pixelsArePermanentlyGone(RewindError.invalidImage))
+    XCTAssertFalse(MeetingFrameJudge.pixelsArePermanentlyGone(RewindError.storageError("Storage not initialized")))
+    XCTAssertFalse(MeetingFrameJudge.pixelsArePermanentlyGone(RewindError.databaseNotInitialized))
+    XCTAssertFalse(MeetingFrameJudge.pixelsArePermanentlyGone(CocoaError(.fileReadUnknown)))
+  }
+
   func testTheJudgeRefusesAnUploadForAReplacedOwner() async {
     do {
       _ = try await MeetingFrameJudge.shared.adjudicateAndCommit(
@@ -575,17 +600,16 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     }
   }
 
-  func testTheFlushPrecedesAdjudicationAndAnUntrustedWindowStillStamps() async {
+  func testTheFlushPrecedesAdjudicationAndAnUntrustedWindowIsNotStamped() async {
     let events = EventLog()
     let pass = MeetingScreenEvidencePass(
       screenshotsEnabled: { true },
       flushScreenActivity: { _ in await events.append("flush") },
-      adjudicate: { _, _ in
-        await events.append("adjudicate")
+      adjudicate: { id, _ in
+        await events.append("adjudicate \(id)")
         return .noCapture
       },
-      sleep: boundThatNeverFires,
-      stampEmpty: { id in await events.append("stamp \(id)") })
+      sleep: boundThatNeverFires)
     let interval = DateInterval(start: Date(timeIntervalSince1970: 0), duration: 10)
 
     let trusted = await pass.beforeNotes(
@@ -598,23 +622,9 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     XCTAssertEqual(unbound, .unbound)
 
     let log = await events.entries
-    XCTAssertEqual(log, ["flush", "adjudicate", "flush", "stamp untrusted", "flush"])
-  }
-
-  /// The empty-candidates stamp, as `ScreenFrameAdjudicationRequest` (extra="forbid",
-  /// `candidates` required with max_length=8 and no minimum) accepts it: an explicit empty array.
-  func testTheEmptyEvidenceStampEncodesTheBackendRequestShape() throws {
-    let attemptID = try XCTUnwrap(UUID(uuidString: "6F9619FF-8B86-D011-B42D-00C04FC964FF"))
-    let request = ScreenFrameAdjudicationRequestWire(attemptID: attemptID, subjectID: "conversation-1", candidates: [])
-    let json = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
-
-    XCTAssertEqual(Set(json.keys), ["schema_version", "attempt_id", "purpose", "subject", "candidates"])
-    XCTAssertEqual(json["schema_version"] as? Int, 1)
-    XCTAssertEqual(json["purpose"] as? String, "meeting_note_v1")
-    XCTAssertEqual((json["attempt_id"] as? String)?.lowercased(), attemptID.uuidString.lowercased())
-    XCTAssertEqual(json["subject"] as? [String: String], ["kind": "conversation", "id": "conversation-1"])
-    XCTAssertEqual((json["candidates"] as? [Any])?.count, 0)
+    XCTAssertEqual(
+      log, ["flush", "adjudicate trusted", "flush", "flush"],
+      "no adjudication, and so no stamp, without a trusted window")
   }
 
   func testAfterFinalizeFailureRecordsDegradedFallbackToNoteOpen() async {

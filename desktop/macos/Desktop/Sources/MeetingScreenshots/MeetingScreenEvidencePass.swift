@@ -88,8 +88,6 @@ struct MeetingScreenEvidencePass: Sendable {
   var flushScreenActivity: @Sendable (DateInterval) async -> Void
   var adjudicate: @Sendable (String, MeetingScreenshotSelectionWindow) async -> MeetingScreenshotsStore.Phase
   var sleep: @Sendable (Duration) async -> Void
-  /// The empty adjudication call: "evidence pass done, nothing to offer" (no bytes, no judging).
-  var stampEmpty: @Sendable (String) async -> Void = { _ in }
   var recordFallback: @Sendable (Fallback) -> Void = { _ in }
 
   static let production = MeetingScreenEvidencePass(
@@ -107,20 +105,6 @@ struct MeetingScreenEvidencePass: Sendable {
       await MeetingScreenshotsStore().loadAndWait(conversationID: conversationID, selectionWindow: window)
     },
     sleep: { try? await Task.sleep(for: $0) },
-    stampEmpty: { conversationID in
-      // Owner-bound like every evidence upload: the conversation belongs to whoever is signed in
-      // now, and the stamp must not go out under a session that replaced them.
-      guard let authorization = MeetingEvidenceAuthorization.captureCurrentOwner() else {
-        log("MeetingScreenEvidence: no signed-in owner; empty evidence stamp not sent")
-        return
-      }
-      do {
-        _ = try await MeetingFrameJudge.shared.adjudicateAndCommit(
-          candidates: [], subjectID: conversationID, authorization: authorization)
-      } catch {
-        log("MeetingScreenEvidence: empty evidence stamp failed for \(conversationID)")
-      }
-    },
     recordFallback: { fallback in
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "meeting_screen_evidence",
@@ -147,13 +131,9 @@ struct MeetingScreenEvidencePass: Sendable {
         await pass.flushScreenActivity(captureInterval)
         guard enabled else { return .disabled }
         guard let conversationID, let fetchSelectionWindow else { return .unbound }
-        let outcome = await pass.adjudicate(conversationID: conversationID, fetchSelectionWindow: fetchSelectionWindow)
-        if outcome == .untrustedWindow {
-          // No window to select in, so nothing to offer: stamp the marker anyway, or the server
-          // holds the notes for its full bound waiting for evidence that cannot come.
-          await pass.stampEmpty(conversationID)
-        }
-        return outcome
+        // With no trusted window nothing is stamped: the server does not wait on a conversation that
+        // has none (and 409s a stamp for it while it is still in progress).
+        return await pass.adjudicate(conversationID: conversationID, fetchSelectionWindow: fetchSelectionWindow)
       },
       orAfter: timeout,
       sleep: sleep,

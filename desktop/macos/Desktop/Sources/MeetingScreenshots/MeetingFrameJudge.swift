@@ -37,7 +37,10 @@ actor MeetingFrameJudge {
   func adjudicateAndCommit(
     candidates: [MeetingFrameCandidate],
     subjectID: String,
-    authorization: MeetingEvidenceAuthorization
+    authorization: MeetingEvidenceAuthorization,
+    loadPixels: @Sendable (MeetingFrameCandidate) async throws -> Data = {
+      try await RewindStorage.shared.loadScreenshotData(for: $0.moment.screenshot)
+    }
   ) async throws -> ConversationScreenFrameSet {
     guard authorization.isCurrent else { throw MeetingEvidenceAuthorizationError.ownerChanged }
     // An empty offer is still sent: it is the "evidence pass done, nothing to show" stamp the
@@ -51,15 +54,23 @@ actor MeetingFrameJudge {
     var wire: [ScreenFrameCandidateWire] = []
     wire.reserveCapacity(bounded.count)
     for candidate in bounded {
-      guard
-        let bytes = try? await RewindStorage.shared.loadScreenshotData(for: candidate.moment.screenshot),
-        let entry = Self.makeCandidateWire(
-          id: candidate.id, timestamp: candidate.timestamp, bytes: bytes)
+      let bytes: Data
+      do {
+        bytes = try await loadPixels(candidate)
+      } catch  where Self.pixelsArePermanentlyGone(error) {
+        continue  // aged out, never written, or corrupt: this frame will never be readable
+      } catch {
+        // Anything else (storage not initialized yet during startup recovery, an I/O error) may
+        // succeed later. Offering a partial or empty set would be stamped as final and suppress
+        // this meeting's screenshots for good, so fail retryably and send nothing.
+        throw MeetingFramePixelsError.temporarilyUnreadable
+      }
+      guard let entry = Self.makeCandidateWire(id: candidate.id, timestamp: candidate.timestamp, bytes: bytes)
       else { continue }
       wire.append(entry)
     }
     if wire.isEmpty && !bounded.isEmpty {
-      // Chunks aged out between selection and upload: nothing to offer, but the pass is done.
+      // Every frame is permanently gone: nothing to offer, but the pass is done.
       log("MeetingFrameJudge: no candidate had readable pixels; sending the empty evidence stamp")
     }
 
@@ -72,6 +83,14 @@ actor MeetingFrameJudge {
   }
 
   // MARK: - Pure helpers (testable without a network or an actor hop)
+
+  /// Whether a pixel read failed for good: the file or frame no longer exists, or cannot decode.
+  static func pixelsArePermanentlyGone(_ error: Error) -> Bool {
+    switch error as? RewindError {
+    case .screenshotNotFound, .corruptedVideoChunk, .invalidImage: return true
+    default: return false
+    }
+  }
 
   /// Build one wire candidate from a frame's raw bytes, or `nil` when the bytes cannot even be
   /// sniffed for a size — malformed data is dropped here rather than sent to fail server-side.
@@ -110,4 +129,11 @@ actor MeetingFrameJudge {
     else { return nil }
     return (width, height)
   }
+}
+
+enum MeetingFramePixelsError: Error, LocalizedError, Equatable {
+  /// A candidate's pixels could not be read for a reason that may clear (see `pixelsArePermanentlyGone`).
+  case temporarilyUnreadable
+
+  var errorDescription: String? { "A meeting frame could not be read yet." }
 }

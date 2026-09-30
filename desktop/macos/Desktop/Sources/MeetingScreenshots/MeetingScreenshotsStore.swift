@@ -129,6 +129,7 @@ final class MeetingScreenshotsStore: ObservableObject {
   /// A bounded phase detail: an owner change keeps its own label so telemetry can bucket it.
   nonisolated static func failureDetail(_ error: Error) -> String {
     if error is MeetingEvidenceAuthorizationError { return ownerChangedDetail }
+    if error is MeetingFramePixelsError { return screenHistoryUnavailableDetail }
     if case AuthError.userChangedDuringRequest = error { return ownerChangedDetail }
     return error.localizedDescription
   }
