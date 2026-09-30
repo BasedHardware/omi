@@ -806,9 +806,11 @@ class TestMeetingContextPack:
 
         calls = {'memories': 0, 'goals': 0}
         monkeypatch.setattr(
-            pack_module.memories_db,
-            'get_memories',
-            lambda *a, **k: calls.__setitem__('memories', calls['memories'] + 1) or [],
+            pack_module,
+            'MemoryService',
+            lambda **kw: SimpleNamespace(
+                read=lambda *a, **k: calls.__setitem__('memories', calls['memories'] + 1) or []
+            ),
         )
         monkeypatch.setattr(
             pack_module.goals_db,
@@ -836,13 +838,49 @@ class TestMeetingContextPack:
         monkeypatch.setattr(pack_module.calendar_db, 'list_meetings', boom)
         monkeypatch.setattr(pack_module.conversations_db, 'get_conversations_without_photos', boom)
         monkeypatch.setattr(pack_module.goals_db, 'get_user_goals', boom)
-        monkeypatch.setattr(pack_module.memories_db, 'get_memories', boom)
+        monkeypatch.setattr(pack_module, 'MemoryService', lambda **kw: SimpleNamespace(read=boom))
         monkeypatch.setattr(pack_module.screen_activity_db, 'get_screen_activity', boom)
         roster = _roster([_entry('Ash Kalb', 'ash@fulcra.com')])
         conversation = SimpleNamespace(started_at=START, finished_at=START + timedelta(minutes=30), id='c1')
         pack = pack_module.gather_meeting_context_pack('uid', conversation, roster, people=[], include_screen_text=True)
         # Every source failed; the pack is empty but nothing raised.
         assert pack is None
+
+    def test_gather_reads_memories_through_the_canonical_authority(self, monkeypatch):
+        """The pack must use the canonical memory read, not the legacy collection.
+
+        Memories are written to `memory_items`; a direct `database.memories.get_memories` read
+        sees only the historical collection, so a meeting whose attendees' memories were written
+        after the switch rendered no MEMORIES lines (same class as #19568, missed by that sweep).
+        """
+        import utils.conversations.meeting_context_pack as pack_module
+
+        class _Record:
+            def __init__(self, content, locked=False):
+                self._payload = {'content': content, 'is_locked': locked}
+                self.is_locked = locked
+
+            def dict(self):
+                return dict(self._payload)
+
+        seen = {}
+
+        def _read(uid, *, limit=100, offset=0):
+            seen['limit'] = limit
+            return [_Record('Ash Kalb prefers async updates'), _Record('locked: do not surface', locked=True)]
+
+        monkeypatch.setattr(pack_module, 'MemoryService', lambda **kw: SimpleNamespace(read=_read))
+        roster = _roster([_entry('Ash Kalb', 'ash@fulcra.com')])
+        conversation = SimpleNamespace(started_at=START, finished_at=START + timedelta(minutes=30), id='c1')
+
+        pack = pack_module.gather_meeting_context_pack(
+            'uid', conversation, roster, people=[], include_screen_text=False
+        )
+
+        assert pack is not None
+        assert any('async updates' in line for line in pack.memories)
+        assert not any('do not surface' in line for line in pack.memories)
+        assert seen['limit'] == 40
 
     def test_gather_gate(self):
         segment = TranscriptSegment(

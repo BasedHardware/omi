@@ -11,6 +11,7 @@ from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.stt import streaming as st
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_rollout import window_allocation, window_language_supported
+from utils.stt.resilient_stream import trim_window_replay_to_anchor
 from utils.stt.live_health import health, mode as routing_mode
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
@@ -329,10 +330,29 @@ class LiveLegSocket(STTSocket):
         self._health_close: Callable[[], None] = lambda: None
         record_live_stt_socket_open(service.value)
         if window:
-            from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC
+            from utils.stt.parakeet_window import SessionPcmGain, WINDOW_INGEST_AGC, WindowedParakeetSocket
 
+            if isinstance(raw, WindowedParakeetSocket):
+                raw.set_replay_progress_callback(self._trim_window_replay_to_anchor)
             if WINDOW_INGEST_AGC:
                 self._ingest_gain = SessionPcmGain()
+
+    def window_replay_anchor_sample(self) -> int | None:
+        from utils.stt.parakeet_window import WindowedParakeetSocket
+
+        if not isinstance(self.raw, WindowedParakeetSocket) or self._send_tracker is None:
+            return None
+        provider_sample = self.raw.replay_anchor_sample()
+        if provider_sample is None:
+            return None
+        return self._send_tracker.send_map.map_sample(provider_sample)
+
+    @property
+    def capacity_subtype(self) -> str | None:
+        return getattr(self.raw, 'capacity_subtype', None)
+
+    def _trim_window_replay_to_anchor(self) -> None:
+        trim_window_replay_to_anchor(self.session.receiver._window_ring(), self)
 
     @property
     def is_connection_dead(self) -> bool:

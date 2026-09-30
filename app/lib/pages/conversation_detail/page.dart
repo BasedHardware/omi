@@ -917,6 +917,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
               openChatSheet(
                 context,
                 ChatPage(
+                  startFresh: true,
                   initialChatContext:
                       ChatPageContext(type: 'conversation', id: convo.id, title: convo.structured.title),
                 ),

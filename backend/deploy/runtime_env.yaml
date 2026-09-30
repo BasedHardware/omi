@@ -14,6 +14,48 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          TRANSLATION_DEMAND_SHADOW_ENABLED:
+            value: 'false'
+            category: rollout
+          TRANSLATION_DEMAND_GATE_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_DEMAND_LEASE_V1_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONDEMAND_GEMINI_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONOPEN_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONDEMAND_COHORT_PERCENT:
+            value: '100'
+            category: rollout
+          TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_SEGMENTS:
+            value: '50'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_CHARS:
+            value: '12000'
+            category: rollout
+          TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
+            value: '3'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
+            value: '4096'
+            category: rollout
+          TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
+            value: '10000000'
+            category: rollout
+          TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
+            value: '1000000000'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+            value: '4'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'true'
@@ -147,6 +189,9 @@ environments:
             category: rollout
           STT_CIRCUIT_HALF_OPEN_PROBES:
             value: '1'
+            category: rollout
+          STT_SHED_CONNECT_FAILURES:
+            value: '3'
             category: rollout
           SONIOX_CIRCUIT_FAILURE_THRESHOLD:
             value: '3'
@@ -691,6 +736,48 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            TRANSLATION_DEMAND_SHADOW_ENABLED:
+              value: 'false'
+              category: rollout
+            TRANSLATION_DEMAND_GATE_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_DEMAND_LEASE_V1_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONDEMAND_GEMINI_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONOPEN_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONDEMAND_COHORT_PERCENT:
+              value: '100'
+              category: rollout
+            TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+              value: ''
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_SEGMENTS:
+              value: '50'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CHARS:
+              value: '12000'
+              category: rollout
+            TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
+              value: '3'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
+              value: '4096'
+              category: rollout
+            TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
+              value: '10000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
+              value: '1000000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+              value: '4'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'true'
@@ -1740,6 +1827,48 @@ environments:
         - conversation.finalize.persisted
         - memory.canonical.mutate
         env:
+          TRANSLATION_DEMAND_SHADOW_ENABLED:
+            value: 'false'
+            category: rollout
+          TRANSLATION_DEMAND_GATE_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_DEMAND_LEASE_V1_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONDEMAND_GEMINI_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONOPEN_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSLATION_ONDEMAND_COHORT_PERCENT:
+            value: '100'
+            category: rollout
+          TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_SEGMENTS:
+            value: '50'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_CHARS:
+            value: '12000'
+            category: rollout
+          TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
+            value: '3'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
+            value: '4096'
+            category: rollout
+          TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
+            value: '10000000'
+            category: rollout
+          TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
+            value: '1000000000'
+            category: rollout
+          TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+            value: '4'
+            category: rollout
           FREE_TIER_LOCAL_PROCESSING:
             category: rollout
             value: 'false'
@@ -1837,16 +1966,16 @@ environments:
             value: 'false'
             category: rollout
           STT_LEARNED_LANGUAGE_PROFILE:
-            value: 'false'
+            value: 'true'
             category: rollout
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
-            value: '25'
+            value: '100'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
-            value: '1'
+            value: '5'
             category: rollout
           PARAKEET_WINDOW_MAX_SESSIONS:
-            value: '1'
+            value: '8'
             category: rollout
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
             value: '8'
@@ -1864,13 +1993,16 @@ environments:
             value: prod-omi-parakeet-headless.prod-omi-backend.svc.cluster.local
             category: service_discovery
           PARAKEET_BATCH_PRESSURE_MIN_REPLICAS:
-            value: '2'
+            value: '3'
             category: rollout
           STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS:
             value: '1800'
             category: rollout
           STT_CIRCUIT_HALF_OPEN_PROBES:
             value: '1'
+            category: rollout
+          STT_SHED_CONNECT_FAILURES:
+            value: '3'
             category: rollout
           SONIOX_CIRCUIT_FAILURE_THRESHOLD:
             value: '3'
@@ -2013,6 +2145,12 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
+          PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS:
+            value: '12'
+            category: reliability
+          PARAKEET_WINDOW_MAX_EMPTY_STREAK:
+            value: '4'
+            category: reliability
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
@@ -2311,6 +2449,48 @@ environments:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
           env:
+            TRANSLATION_DEMAND_SHADOW_ENABLED:
+              value: 'false'
+              category: rollout
+            TRANSLATION_DEMAND_GATE_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_DEMAND_LEASE_V1_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONDEMAND_GEMINI_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONOPEN_ENABLED:
+              value: 'true'
+              category: rollout
+            TRANSLATION_ONDEMAND_COHORT_PERCENT:
+              value: '100'
+              category: rollout
+            TRANSLATION_ONDEMAND_UID_ALLOWLIST:
+              value: ''
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_SEGMENTS:
+              value: '50'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CHARS:
+              value: '12000'
+              category: rollout
+            TRANSLATION_ONDEMAND_DEADLINE_SECONDS:
+              value: '3'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_OUTPUT_TOKENS:
+              value: '4096'
+              category: rollout
+            TRANSLATION_ONDEMAND_UID_DAILY_CHARS:
+              value: '10000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS:
+              value: '1000000000'
+              category: rollout
+            TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES:
+              value: '4'
+              category: rollout
             FREE_TIER_LOCAL_PROCESSING:
               category: rollout
               value: 'false'

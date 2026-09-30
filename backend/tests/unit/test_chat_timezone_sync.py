@@ -1,11 +1,12 @@
 """Chat timezone sync from client requests (issue #4643)."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from models.chat import SendMessageRequest
 import database.notifications as notification_db
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
 def test_send_message_request_accepts_valid_iana_timezone():
@@ -52,17 +53,17 @@ def test_sync_user_time_zone_from_client_returns_request_tz_when_persist_fails(g
 
 @patch.object(notification_db, "get_firestore_client")
 def test_set_user_time_zone_uses_injectable_firestore_client(get_client):
-    fake_client = MagicMock()
+    fake_client = StrictFirestore()
     get_client.return_value = fake_client
     notification_db.set_user_time_zone("uid1", "America/Chicago", firestore_client=fake_client)
-    fake_client.collection.assert_called_once_with("users")
+    assert fake_client.rows[('users', 'uid1')]['time_zone'] == 'America/Chicago'
     get_client.assert_not_called()
 
 
 @patch.object(notification_db, "get_firestore_client")
 def test_set_user_time_zone_defaults_to_get_firestore_client(get_client):
-    fake_client = MagicMock()
+    fake_client = StrictFirestore()
     get_client.return_value = fake_client
     notification_db.set_user_time_zone("uid1", "America/Chicago")
     get_client.assert_called_once()
-    fake_client.collection.assert_called_once_with("users")
+    assert fake_client.rows[('users', 'uid1')]['time_zone'] == 'America/Chicago'

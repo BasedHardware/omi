@@ -11520,4 +11520,119 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'কিছু ফলাফল লোড করা যায়নি';
+
+  @override
+  String get peopleSearchPlaceholder => 'মানুষ খুঁজুন';
+
+  @override
+  String get peopleNotHeardYet => 'এখনও শোনা হয়নি';
+
+  @override
+  String get peopleRecent => 'সাম্প্রতিক';
+
+  @override
+  String get deletePeopleMessage =>
+      'এটি তাদের ভয়েস স্যাম্পল সরিয়ে দেবে এবং পূর্বাবস্থায় ফেরানো যাবে না। আগের কথোপকথনে তাদের বক্তব্য নামহীন বক্তা হিসেবে থাকবে।';
+
+  @override
+  String get personTalkTime => 'কথা বলার সময়';
+
+  @override
+  String get personLastHeard => 'সর্বশেষ শোনা';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count জনকে মুছবেন?',
+      one: '1 জনকে মুছবেন?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'ভয়েস প্রয়োজন';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count জন',
+      one: '১ জন',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'মিলে যাওয়া কেউ নেই';
+
+  @override
+  String get deselectAll => 'সব বাদ দিন';
+
+  @override
+  String get voiceRecognitionSettings => 'ভয়েস শনাক্তকরণ';
+
+  @override
+  String get greetingMorning => 'সুপ্রভাত';
+
+  @override
+  String get greetingAfternoon => 'শুভ অপরাহ্ন';
+
+  @override
+  String get greetingEvening => 'শুভ সন্ধ্যা';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'আপনি কী জানতে চান?';
+
+  @override
+  String get askSuggestDecide => 'আজ আমি কী সিদ্ধান্ত নিলাম?';
+
+  @override
+  String get askSuggestOwe => 'লোকদের কাছে আমার এখনও কী বাকি?';
+
+  @override
+  String get askSuggestNotice => 'Omi কী লক্ষ্য করল?';
+
+  @override
+  String get pastChats => 'আগের চ্যাট';
+
+  @override
+  String get newChat => 'নতুন চ্যাট';
+
+  @override
+  String get startFresh => 'নতুন করে শুরু করুন';
+
+  @override
+  String get noPastChats => 'Omi-এর সঙ্গে আপনার চ্যাট এখানে দেখাবে।';
+
+  @override
+  String get deleteChatQuestion => 'এই চ্যাটটি মুছবেন?';
+
+  @override
+  String get deleteChatMessage => 'এটি আগের চ্যাট থেকে চিরতরে মুছে যাবে।';
+
+  @override
+  String get deleteChat => 'চ্যাট মুছুন';
+
+  @override
+  String get appsAskWith => 'যার সঙ্গে Omi-কে জিজ্ঞাসা করবেন';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'আজ $countটি কথোপকথন।',
+      one: 'আজ ১টি কথোপকথন।',
+      zero: 'আজ কোনো কথোপকথন নেই।',
+    );
+    return '$_temp0';
+  }
 }

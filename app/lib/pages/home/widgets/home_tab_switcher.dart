@@ -31,7 +31,7 @@ class HomeTabSwitcher extends StatelessWidget {
             key: OmiKeys.homeTabConversations,
             child: _tab(context, selected, HomeProvider.homeTab, l10n.home, 'Home', OmiKeys.homeTabHome),
           ),
-          const SizedBox(width: OmiSpacing.md),
+          const SizedBox(width: OmiSpacing.sm),
           _tab(context, selected, HomeProvider.tasksTab, l10n.tasks, 'Tasks', OmiKeys.homeTabTasks),
           const Spacer(),
           if (trailing != null) trailing!,
@@ -71,7 +71,8 @@ class HomeTabSwitcher extends StatelessWidget {
             child: AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,
-              style: OmiType.title1.copyWith(color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary),
+              style: OmiType.title2.copyWith(
+                  fontWeight: FontWeight.w700, color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary),
               child: Text(label),
             ),
           ),

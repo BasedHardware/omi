@@ -146,7 +146,11 @@ from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_w
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
 from utils.sync.bridge import finish_sync_segment
-from utils.sync.assignment_errors import SyncAssignmentSuperseded
+from utils.sync.assignment_errors import (
+    SyncAssignmentConflict,
+    SyncAssignmentSuperseded,
+    bounded_sync_assignment_subtype,
+)
 from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
@@ -268,6 +272,12 @@ async def _resolve_fair_use_soft_cap_plan(uid: str):
 
 def _bounded_sync_failure_reason(reason: str | None) -> str:
     return reason if reason in _SYNC_FAILURE_REASON_CODES else 'other'
+
+
+def _sync_assignment_failure_subtype(error: object) -> str:
+    if isinstance(error, SyncAssignmentConflict):
+        return bounded_sync_assignment_subtype(error.subtype)
+    return 'none'
 
 
 def _record_sync_segment_outcome(
@@ -396,6 +406,7 @@ def _set_deferred_segment_outcome(
     retryable: bool,
     phase: str | None = None,
     exception_type: str | None = None,
+    failure_subtype: str | None = None,
 ) -> None:
     """Keep v2 outcome data local until its durable checkpoint commits."""
     if deferred_outcome is not None:
@@ -409,6 +420,8 @@ def _set_deferred_segment_outcome(
             deferred_outcome['phase'] = phase
         if exception_type is not None:
             deferred_outcome['exception_type'] = exception_type
+        if failure_subtype is not None:
+            deferred_outcome['failure_subtype'] = bounded_sync_assignment_subtype(failure_subtype)
 
 
 def _deferred_segment_labels(
@@ -420,7 +433,8 @@ def _deferred_segment_labels(
     fallback_retryable: bool,
     fallback_phase: str,
     fallback_exception_type: str,
-) -> tuple[TranscriptionOutcome, str, str, bool, str, str]:
+    fallback_failure_subtype: str = 'none',
+) -> tuple[TranscriptionOutcome, str, str, bool, str, str, str]:
     """Read locally deferred values without widening telemetry labels."""
     outcome = deferred_outcome.get('outcome')
     provider = deferred_outcome.get('provider')
@@ -428,6 +442,7 @@ def _deferred_segment_labels(
     retryable = deferred_outcome.get('retryable')
     phase = deferred_outcome.get('phase')
     exception_type = deferred_outcome.get('exception_type')
+    failure_subtype = deferred_outcome.get('failure_subtype')
     return (
         outcome if isinstance(outcome, TranscriptionOutcome) else fallback_outcome,
         provider if isinstance(provider, str) else fallback_provider,
@@ -435,6 +450,7 @@ def _deferred_segment_labels(
         retryable if isinstance(retryable, bool) else fallback_retryable,
         phase if isinstance(phase, str) else fallback_phase,
         exception_type if isinstance(exception_type, str) else fallback_exception_type,
+        bounded_sync_assignment_subtype(failure_subtype or fallback_failure_subtype),
     )
 
 
@@ -610,6 +626,7 @@ def _finalize_sync_job_for_run(
     attempt_ref: str | None = None,
     failure_phase: str | None = None,
     failure_class: str | None = None,
+    failure_subtype: str | None = None,
 ) -> Dict | None:
     if run_lock_token is None:
         finalized = finalize_sync_job(
@@ -618,6 +635,7 @@ def _finalize_sync_job_for_run(
             attempt_ref=attempt_ref,
             failure_phase=failure_phase,
             failure_class=failure_class,
+            failure_subtype=failure_subtype,
         )
         if finalized is None:
             raise SyncJobRunLeaseLost(f'sync job legacy state is no longer mutable: job={job_id}')
@@ -630,6 +648,7 @@ def _finalize_sync_job_for_run(
             attempt_ref=attempt_ref,
             failure_phase=failure_phase,
             failure_class=failure_class,
+            failure_subtype=failure_subtype,
         ),
         job_id=job_id,
     )
@@ -756,6 +775,7 @@ async def _finalize_sync_job_failure(
     attempt_ref: str | None = None,
     failure_phase: str | None = None,
     failure_class: str | None = None,
+    failure_subtype: str | None = None,
     failure_key: str | None = None,
     failure_fingerprint: str | None = None,
 ) -> None:
@@ -777,6 +797,7 @@ async def _finalize_sync_job_failure(
         attempt_ref=attempt_ref,
         failure_phase=failure_phase,
         failure_class=failure_class,
+        failure_subtype=failure_subtype,
         failure_key=failure_key,
         failure_fingerprint=failure_fingerprint,
     )
@@ -803,6 +824,7 @@ def finalize_sync_job_failure_now(
     attempt_ref: str | None = None,
     failure_phase: str | None = None,
     failure_class: str | None = None,
+    failure_subtype: str | None = None,
     failure_key: str | None = None,
     failure_fingerprint: str | None = None,
 ) -> Optional[Dict]:
@@ -850,7 +872,7 @@ def finalize_sync_job_failure_now(
         delete_sync_job_run_lock_epoch(job_id)
     logger.error(
         'event=sync_transcription_job outcome=%s status=failed provider=%s model=%s lane=%s reason_code=%s '
-        'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s',
+        'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s failure_subtype=%s',
         outcome.value,
         bounded_provider(provider),
         _bounded_sync_model(model),
@@ -860,6 +882,7 @@ def finalize_sync_job_failure_now(
         _bounded_correlation_ref(attempt_ref),
         _bounded_sync_phase(failure_phase),
         bounded_exception_class(failure_class),
+        bounded_sync_assignment_subtype(failure_subtype),
     )
     _record_sync_job_outcome(outcome, provider=provider, model=model, lane=lane, job_id=job_id)
     return finalized
@@ -1371,6 +1394,7 @@ def process_segment(
             retryable=failure.retryable,
             phase=phase,
             exception_type=bounded_exception_class(e),
+            failure_subtype=_sync_assignment_failure_subtype(e),
         )
         fingerprint = _persistence_failure_fingerprint(e, phase)
         if deferred_outcome is not None and fingerprint:
@@ -2447,6 +2471,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         retryable,
                         outcome_phase,
                         outcome_exc,
+                        outcome_subtype,
                     ) = _deferred_segment_labels(
                         deferred_outcome,
                         fallback_outcome=TranscriptionOutcome.SUCCESS,
@@ -2482,6 +2507,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         retryable,
                         outcome_phase,
                         outcome_exc,
+                        outcome_subtype,
                     ) = _deferred_segment_labels(
                         deferred_outcome,
                         fallback_outcome=TranscriptionOutcome.UPSTREAM_ERROR,
@@ -2497,7 +2523,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     else:
                         with segment_lock:
                             if not first_segment_failure:
-                                first_segment_failure.append((outcome_phase, outcome_exc))
+                                first_segment_failure.append((outcome_phase, outcome_exc, outcome_subtype))
                     _record_sync_segment_outcome(
                         outcome,
                         provider=outcome_provider,
@@ -2530,7 +2556,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         failure = failure_from_exception(r, provider=sync_provider)
                         with segment_lock:
                             if not first_segment_failure:
-                                first_segment_failure.append(('persistence', bounded_exception_class(r)))
+                                first_segment_failure.append(
+                                    ('persistence', bounded_exception_class(r), _sync_assignment_failure_subtype(r))
+                                )
                         await _record_sync_segment_failure_async(
                             failure,
                             model=sync_model,
@@ -2679,7 +2707,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             # The fenced terminal write is the only state transition that can
             # authorize a retry-claim release. A stale owner cannot free the
             # current owner's material after its lease is replaced.
-            failure_phase, failure_class = first_segment_failure[0] if first_segment_failure else ('none', 'none')
+            failure_phase, failure_class, failure_subtype = (
+                first_segment_failure[0] if first_segment_failure else ('none', 'none', 'none')
+            )
             await run_blocking(
                 db_executor,
                 _finalize_sync_job_for_run,
@@ -2689,6 +2719,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 attempt_ref=attempt_ref,
                 failure_phase=failure_phase,
                 failure_class=failure_class,
+                failure_subtype=failure_subtype,
             )
             if content_id and failed_segments > 0:
                 failure_kwargs = (
@@ -2723,7 +2754,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             logger.info(
                 'event=sync_transcription_job outcome=%s status=finalized provider=%s model=%s '
                 'lane=%s successful_segments=%d total_segments=%d total_ms=%d '
-                'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s',
+                'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s failure_subtype=%s',
                 job_outcome.value,
                 bounded_provider(sync_provider),
                 _bounded_sync_model(sync_model),
@@ -2735,6 +2766,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 _bounded_correlation_ref(attempt_ref),
                 failure_phase,
                 failure_class,
+                failure_subtype,
             )
         except asyncio.CancelledError:
             # Never release the lock, claim, or local files under an executor
@@ -2753,9 +2785,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
         except Exception as e:
             failure = failure_from_exception(e, provider=sync_provider)
             failure_class = bounded_exception_class(e)
+            failure_subtype = _sync_assignment_failure_subtype(e)
             logger.error(
                 'event=sync_transcription_job outcome=%s status=%s provider=%s model=%s '
-                'lane=%s exception_type=%s job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s',
+                'lane=%s exception_type=%s job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s '
+                'failure_subtype=%s',
                 failure.outcome.value,
                 'retrying' if task_mode else 'failed',
                 failure.provider,
@@ -2766,6 +2800,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 _bounded_correlation_ref(attempt_ref),
                 job_phase,
                 failure_class,
+                failure_subtype,
             )
             # Cloud Tasks owns retry/final-attempt state outside this function.
             # Counting a retry here as a terminal job would corrupt the
@@ -2797,6 +2832,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     attempt_ref=attempt_ref,
                     failure_phase=job_phase,
                     failure_class=failure_class,
+                    failure_subtype=failure_subtype,
                 )
             except SyncJobRunLeaseLost:
                 preserve_retry_material = True

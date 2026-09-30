@@ -36,6 +36,18 @@ enum InsightSQLPrivacy {
   /// would otherwise bypass the ``screenshots`` rewrite.
   private static let screenshotDerivedTables: Set<String> = ["screenshots_fts"]
 
+  /// The only `execute_sql` call shape a proactive investigation may send: always read-only
+  /// and always excluded-app filtered. Neither property depends on feature-flag state.
+  static func investigationToolCall(query: String, excludedApps: Set<String>) -> ToolCall {
+    ToolCall(
+      name: "execute_sql",
+      arguments: [
+        "query": filtered(query, excludedApps: excludedApps),
+        "read_only": true,
+      ],
+      thoughtSignature: nil)
+  }
+
   static func filtered(_ query: String, excludedApps: Set<String>) -> String {
     guard !excludedApps.isEmpty else { return query }
     let quoted = excludedApps.sorted().map { "'\($0.replacingOccurrences(of: "'", with: "''"))'" }

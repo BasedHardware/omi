@@ -11307,4 +11307,118 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get searchPartialFailure => '部分结果无法加载';
+
+  @override
+  String get peopleSearchPlaceholder => '搜索人物';
+
+  @override
+  String get peopleNotHeardYet => '尚未听过';
+
+  @override
+  String get peopleRecent => '最近';
+
+  @override
+  String get deletePeopleMessage => '这将删除他们的声音样本，且无法撤销。他们在过往对话中的发言将变为未命名的说话人。';
+
+  @override
+  String get personTalkTime => '说话时长';
+
+  @override
+  String get personLastHeard => '最近一次听到';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '删除 $count 个人？',
+      one: '删除 1 个人？',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => '需要声音';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 人',
+      one: '1 人',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '没有匹配的人';
+
+  @override
+  String get deselectAll => '取消全选';
+
+  @override
+  String get voiceRecognitionSettings => '声音识别';
+
+  @override
+  String get greetingMorning => '早上好';
+
+  @override
+  String get greetingAfternoon => '下午好';
+
+  @override
+  String get greetingEvening => '晚上好';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting，$name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => '你想知道什么？';
+
+  @override
+  String get askSuggestDecide => '我今天决定了什么？';
+
+  @override
+  String get askSuggestOwe => '我还欠别人什么？';
+
+  @override
+  String get askSuggestNotice => 'Omi 注意到了什么？';
+
+  @override
+  String get pastChats => '过往聊天';
+
+  @override
+  String get newChat => '新聊天';
+
+  @override
+  String get startFresh => '重新开始';
+
+  @override
+  String get noPastChats => '你和 Omi 的聊天会显示在这里。';
+
+  @override
+  String get deleteChatQuestion => '删除这个聊天？';
+
+  @override
+  String get deleteChatMessage => '它会从过往聊天中永久消失。';
+
+  @override
+  String get deleteChat => '删除聊天';
+
+  @override
+  String get appsAskWith => '用这些向 Omi 提问';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '今天有 $count 段对话。',
+      one: '今天有 1 段对话。',
+      zero: '今天还没有对话。',
+    );
+    return '$_temp0';
+  }
 }

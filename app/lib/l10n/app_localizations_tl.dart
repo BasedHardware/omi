@@ -11620,4 +11620,119 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Hindi ma-load ang ilang resulta';
+
+  @override
+  String get peopleSearchPlaceholder => 'Maghanap ng tao';
+
+  @override
+  String get peopleNotHeardYet => 'Hindi pa naririnig';
+
+  @override
+  String get peopleRecent => 'Kamakailan';
+
+  @override
+  String get deletePeopleMessage =>
+      'Aalisin nito ang kanilang mga voice sample at hindi na ito maibabalik. Ang kanilang mga sinabi sa mga nakaraang usapan ay magiging mga speaker na walang pangalan.';
+
+  @override
+  String get personTalkTime => 'Oras ng pagsasalita';
+
+  @override
+  String get personLastHeard => 'Huling narinig';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Burahin ang $count tao?',
+      one: 'Burahin ang 1 tao?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Kailangan ng Boses';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tao',
+      one: '1 tao',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Walang Tugmang Tao';
+
+  @override
+  String get deselectAll => 'Alisin ang Lahat ng Pili';
+
+  @override
+  String get voiceRecognitionSettings => 'Pagkilala sa Boses';
+
+  @override
+  String get greetingMorning => 'Magandang umaga';
+
+  @override
+  String get greetingAfternoon => 'Magandang hapon';
+
+  @override
+  String get greetingEvening => 'Magandang gabi';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Ano ang gusto mong malaman?';
+
+  @override
+  String get askSuggestDecide => 'Ano ang napagpasyahan ko ngayon?';
+
+  @override
+  String get askSuggestOwe => 'Ano pa ang utang ko sa mga tao?';
+
+  @override
+  String get askSuggestNotice => 'Ano ang napansin ni Omi?';
+
+  @override
+  String get pastChats => 'Mga nakaraang chat';
+
+  @override
+  String get newChat => 'Bagong chat';
+
+  @override
+  String get startFresh => 'Magsimula ulit';
+
+  @override
+  String get noPastChats => 'Dito lumalabas ang mga chat mo kay Omi.';
+
+  @override
+  String get deleteChatQuestion => 'Burahin ang chat na ito?';
+
+  @override
+  String get deleteChatMessage => 'Mawawala ito sa mga nakaraang chat nang tuluyan.';
+
+  @override
+  String get deleteChat => 'Burahin ang chat';
+
+  @override
+  String get appsAskWith => 'Tanungin si Omi gamit ang';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count usapan ngayon.',
+      one: '1 usapan ngayon.',
+      zero: 'Walang usapan ngayon.',
+    );
+    return '$_temp0';
+  }
 }

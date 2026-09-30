@@ -11556,4 +11556,119 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Sommige resultaten konden niet worden geladen';
+
+  @override
+  String get peopleSearchPlaceholder => 'Zoek mensen';
+
+  @override
+  String get peopleNotHeardYet => 'Nog niet gehoord';
+
+  @override
+  String get peopleRecent => 'Recent';
+
+  @override
+  String get deletePeopleMessage =>
+      'Hiermee worden hun stemsamples verwijderd. Dit kan niet ongedaan worden gemaakt. Hun uitspraken in eerdere gesprekken worden naamloze sprekers.';
+
+  @override
+  String get personTalkTime => 'Spreektijd';
+
+  @override
+  String get personLastHeard => 'Laatst gehoord';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personen verwijderen?',
+      one: '1 persoon verwijderen?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Stem nodig';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count personen',
+      one: '1 persoon',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Geen Overeenkomende Personen';
+
+  @override
+  String get deselectAll => 'Alles Deselecteren';
+
+  @override
+  String get voiceRecognitionSettings => 'Stemherkenning';
+
+  @override
+  String get greetingMorning => 'Goedemorgen';
+
+  @override
+  String get greetingAfternoon => 'Goedemiddag';
+
+  @override
+  String get greetingEvening => 'Goedenavond';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Wat wil je weten?';
+
+  @override
+  String get askSuggestDecide => 'Wat heb ik vandaag besloten?';
+
+  @override
+  String get askSuggestOwe => 'Wat ben ik mensen nog verschuldigd?';
+
+  @override
+  String get askSuggestNotice => 'Wat viel Omi op?';
+
+  @override
+  String get pastChats => 'Eerdere chats';
+
+  @override
+  String get newChat => 'Nieuwe chat';
+
+  @override
+  String get startFresh => 'Opnieuw beginnen';
+
+  @override
+  String get noPastChats => 'Je chats met Omi verschijnen hier.';
+
+  @override
+  String get deleteChatQuestion => 'Deze chat verwijderen?';
+
+  @override
+  String get deleteChatMessage => 'Hij verdwijnt voorgoed uit eerdere chats.';
+
+  @override
+  String get deleteChat => 'Chat verwijderen';
+
+  @override
+  String get appsAskWith => 'Omi vragen met';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gesprekken vandaag.',
+      one: '1 gesprek vandaag.',
+      zero: 'Vandaag geen gesprekken.',
+    );
+    return '$_temp0';
+  }
 }
