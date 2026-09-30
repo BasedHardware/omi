@@ -1282,6 +1282,25 @@ async def _fragment_frame(actual, clock, sample, *, speech=False, wall_seconds=0
     return sample + 640
 
 
+async def _settled_fragment_silence(actual, clock, sample, frames, *, wall_seconds=0.04):
+    # Keep 40ms packets at state transitions. Once VAD is settled, batch known
+    # silence while retaining a final 320ms of packets for exact pre-roll.
+    first = min(140, frames)
+    for _ in range(first):
+        sample = await _fragment_frame(actual, clock, sample, wall_seconds=wall_seconds)
+    remaining = frames - first
+    while remaining > 8:
+        count = min(250, remaining - 8)
+        clock[0] += count * wall_seconds
+        await _flush_capture(actual, bytes(count * 640 * 2), sample)
+        sample += count * 640
+        await _REAL_SLEEP(0)
+        remaining -= count
+    for _ in range(remaining):
+        sample = await _fragment_frame(actual, clock, sample, wall_seconds=wall_seconds)
+    return sample
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('earlier_text', [False, True])
 @pytest.mark.parametrize('response_text', [False, True])
@@ -1297,8 +1316,7 @@ async def test_late_blip_after_full_silent_ring_flushes_once_without_capacity_fa
     }
     # The signature does not locate the blip within the 90s ring. In fact a
     # NEW blip after long silence hits a full ring before either timer is due.
-    for _ in range(4725 if earlier_text else 2250):
-        sample = await _fragment_frame(actual, clock, sample)
+    sample = await _settled_fragment_silence(actual, clock, sample, 4725 if earlier_text else 2250)
     previous.raw._next_post = 0  # the long quiet interval outlives the wall pace
     # Two queued capture packets can be handled before the pump gets a turn.
     sample = await _fragment_frame(actual, clock, sample, speech=True, yield_pump=False)
@@ -1317,10 +1335,9 @@ async def test_late_blip_after_full_silent_ring_flushes_once_without_capacity_fa
         assert clock[0] - previous.raw._first_speech_at < 0.05
     sample = await _fragment_frame(actual, clock, sample)
     assert actual.stt_socket is previous, previous.raw.replay_lag_diagnostics
-    for _ in range(2250):
-        sample = await _fragment_frame(actual, clock, sample)
-        assert actual.stt_socket is previous
-        assert actual._window_ring().buffered_bytes <= 90 * 16000 * 2
+    sample = await _settled_fragment_silence(actual, clock, sample, 2250)
+    assert actual.stt_socket is previous
+    assert actual._window_ring().buffered_bytes <= 90 * 16000 * 2
     assert len(client.requests) == 1 + int(earlier_text), previous.raw.test_job_signals
     assert previous.raw._empty_streak == int(not response_text)
     assert WINDOW_STRANDED_FLUSHES.labels(outcome='performed')._value.get() == before['performed'] + 1
@@ -1347,9 +1364,8 @@ async def test_blip_followed_by_fast_capture_silence_flushes_below_post_pace(mon
     )
     fragment_start_bytes = previous.raw._received_bytes
     sample = await _fragment_frame(actual, clock, sample, speech=True, wall_seconds=0)
-    for _ in range(2250):
-        sample = await _fragment_frame(actual, clock, sample, wall_seconds=0)
-        assert actual.stt_socket is previous, previous.raw.replay_lag_diagnostics
+    sample = await _settled_fragment_silence(actual, clock, sample, 2250, wall_seconds=0)
+    assert actual.stt_socket is previous, previous.raw.replay_lag_diagnostics
     assert len(client.requests) == 1 + int(earlier_text)
     assert [item['text'] for item in base.emitted] == (['Earlier.'] if earlier_text else []) + (
         ['Short.'] if response_text else []
@@ -1461,8 +1477,7 @@ async def test_empty_stranded_answer_stays_in_replay_and_context_until_age(monke
     actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(
         monkeypatch, earlier_text=earlier_text
     )
-    for _ in range(2250):
-        sample = await _fragment_frame(actual, clock, sample)
+    sample = await _settled_fragment_silence(actual, clock, sample, 2250)
     previous.raw._next_post = 0
     fragment_capture_sample = sample
     anchor_before = previous.raw._anchor_bytes
@@ -1471,8 +1486,7 @@ async def test_empty_stranded_answer_stays_in_replay_and_context_until_age(monke
         for outcome in ('performed', 'answered_empty', 'answered_text')
     }
     sample = await _fragment_frame(actual, clock, sample, speech=True)
-    for _ in range(625):  # 25s quiet: beyond both the 5s flush and 15s tail
-        sample = await _fragment_frame(actual, clock, sample)
+    sample = await _settled_fragment_silence(actual, clock, sample, 625)
     assert len(client.requests) == 1 + int(earlier_text)
     assert previous.raw._anchor_bytes == anchor_before
     assert not previous.raw.has_untranscribed_speech()
@@ -1511,11 +1525,15 @@ async def test_periodic_noise_flushes_once_per_long_silence_with_bounded_context
     initial_requests = len(client.requests)
     cycles = 100  # >8 minutes, beyond the PCM/context caps
     for cycle in range(cycles):
-        previous.raw._next_post = 0  # model the elapsed real-time quiet interval
+        previous.raw._next_post = 0  # stress the capture-rate ceiling; wall pacing can only reduce POSTs
         sample = await _fragment_frame(actual, clock, sample, speech=True)
-        for _ in range(124):  # 4.96s: ordinary pauses may not flush
+        for _ in range(8):  # packetize the real VAD hangover transition
             sample = await _fragment_frame(actual, clock, sample)
-        assert len(client.requests) == initial_requests + cycle
+        clock[0] += 4.64
+        await _flush_capture(actual, bytes(int(4.64 * 16000) * 2), sample)
+        sample += int(4.64 * 16000)
+        await _REAL_SLEEP(0)
+        assert len(client.requests) == initial_requests + cycle  # exactly 4.96s silence
         for _ in range(6):  # total 5.20s silence, one flush
             sample = await _fragment_frame(actual, clock, sample)
         assert len(client.requests) == initial_requests + cycle + 1
@@ -1529,8 +1547,7 @@ async def test_periodic_noise_flushes_once_per_long_silence_with_bounded_context
     assert WINDOW_STRANDED_FLUSHES.labels(outcome='answered_text')._value.get() == before['answered_text']
     assert [item['text'] for item in base.emitted] == ['Earlier.']
     assert not replayed and not callbacks
-    for _ in range(2500):  # no new speech: no re-arm, answered context ages out
-        sample = await _fragment_frame(actual, clock, sample)
+    sample = await _settled_fragment_silence(actual, clock, sample, 2500)
     assert len(client.requests) == initial_requests + cycles
     assert previous.raw._answered_empty_span is None
     assert len(previous.raw._answered_context_ends) == 0
