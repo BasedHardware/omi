@@ -12,6 +12,7 @@ from scripts.firestore_workflow_policy import (
 )
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
 from scripts.runtime_env_validation.common import (
+    KEY_CREDENTIAL_ENV_NAMES,
     DEFAULT_MANIFEST,
     ROOT,
     ConfigDict,
@@ -20,6 +21,7 @@ from scripts.runtime_env_validation.common import (
     StringMap,
     _as_config_dict,
     _as_config_list,
+    _declared_service_account,
     _expected_flag_value,
     _get_env_config,
     _is_provisional,
@@ -31,6 +33,7 @@ from scripts.runtime_env_validation.common import (
     _validate_cloud_run_secret_entries,
     _validate_env_entries,
     _validate_forbidden_env_entries,
+    _validate_service_identity,
     compute_project,
     data_plane_project,
 )
@@ -339,6 +342,12 @@ def _rendered_runtime_env_outputs(
             output_prefix = service.replace('-', '_')
             outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(service_config.get('env', {}))
             outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(service_config.get('secrets', {}))
+            service_account = _declared_service_account(service_config)
+            outputs[f'{output_prefix}_identity_flags'] = (
+                f'--service-account={service_account} --remove-secrets={",".join(KEY_CREDENTIAL_ENV_NAMES)}'
+                if service_account
+                else ''
+            )
         jobs = _as_config_dict(cloud_run.get('jobs')) or {}
         for job, raw_job_config in jobs.items():
             job_config = _as_config_dict(raw_job_config)
@@ -491,6 +500,7 @@ def _validate_cloud_run_workflows(
                 strict_provisional=strict_provisional,
             )
         )
+        errors.extend(_validate_workflow_service_identity(service, service_config, service_state))
 
     for job, job_config in expected_jobs.items():
         job_state = workflow_jobs.get(job)
@@ -816,6 +826,29 @@ def _validate_sync_backfill_co_deploy(workflow_file: str, services: dict[str, Co
             'deploys backend-sync without backend-sync-backfill',
         )
     ]
+
+
+def _validate_workflow_service_identity(
+    service: str,
+    service_config: ConfigDict,
+    service_state: ConfigDict,
+) -> list[ValidationError]:
+    """The deploy step pins the declared identity and drops every key-credential ref."""
+    if not _declared_service_account(service_config):
+        return []
+    scope = f'cloud_run_workflow/{service}'
+    flags = _as_config_dict(service_state.get('flags')) or {}
+    errors = _validate_service_identity(
+        scope=scope,
+        service_config=service_config,
+        actual_service_account=flags.get('--service-account'),
+        actual_env_names=set((_as_config_dict(service_state.get('secrets')) or {}).keys()),
+    )
+    removed = set(str(flags.get('--remove-secrets', '')).split(','))
+    for name in KEY_CREDENTIAL_ENV_NAMES:
+        if name not in removed:
+            errors.append(ValidationError(scope, f'deploy must remove key credential {name} (--remove-secrets)'))
+    return errors
 
 
 def _validate_workflow_flags(

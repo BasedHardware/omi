@@ -174,6 +174,34 @@ def _manifest_env_value(expected_services: ConfigDict, name: str) -> str:
     return ''
 
 
+KEY_CREDENTIAL_ENV_NAMES = ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS')
+
+
+def _declared_service_account(service_config: ConfigDict) -> str:
+    raw = service_config.get('service_account')
+    return '' if raw in (None, '') else str(raw).strip()
+
+
+def _validate_service_identity(
+    *,
+    scope: str,
+    service_config: ConfigDict,
+    actual_service_account: str | None,
+    actual_env_names: set[str],
+) -> list[ValidationError]:
+    """A service that declares an attached runtime identity runs as it and mounts no key credential."""
+    expected = _declared_service_account(service_config)
+    if not expected:
+        return []
+    errors: list[ValidationError] = []
+    if actual_service_account != expected:
+        errors.append(ValidationError(scope, f'must run as service_account {expected!r}'))
+    for name in KEY_CREDENTIAL_ENV_NAMES:
+        if name in actual_env_names:
+            errors.append(ValidationError(scope, f'runs as {expected!r} and must not mount key credential {name}'))
+    return errors
+
+
 def _network_flags(env_config: ConfigDict) -> ConfigDict:
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     network = _as_config_dict(cloud_run.get('network')) or {}

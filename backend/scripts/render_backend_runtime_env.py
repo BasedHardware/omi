@@ -19,6 +19,10 @@ from config.free_tier_rollout import validate_free_tier_deploy_value  # noqa: E4
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
 _DEPLOY_CLOUD_RUN_ENV_SEPARATORS = frozenset({',', '\n', '\r', '\u2028', '\u2029'})
+# Env names that once carried an exportable service-account key (or the path to one). A service
+# pinned to an attached runtime identity drops them in the same deploy: its runtime SA deliberately
+# cannot read the key secret, so a lingering ref would fail revision creation.
+KEY_CREDENTIAL_ENV_NAMES = ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS')
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -114,6 +118,7 @@ def main() -> int:
                     (f'{output_prefix}_env_vars', _render_env_vars(service_config.get('env', {}))),
                     (f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {}))),
                     (f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {}))),
+                    (f'{output_prefix}_identity_flags', _render_identity_flags(service, service_config)),
                 )
             )
     for job, raw_job_config in selected_jobs.items():
@@ -227,6 +232,32 @@ def _render_flags(flag_entries: ConfigDict) -> str:
     return ' '.join(f'{name}={value}' for name, value in _render_flag_values(flag_entries).items())
 
 
+def _service_account(service: str, service_config: ConfigDict) -> str:
+    """The attached runtime identity a Cloud Run service must run as, or '' when undeclared."""
+    raw = service_config.get('service_account')
+    if raw in (None, ''):
+        return ''
+    value = str(raw).strip()
+    local, _, domain = value.partition('@')
+    if not local or not domain.endswith('.iam.gserviceaccount.com') or any(ch.isspace() for ch in value):
+        raise ValueError(f'Cloud Run service {service} service_account must be a service-account email')
+    secrets = _as_config_dict(service_config.get('secrets')) or {}
+    for name in KEY_CREDENTIAL_ENV_NAMES:
+        if name in secrets:
+            raise ValueError(
+                f'Cloud Run service {service} runs as {value} and must not also mount key credential {name}'
+            )
+    return value
+
+
+def _render_identity_flags(service: str, service_config: ConfigDict) -> str:
+    """Pin the runtime identity and drop any key-credential ref in the same revision."""
+    service_account = _service_account(service, service_config)
+    if not service_account:
+        return ''
+    return f'--service-account={service_account} --remove-secrets={",".join(KEY_CREDENTIAL_ENV_NAMES)}'
+
+
 def _render_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
     """Build validator state from the same values emitted to deploy-cloudrun."""
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
@@ -237,10 +268,14 @@ def _render_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
         service_config = _as_config_dict(raw_service_config)
         if service_config is None:
             raise ValueError(f'Cloud Run service {service_name} must be a mapping')
-        services[str(service_name)] = {
+        service_state: ConfigDict = {
             'env': _render_state_env(service_config),
             'flags': dict(network_flags),
         }
+        service_account = _service_account(str(service_name), service_config)
+        if service_account:
+            service_state['service_account'] = service_account
+        services[str(service_name)] = service_state
     # Jobs ship from their own workflows, but their env, secret and forbidden_env contract is
     # declared in this manifest and validated against this state; omitting them retires that check.
     jobs: ConfigDict = {}
