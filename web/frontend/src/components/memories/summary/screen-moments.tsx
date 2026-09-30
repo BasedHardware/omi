@@ -10,17 +10,23 @@ import {
   createRefreshGate,
   fitSize,
   groundGradient,
+  initialFrameState,
   msUntilRefresh,
   nextFrameSet,
   withFailedAsset,
   screenshotTiles,
   stepIndex,
 } from '@/src/lib/shared-screenshots.mjs';
-import type { SharedScreenFrame, SharedScreenFrameSet } from '@/src/types/memory.types';
+import type {
+  SharedScreenFrame,
+  SharedScreenFrameSet,
+  SharedScreenshotsResult,
+} from '@/src/types/memory.types';
 
 interface ScreenMomentsProps {
   conversationId: string;
-  initialSet: SharedScreenFrameSet | null;
+  /** The server render's fetch result; a failure is retried client-side. */
+  initial: SharedScreenshotsResult | null;
   startedAt?: Date | string | null;
 }
 
@@ -49,10 +55,14 @@ function useViewport() {
  */
 export default function ScreenMoments({
   conversationId,
-  initialSet,
+  initial,
   startedAt,
 }: ScreenMomentsProps) {
-  const [frameSet, setFrameSet] = useState(initialSet);
+  // Read once: a failed server-side fetch starts empty and is retried below.
+  const [{ set: initialSet, retry: retryInitial }] = useState(() =>
+    initialFrameState(initial),
+  );
+  const [frameSet, setFrameSet] = useState<SharedScreenFrameSet | null>(initialSet);
   const tiles = useMemo(
     () => screenshotTiles(frameSet) as SharedScreenFrame[],
     [frameSet],
@@ -96,11 +106,14 @@ export default function ScreenMoments({
       },
     });
     gateRef.current = gate;
+    // The server render's fetch failed: retry from the client through the
+    // gate (backoff, capped). A successful empty set is never polled.
+    if (retryInitial) gate.request();
     return () => {
       active = false;
       gate.dispose();
     };
-  }, [conversationId]);
+  }, [conversationId, retryInitial]);
   const refresh = useCallback(() => gateRef.current?.request(), []);
   const markFailed = useCallback(
     (url: string) => {

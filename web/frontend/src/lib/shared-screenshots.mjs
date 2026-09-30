@@ -125,6 +125,13 @@ export function groundGradient(frame) {
 export const MAX_REFRESH_BACKOFF_MS = 5 * 60 * 1000;
 
 /**
+ * Consecutive failures after which the gate stops retrying on its own (about
+ * 25 minutes of backoff). Explicit requests (tab return, image error, expiry
+ * timer) still get through.
+ */
+export const MAX_AUTO_RETRIES = 8;
+
+/**
  * The set to show after a refetch. A failed refetch (network error, 5xx)
  * keeps the last set: its URLs may still be valid, and clearing it would tear
  * down the renewal that brings fresh ones. Only a successful response,
@@ -141,12 +148,14 @@ export function nextFrameSet(previous, result) {
  *   broken until the next expiry timer, about an hour later);
  * - a run that fails (its promise rejects) schedules its own retry with
  *   exponential backoff, capped, so a transient outage heals without a reload;
+ *   after `maxAutoRetries` consecutive failures it stops retrying on its own;
  * - requests during a run are absorbed by it; cooldown requests coalesce.
  */
 export function createRefreshGate({
   run,
   minIntervalMs = MIN_REFRESH_INTERVAL_MS,
   maxBackoffMs = MAX_REFRESH_BACKOFF_MS,
+  maxAutoRetries = MAX_AUTO_RETRIES,
   now = () => Date.now(),
   setTimer = (fn, ms) => setTimeout(fn, ms),
   clearTimer = (timer) => clearTimeout(timer),
@@ -189,7 +198,7 @@ export function createRefreshGate({
       () => {
         failures += 1;
         inFlight = false;
-        schedule();
+        if (failures <= maxAutoRetries) schedule();
       },
     );
   }
@@ -217,4 +226,16 @@ export function withFailedAsset(failed, url) {
   const next = new Set(failed);
   next.add(url);
   return next;
+}
+
+/**
+ * Seed state from the server render's fetch. A failed initial fetch starts
+ * empty (the strip stays hidden) but asks for a client retry through the
+ * refresh gate, which backs off and is bounded; a successful response,
+ * including an empty one, is final and never polled. No result at all (no
+ * fetch was made) is treated like an empty success.
+ */
+export function initialFrameState(result) {
+  if (result && result.ok) return { set: result.set, retry: false };
+  return { set: null, retry: Boolean(result && result.ok === false) };
 }

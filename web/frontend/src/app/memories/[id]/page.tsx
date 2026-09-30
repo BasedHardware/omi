@@ -159,11 +159,7 @@ export default async function MemoryPage(props: MemoryPageProps) {
         <ShareTopbar installHref={installHref} />
         <section className="sn-page">
           <MemoryHeader />
-          <Memory
-            memory={memory}
-            searchParams={searchParams}
-            screenFrames={screenshots.ok ? screenshots.set : null}
-          />
+          <Memory memory={memory} searchParams={searchParams} screenshots={screenshots} />
           <SharedConversationInstallCta openInOmiHref={openInOmiHref} />
           <p className="sn-footer">Captured and summarized by Omi</p>
         </section>

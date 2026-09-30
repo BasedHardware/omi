@@ -11,6 +11,7 @@ import {
   fitSize,
   groundGradient,
   msUntilRefresh,
+  initialFrameState,
   withFailedAsset,
   nextFrameSet,
   screenshotTiles,
@@ -306,7 +307,7 @@ describe('createRefreshGate', () => {
 });
 
 describe('transient refetch failures keep the set and retry', () => {
-  function failingHarness(outcomes) {
+  function failingHarness(outcomes, opts = {}) {
     let clock = 0;
     const timers = [];
     const runs = [];
@@ -319,6 +320,7 @@ describe('transient refetch failures keep the set and retry', () => {
       },
       minIntervalMs: 30_000,
       maxBackoffMs: 300_000,
+      maxAutoRetries: opts.maxAutoRetries,
       now: () => clock,
       setTimer: (fn, ms) => {
         const t = { fn, at: clock + ms, cleared: false };
@@ -360,12 +362,25 @@ describe('transient refetch failures keep the set and retry', () => {
   });
 
   it('caps the backoff', async () => {
-    const h = failingHarness(Array(12).fill('fail'));
+    const h = failingHarness(Array(12).fill('fail'), { maxAutoRetries: 20 });
     await h.advance(1_000_000);
     h.gate.request();
     await h.settle();
     for (let i = 0; i < 10; i += 1) await h.advance(300_000);
     assert.equal(h.runs.length, 11);
+  });
+
+  it('stops retrying on its own after a bounded number of consecutive failures', async () => {
+    const h = failingHarness(Array(20).fill('fail'), { maxAutoRetries: 3 });
+    await h.advance(1_000_000);
+    h.gate.request();
+    await h.settle();
+    for (let i = 0; i < 10; i += 1) await h.advance(300_000);
+    assert.equal(h.runs.length, 4, 'one run plus three automatic retries');
+    // An explicit request (tab return, image error) still gets through.
+    h.gate.request();
+    await h.advance(300_000);
+    assert.equal(h.runs.length, 5);
   });
 
   it('keeps the last set on failure and clears only on a successful empty response', () => {
@@ -419,5 +434,35 @@ describe('transient refetch failures keep the set and retry', () => {
 
   it('remounts per conversation so state never carries across a client navigation', () => {
     assert.match(summarySource, /<ScreenMoments\s+key=\{memory\.id\}/);
+  });
+});
+
+describe('initial server-side fetch failure', () => {
+  it('distinguishes a failed initial fetch (retry) from a successful empty set (no polling)', () => {
+    const set = { revision: 1, strip: [frame('a')] };
+    assert.deepEqual(initialFrameState({ ok: true, set }), { set, retry: false });
+    const empty = { revision: 0, banner: null, strip: [] };
+    assert.deepEqual(initialFrameState({ ok: true, set: empty }), {
+      set: empty,
+      retry: false,
+    });
+    assert.deepEqual(initialFrameState({ ok: false }), { set: null, retry: true });
+    assert.deepEqual(initialFrameState(null), { set: null, retry: false });
+    assert.deepEqual(initialFrameState(undefined), { set: null, retry: false });
+  });
+
+  it('passes the failure status from the page instead of collapsing it to null', () => {
+    assert.doesNotMatch(pageSource, /screenshots\.ok \? screenshots\.set : null/);
+    assert.match(pageSource, /screenshots=\{screenshots\}/);
+    assert.match(summarySource, /initial=\{screenshots\}/);
+  });
+
+  it('enqueues a bounded client retry only when the initial fetch failed', () => {
+    assert.match(componentSource, /initialFrameState\(initial\)/);
+    assert.match(componentSource, /if \(retryInitial\) gate\.request\(\)/);
+    // The strip hides while empty, so the gate must be armed before that early return.
+    const gateAt = componentSource.indexOf('createRefreshGate({');
+    const earlyReturn = componentSource.indexOf('if (tiles.length === 0) return null;');
+    assert.ok(gateAt > 0 && earlyReturn > gateAt);
   });
 });

@@ -1,4 +1,4 @@
-import { Memory, SharedScreenFrameSet } from '@/src/types/memory.types';
+import { Memory, SharedScreenshotsResult } from '@/src/types/memory.types';
 import { assignSectionIds, splitSections } from '@/src/lib/shared-note.mjs';
 import ActionItems from './action-items';
 import ScreenMoments from './screen-moments';
@@ -8,10 +8,10 @@ import Markdown from 'markdown-to-jsx';
 
 interface SummaryProps {
   memory: Memory;
-  screenFrames?: SharedScreenFrameSet | null;
+  screenshots?: SharedScreenshotsResult | null;
 }
 
-export default function Summary({ memory, screenFrames = null }: SummaryProps) {
+export default function Summary({ memory, screenshots = null }: SummaryProps) {
   const overview = (memory?.structured?.overview || '').trim();
   const { mains, sideNotes } = splitSections(memory?.structured?.sections);
   const ids = assignSectionIds(mains);
@@ -87,7 +87,7 @@ export default function Summary({ memory, screenFrames = null }: SummaryProps) {
       <ScreenMoments
         key={memory.id}
         conversationId={memory.id}
-        initialSet={screenFrames}
+        initial={screenshots}
         startedAt={memory.started_at}
       />
 

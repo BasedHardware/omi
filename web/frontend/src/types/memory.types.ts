@@ -147,3 +147,12 @@ export interface SharedScreenFrameSet {
   banner?: SharedScreenFrame | null;
   strip?: SharedScreenFrame[];
 }
+
+/**
+ * Result of fetching the public screenshot set. Failure (network, non-2xx,
+ * bad body) is distinct from a successful empty set: failure is retried,
+ * an empty success is final.
+ */
+export type SharedScreenshotsResult =
+  | { ok: true; set: SharedScreenFrameSet }
+  | { ok: false };

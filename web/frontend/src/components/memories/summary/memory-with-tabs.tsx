@@ -5,16 +5,16 @@ import Tabs from '../tabs';
 import Summary from './sumary';
 import Transcription from '../transcript/transcription';
 import Chat from '../chat/chat';
-import { Memory, SharedScreenFrameSet } from '@/src/types/memory.types';
+import { Memory, SharedScreenshotsResult } from '@/src/types/memory.types';
 
 interface MemoryWithTabsProps {
   memory: Memory;
-  screenFrames?: SharedScreenFrameSet | null;
+  screenshots?: SharedScreenshotsResult | null;
 }
 
 export default function MemoryWithTabs({
   memory,
-  screenFrames = null,
+  screenshots = null,
 }: MemoryWithTabsProps) {
   const [currentTab, setCurrentTab] = useState('sum');
   const clearChatRef = useRef<(() => void) | null>(null);
@@ -56,7 +56,7 @@ export default function MemoryWithTabs({
           className="sn-tabpanel"
           style={{ display: currentTab === 'sum' ? 'block' : 'none' }}
         >
-          <Summary memory={memory} screenFrames={screenFrames} />
+          <Summary memory={memory} screenshots={screenshots} />
         </div>
         <div
           className="sn-tabpanel"

@@ -1,11 +1,7 @@
 'use server';
 import envConfig from '@/src/constants/envConfig';
-import { SharedScreenFrameSet } from '@/src/types/memory.types';
+import { SharedScreenFrameSet, SharedScreenshotsResult } from '@/src/types/memory.types';
 import { sharedApiUrl } from '@/src/lib/shared-api-url.mjs';
-
-export type SharedScreenshotsResult =
-  | { ok: true; set: SharedScreenFrameSet }
-  | { ok: false };
 
 /**
  * The public screenshot set for a shared conversation. Never cached: every
