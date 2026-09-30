@@ -1,134 +1,288 @@
-from typing import Any, Dict, List, Optional
-from datetime import datetime, timedelta
+"""
+Database operations for Wrapped (yearly recap) stored in users/{uid}/wrapped/{year}.
+"""
 
-from fastapi import HTTPException
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional, cast
 
-from backend.database.client import db
-from backend.models.wrapped import WrappedStatus
+from ._client import db
 
-# Constants
-WRAPPED_COLLECTION = "wrapped"
+# Collection name under user document
+WRAPPED_COLLECTION = 'wrapped'
+
+
+class WrappedStatus:
+    NOT_GENERATED = 'not_generated'
+    PROCESSING = 'processing'
+    DONE = 'done'
+    ERROR = 'error'
+
+
 VALID_WRAPPED_STATUSES = {
-    WrappedStatus.PENDING,
+    WrappedStatus.NOT_GENERATED,
     WrappedStatus.PROCESSING,
-    WrappedStatus.COMPLETED,
-    WrappedStatus.FAILED,
-    WrappedStatus.RESET
+    WrappedStatus.DONE,
+    WrappedStatus.ERROR,
 }
-MIN_YEAR = 2000
-MAX_YEAR = 2100
 
 
-def _validate_identifier(uid: str) -> str:
-    """Validate and sanitize user identifier to prevent path traversal and invalid paths."""
-    if not uid or not isinstance(uid, str):
-        raise ValueError("User identifier must be a non-empty string")
-    stripped_uid = uid.strip()
-    if not stripped_uid:
-        raise ValueError("User identifier cannot be empty or whitespace")
-    if "/" in stripped_uid:
-        raise ValueError("User identifier cannot contain path separators")
-    return stripped_uid
+def _validate_identifier(value: Any, field_name: str = "uid") -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if not cleaned or '/' in cleaned or '\\' in cleaned:
+        return None
+    return cleaned
 
 
-def _validate_year(year: int) -> int:
-    """Validate year is within acceptable bounds."""
-    if not isinstance(year, int):
-        raise ValueError("Year must be an integer")
-    if year < MIN_YEAR or year > MAX_YEAR:
-        raise ValueError(f"Year must be between {MIN_YEAR} and {MAX_YEAR}")
-    return year
+def _validate_year(value: Any) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        if 2000 <= value <= 2100:
+            return value
+        return None
+    if isinstance(value, str):
+        val_str = value.strip()
+        if val_str.isdigit():
+            val_int = int(val_str)
+            if 2000 <= val_int <= 2100:
+                return val_int
+    return None
 
 
-def _get_wrapped_doc_path(uid: str, year: int) -> str:
-    """Construct Firestore document path for wrapped data."""
-    validated_uid = _validate_identifier(uid)
-    validated_year = _validate_year(year)
-    return f"{WRAPPED_COLLECTION}/{validated_uid}/{validated_year}"
+def _typed_doc(doc: Any) -> Dict[str, Any]:
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
-async def get_wrapped(uid: str, year: int) -> Optional[Dict[str, Any]]:
-    """Retrieve wrapped data for a user and year. Returns None if invalid or not found."""
-    try:
-        doc_path = _get_wrapped_doc_path(uid, year)
-        doc = await db.get_document(doc_path)
-        return doc.to_dict() if doc.exists else None
-    except (ValueError, TypeError):
+def _coerce_timestamp(value: Any) -> Optional[datetime]:
+    if hasattr(value, 'timestamp'):
+        return datetime.fromtimestamp(value.timestamp(), tz=timezone.utc)
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+    return None
+
+
+def get_wrapped(uid: str, year: int) -> Optional[Dict[str, Any]]:
+    """
+    Get the wrapped document for a user and year.
+
+    Args:
+        uid: User ID
+        year: Year (e.g., 2025)
+
+    Returns:
+        Wrapped document data or None if not found or invalid args
+    """
+    valid_uid = _validate_identifier(uid, "uid")
+    valid_year = _validate_year(year)
+    if not valid_uid or valid_year is None:
         return None
 
+    user_ref = db.collection('users').document(valid_uid)
+    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(valid_year))
+    doc = wrapped_ref.get()
 
-async def create_wrapped(uid: str, year: int, initial_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Create wrapped document with validated inputs."""
-    doc_path = _get_wrapped_doc_path(uid, year)
-    if not isinstance(initial_data, dict):
-        raise ValueError("Initial data must be a dictionary")
-    await db.set_document(doc_path, initial_data)
-    return {"path": doc_path, **initial_data}
+    if not getattr(doc, "exists", False):
+        return None
 
+    data = _typed_doc(doc)
 
-async def update_wrapped_status(
-    uid: str, year: int, status: WrappedStatus, progress: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
-    """Update wrapped status with validation for status and progress."""
-    if status not in VALID_WRAPPED_STATUSES:
-        raise ValueError(f"Invalid status. Must be one of {VALID_WRAPPED_STATUSES}")
-    if progress is not None and not isinstance(progress, dict):
-        raise ValueError("Progress must be a dictionary or None")
+    # Convert Firestore timestamps to datetime objects
+    for field in ['started_at', 'completed_at', 'updated_at']:
+        if field in data and data[field]:
+            coerced = _coerce_timestamp(data[field])
+            if coerced is not None:
+                data[field] = coerced
 
-    doc_path = _get_wrapped_doc_path(uid, year)
-    update_data = {"status": status.value}
-    if progress is not None:
-        update_data["progress"] = progress
-
-    await db.update_document(doc_path, update_data)
-    return {"path": doc_path, "status": status.value, "progress": progress}
+    return data
 
 
-async def update_wrapped_progress(
-    uid: str, year: int, progress: Dict[str, Any]
-) -> Dict[str, Any]:
-    """Update wrapped progress with validation."""
-    if not isinstance(progress, dict):
-        raise ValueError("Progress must be a dictionary")
+def create_wrapped(uid: str, year: int) -> Dict[str, Any]:
+    """
+    Create a new wrapped document with status=processing.
 
-    doc_path = _get_wrapped_doc_path(uid, year)
-    await db.update_document(doc_path, {"progress": progress})
-    return {"path": doc_path, "progress": progress}
+    Args:
+        uid: User ID
+        year: Year (e.g., 2025)
+
+    Returns:
+        The created wrapped document data
+    """
+    valid_uid = _validate_identifier(uid, "uid")
+    valid_year = _validate_year(year)
+    if not valid_uid:
+        raise ValueError("uid must be a non-empty string without path separators")
+    if valid_year is None:
+        raise ValueError("year must be a valid integer between 2000 and 2100")
+
+    now = datetime.now(timezone.utc)
+    wrapped_data: Dict[str, Any] = {
+        'year': valid_year,
+        'status': WrappedStatus.PROCESSING,
+        'started_at': now,
+        'updated_at': now,
+        'completed_at': None,
+        'result': None,
+        'error': None,
+        'schema_version': 1,
+    }
+
+    user_ref = db.collection('users').document(valid_uid)
+    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(valid_year))
+    wrapped_ref.set(wrapped_data)
+
+    return wrapped_data
 
 
-async def reset_wrapped_for_regeneration(uid: str, year: int) -> Dict[str, Any]:
-    """Reset wrapped document for regeneration with validated inputs."""
-    doc_path = _get_wrapped_doc_path(uid, year)
-    await db.set_document(
-        doc_path,
-        {
-            "status": WrappedStatus.PENDING.value,
-            "progress": {},
-            "regenerated_at": datetime.utcnow().isoformat()
-        }
-    )
-    return {"path": doc_path, "status": WrappedStatus.PENDING.value}
-
-
-def is_wrapped_stuck(
-    wrapped_data: Optional[Dict[str, Any]], stale_minutes: int = 30
+def update_wrapped_status(
+    uid: str,
+    year: int,
+    status: str,
+    result: Optional[Dict[str, Any]] = None,
+    error: Optional[str] = None,
 ) -> bool:
     """
-    Check if wrapped generation is stuck based on last update time.
-    Returns False if data is None, not a dict, or stale_minutes is non-positive.
+    Update the status of a wrapped document.
+
+    Args:
+        uid: User ID
+        year: Year (e.g., 2025)
+        status: New status (processing, done, error)
+        result: Result payload (only when status=done)
+        error: Error message (only when status=error)
+
+    Returns:
+        True if updated successfully
     """
-    if wrapped_data is None or not isinstance(wrapped_data, dict):
-        return False
-    if not isinstance(stale_minutes, int) or stale_minutes <= 0:
-        return False
-
-    last_updated_str = wrapped_data.get("last_updated")
-    if not last_updated_str or not isinstance(last_updated_str, str):
+    valid_uid = _validate_identifier(uid, "uid")
+    valid_year = _validate_year(year)
+    if not valid_uid or valid_year is None or status not in VALID_WRAPPED_STATUSES:
         return False
 
-    try:
-        last_updated = datetime.fromisoformat(last_updated_str)
-        stale_threshold = datetime.utcnow() - timedelta(minutes=stale_minutes)
-        return last_updated < stale_threshold
-    except (ValueError, TypeError):
+    user_ref = db.collection('users').document(valid_uid)
+    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(valid_year))
+
+    if not getattr(wrapped_ref.get(), "exists", False):
         return False
+
+    now = datetime.now(timezone.utc)
+    update_data: Dict[str, Any] = {
+        'status': status,
+        'updated_at': now,
+    }
+
+    if status == WrappedStatus.DONE:
+        update_data['completed_at'] = now
+        update_data['result'] = result if isinstance(result, dict) else {}
+        update_data['error'] = None
+    elif status == WrappedStatus.ERROR:
+        update_data['error'] = str(error) if error is not None else "Unknown error"
+        update_data['result'] = None
+
+    wrapped_ref.update(update_data)
+    return True
+
+
+def update_wrapped_progress(uid: str, year: int, progress: Dict[str, Any]) -> bool:
+    """
+    Update the progress of a wrapped generation (heartbeat).
+
+    Args:
+        uid: User ID
+        year: Year (e.g., 2025)
+        progress: Progress info (e.g., {"step": "computing_stats", "pct": 0.5})
+
+    Returns:
+        True if updated successfully
+    """
+    valid_uid = _validate_identifier(uid, "uid")
+    valid_year = _validate_year(year)
+    if not valid_uid or valid_year is None or not isinstance(progress, dict):
+        return False
+
+    user_ref = db.collection('users').document(valid_uid)
+    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(valid_year))
+
+    if not getattr(wrapped_ref.get(), "exists", False):
+        return False
+
+    wrapped_ref.update(
+        {
+            'progress': progress,
+            'updated_at': datetime.now(timezone.utc),
+        }
+    )
+    return True
+
+
+def reset_wrapped_for_regeneration(uid: str, year: int) -> Dict[str, Any]:
+    """
+    Reset a stuck or errored wrapped document for regeneration.
+
+    Args:
+        uid: User ID
+        year: Year (e.g., 2025)
+
+    Returns:
+        The updated wrapped document data
+    """
+    valid_uid = _validate_identifier(uid, "uid")
+    valid_year = _validate_year(year)
+    if not valid_uid:
+        raise ValueError("uid must be a non-empty string without path separators")
+    if valid_year is None:
+        raise ValueError("year must be a valid integer between 2000 and 2100")
+
+    now = datetime.now(timezone.utc)
+    wrapped_data: Dict[str, Any] = {
+        'year': valid_year,
+        'status': WrappedStatus.PROCESSING,
+        'started_at': now,
+        'updated_at': now,
+        'completed_at': None,
+        'result': None,
+        'error': None,
+        'progress': None,
+        'schema_version': 1,
+    }
+
+    user_ref = db.collection('users').document(valid_uid)
+    wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(valid_year))
+    wrapped_ref.set(wrapped_data)
+
+    return wrapped_data
+
+
+def is_wrapped_stuck(wrapped_data: Optional[Dict[str, Any]], stale_minutes: int = 15) -> bool:
+    """
+    Check if a wrapped generation is stuck (no heartbeat for stale_minutes).
+
+    Args:
+        wrapped_data: The wrapped document data
+        stale_minutes: Minutes after which a processing job is considered stuck
+
+    Returns:
+        True if the job appears stuck (fail-safe for missing or unparseable updated_at)
+    """
+    if not isinstance(wrapped_data, dict):
+        return False
+
+    if wrapped_data.get('status') != WrappedStatus.PROCESSING:
+        return False
+
+    updated_at_raw = wrapped_data.get('updated_at')
+    if not updated_at_raw:
+        return True
+
+    updated_at = _coerce_timestamp(updated_at_raw)
+    if updated_at is None:
+        return True
+
+    now = datetime.now(timezone.utc)
+    elapsed = (now - updated_at).total_seconds() / 60
+
+    return elapsed > stale_minutes
