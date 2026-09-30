@@ -5,12 +5,13 @@ from __future__ import annotations
 import time
 import os
 from collections import deque
-from typing import Any, Literal
+from typing import Any, Callable, Literal, cast
 
 from utils.stt.live_metrics import RECONNECT, REPLAY_SECONDS, WINDOW_REPLAY_SAFE_TRIMS
-from utils.stt.window_anchor import LEAD_IN_SECONDS
 
 RING_SECONDS = 15
+# Keep a full default replay horizon of recent VAD-negative capture, not just pre-roll.
+WINDOW_SILENCE_TAIL_SECONDS = 15
 MAX_RECONNECTS = 3
 MAX_RECONNECTS_PER_MINUTE = 2
 MAX_REPLAY_SECONDS = 30
@@ -122,22 +123,35 @@ def window_replay_action(
     raw = getattr(socket, 'raw', None)
     has_untranscribed_speech = getattr(raw, 'has_untranscribed_speech', None)
     speech_pending = callable(has_untranscribed_speech) and has_untranscribed_speech()
+    _, capture_end = ring.capture_bounds
+    projected_end = max(capture_end, (start_sample or 0) + len(data) // 2)
+    age_floor = max(0, projected_end - ring.ring_seconds * ring.sample_rate)
+    pending_boundary = getattr(socket, 'window_replay_pending_sample', None)
+    pending_sample = pending_boundary() if callable(pending_boundary) else None
     if callable(has_untranscribed_speech) and not speech_pending:
-        # Keeping 90s of settled silence leaves a NEW blip only one capture
-        # packet of headroom. Keep the VAD pre-roll instead, before admission.
-        _, capture_end = ring.capture_bounds
-        keep_from = max(0, capture_end - int(LEAD_IN_SECONDS * ring.sample_rate))
-        if ring.finalize_through(keep_from):
+        keep_from = max(0, capture_end - WINDOW_SILENCE_TAIL_SECONDS * ring.sample_rate)
+        accounted_boundary = getattr(socket, 'window_replay_accounted_span', None)
+        accounted = (
+            cast(Callable[[], tuple[int, int] | None], accounted_boundary)() if callable(accounted_boundary) else None
+        )
+        if accounted is not None and accounted[1] > age_floor:
+            # An empty answer settles capacity, not transcript completeness.
+            # Its capture audio only leaves replay at the natural ring age.
+            keep_from = min(keep_from, accounted[0])
+        if ring.finalize_through(max(age_floor, keep_from)):
+            WINDOW_REPLAY_SAFE_TRIMS.inc()
+    elif isinstance(pending_sample, int) and age_floor <= pending_sample:
+        # Answered history may age out while new speech is pending. Never
+        # evict an unresolved sample merely to make room for the next packet.
+        if ring.finalize_through(age_floor):
             WINDOW_REPLAY_SAFE_TRIMS.inc()
     request_cut = getattr(raw, 'request_replay_cut', None)
-    if (
-        speech_pending
-        and callable(request_cut)
-        and ring.projected_span_samples(data, start_sample) >= ring.ring_seconds * ring.sample_rate * 2 // 3
-    ):
-        # Provider PCM can advance slower than capture time when VAD gates
-        # portions of a chunk. Ask the next successful POST to emit its held
-        # tail while a third of the replay ring is still available.
+    pending_samples = (
+        max(0, projected_end - pending_sample)
+        if isinstance(pending_sample, int)
+        else ring.projected_span_samples(data, start_sample)
+    )
+    if speech_pending and callable(request_cut) and pending_samples >= ring.ring_seconds * ring.sample_rate * 2 // 3:
         request_cut()
     if not ring.would_overflow(data, start_sample):
         return 'append'

@@ -39,6 +39,7 @@ from utils.stt.live_metrics import (
     WINDOW_REPLAY_CUT_REQUESTS,
     WINDOW_REPLAY_CUT_PERFORMED,
     WINDOW_REPLAY_CUT_SKIPPED,
+    WINDOW_STRANDED_FLUSHES,
 )
 from utils.stt.streaming import ParakeetConnectionError, ParakeetStreamingSocket, _pcm16_to_wav_bytes  # type: ignore[reportPrivateUsage]  # shared WAV encoder
 from utils.stt.window_anchor import (
@@ -94,6 +95,10 @@ HEAD_RECOVERY_MIN_SPEECH_SECONDS = 2.0
 # with window size now set by a 15 s pace, sliding by pace would discard 15 s of
 # speech the model returned nothing for. Keep the slide at the measured 6 s.
 EMPTY_CAP_SLIDE_SECONDS = 6.0
+# Longer than ordinary 1.5–4s pauses, with 7s left in the startup deadline.
+STRANDED_SILENCE_SECONDS = 5.0
+# Answered-empty context may leave TDT only after the 90s capture replay horizon.
+ANSWERED_CONTEXT_RETENTION_SECONDS = 90.0
 FIRST_TEXT_DEADLINE_SECONDS = 12.0
 MAX_EMPTY_STREAK = 4
 
@@ -216,7 +221,7 @@ class _WindowJob:
     end_bytes: int
     force: bool
     pause: bool
-    terminal_silence: bool = False
+    stranded_flush: bool = False
 
 
 class WindowAdmission:
@@ -423,9 +428,15 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._wake = asyncio.Event()
         self._pause_requested = False
         self._idle_flushed = False
+        self._capture_seconds = 0.0
+        self._answered_context_ends: deque[tuple[int, float]] = deque()
+        self._capture_clock_seen = False
         self._capture_silence_seconds = 0.0
         self._capture_silence_flush = False
-        self._short_fragment_answered = False
+        self._stranded_flush_used = False
+        self._stranded_fragment_answered = False
+        self._accounted_speech_end = 0
+        self._answered_empty_span: tuple[int, int] | None = None
         self._last_accepted_at = 0.0
         self._last_post_anchor = -1
         self._last_post_end = -1
@@ -479,8 +490,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if self._closed or self._dead:
             return True
         return (
-            self._first_speech_at is not None and not self._first_text_recorded and not self._short_fragment_answered
-        ) or self._has_unemitted_speech()
+            self._first_speech_at is not None and not self._first_text_recorded and not self._stranded_fragment_answered
+        ) or self._has_unanswered_speech()
 
     def replay_anchor_sample(self) -> int | None:
         """Provider sample before which emitted text makes capture replay unnecessary."""
@@ -563,20 +574,54 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if not self._first_text_recorded and not self._closed and not self._dead:
             self.fail('first_text_deadline')
 
-    def observe_capture(self, is_speech: bool, duration: float, *, speech_ended: bool = False) -> None:
-        """See gated-out silence too; capture can advance faster than wall time."""
+    def replay_accounted_span(self) -> tuple[int, int] | None:
+        """Answered-empty audio remains eligible for replay until capture ages it out."""
+        if self._answered_empty_span is None:
+            return None
+        start, end = self._answered_empty_span
+        start = max(start, (self.replay_anchor_sample() or 0) * 2)
+        return (start // 2, end // 2) if start < end else None
+
+    def replay_pending_sample(self) -> int | None:
+        """Separate unresolved speech capacity from retained answered-empty history."""
+        if self._closed or self._dead:
+            return None
+        return max(self._accounted_speech_end // 2, self.replay_anchor_sample() or 0)
+
+    def _has_unanswered_speech(self) -> bool:
+        with self._lock:
+            start = max(self._anchor_bytes, self._accounted_speech_end)
+            return self._last_speech_end_locked(start, self._received_bytes) is not None
+
+    def observe_capture(self, is_speech: bool, duration: float) -> None:
+        """Only a long capture silence may resolve a stranded fragment."""
         if self._closed or self._dead:
             return
+        self._capture_clock_seen = True
+        self._capture_seconds += duration
+        expired_end = None
+        while (
+            self._answered_context_ends
+            and self._capture_seconds - self._answered_context_ends[0][1] >= ANSWERED_CONTEXT_RETENTION_SECONDS
+        ):
+            expired_end, _ = self._answered_context_ends.popleft()
+        if expired_end is not None:
+            # Only previously answered empty context expires, never an
+            # unresolved/in-flight span. The replay copy ages independently.
+            self._advance_anchor(max(self._anchor_bytes, expired_end))
+            if self._answered_empty_span is not None:
+                first, end = self._answered_empty_span
+                self._answered_empty_span = (max(first, expired_end), end) if expired_end < end else None
         if is_speech:
             self._capture_silence_seconds = 0.0
             self._capture_silence_flush = False
+            self._stranded_flush_used = False
         else:
-            self._capture_silence_seconds = min(SILENCE_FLUSH_SECONDS, self._capture_silence_seconds + duration)
+            self._capture_silence_seconds = min(STRANDED_SILENCE_SECONDS, self._capture_silence_seconds + duration)
             if (
-                (speech_ended or self._capture_silence_seconds >= SILENCE_FLUSH_SECONDS)
-                and not self._capture_silence_flush
-                and not self._idle_flushed
-                and self._has_unemitted_speech()
+                self._capture_silence_seconds >= STRANDED_SILENCE_SECONDS
+                and not self._stranded_flush_used
+                and self._has_unanswered_speech()
             ):
                 self._capture_silence_flush = True
                 self._wake.set()
@@ -587,7 +632,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             # previous utterance, not this new fragment.
             self._pause_requested = False
         self._next_send_speech = True
-        self._short_fragment_answered = False
+        self._stranded_fragment_answered = False
 
     def _buffer_cap(self) -> int:
         return int(buffer_cap_seconds(self._pace_seconds, self._max_context_seconds) * self._sample_rate) * 2
@@ -709,6 +754,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._cancel_first_text_timer()
         self._buf.clear()
         self._speech_spans.clear()
+        self._answered_context_ends.clear()
+        self._answered_empty_span = None
         self._wake.set()
         pump = self._pump_task
         if pump is not None and not pump.done() and pump is not asyncio.current_task():
@@ -781,13 +828,17 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
     async def _run_job(self, job: _WindowJob) -> None:
         posted_pcm = job.pcm
-        if job.terminal_silence and len(posted_pcm) < self._silence_bytes:
+        if job.stranded_flush and len(posted_pcm) < self._silence_bytes:
             # Give a short completed fragment a silence envelope, retaining
             # the real duration for timestamps and the original PCM for replay.
             posted_pcm += bytes(self._silence_bytes - len(posted_pcm))
+        if job.stranded_flush:
+            WINDOW_STRANDED_FLUSHES.labels(outcome='performed').inc()
         segments = await self._post_and_parse(posted_pcm, job.duration)
         if self._dead:
             return
+        if job.stranded_flush:
+            WINDOW_STRANDED_FLUSHES.labels(outcome='answered_text' if segments else 'answered_empty').inc()
         if segments:
             self._empty_streak = 0
         else:
@@ -865,19 +916,19 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self._beyond_window_repost = None
         elif emitted:
             self._beyond_window_repost = None
+        if job.stranded_flush and not segments:
+            # Successful empty decoding after a long silence settles capacity
+            # only. Keep the POST anchor/PCM and replay copy for later context.
+            self._accounted_speech_end = max(self._accounted_speech_end, job.end_bytes)
+            first = job.start_bytes if self._answered_empty_span is None else self._answered_empty_span[0]
+            self._answered_empty_span = (first, self._accounted_speech_end)
+            self._answered_context_ends.append((job.end_bytes, self._capture_seconds))
+            self._stranded_fragment_answered = not self._has_unanswered_speech()
+            new_anchor_bytes = None
+            if self._stranded_fragment_answered:
+                self._replay_cut_requested = False
         if new_anchor_bytes is not None:
             self._advance_anchor(new_anchor_bytes)
-            if (
-                job.terminal_silence
-                and job.duration <= SILENCE_FLUSH_SECONDS
-                and not beyond_window
-                and not self._has_unemitted_speech()
-            ):
-                # Only an answered, completed short clip resolves startup
-                # accounting. Empty context-cap slides keep replay protection.
-                self._short_fragment_answered = True
-                self._capture_silence_flush = False
-                self._replay_cut_requested = False
             if emitted:
                 self._replay_cut_requested = False
         if cut_requested:
@@ -919,7 +970,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         return total
 
     def _idle_wait_timeout(self) -> float | None:
-        if self._closed or self._dead or self._idle_flushed:
+        if self._closed or self._dead or self._idle_flushed or self._capture_clock_seen:
             return None
         if not self._has_unemitted_speech():
             return None
@@ -946,15 +997,20 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             if speech_end is None:
                 self._pause_requested = False
                 return None
-            silence_flush = (received - speech_end) >= self._silence_bytes
+            silence_flush = not self._capture_clock_seen and (received - speech_end) >= self._silence_bytes
             at_cap = (received - self._anchor_bytes) >= self._max_context_bytes
-            idle_flush = (not self._idle_flushed) and (time.monotonic() - self._last_accepted_at >= IDLE_FLUSH_SECONDS)
+            idle_flush = (
+                not self._capture_clock_seen
+                and not self._idle_flushed
+                and time.monotonic() - self._last_accepted_at >= IDLE_FLUSH_SECONDS
+            )
+            stranded_flush = self._capture_silence_flush and received - self._anchor_bytes <= self._max_context_bytes
             stepped = self._now_bytes + self._pace_bytes
             if self._now_bytes <= self._anchor_bytes:
                 stepped = self._anchor_bytes + self._pace_bytes
             closing = self._closed
             pause = False
-            if silence_flush or idle_flush or self._capture_silence_flush:
+            if silence_flush or idle_flush or stranded_flush:
                 end = min(received, self._anchor_bytes + self._max_context_bytes)
                 force = True
             elif closing:
@@ -978,8 +1034,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             if not force and self._anchor_bytes == self._last_post_anchor and end <= self._last_post_end:
                 self._pause_requested = False
                 return None
-            terminal_silence = (silence_flush or idle_flush or self._capture_silence_flush) and end >= received
-            if terminal_silence:
+            if stranded_flush:
+                self._stranded_flush_used = True
+                self._capture_silence_flush = False
+            if (silence_flush or idle_flush or stranded_flush) and end >= received:
                 self._idle_flushed = True
                 self._capture_silence_flush = False
             if self._pause_requested and (pause or force or end >= received):
@@ -995,7 +1053,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 end,
                 force,
                 pause,
-                terminal_silence=terminal_silence,
+                stranded_flush=stranded_flush,
             )
 
     def _origin_bytes(self) -> int:
