@@ -64,15 +64,42 @@ def test_transaction_protects_saved_tail_despite_stale_caller(world, a_text, b_t
     assert read(world)['transcript_segments'] == result.segments
 
 
-def test_speaker_default_protects_fresh_batch_and_selected_clear(world):
+def test_speaker_default_labels_fresh_batch_and_keeps_selected_clear(world):
     store, path, _ = world
     store.rows[path]['transcript_segments'] = [speech('a')]
     db.assign_conversation_speaker('u', 'c', person_id='new', speaker_id=0)
     db.assign_conversation_speaker('u', 'c', person_id=None, segment_ids=['a'], use_for_speech_training=False)
     fresh = [speech('b', 'hello', 0, 1, 2), speech('c', 'world', 0, 2, 3)]
     result = db.update_conversation_segments('u', 'c', [], live_segments=fresh)
-    assert [s['id'] for s in result.segments] == ['a', 'b', 'c']
-    assert [s['person_id'] for s in result.segments] == [None, 'new', 'new']
+    # The selected clear keeps its ID; the speaker-wide label still lets the speaker's words join.
+    assert [(s['id'], s['text'], s['person_id']) for s in result.segments] == [
+        ('a', 'Hello', None),
+        ('b', 'hello world', 'new'),
+    ]
+    assert result.removed_ids == ['c']
+
+
+@pytest.mark.parametrize('decision', [{'is_user': True}, {'person_id': 'new'}, {'person_id': None}])
+def test_speaker_wide_label_keeps_live_words_in_one_utterance(decision):
+    receipt = {'speakers': {'1': {'generation': 1, 'is_user': False, 'person_id': None, **decision}}}
+    persisted = []
+    words = ['Okay,', 'I', 'manually', 'labeled', 'it', 'as', 'me.']
+    for index, word in enumerate(words):
+        fresh = speech(f'w{index}', word, 1, index * 0.5, index * 0.5 + 0.4)
+        persisted = merge_live_segments(persisted, [fresh], receipt).segments
+    assert [s['text'] for s in persisted] == ['Okay, I manually labeled it as me.']
+
+
+@pytest.mark.parametrize('labeled', [0, 1])
+def test_speaker_wide_label_blocks_cross_speaker_repair(labeled):
+    receipt = {'speakers': {str(labeled): {'generation': 1, 'is_user': False, 'person_id': 'new'}}}
+    a = speech('a', 'A long unfinished phrase', 0, 0, 1)
+    b = speech('b', 'yes. Another sentence.', 1, 1, 2)
+    result = merge_live_segments([a], [b], receipt)
+    assert [(s['id'], s['text']) for s in result.segments] == [
+        ('a', 'A long unfinished phrase'),
+        ('b', 'yes. Another sentence.'),
+    ]
     assert result.removed_ids == []
 
 
@@ -220,6 +247,89 @@ async def test_recognized_speaker_words_merge_into_one_live_utterance(world, per
         assert [segment.id for segment in updated] == ['a']
         assert removed == [sid]
     assert [segment['text'] for segment in read(world)['transcript_segments']] == ['I have to']
+
+
+LABELED_SPEAKER_0 = {'speakers': {'0': {'generation': 1, 'is_user': False, 'person_id': 'new'}}}
+
+
+def test_speaker_wide_label_leaves_late_word_unmerged():
+    result = merge_live_segments([speech('a', 'newer', 0, 10, 11)], [speech('b', 'older', 0, 1, 2)], LABELED_SPEAKER_0)
+    assert [(s['id'], s['text'], s['start'], s['end']) for s in result.segments] == [
+        ('b', 'older', 1, 2),
+        ('a', 'newer', 10, 11),
+    ]
+    assert result.removed_ids == []
+
+
+def test_speaker_wide_label_appends_across_speaker_spellings_and_keeps_saved_id():
+    a = speech('a', 'I', 0, 0, 0.2)
+    b = speech('b', 'have', 0, 0.2, 0.4)
+    b['speaker'] = 'SPEAKER_0'  # same numeric speaker, unpadded spelling
+    result = merge_live_segments([a], [b], LABELED_SPEAKER_0)
+    assert [(s['id'], s['text'], s['start'], s['end']) for s in result.segments] == [('a', 'I have', 0, 0.4)]
+    assert result.removed_ids == ['b'] and result.absorbed_into == {'b': 'a'}
+
+
+def test_speaker_wide_label_never_crosses_numeric_speakers_with_same_spelling():
+    a = speech('a', 'owner', 0, 0, 1)
+    b = speech('b', 'other', 1, 1, 2)
+    b.update(speaker='SPEAKER_00', is_user=True)
+    a['is_user'] = True
+    result = merge_live_segments([a], [b], LABELED_SPEAKER_0)
+    assert [(s['id'], s['text']) for s in result.segments] == [('a', 'owner'), ('b', 'other')]
+
+
+def test_speaker_wide_label_merge_keeps_only_whole_translations():
+    a = speech('a', 'Hello', 0, 0, 1)
+    b = speech('b', 'world', 0, 1, 2)
+    a['translations'] = [{'lang': 'fr', 'text': 'Bonjour'}, {'lang': 'es', 'text': 'Hola'}]
+    b['translations'] = [{'lang': 'fr', 'text': 'monde'}]
+    (merged,) = merge_live_segments([a], [b], LABELED_SPEAKER_0).segments
+    assert merged['text'] == 'Hello world'
+    # 'es' covered only "Hello"; keeping it would claim to translate the whole segment.
+    assert merged['translations'] == [{'lang': 'fr', 'text': 'Bonjour monde'}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status', [SpeakerIdentityStatus.ambiguous, SpeakerIdentityStatus.not_user])
+async def test_manually_labeled_owner_words_merge_despite_live_voice_status(world, status):
+    """A manual owner label must not fragment the live transcript into one word per segment."""
+    store, path, _ = world
+    store.rows[path]['transcript_segments'] = [speech('a', 'I', 0, 0, 0.2)]
+    db.assign_conversation_speaker('u', 'c', person_id=None, is_user=True, speaker_id=0)
+    first = read(world)['transcript_segments'][0]
+
+    async def persist(fn, *args, **kwargs):
+        if fn is db.update_conversation_segments:
+            return fn(*args, **kwargs)
+        return True
+
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid='u'),
+        state=SimpleNamespace(speaker_map_dirty=False),
+        persistence=SimpleNamespace(call=persist),
+        speakers=SimpleNamespace(
+            segment_assignments={},
+            speaker_to_person={},
+            segment_identity_status={},
+            # Live voice matching still has its own verdict for this voice.
+            voice_identity_status={0: status},
+        ),
+    )
+    processor = object.__new__(transcripts.TranscriptProcessor)
+    processor.host = host
+    processor.cache = transcripts.ConversationCache(None)
+    processor.cache.data = deepcopy(store.rows[path])
+    current = SimpleNamespace(id='c', transcript_segments=[TranscriptSegment(**first)])
+    for sid, word, start, end in [('b', 'have', 0.2, 0.4), ('c', 'to', 0.4, 0.6)]:
+        result = await processor._update_live_conversation(
+            current, [TranscriptSegment(**speech(sid, word, 0, start, end))], [], datetime.now(timezone.utc), None
+        )
+        assert result is not None
+        current, _, removed = result
+        assert removed == [sid]
+    stored = read(world)['transcript_segments']
+    assert [(s['text'], s['is_user'], s.get('speaker_match_source')) for s in stored] == [('I have to', True, None)]
 
 
 @pytest.fixture
