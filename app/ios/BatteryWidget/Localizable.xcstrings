@@ -4201,306 +4201,6 @@
         }
       }
     },
-    "Muted" : {
-      "extractionState" : "manual",
-      "comment" : "Capture Live Activity",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Muted"
-          }
-        },
-        "ar" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "مكتوم"
-          }
-        },
-        "be" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Адключана"
-          }
-        },
-        "bg" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Заглушено"
-          }
-        },
-        "bn" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "নিঃশব্দ"
-          }
-        },
-        "bs" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Utišano"
-          }
-        },
-        "ca" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Silenciat"
-          }
-        },
-        "cs" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ztlumeno"
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lydløs"
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stumm"
-          }
-        },
-        "el" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Σίγαση"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Silenciado"
-          }
-        },
-        "et" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vaigistatud"
-          }
-        },
-        "fa" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "بی‌صدا شده"
-          }
-        },
-        "fi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mykistetty"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Muet"
-          }
-        },
-        "he" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "מושתק"
-          }
-        },
-        "hi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "म्यूट"
-          }
-        },
-        "hr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Utišano"
-          }
-        },
-        "hu" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Némítva"
-          }
-        },
-        "id" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dibisukan"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Disattivato"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ミュート"
-          }
-        },
-        "kn" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ಮೌನವಾಗಿದೆ"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "음소거"
-          }
-        },
-        "lt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nutildyta"
-          }
-        },
-        "lv" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Izslēgts skaņa"
-          }
-        },
-        "mk" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ставена на молчење"
-          }
-        },
-        "mr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "शांत केला"
-          }
-        },
-        "ms" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dibisukan"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gedempt"
-          }
-        },
-        "no" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dempet"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wyciszono"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Silenciado"
-          }
-        },
-        "ro" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dezactivat"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Отключен звук"
-          }
-        },
-        "sk" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stlmené"
-          }
-        },
-        "sl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Utišano"
-          }
-        },
-        "sr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Утишана"
-          }
-        },
-        "sv" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tystad"
-          }
-        },
-        "ta" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "முடக்கப்பட்ட"
-          }
-        },
-        "te" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "మిటమిటించింది"
-          }
-        },
-        "th" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ปิดเสียง"
-          }
-        },
-        "tl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Muted"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sessiz"
-          }
-        },
-        "uk" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Вимкнено звук"
-          }
-        },
-        "ur" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "خاموش"
-          }
-        },
-        "vi" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Đã tắt tiếng"
-          }
-        },
-        "zh" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已静音"
-          }
-        }
-      }
-    },
     "Recording" : {
       "extractionState" : "manual",
       "comment" : "Capture Live Activity",
@@ -5101,302 +4801,301 @@
         }
       }
     },
-    "Unmute" : {
+    "Start" : {
       "extractionState" : "manual",
-      "comment" : "Capture Live Activity",
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unmute"
-          }
-        },
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "إلغاء الكتم"
+            "value" : "بدء"
           }
         },
         "be" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Уключыць гук"
+            "value" : "Пачаць"
           }
         },
         "bg" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Включи звука"
+            "value" : "Старт"
           }
         },
         "bn" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "আনমিউট করুন"
+            "value" : "শুরু করুন"
           }
         },
         "bs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Uključi zvuk"
+            "value" : "Počni"
           }
         },
         "ca" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Activar so"
+            "value" : "Iniciar"
           }
         },
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zapnout zvuk"
+            "value" : "Spustit"
           }
         },
         "da" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Slå lyd til"
+            "value" : "Start"
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ton an"
+            "value" : "Starten"
           }
         },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Άρση σίγασης"
+            "value" : "Έναρξη"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Reactivar audio"
+            "value" : "Iniciar"
           }
         },
         "et" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tühista vaigistus"
+            "value" : "Alusta"
           }
         },
         "fa" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "باصدا کردن"
+            "value" : "شروع"
           }
         },
         "fi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Poista mykistys"
+            "value" : "Aloita"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Réactiver le son"
+            "value" : "Démarrer"
           }
         },
         "he" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "בטל השתקה"
+            "value" : "התחל"
           }
         },
         "hi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "अनम्यूट"
+            "value" : "शुरू करें"
           }
         },
         "hr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Uključi zvuk"
+            "value" : "Početak"
           }
         },
         "hu" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Némítás feloldása"
+            "value" : "Indítás"
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bunyikan"
+            "value" : "Mulai"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Riattiva audio"
+            "value" : "Avvia"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ミュート解除"
+            "value" : "開始"
           }
         },
         "kn" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ಮ್ಯೂಟ್ ತೆಗೆ"
+            "value" : "ಪ್ರಾರಂಭ"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "음소거 해제"
+            "value" : "시작"
           }
         },
         "lt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Įjungti garsą"
+            "value" : "Pradėti"
           }
         },
         "lv" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ieslēgt skaņu"
+            "value" : "Sākt"
           }
         },
         "mk" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Вклучи звук"
+            "value" : "Почни"
           }
         },
         "mr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "आवाज सुरू करा"
+            "value" : "सुरू करा"
           }
         },
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nyahsenyap"
+            "value" : "Mula"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dempen opheffen"
+            "value" : "Starten"
           }
         },
         "no" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Slå på lyd"
+            "value" : "Start"
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wyłącz wyciszenie"
+            "value" : "Rozpocznij"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Reativar áudio"
+            "value" : "Iniciar"
           }
         },
         "ro" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Reactivează sunetul"
+            "value" : "Pornire"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Включить звук"
+            "value" : "Начать"
           }
         },
         "sk" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zrušiť stlmenie"
+            "value" : "Spustiť"
           }
         },
         "sl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vklopi zvok"
+            "value" : "Začni"
           }
         },
         "sr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Uključi zvuk"
+            "value" : "Почетак"
           }
         },
         "sv" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Slå på ljud"
+            "value" : "Starta"
           }
         },
         "ta" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ஒலியை இயக்கு"
+            "value" : "தொடங்கவும்"
           }
         },
         "te" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "అన్‌మ్యూట్ చేయి"
+            "value" : "ప్రారంభించండి"
           }
         },
         "th" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "เปิดเสียง"
+            "value" : "เริ่ม"
           }
         },
         "tl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "I-unmute"
+            "value" : "Magsimula"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sesi aç"
+            "value" : "Başlat"
           }
         },
         "uk" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Увімкнути звук"
+            "value" : "Почати"
           }
         },
         "ur" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "آواز چالو کریں"
+            "value" : "شروع کریں"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bật tiếng"
+            "value" : "Bắt đầu"
           }
         },
         "zh" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "取消静音"
+            "value" : "开始"
           }
         }
       }
@@ -8701,302 +8400,301 @@
         }
       }
     },
-    "Mute" : {
+    "Stop" : {
       "extractionState" : "manual",
-      "comment" : "Capture Live Activity",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "كتم"
+            "value" : "إيقاف"
           }
         },
         "be" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Цьміць"
+            "value" : "Спыніць"
           }
         },
         "bg" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Заглуши"
+            "value" : "Спри"
           }
         },
         "bn" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "নিঃশব্দ করুন"
+            "value" : "থামান"
           }
         },
         "bs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Utišaj"
+            "value" : "Zaustavi"
           }
         },
         "ca" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Silenciar"
+            "value" : "Atura"
           }
         },
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ztlumit"
+            "value" : "Zastavit"
           }
         },
         "da" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lydløs"
+            "value" : "Stop"
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Stumm"
+            "value" : "Stopp"
           }
         },
         "el" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Σίγαση"
+            "value" : "Διακοπή"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mute"
+            "value" : "Stop"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Silencio"
+            "value" : "Detener"
           }
         },
         "et" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vaigista"
+            "value" : "Peata"
           }
         },
         "fa" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "بی‌صدا"
+            "value" : "توقف"
           }
         },
         "fi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vaimenna"
+            "value" : "Pysäytä"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Muet"
+            "value" : "Arrêter"
           }
         },
         "he" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "השתק"
+            "value" : "עצור"
           }
         },
         "hi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "म्यूट"
+            "value" : "रोकें"
           }
         },
         "hr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Isključi zvuk"
+            "value" : "Zaustavi"
           }
         },
         "hu" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Némítás"
+            "value" : "Leállítás"
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bisukan"
+            "value" : "Hentikan"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Muto"
+            "value" : "Ferma"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ミュート"
+            "value" : "停止"
           }
         },
         "kn" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ಸುಮಾರು"
+            "value" : "ನಿಲ್ಲಿಸಿ"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "음소거"
+            "value" : "중지"
           }
         },
         "lt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nutildyti"
+            "value" : "Sustabdyti"
           }
         },
         "lv" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Apklusināt"
+            "value" : "Apturēt"
           }
         },
         "mk" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Исклучи звук"
+            "value" : "Стоп"
           }
         },
         "mr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "निःशब्द करा"
+            "value" : "थांबवा"
           }
         },
         "ms" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bisukan"
+            "value" : "Hentikan"
           }
         },
         "nl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dempen"
+            "value" : "Stop"
           }
         },
         "no" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Demp"
+            "value" : "Stopp"
           }
         },
         "pl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wycisz"
+            "value" : "Zatrzymaj"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mudo"
+            "value" : "Parar"
           }
         },
         "ro" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mut"
+            "value" : "Oprește"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Без звука"
+            "value" : "Стоп"
           }
         },
         "sk" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Stlmiť"
+            "value" : "Zastaviť"
           }
         },
         "sl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Utišaj"
+            "value" : "Ustavi"
           }
         },
         "sr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Утишај"
+            "value" : "Заустави"
           }
         },
         "sv" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tysta"
+            "value" : "Stoppa"
           }
         },
         "ta" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "குரல் நீக்கவும்"
+            "value" : "நிறுத்து"
           }
         },
         "te" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "మ్యూట్"
+            "value" : "ఆపు"
           }
         },
         "th" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ปิดเสียง"
+            "value" : "หยุด"
           }
         },
         "tl" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "I-mute"
+            "value" : "Itigil"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sessiz"
+            "value" : "Durdur"
           }
         },
         "uk" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Без звуку"
+            "value" : "Стоп"
           }
         },
         "ur" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "خاموشی کریں"
+            "value" : "روکیں"
           }
         },
         "vi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Tắt tiếng"
+            "value" : "Dừng"
           }
         },
         "zh" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "静音"
+            "value" : "停止"
           }
         }
       }

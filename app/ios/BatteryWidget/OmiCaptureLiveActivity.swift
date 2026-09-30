@@ -195,7 +195,7 @@ private struct CaptureStatus: View {
         if state.actionFailed { return "Open Omi to continue" }
         switch state.status {
         case "ended": return "Finished"
-        case "paused": return "Muted"
+        case "paused": return "Paused"
         case "interrupted": return "Paused"
         case "connecting": return "Connecting…"
         case "recording": return "Recording"
@@ -321,75 +321,69 @@ struct CapturePendant: View {
     }
 }
 
-/// Voice Memos-style strip (lib.py `wave_strip`: 2 pt bars, 2.5 pt gaps,
-/// rgba(236,238,242,.55), left edge fading in over 24%). The OS cannot loop
-/// animations in a Live Activity, so the app sends new loudness bins about once
-/// a second while voice is heard and each update slides the strip left.
-/// Silence settles it to a hairline. Unmetered sources keep the still strip.
+/// omi-home-v4 `.wave`: 2 pt bars 2.2 pt apart in the design's fixed level pattern, each
+/// breathing between full and 45 % height, the breath rippling leftward every 13 bars.
+/// The OS cannot loop animations in a Live Activity, so the app's updates step the loop:
+/// while voice is heard the app updates about once a second, each update flips the breath,
+/// and every bar animates to it after a delay set by its place in the ripple. Without voice
+/// the strip rests, dimmed like the design's paused wave.
 @available(iOS 16.1, *)
 private struct CaptureWaveform: View {
     let snapshot: CaptureSnapshot
     let height: CGFloat
     private static let barWidth: CGFloat = 2
-    private static let gap: CGFloat = 2.5
+    private static let gap: CGFloat = 2.2
+    /// `@keyframes lvl{50%{transform:scaleY(.45)}}`.
+    private static let exhaled: CGFloat = 0.45
+    private static let ripple = 13
+    /// The design's `lv` list: bar heights as a share of the strip.
+    private static let levels: [CGFloat] = [
+        0.22, 0.35, 0.5, 0.3, 0.62, 0.8, 0.45, 0.28, 0.55, 0.9, 0.7, 0.38, 0.25, 0.42, 0.66, 0.52, 0.3,
+        0.2, 0.35, 0.58, 0.76, 0.6, 0.4, 0.33, 0.48, 0.7, 0.85, 0.5, 0.3, 0.24, 0.4, 0.62, 0.45, 0.3,
+        0.52, 0.72, 0.56, 0.36, 0.28, 0.44, 0.6, 0.8, 0.64, 0.4, 0.3, 0.5, 0.66, 0.42, 0.3, 0.26,
+    ]
+
+    /// Voice is heard, so updates arrive about once a second.
+    private var breathing: Bool {
+        snapshot.isReceivingAudio && snapshot.state.metered && snapshot.state.voice
+    }
+
+    /// Flips on every update: `levelsEnd` counts 125 ms bins of wall clock, 8 per update.
+    private var exhale: Bool {
+        breathing && (snapshot.state.levelsEnd + 4) / 8 % 2 == 1
+    }
+
+    private var opacity: Double {
+        if breathing { return 1 }
+        // Unmetered sources cannot say when voice is heard; a live one keeps the strip lit.
+        return snapshot.isReceivingAudio && !snapshot.state.metered ? 1 : 0.4
+    }
 
     var body: some View {
-        let state = snapshot.state
+        let exhale = self.exhale
         GeometryReader { geometry in
             // Never derive layout from an unbounded proposal; it cannot be placed.
             let width = geometry.size.width.isFinite ? max(0, geometry.size.width) : 0
             let count = max(1, Int((width + Self.gap) / (Self.barWidth + Self.gap)))
-            // Metered bars are keyed by absolute bin, so an update slides them left
-            // rather than redrawing them. The still strip is keyed by position.
-            let origin = state.metered ? state.levelsEnd : 0
-            if state.metered && !state.voice {
-                // Nothing heard: one hairline instead of a row of dots.
-                Capsule()
-                    .fill(CapturePalette.label.opacity(opacity))
-                    .frame(width: width, height: 1.5)
-                    .frame(width: width, height: height)
-            } else {
-                HStack(alignment: .center, spacing: Self.gap) {
-                    ForEach((origin - count + 1)...origin, id: \.self) { bin in
-                        Capsule()
-                            .fill(CapturePalette.label.opacity(opacity))
-                            .frame(width: Self.barWidth, height: barHeight(age: origin - bin))
-                    }
+            HStack(alignment: .center, spacing: Self.gap) {
+                ForEach(0..<count, id: \.self) { index in
+                    Capsule()
+                        .frame(width: Self.barWidth,
+                               height: max(3, height * Self.levels[index % Self.levels.count]))
+                        .scaleEffect(x: 1, y: exhale ? Self.exhaled : 1)
+                        // v4's negative delays run the breath leftward. The longest delay plus
+                        // the tween (0.96 + 0.8 s) stays inside a Live Activity's 2 s budget.
+                        .animation(.easeInOut(duration: 0.8)
+                            .delay(Double(Self.ripple - 1 - index % Self.ripple) * 0.08), value: exhale)
                 }
-                .frame(width: width, height: height, alignment: .trailing)
-                .clipped()
             }
+            .frame(width: width, height: height)
+            .clipped()
         }
         .frame(height: height)
-        .mask(LinearGradient(stops: [
-            .init(color: .clear, location: 0),
-            .init(color: .black, location: 0.24),
-            .init(color: .black, location: 1),
-        ], startPoint: .leading, endPoint: .trailing))
+        .foregroundStyle(CapturePalette.label.opacity(opacity))
+        .animation(.easeInOut(duration: 0.4), value: opacity)
         .accessibilityHidden(true)
-    }
-
-    private var opacity: Double {
-        let state = snapshot.state
-        if state.metered { return state.voice ? 0.55 : 0.28 }
-        return snapshot.isReceivingAudio ? 0.55 : 0.2
-    }
-
-    private func barHeight(age: Int) -> CGFloat {
-        let state = snapshot.state
-        guard state.metered else { return max(3, height * Self.designLevel(age)) }
-        // Silence is a hairline; heard audio rises from it (levels are a dB curve).
-        guard state.voice, age < state.levels.count else { return 2 }
-        let level = CGFloat(state.levels[state.levels.count - 1 - age]) / 100
-        return max(2, height * level)
-    }
-
-    // lib.py `_hs(n, seed=1.0, lo=0.14)`.
-    private static func designLevel(_ index: Int) -> CGFloat {
-        let i = Double(index)
-        let a = abs(sin(i * 0.37 + 1) * sin(i * 0.113 + 2.1))
-        let b = abs(sin(i * 1.7 + 0.5)) * 0.35
-        return CGFloat(0.14 + 0.86 * min(1, a * 0.85 + b * 0.5))
     }
 }
 
@@ -406,11 +400,11 @@ private struct CaptureActions: View {
     var body: some View {
         if #available(iOS 17.0, *), !snapshot.isStale, state.status != "ended" {
             HStack(spacing: 8) {
-                // The pendant keeps picking up audio; Mute and Unmute say whether Omi uses it.
-                // Unmute is offered only after the user muted; recovery states keep Mute.
+                // Shared by the Lock Screen and expanded Island. Start/Stop keep the existing
+                // resume/pause behavior; Start is offered only after a user stops capture.
                 if state.canPause {
                     let resume = state.status == "paused"
-                    action(resume ? "Unmute" : "Mute", value: resume ? "resume" : "pause", enabled: true)
+                    action(resume ? "Start" : "Stop", value: resume ? "resume" : "pause", enabled: true)
                 }
                 // End always closes this card, saving the conversation first when there is one
                 // (LiveActivityManager).
@@ -430,7 +424,7 @@ private struct CaptureActions: View {
             Text(label)
                 .font(.subheadline.weight(primary ? .bold : .semibold))
                 .lineLimit(1)
-                // Long translations ("Reactivează sunetul") shrink a little rather than cut off.
+                // Long translations shrink a little rather than cut off.
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity, minHeight: height)
                 .foregroundStyle(filled ? CapturePalette.ink : CapturePalette.label.opacity(available ? 1 : 0.5))
