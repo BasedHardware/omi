@@ -23,6 +23,7 @@ from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import smart_merge_step
+from utils.conversations.meeting_evidence_admission import await_meeting_evidence
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.conversations.process_conversation import (
     DerivedEffectsDisposition,
@@ -134,6 +135,9 @@ async def finalize_persisted_conversation(
         if not admitted:
             return ConversationFinalizationDisposition.fenced
         conversation.status = ConversationStatus.processing
+
+    if conversation.status != ConversationStatus.completed:
+        await await_meeting_evidence(uid, conversation_id, conversation_data, trigger=trigger)
 
     stage = 'geolocation'
     try:
