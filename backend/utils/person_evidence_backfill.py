@@ -69,7 +69,7 @@ def backfill_person(
             receipt = conversations_db.decode_manual_speaker_assignments(
                 uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
             )
-            segments = conversations_db._decode_transcript_segments_strict(
+            segments = conversations_db.decode_transcript_segments_verified(
                 uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
             )
             # Only receipt-covered segments prove a manual label. A historical
@@ -102,8 +102,8 @@ def backfill_person(
                 receipt['label_evidence'] = ledger
                 transaction.update(
                     conversation_ref,
-                    conversations_db._prepare_conversation_for_write(
-                        {'manual_speaker_assignments': receipt}, uid, raw.get('data_protection_level', 'standard')
+                    conversations_db.encode_conversation_for_write(
+                        uid, {'manual_speaker_assignments': receipt}, raw.get('data_protection_level', 'standard')
                     ),
                 )
             if tally is not None and apply:

@@ -299,8 +299,8 @@ def remove_ignored_voice(
             receipt['generation'] = receipt.get('generation', 0) + 1
             transaction.update(
                 conversation_ref,
-                conversations_db._prepare_conversation_for_write(
-                    {'manual_speaker_assignments': receipt}, uid, raw.get('data_protection_level', 'standard')
+                conversations_db.encode_conversation_for_write(
+                    uid, {'manual_speaker_assignments': receipt}, raw.get('data_protection_level', 'standard')
                 ),
             )
         answered = {k: v for k, v in (state.get('answered') or {}).items() if k not in set(prompt_ids)}
