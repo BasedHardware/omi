@@ -1494,7 +1494,8 @@ enum SpeakerTagPromptAnswerSubmittedAnswer {
   newPerson("new_person"),
   someoneElse("someone_else"),
   skip("skip"),
-  unknown("unknown");
+  unknown("unknown"),
+  notAPerson("not_a_person");
   const SpeakerTagPromptAnswerSubmittedAnswer(this.wireName);
   final String wireName;
 }
