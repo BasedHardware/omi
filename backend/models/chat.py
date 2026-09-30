@@ -26,8 +26,8 @@ class MessageType(str, Enum):
 
 
 class MessageConversationStructured(BaseModel):
-    title: str = ''
-    emoji: str = ''
+    title: str
+    emoji: str
 
 
 class MessageConversation(BaseModel):
