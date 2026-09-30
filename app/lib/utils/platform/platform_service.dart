@@ -14,6 +14,19 @@ class PlatformService {
   static bool get isIntercomSupported => !PhysicalQualification.enabled;
   static bool get isCrashlyticsSupported => !PhysicalQualification.enabled;
 
+  /// iOS reports `Version 18.2 (Build 22C150)` (or a Darwin `uname` string on
+  /// some builds), so the major version is the first integer run in the string.
+  /// Splitting at `.` would capture `Version 18` and fail int.tryParse.
+  static int iosMajorVersion(String operatingSystemVersion) {
+    final match = RegExp(r'\d+').firstMatch(operatingSystemVersion);
+    return int.tryParse(match?.group(0) ?? '') ?? 0;
+  }
+
+  /// True when the running iOS major version is at least [minimum].
+  /// Non-iOS hosts and unparsable versions report 0 and fail every gate.
+  static bool isIOSAtLeast(int minimum) =>
+      Platform.isIOS && iosMajorVersion(Platform.operatingSystemVersion) >= minimum;
+
   /// Execute a function only if the platform supports it
   static T? executeIfSupported<T>(
     bool isSupported,

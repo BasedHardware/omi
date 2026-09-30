@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/ui.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 class OnboardingCompleteScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -22,8 +21,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
   late Animation<double> _slideAnimation;
 
   // App Shortcuts phrases require iOS 16; older systems have no Omi phrases.
-  late final bool _siriHintSupported =
-      Platform.isIOS && (int.tryParse(Platform.operatingSystemVersion.split('.').first) ?? 0) >= 16;
+  late final bool _siriHintSupported = PlatformService.isIOSAtLeast(16);
 
   @override
   void initState() {

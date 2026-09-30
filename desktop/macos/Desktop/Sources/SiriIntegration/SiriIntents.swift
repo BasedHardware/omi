@@ -178,7 +178,9 @@ struct AskOmiIntent: AppIntent {
         _ = try await continuation.perform()
         return .result(dialog: "Open Omi chat to continue.")
       }
-      let spoken = answer.count > 450 ? String(answer.prefix(447)) + "…" : answer
+      // The full answer is persisted to the owner's chat, so a truncated spoken
+      // answer must still say where the remainder can be read.
+      let spoken = answer.count > 450 ? String(answer.prefix(447)) + "… Open Omi chat for the rest." : answer
       return .result(dialog: IntentDialog("\(spoken)"))
     }
   }

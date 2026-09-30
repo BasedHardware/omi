@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
@@ -29,16 +30,8 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
 
   // App Shortcuts and the native Shortcuts button require iOS 16; the
   // searchInApp schema requires iOS 27. Older systems keep the index switch.
-  late final bool _shortcutsHintSupported = _iosMajorVersion >= 16;
-  late final bool _searchHintSupported = _iosMajorVersion >= 27;
-
-  static int get _iosMajorVersion {
-    if (!Platform.isIOS) return 0;
-    final major = int.tryParse(Platform.operatingSystemVersion.split('.').first) ?? 0;
-    // A Darwin kernel version (macOS-style) never reaches 27 before iOS 27's
-    // own numbering, so misreads stay on the conservative side of both gates.
-    return major;
-  }
+  late final bool _shortcutsHintSupported = PlatformService.isIOSAtLeast(16);
+  late final bool _searchHintSupported = PlatformService.isIOSAtLeast(27);
 
   Future<void> _loadSiriSetting() async {
     final revision = _siriRevision;

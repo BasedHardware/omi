@@ -267,6 +267,8 @@ struct AskOmiIntent: AppIntent {
             }
             didAttemptChatPost = true
             let answer = try await OmiNativeAPI().ask(question: value, owner: owner)
+            // Short answers stay spoken-only; a truncated one must say where the
+            // rest lives so the user keeps a route to the full text in chat.
             return (.result(dialog: IntentDialog("\(Self.spokenAnswer(answer))")), "ok")
         } catch SiriSession.Failure.auth {
             return (await Self.offerChat(openChat, dialog: "Open Omi and sign in first."), "auth")
@@ -291,10 +293,12 @@ struct AskOmiIntent: AppIntent {
         }
     }
 
+    /// The answer is also persisted to the owner's chat, so a truncated spoken
+    /// answer must still say where the remainder can be read.
     static func spokenAnswer(_ answer: String) -> String {
         let trimmed = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > 450 else { return trimmed }
-        return String(trimmed.prefix(447)) + "…"
+        return String(trimmed.prefix(447)) + "… Open Omi chat for the rest."
     }
 }
 
@@ -356,13 +360,22 @@ struct OpenOmiIntent: OpenIntent {
         let started = Date()
         var outcome = "server"
         defer { SiriTelemetry.intent("open", outcome: outcome, started: started) }
-        let kind = target.folder?.id == "memories" ? "memory" : "conversation"
-        guard SiriSnapshotStore.shared.containsCurrentEntity(type: kind, id: target.id) else {
-            throw SiriUnsupportedInput(kind: .open)
+        do {
+            // Fence authentication before the Boolean entity check collapses
+            // Failure.auth into "no longer available", which would misclassify
+            // the deferred outcome as server instead of auth.
+            try requireSignedInSiriSession()
+            let kind = target.folder?.id == "memories" ? "memory" : "conversation"
+            guard SiriSnapshotStore.shared.containsCurrentEntity(type: kind, id: target.id) else {
+                throw SiriUnsupportedInput(kind: .open)
+            }
+            SiriBridge.shared.navigate("omi://\(kind)/\(target.id)")
+            outcome = "ok"
+            return .result()
+        } catch {
+            outcome = SiriTelemetry.outcome(error)
+            throw error
         }
-        SiriBridge.shared.navigate("omi://\(kind)/\(target.id)")
-        outcome = "ok"
-        return .result()
     }
 }
 
@@ -376,12 +389,21 @@ struct OpenOmiMemoryIntent: OpenIntent {
         let started = Date()
         var outcome = "server"
         defer { SiriTelemetry.intent("open", outcome: outcome, started: started) }
-        guard SiriSnapshotStore.shared.containsCurrentEntity(type: "memory", id: target.id) else {
-            throw SiriUnsupportedInput(kind: .open)
+        do {
+            // Fence authentication before the Boolean entity check collapses
+            // Failure.auth into "no longer available", which would misclassify
+            // the deferred outcome as server instead of auth.
+            try requireSignedInSiriSession()
+            guard SiriSnapshotStore.shared.containsCurrentEntity(type: "memory", id: target.id) else {
+                throw SiriUnsupportedInput(kind: .open)
+            }
+            SiriBridge.shared.navigate("omi://memory/\(target.id)")
+            outcome = "ok"
+            return .result()
+        } catch {
+            outcome = SiriTelemetry.outcome(error)
+            throw error
         }
-        SiriBridge.shared.navigate("omi://memory/\(target.id)")
-        outcome = "ok"
-        return .result()
     }
 }
 
@@ -395,12 +417,21 @@ struct OpenOmiTaskIntent: OpenIntent {
         let started = Date()
         var outcome = "server"
         defer { SiriTelemetry.intent("open", outcome: outcome, started: started) }
-        guard SiriSnapshotStore.shared.containsCurrentEntity(type: "task", id: target.id) else {
-            throw SiriUnsupportedInput(kind: .open)
+        do {
+            // Fence authentication before the Boolean entity check collapses
+            // Failure.auth into "no longer available", which would misclassify
+            // the deferred outcome as server instead of auth.
+            try requireSignedInSiriSession()
+            guard SiriSnapshotStore.shared.containsCurrentEntity(type: "task", id: target.id) else {
+                throw SiriUnsupportedInput(kind: .open)
+            }
+            SiriBridge.shared.navigate("omi://task/\(target.id)")
+            outcome = "ok"
+            return .result()
+        } catch {
+            outcome = SiriTelemetry.outcome(error)
+            throw error
         }
-        SiriBridge.shared.navigate("omi://task/\(target.id)")
-        outcome = "ok"
-        return .result()
     }
 }
 
@@ -468,7 +499,13 @@ struct SearchOmiIntent: ShowInAppSearchResultsIntent {
         ask.question = criteria.term
         // Ask catches its own failures and answers with a dialog, so the delegated
         // outcome — not the mere absence of a throw — is the Search result.
+        // Delegating through performReportingOutcome skips AskOmiIntent.perform()'s
+        // askOmi wrapper, so this entry point owns that event for the delegation.
+        let askStarted = Date()
+        var askOutcome = "server"
+        defer { SiriTelemetry.intent("askOmi", outcome: askOutcome, started: askStarted) }
         let performed = try await ask.performReportingOutcome()
+        askOutcome = performed.outcome
         outcome = performed.outcome
         return performed.result
     }
@@ -650,14 +687,23 @@ struct OmiUiActivityIntent: AppIntent {
         let started = Date()
         var outcome = "server"
         defer { SiriTelemetry.intent("open", outcome: outcome, started: started) }
-        guard SiriSnapshotStore.shared.containsCurrentEntity(type: kind, id: id) else {
-            throw SiriUnsupportedInput(kind: .open)
+        do {
+            // Fence authentication before the Boolean entity check collapses
+            // Failure.auth into "no longer available", which would misclassify
+            // the deferred outcome as server instead of auth.
+            try requireSignedInSiriSession()
+            guard SiriSnapshotStore.shared.containsCurrentEntity(type: kind, id: id) else {
+                throw SiriUnsupportedInput(kind: .open)
+            }
+            let route = kind == "conversation" ? "omi://conversation/\(id)" :
+                (kind == "memory" ? "omi://memory/\(id)" : "omi://task/\(id)")
+            SiriBridge.shared.navigate(route)
+            outcome = "ok"
+            return .result()
+        } catch {
+            outcome = SiriTelemetry.outcome(error)
+            throw error
         }
-        let route = kind == "conversation" ? "omi://conversation/\(id)" :
-            (kind == "memory" ? "omi://memory/\(id)" : "omi://task/\(id)")
-        SiriBridge.shared.navigate(route)
-        outcome = "ok"
-        return .result()
     }
 }
 
