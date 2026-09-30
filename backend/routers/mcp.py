@@ -372,8 +372,11 @@ def _validate_cleaner_memories(memories: Sequence[Any], uid: str) -> List[dict]:
             continue
         try:
             if isinstance(mem, dict):
-                CleanerMemory.model_validate(mem)
-                valid_memories.append(mem)
+                payload = dict(mem)
+                if not payload.get("category"):
+                    payload["category"] = MemoryCategory.other
+                CleanerMemory.model_validate(payload)
+                valid_memories.append(payload)
             else:
                 valid_memories.append(mem.model_dump())
         except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
