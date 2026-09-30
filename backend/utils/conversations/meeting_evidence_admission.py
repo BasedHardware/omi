@@ -30,7 +30,7 @@ from utils.executors import db_executor, run_blocking
 from utils.metrics import MEETING_NOTES_EVIDENCE_WAIT_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.other.storage import configured_screen_frames_bucket
-from utils.conversations.screen_content_window import current_selection_fingerprint
+from utils.conversations.screen_content_window import selection_fingerprint, trusted_content_window
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,9 @@ async def await_meeting_evidence(
     ``not_applicable``: not a waiting trigger, not a desktop meeting, the wait
     is disabled, this host has no screen-frame bucket, or the account's
     screenshot setting is off (no evidence will come). ``present``: already
-    there. ``arrived``: landed during the wait. ``timed_out``: proceeded without.
+    there. ``arrived``: landed during the wait. ``no_window``: the conversation has
+    no trusted content window, so no pass can be stamped; proceeded at once.
+    ``timed_out``: proceeded without.
     """
     bound = evidence_wait_seconds()
     bucket = configured_screen_frames_bucket()
@@ -102,8 +104,14 @@ async def await_meeting_evidence(
             return 'not_applicable'
         first = True
         while True:
-            if await _current_pass_landed(uid, conversation_id, bucket, remaining):
+            state = await _current_pass_state(uid, conversation_id, bucket, remaining)
+            if state == 'landed':
                 outcome = 'present' if first else 'arrived'
+                break
+            if state == 'no_window' and first:
+                # Nothing the Mac can select or stamp: the adjudication route refuses an
+                # open conversation without a trusted content window. Proceed now.
+                outcome = 'no_window'
                 break
             first = False
             if remaining() <= 0:
@@ -136,20 +144,23 @@ async def await_meeting_evidence(
     return outcome
 
 
-async def _current_pass_landed(uid: str, conversation_id: str, bucket: str, remaining: Callable[[], float]) -> bool:
-    """This bucket's marker covers the conversation's CURRENT content window.
+async def _current_pass_state(uid: str, conversation_id: str, bucket: str, remaining: Callable[[], float]) -> str:
+    """``landed``: this bucket's marker covers the conversation's CURRENT trusted
+    content window. ``no_window``: the conversation has no trusted window, so no
+    pass can be stamped for it. ``waiting``: otherwise.
 
     A marker stamped mid-meeting for an earlier window is stale once the
     transcript extends: the Mac then runs a fresh pass for the new fingerprint,
     and the notes must wait for that one. Both reads are re-done each poll.
     """
+    conversation = await _bounded(get_conversation_content_window_fields, uid, conversation_id, budget=remaining())
+    window = trusted_content_window(conversation) if conversation else None
+    if window is None:
+        return 'no_window'
     stamp, fingerprint = await _bounded(
         get_conversation_screen_frames_marker, uid, conversation_id, bucket=bucket, budget=remaining()
     )
-    if stamp is None:
-        return False
-    conversation = await _bounded(get_conversation_content_window_fields, uid, conversation_id, budget=remaining())
-    return conversation is not None and fingerprint == current_selection_fingerprint(conversation)
+    return 'landed' if stamp is not None and fingerprint == selection_fingerprint(*window) else 'waiting'
 
 
 async def _bounded(fn: Callable[..., Any], *args: Any, budget: float, **kwargs: Any) -> Any:
