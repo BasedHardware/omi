@@ -15,6 +15,9 @@ import os
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test")
 
+from fastapi import HTTPException
+import pytest
+
 import routers.calendar_onboarding as co
 
 # --- pure state helper ---
@@ -112,3 +115,33 @@ def test_reset_endpoint_clears_flags(monkeypatch):
     assert calls["uid"] == "u1"
     assert calls["key"] == "google_calendar"
     assert calls["data"] == {"onboarding_skipped": False, "reauth_required": False, "reauth_reason": None}
+
+
+def test_status_endpoint_db_failure_raises_500(monkeypatch):
+    monkeypatch.setattr(
+        co.users_db, "get_integration", lambda *args: (_ for _ in ()).throw(RuntimeError("Firestore read failed"))
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        co.get_calendar_onboarding_status(uid="u1")
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "Failed to retrieve calendar onboarding status"
+
+
+def test_skip_endpoint_db_failure_raises_500(monkeypatch):
+    monkeypatch.setattr(
+        co.users_db, "set_integration", lambda *args: (_ for _ in ()).throw(RuntimeError("Firestore write failed"))
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        co.skip_calendar_onboarding(uid="u1")
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "Failed to skip calendar onboarding"
+
+
+def test_reset_endpoint_db_failure_raises_500(monkeypatch):
+    monkeypatch.setattr(
+        co.users_db, "set_integration", lambda *args: (_ for _ in ()).throw(RuntimeError("Firestore update failed"))
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        co.reset_calendar_onboarding(uid="u1")
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "Failed to reset calendar onboarding"
