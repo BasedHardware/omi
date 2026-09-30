@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-internal-exception-text-returned-to-tool-caller",
+  "violated_contract": "An internal exception's detail must never be returned to the tool caller. Answering an agent tool call with f-string interpolation of str(e) from a database, network, or cloud-backend failure hands the caller implementation detail -- driver and endpoint errors, sometimes user identifiers or connection material -- and gives the model an opaque string it repeats to the user as if it were a product message. The caller-visible error is a product surface; the exception text belongs in the server log.",
+  "canonical_prevention": "Convert internal exceptions to one static, caller-facing message at the tool boundary and record the exception server-side with logger.error(..., exc_info=True) (a validation catch may log at warning level). Never interpolate str(e) into the returned string. A hermetic unit test drives each boundary -- initial fetch failure, post-refresh failure, and non-auth service failure -- and asserts the returned string equals the static message and does not contain the exception text.",
+  "canonical_prevention_artifact": [
+    "backend/utils/retrieval/tools/integration_base.py",
+    "backend/tests/unit/test_integration_base_sanitization.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/retrieval/tools/**"
+  ],
+  "status": "open"
+}
