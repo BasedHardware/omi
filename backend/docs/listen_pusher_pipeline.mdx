@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-09-30 (safety-WAL segments bind to their live rollover generation through `external_data.recording_origin_id`, kill switch SYNC_LINEAGE_RESOLVE_ENABLED=false; same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
+> Last updated: 2026-09-30 (safety-WAL segments bind to their live rollover generation through `external_data.recording_origin_id`, staged by SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST, kill switch SYNC_LINEAGE_RESOLVE_ENABLED=false; same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -23,10 +23,23 @@ after its last word) hold the segment; smart-merge donors resolve to their
 survivor. A batch that straddles generations is split across them. A segment
 with no unique generation keeps the phone's `conversation_id` stamp when there
 is one, and otherwise takes the ordinary unbound path, which never adopts a
-live row. `SYNC_LINEAGE_RESOLVE_ENABLED=false` (on backend-listen, backend-sync
-and backend-sync-backfill) restores the earlier whole-batch binding: one
-conversation whose recording id equals the client id must contain the whole
-upload, and a miss drops the stamp. See `backend/utils/sync/ARCHITECTURE.md`.
+live row. `SYNC_LINEAGE_RESOLVE_ENABLED=false` (on backend-listen, Cloud Run
+backend for inline sync, backend-sync and backend-sync-backfill) restores the
+earlier whole-batch binding: one conversation whose recording id equals the
+client id must contain the whole upload, and a miss drops the stamp. See
+`backend/utils/sync/ARCHITECTURE.md`.
+
+Staged rollout: `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (comma-separated uids;
+empty admits everyone) limits per-segment binding, the pinned live origin, the
+live revision fence and the open-live enrichment deferral to listed owners; any
+other uid behaves exactly as with the kill switch off, and the kill switch wins.
+The listen origin stamp is metadata only and ignores the list, so widening finds
+lineage already stamped. Prod lists one uid on all four services (keep them
+identical; a service without the variable admits everyone); dev leaves it unset.
+Refused eligible uploads log `event=sync_lineage_resolve outcome=not_allowlisted`
+with no ids. The metric comes from backend-sync, which is not scraped, so logs are
+the watch source. Widen only after the 48 h log gates in `ARCHITECTURE.md`, by
+clearing the list on all four services together, then watch 24 h.
 
 The bounded lookup filters by both start and finish so an old stamp-extended
 row cannot hide behind newer generations; a truncated overlap set proves no

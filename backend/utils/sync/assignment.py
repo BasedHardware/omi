@@ -8,7 +8,7 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 from copy import deepcopy
 from typing import TYPE_CHECKING, Callable, Optional
 
-from config.sync_lineage import sync_lineage_resolve_enabled
+from config.sync_lineage import sync_lineage_resolve_active_for
 from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
@@ -208,7 +208,7 @@ def assign_in_transaction(
         and target
         and isinstance(target.get('audio_timeline'), dict)
         and target.get('audio_timeline')
-        and sync_lineage_resolve_enabled()
+        and sync_lineage_resolve_active_for(user_ref.id)
     )
     if pinned_live_origin and target:
         # Live keeps emitting offsets against this durable first-audio pin.

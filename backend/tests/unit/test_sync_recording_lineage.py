@@ -51,6 +51,7 @@ def dependencies():
 @pytest.fixture(autouse=True)
 def default_flag(monkeypatch):
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
 
 
 def at(seconds):
@@ -296,7 +297,7 @@ async def test_kill_switch_off_reproduces_the_whole_batch_outcome(monkeypatch, d
     monkeypatch.setattr(pipeline, 'run_blocking', run_inline)
     chunks = upload_stamped_for_l()
     start, end = chunks[0]['started_at'].timestamp() - 1, chunks[-1]['finished_at'].timestamp()
-    assert not lineage_resolution_requested(ORIGIN, start, end)
+    assert not lineage_resolution_requested('u', ORIGIN, start, end)
     target = await pipeline._resolve_safety_wal_target(
         'u', gen_id(L), ORIGIN, pipeline.ConversationSource.omi, 'pendant', False, start, end
     )
@@ -307,7 +308,7 @@ async def test_kill_switch_off_reproduces_the_whole_batch_outcome(monkeypatch, d
 
 
 def test_upload_without_recording_id_keeps_temporal_assignment():
-    assert not lineage_resolution_requested(None, 1.0, 2.0)
+    assert not lineage_resolution_requested('u', None, 1.0, 2.0)
     store = seeded_store()
     s = gen_start(L + 3)
     chunk = sync_chunk(s + 61, s + 69, 'an old client upload without recording proof')
@@ -636,7 +637,7 @@ def test_decision_logging_cannot_fail_an_upload(lineage_db, monkeypatch, flag):
 
     monkeypatch.setattr(recording_lineage.logger, 'info', broken_handler)
     if flag == 'off':
-        assert not lineage_resolution_requested(ORIGIN, 1.0, 2.0)
+        assert not lineage_resolution_requested('u', ORIGIN, 1.0, 2.0)
     else:
         chunks = upload_straddling_next_two()
         assert list(resolve(chunks).values()) == [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2
@@ -742,7 +743,7 @@ def test_off_and_unrecognized_values_disable_it(monkeypatch, value, caplog):
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, value)
     assert not sync_lineage.sync_lineage_resolve_enabled()
     with caplog.at_level(logging.INFO, logger=recording_lineage.__name__):
-        assert not lineage_resolution_requested(ORIGIN, 1.0, 2.0)
+        assert not lineage_resolution_requested('u', ORIGIN, 1.0, 2.0)
     assert 'event=sync_lineage_resolve outcome=disabled' in caplog.text
 
 

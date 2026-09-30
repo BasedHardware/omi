@@ -149,6 +149,12 @@ overlay:
         CAPTURE_JEV_SHADOW_PERCENT:
           value: '0'
           category: rollout
+        # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
+        # the list for everyone. Keep this identical on backend-listen, backend, backend-sync and
+        # backend-sync-backfill; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+        SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+          category: rollout
     pusher:
       env:
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -413,6 +419,12 @@ overlay:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
+          # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
+          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync and
+          # backend-sync-backfill; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
       backend-sync:
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -514,6 +526,12 @@ overlay:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
+          # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
+          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync and
+          # backend-sync-backfill; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
       backend-sync-backfill:
         forbidden_env:
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
@@ -593,6 +611,12 @@ overlay:
             category: rollout
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
+            category: rollout
+          # Staged rollout of sync lineage binding (omi#19947): David first, 48 h watch, then clear
+          # the list for everyone. Keep this identical on backend-listen, backend, backend-sync and
+          # backend-sync-backfill; empty admits every user. Kill switch: SYNC_LINEAGE_RESOLVE_ENABLED=false.
+          SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: rollout
       backend-integration:
         forbidden_env:

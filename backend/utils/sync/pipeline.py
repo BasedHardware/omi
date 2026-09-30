@@ -145,7 +145,7 @@ from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
-from config.sync_lineage import sync_lineage_resolve_enabled
+from config.sync_lineage import sync_lineage_resolve_active_for
 from utils.sync.recording_lineage import fallback_segment_targets, lineage_resolution_requested, resolve_segment_targets
 from utils.sync.bridge import finish_sync_segment
 from utils.sync.assignment_errors import (
@@ -989,7 +989,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         return
 
     if (
-        sync_lineage_resolve_enabled()
+        sync_lineage_resolve_active_for(uid)
         and conversation_data.get('sync_live_target')
         and conversation_data.get('status') == 'in_progress'
     ):
@@ -1860,11 +1860,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # any geocode failure, so a miss never drops the user's location.
     geolocation = await async_resolve_geolocation(geolocation)
     # Recording-id uploads bind each VAD segment to its rollover generation after
-    # VAD (recording_lineage.py). With SYNC_LINEAGE_RESOLVE_ENABLED off, the whole
-    # batch resolves here as before: a unique match replaces the stamp, a miss drops
-    # it. Old clients without this proof retain their stamp either way.
+    # VAD (recording_lineage.py). With SYNC_LINEAGE_RESOLVE_ENABLED off, or a uid outside
+    # its allowlist, the whole batch resolves here as before: a unique match replaces the
+    # stamp, a miss drops it. Old clients without this proof retain their stamp either way.
     use_lineage = lineage_resolution_requested(
-        recording_session_id, audio_start_seconds, audio_end_seconds, job_id=job_id
+        uid, recording_session_id, audio_start_seconds, audio_end_seconds, job_id=job_id
     )
     if not use_lineage:
         target_conversation_id = await _resolve_safety_wal_target(

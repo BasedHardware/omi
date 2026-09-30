@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 
-from config.sync_lineage import sync_lineage_resolve_enabled
+from config.sync_lineage import sync_lineage_resolve_enabled, sync_lineage_resolve_uid_allowed
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class
 from utils.metrics import OMI_SYNC_LINEAGE_RESOLVE_TOTAL
 from utils.observability.fallback import record_fallback
@@ -72,6 +72,7 @@ OUTCOMES = (
     'interval_miss',
     'lookup_failed',
     'disabled',
+    'not_allowlisted',
 )
 
 
@@ -96,23 +97,30 @@ class LineagePlan:
 
 
 def lineage_resolution_requested(
+    uid: Optional[str],
     recording_session_id: Optional[str],
     audio_start_seconds: Optional[float],
     audio_end_seconds: Optional[float],
     *,
     job_id: Optional[str] = None,
 ) -> bool:
-    """True when this upload binds per segment; off records ``disabled`` for eligible uploads.
+    """True when this upload binds per segment; otherwise records why for eligible uploads.
 
     Eligibility is exactly the population the whole-batch resolver serves:
-    a recording id plus both audio bounds.
+    a recording id plus both audio bounds. The kill switch wins (``disabled``);
+    with it on, a uid outside ``SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST`` records
+    ``not_allowlisted`` and takes the same whole-batch path as the kill switch.
+    That decision line carries no job reference, so it names no user or row.
     """
     if not recording_session_id or audio_start_seconds is None or audio_end_seconds is None:
         return False
-    if sync_lineage_resolve_enabled():
-        return True
-    _emit(LineagePlan(targets={}, outcome='disabled', reason='none'), job_id)
-    return False
+    if not sync_lineage_resolve_enabled():
+        _emit(LineagePlan(targets={}, outcome='disabled', reason='none'), job_id)
+        return False
+    if not sync_lineage_resolve_uid_allowed(uid):
+        _emit(LineagePlan(targets={}, outcome='not_allowlisted', reason='none'), None)
+        return False
+    return True
 
 
 def _chain_end(row_id: str, redirects: Mapping[str, str]) -> str:
