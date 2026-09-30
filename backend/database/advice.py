@@ -44,7 +44,6 @@ def _sanitize_category(category: Optional[str]) -> str:
     return category.strip()
 
 
-
 def _sanitize_confidence(value: Any) -> float:
     if value is None:
         return 0.5

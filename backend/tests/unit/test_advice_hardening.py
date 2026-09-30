@@ -45,13 +45,13 @@ _mod("database._client", db=MagicMock())
 
 def _load():
     import importlib.util
+
     spec = importlib.util.spec_from_file_location("database.advice", str(BACKEND_DIR / "database" / "advice.py"))
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     sys.modules["database.advice"] = mod
     spec.loader.exec_module(mod)
     return mod
-
 
 
 advice = _load()
