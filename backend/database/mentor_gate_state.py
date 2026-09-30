@@ -47,6 +47,7 @@ CLAIM_TTL_SECONDS = 30
 # Expired local entries are dropped when their own key is read again, so a churned
 # user's key would otherwise sit on a long-lived process forever. Bound the map.
 _MAX_LOCAL_ENTRIES = 50000
+MAX_ID_LENGTH = 128
 
 _local: Dict[str, tuple[Dict[str, Any], float]] = {}
 # The mirror is read and written from the shared db/postprocess executors, so
@@ -55,12 +56,58 @@ _local: Dict[str, tuple[Dict[str, Any], float]] = {}
 _local_lock = threading.Lock()
 
 
+def _clean_id(value: Any) -> str:
+    """Normalize and validate user identifier."""
+    if not isinstance(value, str):
+        return ""
+    cleaned = value.strip()
+    if (
+        not cleaned
+        or len(cleaned) > MAX_ID_LENGTH
+        or any(c in cleaned for c in ("\r", "\n", "\0", " ", ":", "/", "\\"))
+    ):
+        return ""
+    return cleaned
+
+
+def _clean_ttl(ttl: Any, default: int) -> int:
+    """Sanitize TTL ensuring it is a positive integer bounded reasonably."""
+    if isinstance(ttl, bool) or not isinstance(ttl, int) or ttl <= 0:
+        return default
+    return ttl
+
+
+def _clean_state(state: Any) -> Optional[Dict[str, Any]]:
+    """Validate and copy state dictionary."""
+    if not isinstance(state, dict):
+        return None
+    return dict(state)
+
+
+def _resolve_redis(redis_client: Any = None) -> Any:
+    """Resolve Redis client with caller dependency injection support."""
+    if redis_client is not None:
+        return redis_client
+    try:
+        from database.redis_db import r
+
+        return r
+    except Exception:
+        return None
+
+
+def clear_local_cache() -> None:
+    """Thread-safe reset of the process-local mirror (useful for tests and maintenance)."""
+    with _local_lock:
+        _local.clear()
+
+
 def _redis_key(uid: str) -> str:
-    return f'{uid}:mentor_gate_eval_state'
+    return f"{uid}:mentor_gate_eval_state"
 
 
 def _claim_key(uid: str) -> str:
-    return f'{uid}:mentor_gate_eval_claim'
+    return f"{uid}:mentor_gate_eval_claim"
 
 
 def _read_local(uid: str) -> Optional[Dict[str, Any]]:
@@ -88,62 +135,85 @@ def _write_local(uid: str, state: Dict[str, Any], ttl: int) -> None:
                     _local.pop(key, None)
 
 
-def _read_shared(uid: str) -> Optional[Dict[str, Any]]:
+def _read_shared(uid: str, redis_client: Any = None) -> Optional[Dict[str, Any]]:
+    clean_uid = _clean_id(uid)
+    if not clean_uid:
+        return None
     try:
-        from database.redis_db import r
-
-        raw = r.get(_redis_key(uid))
+        r = _resolve_redis(redis_client)
+        if r is None:
+            return None
+        raw = r.get(_redis_key(clean_uid))
         if not raw:
             return None
         value = json.loads(raw)
         return value if isinstance(value, dict) else None
     except Exception as e:
-        logger.warning(f"mentor_gate_state read failed, falling open: {e}")
+        logger.warning("mentor_gate_state read failed, falling open: %s", e)
         return None
 
 
-def _write_shared(uid: str, state: Dict[str, Any], ttl: int) -> bool:
+def _write_shared(uid: str, state: Dict[str, Any], ttl: int, redis_client: Any = None) -> bool:
+    clean_uid = _clean_id(uid)
+    clean_state = _clean_state(state)
+    if not clean_uid or clean_state is None:
+        return False
+    valid_ttl = _clean_ttl(ttl, STATE_TTL_SECONDS)
     try:
-        from database.redis_db import r
-
-        r.set(_redis_key(uid), json.dumps(state), ex=ttl)
+        r = _resolve_redis(redis_client)
+        if r is None:
+            return False
+        payload = json.dumps(clean_state, default=str)
+        r.set(_redis_key(clean_uid), payload, ex=valid_ttl)
         return True
     except Exception as e:
-        logger.warning(f"mentor_gate_state write failed: {e}")
+        logger.warning("mentor_gate_state write failed: %s", e)
         return False
 
 
-def _claim_shared(uid: str, ttl: int) -> bool:
+def _claim_shared(uid: str, ttl: int = CLAIM_TTL_SECONDS, redis_client: Any = None) -> bool:
+    clean_uid = _clean_id(uid)
+    if not clean_uid:
+        return False
+    valid_ttl = _clean_ttl(ttl, CLAIM_TTL_SECONDS)
     try:
-        from database.redis_db import r
-
-        return bool(r.set(_claim_key(uid), '1', nx=True, ex=ttl))
+        r = _resolve_redis(redis_client)
+        if r is None:
+            # Fall open on cache outage: do not block mentor
+            return True
+        return bool(r.set(_claim_key(clean_uid), "1", nx=True, ex=valid_ttl))
     except Exception as e:
-        logger.warning(f"mentor_gate_state claim failed, falling open: {e}")
+        logger.warning("mentor_gate_state claim failed, falling open: %s", e)
         return True
 
 
-def _release_shared(uid: str) -> None:
+def _release_shared(uid: str, redis_client: Any = None) -> None:
+    clean_uid = _clean_id(uid)
+    if not clean_uid:
+        return
     try:
-        from database.redis_db import r
-
-        r.delete(_claim_key(uid))
+        r = _resolve_redis(redis_client)
+        if r is not None:
+            r.delete(_claim_key(clean_uid))
     except Exception as e:
-        logger.warning(f"mentor_gate_state release failed: {e}")
+        logger.warning("mentor_gate_state release failed: %s", e)
 
 
-def read(uid: str) -> Optional[Dict[str, Any]]:
+def read(uid: str, *, redis_client: Any = None) -> Optional[Dict[str, Any]]:
     """Last gate-evaluation record for a user, or None when there is none."""
-    state = _read_local(uid)
+    clean_uid = _clean_id(uid)
+    if not clean_uid:
+        return None
+    state = _read_local(clean_uid)
     if state is not None:
         return state
-    remote = _read_shared(uid)
+    remote = _read_shared(clean_uid, redis_client=redis_client) if redis_client is not None else _read_shared(clean_uid)
     if remote is not None:
-        _write_local(uid, remote, STATE_TTL_SECONDS)
+        _write_local(clean_uid, remote, STATE_TTL_SECONDS)
     return remote
 
 
-def read_authoritative(uid: str) -> Optional[Dict[str, Any]]:
+def read_authoritative(uid: str, *, redis_client: Any = None) -> Optional[Dict[str, Any]]:
     """Shared-tier read that bypasses (and refreshes) the local mirror.
 
     The mirror can be stale the moment any other host records an evaluation,
@@ -151,31 +221,58 @@ def read_authoritative(uid: str) -> Optional[Dict[str, Any]]:
     a possibly-outdated copy. Only the "evaluated recently -> skip" answer is
     allowed to come from the mirror.
     """
-    remote = _read_shared(uid)
+    clean_uid = _clean_id(uid)
+    if not clean_uid:
+        return None
+    remote = _read_shared(clean_uid, redis_client=redis_client) if redis_client is not None else _read_shared(clean_uid)
     if remote is not None:
-        _write_local(uid, remote, STATE_TTL_SECONDS)
+        _write_local(clean_uid, remote, STATE_TTL_SECONDS)
     return remote
 
 
-def claim(uid: str, ttl: int = CLAIM_TTL_SECONDS) -> bool:
+def claim(uid: str, ttl: int = CLAIM_TTL_SECONDS, *, redis_client: Any = None) -> bool:
     """Try to become the one worker evaluating this user right now."""
-    return _claim_shared(uid, ttl)
+    clean_uid = _clean_id(uid)
+    if not clean_uid:
+        return False
+    valid_ttl = _clean_ttl(ttl, CLAIM_TTL_SECONDS)
+    return (
+        _claim_shared(clean_uid, valid_ttl, redis_client=redis_client)
+        if redis_client is not None
+        else _claim_shared(clean_uid, valid_ttl)
+    )
 
 
-def release(uid: str) -> None:
+def release(uid: str, *, redis_client: Any = None) -> None:
     """Best-effort release; the TTL bounds a holder that crashes first."""
-    _release_shared(uid)
+    clean_uid = _clean_id(uid)
+    if not clean_uid:
+        return
+    if redis_client is not None:
+        _release_shared(clean_uid, redis_client=redis_client)
+    else:
+        _release_shared(clean_uid)
 
 
-def record(uid: str, state: Dict[str, Any], ttl: int = STATE_TTL_SECONDS) -> None:
+def record(uid: str, state: Dict[str, Any], ttl: int = STATE_TTL_SECONDS, *, redis_client: Any = None) -> None:
     """Persist a gate evaluation.
 
     Shared tier first, mirror only after it succeeds: an evaluation that never
     reached the shared tier must not throttle this pod either, or a Redis
     outage would silently tighten the debounce instead of falling open.
     """
-    if _write_shared(uid, state, ttl):
-        _write_local(uid, state, ttl)
+    clean_uid = _clean_id(uid)
+    clean_state = _clean_state(state)
+    if not clean_uid or clean_state is None:
+        return
+    valid_ttl = _clean_ttl(ttl, STATE_TTL_SECONDS)
+    write_ok = (
+        _write_shared(clean_uid, clean_state, valid_ttl, redis_client=redis_client)
+        if redis_client is not None
+        else _write_shared(clean_uid, clean_state, valid_ttl)
+    )
+    if write_ok:
+        _write_local(clean_uid, clean_state, valid_ttl)
     else:
         with _local_lock:
-            _local.pop(uid, None)
+            _local.pop(clean_uid, None)
