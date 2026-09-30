@@ -308,6 +308,16 @@ def test_adjacent_generations_inside_the_edge_allowance_are_ambiguous():
     assert result.targets == {chunk['id']: None} and result.reason == 'interval_miss'
 
 
+def test_overlapping_generations_never_pick_one():
+    """A row whose interval grew over its successor (e.g. an earlier stamp append) is ambiguous."""
+    rows = [generation(1, finished_at=at(gen_start(2) + DURATION)), generation(2)]
+    chunk = sync_chunk(gen_start(2) + 61, gen_start(2) + 69, live_text(2, 1))
+    result = select_segment_targets(
+        rows, ORIGIN, spans([chunk]), stamped_target='STAMP', source='omi', client_device_id='pendant', is_locked=False
+    )
+    assert result.targets == {chunk['id']: 'STAMP'} and result.reason == 'interval_miss'
+
+
 @pytest.mark.parametrize(
     'mutation',
     [
