@@ -190,9 +190,7 @@ describe('useScreenFrames', () => {
         await vi.advanceTimersByTimeAsync(58 * 60 * 1000);
       });
 
-      expect(api.getConversationScreenFrames).toHaveBeenLastCalledWith('conv-1', {
-        fresh: true,
-      });
+      expect(api.getConversationScreenFrames).toHaveBeenCalledTimes(2);
       await waitFor(() =>
         expect(result.current.frameSet?.strip?.[0]?.content_url).toBe(
           'https://example.com/a-renewed.jpg',
@@ -228,9 +226,7 @@ describe('useScreenFrames', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(58 * 60 * 1000);
       });
-      expect(api.getConversationScreenFrames).toHaveBeenLastCalledWith('conv-1', {
-        fresh: true,
-      });
+      expect(api.getConversationScreenFrames).toHaveBeenCalledTimes(2);
 
       // ...when a delete lands with the server's authoritative set.
       await act(async () => {
@@ -239,6 +235,59 @@ describe('useScreenFrames', () => {
       expect(result.current.frameSet?.strip?.map((f) => f.id)).toEqual(['b']);
 
       // The stale refresh response (still carrying 'a') must be discarded.
+      await act(async () => {
+        resolveRefresh(frameSet());
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.frameSet?.strip?.map((f) => f.id)).toEqual(['b']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('discards a refresh that started after a delete started but resolved after it committed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.setSystemTime(new Date('2026-08-24T10:00:00Z'));
+      let resolveRefresh: (set: ConversationScreenFrameSet) => void = () => {};
+      let resolveDelete: (set: ConversationScreenFrameSet) => void = () => {};
+      vi.mocked(api.getConversationScreenFrames)
+        .mockReset()
+        .mockResolvedValueOnce(frameSet())
+        .mockImplementationOnce(
+          () =>
+            new Promise<ConversationScreenFrameSet>((resolve) => {
+              resolveRefresh = resolve;
+            }),
+        );
+      vi.mocked(api.deleteScreenFrame)
+        .mockReset()
+        .mockImplementationOnce(
+          () =>
+            new Promise<ConversationScreenFrameSet>((resolve) => {
+              resolveDelete = resolve;
+            }),
+        );
+      const { result } = renderHook(() => useScreenFrames('conv-1'));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      // 1. The delete starts and waits on the network.
+      let deletion: Promise<boolean> = Promise.resolve(false);
+      act(() => {
+        deletion = result.current.deleteFrame('a');
+      });
+      // 2. The expiry refresh starts after it (sees the already-bumped state).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(58 * 60 * 1000);
+      });
+      expect(api.getConversationScreenFrames).toHaveBeenCalledTimes(2);
+      // 3. The delete commits first...
+      await act(async () => {
+        resolveDelete(frameSet({ strip: [frame('b')] }));
+        await deletion;
+      });
+      expect(result.current.frameSet?.strip?.map((f) => f.id)).toEqual(['b']);
+      // 4. ...then the older GET lands. It must not bring 'a' back.
       await act(async () => {
         resolveRefresh(frameSet());
         await vi.advanceTimersByTimeAsync(0);

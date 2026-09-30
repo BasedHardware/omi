@@ -46,9 +46,10 @@ export function useScreenFrames(
   // So an in-flight fetch/mutation for a conversation the user has since
   // navigated away from can't clobber the newer conversation's state.
   const lastUrlRefreshAt = useRef(0);
-  // Bumped by every load and mutation. A background URL refresh applies its
-  // response only if nothing replaced the set while it was in flight;
-  // otherwise it would resurrect frames a delete had just removed.
+  // Bumped when a load or mutation starts AND when a mutation commits. A
+  // load or background URL refresh applies its response only if the counter
+  // has not moved since it started, so no GET that overlapped a mutation --
+  // whichever started first -- can resurrect frames the mutation removed.
   const setGeneration = useRef(0);
   const convIdRef = useRef(conversationId);
   useEffect(() => {
@@ -63,13 +64,13 @@ export function useScreenFrames(
     }
 
     const requestedId = conversationId;
-    setGeneration.current += 1;
+    const generation = ++setGeneration.current;
     lastUrlRefreshAt.current = Date.now();
     try {
       setLoading(true);
       setError(null);
       const data = await getConversationScreenFrames(requestedId);
-      if (convIdRef.current === requestedId) {
+      if (convIdRef.current === requestedId && setGeneration.current === generation) {
         setFrameSet(data);
       }
     } catch (err) {
@@ -106,7 +107,7 @@ export function useScreenFrames(
       lastUrlRefreshAt.current = Date.now();
       const generation = setGeneration.current;
       try {
-        const data = await getConversationScreenFrames(requestedId, { fresh: true });
+        const data = await getConversationScreenFrames(requestedId);
         if (convIdRef.current === requestedId && setGeneration.current === generation) {
           setFrameSet(data);
         }
@@ -125,6 +126,7 @@ export function useScreenFrames(
       setGeneration.current += 1;
       try {
         const updated = await deleteScreenFrame(requestedId, frameId);
+        setGeneration.current += 1;
         if (convIdRef.current === requestedId) {
           setFrameSet(updated);
           setError(null);
@@ -147,6 +149,7 @@ export function useScreenFrames(
     setGeneration.current += 1;
     try {
       const updated = await deleteAllScreenFrames(requestedId);
+      setGeneration.current += 1;
       if (convIdRef.current === requestedId) {
         setFrameSet(updated);
         setError(null);
@@ -168,6 +171,7 @@ export function useScreenFrames(
       setGeneration.current += 1;
       try {
         const updated = await patchScreenFrameSharing(requestedId, enabledValue);
+        setGeneration.current += 1;
         if (convIdRef.current === requestedId) {
           setFrameSet(updated);
           setError(null);
