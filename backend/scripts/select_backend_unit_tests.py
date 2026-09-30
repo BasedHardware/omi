@@ -310,6 +310,18 @@ AREA_TESTS = (
         (),
         ('tests/unit/test_rate_*.py',),
     ),
+    (
+        (
+            'backend/database/users.py',
+            'backend/database/csat.py',
+        ),
+        (),
+        (
+            'tests/unit/test_firestore_query_shapes.py',
+            'tests/unit/test_firestore_index_rules.py',
+            'tests/unit/test_firestore_shape_recorder.py',
+        ),
+    ),
 )
 
 
