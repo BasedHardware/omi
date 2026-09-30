@@ -1662,8 +1662,20 @@ _add(
         setup=_seed_daily_summary_recipient,
     )
 )
-_add(DriverEntry('database.notifications.get_users_id_in_timezones', base={'timezones': ['UTC']}))
-_add(DriverEntry('database.notifications.get_users_token_in_timezones', base={'timezones': ['UTC']}))
+_add(
+    DriverEntry(
+        'database.notifications.get_users_id_in_timezones',
+        base={'timezones': ['UTC']},
+        setup=_seed_daily_summary_recipient,
+    )
+)
+_add(
+    DriverEntry(
+        'database.notifications.get_users_token_in_timezones',
+        base={'timezones': ['UTC']},
+        setup=_seed_daily_summary_recipient,
+    )
+)
 _add(DriverEntry('database.notifications.remove_bulk_tokens', base={'tokens': ['token-1', 'token-2']}))
 _add(DriverEntry('database.notifications.remove_invalid_token', base={'token': 'token-1'}))
 _add(

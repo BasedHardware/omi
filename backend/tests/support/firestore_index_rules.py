@@ -22,6 +22,7 @@ class IndexSpec:
     uncertain: bool = False
     reason: str = ''
     composite: bool = True
+    validity_uncertain: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -55,6 +56,7 @@ def candidate_index(shape: QueryShape) -> IndexSpec:
     arrays: set[str] = set()
     ranges: set[str] = set()
     reasons = []
+    validity_reasons = []
     for predicate in shape.filters:
         operator = predicate.operator.replace('-', '_')
         if operator in EQUALITY_OPERATORS:
@@ -66,6 +68,7 @@ def candidate_index(shape: QueryShape) -> IndexSpec:
         else:
             equalities.add(predicate.field)
             reasons.append(f'unsupported filter operator: {operator}')
+            validity_reasons.append(f'unsupported filter operator: {operator}')
     equalities.discard('__name__')
     explicitly_ordered = {field for field, _ in shape.orders}
     equalities.difference_update(
@@ -76,12 +79,14 @@ def candidate_index(shape: QueryShape) -> IndexSpec:
     if _has_or(shape.filter_tree):
         reasons.append('OR branches require per-disjunction oracle validation; candidate is the union of fields')
     if len(arrays) > 1 or arrays & (equalities | ranges):
-        reasons.append('multiple array fields or mixed array/scalar predicates require query-validity validation')
+        reason = 'multiple array fields or mixed array/scalar predicates require query-validity validation'
+        reasons.append(reason)
+        validity_reasons.append(reason)
     ordered = [field for field, _ in shape.orders]
     if len(ordered) != len(set(ordered)) or ('__name__' in ordered and ordered[-1] != '__name__'):
-        reasons.append(
-            'duplicate order fields or a non-terminal explicit __name__ order require query-validity validation'
-        )
+        reason = 'duplicate order fields or a non-terminal explicit __name__ order require query-validity validation'
+        reasons.append(reason)
+        validity_reasons.append(reason)
     orders = [
         (field, DESC if mode == ASC else ASC) if shape.limit_to_last else (field, mode) for field, mode in shape.orders
     ]
@@ -117,6 +122,7 @@ def candidate_index(shape: QueryShape) -> IndexSpec:
         uncertain=bool(reasons),
         reason='; '.join(dict.fromkeys(reasons)),
         composite=len(used) > 1,
+        validity_uncertain=bool(validity_reasons),
     )
 
 
@@ -199,9 +205,14 @@ def is_served(shape: QueryShape, manifest: Mapping[str, Any]) -> bool:
 
     An uncertain shape is still reported by the guard even if this returns True.
     OR service and partial-index merging are not asserted without the oracle.
+    A validity-uncertain shape (possibly-invalid query) is never served: a
+    declared index cannot establish that the query itself is valid, so it must
+    stay in the uncertainty ledger until the real-Firestore oracle exists.
     """
     spec = candidate_index(shape)
     if _has_or(shape.filter_tree):
+        return False
+    if spec.validity_uncertain:
         return False
     if any(matches_index(spec, entry) for entry in manifest.get('indexes', ())):
         return True

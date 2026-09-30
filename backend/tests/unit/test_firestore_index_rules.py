@@ -177,6 +177,28 @@ def test_collection_group_descending_single_field_also_serves_equality():
     )
 
 
+def test_validity_uncertain_shape_stays_unserved_even_with_matching_manifest_index():
+    """A declared index cannot prove an invalid query is valid.
+
+    Two ``array_contains`` fields are validity-uncertain; the generated
+    candidate index (with a manifest entry matching it exactly) must not flip
+    the shape to served, or the uncertainty ledger would silently lose it.
+    """
+    query = shape([('tags', 'array_contains'), ('labels', 'array_contains')])
+    spec = candidate_index(query)
+    assert spec.uncertain
+    assert spec.validity_uncertain
+    assert not is_served(query, {'indexes': [entry(spec.fields)]})
+
+
+def test_unsupported_operator_stays_unserved_even_with_matching_manifest_index():
+    """An operator the analyzer cannot classify keeps the shape out of served."""
+    query = shape([('status', 'regex')])
+    spec = candidate_index(query)
+    assert spec.validity_uncertain
+    assert not is_served(query, {'indexes': [entry(spec.fields)]})
+
+
 def test_single_field_exemptions_wildcard_parent_and_specific_override():
     query = shape([('metadata.time', '>')])
     base = [{'collectionGroup': 'conversations', 'fieldPath': '*', 'indexes': []}]
