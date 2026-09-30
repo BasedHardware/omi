@@ -79,6 +79,18 @@ def _storage(receipt: RecurrenceInboxReceipt) -> dict[str, Any]:
     return payload
 
 
+def _clean_str(value: object, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string")
+    return value.strip()
+
+
+def _clean_generation(value: object) -> int:
+    if type(value) is not int or value < 0:
+        raise ValueError("account_generation must be a non-negative integer")
+    return value
+
+
 def enqueue_recurrence_signal(
     uid: str,
     signal: CanonicalRecurrenceSignal,
@@ -87,18 +99,20 @@ def enqueue_recurrence_signal(
     firestore_client: Any = None,
 ) -> RecurrenceInboxReceipt:
     """Persist before mutation; completed receipts never reopen within a generation."""
+    clean_uid = _clean_str(uid, 'uid')
+    clean_gen = _clean_generation(account_generation)
     client = _get_db(firestore_client)
-    receipt_id = _receipt_id(uid, signal.stable_loop_key, account_generation)
-    ref = _receipt_ref(uid, receipt_id, firestore_client=client)
+    receipt_id = _receipt_id(clean_uid, signal.stable_loop_key, clean_gen)
+    ref = _receipt_ref(clean_uid, receipt_id, firestore_client=client)
     transaction = client.transaction()
     now = datetime.now(timezone.utc)
 
     @firestore.transactional
     def apply(write_transaction):
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
-            uid=uid,
-            account_generation=account_generation,
+            _control_ref(clean_uid, firestore_client=client).get(transaction=write_transaction),
+            uid=clean_uid,
+            account_generation=clean_gen,
         )
         snapshot = ref.get(transaction=write_transaction)
         if snapshot.exists:
@@ -110,7 +124,7 @@ def enqueue_recurrence_signal(
         receipt = RecurrenceInboxReceipt(
             receipt_id=receipt_id,
             loop_key=signal.stable_loop_key,
-            account_generation=account_generation,
+            account_generation=clean_gen,
             status=RecurrenceInboxStatus.pending,
             signal=signal,
             created_at=now,
@@ -129,14 +143,18 @@ def list_pending_recurrence_receipts(
     limit: int = 100,
     firestore_client: Any = None,
 ) -> list[RecurrenceInboxReceipt]:
+    if not isinstance(uid, str) or not uid.strip():
+        return []
+    clean_uid = uid.strip()
+    safe_limit = max(1, min(int(limit) if isinstance(limit, int) else 100, 500))
     query = (
         _get_db(firestore_client)
         .collection('users')
-        .document(uid)
+        .document(clean_uid)
         .collection(RECURRENCE_INBOX_COLLECTION)
         .where(filter=FieldFilter('status', '==', RecurrenceInboxStatus.pending.value))
         .where(filter=FieldFilter('account_generation', '==', account_generation))
-        .limit(limit)
+        .limit(safe_limit)
     )
     return parse_snapshots(RecurrenceInboxReceipt, query.stream())
 
@@ -149,25 +167,29 @@ def complete_recurrence_receipt(
     account_generation: int,
     firestore_client: Any = None,
 ) -> None:
+    clean_uid = _clean_str(uid, 'uid')
+    clean_receipt_id = _clean_str(receipt_id, 'receipt_id')
+    clean_gen = _clean_generation(account_generation)
+    outcome_val = outcome.value if isinstance(outcome, RecurrenceOutcomeKind) else str(outcome)
     client = _get_db(firestore_client)
-    ref = _receipt_ref(uid, receipt_id, firestore_client=client)
+    ref = _receipt_ref(clean_uid, clean_receipt_id, firestore_client=client)
     transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
-            uid=uid,
-            account_generation=account_generation,
+            _control_ref(clean_uid, firestore_client=client).get(transaction=write_transaction),
+            uid=clean_uid,
+            account_generation=clean_gen,
         )
         snapshot = ref.get(transaction=write_transaction)
-        if not snapshot.exists or _from_snapshot(snapshot).account_generation != account_generation:
+        if not snapshot.exists or _from_snapshot(snapshot).account_generation != clean_gen:
             raise RecurrenceGenerationMismatchError('recurrence receipt generation mismatch')
         write_transaction.update(
             ref,
             {
                 'status': RecurrenceInboxStatus.completed.value,
-                'last_outcome': outcome.value,
+                'last_outcome': outcome_val,
                 'last_error_code': None,
                 'attempts': firestore.Increment(1),
                 'updated_at': datetime.now(timezone.utc),
@@ -185,24 +207,28 @@ def retry_recurrence_receipt(
     account_generation: int,
     firestore_client: Any = None,
 ) -> None:
+    clean_uid = _clean_str(uid, 'uid')
+    clean_receipt_id = _clean_str(receipt_id, 'receipt_id')
+    clean_gen = _clean_generation(account_generation)
+    safe_error_code = str(error_code or '')[:128]
     client = _get_db(firestore_client)
-    ref = _receipt_ref(uid, receipt_id, firestore_client=client)
+    ref = _receipt_ref(clean_uid, clean_receipt_id, firestore_client=client)
     transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
         _validate_generation(
-            _control_ref(uid, firestore_client=client).get(transaction=write_transaction),
-            uid=uid,
-            account_generation=account_generation,
+            _control_ref(clean_uid, firestore_client=client).get(transaction=write_transaction),
+            uid=clean_uid,
+            account_generation=clean_gen,
         )
         snapshot = ref.get(transaction=write_transaction)
-        if not snapshot.exists or _from_snapshot(snapshot).account_generation != account_generation:
+        if not snapshot.exists or _from_snapshot(snapshot).account_generation != clean_gen:
             raise RecurrenceGenerationMismatchError('recurrence receipt generation mismatch')
         write_transaction.update(
             ref,
             {
-                'last_error_code': error_code[:128],
+                'last_error_code': safe_error_code,
                 'attempts': firestore.Increment(1),
                 'updated_at': datetime.now(timezone.utc),
             },
