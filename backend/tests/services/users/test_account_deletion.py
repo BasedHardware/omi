@@ -2005,3 +2005,53 @@ def test_reconcile_does_not_query_auth_for_legacy_durable_intent(monkeypatch):
     claim.assert_called_once_with('uid1')
     submit.assert_called_once_with('job-1')
     account_deletion.auth.get_user.assert_not_called()
+
+
+def test_reconcile_transitions_capped_records_to_terminal_failed(monkeypatch):
+    pending = [{
+        'uid': 'uid_capped',
+        'wipe_status': 'failed',
+        'wipe_attempts': 10,
+        'wipe_error': 'Queue 404 does not exist',
+    }]
+
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    mark_terminal = MagicMock()
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_terminal_failed', mark_terminal)
+    telemetry = MagicMock()
+    monkeypatch.setattr(account_deletion, '_emit_deletion_telemetry', telemetry)
+    claim = MagicMock()
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', claim)
+
+    summary = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert summary == {'requeued': 0, 'skipped': 1}
+    assert mark_terminal.called
+    assert mark_terminal.call_args[0][0] == 'uid_capped'
+    assert mark_terminal.call_args[1]['reason'] == 'reconciliation_attempts_exhausted'
+    assert not claim.called
+
+
+def test_reconcile_marks_terminal_when_enqueue_fails_and_hits_cap(monkeypatch):
+    pending = [{
+        'uid': 'uid_enqueue_capped',
+        'wipe_status': 'failed',
+        'wipe_attempts': 9,
+        'wipe_job_id': 'job-123',
+    }]
+
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', lambda uid: uid)
+    monkeypatch.setattr(account_deletion, 'enqueue_account_deletion_wipe', MagicMock(side_effect=Exception('404 Queue not found')))
+    mark_terminal = MagicMock()
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_terminal_failed', mark_terminal)
+    telemetry = MagicMock()
+    monkeypatch.setattr(account_deletion, '_emit_deletion_telemetry', telemetry)
+
+    summary = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert summary == {'requeued': 0, 'skipped': 1}
+    assert mark_terminal.called
+    assert mark_terminal.call_args[0][0] == 'uid_enqueue_capped'
+    assert mark_terminal.call_args[1]['reason'] == 'enqueue_attempts_exhausted'
+

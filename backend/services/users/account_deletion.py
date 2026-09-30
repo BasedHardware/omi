@@ -594,6 +594,30 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
         if not uid:
             skipped += 1
             continue
+
+        raw_attempts = record.get('wipe_attempts')
+        attempts = raw_attempts if isinstance(raw_attempts, int) and raw_attempts > 0 else 0
+        raw_max_attempts = getattr(users_db, 'DELETION_WIPE_MAX_ATTEMPTS', 10)
+        max_attempts = raw_max_attempts if isinstance(raw_max_attempts, int) else 10
+        if attempts >= max_attempts:
+            users_db.mark_user_deletion_wipe_terminal_failed(
+                uid, reason='reconciliation_attempts_exhausted', error=str(record.get('wipe_error', ''))
+            )
+            _emit_deletion_telemetry(
+                uid,
+                ACCOUNT_DELETION_WIPE_FAILED,
+                {
+                    'failed_operations': ['reconciliation_attempts_exhausted'],
+                    'retry_count': attempts,
+                    'terminal': True,
+                },
+            )
+            logger.critical(
+                f'delete_account reconciliation permanently aborted for {uid}: attempt cap {attempts} reached'
+            )
+            skipped += 1
+            continue
+
         # ``deleting_auth`` is a legacy durable intent from the former
         # two-transaction admission path. The worker now owns Firebase Auth
         # deletion, so a stale legacy intent is safe to claim even when the
@@ -640,7 +664,25 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
             enqueue_account_deletion_wipe(wipe_job_id)
         except Exception as e:
             logger.error(f'delete_account reconciliation enqueue failed for {uid}: {sanitize(str(e))}')
-            _mark_wipe_failed_after_enqueue_error(uid, e)
+            new_attempts = attempts + 1
+            if new_attempts >= max_attempts:
+                users_db.mark_user_deletion_wipe_terminal_failed(
+                    uid, reason='enqueue_attempts_exhausted', error=str(e)
+                )
+                _emit_deletion_telemetry(
+                    uid,
+                    ACCOUNT_DELETION_WIPE_FAILED,
+                    {
+                        'failed_operations': ['enqueue_attempts_exhausted'],
+                        'retry_count': new_attempts,
+                        'terminal': True,
+                    },
+                )
+                logger.critical(
+                    f'delete_account reconciliation permanently failed for {uid} after {new_attempts} attempts: {sanitize(str(e))}'
+                )
+            else:
+                _mark_wipe_failed_after_enqueue_error(uid, e)
             skipped += 1
             continue
         requeued += 1
