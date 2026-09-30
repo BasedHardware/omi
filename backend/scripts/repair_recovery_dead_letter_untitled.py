@@ -16,19 +16,34 @@ preserved separately and dropped with a counted warning; other corruption fails.
 Cursor checkpoints advance only after a page drains;
 processed IDs cover crashes mid-page. Errors remain retryable on resume.
 
---artifact-uri gs://bucket/prefix publishes run files (including audit.key) as
-immutable objects behind a generation-checked manifest.json. New prefixes must
-be empty. Resume downloads the published snapshot while holding the local lock;
-local files remain authoritative until the next upload. Uploads run after each
-drained page checkpoint, after reconciliation, and in finally on exit. SIGTERM
-requests that exit path. --rollback accepts a logical gs://bucket/prefix/audit.jsonl
-URI or the prefix itself; use a separate target prefix for rollback artifacts.
-run.lock and incomplete atomic-save .tmp files are local only. Concurrent writers
-or failed publication abort with nonzero status; restart using --resume. Prior
-local artifacts are archived beside the run directory before downloading.
-Uncatchable termination or failed publication can leave the last page only
-in local storage; only the last published snapshot is guaranteed durable. Keep
-bucket access restricted: audit.key decrypts the audit's before/after states.
+--artifact-uri gs://bucket/prefix publishes a generation-checked snapshot plus
+immutable intents/<decision_id>.json and receipts/<decision_id>/<sequence>.json.
+config.json and audit.key must be published before the first intent. Every intent
+must reach GCS BEFORE its row's Firestore transaction; outcome/projection receipts
+follow each row. Resume/reconciliation/rollback enumerate these objects and merge
+them into the local journals, even if no page snapshot was ever published. Missing
+receipts are recovered using the existing full-row after digest. GCS failures
+stop further mutations; an ambiguous upload permits a mutation only if identical
+bytes can be read back from its immutable object.
+
+lease.json fences each prefix with an owner token, expiry and generation match.
+It lasts 120 seconds and renews every 40 seconds, on publication, and before each
+transaction/write. Active leases reject another resume or rollback. Expired or
+released leases admit a new reconciling owner; it cannot mutate until durable
+intents/receipts have been imported and reconciled. Lost/expired ownership stops
+before the next mutation. A lease cannot cancel an already submitted transaction;
+its published intent remains available for recovery. Rollback holds leases for
+both its source and its distinct target prefix. Normal exit releases ownership.
+
+Snapshots mirror every drained page, including frozen/partial pages, rollback
+batches, after reconciliation, and in finally. SIGTERM requests that exit path.
+--rollback accepts a logical gs://bucket/prefix/audit.jsonl URI or the prefix;
+physical snapshots live under _snapshots/. New prefixes must be empty. Local files
+remain authoritative during execution; downloads hold the local lock and archive
+prior files separately. run.lock and incomplete atomic-save .tmp files stay local.
+An uncatchable kill may lose the newest summary/cursor, but each committed mutation
+already has a durable intent and encryption key, independent of those snapshots.
+Keep the entire prefix and restrict access: audit.key decrypts before/after states.
 
 Calendar safety protects nonempty rule discards: stored overlaps and connected
 Google Calendar accounts skip without provider calls/token-refresh writes. Empty
@@ -74,7 +89,13 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
 from cryptography.fernet import Fernet
-from google.api_core.exceptions import Aborted, Conflict, DeadlineExceeded, ServiceUnavailable
+from google.api_core.exceptions import (
+    Aborted,
+    Conflict,
+    DeadlineExceeded,
+    NotFound,
+    ServiceUnavailable,
+)
 from google.cloud import firestore, storage
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -304,6 +325,116 @@ class RateLimiter:
             time.sleep(delay)
 
 
+class ArtifactError(RuntimeError):
+    """A fatal durability or ownership failure; never convert it to a row skip."""
+
+
+class LeaseLost(ArtifactError):
+    pass
+
+
+class RunLease:
+    TTL = 120.0
+
+    def __init__(self, blob: Any, *, clock: Callable[[], float] = time.time):
+        self.blob = blob
+        self.clock = clock
+        self.owner = uuid.uuid4().hex
+        self.generation: int | None = None
+        self.expires = 0.0
+        self.ready = False
+        self.lost = False
+        self.lock = threading.RLock()
+        self.stop = threading.Event()
+        self.thread: threading.Thread | None = None
+
+    def _write(self, generation: int, *, ready: bool, expires: float) -> None:
+        self.blob.upload_from_string(
+            json.dumps({'owner': self.owner, 'expires': expires, 'state': 'ready' if ready else 'reconciling'}),
+            content_type='application/json',
+            if_generation_match=generation,
+            timeout=10,
+            retry=None,
+        )
+        self.generation = int(self.blob.generation)
+        self.expires = expires
+        self.ready = ready
+
+    def acquire(self, *, fresh: bool = False) -> None:
+        with self.lock:
+            if self.generation is not None:
+                self.renew()
+                return
+            generation = 0
+            try:
+                self.blob.reload(timeout=10, retry=None)
+                generation = int(self.blob.generation)
+                prior = json.loads(self.blob.download_as_bytes(if_generation_match=generation, timeout=10, retry=None))
+                expiry = prior.get('expires')
+                if fresh or not isinstance(expiry, (int, float)) or not math.isfinite(expiry) or expiry > self.clock():
+                    raise LeaseLost('artifact run lease is occupied')
+            except NotFound:
+                pass
+            try:
+                self._write(generation, ready=fresh, expires=self.clock() + self.TTL)
+            except Exception:
+                self.lost = True
+                raise LeaseLost('artifact run lease acquisition failed') from None
+
+    def renew(self, *, require_ready: bool = False, reconciled: bool = False) -> None:
+        with self.lock:
+            if self.lost or self.generation is None or self.expires <= self.clock():
+                self.lost = True
+                raise LeaseLost('artifact run lease lost or expired')
+            if require_ready and not self.ready:
+                raise LeaseLost('artifact run requires reconciliation')
+            try:
+                self.blob.reload(timeout=10, retry=None)
+                if int(self.blob.generation) != self.generation:
+                    raise LeaseLost('artifact run lease generation changed')
+                record = json.loads(
+                    self.blob.download_as_bytes(if_generation_match=self.generation, timeout=10, retry=None)
+                )
+                if (
+                    record.get('owner') != self.owner
+                    or record.get('expires') != self.expires
+                    or self.expires <= self.clock()
+                ):
+                    raise LeaseLost('artifact run lease owner changed')
+                self._write(self.generation, ready=self.ready or reconciled, expires=self.clock() + self.TTL)
+            except Exception:
+                self.lost = True
+                self.stop.set()
+                raise LeaseLost('artifact run lease renewal failed') from None
+
+    def start(self) -> None:
+        if self.thread is not None:
+            return
+
+        def heartbeat() -> None:
+            while not self.stop.wait(self.TTL / 3):
+                try:
+                    self.renew()
+                except ArtifactError:
+                    return  # all subsequent publications/mutations fail closed
+
+        self.thread = threading.Thread(target=heartbeat, name='repair-artifact-lease', daemon=True)
+        self.thread.start()
+
+    def close(self) -> None:
+        self.stop.set()
+        if self.thread is not None:
+            self.thread.join(timeout=1)
+        with self.lock:
+            if self.generation is None or self.lost:
+                return
+            try:
+                self._write(self.generation, ready=False, expires=0.0)
+            except Exception:
+                pass  # generation fence prevents releasing another owner's lease
+            self.lost = True
+
+
 class ArtifactMirror:
     """Publish immutable files through one generation-fenced snapshot manifest.
 
@@ -312,7 +443,7 @@ class ArtifactMirror:
     run.lock and incomplete atomic-save temporaries are local control files.
     """
 
-    def __init__(self, uri: str, client: Any):
+    def __init__(self, uri: str, client: Any, *, heartbeat: bool = False):
         parsed = urlsplit(uri)
         prefix = parsed.path.strip('/')
         if (
@@ -331,8 +462,11 @@ class ArtifactMirror:
         self.generation = 0
         self.files: dict[str, Any] = {}
         self.failed = False
+        self.lease = RunLease(self.bucket.blob(self.prefix + 'lease.json'))
+        self.heartbeat = heartbeat
 
     def publish(self, files: dict[str, Any]) -> None:
+        self.lease.renew()
         try:
             self.manifest.upload_from_string(
                 json.dumps({'version': 1, 'files': files}, sort_keys=True),
@@ -350,9 +484,15 @@ class ArtifactMirror:
     def create(self) -> None:
         if next(iter(self.client.list_blobs(self.bucket, prefix=self.prefix, max_results=1)), None) is not None:
             raise ValueError('artifact prefix is not empty')
+        self.lease.acquire(fresh=True)
+        if self.heartbeat:
+            self.lease.start()
         self.publish({})  # generation=0 also fences racing new-run reservations
 
     def download(self, path: Path, *, archive_parent: Path | None = None) -> None:
+        self.lease.acquire()
+        if self.heartbeat:
+            self.lease.start()
         self.manifest.reload()
         self.generation = int(self.manifest.generation)
         snapshot = json.loads(self.manifest.download_as_bytes(if_generation_match=self.generation))
@@ -398,6 +538,7 @@ class ArtifactMirror:
             os.replace(temporary, destination)
 
     def upload(self, path: Path) -> None:
+        self.lease.renew()
         if self.failed:
             raise RuntimeError('artifact publication requires fresh resume')
         files = deepcopy(self.files)
@@ -424,6 +565,68 @@ class ArtifactMirror:
             if int(self.manifest.generation) != self.generation:
                 self.failed = True
                 raise RuntimeError('concurrent artifact writer')
+
+    def immutable(self, name: str, record: dict[str, Any], *, intent: bool = False) -> None:
+        if self.failed:
+            raise ArtifactError('artifact publication stopped')
+        self.lease.renew(require_ready=intent)
+        data = json.dumps(record, sort_keys=True).encode()
+        blob = self.bucket.blob(self.prefix + name)
+        try:
+            blob.upload_from_string(data, if_generation_match=0, timeout=10)
+        except Exception:
+            # The server may have accepted an upload whose response was lost.
+            # Only identical durable bytes permit the mutation or receipt retry.
+            try:
+                blob.reload(timeout=10)
+                if blob.download_as_bytes(if_generation_match=int(blob.generation), timeout=10) == data:
+                    return
+            except Exception:
+                pass
+            self.failed = True
+            raise ArtifactError('immutable artifact publication failed') from None
+
+    def publish_intent(self, path: Path, record: dict[str, Any]) -> None:
+        if 'audit.key' not in self.files or 'config.json' not in self.files:
+            self.upload(path)  # encryption key/config must survive before intent
+        self.immutable(f"intents/{record['decision_id']}.json", record, intent=True)
+
+    def import_events(self, log: 'RunLog') -> None:
+        self.lease.renew()
+        intents = {record['decision_id']: record for record in log.read('audit.jsonl')}
+        for blob in self.client.list_blobs(self.bucket, prefix=self.prefix + 'intents/'):
+            blob.reload()
+            record = json.loads(blob.download_as_bytes(if_generation_match=int(blob.generation)))
+            if not isinstance(record, dict) or blob.name != self.prefix + f"intents/{record.get('decision_id')}.json":
+                raise ArtifactError('invalid durable intent')
+            existing = intents.get(record['decision_id'])
+            if existing is not None:
+                if existing != record:
+                    raise ArtifactError('durable intent differs from local journal')
+                continue
+            log.append_local('audit.jsonl', record)
+            intents[record['decision_id']] = record
+        receipts = []
+        for blob in self.client.list_blobs(self.bucket, prefix=self.prefix + 'receipts/'):
+            blob.reload()
+            record = json.loads(blob.download_as_bytes(if_generation_match=int(blob.generation)))
+            if (
+                not isinstance(record, dict)
+                or not isinstance(record.get('receipt_seq'), int)
+                or record['receipt_seq'] < 1
+                or blob.name != self.prefix + f"receipts/{record.get('decision_id')}/{record['receipt_seq']:020d}.json"
+                or record['decision_id'] not in intents
+                or record.get('job_id') != intents[record['decision_id']].get('job_id')
+            ):
+                raise ArtifactError('invalid durable receipt')
+            receipts.append(record)
+        for record in sorted(receipts, key=lambda item: (item['decision_id'], item['receipt_seq'])):
+            existing = log.results.get(record['decision_id'], {})
+            if existing.get('receipt_seq', 0) >= record['receipt_seq']:
+                continue
+            log.append_local('results.jsonl', record)
+            log.results[record['decision_id']] = record
+        log.processed = {record['job_id'] for record in log.results.values() if record['outcome'] != 'error'}
 
 
 class RunLog:
@@ -504,6 +707,12 @@ class RunLog:
 
     def append(self, name: str, value: Any) -> None:
         with self.lock:
+            self.append_local(name, value)
+            if name == 'audit.jsonl' and self.artifacts is not None:
+                self.artifacts.publish_intent(self.path, value)
+
+    def append_local(self, name: str, value: Any) -> None:
+        with self.lock:
             with (self.path / name).open('a') as file:
                 file.write(json.dumps(value, sort_keys=True) + '\n')
                 file.flush()
@@ -529,9 +738,15 @@ class RunLog:
                     else None
                 ),
             }
-            if result != {k: v for k, v in existing.items() if k != 'at'}:
+            if result != {k: v for k, v in existing.items() if k not in ('at', 'receipt_seq')}:
                 result['at'] = utc_now()
+                if self.artifacts is not None:
+                    result['receipt_seq'] = existing.get('receipt_seq', 0) + 1
                 self.append('results.jsonl', result)
+                if self.artifacts is not None:
+                    self.artifacts.immutable(
+                        f"receipts/{result['decision_id']}/{result['receipt_seq']:020d}.json", result
+                    )
                 self.results[result['decision_id']] = result
             if outcome != 'error':
                 self.processed.add(result['job_id'])
@@ -540,6 +755,12 @@ class RunLog:
         return [
             r for r in self.results.values() if r['outcome'] == 'written' and r.get('projection_status') != 'complete'
         ]
+
+    def before_mutation(self) -> None:
+        if self.artifacts is not None:
+            if self.artifacts.failed:
+                raise ArtifactError('artifact publication stopped')
+            self.artifacts.lease.renew(require_ready=True)
 
     def mirror(self) -> None:
         with self.lock:
@@ -685,6 +906,7 @@ def write_cas(
     updates: dict[str, Any],
     row_revision: Any = None,
     job_revision: Any = None,
+    before_write: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     job_ref = runtime.client.collection(JOBS).document(job_id)
     ref = runtime.client.document(f"users/{job['uid']}/conversations/{job['conversation_id']}")
@@ -713,6 +935,8 @@ def write_cas(
             return 'photos'
         if discarding and protection:
             return 'discard_protected'
+        if before_write is not None:
+            before_write()
         transaction.update(ref, updates)
         return 'written'
 
@@ -796,6 +1020,8 @@ def retry_pending_projections(runtime: Runtime, log: RunLog, limiter: RateLimite
             if not valid_binding(job) or safe_id(job['uid'], job['conversation_id']) != record.get('id_hash'):
                 return  # cannot safely identify the projection; leave it pending
             converge_written(runtime, log, record, job, limiter)
+        except ArtifactError:
+            raise
         except Exception:
             logger.warning('projection_retry_pending job_hash=%s', digest(record['job_id'])[:20])
 
@@ -854,9 +1080,10 @@ def evaluate(runtime: Runtime, log: RunLog, job_id: str, *, limiter: RateLimiter
                     log.append('audit.jsonl', record)
                     audit_written = True
                     if log.config['apply']:
-                        write_result = retry_write(
-                            limiter,
-                            lambda: write_cas(
+
+                        def operation() -> dict[str, Any]:
+                            log.before_mutation()
+                            return write_cas(
                                 runtime,
                                 job_id,
                                 job,
@@ -864,7 +1091,12 @@ def evaluate(runtime: Runtime, log: RunLog, job_id: str, *, limiter: RateLimiter
                                 updates,
                                 getattr(snapshot, 'update_time', None),
                                 getattr(job_snapshot, 'update_time', None),
-                            ),
+                                before_write=log.before_mutation,
+                            )
+
+                        write_result = retry_write(
+                            limiter,
+                            operation,
                             reconcile=lambda: reconcile_intent(runtime, record),
                         )
                         outcome = write_result['outcome']
@@ -874,6 +1106,8 @@ def evaluate(runtime: Runtime, log: RunLog, job_id: str, *, limiter: RateLimiter
                     if outcome == 'written':
                         converge_written(runtime, log, record, job, limiter)
                     return dict(record, outcome=outcome)
+    except ArtifactError:
+        raise
     except CannotClassify as exc:
         reason = str(exc)
         record['rule'] = exc.rule
@@ -915,6 +1149,8 @@ def discovery_pages(client: Any, cursor: str | None, page_size: int) -> Iterable
 
 
 def reconcile_pending(runtime: Runtime, log: RunLog) -> None:
+    if log.artifacts is not None:
+        log.artifacts.import_events(log)
     for record in log.read('audit.jsonl'):
         existing = log.results.get(record['decision_id'])
         if existing and existing['outcome'] == 'written':
@@ -934,6 +1170,8 @@ def reconcile_pending(runtime: Runtime, log: RunLog) -> None:
                 record['commit_revision'] = recovered['commit_revision']
         log.finish(record, outcome)
     log.mirror()
+    if log.artifacts is not None:
+        log.artifacts.lease.renew(reconciled=True)
 
 
 def run(
@@ -1012,6 +1250,8 @@ def run(
                     break
             if complete_page and not frozen and not stopped:
                 log.checkpoint(page[-1].id)
+            else:
+                log.mirror()  # cursor freezes must never freeze durable pages
             if stopped or (limit is not None and processed >= limit):
                 break
     summary = {
@@ -1110,6 +1350,8 @@ def rollback(
                 ):
                     return 'rollback_changed'
                 if target.config['apply']:
+                    target.before_mutation()
+                    source.before_mutation()
                     transaction.update(
                         ref, {k: v['value'] if v['present'] else firestore.DELETE_FIELD for k, v in before.items()}
                     )
@@ -1119,6 +1361,8 @@ def rollback(
             def operation() -> dict[str, Any]:
                 if not target.config['apply']:
                     return {'outcome': restore(None), 'commit_revision': None}
+                target.before_mutation()
+                source.before_mutation()
                 transaction = runtime.client.transaction(max_attempts=1)
                 outcome = firestore.transactional(restore)(transaction)
                 receipts = getattr(transaction, '_write_results', [])
@@ -1137,6 +1381,8 @@ def rollback(
             if outcome == 'written':
                 converge_written(runtime, target, entry, job, limiter)
             return dict(entry, outcome=outcome)
+        except ArtifactError:
+            raise
         except Exception as exc:
             if target.config['apply']:
                 try:
@@ -1159,6 +1405,7 @@ def rollback(
                 target.finish(result, result['outcome'])
                 counts[result['outcome']] += 1
                 recent.append(result['outcome'] == 'error')
+            target.mirror()
             if len(recent) == error_window and sum(recent) / error_window > error_threshold:
                 stopped = True
                 break
@@ -1229,7 +1476,8 @@ def main() -> int:
     logs: list[RunLog] = []
     locks: list[IO[Any]] = []
     storage_client = storage.Client() if args.artifact_uri or (args.rollback or '').startswith('gs://') else None
-    mirror = ArtifactMirror(args.artifact_uri, storage_client) if args.artifact_uri else None
+    mirror = ArtifactMirror(args.artifact_uri, storage_client, heartbeat=True) if args.artifact_uri else None
+    mirrors = [mirror] if mirror is not None else []
     previous_sigterm = None
     if mirror is not None and threading.current_thread() is threading.main_thread():
 
@@ -1267,7 +1515,8 @@ def main() -> int:
                 uri = args.rollback.rstrip('/')
                 if uri.endswith('/audit.jsonl'):
                     uri = uri[: -len('/audit.jsonl')]
-                source_mirror = ArtifactMirror(uri, storage_client)
+                source_mirror = ArtifactMirror(uri, storage_client, heartbeat=True)
+                mirrors.append(source_mirror)
                 if (
                     mirror is not None
                     and source_mirror.bucket.name == mirror.bucket.name
@@ -1326,6 +1575,8 @@ def main() -> int:
             if failures:
                 raise failures[0]
         finally:
+            for remote in reversed(mirrors):
+                remote.lease.close()
             for lock_file in reversed(locks):
                 lock_file.close()
             if previous_sigterm is not None:

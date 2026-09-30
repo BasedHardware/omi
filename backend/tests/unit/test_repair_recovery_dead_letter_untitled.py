@@ -1,6 +1,8 @@
 """Hermetic repair contracts, using the strict transaction boundary fake."""
 
 from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
+import threading
 from datetime import datetime, timezone
 import json
 from types import SimpleNamespace
@@ -1014,13 +1016,16 @@ class FakeStorage:
         self.objects = {}
         self.uploads = []
         self.serial = 0
+        self.lock = threading.RLock()
 
     def bucket(self, name):
         return SimpleNamespace(name=name, blob=lambda key: FakeBlob(self, name, key))
 
-    def list_blobs(self, bucket, *, prefix, max_results):
+    def list_blobs(self, bucket, *, prefix, max_results=None):
         return [
-            FakeBlob(self, name, key) for name, key in self.objects if name == bucket.name and key.startswith(prefix)
+            FakeBlob(self, name, key)
+            for name, key in list(self.objects)
+            if name == bucket.name and key.startswith(prefix)
         ][:max_results]
 
 
@@ -1031,22 +1036,27 @@ class FakeBlob:
         self.name = name
         self.generation = None
 
-    def reload(self):
+    def reload(self, **kwargs):
+        from google.api_core.exceptions import NotFound
+
+        if (self.bucket, self.name) not in self.storage.objects:
+            raise NotFound('missing object')
         self.generation = self.storage.objects[(self.bucket, self.name)][0]
 
-    def upload_from_string(self, data, *, if_generation_match, content_type=None):
+    def upload_from_string(self, data, *, if_generation_match, content_type=None, **kwargs):
         from google.api_core.exceptions import PreconditionFailed
 
-        key = (self.bucket, self.name)
-        current = self.storage.objects.get(key, (0, None))[0]
-        if current != if_generation_match:
-            raise PreconditionFailed('generation mismatch')
-        self.storage.serial += 1
-        self.generation = self.storage.serial
-        self.storage.objects[key] = (self.generation, data.encode() if isinstance(data, str) else data)
-        self.storage.uploads.append((self.name, if_generation_match))
+        with self.storage.lock:
+            key = (self.bucket, self.name)
+            current = self.storage.objects.get(key, (0, None))[0]
+            if current != if_generation_match:
+                raise PreconditionFailed('generation mismatch')
+            self.storage.serial += 1
+            self.generation = self.storage.serial
+            self.storage.objects[key] = (self.generation, data.encode() if isinstance(data, str) else data)
+            self.storage.uploads.append((self.name, if_generation_match))
 
-    def download_as_bytes(self, *, if_generation_match):
+    def download_as_bytes(self, *, if_generation_match, **kwargs):
         from google.api_core.exceptions import PreconditionFailed
 
         generation, data = self.storage.objects[(self.bucket, self.name)]
@@ -1078,7 +1088,7 @@ def test_artifact_new_run_refuses_any_existing_object_and_racing_reservation():
     first = artifact(storage, 'gs://test-bucket/repair/run-other')
     second = artifact(storage, 'gs://test-bucket/repair/run-other')
     first.create()
-    with pytest.raises(PreconditionFailed):
+    with pytest.raises(repair.LeaseLost):
         second.publish({})
 
 
@@ -1092,6 +1102,7 @@ def test_artifact_resume_downloads_key_journals_and_checkpoint(tmp_path, caplog)
     restored = tmp_path / 'download'
     restored.mkdir()
     (restored / 'results.jsonl').write_text('unpublished local debris')
+    source.artifacts.lease.close()
     resumed_mirror = artifact(storage)
     resumed_mirror.download(restored)
     resumed = repair.RunLog(restored, source.config, resume=True)
@@ -1128,8 +1139,6 @@ def test_artifact_upload_after_reconcile_and_each_drained_page(tmp_path):
 
 
 def test_artifact_concurrent_writer_detected_preserves_complete_previous_snapshot(tmp_path):
-    from google.api_core.exceptions import PreconditionFailed
-
     _, _, log = setup(tmp_path)
     storage = FakeStorage()
     first = artifact(storage)
@@ -1138,15 +1147,12 @@ def test_artifact_concurrent_writer_detected_preserves_complete_previous_snapsho
     path = tmp_path / 'second'
     path.mkdir()
     second = artifact(storage)
-    second.download(path)
+    with pytest.raises(repair.LeaseLost):
+        second.download(path)
+    assert not (path / 'audit.key').exists()
     (log.path / 'summary.json').write_text('{"writer":1}')
     first.upload(log.path)
-    (path / 'summary.json').write_text('{"writer":2}')
-    with pytest.raises(PreconditionFailed):
-        second.upload(path)
     assert json.loads(remote_file(storage, 'summary.json')) == {'writer': 1}
-    with pytest.raises(RuntimeError, match='fresh resume'):
-        second.upload(path)
 
 
 def artifact_cli(monkeypatch, storage, client, args):
@@ -1197,6 +1203,7 @@ def test_artifact_cli_resume_downloads_before_runlog(tmp_path, monkeypatch):
     evaluate(runtime, source)
     source.checkpoint(JOB_ID)
     mirror.upload(source.path)
+    mirror.lease.close()
     path = tmp_path / 'ephemeral'
     artifact_cli(monkeypatch, storage, client, ['--resume', str(path), '--artifact-uri', 'gs://test-bucket/repair/run'])
     assert repair.main() == 0
@@ -1212,6 +1219,7 @@ def test_artifact_cli_gs_rollback_downloads_source_and_mirrors_target(tmp_path, 
     source.artifacts = artifact(storage)
     source.artifacts.create()
     source.mirror()
+    source.artifacts.lease.close()
     target = tmp_path / 'rollback'
     artifact_cli(
         monkeypatch,
@@ -1257,6 +1265,7 @@ def test_artifact_failed_publication_keeps_previous_snapshot_and_can_resume(tmp_
     monkeypatch.setattr(mirror.manifest, 'upload_from_string', original)
     path = tmp_path / 'recover'
     path.mkdir()
+    mirror.lease.close()
     resumed = artifact(storage)
     resumed.download(path)
     resumed.upload(source.path)
@@ -1281,6 +1290,7 @@ def test_artifact_corrupt_manifest_fails_before_overwriting_local_files(tmp_path
     path = tmp_path / 'download'
     path.mkdir()
     (path / 'audit.key').write_bytes(b'local original')
+    mirror.lease.close()
     with pytest.raises(ValueError):
         artifact(storage).download(path)
     assert (path / 'audit.key').read_bytes() == b'local original'
@@ -1299,6 +1309,350 @@ def test_artifact_nested_rollback_source_files_round_trip(tmp_path):
     assert remote_file(storage, 'rollback-source/audit.key') == b'source key'
     restored = tmp_path / 'restored'
     restored.mkdir()
+    mirror.lease.close()
     artifact(storage).download(restored)
     assert (restored / 'rollback-source' / 'audit.key').read_bytes() == b'source key'
     assert not (restored / 'rollback-source' / 'run.lock').exists()
+
+
+class DiskLost(BaseException):
+    """Uncatchable process/disk loss; intentionally bypasses exit uploads."""
+
+
+class ManualClock:
+    def __init__(self):
+        self.now = repair.time.time()
+
+    def __call__(self):
+        return self.now
+
+    def expire(self):
+        self.now += repair.RunLease.TTL + 1
+
+
+def durable_run(log, storage, clock, uri='gs://test-bucket/repair/run'):
+    mirror = artifact(storage, uri)
+    mirror.lease.clock = clock
+    mirror.create()
+    log.artifacts = mirror
+    log.mirror()
+    return mirror
+
+
+def recovered_run(tmp_path, storage, clock, config, uri='gs://test-bucket/repair/run', name='fresh'):
+    path = tmp_path / name
+    path.mkdir()
+    mirror = artifact(storage, uri)
+    mirror.lease.clock = clock
+    mirror.download(path)
+    log = repair.RunLog(path, config, resume=True)
+    log.artifacts = mirror
+    return log
+
+
+def durable_objects(storage, kind, prefix='repair/run/'):
+    return [
+        json.loads(data)
+        for (bucket, name), (_, data) in storage.objects.items()
+        if bucket == 'test-bucket' and name.startswith(prefix + kind + '/')
+    ]
+
+
+def assert_durable_before_updates(monkeypatch, client, storage, prefix='repair/run/'):
+    """Assert at the actual write boundary, independently of exit/checkpoints."""
+    original = lambda **kwargs: Client.transaction(client, **kwargs)
+    observed = []
+
+    def transaction(**kwargs):
+        tx = original(**kwargs)
+        update = tx.update
+
+        def checked(ref, patch):
+            current = client.rows[ref.path]
+            after = repair.patched(
+                current,
+                {
+                    field: (
+                        {'present': False}
+                        if value is repair.firestore.DELETE_FIELD
+                        else {'present': True, 'value': value}
+                    )
+                    for field, value in patch.items()
+                },
+            )
+            matches = [
+                intent
+                for intent in durable_objects(storage, 'intents', prefix)
+                if intent.get('before_digest') == repair.digest(current)
+                and intent.get('after_digest') == repair.digest(after)
+            ]
+            assert matches, 'mutation has no published write-ahead intent'
+            assert remote_file(storage, 'audit.key', prefix=prefix)
+            observed.append(matches[-1]['decision_id'])
+            update(ref, patch)
+            for field, value in patch.items():
+                if value is repair.firestore.DELETE_FIELD:
+                    client.rows[ref.path].pop(field, None)
+            if 'structured.title' in client.rows[ref.path]:
+                client.rows[ref.path]['structured']['title'] = client.rows[ref.path].pop('structured.title')
+
+        tx.update = checked
+        return tx
+
+    monkeypatch.setattr(client, 'transaction', transaction)
+    return observed
+
+
+@pytest.mark.parametrize('text', ['', TEXT])
+def test_disk_loss_after_commit_before_checkpoint_recovers_intent_receipt_and_rollback(tmp_path, monkeypatch, text):
+    client, runtime, source = setup(tmp_path, apply=True, kept=True, text=text)
+    storage, clock = FakeStorage(), ManualClock()
+    durable_run(source, storage, clock)
+    observed = assert_durable_before_updates(monkeypatch, client, storage)
+    write = repair.write_cas
+
+    def commit_then_lose_disk(*args, **kwargs):
+        result = write(*args, **kwargs)
+        assert result['outcome'] == 'written'
+        raise DiskLost()
+
+    monkeypatch.setattr(repair, 'write_cas', commit_then_lose_disk)
+    with pytest.raises(DiskLost):
+        evaluate(runtime, source)
+    assert len(observed) == 1
+    assert not durable_objects(storage, 'receipts')
+    assert 'audit.jsonl' not in json.loads(storage.objects[('test-bucket', 'repair/run/manifest.json')][1])['files']
+    clock.expire()  # no graceful shutdown, release, checkpoint or finally upload
+    recovered = recovered_run(tmp_path, storage, clock, source.config)
+    assert not recovered.artifacts.lease.ready
+    with pytest.raises(repair.LeaseLost, match='reconciliation'):
+        recovered.before_mutation()
+    monkeypatch.setattr(repair, 'write_cas', write)
+    summary = repair.run(runtime, recovered, max_writes_per_second=100000)
+    assert summary['processed'] == 0 and summary['projection_pending'] == 0
+    assert len(client.transactions) == 1
+    result = next(iter(recovered.results.values()))
+    assert result['outcome'] == 'written' and result['projection_status'] == 'complete'
+    assert durable_objects(storage, 'receipts')[-1]['projection_status'] == 'complete'
+    target = repair.RunLog(tmp_path / 'undo', dict(source.config, rollback='source'))
+    durable_run(target, storage, clock, 'gs://test-bucket/repair/undo')
+    assert_durable_before_updates(monkeypatch, client, storage, prefix='repair/undo/')
+    assert repair.rollback(runtime, recovered, target, qps=100000)['outcomes'] == {'written': 1}
+    assert client.rows[ROW_PATH]['discarded'] is False
+    assert client.rows[ROW_PATH]['structured']['title'] == ''
+
+
+def test_frozen_run_publishes_each_page_and_recovers_all_written_rows(tmp_path, monkeypatch):
+    client, runtime, log = setup(tmp_path, apply=True)
+    storage, clock = FakeStorage(), ManualClock()
+    durable_run(log, storage, clock)
+    client.rows.clear()
+    for index in range(6):
+        cid, jid = f'conversation-{index}', f'job-{index}'
+        client.rows[(repair.JOBS, jid)] = dict(job(), conversation_id=cid)
+        client.rows[('users', UID, 'conversations', cid)] = dict(row(), finalization_job_id=jid)
+    decode = runtime.decode
+
+    def one_error(data, uid):
+        if data['finalization_job_id'] == 'job-0':
+            raise ValueError('ordinary read error')
+        return decode(data, uid)
+
+    runtime.decode = one_error
+    pages = []
+    upload = log.artifacts.upload
+
+    def record_page(path):
+        upload(path)
+        pages.append(len(log.read('audit.jsonl')))
+
+    monkeypatch.setattr(log.artifacts, 'upload', record_page)
+    observed = assert_durable_before_updates(monkeypatch, client, storage)
+    summary = repair.run(runtime, log, workers=2, page_size=2, max_writes_per_second=100000)
+    assert summary['exit_code'] == 2 and summary['classes']['written'] == 5
+    assert log.cursor is None  # error freezes discovery advancement only
+    assert pages == [0, 2, 4, 6]
+    assert len(observed) == 5 and len(durable_objects(storage, 'intents')) == 6
+    clock.expire()
+    recovered = recovered_run(tmp_path, storage, clock, log.config)
+    repair.reconcile_pending(runtime, recovered)
+    assert len([receipt for receipt in recovered.results.values() if receipt['outcome'] == 'written']) == 5
+
+
+def test_rollback_disk_loss_has_durable_target_intent_and_recovers_completion(tmp_path, monkeypatch):
+    client, runtime, source = setup(tmp_path, apply=True)
+    storage, clock = FakeStorage(), ManualClock()
+    durable_run(source, storage, clock)
+    assert evaluate(runtime, source)['outcome'] == 'written'
+    target = repair.RunLog(tmp_path / 'undo', dict(source.config, rollback='source'))
+    uri = 'gs://test-bucket/repair/undo'
+    durable_run(target, storage, clock, uri)
+    observed = assert_durable_before_updates(monkeypatch, client, storage, prefix='repair/undo/')
+
+    def lose_receipt(*args, **kwargs):
+        raise DiskLost()
+
+    monkeypatch.setattr(target, 'finish', lose_receipt)
+    with pytest.raises(DiskLost):
+        repair.rollback(runtime, source, target, qps=100000)
+    assert client.rows[ROW_PATH]['discarded'] is False and len(observed) == 1
+    assert durable_objects(storage, 'intents', prefix='repair/undo/')
+    assert not durable_objects(storage, 'receipts', prefix='repair/undo/')
+    clock.expire()
+    restored_source = recovered_run(tmp_path, storage, clock, source.config, name='source-fresh')
+    restored_target = recovered_run(tmp_path, storage, clock, target.config, uri, name='target-fresh')
+    summary = repair.rollback(runtime, restored_source, restored_target, qps=100000)
+    assert summary['projection_pending'] == 0 and not summary['outcomes']
+    assert len(client.transactions) == 2  # forward and original rollback only
+    assert next(iter(restored_target.results.values()))['outcome'] == 'written'
+    assert durable_objects(storage, 'receipts', prefix='repair/undo/')[-1]['projection_status'] == 'complete'
+
+
+def test_two_concurrent_resumes_admit_only_one_writer_and_all_writes_are_audited(tmp_path, monkeypatch):
+    client, runtime, source = setup(tmp_path, apply=True)
+    other_job, other_cid = 'job-two', 'conversation-two'
+    client.rows[(repair.JOBS, other_job)] = dict(job(), conversation_id=other_cid)
+    other_path = ('users', UID, 'conversations', other_cid)
+    client.rows[other_path] = dict(row(), finalization_job_id=other_job)
+    storage, clock = FakeStorage(), ManualClock()
+    durable_run(source, storage, clock)
+    clock.expire()
+    barrier = threading.Barrier(2)
+
+    def resume(name):
+        path = tmp_path / name
+        path.mkdir()
+        mirror = artifact(storage)
+        mirror.lease.clock = clock
+        barrier.wait(timeout=5)
+        try:
+            mirror.download(path)
+            log = repair.RunLog(path, source.config, resume=True)
+            log.artifacts = mirror
+            return log, mirror
+        except repair.LeaseLost:
+            return None, mirror
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(resume, name) for name in ('one', 'two')]
+        runs = [future.result() for future in futures]
+    assert sum(run is not None for run, _ in runs) == 1
+    winner = next(run for run, _ in runs if run is not None)
+    loser_mirror = next(mirror for run, mirror in runs if run is None)
+    observed = assert_durable_before_updates(monkeypatch, client, storage)
+    repair.reconcile_pending(runtime, winner)
+    assert evaluate(runtime, winner)['outcome'] == 'written'
+    # Even a losing writer that continues classification on a different row
+    # cannot publish an intent or enter that row's Firestore transaction.
+    loser = repair.RunLog(tmp_path / 'losing-work', source.config)
+    loser.artifacts = loser_mirror
+    with pytest.raises(repair.LeaseLost):
+        repair.evaluate(runtime, loser, other_job, limiter=repair.RateLimiter(100000))
+    with pytest.raises(repair.LeaseLost):
+        source.before_mutation()
+    assert client.rows[other_path]['discarded'] is False
+    assert len(observed) == 1 and len(client.transactions) == 1
+    assert len(durable_objects(storage, 'intents')) == 1
+
+
+@pytest.mark.parametrize('stage', ['intent_upload', 'lease_after_intent', 'lease_inside_transaction'])
+def test_artifact_or_lease_failure_prevents_mutation(tmp_path, monkeypatch, stage):
+    client, runtime, log = setup(tmp_path, apply=True)
+    storage, clock = FakeStorage(), ManualClock()
+    mirror = durable_run(log, storage, clock)
+    original = FakeBlob.upload_from_string
+
+    def upload(blob, *args, **kwargs):
+        if '/intents/' in blob.name:
+            if stage == 'intent_upload':
+                raise repair.ServiceUnavailable('unavailable')
+            result = original(blob, *args, **kwargs)
+            if stage == 'lease_after_intent':
+                key = ('test-bucket', 'repair/run/lease.json')
+                generation, data = storage.objects[key]
+                storage.objects[key] = (generation + 1000, data)
+            return result
+        return original(blob, *args, **kwargs)
+
+    monkeypatch.setattr(FakeBlob, 'upload_from_string', upload)
+    if stage == 'lease_inside_transaction':
+
+        def expire_during_revalidation(ref, data, job, transaction):
+            if transaction is not None:
+                clock.expire()
+            return None
+
+        runtime.protections = expire_during_revalidation
+    with pytest.raises(repair.ArtifactError):
+        evaluate(runtime, log)
+    assert client.rows[ROW_PATH]['discarded'] is False
+    assert all(not transaction.updates for transaction in client.transactions)
+
+
+def test_receipt_upload_failure_is_recovered_from_published_intent(tmp_path, monkeypatch):
+    client, runtime, source = setup(tmp_path, apply=True)
+    storage, clock = FakeStorage(), ManualClock()
+    durable_run(source, storage, clock)
+    original = FakeBlob.upload_from_string
+
+    def fail_receipt(blob, *args, **kwargs):
+        if '/receipts/' in blob.name:
+            raise repair.ServiceUnavailable('no receipt')
+        return original(blob, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(FakeBlob, 'upload_from_string', fail_receipt)
+        with pytest.raises(repair.ArtifactError):
+            evaluate(runtime, source)
+    assert client.rows[ROW_PATH]['discarded'] is True
+    assert len(durable_objects(storage, 'intents')) == 1 and not durable_objects(storage, 'receipts')
+    clock.expire()
+    resumed = recovered_run(tmp_path, storage, clock, source.config)
+    summary = repair.run(runtime, resumed, max_writes_per_second=100000)
+    assert summary['projection_pending'] == 0 and len(client.transactions) == 1
+
+
+def test_ambiguous_intent_upload_requires_identical_durable_bytes_before_commit(tmp_path, monkeypatch):
+    client, runtime, log = setup(tmp_path, apply=True)
+    storage, clock = FakeStorage(), ManualClock()
+    durable_run(log, storage, clock)
+    observed = assert_durable_before_updates(monkeypatch, client, storage)
+    original = FakeBlob.upload_from_string
+
+    def response_lost(blob, *args, **kwargs):
+        result = original(blob, *args, **kwargs)
+        if '/intents/' in blob.name:
+            raise repair.DeadlineExceeded('response lost')
+        return result
+
+    monkeypatch.setattr(FakeBlob, 'upload_from_string', response_lost)
+    assert evaluate(runtime, log)['outcome'] == 'written' and len(observed) == 1
+
+
+def test_lease_heartbeat_renews_periodically_and_stops_on_lost_generation(tmp_path, monkeypatch):
+    _, _, log = setup(tmp_path)
+    storage, clock = FakeStorage(), ManualClock()
+    mirror = durable_run(log, storage, clock)
+    called = threading.Event()
+    renew = mirror.lease.renew
+
+    def observed(**kwargs):
+        try:
+            renew(**kwargs)
+        finally:
+            called.set()
+
+    monkeypatch.setattr(mirror.lease, 'TTL', 0.03)
+    monkeypatch.setattr(mirror.lease, 'renew', observed)
+    generation = mirror.lease.generation
+    mirror.lease.start()
+    assert called.wait(timeout=2)
+    assert mirror.lease.generation > generation
+    called.clear()
+    key = ('test-bucket', 'repair/run/lease.json')
+    with storage.lock:
+        generation, data = storage.objects[key]
+        storage.objects[key] = (generation + 1000, data)
+    assert called.wait(timeout=2)
+    mirror.lease.close()
+    assert mirror.lease.lost and mirror.lease.stop.is_set()
