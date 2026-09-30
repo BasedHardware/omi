@@ -85,6 +85,7 @@ class LineagePlan:
     counts: dict[str, int] = field(default_factory=dict)
     generations: int = 0
     rows: int = 0
+    degraded: bool = False
 
 
 def lineage_resolution_requested(
@@ -271,14 +272,22 @@ def select_segment_targets(
 
 def _load_lineage(
     uid: str, origin_id: str, started_before: datetime, firestore_client: Any
-) -> tuple[list[dict[str, Any]], Optional[float]]:
+) -> tuple[list[dict[str, Any]], Optional[float], bool]:
+    """Lineage rows, the start before which the window is incomplete, and whether it degraded."""
     # Import on use, like recording_session_target: pipeline.py loads this module
     # while unit harnesses stub google.cloud and the database package.
     from database import sync_recording_lineage as lineage_db
 
-    rows = lineage_db.get_recording_generations(
-        uid, origin_id, started_before=started_before, limit=GENERATION_LIMIT, firestore_client=firestore_client
-    )
+    degraded = False
+    try:
+        rows = lineage_db.get_recording_generations(
+            uid, origin_id, started_before=started_before, limit=GENERATION_LIMIT, firestore_client=firestore_client
+        )
+    except Exception as exc:
+        # E.g. the composite index is still building: keep the origin-row read,
+        # the same candidate set the whole-batch resolver has always used.
+        logger.warning('event=sync_lineage_lookup outcome=degraded exception_type=%s', bounded_exception_class(exc))
+        rows, degraded = [], True
     truncated_before = None
     if len(rows) > GENERATION_LIMIT:
         rows = rows[:GENERATION_LIMIT]
@@ -294,10 +303,10 @@ def _load_lineage(
             uid, origin_id, limit=ORIGIN_ROW_LIMIT, firestore_client=firestore_client
         )
         if len(legacy) > ORIGIN_ROW_LIMIT:
-            return rows, math.inf
+            return rows, math.inf, degraded
         known = {row.get('id') for row in rows}
         rows += [row for row in legacy if row.get('id') not in known]
-    return rows, truncated_before
+    return rows, truncated_before, degraded
 
 
 def resolve_segment_targets(
@@ -320,11 +329,13 @@ def resolve_segment_targets(
             started_before = datetime.fromtimestamp(
                 max(end for _, end in spans.values()) + START_SKEW_SECONDS, tz=timezone.utc
             )
-            rows, truncated_before = _load_lineage(uid, clean_text(origin_id), started_before, firestore_client)
+            rows, truncated_before, degraded = _load_lineage(
+                uid, clean_text(origin_id), started_before, firestore_client
+            )
             failed = False
         except Exception as exc:
             logger.warning('event=sync_lineage_lookup outcome=failed exception_type=%s', bounded_exception_class(exc))
-            rows, truncated_before, failed = [], None, True
+            rows, truncated_before, degraded, failed = [], None, False, True
         plan = select_segment_targets(
             rows,
             origin_id,
@@ -341,11 +352,13 @@ def resolve_segment_targets(
         plan = LineagePlan(
             targets={key: stamped_target for key in spans}, outcome='lookup_failed', reason='lookup_failed'
         )
-    if plan.outcome == 'lookup_failed':
+        degraded = False
+    if plan.outcome == 'lookup_failed' or degraded:
+        plan.degraded = degraded
         record_fallback(
             component='other',
             from_mode='sync_lineage',
-            to_mode='stamp' if stamped_target else 'temporal',
+            to_mode='origin_row' if degraded else 'stamp' if stamped_target else 'temporal',
             reason='other',
             outcome='degraded',
         )
@@ -363,7 +376,7 @@ def _emit(plan: LineagePlan, job_id: Optional[str]) -> None:
     counts = plan.counts
     logger.info(
         'event=sync_lineage_resolve outcome=%s reason=%s segments=%d bound=%d stamp_overridden=%d '
-        'stamp_fallback=%d unbound=%d generations=%d rows=%d job_ref=%s',
+        'stamp_fallback=%d unbound=%d generations=%d rows=%d window=%s job_ref=%s',
         outcome,
         plan.reason,
         len(plan.targets),
@@ -373,5 +386,6 @@ def _emit(plan: LineagePlan, job_id: Optional[str]) -> None:
         counts.get('unbound', 0),
         plan.generations,
         plan.rows,
+        'origin_row_only' if plan.degraded else 'lineage',
         bounded_correlation_ref(job_id),
     )

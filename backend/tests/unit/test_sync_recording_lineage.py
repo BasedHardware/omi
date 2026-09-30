@@ -426,15 +426,15 @@ def test_user_managed_live_generation_keeps_its_identity_and_markers(managed):
 class _LineageDb:
     """In-memory stand-in for database.sync_recording_lineage with the real query semantics."""
 
-    def __init__(self, rows, *, fail=False):
+    def __init__(self, rows):
         self.rows = rows
-        self.fail = fail
+        self.failing: set[str] = set()
         self.calls = []
 
     def get_recording_generations(self, uid, origin_id, *, started_before, limit, firestore_client=None):
         self.calls.append('generations')
-        if self.fail:
-            raise TimeoutError('deadline')
+        if 'generations' in self.failing:
+            raise TimeoutError('index not serving')
         matching = [
             row
             for row in self.rows
@@ -446,6 +446,8 @@ class _LineageDb:
 
     def get_origin_generation(self, uid, origin_id, *, limit, firestore_client=None):
         self.calls.append('origin')
+        if 'origin' in self.failing:
+            raise TimeoutError('deadline')
         matching = [
             row for row in self.rows if (row.get('external_data') or {}).get('recording_session_id') == origin_id
         ]
@@ -496,8 +498,20 @@ def test_recording_from_before_the_origin_stamp_reads_the_origin_row(lineage_db)
     assert lineage_db.calls == ['generations', 'origin']
 
 
+def test_unbuilt_lineage_index_degrades_to_the_origin_row(lineage_db, monkeypatch, caplog):
+    lineage_db.failing = {'generations'}
+    fallback = MagicMock()
+    monkeypatch.setattr(recording_lineage, 'record_fallback', fallback)
+    first = sync_chunk(gen_start(0) + 62, gen_start(0) + 70, live_text(0, 1))
+    later = upload_straddling_next_two()[0]
+    with caplog.at_level(logging.INFO, logger=recording_lineage.__name__):
+        assert resolve([first, later], stamp='STAMP') == {first['id']: ORIGIN, later['id']: 'STAMP'}
+    assert fallback.call_args.kwargs['to_mode'] == 'origin_row'
+    assert 'window=origin_row_only' in caplog.text
+
+
 def test_lookup_failure_fails_open_to_the_stamp(lineage_db, monkeypatch, caplog):
-    lineage_db.fail = True
+    lineage_db.failing = {'generations', 'origin'}
     fallback = MagicMock()
     monkeypatch.setattr(recording_lineage, 'record_fallback', fallback)
     chunks = upload_straddling_next_two()
@@ -643,7 +657,7 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp):
     monkeypatch.setattr(
         sys.modules[pipeline.resolve_segment_targets.__module__],
         '_load_lineage',
-        lambda *_args: ([generation(k) for k in range(GENERATIONS)], None),
+        lambda *_args: ([generation(k) for k in range(GENERATIONS)], None, False),
     )
     candidates = [generation(0)]
     monkeypatch.setattr(
