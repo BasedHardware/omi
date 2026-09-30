@@ -242,7 +242,10 @@ def merge_live_segments(persisted: list[dict], fresh: list[dict], receipt: dict)
     # Selected-segment decisions are keyed by ID, so those segments must keep it.
     # Speaker-wide decisions are keyed by speaker: same-speaker merges keep them.
     covered = set(receipt.get('segments') or {})
-    speaker_bound = {s.speaker_id for s in [*tail, *incoming] if str(s.speaker_id) in (receipt.get('speakers') or {})}
+    speakers = receipt.get('speakers') or {}
+    speaker_bound = {
+        s.speaker_id for s in [*tail, *incoming] if s.speaker_id is not None and str(s.speaker_id) in speakers
+    }
     # Unplaced fallback IDs are the retry receipt. Never absorb one into the
     # preceding unplaced tail, or a committed retry would no longer find its
     # ID in the next transaction snapshot.

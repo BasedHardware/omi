@@ -1678,9 +1678,12 @@ explicit follow-ups. See `utils/sync/ARCHITECTURE.md` for recovery and indexing 
 
 Live capture passes fresh, unmerged STT segments to `update_conversation_segments(live_segments=...)`.
 The transaction reads the current transcript and manual receipt, then merges only
-its tail and the fresh batch. Any segment covered by a selected-ID decision or a
-speaker-wide default blocks all concatenation and partial sentence transfer;
-clears, training opt-outs, and legacy receipts receive identical protection.
+its tail and the fresh batch, after applying the receipt to both so compared
+provenance is post-decision. A segment covered by a selected-ID decision blocks all
+concatenation and partial sentence transfer. A speaker-wide default is a boundary:
+that speaker's segments only append to each other in chronological order (no sentence
+repair, no late arrivals), and never exchange words with another speaker. Clears,
+training opt-outs, and legacy receipts receive identical protection.
 Inference updates may change identity fields, but the current manual receipt wins.
 The accepted transcript and `LiveTranscriptMerge` deletion delta return together;
 only committed IDs drive live updates and `SegmentsDeletedEvent`.

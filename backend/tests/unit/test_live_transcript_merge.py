@@ -249,6 +249,47 @@ async def test_recognized_speaker_words_merge_into_one_live_utterance(world, per
     assert [segment['text'] for segment in read(world)['transcript_segments']] == ['I have to']
 
 
+LABELED_SPEAKER_0 = {'speakers': {'0': {'generation': 1, 'is_user': False, 'person_id': 'new'}}}
+
+
+def test_speaker_wide_label_leaves_late_word_unmerged():
+    result = merge_live_segments([speech('a', 'newer', 0, 10, 11)], [speech('b', 'older', 0, 1, 2)], LABELED_SPEAKER_0)
+    assert [(s['id'], s['text'], s['start'], s['end']) for s in result.segments] == [
+        ('b', 'older', 1, 2),
+        ('a', 'newer', 10, 11),
+    ]
+    assert result.removed_ids == []
+
+
+def test_speaker_wide_label_appends_across_speaker_spellings_and_keeps_saved_id():
+    a = speech('a', 'I', 0, 0, 0.2)
+    b = speech('b', 'have', 0, 0.2, 0.4)
+    b['speaker'] = 'SPEAKER_0'  # same numeric speaker, unpadded spelling
+    result = merge_live_segments([a], [b], LABELED_SPEAKER_0)
+    assert [(s['id'], s['text'], s['start'], s['end']) for s in result.segments] == [('a', 'I have', 0, 0.4)]
+    assert result.removed_ids == ['b'] and result.absorbed_into == {'b': 'a'}
+
+
+def test_speaker_wide_label_never_crosses_numeric_speakers_with_same_spelling():
+    a = speech('a', 'owner', 0, 0, 1)
+    b = speech('b', 'other', 1, 1, 2)
+    b.update(speaker='SPEAKER_00', is_user=True)
+    a['is_user'] = True
+    result = merge_live_segments([a], [b], LABELED_SPEAKER_0)
+    assert [(s['id'], s['text']) for s in result.segments] == [('a', 'owner'), ('b', 'other')]
+
+
+def test_speaker_wide_label_merge_keeps_only_whole_translations():
+    a = speech('a', 'Hello', 0, 0, 1)
+    b = speech('b', 'world', 0, 1, 2)
+    a['translations'] = [{'lang': 'fr', 'text': 'Bonjour'}, {'lang': 'es', 'text': 'Hola'}]
+    b['translations'] = [{'lang': 'fr', 'text': 'monde'}]
+    (merged,) = merge_live_segments([a], [b], LABELED_SPEAKER_0).segments
+    assert merged['text'] == 'Hello world'
+    # 'es' covered only "Hello"; keeping it would claim to translate the whole segment.
+    assert merged['translations'] == [{'lang': 'fr', 'text': 'Bonjour monde'}]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status', [SpeakerIdentityStatus.ambiguous, SpeakerIdentityStatus.not_user])
 async def test_manually_labeled_owner_words_merge_despite_live_voice_status(world, status):

@@ -260,6 +260,32 @@ class TranscriptSegment(BaseModel):
                 and a.speech_profile_processed == b.speech_profile_processed
             )
 
+        def _join_translations(a: 'TranscriptSegment', b: 'TranscriptSegment') -> List[Translation]:
+            # A language translated on only one side would describe part of the merged
+            # text; drop it so the translation path treats the segment as a miss.
+            theirs = {t.lang: t.text for t in b.translations or []}
+            return [
+                Translation(lang=t.lang, text=f'{t.text} {theirs[t.lang]}')
+                for t in a.translations or []
+                if t.lang in theirs
+            ]
+
+        def _append_decided_speaker(
+            a: 'TranscriptSegment', b: 'TranscriptSegment'
+        ) -> Tuple[Optional['TranscriptSegment'], Optional['TranscriptSegment']]:
+            # Both sides carry the same decided speaker_id (the caller refused any other
+            # pair), though their SPEAKER_ spellings may differ. Only append in order:
+            # sentence repair would retire a saved ID, and a late arrival would invert the span.
+            if not _is_chronological_continuation(a, b) or a.speech_profile_processed != b.speech_profile_processed:
+                return a, b
+            if len(a.text) >= 125 and a.text[-1:] in SENTENCE_ENDERS and not _starts_with_lowercase_cased(b.text):
+                return a, b
+            a.text += f' {b.text}'
+            a.end = b.end
+            a.translations = _join_translations(a, b)
+            _absorb(b, a)
+            return a, None
+
         absorbed_into: Dict[str, str] = {}
         removed_ids: List[str] = []
 
@@ -299,6 +325,8 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if b.audio_capture_run != a.audio_capture_run:
                 return a, b
+            if speaker_bound_ids and a.speaker_id in speaker_bound_ids:
+                return _append_decided_speaker(a, b)
 
             if (
                 a.speaker != b.speaker
