@@ -393,7 +393,7 @@ env:
   - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
-    value: "50"
+    value: "100"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
     value: "5"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
