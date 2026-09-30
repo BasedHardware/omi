@@ -6,9 +6,15 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from database._client import get_data_plane_firestore_client
-
 RETENTION_DAYS = 60
+
+
+def get_data_plane_firestore_client() -> Any:
+    # Resolved at call time: this module is imported on the capture path, and many
+    # suites stub `database._client` with only the clients they exercise.
+    from database._client import get_data_plane_firestore_client as _get_client
+
+    return _get_client()
 
 
 def write_jev_shadow(
