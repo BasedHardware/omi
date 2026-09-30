@@ -1282,10 +1282,10 @@ async def _fragment_frame(actual, clock, sample, *, speech=False, wall_seconds=0
     return sample + 640
 
 
-async def _settled_fragment_silence(actual, clock, sample, frames, *, wall_seconds=0.04):
+async def _settled_fragment_silence(actual, clock, sample, frames, *, wall_seconds=0.04, settled=False):
     # Keep 40ms packets at state transitions. Once VAD is settled, batch known
     # silence while retaining a final 320ms of packets for exact pre-roll.
-    first = min(140, frames)
+    first = 0 if settled else min(140, frames)
     for _ in range(first):
         sample = await _fragment_frame(actual, clock, sample, wall_seconds=wall_seconds)
     remaining = frames - first
@@ -1607,8 +1607,14 @@ async def test_periodic_noise_flushes_once_per_long_silence_with_bounded_context
         sample += int(4.64 * 16000)
         await _REAL_SLEEP(0)
         assert len(client.requests) == initial_requests + cycle  # exactly 4.96s silence
-        for _ in range(6):  # total 5.20s silence, one flush
-            sample = await _fragment_frame(actual, clock, sample)
+        # Keep the threshold-crossing packet individual, then batch settled
+        # silence and retain the final packet at exactly 5.20s.
+        sample = await _fragment_frame(actual, clock, sample)
+        clock[0] += 0.16
+        await _flush_capture(actual, bytes(4 * 640 * 2), sample)
+        sample += 4 * 640
+        await _REAL_SLEEP(0)
+        sample = await _fragment_frame(actual, clock, sample)
         assert len(client.requests) == initial_requests + cycle + 1
         assert previous.raw._stranded_flush_used
         assert actual.stt_socket is previous
@@ -1620,7 +1626,7 @@ async def test_periodic_noise_flushes_once_per_long_silence_with_bounded_context
     assert WINDOW_STRANDED_FLUSHES.labels(outcome='answered_text')._value.get() == before['answered_text']
     assert [item['text'] for item in base.emitted] == ['Earlier.']
     assert not replayed and not callbacks
-    sample = await _settled_fragment_silence(actual, clock, sample, 2500)
+    sample = await _settled_fragment_silence(actual, clock, sample, 2500, settled=True)
     assert len(client.requests) == initial_requests + cycles
     assert previous.raw._answered_empty_span is None
     assert len(previous.raw._answered_context_ends) == 0
