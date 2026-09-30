@@ -189,6 +189,10 @@ env:
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: CAPTURE_JEV_SHADOW_PERCENT
     value: "0"
+  # Staged sync-lineage rollout (omi#19947); keep identical to the Cloud Run services in
+  # backend/deploy/runtime_env/prod.overlay.yaml. Empty admits every user.
+  - name: SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE

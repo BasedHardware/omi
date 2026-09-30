@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "แท็กคำพูดถัดไปของผู้พูดคนนี้ด้วย",
     "updateSummaryWithNewNames": "อัปเดตสรุปด้วยชื่อใหม่",
     "syncStatusUnsupportedAudio": "อ่านเสียงไม่ได้ — ซิงค์ไม่ได้",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{คุณช่วยอะไรฉันได้บ้าง?} goal{ช่วยฉันตั้งเป้าหมายหน่อย} activity{สรุปกิจกรรมล่าสุดของฉัน} improve{ฉันจะพัฒนาตัวเองได้อย่างไร?} other{}}",
     "nextWeek": "สัปดาห์หน้า",
     "clearSearch": "ล้างการค้นหา",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "สิ่งที่อยู่บนหน้าจอ",
     "meetingScreenshotFallbackCaption": "ภาพหน้าจอจากการประชุมนี้",
     "deleteMeetingScreenshotTitle": "ลบภาพหน้าจอหรือไม่",
-    "deleteMeetingScreenshotMessage": "การดำเนินการนี้จะลบภาพหน้าจอออกจากบันทึกของการประชุมนี้ และไม่สามารถเลิกทำได้"
+    "deleteMeetingScreenshotMessage": "การดำเนินการนี้จะลบภาพหน้าจอออกจากบันทึกของการประชุมนี้ และไม่สามารถเลิกทำได้",
+    "conversationSummaryFailed": "สร้างสรุปไม่สำเร็จ"
 }

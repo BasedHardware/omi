@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Merkitse myös tämän puhujan myöhempi puhe",
     "updateSummaryWithNewNames": "Päivitä yhteenveto uusilla nimillä",
     "syncStatusUnsupportedAudio": "Ääntä ei voitu lukea — ei voi synkronoida",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Mitä voit tehdä hyväkseni?} goal{Auta minua asettamaan tavoite} activity{Tee yhteenveto viimeaikaisista toimistani} improve{Miten voin kehittyä?} other{}}",
     "nextWeek": "Ensi viikolla",
     "clearSearch": "Tyhjennä haku",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "Mitä näytöllä oli",
     "meetingScreenshotFallbackCaption": "Kuvakaappaus tästä kokouksesta",
     "deleteMeetingScreenshotTitle": "Poistetaanko kuvakaappaus?",
-    "deleteMeetingScreenshotMessage": "Kuvakaappaus poistetaan tämän kokouksen muistiinpanosta. Toimintoa ei voi kumota."
+    "deleteMeetingScreenshotMessage": "Kuvakaappaus poistetaan tämän kokouksen muistiinpanosta. Toimintoa ei voi kumota.",
+    "conversationSummaryFailed": "Yhteenveto epäonnistui"
 }

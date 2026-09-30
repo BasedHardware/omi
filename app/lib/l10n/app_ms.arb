@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Tandai juga ucapan kemudian daripada penceramah ini",
     "updateSummaryWithNewNames": "Kemas kini ringkasan dengan nama baharu",
     "syncStatusUnsupportedAudio": "Audio tidak dapat dibaca — tidak boleh disegerakkan",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Apa yang boleh kamu lakukan untuk saya?} goal{Bantu saya menetapkan matlamat} activity{Ringkaskan aktiviti terkini saya} improve{Bagaimana saya boleh menjadi lebih baik?} other{}}",
     "nextWeek": "Minggu depan",
     "clearSearch": "Kosongkan carian",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "Apa yang ada di skrin",
     "meetingScreenshotFallbackCaption": "Tangkapan skrin daripada mesyuarat ini",
     "deleteMeetingScreenshotTitle": "Padam tangkapan skrin?",
-    "deleteMeetingScreenshotMessage": "Ini akan mengalih keluar tangkapan skrin daripada nota mesyuarat ini. Tindakan ini tidak boleh dibuat asal."
+    "deleteMeetingScreenshotMessage": "Ini akan mengalih keluar tangkapan skrin daripada nota mesyuarat ini. Tindakan ini tidak boleh dibuat asal.",
+    "conversationSummaryFailed": "Ringkasan gagal"
 }
