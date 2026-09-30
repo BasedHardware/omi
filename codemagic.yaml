@@ -2928,6 +2928,9 @@ workflows:
       - name: Submit explicitly selected existing builds
         script: |
           set -euo pipefail
+          # The declared "0" placeholders mean "not supplied"; the API override omits absent builds.
+          [ "${PROMOTE_IOS_BUILD:-}" = "0" ] && PROMOTE_IOS_BUILD=""
+          [ "${PROMOTE_ANDROID_BUILD:-}" = "0" ] && PROMOTE_ANDROID_BUILD=""
           python3 scripts/mobile_store_promote.py \
             --confirm "${CONFIRM:-}" \
             --platform "${PROMOTE_PLATFORM:-}" \
