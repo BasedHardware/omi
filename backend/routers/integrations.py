@@ -156,7 +156,7 @@ class IntegrationData(BaseModel):
 class AppleHealthSyncData(BaseModel):
     """Health data synced from Apple Health on iOS device"""
 
-    period_days: int = Field(default=7, description="Number of days of data")
+    period_days: int = Field(default=7, ge=1, le=365, description="Number of days of data")
 
     # Steps data
     total_steps: Optional[int] = Field(default=None, description="Total steps in period")
@@ -296,13 +296,19 @@ def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid))
     Gmail has no grant of its own — it rides the Google Calendar OAuth grant and is
     connected only when that grant actually carries the Gmail scope.
     """
-    if app_key in DERIVED_INTEGRATIONS:
-        source_key, required_scope = DERIVED_INTEGRATIONS[app_key]
-        source = users_db.get_integration(uid, source_key)
-        connected = bool(source and source.get('connected')) and google_integration_has_scope(source, required_scope)
-        return IntegrationResponse(connected=connected, app_key=app_key)
+    try:
+        if app_key in DERIVED_INTEGRATIONS:
+            source_key, required_scope = DERIVED_INTEGRATIONS[app_key]
+            source = users_db.get_integration(uid, source_key)
+            connected = bool(source and source.get('connected')) and google_integration_has_scope(
+                source, required_scope
+            )
+            return IntegrationResponse(connected=connected, app_key=app_key)
 
-    integration = users_db.get_integration(uid, app_key)
+        integration = users_db.get_integration(uid, app_key)
+    except Exception as e:
+        logger.error(f'Failed to get integration {app_key} for uid {uid}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve integration status")
 
     if integration and integration.get('connected'):
         return IntegrationResponse(connected=True, app_key=app_key)
@@ -324,7 +330,11 @@ def save_integration(app_key: str, data: IntegrationData, uid: str = Depends(aut
     # Convert Pydantic model to dict, excluding None values
     integration_data = data.model_dump(exclude_none=True)
 
-    users_db.set_integration(uid, app_key, integration_data)
+    try:
+        users_db.set_integration(uid, app_key, integration_data)
+    except Exception as e:
+        logger.error(f'Failed to save integration {app_key} for uid {uid}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save integration")
 
     return {"status": "ok", "app_key": app_key}
 
@@ -339,7 +349,11 @@ def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_ui
     if app_key in DERIVED_INTEGRATIONS:
         app_key = DERIVED_INTEGRATIONS[app_key][0]
 
-    success = users_db.delete_integration(uid, app_key)
+    try:
+        success = users_db.delete_integration(uid, app_key)
+    except Exception as e:
+        logger.error(f'Failed to delete integration {app_key} for uid {uid}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete integration")
 
     if not success:
         raise HTTPException(status_code=404, detail="Integration not found")
@@ -417,7 +431,11 @@ def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.ge
         'last_synced': datetime.now(timezone.utc).isoformat(),
     }
 
-    users_db.set_integration(uid, 'apple_health', integration_data)
+    try:
+        users_db.set_integration(uid, 'apple_health', integration_data)
+    except Exception as e:
+        logger.error(f'Failed to sync apple health data for uid {uid}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save health data")
 
     return {
         "status": "ok",
@@ -471,8 +489,8 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         state_data = {'uid': uid, 'app_key': provider_key, 'created_at': datetime.now(timezone.utc).isoformat()}
         redis_db.r.setex(state_key, OAUTH_STATE_EXPIRY, json.dumps(state_data))
     except Exception as e:
-        logger.error(f'ERROR: Failed to store OAuth state in Redis: {e}')
-        raise HTTPException(status_code=500, detail=f"Failed to initialize OAuth flow: {str(e)}")
+        logger.error(f'ERROR: Failed to store OAuth state in Redis: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to initialize OAuth flow")
 
     client_id_env = cast(str, oauth['client_id_env'])
     client_id = os.getenv(client_id_env)
@@ -494,7 +512,11 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         code_verifier = secrets.token_urlsafe(32)
         code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip('=')
         verifier_key = f"oauth_code_verifier:{state_token}"
-        redis_db.r.setex(verifier_key, OAUTH_STATE_EXPIRY, code_verifier)
+        try:
+            redis_db.r.setex(verifier_key, OAUTH_STATE_EXPIRY, code_verifier)
+        except Exception as e:
+            logger.error(f'ERROR: Failed to store OAuth code verifier in Redis: {e}', exc_info=True)
+            raise HTTPException(status_code=500, detail="Failed to initialize OAuth flow")
         params['code_challenge'] = code_challenge
 
     auth_url = f"{oauth['auth_base']}?{urlencode(params)}"
