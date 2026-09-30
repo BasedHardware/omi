@@ -1,6 +1,7 @@
 """Durable workflow-owned handoff for canonical recurrence signals."""
 
 import hashlib
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -79,6 +80,9 @@ def _storage(receipt: RecurrenceInboxReceipt) -> dict[str, Any]:
     return payload
 
 
+_STABLE_ID_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:-]*$')
+
+
 def _clean_str(value: object, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string")
@@ -89,6 +93,29 @@ def _clean_generation(value: object) -> int:
     if type(value) is not int or value < 0:
         raise ValueError("account_generation must be a non-negative integer")
     return value
+
+
+def _clean_outcome(outcome: object) -> RecurrenceOutcomeKind:
+    if isinstance(outcome, RecurrenceOutcomeKind):
+        return outcome
+    if isinstance(outcome, str):
+        try:
+            return RecurrenceOutcomeKind(outcome)
+        except ValueError:
+            pass
+    raise ValueError(f"outcome must be a valid RecurrenceOutcomeKind, got {outcome!r}")
+
+
+def _sanitize_error_code(error_code: object) -> str:
+    if isinstance(error_code, str):
+        candidate = error_code.strip()
+        if candidate and _STABLE_ID_PATTERN.fullmatch(candidate):
+            return candidate[:128]
+    if isinstance(error_code, Exception):
+        candidate = type(error_code).__name__
+        if _STABLE_ID_PATTERN.fullmatch(candidate):
+            return candidate[:128]
+    return 'unknown'
 
 
 def enqueue_recurrence_signal(
@@ -143,9 +170,15 @@ def list_pending_recurrence_receipts(
     limit: int = 100,
     firestore_client: Any = None,
 ) -> list[RecurrenceInboxReceipt]:
+    """Fetch pending recurrence receipts for an account generation.
+
+    Empty or whitespace uids return []. The limit parameter is clamped to
+    the [1, 500] range, defaulting to 100 for non-integer inputs.
+    """
     if not isinstance(uid, str) or not uid.strip():
         return []
     clean_uid = uid.strip()
+    clean_gen = _clean_generation(account_generation)
     safe_limit = max(1, min(int(limit) if isinstance(limit, int) else 100, 500))
     query = (
         _get_db(firestore_client)
@@ -153,7 +186,7 @@ def list_pending_recurrence_receipts(
         .document(clean_uid)
         .collection(RECURRENCE_INBOX_COLLECTION)
         .where(filter=FieldFilter('status', '==', RecurrenceInboxStatus.pending.value))
-        .where(filter=FieldFilter('account_generation', '==', account_generation))
+        .where(filter=FieldFilter('account_generation', '==', clean_gen))
         .limit(safe_limit)
     )
     return parse_snapshots(RecurrenceInboxReceipt, query.stream())
@@ -170,7 +203,7 @@ def complete_recurrence_receipt(
     clean_uid = _clean_str(uid, 'uid')
     clean_receipt_id = _clean_str(receipt_id, 'receipt_id')
     clean_gen = _clean_generation(account_generation)
-    outcome_val = outcome.value if isinstance(outcome, RecurrenceOutcomeKind) else str(outcome)
+    clean_outcome = _clean_outcome(outcome)
     client = _get_db(firestore_client)
     ref = _receipt_ref(clean_uid, clean_receipt_id, firestore_client=client)
     transaction = client.transaction()
@@ -189,7 +222,7 @@ def complete_recurrence_receipt(
             ref,
             {
                 'status': RecurrenceInboxStatus.completed.value,
-                'last_outcome': outcome_val,
+                'last_outcome': clean_outcome.value,
                 'last_error_code': None,
                 'attempts': firestore.Increment(1),
                 'updated_at': datetime.now(timezone.utc),
@@ -210,7 +243,7 @@ def retry_recurrence_receipt(
     clean_uid = _clean_str(uid, 'uid')
     clean_receipt_id = _clean_str(receipt_id, 'receipt_id')
     clean_gen = _clean_generation(account_generation)
-    safe_error_code = str(error_code or '')[:128]
+    safe_error_code = _sanitize_error_code(error_code)
     client = _get_db(firestore_client)
     ref = _receipt_ref(clean_uid, clean_receipt_id, firestore_client=client)
     transaction = client.transaction()

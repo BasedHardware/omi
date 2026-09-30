@@ -50,6 +50,46 @@ def test_clean_generation_helper():
         recurrence_inbox_db._clean_generation(True)
 
 
+def test_clean_outcome_helper():
+    assert (
+        recurrence_inbox_db._clean_outcome(RecurrenceOutcomeKind.candidate_created)
+        == RecurrenceOutcomeKind.candidate_created
+    )
+    assert (
+        recurrence_inbox_db._clean_outcome("candidate_created")
+        == RecurrenceOutcomeKind.candidate_created
+    )
+    with pytest.raises(ValueError, match="valid RecurrenceOutcomeKind"):
+        recurrence_inbox_db._clean_outcome("invalid_outcome")
+    with pytest.raises(ValueError, match="valid RecurrenceOutcomeKind"):
+        recurrence_inbox_db._clean_outcome(None)
+
+
+def test_sanitize_error_code_helper():
+    # Valid StableId strings
+    assert recurrence_inbox_db._sanitize_error_code("timeout") == "timeout"
+    assert recurrence_inbox_db._sanitize_error_code("http_504") == "http_504"
+    assert recurrence_inbox_db._sanitize_error_code("auth:token_expired") == "auth:token_expired"
+
+    # None and empty strings never write empty string
+    assert recurrence_inbox_db._sanitize_error_code(None) == "unknown"
+    assert recurrence_inbox_db._sanitize_error_code("") == "unknown"
+    assert recurrence_inbox_db._sanitize_error_code("   ") == "unknown"
+
+    # Strings with spaces fall back to 'unknown' to preserve StableId regex
+    assert recurrence_inbox_db._sanitize_error_code("upstream timeout error") == "unknown"
+
+    # Exception instances fall back to type name
+    assert recurrence_inbox_db._sanitize_error_code(TimeoutError("request timed out")) == "TimeoutError"
+    assert recurrence_inbox_db._sanitize_error_code(RuntimeError("something failed")) == "RuntimeError"
+
+    # Truncation to 128 characters
+    long_code = "a" * 200
+    sanitized = recurrence_inbox_db._sanitize_error_code(long_code)
+    assert len(sanitized) == 128
+    assert sanitized == "a" * 128
+
+
 def test_enqueue_recurrence_signal_validation():
     signal = _make_mock_signal()
     with pytest.raises(ValueError, match="uid must be a non-empty string"):
@@ -66,6 +106,9 @@ def test_list_pending_recurrence_receipts_input_guards():
     assert recurrence_inbox_db.list_pending_recurrence_receipts("", account_generation=1) == []
     assert recurrence_inbox_db.list_pending_recurrence_receipts("   ", account_generation=1) == []
     assert recurrence_inbox_db.list_pending_recurrence_receipts(None, account_generation=1) == []
+
+    with pytest.raises(ValueError, match="account_generation must be a non-negative integer"):
+        recurrence_inbox_db.list_pending_recurrence_receipts("u1", account_generation=-1)
 
 
 def test_list_pending_recurrence_receipts_limit_clamping():
@@ -95,6 +138,8 @@ def test_complete_recurrence_receipt_validation():
         recurrence_inbox_db.complete_recurrence_receipt("u1", "", outcome=RecurrenceOutcomeKind.candidate_created, account_generation=1)
     with pytest.raises(ValueError, match="account_generation must be a non-negative integer"):
         recurrence_inbox_db.complete_recurrence_receipt("u1", "rcpt_1", outcome=RecurrenceOutcomeKind.candidate_created, account_generation=-1)
+    with pytest.raises(ValueError, match="valid RecurrenceOutcomeKind"):
+        recurrence_inbox_db.complete_recurrence_receipt("u1", "rcpt_1", outcome="bad_outcome", account_generation=1)
 
 
 def test_retry_recurrence_receipt_validation():
@@ -106,7 +151,7 @@ def test_retry_recurrence_receipt_validation():
         recurrence_inbox_db.retry_recurrence_receipt("u1", "rcpt_1", error_code="err", account_generation=-5)
 
 
-def test_retry_recurrence_receipt_error_code_non_string_resilience(monkeypatch):
+def test_retry_recurrence_receipt_error_code_strict_contract(monkeypatch):
     mock_client = MagicMock()
     mock_txn = MagicMock()
     mock_client.transaction.return_value = mock_txn
@@ -136,24 +181,22 @@ def test_retry_recurrence_receipt_error_code_non_string_resilience(monkeypatch):
     mock_from_snapshot.account_generation = 1
     monkeypatch.setattr(recurrence_inbox_db, "_from_snapshot", lambda *args, **kwargs: mock_from_snapshot)
 
-    # 1. Non-string None error_code does not raise TypeError
+    # 1. Non-string None error_code coerces to 'unknown' (never empty string)
     recurrence_inbox_db.retry_recurrence_receipt("  u1  ", "  r1  ", error_code=None, account_generation=1, firestore_client=mock_client)
     update_call = mock_txn.update.call_args[0][1]
-    assert update_call["last_error_code"] == ""
+    assert update_call["last_error_code"] == "unknown"
 
-    # 2. Integer error_code is safely stringified
-    recurrence_inbox_db.retry_recurrence_receipt("u1", "r1", error_code=504, account_generation=1, firestore_client=mock_client)
+    # 2. String with spaces coerces to 'unknown' to preserve StableId regex
+    recurrence_inbox_db.retry_recurrence_receipt("u1", "r1", error_code="space in error", account_generation=1, firestore_client=mock_client)
     update_call = mock_txn.update.call_args[0][1]
-    assert update_call["last_error_code"] == "504"
+    assert update_call["last_error_code"] == "unknown"
 
-    # 3. Exception object error_code is safely stringified
+    # 3. Exception object coerces to exception class name
     recurrence_inbox_db.retry_recurrence_receipt("u1", "r1", error_code=RuntimeError("upstream timeout"), account_generation=1, firestore_client=mock_client)
     update_call = mock_txn.update.call_args[0][1]
-    assert update_call["last_error_code"] == "upstream timeout"
+    assert update_call["last_error_code"] == "RuntimeError"
 
-    # 4. Long error string is truncated cleanly to 128 characters
-    long_msg = "X" * 200
-    recurrence_inbox_db.retry_recurrence_receipt("u1", "r1", error_code=long_msg, account_generation=1, firestore_client=mock_client)
+    # 4. Valid StableId identifier is preserved
+    recurrence_inbox_db.retry_recurrence_receipt("u1", "r1", error_code="network_timeout_504", account_generation=1, firestore_client=mock_client)
     update_call = mock_txn.update.call_args[0][1]
-    assert len(update_call["last_error_code"]) == 128
-    assert update_call["last_error_code"] == "X" * 128
+    assert update_call["last_error_code"] == "network_timeout_504"
