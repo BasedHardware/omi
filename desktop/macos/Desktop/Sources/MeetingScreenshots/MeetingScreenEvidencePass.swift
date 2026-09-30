@@ -34,6 +34,12 @@ struct MeetingScreenEvidencePass: Sendable {
     /// Whether the conversation still lacks a settled screenshot pass after this outcome, so the
     /// post-finalization retry should run. An untrusted pre-finalization window can become trusted
     /// once the backend stamps `finished_at`, so it is retried too.
+    /// Whether to run the terminal pass once finalization is terminal. Everything but a disabled
+    /// pass does: even a settled pre-pass may have judged a window the late STT tail has since
+    /// widened. When the terminal window is unchanged, the store's cache and persisted-set check
+    /// make that pass a no-op (no selection, no upload).
+    var needsTerminalPass: Bool { self != .disabled }
+
     var needsRetryAfterFinalize: Bool {
       switch self {
       case .disabled, .settled(.ready), .settled(.noCapture), .settled(.disabled): return false
@@ -60,6 +66,7 @@ struct MeetingScreenEvidencePass: Sendable {
       case .settled(.failed(let detail)):
         // Local conditions (an unsealed chunk, an unreadable screen history) are not upload
         // failures; keep them apart in the bucket.
+        if detail == MeetingScreenshotsStore.ownerChangedDetail { return "auth" }
         let local = [
           MeetingScreenshotsStore.activeChunkRetryDetail, MeetingScreenshotsStore.screenHistoryUnavailableDetail,
         ]
@@ -96,12 +103,20 @@ struct MeetingScreenEvidencePass: Sendable {
     adjudicate: { @MainActor conversationID, window in
       // A fresh store shares the static cache and in-flight map with every note view, so this is
       // the same run a note opened mid-flight awaits, and its result is what that note renders.
+      // It binds its own owner before reading any screen history (`MeetingEvidenceAuthorization`).
       await MeetingScreenshotsStore().loadAndWait(conversationID: conversationID, selectionWindow: window)
     },
     sleep: { try? await Task.sleep(for: $0) },
     stampEmpty: { conversationID in
+      // Owner-bound like every evidence upload: the conversation belongs to whoever is signed in
+      // now, and the stamp must not go out under a session that replaced them.
+      guard let authorization = MeetingEvidenceAuthorization.captureCurrentOwner() else {
+        log("MeetingScreenEvidence: no signed-in owner; empty evidence stamp not sent")
+        return
+      }
       do {
-        _ = try await MeetingFrameJudge.shared.adjudicateAndCommit(candidates: [], subjectID: conversationID)
+        _ = try await MeetingFrameJudge.shared.adjudicateAndCommit(
+          candidates: [], subjectID: conversationID, authorization: authorization)
       } catch {
         log("MeetingScreenEvidence: empty evidence stamp failed for \(conversationID)")
       }

@@ -36,8 +36,10 @@ actor MeetingFrameJudge {
   ///   - subjectID: The conversation these frames belong to.
   func adjudicateAndCommit(
     candidates: [MeetingFrameCandidate],
-    subjectID: String
+    subjectID: String,
+    authorization: MeetingEvidenceAuthorization
   ) async throws -> ConversationScreenFrameSet {
+    guard authorization.isCurrent else { throw MeetingEvidenceAuthorizationError.ownerChanged }
     // An empty offer is still sent: it is the "evidence pass done, nothing to show" stamp the
     // backend's notes admission waits for (no bytes, no judging), and it records that this window
     // was looked at so a later open reads the persisted result instead of selecting again.
@@ -61,8 +63,11 @@ actor MeetingFrameJudge {
       log("MeetingFrameJudge: no candidate had readable pixels; sending the empty evidence stamp")
     }
 
+    // The pixels just read belong to the captured owner; never send them under anyone else's session.
+    guard authorization.isCurrent else { throw MeetingEvidenceAuthorizationError.ownerChanged }
     let request = ScreenFrameAdjudicationRequestWire(subjectID: subjectID, candidates: wire)
-    let response = try await APIClient.shared.adjudicateScreenFrames(request)
+    let response = try await APIClient.shared.adjudicateScreenFrames(
+      request, authorizationSnapshot: authorization.snapshot)
     return response.frameSet
   }
 

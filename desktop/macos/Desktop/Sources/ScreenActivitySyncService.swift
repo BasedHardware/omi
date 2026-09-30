@@ -247,10 +247,16 @@ actor ScreenActivitySyncService {
   /// Legacy (cursor) sync is left alone. Best effort: every failure leaves the periodic path to it.
   func flushMeetingWindow(_ interval: DateInterval, deadline: Date) async {
     let losslessEnabled = await MainActor.run { ScreenActivityLosslessSyncFeature.isEnabled }
-    guard losslessEnabled, let dbPool = await getDBPool() else { return }
+    guard losslessEnabled else { return }
+    // Owner-bound (auth-session invariant): bind before touching this owner's database, recheck
+    // after every read, and send every batch under that owner's session only.
+    guard let authorization = MeetingEvidenceAuthorization.captureCurrentOwner(),
+      let dbPool = await getDBPool()
+    else { return }
     await Self.flushMeetingWindow(
       interval, database: dbPool,
-      push: { await self.pushRows($0) },
+      push: { await self.pushRows($0, authorizationSnapshot: authorization.snapshot) },
+      authorizationIsCurrent: { authorization.isCurrent },
       shouldContinue: { Date() < deadline },
       recordFallback: { reason in
         DesktopDiagnosticsManager.shared.recordFallback(
@@ -270,6 +276,8 @@ actor ScreenActivitySyncService {
     case pushFailed(synced: Int)
     case databaseFailed(synced: Int)
     case deadlineReached(synced: Int)
+    /// The signed-in account changed mid-flush: nothing further is sent or marked.
+    case ownerChanged(synced: Int)
   }
 
   /// The flush itself, over any database and transport: compact once, then ship the meeting's
@@ -282,6 +290,7 @@ actor ScreenActivitySyncService {
     batchSize: Int = meetingFlushBatchSize,
     database: any DatabaseWriter,
     push: ([[String: Any]]) async -> Bool,
+    authorizationIsCurrent: () -> Bool = { true },
     shouldContinue: () -> Bool,
     recordFallback: (String) -> Void,
     isolation: isolated (any Actor)? = #isolation
@@ -294,15 +303,30 @@ actor ScreenActivitySyncService {
           try fetchMeetingWindowCandidates(db: db, interval: interval, limit: batchSize)
         }
         guard !candidates.isEmpty else { break }
+        guard authorizationIsCurrent() else {
+          log("ScreenActivitySync: meeting flush stopped; signed-in account changed")
+          recordFallback("auth")
+          return .ownerChanged(synced: synced)
+        }
         guard shouldContinue() else {
           log("ScreenActivitySync: meeting flush stopped at the deadline after \(synced) rows")
           recordFallback("timeout")
           return .deadlineReached(synced: synced)
         }
         guard await push(candidates.map(\.payload)) else {
+          if !authorizationIsCurrent() {
+            log("ScreenActivitySync: meeting flush push abandoned; signed-in account changed")
+            recordFallback("auth")
+            return .ownerChanged(synced: synced)
+          }
           log("ScreenActivitySync: meeting flush push failed; periodic sync will retry")
           recordFallback("upload_failed")
           return .pushFailed(synced: synced)
+        }
+        guard authorizationIsCurrent() else {
+          log("ScreenActivitySync: meeting flush stopped after a push; signed-in account changed")
+          recordFallback("auth")
+          return .ownerChanged(synced: synced)
         }
         try await database.write { db in try markCandidatesSynced(db: db, candidates: candidates) }
         synced += candidates.count
@@ -547,7 +571,11 @@ actor ScreenActivitySyncService {
 
   // MARK: - HTTP push
 
-  private func pushRows(_ rows: [[String: Any]]) async -> Bool {
+  /// With `authorizationSnapshot` the push is owner-bound: headers are minted for that owner only,
+  /// and the request is abandoned if the session changed while they were built.
+  private func pushRows(
+    _ rows: [[String: Any]], authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async -> Bool {
     let accountGeneration = await MainActor.run {
       AccountCutoverControlManager.shared.control.accountGeneration
     }
@@ -563,7 +591,14 @@ actor ScreenActivitySyncService {
     }
 
     do {
-      let headers = try await APIClient.shared.buildHeaders()
+      if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
+        return false
+      }
+      let headers = try await APIClient.shared.buildHeaders(expectedAuthOwnerId: authorizationSnapshot?.ownerID)
+      if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
+        log("ScreenActivitySync: signed-in account changed while preparing a push; not sent")
+        return false
+      }
       let baseURL = await APIClient.shared.rustBackendURL
       guard let url = URL(string: baseURL + "v1/screen-activity/sync") else {
         log("ScreenActivitySync: invalid URL")
@@ -584,6 +619,11 @@ actor ScreenActivitySyncService {
       if httpResponse.statusCode == 200 {
         let syncResponse = try JSONDecoder().decode(OmiAPI.ScreenActivitySyncResponse.self, from: data)
         guard let delivered = syncResponse.frameRequests, !delivered.isEmpty else {
+          return true
+        }
+        if let authorizationSnapshot, !RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) {
+          // The rows landed for their owner; a replaced session must not continue into pixel
+          // claims and uploads. The periodic path serves those requests for whoever owns them.
           return true
         }
         let deviceID = ClientDeviceService.shared.clientDeviceId

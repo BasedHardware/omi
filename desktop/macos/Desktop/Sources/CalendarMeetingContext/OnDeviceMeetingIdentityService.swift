@@ -631,6 +631,7 @@ actor OnDeviceMeetingIdentityService {
   private let provider: any MeetingScreenActivityProviding
   private let uploader: any DesktopMeetingUploading
   private let ownerIdentity: @Sendable () async -> OwnerIdentity
+  private let captureAuthorization: @Sendable () -> MeetingEvidenceAuthorization?
   private var uploadedEventIDs = Set<String>()
 
   init(
@@ -638,8 +639,12 @@ actor OnDeviceMeetingIdentityService {
     uploader: any DesktopMeetingUploading = BackendDesktopMeetingUploader(),
     ownerIdentity: @escaping @Sendable () async -> OwnerIdentity = { @MainActor in
       OnDeviceMeetingIdentityService.signedInOwner()
+    },
+    captureAuthorization: @escaping @Sendable () -> MeetingEvidenceAuthorization? = {
+      MeetingEvidenceAuthorization.captureCurrentOwner()
     }
   ) {
+    self.captureAuthorization = captureAuthorization
     self.provider = provider
     self.uploader = uploader
     self.ownerIdentity = ownerIdentity
@@ -654,6 +659,9 @@ actor OnDeviceMeetingIdentityService {
   }
 
   func syncIdentity(overlapping interval: DateInterval) async {
+    // Bind to one owner before reading that owner's screen history; the names read below must
+    // never be uploaded under a session that replaced them.
+    guard let authorization = captureAuthorization() else { return }
     let snapshots = await provider.snapshots(overlapping: interval)
     let owner = await ownerIdentity()
     guard
@@ -663,7 +671,11 @@ actor OnDeviceMeetingIdentityService {
     guard !uploadedEventIDs.contains(payload.calendarEventID) else { return }
     do {
       _ = try payload.wireBody
-      try await uploader.upload(payload)
+      guard authorization.isCurrent else {
+        log("OnDeviceMeetingIdentity: signed-in account changed; identity not uploaded")
+        return
+      }
+      try await uploader.upload(payload, authorizationSnapshot: authorization.snapshot)
       uploadedEventIDs.insert(payload.calendarEventID)
       log("OnDeviceMeetingIdentity: stored meeting identity")
     } catch {

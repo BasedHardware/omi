@@ -278,9 +278,10 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     let server = FakeScreenFrameServer(stampedFingerprint: window.fingerprint)
     let chunk = ActiveChunk()
     let store = MeetingScreenshotsStore(
+      captureAuthorization: { .forTesting() },
       featureEnabled: { true },
       selectCandidates: { window in await chunk.select(in: window) },
-      adjudicateAndCommit: { candidates, _ in try await server.adjudicate(capturedAt: candidates[0].timestamp) },
+      adjudicateAndCommit: { candidates, _, _ in try await server.adjudicate(capturedAt: candidates[0].timestamp) },
       fetchPersistedSet: { _ in await server.persisted() },
       deleteFrameRemote: { _, _ in },
       sealActiveRecording: { await chunk.seal() })
@@ -303,9 +304,10 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     let conversationID = "unsealed-\(UUID().uuidString)"
     func makeStore() -> MeetingScreenshotsStore {
       MeetingScreenshotsStore(
+        captureAuthorization: { .forTesting() },
         featureEnabled: { true },
         selectCandidates: { window in await chunk.select(in: window) },
-        adjudicateAndCommit: { candidates, _ in try await server.adjudicate(capturedAt: candidates[0].timestamp) },
+        adjudicateAndCommit: { candidates, _, _ in try await server.adjudicate(capturedAt: candidates[0].timestamp) },
         fetchPersistedSet: { _ in await server.persisted() },
         deleteFrameRemote: { _, _ in },
         sealActiveRecording: { await chunk.seal() })
@@ -332,6 +334,7 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     let conversationID = "expiry-\(UUID().uuidString)"
     func makeStore() -> MeetingScreenshotsStore {
       MeetingScreenshotsStore(
+        captureAuthorization: { .forTesting() },
         featureEnabled: { true },
         selectCandidates: { _ in
           XCTFail("a persisted set for this window must be read, not re-selected")
@@ -446,12 +449,13 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     let conversationID = "empty-\(UUID().uuidString)"
     func makeStore() -> MeetingScreenshotsStore {
       MeetingScreenshotsStore(
+        captureAuthorization: { .forTesting() },
         featureEnabled: { true },
         selectCandidates: { _ in
           selections.count += 1
           return MeetingFrameSelector.Outcome()
         },
-        adjudicateAndCommit: { candidates, _ in await server.adjudicate(candidateCount: candidates.count) },
+        adjudicateAndCommit: { candidates, _, _ in await server.adjudicate(candidateCount: candidates.count) },
         fetchPersistedSet: { _ in await server.persisted() },
         deleteFrameRemote: { _, _ in })
     }
@@ -477,9 +481,11 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     let conversationID = "stamp-fails-\(UUID().uuidString)"
     func makeStore() -> MeetingScreenshotsStore {
       MeetingScreenshotsStore(
+        captureAuthorization: { .forTesting() },
         featureEnabled: { true },
         selectCandidates: { _ in MeetingFrameSelector.Outcome() },
-        adjudicateAndCommit: { candidates, _ in try await server.adjudicateOrFail(candidateCount: candidates.count) },
+        adjudicateAndCommit: { candidates, _, _ in try await server.adjudicateOrFail(candidateCount: candidates.count)
+        },
         fetchPersistedSet: { _ in await server.persisted() },
         deleteFrameRemote: { _, _ in })
     }
@@ -501,9 +507,10 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
       start: Date(timeIntervalSince1970: 9_000), end: Date(timeIntervalSince1970: 9_600))
     let server = StampServer(fingerprint: window.fingerprint)
     let store = MeetingScreenshotsStore(
+      captureAuthorization: { .forTesting() },
       featureEnabled: { true },
       selectCandidates: { _ in .unavailable },
-      adjudicateAndCommit: { candidates, _ in await server.adjudicate(candidateCount: candidates.count) },
+      adjudicateAndCommit: { candidates, _, _ in await server.adjudicate(candidateCount: candidates.count) },
       fetchPersistedSet: { _ in await server.persisted() },
       deleteFrameRemote: { _, _ in })
 
@@ -519,6 +526,53 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
   func testTheSelectorReportsAnUnavailableStoreAsAFailedReadNotAnEmptyOne() {
     XCTAssertTrue(MeetingFrameSelector.Outcome.unavailable.localReadFailed)
     XCTAssertFalse(MeetingFrameSelector.Outcome().localReadFailed)
+  }
+
+  @MainActor
+  func testEvidenceIsNeverReadWithoutAnOwnerNorUploadedAfterTheOwnerChanged() async throws {
+    let window = MeetingScreenshotSelectionWindow(
+      start: Date(timeIntervalSince1970: 10_000), end: Date(timeIntervalSince1970: 10_600))
+    let server = StampServer(fingerprint: window.fingerprint)
+    let selections = SelectionCounter()
+    let signedIn = OwnerSwitch()
+    func makeStore(_ capture: @escaping () -> MeetingEvidenceAuthorization?) -> MeetingScreenshotsStore {
+      MeetingScreenshotsStore(
+        captureAuthorization: capture,
+        featureEnabled: { true },
+        selectCandidates: { _ in
+          selections.count += 1
+          signedIn.switchAccount()  // the account changes while owner A's history is being read
+          return MeetingFrameSelector.Outcome()
+        },
+        adjudicateAndCommit: { candidates, _, _ in await server.adjudicate(candidateCount: candidates.count) },
+        fetchPersistedSet: { _ in await server.persisted() },
+        deleteFrameRemote: { _, _ in })
+    }
+
+    let noOwner = await makeStore({ nil }).loadAndWait(
+      conversationID: "no-owner-\(UUID().uuidString)", selectionWindow: window)
+    XCTAssertEqual(noOwner, .failed(MeetingScreenshotsStore.ownerChangedDetail))
+    XCTAssertEqual(selections.count, 0, "nothing is read without an owner to bind it to")
+
+    let switched = await makeStore({ .forTesting(isCurrent: { signedIn.isOriginalOwner }) }).loadAndWait(
+      conversationID: "switched-\(UUID().uuidString)", selectionWindow: window)
+    XCTAssertEqual(switched, .failed(MeetingScreenshotsStore.ownerChangedDetail))
+    XCTAssertEqual(selections.count, 1)
+    let offers = await server.offers
+    XCTAssertEqual(offers, [], "owner A's evidence must not be sent once owner B is signed in")
+    XCTAssertEqual(MeetingScreenEvidencePass.Fallback.reason(for: .settled(switched)), "auth")
+    XCTAssertTrue(MeetingScreenEvidencePass.Outcome.settled(switched).needsRetryAfterFinalize)
+  }
+
+  func testTheJudgeRefusesAnUploadForAReplacedOwner() async {
+    do {
+      _ = try await MeetingFrameJudge.shared.adjudicateAndCommit(
+        candidates: [], subjectID: "conversation", authorization: .forTesting(isCurrent: { false }))
+      XCTFail("an upload for a replaced owner must be refused")
+    } catch {
+      XCTAssertEqual(error as? MeetingEvidenceAuthorizationError, .ownerChanged)
+      XCTAssertEqual(MeetingScreenshotsStore.failureDetail(error), MeetingScreenshotsStore.ownerChangedDetail)
+    }
   }
 
   func testTheFlushPrecedesAdjudicationAndAnUntrustedWindowStillStamps() async {
@@ -584,6 +638,7 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
   private static func makeStore(server: FakeScreenFrameServer, selections: SelectionCounter) -> MeetingScreenshotsStore
   {
     MeetingScreenshotsStore(
+      captureAuthorization: { .forTesting() },
       featureEnabled: { true },
       selectCandidates: { window in
         selections.count += 1
@@ -596,7 +651,7 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
         ]
         return outcome
       },
-      adjudicateAndCommit: { candidates, _ in try await server.adjudicate(capturedAt: candidates[0].timestamp) },
+      adjudicateAndCommit: { candidates, _, _ in try await server.adjudicate(capturedAt: candidates[0].timestamp) },
       fetchPersistedSet: { _ in await server.persisted() },
       deleteFrameRemote: { _, _ in })
   }
@@ -861,4 +916,21 @@ private actor StampServer {
   }
 
   func persisted() -> ConversationScreenFrameSet { stored }
+}
+
+private final class OwnerSwitch: @unchecked Sendable {
+  private let lock = NSLock()
+  private var original = true
+
+  var isOriginalOwner: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return original
+  }
+
+  func switchAccount() {
+    lock.lock()
+    original = false
+    lock.unlock()
+  }
 }

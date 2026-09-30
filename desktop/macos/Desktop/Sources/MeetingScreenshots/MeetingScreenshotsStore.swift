@@ -94,8 +94,10 @@ final class MeetingScreenshotsStore: ObservableObject {
   private var task: Task<Void, Never>?
   private let featureEnabled: () -> Bool
   private let selectCandidates: (MeetingScreenshotSelectionWindow) async -> MeetingFrameSelector.Outcome
+  private let captureAuthorization: () -> MeetingEvidenceAuthorization?
   private let adjudicateAndCommit:
-    @Sendable ([MeetingFrameCandidate], String) async throws -> ConversationScreenFrameSet
+    @Sendable ([MeetingFrameCandidate], String, MeetingEvidenceAuthorization) async throws
+      -> ConversationScreenFrameSet
   private let fetchPersistedSet: @Sendable (String) async throws -> ConversationScreenFrameSet
   private let deleteFrameRemote: @Sendable (String, String) async throws -> Void
   private let sealActiveRecording: @Sendable () async -> Void
@@ -121,17 +123,29 @@ final class MeetingScreenshotsStore: ObservableObject {
   nonisolated static let activeChunkRetryDetail = "meeting frames still being recorded"
   /// Phase detail when the local Rewind store could not be read at all.
   nonisolated static let screenHistoryUnavailableDetail = "screen history unavailable"
+  /// Phase detail when no owner could be bound, or the owner changed before the upload.
+  nonisolated static let ownerChangedDetail = "signed-in account changed"
+
+  /// A bounded phase detail: an owner change keeps its own label so telemetry can bucket it.
+  nonisolated static func failureDetail(_ error: Error) -> String {
+    if error is MeetingEvidenceAuthorizationError { return ownerChangedDetail }
+    if case AuthError.userChangedDuringRequest = error { return ownerChangedDetail }
+    return error.localizedDescription
+  }
 
   init(
+    captureAuthorization: @escaping () -> MeetingEvidenceAuthorization? = {
+      MeetingEvidenceAuthorization.captureCurrentOwner()
+    },
     featureEnabled: @escaping () -> Bool = { MeetingNoteScreenshotsFeature.isEnabled },
     selectCandidates: @escaping (MeetingScreenshotSelectionWindow) async -> MeetingFrameSelector.Outcome = {
       await MeetingFrameSelector.selectCandidates(in: $0)
     },
     adjudicateAndCommit:
       @escaping @Sendable (
-        [MeetingFrameCandidate], String
+        [MeetingFrameCandidate], String, MeetingEvidenceAuthorization
       ) async throws -> ConversationScreenFrameSet = {
-        try await MeetingFrameJudge.shared.adjudicateAndCommit(candidates: $0, subjectID: $1)
+        try await MeetingFrameJudge.shared.adjudicateAndCommit(candidates: $0, subjectID: $1, authorization: $2)
       },
     fetchPersistedSet: @escaping @Sendable (String) async throws -> ConversationScreenFrameSet = {
       try await APIClient.shared.getConversationScreenFrames(conversationID: $0)
@@ -146,6 +160,7 @@ final class MeetingScreenshotsStore: ObservableObject {
       _ = try? await RewindStorage.shared.flushCurrentVideoChunk()
     }
   ) {
+    self.captureAuthorization = captureAuthorization
     self.sealActiveRecording = sealActiveRecording
     self.now = now
     self.featureEnabled = featureEnabled
@@ -365,6 +380,13 @@ final class MeetingScreenshotsStore: ObservableObject {
       return
     }
 
+    // Bind this run to one owner before reading any of that owner's screen history. Every upload
+    // below re-checks it and carries it into transport auth.
+    guard let authorization = captureAuthorization() else {
+      log("MeetingScreenshots: no signed-in owner to bind for \(conversationID); not selecting")
+      phase = .failed(Self.ownerChangedDetail)
+      return
+    }
     phase = .selecting
     log(
       "MeetingScreenshots: selecting for \(conversationID) trusted window "
@@ -395,6 +417,14 @@ final class MeetingScreenshotsStore: ObservableObject {
       "MeetingScreenshots: \(outcome.framesInWindow) frame(s) in window, "
         + "\(outcome.candidates.count) candidate(s), drops=\(outcome.drops)")
 
+    guard authorization.isCurrent else {
+      // What was just read belongs to an owner who is no longer signed in: upload none of it.
+      log("MeetingScreenshots: signed-in account changed during selection for \(conversationID)")
+      publish(notes: ["the signed-in account changed"])
+      phase = .failed(Self.ownerChangedDetail)
+      return
+    }
+
     if outcome.localReadFailed {
       // Could not look is not "found nothing": never stamp it as final. Uncached, so the next load
       // (or the post-finalize retry) selects again; the server's bounded wait covers the notes.
@@ -408,7 +438,7 @@ final class MeetingScreenshotsStore: ObservableObject {
       // Nothing to offer, but the pass is done: send the empty stamp (no bytes, no judging). It is
       // what the backend's notes admission waits for, and it records this window as looked at.
       do {
-        let stamped = try await adjudicateAndCommit([], conversationID)
+        let stamped = try await adjudicateAndCommit([], conversationID, authorization)
         guard self.selectionWindow == selectionWindow else { return }
         apply(frameSet: stamped, within: selectionWindow, notes: notes)
       } catch {
@@ -417,7 +447,7 @@ final class MeetingScreenshotsStore: ObservableObject {
         // Uncached failure, like any other adjudication failure: the retry and the next open
         // must be able to stamp again, and the pass records the degraded fallback.
         publish(notes: notes)
-        phase = .failed(error.localizedDescription)
+        phase = .failed(Self.failureDetail(error))
       }
       return
     }
@@ -426,7 +456,7 @@ final class MeetingScreenshotsStore: ObservableObject {
 
     let frameSet: ConversationScreenFrameSet
     do {
-      frameSet = try await adjudicateAndCommit(outcome.candidates, conversationID)
+      frameSet = try await adjudicateAndCommit(outcome.candidates, conversationID, authorization)
     } catch {
       guard self.selectionWindow == selectionWindow else { return }
       // No network, a 4xx/5xx, a timeout — all of it fails the same way: the view for `.failed`
@@ -434,7 +464,7 @@ final class MeetingScreenshotsStore: ObservableObject {
       // looks like a note with no screenshots.
       log("MeetingScreenshots: adjudication failed for \(conversationID) — \(error.localizedDescription)")
       publish(notes: notes)
-      phase = .failed(error.localizedDescription)
+      phase = .failed(Self.failureDetail(error))
       return
     }
 

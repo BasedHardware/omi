@@ -21,6 +21,7 @@ final class MeetingScreenshotsTests: XCTestCase {
   func testDisabledStoreStopsBeforeCandidateSelection() {
     var didSelect = false
     let store = MeetingScreenshotsStore(
+      captureAuthorization: { .forTesting() },
       featureEnabled: { false },
       selectCandidates: { _ in
         didSelect = true
@@ -41,6 +42,7 @@ final class MeetingScreenshotsTests: XCTestCase {
   func testUntrustedWindowFailsClosedBeforeFetchOrSelection() {
     var didSelect = false
     let store = MeetingScreenshotsStore(
+      captureAuthorization: { .forTesting() },
       selectCandidates: { _ in
         didSelect = true
         return MeetingFrameSelector.Outcome()
@@ -69,11 +71,12 @@ final class MeetingScreenshotsTests: XCTestCase {
       adjudicatedAt: Date(),
       selectionFingerprint: "meeting-lifecycle-v0:0:300000")
     let store = MeetingScreenshotsStore(
+      captureAuthorization: { .forTesting() },
       selectCandidates: { _ in
         didSelect = true
         return MeetingFrameSelector.Outcome()
       },
-      adjudicateAndCommit: { _, _ in
+      adjudicateAndCommit: { _, _, _ in
         ConversationScreenFrameSet(
           revision: 1, banner: nil, strip: [], adjudicatedAt: Date(), selectionFingerprint: window.fingerprint)
       },

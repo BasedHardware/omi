@@ -149,6 +149,37 @@ final class OnDeviceMeetingIdentityCallTileTests: XCTestCase {
     XCTAssertEqual(OnDeviceMeetingIdentityExtractor.callTileNames(in: rows), [], "4 of 20 rows is below 25%")
   }
 
+  /// The identity upload is owner-bound: never read without an owner, never sent after a switch.
+  func testIdentityUploadIsBoundToTheOwnerWhoseScreenWasRead() async {
+    let rows = (0..<4).map { meetRow("Jordan Rivera", minute: $0) }
+    let interval = DateInterval(start: rows[0].timestamp, duration: 600)
+
+    let reads = RecordingProvider(rows: rows)
+    let uploads = RecordingUploader()
+    await OnDeviceMeetingIdentityService(
+      provider: reads, uploader: uploads, ownerIdentity: { .init(names: [], emails: []) },
+      captureAuthorization: { nil }
+    ).syncIdentity(overlapping: interval)
+    let readsWithoutOwner = await reads.count
+    XCTAssertEqual(readsWithoutOwner, 0, "no owner to bind: the screen history is not read")
+
+    let switched = OwnerFlag()
+    let switchingReads = RecordingProvider(rows: rows, onRead: { switched.set() })
+    await OnDeviceMeetingIdentityService(
+      provider: switchingReads, uploader: uploads, ownerIdentity: { .init(names: [], emails: []) },
+      captureAuthorization: { .forTesting(isCurrent: { !switched.value }) }
+    ).syncIdentity(overlapping: interval)
+    let uploadsAfterSwitch = await uploads.count
+    XCTAssertEqual(uploadsAfterSwitch, 0, "owner A's names must not be uploaded under owner B")
+
+    await OnDeviceMeetingIdentityService(
+      provider: RecordingProvider(rows: rows), uploader: uploads, ownerIdentity: { .init(names: [], emails: []) },
+      captureAuthorization: { .forTesting() }
+    ).syncIdentity(overlapping: interval)
+    let uploadsForCurrentOwner = await uploads.count
+    XCTAssertEqual(uploadsForCurrentOwner, 1)
+  }
+
   private func meetRow(_ ocr: String, minute: Int) -> MeetingScreenActivitySnapshot {
     MeetingScreenActivitySnapshot(
       timestamp: Date(timeIntervalSince1970: 1_790_769_600 + Double(minute) * 60),
@@ -168,5 +199,45 @@ final class OnDeviceMeetingIdentityCallTileTests: XCTestCase {
     return OnDeviceMeetingIdentityExtractor.payload(
       from: snapshots, overlapping: interval, ownerNames: ownerNames, ownerEmails: ownerEmails
     )?.participants.compactMap(\.name) ?? []
+  }
+}
+
+private actor RecordingProvider: MeetingScreenActivityProviding {
+  private let rows: [MeetingScreenActivitySnapshot]
+  private let onRead: @Sendable () -> Void
+  private(set) var count = 0
+
+  init(rows: [MeetingScreenActivitySnapshot], onRead: @escaping @Sendable () -> Void = {}) {
+    self.rows = rows
+    self.onRead = onRead
+  }
+
+  func snapshots(overlapping interval: DateInterval) async -> [MeetingScreenActivitySnapshot] {
+    count += 1
+    onRead()
+    return rows
+  }
+}
+
+private actor RecordingUploader: DesktopMeetingUploading {
+  private(set) var count = 0
+
+  func upload(_ payload: DesktopMeetingPayload) async throws { count += 1 }
+}
+
+private final class OwnerFlag: @unchecked Sendable {
+  private let lock = NSLock()
+  private var raised = false
+
+  var value: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return raised
+  }
+
+  func set() {
+    lock.lock()
+    raised = true
+    lock.unlock()
   }
 }

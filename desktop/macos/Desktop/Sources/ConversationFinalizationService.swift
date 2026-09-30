@@ -457,7 +457,7 @@ actor ConversationFinalizationService {
         try await MeetingScreenEvidencePass.serverSelectionWindow(conversationID: conversationId, client: client)
       })
     let conversation = try await apiClient.finalizeConversation(id: conversationId)
-    if before.needsRetryAfterFinalize {
+    if before.needsTerminalPass {
       retryScreenEvidenceAfterFinalize(conversationID: conversation.id)
     }
     return conversation

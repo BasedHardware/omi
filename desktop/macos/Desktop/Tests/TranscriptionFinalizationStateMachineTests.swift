@@ -170,7 +170,10 @@ private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendabl
       client?.urlProtocol(
         self,
         didLoad: Data(
-          #"{"revision":0,"banner":null,"strip":[],"adjudicated_at":null,"selection_fingerprint":null,"trusted_selection_fingerprint":"meeting-content-v1:1783418401623:1783418458373"}"#
+          // A late STT tail: once finalized, the server's trusted window ends 3 s later.
+          (Self.requests.contains { $0.method == "POST" && $0.url.path.hasSuffix("/finalize") }
+            ? #"{"revision":0,"banner":null,"strip":[],"adjudicated_at":null,"selection_fingerprint":null,"trusted_selection_fingerprint":"meeting-content-v1:1783418401623:1783418461373"}"#
+            : #"{"revision":0,"banner":null,"strip":[],"adjudicated_at":null,"selection_fingerprint":null,"trusted_selection_fingerprint":"meeting-content-v1:1783418401623:1783418458373"}"#)
             .utf8))
     } else if path == "/v1/conversations/evidence-recording-id"
       || path == "/v1/conversations/evidence-recording-id/finalize"
@@ -839,7 +842,7 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     // whose marker says both have landed — all before the backend is asked to write notes.
     // 10:00:00.123456 + 1.5s and + 58.25s, in the server's arithmetic.
     XCTAssertEqual(
-      recorded,
+      Array(recorded.prefix(3)),
       [
         "identity", "flush",
         "adjudicate evidence-recording-id meeting-content-v1:1783418401623:1783418458373 posts=0",
@@ -853,6 +856,60 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     XCTAssertLessThan(read, finalize, "screen evidence must be gathered before the backend is asked to write notes")
     let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
     XCTAssertEqual(storedSession?.backendId, "evidence-recording-id")
+  }
+
+  func testASettledPrePassIsRejudgedWhenTheTerminalWindowGrew() async throws {
+    FinalizationRecoveryURLStub.reset()
+    setenv("OMI_PYTHON_API_URL", "https://finalization-recovery.test/", 1)
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [FinalizationRecoveryURLStub.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    await client.setTestAuthHeader("Bearer test-token")
+    await ConversationFinalizationService.shared.setAPIClientForTesting(client)
+    let events = EvidenceEventRecorder()
+    let terminal = expectation(description: "the terminal window is judged once finalization is terminal")
+    await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(
+      MeetingScreenEvidencePass(
+        screenshotsEnabled: { true },
+        flushScreenActivity: { _ in },
+        adjudicate: { _, window in
+          let posts = FinalizationRecoveryURLStub.requests.filter { $0.method == "POST" }.count
+          await events.record("adjudicate \(window.fingerprint) posts=\(posts)")
+          if posts > 0 { terminal.fulfill() }
+          return .ready  // the pre-pass settled successfully
+        },
+        sleep: boundThatNeverFires))
+    await ConversationFinalizationService.shared.setMeetingContextSyncForTesting { _ in }
+    addTeardownBlock {
+      await ConversationFinalizationService.shared.setAPIClientForTesting(nil)
+      await ConversationFinalizationService.shared.setScreenEvidencePassForTesting(nil)
+      await ConversationFinalizationService.shared.setMeetingContextSyncForTesting(nil)
+    }
+    defer {
+      unsetenv("OMI_PYTHON_API_URL")
+      FinalizationRecoveryURLStub.reset()
+    }
+
+    let sessionId = try await TranscriptionStorage.shared.startSession(
+      source: "desktop",
+      clientConversationId: "evidence-recording-id",
+      conversationRole: .meeting,
+      finalizationStrategy: .cloudReconcile
+    )
+    try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
+
+    await ConversationFinalizationService.shared.finalizeSession(
+      id: sessionId, reason: .maxDurationRotation, allowCloudForceProcess: true)
+    await fulfillment(of: [terminal], timeout: 5)
+
+    let recorded = await events.events
+    XCTAssertEqual(
+      recorded,
+      [
+        "adjudicate meeting-content-v1:1783418401623:1783418458373 posts=0",
+        "adjudicate meeting-content-v1:1783418401623:1783418461373 posts=1",
+      ],
+      "a settled pre-pass must still be re-judged on the widened terminal window")
   }
 
   func testFailedPreNotesEvidenceIsRetriedRightAfterFinalize() async throws {

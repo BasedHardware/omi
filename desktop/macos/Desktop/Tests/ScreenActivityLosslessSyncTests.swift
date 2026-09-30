@@ -270,6 +270,56 @@ final class ScreenActivityLosslessSyncTests: XCTestCase {
     XCTAssertEqual(reasons, ["timeout"])
   }
 
+  /// Owner-bound background sync: a batch read for owner A is never sent, nor marked, once the
+  /// signed-in account has changed.
+  func testMeetingFlushStopsWhenTheSignedInAccountChanges() async throws {
+    let queue = try makeLegacyQueue()
+    let start = Date(timeIntervalSince1970: 1_700_000_100)
+    let meeting = DateInterval(start: start, duration: 3_600)
+    try await queue.write { db in
+      try RewindDatabase.installScreenActivitySyncStateSchema(db)
+      for index in 0..<150 {
+        try db.execute(
+          sql: "INSERT INTO screenshots (timestamp, appName, windowTitle, ocrText) VALUES (?, ?, ?, ?)",
+          arguments: [start.addingTimeInterval(Double(index)), "SyntheticApp", "Window \(index)", "text \(index)"])
+      }
+    }
+    var batches: [Int] = []
+    var reasons: [String] = []
+    var ownerIsCurrent = true
+
+    let result = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: queue,
+      push: { rows in
+        batches.append(rows.count)
+        ownerIsCurrent = false  // the account switches while the first batch is in flight
+        return true
+      },
+      authorizationIsCurrent: { ownerIsCurrent },
+      shouldContinue: { true },
+      recordFallback: { reasons.append($0) })
+
+    XCTAssertEqual(result, .ownerChanged(synced: 0))
+    XCTAssertEqual(batches, [100], "no further batch goes out under the new session")
+    XCTAssertEqual(reasons, ["auth"])
+    let pending = try await queue.read { db in
+      try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM screenshots WHERE screenActivitySyncState = 0")
+    }
+    XCTAssertEqual(pending, 150, "nothing is marked synced for a replaced owner")
+
+    batches = []
+    reasons = []
+    let refused = await ScreenActivitySyncService.flushMeetingWindow(
+      meeting, database: queue,
+      push: { rows in
+        batches.append(rows.count)
+        return true
+      },
+      authorizationIsCurrent: { false }, shouldContinue: { true }, recordFallback: { reasons.append($0) })
+    XCTAssertEqual(refused, .ownerChanged(synced: 0))
+    XCTAssertEqual(batches, [], "a batch read for a replaced owner is never pushed")
+  }
+
   /// A row whose vector is still pending must not ship text-only and then ship again unchanged:
   /// the second push is a byte-identical Firestore document write plus a full index rewrite.
   func testARowWaitsForItsEmbeddingRatherThanShippingTwice() throws {
