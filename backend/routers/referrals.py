@@ -1,7 +1,8 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 import firebase_admin.auth
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from database.referrals import claim_referral_trial
 from utils.other import endpoints as auth
@@ -18,6 +19,8 @@ from utils.referrals import (
 )
 from utils.integration_telemetry import emit_posthog_event
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=['referrals'])
 
 
@@ -26,7 +29,7 @@ class ReferralLinkResponse(BaseModel):
 
 
 class ReferralClaimRequest(BaseModel):
-    code: str
+    code: str = Field(..., min_length=1, max_length=256)
 
 
 class ReferralClaimResponse(BaseModel):
@@ -40,21 +43,27 @@ def get_referral_link(uid: str = Depends(auth.get_current_user_uid)) -> Referral
         response = ReferralLinkResponse(referral_url=referral_link(uid))
     except ReferralCodeError as error:
         raise HTTPException(status_code=503, detail='Referral links are temporarily unavailable') from error
+    except Exception as error:
+        logger.error(f'Failed to generate referral link for uid {uid}: {error}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to generate referral link') from error
     emit_posthog_event(uid, 'Referral Link Issued', {'program': REFERRAL_PROGRAM})
     return response
 
 
 @router.get('/r/{code}', response_class=RedirectResponse)
 def capture_referral(code: str) -> RedirectResponse:
+    clean_code = (code or '').strip()
+    if not clean_code or len(clean_code) > 256:
+        raise HTTPException(status_code=404, detail='Referral link not found')
     try:
-        referrer_uid = referrer_uid_from_code(code)
+        referrer_uid = referrer_uid_from_code(clean_code)
     except ReferralCodeError as error:
         raise HTTPException(status_code=404, detail='Referral link not found') from error
 
-    response = RedirectResponse(referral_signup_url(code), status_code=302)
+    response = RedirectResponse(referral_signup_url(clean_code), status_code=302)
     response.set_cookie(
         REFERRAL_COOKIE_NAME,
-        code,
+        clean_code,
         max_age=REFERRAL_COOKIE_MAX_AGE_SECONDS,
         httponly=True,
         secure=True,
@@ -70,18 +79,29 @@ def claim_referral(
     body: ReferralClaimRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ) -> ReferralClaimResponse:
+    clean_code = body.code.strip()
     try:
-        referrer_uid = referrer_uid_from_code(body.code)
+        referrer_uid = referrer_uid_from_code(clean_code)
     except ReferralCodeError as error:
         raise HTTPException(status_code=404, detail='Referral link not found') from error
 
-    user = firebase_admin.auth.get_user(uid)
+    try:
+        user = firebase_admin.auth.get_user(uid)
+    except Exception as error:
+        logger.error(f'Failed to load user auth metadata for referral claim uid {uid}: {error}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to verify account metadata') from error
+
     creation_timestamp = getattr(getattr(user, 'user_metadata', None), 'creation_timestamp', None)
-    claimed, reason = claim_referral_trial(
-        uid,
-        referrer_uid,
-        is_new_user=is_new_referral_account(creation_timestamp),
-    )
+    try:
+        claimed, reason = claim_referral_trial(
+            uid,
+            referrer_uid,
+            is_new_user=is_new_referral_account(creation_timestamp),
+        )
+    except Exception as error:
+        logger.error(f'Failed to execute claim_referral_trial for uid {uid}: {error}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to process referral claim') from error
+
     emit_posthog_event(
         uid,
         'Referral Claimed',
