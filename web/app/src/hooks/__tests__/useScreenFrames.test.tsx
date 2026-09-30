@@ -297,4 +297,100 @@ describe('useScreenFrames', () => {
       vi.useRealTimers();
     }
   });
+
+  it('rearms renewal when a failed delete discards an in-flight renewal', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.setSystemTime(new Date('2026-08-24T10:00:00Z'));
+      let resolveRefresh: (set: ConversationScreenFrameSet) => void = () => {};
+      const renewed = frameSet({
+        strip: [
+          {
+            ...frame('a'),
+            content_url: 'https://example.com/a-renewed.jpg',
+            url_expires_at: '2026-08-24T12:00:00Z',
+          },
+        ],
+      });
+      vi.mocked(api.getConversationScreenFrames)
+        .mockReset()
+        .mockResolvedValueOnce(frameSet())
+        .mockImplementationOnce(
+          () =>
+            new Promise<ConversationScreenFrameSet>((resolve) => {
+              resolveRefresh = resolve;
+            }),
+        )
+        .mockResolvedValue(renewed);
+      vi.mocked(api.deleteScreenFrame)
+        .mockReset()
+        .mockRejectedValueOnce(new Error('offline'));
+      const { result } = renderHook(() => useScreenFrames('conv-1'));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      // Renewal in flight...
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(58 * 60 * 1000);
+      });
+      expect(api.getConversationScreenFrames).toHaveBeenCalledTimes(2);
+      // ...a delete starts and fails, which fences the renewal out...
+      await act(async () => {
+        await result.current.deleteFrame('a');
+      });
+      await act(async () => {
+        resolveRefresh(renewed);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.frameSet?.strip?.[0]?.content_url).toBe(
+        'https://example.com/a.jpg',
+      );
+
+      // ...so renewal must be retried rather than never rearmed.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60 * 1000);
+      });
+      expect(api.getConversationScreenFrames).toHaveBeenCalledTimes(3);
+      await waitFor(() =>
+        expect(result.current.frameSet?.strip?.[0]?.content_url).toBe(
+          'https://example.com/a-renewed.jpg',
+        ),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries a failed renewal with backoff instead of giving up', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.setSystemTime(new Date('2026-08-24T10:00:00Z'));
+      vi.mocked(api.getConversationScreenFrames)
+        .mockReset()
+        .mockResolvedValueOnce(frameSet())
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValue(
+          frameSet({
+            strip: [{ ...frame('a'), url_expires_at: '2026-08-24T12:00:00Z' }],
+          }),
+        );
+      const { result } = renderHook(() => useScreenFrames('conv-1'));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(58 * 60 * 1000);
+      });
+      expect(api.getConversationScreenFrames).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+      });
+      expect(api.getConversationScreenFrames).toHaveBeenCalledTimes(3);
+      await waitFor(() =>
+        expect(result.current.frameSet?.strip?.[0]?.url_expires_at).toBe(
+          '2026-08-24T12:00:00Z',
+        ),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

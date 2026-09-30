@@ -4,6 +4,9 @@ import {
   buildLightboxFrames,
   findFrameIndex,
   FRAME_URL_REFRESH_MARGIN_MS,
+  MAX_FRAME_REFRESH_BACKOFF_MS,
+  MIN_FRAME_REFRESH_INTERVAL_MS,
+  frameUrlRetryFloorMs,
   isFrameSetEmpty,
   msUntilFrameUrlRefresh,
   resolveIndexAfterRemoval,
@@ -190,5 +193,15 @@ describe('msUntilFrameUrlRefresh', () => {
       strip: [{ ...frame('a'), url_expires_at: 'never' }],
     };
     expect(msUntilFrameUrlRefresh(bad, at('2026-08-24T10:00:00Z'))).toBe(0);
+  });
+});
+
+describe('frameUrlRetryFloorMs', () => {
+  it('starts at the base interval, doubles per miss, and stays bounded', () => {
+    expect(frameUrlRetryFloorMs(0)).toBe(MIN_FRAME_REFRESH_INTERVAL_MS);
+    expect(frameUrlRetryFloorMs(1)).toBe(2 * MIN_FRAME_REFRESH_INTERVAL_MS);
+    expect(frameUrlRetryFloorMs(2)).toBe(4 * MIN_FRAME_REFRESH_INTERVAL_MS);
+    expect(frameUrlRetryFloorMs(50)).toBe(MAX_FRAME_REFRESH_BACKOFF_MS);
+    expect(frameUrlRetryFloorMs(-1)).toBe(MIN_FRAME_REFRESH_INTERVAL_MS);
   });
 });

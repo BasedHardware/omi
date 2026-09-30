@@ -128,3 +128,19 @@ export function msUntilFrameUrlRefresh(
   }
   return Math.max(0, earliest - marginMs - nowMs);
 }
+
+/** Upper bound on the wait between renewal retries after repeated misses. */
+export const MAX_FRAME_REFRESH_BACKOFF_MS = 5 * 60 * 1000;
+
+/**
+ * Minimum gap between renewal attempts after `misses` consecutive renewals
+ * that adopted nothing: the base interval, doubling per miss, capped. Never
+ * infinite, so signed URLs are always eventually renewed.
+ */
+export function frameUrlRetryFloorMs(misses: number): number {
+  const steps = Math.max(0, Math.min(misses, 10));
+  return Math.min(
+    MIN_FRAME_REFRESH_INTERVAL_MS * 2 ** steps,
+    MAX_FRAME_REFRESH_BACKOFF_MS,
+  );
+}

@@ -7,10 +7,7 @@ import {
   getConversationScreenFrames,
   patchScreenFrameSharing,
 } from '@/lib/api';
-import {
-  MIN_FRAME_REFRESH_INTERVAL_MS,
-  msUntilFrameUrlRefresh,
-} from '@/lib/screenFrames';
+import { frameUrlRetryFloorMs, msUntilFrameUrlRefresh } from '@/lib/screenFrames';
 import type { ConversationScreenFrameSet } from '@/types/conversation';
 
 interface UseScreenFramesOptions {
@@ -42,6 +39,10 @@ export function useScreenFrames(
   const [frameSet, setFrameSet] = useState<ConversationScreenFrameSet | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Consecutive renewals that did not adopt a fresh set (failed, or fenced out
+  // by an overlapping mutation). Changing it rearms the renewal timer, with
+  // backoff; any adopted set resets it.
+  const [renewalMisses, setRenewalMisses] = useState(0);
 
   // So an in-flight fetch/mutation for a conversation the user has since
   // navigated away from can't clobber the newer conversation's state.
@@ -66,6 +67,7 @@ export function useScreenFrames(
     const requestedId = conversationId;
     const generation = ++setGeneration.current;
     lastUrlRefreshAt.current = Date.now();
+    setRenewalMisses(0);
     try {
       setLoading(true);
       setError(null);
@@ -101,23 +103,29 @@ export function useScreenFrames(
     const due = msUntilFrameUrlRefresh(frameSet, Date.now());
     if (due === null) return;
     const sinceLast = Date.now() - lastUrlRefreshAt.current;
-    const delay = Math.max(due, MIN_FRAME_REFRESH_INTERVAL_MS - sinceLast);
+    const delay = Math.max(due, frameUrlRetryFloorMs(renewalMisses) - sinceLast);
     const requestedId = conversationId;
     const timer = setTimeout(async () => {
       lastUrlRefreshAt.current = Date.now();
       const generation = setGeneration.current;
       try {
         const data = await getConversationScreenFrames(requestedId);
-        if (convIdRef.current === requestedId && setGeneration.current === generation) {
+        if (convIdRef.current !== requestedId) return;
+        if (setGeneration.current === generation) {
+          setRenewalMisses(0);
           setFrameSet(data);
+        } else {
+          // Fenced out by a mutation. If that mutation adopted a set, the new
+          // frameSet rearms the timer anyway; if it failed, nothing else will.
+          setRenewalMisses((n) => n + 1);
         }
       } catch (err) {
-        // Keep the current set; the next mount or manual refresh retries.
         console.error('Failed to refresh screen frame URLs:', err);
+        if (convIdRef.current === requestedId) setRenewalMisses((n) => n + 1);
       }
     }, delay);
     return () => clearTimeout(timer);
-  }, [enabled, conversationId, frameSet]);
+  }, [enabled, conversationId, frameSet, renewalMisses]);
 
   const deleteFrame = useCallback(
     async (frameId: string): Promise<boolean> => {
