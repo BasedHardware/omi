@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
+import tempfile
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
@@ -58,16 +59,19 @@ def sanitize_text(value: Any) -> str:
 
     # Collapse any inner whitespace/newlines
     collapsed = " ".join(value.split())
-    # Escape pipe characters so Markdown tables don't tear
-    return collapsed.replace("|", "\\|")
+    # Escape backslashes first, then escape pipe characters so Markdown tables don't tear
+    return collapsed.replace("\\", "\\\\").replace("|", "\\|")
 
 
 def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
     """Safely parse an ISO-8601 datetime string and normalize to UTC."""
     if not iso_str or not isinstance(iso_str, str):
         return None
+    clean_val = iso_str.strip().replace("Z", "+00:00")
+    if len(clean_val) == 10 and clean_val.count("-") == 2:
+        clean_val += "T00:00:00+00:00"
     try:
-        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(clean_val)
         if dt.tzinfo is None:
             return dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc)
@@ -91,18 +95,28 @@ def calculate_progress(goal: Dict[str, Any]) -> float:
 
     try:
         curr = float(goal.get("current_value") or 0.0)
+        if not math.isfinite(curr):
+            curr = 0.0
     except (ValueError, TypeError):
         curr = 0.0
 
     try:
         target = float(goal.get("target_value") or 0.0)
+        if not math.isfinite(target):
+            target = 0.0
     except (ValueError, TypeError):
         target = 0.0
 
     try:
         min_val = float(goal.get("min_value") or 0.0)
+        if not math.isfinite(min_val):
+            min_val = 0.0
     except (ValueError, TypeError):
         min_val = 0.0
+
+    if min_val > target:
+        span = min_val - target
+        return max(0.0, (min_val - curr) / span * 100.0)
 
     # If min_val is defined and target != min_val
     if target > min_val:
@@ -113,8 +127,10 @@ def calculate_progress(goal: Dict[str, Any]) -> float:
     if target > 0:
         return max(0.0, (curr / target) * 100.0)
 
-    # If target is 0 or less, check if curr reached target
-    return 100.0 if curr >= target else 0.0
+    if curr > 0 and target == 0:
+        return 100.0
+
+    return 0.0
 
 
 def determine_status(goal: Dict[str, Any], progress: float) -> Tuple[str, str]:
@@ -138,6 +154,8 @@ def determine_status(goal: Dict[str, Any], progress: float) -> Tuple[str, str]:
 
 def render_progress_bar(progress: float, width: int = 10) -> str:
     """Render a compact ASCII progress bar."""
+    if not math.isfinite(progress):
+        progress = 0.0
     clamped = max(0.0, min(100.0, progress))
     filled_len = int(round((clamped / 100.0) * width))
     empty_len = width - filled_len
@@ -385,14 +403,14 @@ def generate_markdown_digest(
 
             if curr is None:
                 curr_disp = "0"
-            elif isinstance(curr, float) and curr.is_integer():
+            elif isinstance(curr, float) and math.isfinite(curr) and curr.is_integer():
                 curr_disp = str(int(curr))
             else:
                 curr_disp = str(curr)
 
             if tval is None:
                 tval_disp = "0"
-            elif isinstance(tval, float) and tval.is_integer():
+            elif isinstance(tval, float) and math.isfinite(tval) and tval.is_integer():
                 tval_disp = str(int(tval))
             else:
                 tval_disp = str(tval)
@@ -418,7 +436,8 @@ def write_digest(content: str, dest_path: str | Path, force: bool = False) -> No
 
     # Guard against path traversal patterns in user-specified relative path
     orig_str = str(dest_path)
-    if ".." in orig_str.split("/") or ".." in orig_str.split("\\"):
+    norm_str = orig_str.replace("\\", "/")
+    if ".." in Path(dest_path).parts or ".." in norm_str.split("/"):
         raise ValueError(f"Path traversal sequence '..' is forbidden: {dest_path}")
 
     if dest.exists() and not force:
@@ -429,14 +448,19 @@ def write_digest(content: str, dest_path: str | Path, force: bool = False) -> No
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     # Atomic write via temporary file
-    temp_file = dest.with_suffix(f".tmp_{os.getpid()}_{int(datetime.now().timestamp())}")
+    temp_path: Optional[Path] = None
     try:
-        temp_file.write_text(content, encoding="utf-8")
-        os.replace(temp_file, dest)
+        with tempfile.NamedTemporaryFile(
+            dir=dest.parent, prefix=f".{dest.name}.tmp_", delete=False
+        ) as tf:
+            tf.write(content.encode("utf-8"))
+            temp_path = Path(tf.name)
+        os.replace(temp_path, dest)
+        temp_path = None
     finally:
-        if temp_file.exists():
+        if temp_path and temp_path.exists():
             try:
-                temp_file.unlink()
+                temp_path.unlink()
             except OSError:
                 pass
 

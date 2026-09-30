@@ -310,6 +310,72 @@ class TestGoalsDigest(unittest.TestCase):
             sys.stdout = saved_stdout
             sys.argv = saved_argv
 
+    def test_trailing_backslash_markdown_escaping(self) -> None:
+        """Trailing backslashes in title or unit must not escape table delimiters and tear columns."""
+        nasty_goal = {
+            "id": "g_backslash",
+            "title": "Windows Path C:\\",
+            "goal_type": "scale",
+            "current_value": 5,
+            "target_value": 10,
+            "unit": "steps\\",
+        }
+        digest = gd.generate_markdown_digest([nasty_goal])
+        goal_rows = [l for l in digest.splitlines() if "Windows Path" in l]
+        self.assertEqual(len(goal_rows), 1)
+        row = goal_rows[0]
+        unescaped_pipes = [i for i, c in enumerate(row) if c == "|" and (i == 0 or row[i - 1] != "\\")]
+        self.assertEqual(len(unescaped_pipes), 7, f"Table row column count torn: {row}")
+
+    def test_nan_and_inf_defense(self) -> None:
+        """Goals containing NaN or Inf must not raise OverflowError or ValueError."""
+        dirty_goal = {
+            "id": "nan_inf_goal",
+            "title": "Extreme numerical boundaries",
+            "current_value": float("nan"),
+            "target_value": float("inf"),
+            "min_value": float("-inf"),
+        }
+        prog = gd.calculate_progress(dirty_goal)
+        self.assertEqual(prog, 0.0)
+
+        # Progress bar rendering with NaN / Inf
+        bar = gd.render_progress_bar(float("nan"))
+        self.assertIn("0.0%", bar)
+        bar_inf = gd.render_progress_bar(float("inf"))
+        self.assertIn("0.0%", bar_inf)
+
+        # Markdown digest output must succeed without uncaught error
+        digest = gd.generate_markdown_digest([dirty_goal])
+        self.assertIn("Extreme numerical boundaries", digest)
+
+    def test_mixed_slash_path_traversal(self) -> None:
+        """Mixed forward/backward slashes must not bypass directory traversal guards."""
+        with self.assertRaises(ValueError):
+            gd.write_digest("# content", "output/..\\evil.md")
+        with self.assertRaises(ValueError):
+            gd.write_digest("# content", "subdir\\../evil.md")
+
+    def test_date_only_iso_parsing(self) -> None:
+        """Pure date strings like YYYY-MM-DD should be parsed safely."""
+        dt = gd.parse_datetime("2026-12-31")
+        self.assertIsNotNone(dt)
+        self.assertEqual(dt.year, 2026)
+        self.assertEqual(dt.month, 12)
+        self.assertEqual(dt.day, 31)
+
+    def test_reverse_goal_progress(self) -> None:
+        """Weight loss style goal where target < min_val."""
+        goal = {
+            "id": "weight_loss",
+            "title": "Lose weight to 70kg",
+            "current_value": 85,
+            "min_value": 100,
+            "target_value": 70,
+        }
+        prog = gd.calculate_progress(goal)
+        self.assertAlmostEqual(prog, 50.0, places=1)
+
 
 if __name__ == "__main__":
     unittest.main()
