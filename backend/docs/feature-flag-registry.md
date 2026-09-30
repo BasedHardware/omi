@@ -183,6 +183,7 @@ and an explicit empty literal renders as `''`.
 | `SYNC_BACKFILL_INFLIGHT_LIMIT` | One in-flight backfill upload per uid; excess uploads get 429 backfill_paced | backend | env | closed | false | false | false | — | pending | 2026-10-27 | dazheng |
 | `SYNC_BACKFILL_ROUTING_ENABLED` | Route eligible sync work to backfill lane | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `SYNC_BACKFILL_UID_SEQUENCER` | Accept backfill uploads then dispatch one worker job per uid from durable queue | backend | env | closed | on | on | on | — | pending | 2026-10-27 | dazheng |
+| `SYNC_LINEAGE_RESOLVE_ENABLED` | Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) | backend | env | open | — | — | — | — | graduate | 2026-10-30 | dazheng |
 | `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 0 (gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSCRIPT_CHUNK_INDEXING_ENABLED` | Index transcript chunks for retrieval | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
@@ -324,6 +325,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SONIOX_ELAPSED_AXIS` — Measure Soniox elapsed timestamps before enabling speaker windows (fail: closed)
 - `SYNC_BACKFILL_ROUTING_ENABLED` — Route eligible sync work to backfill lane (fail: closed)
 - `SYNC_DISPATCH_MODE` — Select sync dispatch lane (fail: closed)
+- `SYNC_LINEAGE_RESOLVE_ENABLED` — Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) (fail: open)
 - `TRANSCRIPT_CHUNK_INDEXING_ENABLED` — Index transcript chunks for retrieval (fail: closed)
 - `TRANSLATION_OUTPUT_GUARD_ENABLED` — Reject conservative same-language translation rewrites (fail: open)
 - `TRANSLATION_PROFILE_GATE_ENABLED` — Defer short out-of-profile translation guesses (fail: open)

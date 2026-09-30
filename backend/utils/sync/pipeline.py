@@ -145,6 +145,7 @@ from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
+from utils.sync.recording_lineage import lineage_resolution_requested, resolve_segment_targets
 from utils.sync.bridge import finish_sync_segment
 from utils.sync.assignment_errors import (
     SyncAssignmentConflict,
@@ -1844,19 +1845,24 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # keeps the caller's exact coordinates and returns the input unchanged on
     # any geocode failure, so a miss never drops the user's location.
     geolocation = await async_resolve_geolocation(geolocation)
-    # Resolve before segment intake. A unique server-side match is authoritative
-    # over a local stamp from another silence-rollover generation; no safe match
-    # invalidates the stamp. Old clients without this proof retain their stamp.
-    target_conversation_id = await _resolve_safety_wal_target(
-        uid,
-        target_conversation_id,
-        recording_session_id,
-        source,
-        client_device_id,
-        should_lock,
-        audio_start_seconds,
-        audio_end_seconds,
+    # Recording-id uploads bind each VAD segment to its rollover generation after
+    # VAD (recording_lineage.py). With SYNC_LINEAGE_RESOLVE_ENABLED off, the whole
+    # batch resolves here as before: a unique match replaces the stamp, a miss drops
+    # it. Old clients without this proof retain their stamp either way.
+    use_lineage = lineage_resolution_requested(
+        recording_session_id, audio_start_seconds, audio_end_seconds, job_id=job_id
     )
+    if not use_lineage:
+        target_conversation_id = await _resolve_safety_wal_target(
+            uid,
+            target_conversation_id,
+            recording_session_id,
+            source,
+            client_device_id,
+            should_lock,
+            audio_start_seconds,
+            audio_end_seconds,
+        )
 
     sync_provider = 'unknown'
     sync_model = 'unknown'
@@ -2388,8 +2394,29 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             # instead of racing into separate conversations (#6551, #5747).
             segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
             assignment_turnstile = _OrderedTurnstile(segment_list)
+            segment_targets: dict = {}
+            if use_lineage and segment_list:
+
+                def _segment_targets() -> dict:
+                    spans = {
+                        p: (get_timestamp_from_path(p), get_timestamp_from_path(p) + get_wav_duration(p))
+                        for p in segment_list
+                    }
+                    return resolve_segment_targets(
+                        uid,
+                        str(recording_session_id),
+                        spans,
+                        stamped_target=target_conversation_id,
+                        source=source,
+                        client_device_id=client_device_id,
+                        is_locked=is_locked,
+                        job_id=job_id,
+                    )
+
+                segment_targets = await run_blocking(db_executor, _segment_targets)
 
             def _process_one_segment(path: str):
+                segment_target = segment_targets.get(path, target_conversation_id)
                 segment_id = segment_ids_by_path.get(path)
                 if path in already_processed or (segment_id and segment_id in durable_processed_segment_ids):
                     # Release the assignment slot — later segments wait on it
@@ -2406,7 +2433,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     is_locked,
                     transcription_prefs,
                     person_embeddings_cache,
-                    target_conversation_id,
+                    segment_target,
                     assignment_turnstile,
                     speaker_scope=f'sync:{segment_id or compute_sync_segment_id(uid, path)}',
                     private_cloud_sync_enabled=private_cloud_sync_enabled,
