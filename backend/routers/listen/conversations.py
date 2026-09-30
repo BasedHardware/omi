@@ -431,6 +431,8 @@ class LiveConversationController:
             'conversation_role': request.conversation_role,
             'recording_session_id': self.host.recording_session_id,
         }
+        if getattr(request, 'screen_evidence_pass', False):
+            external_data['screen_evidence_pass'] = True
         onboarding_session_id = resolve_onboarding_provenance_marker(self.host)
         if onboarding_session_id:
             # This marker reflects the backend's own onboarding-admission
