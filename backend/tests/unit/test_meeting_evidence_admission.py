@@ -12,10 +12,11 @@ from datetime import datetime, timezone
 import pytest
 
 from models.conversation_enums import ConversationStatus
+from utils.metrics import MEETING_NOTES_EVIDENCE_WAIT_TOTAL
 from utils.conversations import finalizer  # imported at collection: the finalizer's import graph is not per-test cost
 from utils.conversations import meeting_evidence_admission as admission
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.conversations.screen_content_window import current_selection_fingerprint
+from utils.conversations.screen_content_window import selection_fingerprint, trusted_content_window
 
 BUCKET = 'based-hardware-dev-screen-frames'
 MEETING = {'source': 'desktop', 'external_data': {'conversation_role': 'meeting', 'screen_evidence_pass': True}}
@@ -69,8 +70,8 @@ def _window(end_seconds: float) -> dict:
 
 
 CURRENT = _window(300.0)
-CURRENT_FINGERPRINT = current_selection_fingerprint(CURRENT)
-EARLIER_FINGERPRINT = current_selection_fingerprint(_window(120.0))
+CURRENT_FINGERPRINT = selection_fingerprint(*trusted_content_window(CURRENT))
+EARLIER_FINGERPRINT = selection_fingerprint(*trusted_content_window(_window(120.0)))
 
 
 def _marker(monkeypatch, stamps, window=CURRENT):
@@ -300,8 +301,12 @@ class TestTheMarkerMustCoverTheCurrentWindow:
         # not match yet; the next read sees the extended transcript and it does.
         assert _run(clock) == 'arrived'
 
-    def test_a_deleted_conversation_does_not_count_as_evidence(self, monkeypatch, clock):
-        _marker(monkeypatch, [STAMP], window=None)
+    def test_a_window_that_vanishes_mid_wait_keeps_waiting(self, monkeypatch, clock):
+        windows = iter([CURRENT] + [None] * 100)
+        _marker(monkeypatch, [None])
+        monkeypatch.setattr(
+            admission, 'get_conversation_content_window_fields', lambda uid, cid, *, rpc_timeout: next(windows)
+        )
         assert _run(clock) == 'timed_out'
 
 
@@ -360,3 +365,32 @@ def test_processing_uses_the_row_as_it_is_after_the_wait(monkeypatch, outcome):
 def test_a_row_completed_by_another_owner_during_the_wait_is_not_reprocessed(monkeypatch):
     processed = _process_after_wait(monkeypatch, reloaded_status='completed')
     assert processed == []
+
+
+class TestNoTrustedWindowProceedsAtOnce:
+    """Without a trusted content window nothing can be selected or stamped (the
+    adjudication route refuses an open conversation without one), so waiting
+    could only ever time out."""
+
+    @pytest.mark.parametrize(
+        'window',
+        [
+            None,  # the row is gone
+            {'started_at': STAMP, 'audio_timeline': {'version': 2}, 'transcript_segments': []},  # no speech
+            # A legacy (untrusted) origin whose projection disagrees with finished_at.
+            {'started_at': STAMP, 'finished_at': STAMP, 'transcript_segments': [{'text': 'x', 'start': 0, 'end': 600}]},
+        ],
+    )
+    def test_no_window_proceeds_immediately_without_a_fallback(self, monkeypatch, clock, fallbacks, window):
+        reads = _marker(monkeypatch, [STAMP], window=window)
+        before = MEETING_NOTES_EVIDENCE_WAIT_TOTAL.labels(outcome='no_window')._value.get()
+
+        assert _run(clock) == 'no_window'
+
+        assert clock.sleeps == [] and reads == []  # no marker read, no wait
+        assert fallbacks == []
+        assert MEETING_NOTES_EVIDENCE_WAIT_TOTAL.labels(outcome='no_window')._value.get() == before + 1
+
+    def test_a_trusted_window_keeps_the_marker_rule(self, monkeypatch, clock):
+        _marker(monkeypatch, [None, STAMP])
+        assert _run(clock) == 'arrived'

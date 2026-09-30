@@ -105,8 +105,18 @@ runs:
           --region=${{ inputs.region }} \
           --project=${{ inputs.project_id }} \
           --format=json > /tmp/backend-sync-live.json
+        # The worker's own live identity decides whether backend-sync's key-credential refs may be
+        # cloned: a worker already moved to a dedicated runtime SA cannot read them. A first deploy
+        # has no live worker, so nothing is dropped.
+        target_args=()
+        if gcloud run services describe ${{ inputs.service }}-sync-backfill \
+          --region=${{ inputs.region }} \
+          --project=${{ inputs.project_id }} \
+          --format=json > /tmp/backend-sync-backfill-live.json 2>/dev/null; then
+          target_args=(--target-json /tmp/backend-sync-backfill-live.json)
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPT_DIR/render_cloud_run_clone_env.py" \
-          --source-json /tmp/backend-sync-live.json >> "$GITHUB_OUTPUT"
+          --source-json /tmp/backend-sync-live.json "${target_args[@]}" >> "$GITHUB_OUTPUT"
 
     - name: Render optional candidate tag
       if: ${{ inputs.mode == 'worker' }}

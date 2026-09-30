@@ -821,9 +821,11 @@ admits finalization at once. So the shared finalizer (pusher, Cloud Tasks, and
 therefore `POST /finalize`) waits, bounded by `MEETING_NOTES_EVIDENCE_WAIT_SECONDS`
 (code default 0; 25 on dev and prod finalizer hosts), before processing a desktop
 `conversation_role == 'meeting'` capture on `capture_end`/`client_finalize`. It
-proceeds as soon as this bucket's adjudication marker is set. It skips the wait
-when the host has no `BUCKET_SCREEN_FRAMES` or the account's screenshot setting
-is off. The wait is async (a poll is one `db_executor` read), fails open, and
+proceeds as soon as this bucket's adjudication marker is set for the
+conversation's current trusted content window. It skips the wait when the host
+has no `BUCKET_SCREEN_FRAMES`, the account's screenshot setting is off, or the
+conversation has no trusted content window at the first poll (`no_window`: no
+pass can be stamped for it). The wait is async (a poll is one `db_executor` read), fails open, and
 counts `meeting_notes_evidence_wait_total{outcome}`.
 
 ### 2.1 Durable finalization ownership
@@ -880,10 +882,22 @@ completed-status transaction. An explicit relevance discard is a valid
 terminal outcome without rich structure only when the sweep verifies its
 persisted server-recovery verdict and preserved transcript and audio IDs. With
 `LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED`, a clear rule-level
-ordinary discard skips the paid notes model, and the first minimal result ends
-the job instead of retrying the same content. The lease-fenced terminal write
-sets a still-bound conversation to completed and visible with its transcript
-retained; explicit reprocess remains available. Provider and parser failures
+ordinary discard (empty transcript, filler, mic check) skips the paid notes
+model and is recorded as an explicit server-recovery discard, the same verdict
+capture-end processing reaches; it stays restorable through Show discarded.
+That discard requires strict decoding of the stored transcript and never
+writes its blob or compression marker. The persistence transaction rechecks
+protected structure, user title and `sync_relevance_user_kept`. A post-admission
+edit or restore refuses the discard before any content or decision write and
+takes the existing typed-minimum terminal path: the row remains visible,
+the job is dead-lettered, and self-heal reports `dead_letter` rather than
+verifying a contradictory discard. The finalizer also carries the stored
+restore marker into relevance assessment, so a restored row never receives
+a discard decision.
+Any other minimal result ends the job on its first occurrence instead of
+retrying the same content. That lease-fenced terminal write sets a still-bound
+conversation to completed and visible with its transcript retained; explicit
+reprocess remains available. Provider and parser failures
 stay on the ordinary retry budget. Turning the flag off restores the previous
 retry behavior.
 
@@ -1678,9 +1692,12 @@ explicit follow-ups. See `utils/sync/ARCHITECTURE.md` for recovery and indexing 
 
 Live capture passes fresh, unmerged STT segments to `update_conversation_segments(live_segments=...)`.
 The transaction reads the current transcript and manual receipt, then merges only
-its tail and the fresh batch. Any segment covered by a selected-ID decision or a
-speaker-wide default blocks all concatenation and partial sentence transfer;
-clears, training opt-outs, and legacy receipts receive identical protection.
+its tail and the fresh batch, after applying the receipt to both so compared
+provenance is post-decision. A segment covered by a selected-ID decision blocks all
+concatenation and partial sentence transfer. A speaker-wide default is a boundary:
+that speaker's segments only append to each other in chronological order (no sentence
+repair, no late arrivals), and never exchange words with another speaker. Clears,
+training opt-outs, and legacy receipts receive identical protection.
 Inference updates may change identity fields, but the current manual receipt wins.
 The accepted transcript and `LiveTranscriptMerge` deletion delta return together;
 only committed IDs drive live updates and `SegmentsDeletedEvent`.

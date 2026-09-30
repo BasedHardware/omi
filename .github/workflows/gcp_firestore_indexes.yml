@@ -63,6 +63,7 @@ jobs:
       contents: 'read'
       id-token: 'write'
     runs-on: ubuntu-latest
+    timeout-minutes: 240
     steps:
       - name: Validate Firestore migration input
         env:
@@ -136,7 +137,7 @@ jobs:
           python3 backend/scripts/reconcile_firestore_indexes.py \
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
             --provision-missing \
-            --timeout-seconds 3600
+            --timeout-seconds 10800
 
       # Field overrides are deliberately not applied here: disabling automatic
       # indexes deletes their existing entries. Fail after monotone composite
@@ -186,6 +187,7 @@ jobs:
       id-token: 'write'
       contents: 'read'
     runs-on: ubuntu-latest
+    timeout-minutes: 240
     steps:
       - name: Checkout merged Firestore control plane
         uses: actions/checkout@v7
@@ -222,7 +224,7 @@ jobs:
           python3 backend/scripts/reconcile_firestore_indexes.py \
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
             --provision-missing \
-            --timeout-seconds 3600
+            --timeout-seconds 10800
 
   reject_nonprod_field_exemptions:
     if: >-
