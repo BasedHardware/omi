@@ -495,6 +495,22 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     XCTAssertEqual(log, ["flush", "adjudicate", "flush", "stamp untrusted", "flush"])
   }
 
+  /// The empty-candidates stamp, as `ScreenFrameAdjudicationRequest` (extra="forbid",
+  /// `candidates` required with max_length=8 and no minimum) accepts it: an explicit empty array.
+  func testTheEmptyEvidenceStampEncodesTheBackendRequestShape() throws {
+    let attemptID = try XCTUnwrap(UUID(uuidString: "6F9619FF-8B86-D011-B42D-00C04FC964FF"))
+    let request = ScreenFrameAdjudicationRequestWire(attemptID: attemptID, subjectID: "conversation-1", candidates: [])
+    let json = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
+
+    XCTAssertEqual(Set(json.keys), ["schema_version", "attempt_id", "purpose", "subject", "candidates"])
+    XCTAssertEqual(json["schema_version"] as? Int, 1)
+    XCTAssertEqual(json["purpose"] as? String, "meeting_note_v1")
+    XCTAssertEqual((json["attempt_id"] as? String)?.lowercased(), attemptID.uuidString.lowercased())
+    XCTAssertEqual(json["subject"] as? [String: String], ["kind": "conversation", "id": "conversation-1"])
+    XCTAssertEqual((json["candidates"] as? [Any])?.count, 0)
+  }
+
   func testAfterFinalizeFailureRecordsDegradedFallbackToNoteOpen() async {
     let fallbacks = FallbackRecorder()
     let pass = MeetingScreenEvidencePass(
