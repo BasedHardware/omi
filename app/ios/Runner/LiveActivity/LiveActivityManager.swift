@@ -66,7 +66,7 @@ final class LiveActivityManager {
             enqueue { [weak self] in
                 guard let self else { result(nil); return }
                 self.enabled = value
-                UserDefaults.standard.set(value, forKey: "omi.captureLiveActivityEnabled")
+                try? SafeDefaults.store(.bool(value), forKey: "omi.captureLiveActivityEnabled")
                 if value { self.suppressedRecordingId = nil }
                 await self.reconcile()
                 result(nil)
@@ -80,7 +80,7 @@ final class LiveActivityManager {
                 result(FlutterError(code: "invalid", message: "Invalid capture snapshot", details: nil)); return
             }
             do {
-                let data = try JSONSerialization.data(withJSONObject: values)
+                let data = try SafeJSON.data(withJSONObject: values)
                 let state = try JSONDecoder().decode(OmiCaptureAttributes.ContentState.self, from: data)
                 guard state.startedAt.isFinite, state.elapsed >= 0 else { throw CaptureActionError.unavailable }
                 enqueue { [weak self] in
@@ -166,7 +166,8 @@ final class LiveActivityManager {
               immediate || activity.activityState != .ended else { return }
         var final = activity.contentState
         if !final.paused && final.status != "ended" {
-            final.elapsed = max(0, Int(Date().timeIntervalSince1970 - final.startedAt))
+            let elapsed = CheckedIntegerConversion.int(Date().timeIntervalSince1970 - final.startedAt)
+            final.elapsed = max(0, elapsed ?? final.elapsed)
         }
         final.status = "ended"
         final.busy = false
