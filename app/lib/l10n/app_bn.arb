@@ -10798,8 +10798,6 @@
     "tagSpeakerIncludingLaterSpeech": "এই বক্তার পরবর্তী কথাও ট্যাগ করুন",
     "updateSummaryWithNewNames": "নতুন নাম দিয়ে সারাংশ আপডেট করুন",
     "syncStatusUnsupportedAudio": "অডিও পড়া যায়নি — সিঙ্ক করা সম্ভব নয়",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{তুমি আমার জন্য কী করতে পারো?} goal{আমাকে একটি লক্ষ্য নির্ধারণে সাহায্য করো} activity{আমার সাম্প্রতিক কাজের সারসংক্ষেপ দাও} improve{আমি কীভাবে উন্নতি করতে পারি?} other{}}",
     "nextWeek": "পরের সপ্তাহে",
     "clearSearch": "অনুসন্ধান মুছুন",
@@ -11221,5 +11219,6 @@
     "meetingScreenshotsTitle": "স্ক্রিনে যা ছিল",
     "meetingScreenshotFallbackCaption": "এই মিটিংয়ের স্ক্রিনশট",
     "deleteMeetingScreenshotTitle": "স্ক্রিনশট মুছবেন?",
-    "deleteMeetingScreenshotMessage": "এটি এই মিটিংয়ের নোট থেকে স্ক্রিনশটটি সরিয়ে দেবে। এটি পূর্বাবস্থায় ফেরানো যাবে না।"
+    "deleteMeetingScreenshotMessage": "এটি এই মিটিংয়ের নোট থেকে স্ক্রিনশটটি সরিয়ে দেবে। এটি পূর্বাবস্থায় ফেরানো যাবে না।",
+    "conversationSummaryFailed": "সারাংশ তৈরি করা যায়নি"
 }

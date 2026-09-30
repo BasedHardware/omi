@@ -7871,6 +7871,17 @@
             "title": "Suggested Summarization Apps",
             "type": "array"
           },
+          "summary_retryable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Retryable"
+          },
           "sync_content_revision": {
             "anyOf": [
               {
@@ -9051,6 +9062,17 @@
             },
             "title": "Suggested Summarization Apps",
             "type": "array"
+          },
+          "summary_retryable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Retryable"
           },
           "sync_content_revision": {
             "anyOf": [

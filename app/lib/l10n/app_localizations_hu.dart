@@ -10141,12 +10141,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'A hang nem olvasható — nem szinkronizálható';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11678,4 +11672,7 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get deleteMeetingScreenshotMessage =>
       'A képernyőkép törlődik a megbeszélés jegyzetéből. Ez nem vonható vissza.';
+
+  @override
+  String get conversationSummaryFailed => 'Az összefoglaló nem sikerült';
 }

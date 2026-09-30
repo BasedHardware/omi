@@ -355,9 +355,31 @@ def test_stranded_job_and_its_processing_conversation_reach_one_atomic_terminal(
     assert job_update['fanout_status'] == 'fenced'
     # The customer is taken off `processing` in the same transaction, and the
     # recording stays retrievable and reprocessable rather than discarded.
-    assert transaction.updates[1] == (conversation_ref, {'status': 'completed', 'finalization_status': 'dead_letter'})
+    # It is never left untitled: no transcript and no start time still yield the
+    # deterministic label, and no retry marker (BYOK is not a transient failure).
+    assert transaction.updates[1] == (
+        conversation_ref,
+        {
+            'status': 'completed',
+            'finalization_status': 'dead_letter',
+            'structured': {'title': 'Recording', 'overview': ''},
+        },
+    )
     # Firestore requires every transactional read before the first write.
     assert transaction.read_after_write is False
+
+
+def test_abandoned_conversation_gets_its_first_sentence_title_and_keeps_a_real_one():
+    titled = _bound_conversation({'transcript_segments': [{'text': 'Budget review for Q4. Then more.'}]})
+    transaction = _OrderedTransaction()
+    _abandon(transaction, _Ref('job-1', _stranded_job()), titled, projection=_Collection())
+    assert transaction.updates[1][1]['structured'] == {'title': 'Budget review for Q4.', 'overview': ''}
+    assert 'summary_retryable' not in transaction.updates[1][1]
+
+    kept = _bound_conversation({'structured': {'title': 'Existing', 'overview': 'x'}})
+    transaction = _OrderedTransaction()
+    _abandon(transaction, _Ref('job-1', _stranded_job()), kept, projection=_Collection())
+    assert transaction.updates[1] == (kept, {'status': 'completed', 'finalization_status': 'dead_letter'})
 
 
 def test_terminal_moves_the_projection_shard_deltas():

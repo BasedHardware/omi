@@ -10149,12 +10149,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncStatusUnsupportedAudio => 'Audio nu a putut fi citit — nu poate fi sincronizat';
 
   @override
-  String get conversationTitleDidntGenerate => 'Title didn\'t generate';
-
-  @override
-  String get conversationReprocess => 'Reprocess';
-
-  @override
   String chatStarterPrompt(String kind) {
     String _temp0 = intl.Intl.selectLogic(
       kind,
@@ -11688,4 +11682,7 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get deleteMeetingScreenshotMessage =>
       'Captura de ecran va fi eliminată din nota acestei întâlniri. Acțiunea nu poate fi anulată.';
+
+  @override
+  String get conversationSummaryFailed => 'Rezumatul a eșuat';
 }

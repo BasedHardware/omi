@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Märgi ka selle kõneleja hilisem kõne",
     "updateSummaryWithNewNames": "Uuenda kokkuvõtet uute nimedega",
     "syncStatusUnsupportedAudio": "Heli ei õnnestunud lugeda — sünkroonimine pole võimalik",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Mida sa minu heaks teha saad?} goal{Aita mul eesmärk seada} activity{Tee kokkuvõte minu hiljutisest tegevusest} improve{Kuidas saan end parandada?} other{}}",
     "nextWeek": "Järgmisel nädalal",
     "clearSearch": "Tühjenda otsing",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "Mis oli ekraanil",
     "meetingScreenshotFallbackCaption": "Ekraanipilt sellelt koosolekult",
     "deleteMeetingScreenshotTitle": "Kas kustutada ekraanipilt?",
-    "deleteMeetingScreenshotMessage": "See eemaldab ekraanipildi selle koosoleku märkmest. Seda ei saa tagasi võtta."
+    "deleteMeetingScreenshotMessage": "See eemaldab ekraanipildi selle koosoleku märkmest. Seda ei saa tagasi võtta.",
+    "conversationSummaryFailed": "Kokkuvõtte loomine ebaõnnestus"
 }

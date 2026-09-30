@@ -13,6 +13,8 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 
 TranscriptSegment _segment(String text) {
   return TranscriptSegment(
@@ -29,22 +31,26 @@ TranscriptSegment _segment(String text) {
 
 ServerConversation _conversation({
   String id = 'c1',
-  String title = '',
+  String title = 'We picked the venue for Friday.',
   ConversationStatus status = ConversationStatus.completed,
   List<TranscriptSegment>? segments,
   String emoji = '',
+  bool summaryRetryable = true,
 }) {
   return ServerConversation(
     id: id,
     createdAt: DateTime.utc(2020, 1, 1, 12),
     structured: Structured(title, '', emoji: emoji),
     status: status,
-    transcriptSegments: segments ?? [_segment('one two three four five')],
+    transcriptSegments: segments ?? [_segment('We picked the venue for Friday.')],
+    summaryRetryable: summaryRetryable,
   );
 }
 
-Finder get _indicator => find.byKey(const Key('conversation_failed_title_indicator'));
-Finder get _reprocessButton => find.byKey(const Key('conversation_failed_title_reprocess_button'));
+Finder get _indicator => find.byKey(const Key('conversation_summary_failed_indicator'));
+Finder get _retryButton => find.byKey(const Key('conversation_summary_retry_button'));
+
+AppLocalizations _l10n(WidgetTester tester) => AppLocalizations.of(tester.element(find.byType(Scaffold)));
 
 Future<ConversationProvider> _pumpRow(
   WidgetTester tester, {
@@ -89,108 +95,109 @@ Future<ConversationProvider> _pumpRow(
 }
 
 void main() {
+  final emitted = <ConversationUntitledRendered>[];
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    emitted.clear();
+    UntitledConversationTelemetry.resetForTest();
+    UntitledConversationTelemetry.sinkOverride = emitted.add;
   });
 
-  testWidgets('recoverable row shows the failed-title indicator and Reprocess', (tester) async {
+  tearDown(UntitledConversationTelemetry.resetForTest);
+
+  testWidgets('a retryable row shows its deterministic title with Summary failed · Retry', (tester) async {
     await _pumpRow(tester, conversation: _conversation());
 
+    expect(find.text('We picked the venue for Friday.'), findsOneWidget);
     expect(_indicator, findsOneWidget);
-    expect(_reprocessButton, findsOneWidget);
-    expect(
-      find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).conversationTitleDidntGenerate),
-      findsOneWidget,
-    );
-    expect(
-      find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).conversationReprocess),
-      findsOneWidget,
-    );
+    expect(_retryButton, findsOneWidget);
+    expect(find.text(_l10n(tester).conversationSummaryFailed), findsOneWidget);
+    expect(find.text(_l10n(tester).retry), findsOneWidget);
+    expect(emitted, isEmpty);
   });
 
-  testWidgets('short transcript stays a quiet untitled row', (tester) async {
+  testWidgets('a row the model found nothing in keeps its title and offers no retry', (tester) async {
+    await _pumpRow(tester, conversation: _conversation(summaryRetryable: false));
+
+    expect(find.text('We picked the venue for Friday.'), findsOneWidget);
+    expect(_indicator, findsNothing);
+    expect(_retryButton, findsNothing);
+  });
+
+  testWidgets('a legacy untitled row shows transcript text, not Untitled, and no guessed retry', (tester) async {
     await _pumpRow(
       tester,
-      conversation: _conversation(segments: [_segment('one two three four')]),
+      conversation: _conversation(
+        title: '',
+        summaryRetryable: false,
+        segments: [_segment('one two three four five six seven')],
+      ),
     );
 
-    expect(_indicator, findsNothing);
-    expect(_reprocessButton, findsNothing);
+    expect(find.text('one two three four five six seven'), findsOneWidget);
+    expect(find.text(_l10n(tester).untitledConversation), findsNothing);
+    expect(_retryButton, findsNothing);
+    expect(emitted, isEmpty);
   });
 
-  testWidgets('titled rows do not show the failed-title affordance', (tester) async {
-    await _pumpRow(
-      tester,
-      conversation: _conversation(title: 'Morning standup'),
-    );
+  testWidgets('a legacy untitled row without transcript text is the one Untitled case, and it reports', (tester) async {
+    await _pumpRow(tester, conversation: _conversation(title: '', summaryRetryable: false, segments: const []));
 
-    expect(_indicator, findsNothing);
-    expect(_reprocessButton, findsNothing);
+    expect(find.text(_l10n(tester).untitledConversation), findsOneWidget);
+    expect(emitted, hasLength(1));
+    expect(emitted.single.surface, ConversationUntitledRenderedSurface.list);
   });
 
-  testWidgets('Reprocess loading then processing result moves the row off the completed list', (tester) async {
+  testWidgets('Retry shows progress, then a processing result moves the row off the completed list', (tester) async {
     final gate = Completer<ServerConversation?>();
-    final provider = await _pumpRow(
-      tester,
-      conversation: _conversation(),
-      reprocess: (_) => gate.future,
-    );
+    final provider = await _pumpRow(tester, conversation: _conversation(), reprocess: (_) => gate.future);
 
-    await tester.tap(_reprocessButton);
+    await tester.tap(_retryButton);
     await tester.pump();
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-    gate.complete(
-      _conversation(status: ConversationStatus.processing, title: '', emoji: ''),
-    );
+    gate.complete(_conversation(status: ConversationStatus.processing, summaryRetryable: false));
     await tester.pumpAndSettle();
 
     expect(provider.processingConversations, hasLength(1));
-    expect(provider.processingConversations.first.status, ConversationStatus.processing);
     expect(provider.conversations, isEmpty);
     expect(_indicator, findsNothing);
     expect(find.text('moved-to-processing'), findsOneWidget);
   });
 
-  testWidgets('Reprocess titled result updates the row', (tester) async {
+  testWidgets('a successful Retry refreshes the row and clears the chip', (tester) async {
     final provider = await _pumpRow(
       tester,
       conversation: _conversation(),
-      reprocess: (_) async => _conversation(title: 'Standup notes', emoji: '📝'),
+      reprocess: (_) async => _conversation(title: 'Venue planning', emoji: '📝', summaryRetryable: false),
     );
 
-    await tester.tap(_reprocessButton);
+    await tester.tap(_retryButton);
     await tester.pumpAndSettle();
 
-    expect(provider.conversations, hasLength(1));
-    expect(provider.conversations.first.structured.title, 'Standup notes');
-    expect(provider.processingConversations, isEmpty);
+    expect(provider.conversations.single.structured.title, 'Venue planning');
+    expect(provider.conversations.single.summaryRetryable, isFalse);
+    expect(find.text('Venue planning'), findsOneWidget);
     expect(_indicator, findsNothing);
-    expect(find.text('Standup notes'), findsOneWidget);
+    expect(_retryButton, findsNothing);
   });
 
-  testWidgets('Reprocess failure keeps the recoverable row and shows a snackbar', (tester) async {
-    await _pumpRow(
-      tester,
-      conversation: _conversation(),
-      reprocess: (_) async => null,
-    );
+  testWidgets('a failed Retry keeps the chip and shows an error', (tester) async {
+    await _pumpRow(tester, conversation: _conversation(), reprocess: (_) async => null);
 
-    await tester.tap(_reprocessButton);
+    await tester.tap(_retryButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(tester.takeException(), isNull);
     expect(_indicator, findsOneWidget);
-    expect(_reprocessButton, findsOneWidget);
-    expect(
-      find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).somethingWentWrong),
-      findsOneWidget,
-    );
+    expect(_retryButton, findsOneWidget);
+    expect(find.text(_l10n(tester).somethingWentWrong), findsOneWidget);
   });
 
-  testWidgets('Reprocess thrown error keeps the recoverable row and shows a snackbar', (tester) async {
+  testWidgets('a thrown Retry error keeps the chip and shows an error', (tester) async {
     await _pumpRow(
       tester,
       conversation: _conversation(),
@@ -199,15 +206,12 @@ void main() {
       },
     );
 
-    await tester.tap(_reprocessButton);
+    await tester.tap(_retryButton);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(tester.takeException(), isNull);
     expect(_indicator, findsOneWidget);
-    expect(
-      find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).somethingWentWrong),
-      findsOneWidget,
-    );
+    expect(find.text(_l10n(tester).somethingWentWrong), findsOneWidget);
   });
 }

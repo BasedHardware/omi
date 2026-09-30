@@ -877,6 +877,20 @@ retained; explicit reprocess remains available. Provider and parser failures
 stay on the ordinary retry budget. Turning the flag off restores the previous
 retry behavior.
 
+Every terminal that moves a `processing` row into the default list (this
+dead-letter, BYOK abandonment and crash-orphan recovery) leaves it titled. In
+the same transaction it decodes the snapshot's transcript with the read path's
+own uid-keyed decode, and replaces an empty generated title with
+`deterministic_minimum_title` (the first sentence, else `Recording · 3:14 PM`
+in the user's zone). A real or user title is never touched. The legacy
+1 MiB orphan terminal is the one exception: its write must only shrink the
+document. Only the dead-letter sets `summary_retryable=true`, and only after
+a transient failure (`final_attempt_failed` / `processing_failed`) on a row
+with transcript text or photos and no earlier summary. Clients then offer "Summary failed · Retry", which
+calls `/reprocess`. `recovery_structure_unavailable` never sets it, because the
+model ran and a retry gives the same answer. Enrichment and the free-tier
+terminal persist clear the marker with an explicit null.
+
 Live listen sessions also hold a five-minute lease on their user-scoped
 `recording_sessions` document. Accepted decoded audio renews it at most once a
 minute. Session opening writes the binding and the conversation's bound

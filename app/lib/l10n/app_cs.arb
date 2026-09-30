@@ -3238,8 +3238,6 @@
     "tagSpeakerIncludingLaterSpeech": "Označit i pozdější řeč tohoto mluvčího",
     "updateSummaryWithNewNames": "Aktualizovat souhrn s novými jmény",
     "syncStatusUnsupportedAudio": "Zvuk nelze přečíst — synchronizace není možná",
-    "conversationTitleDidntGenerate": "Title didn't generate",
-    "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Co pro mě můžeš udělat?} goal{Pomoz mi stanovit cíl} activity{Shrň mé nedávné aktivity} improve{Jak se mohu zlepšit?} other{}}",
     "nextWeek": "Příští týden",
     "clearSearch": "Vymazat hledání",
@@ -3661,5 +3659,6 @@
     "meetingScreenshotsTitle": "Co bylo na obrazovce",
     "meetingScreenshotFallbackCaption": "Snímek obrazovky z této schůzky",
     "deleteMeetingScreenshotTitle": "Smazat snímek obrazovky?",
-    "deleteMeetingScreenshotMessage": "Snímek obrazovky bude odebrán z poznámky této schůzky. Tuto akci nelze vrátit."
+    "deleteMeetingScreenshotMessage": "Snímek obrazovky bude odebrán z poznámky této schůzky. Tuto akci nelze vrátit.",
+    "conversationSummaryFailed": "Shrnutí se nepodařilo"
 }
