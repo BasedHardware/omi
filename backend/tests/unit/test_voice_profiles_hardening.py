@@ -38,9 +38,7 @@ def test_invalid_prompt_id_raises_value_error():
 def test_invalid_conversation_id_raises_value_error():
     store = StrictFirestore()
     with pytest.raises(ValueError, match="conversation_id must be a non-empty string"):
-        voice_profiles.add_owner_voice_confirmation(
-            "u", [0.1, 0.2], _pool, conversation_id="", firestore_client=store
-        )
+        voice_profiles.add_owner_voice_confirmation("u", [0.1, 0.2], _pool, conversation_id="", firestore_client=store)
 
 
 def test_non_finite_embedding_raises_value_error():
@@ -59,13 +57,12 @@ def test_non_finite_embedding_raises_value_error():
 def test_empty_embedding_raises_value_error():
     store = StrictFirestore()
     with pytest.raises(ValueError, match="embedding must be a non-empty sequence"):
-        voice_profiles.add_owner_voice_confirmation(
-            "u", [], _pool, conversation_id="c1", firestore_client=store
-        )
+        voice_profiles.add_owner_voice_confirmation("u", [], _pool, conversation_id="c1", firestore_client=store)
 
 
 def test_non_finite_pooled_result_raises_value_error():
     store = StrictFirestore()
+
     def _bad_pool(vectors):
         return [float('nan'), 1.0]
 

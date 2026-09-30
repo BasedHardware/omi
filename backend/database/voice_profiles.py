@@ -54,7 +54,6 @@ def _sanitize_pooled_vector(vector: Sequence[float]) -> List[float]:
     return sanitized
 
 
-
 def _client(firestore_client: Any = None) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
 
