@@ -25,6 +25,17 @@ WINDOW_REPLAY_SAFE_TRIMS = Counter(
     'omi_stt_window_replay_safe_trims_total',
     'Window replay ring trims through emitted anchors or speech-free capture',
 )
+WINDOW_REPLAY_CUT_REQUESTS = Counter(
+    'omi_stt_window_replay_cut_requests_total', 'Coalesced requests to cut a held TDT tail under capture-ring pressure'
+)
+WINDOW_REPLAY_CUT_PERFORMED = Counter(
+    'omi_stt_window_replay_cut_performed_total', 'Requested cuts that emit a forced tail and advance the replay anchor'
+)
+WINDOW_REPLAY_CUT_SKIPPED = Counter(
+    'omi_stt_window_replay_cut_skipped_total',
+    'Requested cuts deferred at request time or not performed on a POST result',
+    ['reason'],
+)
 WINDOW_CANARY_OUTCOME = Counter(
     'omi_stt_window_canary_transcript_outcome_total',
     'Listen transcript outcome by stable window allocation arm',

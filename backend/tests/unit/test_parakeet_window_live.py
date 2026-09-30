@@ -1230,6 +1230,240 @@ async def test_partial_vad_admission_unfinished_tdt_tail_keeps_replay_anchor_wit
     await actual._drain_stt_sockets()
 
 
+class LagScenarioClient(ProgressThenHoldClient):
+    def __init__(self, *, tiny=False):
+        super().__init__()
+        self.tiny = tiny
+
+    async def post(self, url, **kwargs):
+        self.requests.append((url, kwargs))
+        duration = _wav_duration(kwargs)
+        if len(self.requests) == 1:
+            segments = [{'text': 'Initial.', 'start': 0.0, 'end': duration - 1.5}]
+        elif self.tiny:
+            segments = [{'text': 'Brief.', 'start': 0.0, 'end': 0.1}]
+        else:
+            segments = []
+        return httpx.Response(200, json={'segments': segments}, request=httpx.Request('POST', url))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('scenario', ['answered_empty', 'very_short', 'sparse_empty', 'vad_noise_after_text'])
+async def test_replay_lag_scenarios_preserve_answered_audio_and_explain_overflow(monkeypatch, caplog, scenario):
+    # Run the real window jobs at deterministic capture steps; no synthetic
+    # speech predicate, no real audio/content and no wall-clock waiting.
+    async def parked_pump(_self):
+        await asyncio.Future()
+
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_pump', parked_pump)
+    client = LagScenarioClient(tiny=scenario == 'very_short')
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    raw = previous.raw
+    ring = actual._window_ring()
+    pcm = b'\x01\x00' * 16000 * 6
+    await _flush_capture(actual, pcm, 0)
+    await raw._run_job(raw._next_job())
+    initial_anchor = previous.window_replay_anchor_sample()
+    assert initial_anchor == int(4.5 * 16000)
+    admitted_samples = 16000 if scenario == 'sparse_empty' else 3 * 16000
+
+    def admit_partial(data, _wall, _score, start_sample):
+        return vad_gate.GateOutput(
+            audio_to_send=data[: admitted_samples * 2],
+            is_speech=True,
+            send_spans=((start_sample, admitted_samples),),
+        )
+
+    monkeypatch.setattr(previous.gate, 'process_audio', admit_partial)
+    requested_before = window.WINDOW_REPLAY_CUT_REQUESTS._value.get()
+    skipped_before = window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='no_text_yet')._value.get()
+    snapshot = None
+    for step in range(1, 30):
+        snapshot = ring.snapshot()
+        await _flush_capture(actual, pcm, step * 6 * 16000)
+        if actual.stt_socket is not previous:
+            break
+        job = raw._next_job()
+        if job is not None:
+            await raw._run_job(job)
+    else:
+        pytest.fail('scenario did not reproduce replay-ring overflow')
+
+    diagnostics = raw.replay_lag_diagnostics
+    assert raw.capacity_subtype == 'replay_ring_cap'
+    assert diagnostics.capture_seconds > 90
+    assert 0 < diagnostics.admitted_seconds < diagnostics.capture_seconds / 2
+    assert not diagnostics.post_in_flight and not diagnostics.pacing_wait
+    assert diagnostics.cut_pending
+    assert window.WINDOW_REPLAY_CUT_REQUESTS._value.get() > requested_before
+    assert len(callbacks) == 1
+    # No answered-empty samples are discarded. Replay covers exactly the
+    # protected snapshot plus the unsent chunk, once, starting at the anchor.
+    assert snapshot[0][0] == previous.window_replay_anchor_sample()
+    assert b''.join(replayed) == b''.join(data for _, data in snapshot) + pcm
+    if scenario == 'very_short':
+        assert diagnostics.empty_posts_since_anchor == 0 and diagnostics.empty_streak == 0
+    else:
+        assert diagnostics.posts_since_anchor == diagnostics.empty_posts_since_anchor > 0
+        assert diagnostics.empty_streak > 0
+        assert window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='no_text_yet')._value.get() > skipped_before
+    # Snapshot survives cancellation/rebuild and arrives on the existing
+    # outcome line only when the replacement leg actually transcribes.
+    assert actual._pending_live_failover.replay_lag_diagnostics is diagnostics
+    callbacks[0]([{'speaker': 'speaker_0', 'text': 'Replacement.', 'start': 0, 'end': 1}])
+    lines = [r.message for r in caplog.records if 'subtype=replay_ring_cap' in r.message]
+    assert len(lines) == 1
+    assert 'un_emitted_capture_seconds=' in lines[0] and 'vad_admitted_seconds=' in lines[0]
+    assert 'posts_since_anchor=' in lines[0] and 'empty_posts_since_anchor=' in lines[0]
+    assert 'Initial.' not in lines[0] and 'Replacement.' not in lines[0]
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_sparse_healthy_speech_idle_flushes_without_replay_pressure(monkeypatch):
+    pump_release = asyncio.Event()
+
+    async def parked_pump(_self):
+        await pump_release.wait()
+
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_pump', parked_pump)
+    client = UnpunctuatedClient()
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    clock = [window.time.monotonic()]
+    monkeypatch.setattr(window.time, 'monotonic', lambda: clock[0])
+    pcm = b'\x01\x00' * 16000 * 30
+
+    def admit_sparse(data, _wall, _score, start_sample):
+        return vad_gate.GateOutput(audio_to_send=data[: 16000 * 2], is_speech=True, send_spans=((start_sample, 16000),))
+
+    monkeypatch.setattr(previous.gate, 'process_audio', admit_sparse)
+    for step in range(10):
+        await _flush_capture(actual, pcm, step * 30 * 16000)
+        clock[0] += 2  # production idle flush budget, after the admitted second
+        job = previous.raw._next_job()
+        assert job is not None and job.force
+        await previous.raw._run_job(job)
+        clock[0] += 28
+        assert actual.stt_socket is previous and not previous.is_connection_dead
+        assert actual._window_ring().buffered_bytes <= 30 * 16000 * 2
+    assert len(base.emitted) == 10 and len(client.requests) == 10
+    assert not replayed and not callbacks
+    pump_release.set()
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_cut_with_unusable_timestamps_counts_other_without_discarding_speech(monkeypatch):
+    monkeypatch.setattr(
+        window, 'get_stt_client', lambda: Client(data={'segments': [{'text': 'Drift', 'start': 6, 'end': 8}]})
+    )
+    sock = window.WindowedParakeetSocket(
+        lambda _: pytest.fail('invalid text emitted'), 'http://tdt.invalid', 16000, lambda: None
+    )
+    sock.mark_speech()
+    assert sock.send(b'\x01\x00' * 16000 * 6)
+    sock.request_replay_cut()
+    before = window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='other')._value.get()
+    await sock._run_job(sock._next_job())
+    assert window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='other')._value.get() == before + 1
+    assert sock.replay_anchor_sample() is None and sock.has_untranscribed_speech()
+    assert sock._replay_cut_requested
+    sock.finish()
+
+
+@pytest.mark.asyncio
+async def test_no_first_text_cut_is_noop_but_startup_deadline_still_protects_noise(monkeypatch):
+    client = Client(data={'text': ''})
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    raw = previous.raw
+    before = window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='no_text_yet')._value.get()
+    pcm = b'\x01\x00' * 16000 * 6  # synthetic noise classified as speech by the real gate seam
+    raw.request_replay_cut()
+    await _flush_capture(actual, pcm, 0)
+    await _wait_requests(client, 1)
+    for _ in range(100):
+        if raw._empty_streak:
+            break
+        await _REAL_SLEEP(0)
+    assert raw._empty_streak == 1 and raw.has_untranscribed_speech()
+    assert raw.replay_anchor_sample() is None
+    assert raw._replay_cut_requested and not base.emitted
+    assert window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='no_text_yet')._value.get() == before + 1
+    # Fire the production deadline callback rather than disabling the budget
+    # to fabricate a >90s startup. A no-text session fails much earlier.
+    raw._expire_first_text()
+    assert await actual._failover_stt_socket()
+    assert raw.death_reason == 'first_text_deadline'
+    assert len(callbacks) == 1 and b''.join(replayed) == pcm
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+async def test_pacing_wait_with_capture_burst_reports_deferred_cut_and_exact_replay(monkeypatch):
+    client = ProgressThenHoldClient()
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    raw = previous.raw
+    pcm = b'\x01\x00' * 16000 * 6
+    await _flush_capture(actual, pcm, 0)
+    await _wait_replay_anchor(raw, -1)
+    pacing_started, pacing_release = asyncio.Event(), asyncio.Event()
+
+    async def hold_pacing(_delay):
+        pacing_started.set()
+        await pacing_release.wait()
+
+    monkeypatch.setattr(window.asyncio, 'sleep', hold_pacing)
+
+    # Only one admitted second per six capture seconds: the PCM buffer cannot
+    # hit its own cap first. A catch-up burst can consume 30 capture seconds
+    # of ring headroom before the next six-second wall pacing wait ends.
+    def admit_sparse(data, _wall, _score, start_sample):
+        return vad_gate.GateOutput(audio_to_send=data[: 16000 * 2], is_speech=True, send_spans=((start_sample, 16000),))
+
+    monkeypatch.setattr(previous.gate, 'process_audio', admit_sparse)
+    await _flush_capture(actual, pcm, 6 * 16000)
+    await asyncio.wait_for(pacing_started.wait(), 2)
+    skipped_before = window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='post_pacing')._value.get()
+    for step in range(2, 17):
+        snapshot = actual._window_ring().snapshot()
+        await _flush_capture(actual, pcm, step * 6 * 16000)
+        if actual.stt_socket is not previous:
+            break
+    diagnostics = raw.replay_lag_diagnostics
+    assert raw.capacity_subtype == 'replay_ring_cap'
+    assert diagnostics.pacing_wait and not diagnostics.post_in_flight
+    assert diagnostics.cut_pending and diagnostics.posts_since_anchor == 0
+    assert window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='post_pacing')._value.get() == skipped_before + 1
+    assert len(callbacks) == 1 and b''.join(replayed) == b''.join(data for _, data in snapshot) + pcm
+    assert len(base.emitted) == 1
+    pacing_release.set()
+    await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('held_tail', [False, True])
+async def test_cut_result_counters_distinguish_natural_progress_from_forced_tail(monkeypatch, held_tail):
+    client = LongTailClient() if held_tail else ProgressThenHoldClient()
+    actual, base, previous, _replayed, _callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    raw = previous.raw
+    performed_before = window.WINDOW_REPLAY_CUT_PERFORMED._value.get()
+    skipped_before = window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='no_held_tail')._value.get()
+    requests_before = window.WINDOW_REPLAY_CUT_REQUESTS._value.get()
+    raw.request_replay_cut()
+    raw.request_replay_cut()  # incoming capture chunks coalesce into one request
+    pcm = b'\x01\x00' * 16000 * 6
+    await _flush_capture(actual, pcm, 0)
+    await _wait_replay_anchor(raw, -1)
+    assert window.WINDOW_REPLAY_CUT_REQUESTS._value.get() == requests_before + 1
+    assert window.WINDOW_REPLAY_CUT_PERFORMED._value.get() == performed_before + int(held_tail)
+    assert window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='no_held_tail')._value.get() == skipped_before + int(
+        not held_tail
+    )
+    assert not raw._replay_cut_requested
+    assert raw._posts_since_anchor == raw._empty_posts_since_anchor == 0
+    await actual._drain_stt_sockets()
+
+
 @pytest.mark.asyncio
 async def test_stalled_window_post_fails_once_and_replays_exactly_from_emit_anchor(monkeypatch):
     client = ProgressThenHoldClient(hold_after=2)
@@ -1246,11 +1480,17 @@ async def test_stalled_window_post_fails_once_and_replays_exactly_from_emit_anch
     await _flush_capture(actual, pcm, 6 * 16000)
     await asyncio.wait_for(client.blocked.wait(), 2)
     assert previous.raw.has_untranscribed_speech()
+    assert previous.raw._post_in_flight
     assert not previous.raw._pump_task.done()
+    before_deferred = window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='post_in_flight')._value.get()
     await _flush_capture(actual, pcm, 12 * 16000)
+    assert window.WINDOW_REPLAY_CUT_SKIPPED.labels(reason='post_in_flight')._value.get() == before_deferred + 1
 
     assert previous.raw.death_reason == 'capacity_full'
     assert previous.capacity_subtype == 'replay_ring_cap'
+    assert previous.raw.replay_lag_diagnostics.post_in_flight
+    assert previous.raw.replay_lag_diagnostics.posts_since_anchor == 1
+    assert previous.raw.replay_lag_diagnostics.empty_posts_since_anchor == 0
     assert actual._pending_live_failover.reason == 'capacity_full'
     assert actual._pending_live_failover.capacity_subtype == 'replay_ring_cap'
     assert len(callbacks) == 1
