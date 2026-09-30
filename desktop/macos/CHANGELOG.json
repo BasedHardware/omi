@@ -2,6 +2,27 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.422",
+      "date": "2026-09-29",
+      "changes": [
+        "Fixed \"Summarize with an app\" being unreachable on a conversation that has no summary yet"
+      ]
+    },
+    {
+      "version": "0.12.421",
+      "date": "2026-09-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.420",
+      "date": "2026-09-29",
+      "changes": [
+        "Ask Omi a full question with Siri in one breath and get an answer"
+      ]
+    },
+    {
       "version": "0.12.419",
       "date": "2026-09-29",
       "changes": [

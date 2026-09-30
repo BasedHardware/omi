@@ -21667,6 +21667,17 @@
       },
       "Person": {
         "properties": {
+          "conversation_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Count"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -21682,6 +21693,18 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "last_heard_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heard At"
           },
           "name": {
             "title": "Name",
@@ -21713,6 +21736,17 @@
             "default": 3,
             "title": "Speech Samples Version",
             "type": "integer"
+          },
+          "talk_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Talk Seconds"
           },
           "updated_at": {
             "anyOf": [
@@ -41477,6 +41511,32 @@
               "default": true,
               "title": "Include Discarded",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_translations",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Translations",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "translation_cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Translation Cursor"
             }
           },
           {
@@ -65165,6 +65225,16 @@
             "schema": {
               "default": true,
               "title": "Include Speech Samples",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_stats",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Stats",
               "type": "boolean"
             }
           },

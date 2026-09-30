@@ -17,7 +17,6 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/services/app_review_service.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
@@ -25,6 +24,8 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/chat_history_state.dart';
+import 'package:omi/backend/http/api/chat_sessions.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -34,7 +35,7 @@ import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef ChatFilesUploader = Future<List<MessageFile>?> Function(List<File> files, {String? appId});
 typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(String text,
-    {String? appId, List<String>? filesId, ChatPageContext? context});
+    {String? appId, List<String>? filesId, ChatPageContext? context, String? chatSessionId});
 typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files, {String? language});
 typedef VoiceAudioFileSaver = Future<File> Function(List<List<int>> bytes, int startTime, int frameSize);
 
@@ -63,16 +64,29 @@ class _FailedReply {
   bool get canRetry => text != null;
 }
 
-class MessageProvider extends ChangeNotifier {
+class MessageProvider extends ChangeNotifier with ChatHistoryState {
   MessageProvider({
     ChatFilesUploader? filesUploader,
+    ChatSessionsApi? sessionsApi,
     VoiceReplyStreamer? voiceReplyStreamer,
     VoiceAudioFileSaver? voiceAudioFileSaver,
     Duration voiceReplyTimeout = const Duration(seconds: 60),
-  })  : _filesUploader = filesUploader ?? uploadFilesServer,
+  })  : chatSessionsApi = sessionsApi ?? ChatSessionsApi(),
+        _filesUploader = filesUploader ?? uploadFilesServer,
         _voiceReplyStreamer = voiceReplyStreamer ?? sendVoiceMessageStreamServer,
         _voiceAudioFileSaver = voiceAudioFileSaver ?? FileUtils.saveAudioBytesToTempFile,
         _voiceReplyTimeout = voiceReplyTimeout;
+
+  @override
+  final ChatSessionsApi chatSessionsApi;
+  @override
+  bool get chatMutationInProgress => sendingMessage || showTypingIndicator || _voiceSendInFlight || isUploadingFiles;
+  @override
+  void resetChatDraft() {
+    _failedReplies.clear();
+    clearSelectedFiles();
+    clearUploadedFiles();
+  }
 
   final ChatFilesUploader _filesUploader;
   final VoiceReplyStreamer _voiceReplyStreamer;
@@ -84,19 +98,14 @@ class MessageProvider extends ChangeNotifier {
   ChatReplyStreamer? replyStreamOverride;
   final Map<String, _ChatTelemetryAttempt> _chatTelemetryAttempts = {};
 
+  @override
   AppProvider? appProvider;
-  List<ServerMessage> messages = [];
   bool _isNextMessageFromVoice = false;
 
-  bool isLoadingMessages = false;
-  bool hasCachedMessages = false;
-  bool isClearingChat = false;
   bool showTypingIndicator = false;
   bool sendingMessage = false;
   double aiStreamProgress = 1.0;
   bool agentThinkingAfterText = false;
-
-  String firstTimeLoadingText = '';
 
   List<App> chatApps = [];
   bool isLoadingChatApps = false;
@@ -273,11 +282,6 @@ class MessageProvider extends ChangeNotifier {
     return uploadingFiles[id] ?? false;
   }
 
-  void setHasCachedMessages(bool value) {
-    hasCachedMessages = value;
-    notifyListeners();
-  }
-
   void setSendingMessage(bool value) {
     sendingMessage = value;
     notifyListeners();
@@ -285,16 +289,6 @@ class MessageProvider extends ChangeNotifier {
 
   void setShowTypingIndicator(bool value) {
     showTypingIndicator = value;
-    notifyListeners();
-  }
-
-  void setClearingChat(bool value) {
-    isClearingChat = value;
-    notifyListeners();
-  }
-
-  void setLoadingMessages(bool value) {
-    isLoadingMessages = value;
     notifyListeners();
   }
 
@@ -484,52 +478,6 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future refreshMessages({bool dropdownSelected = false}) async {
-    _failedReplies.clear();
-    setLoadingMessages(true);
-    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
-      setHasCachedMessages(true);
-    }
-    messages = await getMessagesFromServer(dropdownSelected: dropdownSelected);
-    if (messages.isEmpty) {
-      messages = List<ServerMessage>.from(SharedPreferencesUtil().cachedMessages);
-    } else {
-      SharedPreferencesUtil().cachedMessages = messages;
-      setHasCachedMessages(true);
-    }
-    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    setLoadingMessages(false);
-    notifyListeners();
-  }
-
-  void setMessagesFromCache() {
-    if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
-      setHasCachedMessages(true);
-      messages = List<ServerMessage>.from(SharedPreferencesUtil().cachedMessages);
-      messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    }
-    notifyListeners();
-  }
-
-  Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
-    final l10n = globalNavigatorKey.currentContext?.l10n;
-    if (!hasCachedMessages) {
-      firstTimeLoadingText = l10n?.msgReadingMemories ?? 'Reading your memories…';
-      notifyListeners();
-    }
-    setLoadingMessages(true);
-    var mes = await getMessagesServer(appId: appProvider?.selectedChatAppId, dropdownSelected: dropdownSelected);
-    if (!hasCachedMessages) {
-      firstTimeLoadingText = l10n?.msgLearningMemories ?? 'Learning from your memories…';
-      notifyListeners();
-    }
-    messages = List<ServerMessage>.from(mes);
-    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    setLoadingMessages(false);
-    notifyListeners();
-    return messages;
-  }
-
   Future<bool> setMessageNps(ServerMessage message, int value, {String? reason}) async {
     if (!await setMessageResponseRating(message.id, value, reason: reason)) return false;
     if (value == -1) unawaited(AppReviewService().recordBadExperience(AppReviewBadExperience.negativeChatRating));
@@ -538,23 +486,6 @@ class MessageProvider extends ChangeNotifier {
     message.rating = value == 0 ? null : value;
     notifyListeners();
     return true;
-  }
-
-  Future clearChat() async {
-    setClearingChat(true);
-    try {
-      var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
-      _failedReplies.clear();
-      messages = List<ServerMessage>.from(mes);
-      messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    } catch (e) {
-      Logger.debug('Failed to clear chat: $e');
-      final l10n = globalNavigatorKey.currentContext?.l10n;
-      AppSnackbar.showSnackbarError(l10n?.somethingWentWrong ?? 'Something went wrong! Please try again later.');
-    } finally {
-      setClearingChat(false);
-    }
-    notifyListeners();
   }
 
   void addMessageLocally(String messageText) {
@@ -613,7 +544,7 @@ class MessageProvider extends ChangeNotifier {
   }) async {
     // Re-entry guard so a duplicated end-of-session signal from the device
     // button can't kick off two parallel voice replies.
-    if (_voiceSendInFlight) {
+    if (_voiceSendInFlight || sendingMessage || showTypingIndicator) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.sendInFlight);
       return;
     }
@@ -622,6 +553,10 @@ class MessageProvider extends ChangeNotifier {
       return;
     }
     _voiceSendInFlight = true;
+    // Pendant voice addresses the server-current conversation. Its playback may continue while
+    // Past chats is open, but its transient reply must never become a row in an archived thread.
+    final voiceMessages = chatSessionId == null && !isFreshChat ? messages : <ServerMessage>[];
+    final visibleVoice = identical(voiceMessages, messages);
     final chatAttempt = ProductTelemetry.instance.start(ProductJourney.chatVoice, surface: ProductSurface.chat);
     var chatAttemptCompleted = false;
     late String responseMessageId;
@@ -655,10 +590,10 @@ class MessageProvider extends ChangeNotifier {
 
     PlatformManager.instance.analytics.chatVoiceInputUsed(chatTargetId: chatTargetId, isPersonaChat: isPersonaChat);
 
-    setShowTypingIndicator(true);
+    if (visibleVoice) setShowTypingIndicator(true);
     var message = ServerMessage.empty();
-    messages.add(message);
-    var aiIndex = messages.length - 1;
+    voiceMessages.add(message);
+    var aiIndex = voiceMessages.length - 1;
     responseMessageId = message.id;
     _registerChatTelemetryAttempt(responseMessageId, chatAttempt);
     notifyListeners();
@@ -714,7 +649,7 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.done) {
           chunk.message!.memoryAction = message.memoryAction;
           message = chunk.message!;
-          messages[aiIndex] = message;
+          voiceMessages[aiIndex] = message;
           _transferChatTelemetryAttempt(responseMessageId, message.id);
           _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
           chatAttemptCompleted = true;
@@ -730,7 +665,7 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.message) {
-          messages.insert(aiIndex, chunk.message!);
+          voiceMessages.insert(aiIndex, chunk.message!);
           aiIndex++;
           notifyListeners();
           continue;
@@ -856,11 +791,13 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
+      await prepareChatSession();
       await for (var chunk in (replyStreamOverride ?? sendMessageStreamServer)(
         text,
         appId: currentAppId,
         filesId: fileIds,
         context: context,
+        chatSessionId: chatSessionId,
       )) {
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();
@@ -900,6 +837,7 @@ class MessageProvider extends ChangeNotifier {
           messages[aiIndex] = message;
           _transferChatTelemetryAttempt(responseMessageId, message.id);
           _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
+          nameChatSession();
           chatAttemptCompleted = true;
           notifyListeners();
           continue;

@@ -11518,4 +11518,119 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Bazı sonuçlar yüklenemedi';
+
+  @override
+  String get peopleSearchPlaceholder => 'Kişi ara';
+
+  @override
+  String get peopleNotHeardYet => 'Henüz duyulmadı';
+
+  @override
+  String get peopleRecent => 'Yakınlarda';
+
+  @override
+  String get deletePeopleMessage =>
+      'Bu, ses örneklerini kaldırır ve geri alınamaz. Geçmiş konuşmalardaki sözleri adsız konuşmacılara dönüşür.';
+
+  @override
+  String get personTalkTime => 'Konuşma süresi';
+
+  @override
+  String get personLastHeard => 'Son duyulma';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kişi silinsin mi?',
+      one: '1 kişi silinsin mi?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Ses Gerekli';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kişi',
+      one: '1 kişi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Eşleşen Kişi Yok';
+
+  @override
+  String get deselectAll => 'Tümünün Seçimini Kaldır';
+
+  @override
+  String get voiceRecognitionSettings => 'Ses Tanıma';
+
+  @override
+  String get greetingMorning => 'Günaydın';
+
+  @override
+  String get greetingAfternoon => 'İyi öğleden sonralar';
+
+  @override
+  String get greetingEvening => 'İyi akşamlar';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Ne bilmek istersin?';
+
+  @override
+  String get askSuggestDecide => 'Bugün neye karar verdim?';
+
+  @override
+  String get askSuggestOwe => 'Hâlâ insanlara ne borçluyum?';
+
+  @override
+  String get askSuggestNotice => 'Omi neyi fark etti?';
+
+  @override
+  String get pastChats => 'Geçmiş sohbetler';
+
+  @override
+  String get newChat => 'Yeni sohbet';
+
+  @override
+  String get startFresh => 'Baştan başla';
+
+  @override
+  String get noPastChats => 'Omi ile sohbetleriniz burada görünür.';
+
+  @override
+  String get deleteChatQuestion => 'Bu sohbet silinsin mi?';
+
+  @override
+  String get deleteChatMessage => 'Geçmiş sohbetlerden kalıcı olarak kaldırılır.';
+
+  @override
+  String get deleteChat => 'Sohbeti sil';
+
+  @override
+  String get appsAskWith => 'Omi\'ye şununla sor';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Bugün $count konuşma.',
+      one: 'Bugün 1 konuşma.',
+      zero: 'Bugün konuşma yok.',
+    );
+    return '$_temp0';
+  }
 }

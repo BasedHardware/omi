@@ -11320,4 +11320,118 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get searchPartialFailure => '일부 결과를 불러오지 못했습니다';
+
+  @override
+  String get peopleSearchPlaceholder => '사람 검색';
+
+  @override
+  String get peopleNotHeardYet => '아직 듣지 못함';
+
+  @override
+  String get peopleRecent => '최근';
+
+  @override
+  String get deletePeopleMessage => '음성 샘플이 삭제되며 되돌릴 수 없습니다. 지난 대화에서 이 사람의 발언은 이름 없는 화자로 바뀝니다.';
+
+  @override
+  String get personTalkTime => '발화 시간';
+
+  @override
+  String get personLastHeard => '마지막으로 들은 날';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명을 삭제할까요?',
+      one: '1명을 삭제할까요?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => '음성 필요';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명',
+      one: '1명',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => '일치하는 사람 없음';
+
+  @override
+  String get deselectAll => '모두 선택 해제';
+
+  @override
+  String get voiceRecognitionSettings => '음성 인식';
+
+  @override
+  String get greetingMorning => '좋은 아침이에요';
+
+  @override
+  String get greetingAfternoon => '좋은 오후예요';
+
+  @override
+  String get greetingEvening => '좋은 저녁이에요';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name님';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => '무엇이 궁금하세요?';
+
+  @override
+  String get askSuggestDecide => '오늘 무엇을 결정했지?';
+
+  @override
+  String get askSuggestOwe => '아직 사람들에게 해 줘야 할 일은?';
+
+  @override
+  String get askSuggestNotice => 'Omi가 알아챈 것은?';
+
+  @override
+  String get pastChats => '지난 채팅';
+
+  @override
+  String get newChat => '새 채팅';
+
+  @override
+  String get startFresh => '처음부터 시작';
+
+  @override
+  String get noPastChats => 'Omi와 나눈 채팅이 여기에 표시돼요.';
+
+  @override
+  String get deleteChatQuestion => '이 채팅을 삭제할까요?';
+
+  @override
+  String get deleteChatMessage => '지난 채팅에서 영구히 사라져요.';
+
+  @override
+  String get deleteChat => '채팅 삭제';
+
+  @override
+  String get appsAskWith => '이것과 함께 Omi에게 묻기';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '오늘 대화 $count개.',
+      one: '오늘 대화 1개.',
+      zero: '오늘은 대화가 없어요.',
+    );
+    return '$_temp0';
+  }
 }

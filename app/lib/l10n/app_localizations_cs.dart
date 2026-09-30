@@ -11504,4 +11504,119 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Některé výsledky se nepodařilo načíst';
+
+  @override
+  String get peopleSearchPlaceholder => 'Hledat lidi';
+
+  @override
+  String get peopleNotHeardYet => 'Zatím neslyšeni';
+
+  @override
+  String get peopleRecent => 'Nedávní';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tím se odstraní jejich hlasové vzorky a nelze to vrátit zpět. Jejich repliky v minulých konverzacích se stanou nepojmenovanými mluvčími.';
+
+  @override
+  String get personTalkTime => 'Doba mluvení';
+
+  @override
+  String get personLastHeard => 'Naposledy slyšen';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Smazat lidi: $count?',
+      one: 'Smazat 1 člověka?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Chybí hlas';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Počet osob: $count',
+      one: '1 osoba',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Žádné odpovídající osoby';
+
+  @override
+  String get deselectAll => 'Zrušit výběr';
+
+  @override
+  String get voiceRecognitionSettings => 'Rozpoznávání hlasu';
+
+  @override
+  String get greetingMorning => 'Dobré ráno';
+
+  @override
+  String get greetingAfternoon => 'Dobré odpoledne';
+
+  @override
+  String get greetingEvening => 'Dobrý večer';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Co chcete vědět?';
+
+  @override
+  String get askSuggestDecide => 'Co jsem dnes rozhodl?';
+
+  @override
+  String get askSuggestOwe => 'Co ještě dlužím lidem?';
+
+  @override
+  String get askSuggestNotice => 'Čeho si Omi všiml?';
+
+  @override
+  String get pastChats => 'Předchozí chaty';
+
+  @override
+  String get newChat => 'Nový chat';
+
+  @override
+  String get startFresh => 'Začít znovu';
+
+  @override
+  String get noPastChats => 'Tady se zobrazí vaše chaty s Omi.';
+
+  @override
+  String get deleteChatQuestion => 'Smazat tento chat?';
+
+  @override
+  String get deleteChatMessage => 'Z předchozích chatů zmizí natrvalo.';
+
+  @override
+  String get deleteChat => 'Smazat chat';
+
+  @override
+  String get appsAskWith => 'Ptejte se Omi s';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rozhovorů dnes.',
+      one: '1 rozhovor dnes.',
+      zero: 'Dnes žádné rozhovory.',
+    );
+    return '$_temp0';
+  }
 }

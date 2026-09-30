@@ -11524,4 +11524,119 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'Kai kurių rezultatų nepavyko įkelti';
+
+  @override
+  String get peopleSearchPlaceholder => 'Ieškoti žmonių';
+
+  @override
+  String get peopleNotHeardYet => 'Dar negirdėta';
+
+  @override
+  String get peopleRecent => 'Naujausi';
+
+  @override
+  String get deletePeopleMessage =>
+      'Tai pašalins jų balso pavyzdžius ir to atšaukti negalima. Jų replikos ankstesniuose pokalbiuose taps be vardo kalbėtojais.';
+
+  @override
+  String get personTalkTime => 'Kalbėjimo laikas';
+
+  @override
+  String get personLastHeard => 'Paskutinį kartą girdėta';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ištrinti žmones: $count?',
+      one: 'Ištrinti 1 žmogų?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Trūksta balso';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Asmenų: $count',
+      one: '1 asmuo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Atitinkančių asmenų nėra';
+
+  @override
+  String get deselectAll => 'Atžymėti viską';
+
+  @override
+  String get voiceRecognitionSettings => 'Balso atpažinimas';
+
+  @override
+  String get greetingMorning => 'Labas rytas';
+
+  @override
+  String get greetingAfternoon => 'Laba diena';
+
+  @override
+  String get greetingEvening => 'Labas vakaras';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Ką norite sužinoti?';
+
+  @override
+  String get askSuggestDecide => 'Ką šiandien nusprendžiau?';
+
+  @override
+  String get askSuggestOwe => 'Ką dar esu skolingas žmonėms?';
+
+  @override
+  String get askSuggestNotice => 'Ką pastebėjo Omi?';
+
+  @override
+  String get pastChats => 'Ankstesni pokalbiai';
+
+  @override
+  String get newChat => 'Naujas pokalbis';
+
+  @override
+  String get startFresh => 'Pradėti iš naujo';
+
+  @override
+  String get noPastChats => 'Jūsų pokalbiai su Omi rodomi čia.';
+
+  @override
+  String get deleteChatQuestion => 'Ištrinti šį pokalbį?';
+
+  @override
+  String get deleteChatMessage => 'Jis visam laikui dings iš ankstesnių pokalbių.';
+
+  @override
+  String get deleteChat => 'Ištrinti pokalbį';
+
+  @override
+  String get appsAskWith => 'Klauskite Omi su';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pokalbiai šiandien.',
+      one: '1 pokalbis šiandien.',
+      zero: 'Šiandien pokalbių nėra.',
+    );
+    return '$_temp0';
+  }
 }

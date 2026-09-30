@@ -11573,4 +11573,119 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get searchPartialFailure => 'No s\'han pogut carregar alguns resultats';
+
+  @override
+  String get peopleSearchPlaceholder => 'Cerca persones';
+
+  @override
+  String get peopleNotHeardYet => 'Encara no s\'ha sentit';
+
+  @override
+  String get peopleRecent => 'Recents';
+
+  @override
+  String get deletePeopleMessage =>
+      'Això elimina les seves mostres de veu i no es pot desfer. Les seves intervencions en converses anteriors passen a ser parlants sense nom.';
+
+  @override
+  String get personTalkTime => 'Temps de parla';
+
+  @override
+  String get personLastHeard => 'Última vegada';
+
+  @override
+  String deletePeopleTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Eliminar $count persones?',
+      one: 'Eliminar 1 persona?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get peopleFilterNeedsVoice => 'Cal la veu';
+
+  @override
+  String peopleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count persones',
+      one: '1 persona',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get noMatchingPeople => 'Cap persona coincident';
+
+  @override
+  String get deselectAll => 'Desselecciona-ho tot';
+
+  @override
+  String get voiceRecognitionSettings => 'Reconeixement de veu';
+
+  @override
+  String get greetingMorning => 'Bon dia';
+
+  @override
+  String get greetingAfternoon => 'Bona tarda';
+
+  @override
+  String get greetingEvening => 'Bona nit';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get whatDoYouWantToKnow => 'Què vols saber?';
+
+  @override
+  String get askSuggestDecide => 'Què he decidit avui?';
+
+  @override
+  String get askSuggestOwe => 'Què encara dec a la gent?';
+
+  @override
+  String get askSuggestNotice => 'Què ha notat l\'Omi?';
+
+  @override
+  String get pastChats => 'Xats anteriors';
+
+  @override
+  String get newChat => 'Xat nou';
+
+  @override
+  String get startFresh => 'Comença de nou';
+
+  @override
+  String get noPastChats => 'Els teus xats amb Omi apareixen aquí.';
+
+  @override
+  String get deleteChatQuestion => 'Vols suprimir aquest xat?';
+
+  @override
+  String get deleteChatMessage => 'Desapareixerà dels xats anteriors per sempre.';
+
+  @override
+  String get deleteChat => 'Suprimeix el xat';
+
+  @override
+  String get appsAskWith => 'Pregunta a Omi amb';
+
+  @override
+  String conversationsTodayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count converses avui.',
+      one: '1 conversa avui.',
+      zero: 'Avui cap conversa.',
+    );
+    return '$_temp0';
+  }
 }
