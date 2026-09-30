@@ -1641,11 +1641,25 @@ _add(
         reason='timezone query helper observed inside both listed consumers',
     )
 )
+
+
+def _seed_daily_summary_recipient(client, combo, trial):
+    """Queue one recipient so the per-user ``fcm_tokens`` stream executes.
+
+    The consume-once queues feed the recipients query (one matched user, whose
+    ``fcm_token`` legacy field doubles as the non-subcollection token source)
+    and then the nested ``users/{uid}/fcm_tokens`` stream.
+    """
+    client.queue_results([client.snapshot(f'users/{UID}', {'fcm_token': 'legacy-1'})])
+    client.queue_results([])
+
+
 _add(DriverEntry('database.notifications.get_all_tokens', base={'uid': UID}))
 _add(
     DriverEntry(
         'database.notifications.get_users_for_daily_summary_indexed',
         base={'timezones': ['UTC'], 'target_local_hour': 7},
+        setup=_seed_daily_summary_recipient,
     )
 )
 _add(DriverEntry('database.notifications.get_users_id_in_timezones', base={'timezones': ['UTC']}))
@@ -1901,19 +1915,23 @@ def _seed_expired_context_snapshot(client, combo, trial):
 
 
 def _seed_canonical_product_state(client, combo, trial):
-    """Trial 0 keeps the empty path; trial 1 walks one populated workstream.
+    """Queue a generation-matched workstream row so nested per-workstream queries run.
 
-    A queued, generation-matched workstream row drives the per-workstream
+    ``account_generation`` is a domain: 0 records the unfiltered collection
+    queries (the production default), 1 records the ``account_generation ==``
+    filter; the seeded row always matches the driven generation so the
     ``workstreams/{id}/artifact_refs`` and ``workstreams/{id}/events``
-    (``order_by sequence DESC``) queries; the consume-once queues feed the four
-    top-level collections and both nested subcollections in call order.
+    (``order_by sequence DESC``) queries execute in every combo. The
+    consume-once queues feed the four top-level collections and both nested
+    subcollections in call order.
     """
-    if trial == 0:
-        return
+    payload: dict = {}
+    if combo['account_generation']:
+        payload['account_generation'] = combo['account_generation']
     client.queue_results([])
     client.queue_results([])
     client.queue_results([])
-    client.queue_results([client.snapshot(f'users/{UID}/workstreams/ws-1', {'account_generation': 1})])
+    client.queue_results([client.snapshot(f'users/{UID}/workstreams/ws-1', payload)])
     client.queue_results([])
     client.queue_results([])
 
@@ -1967,11 +1985,10 @@ _add(
     DriverEntry(
         'database.task_recommendations.load_canonical_product_state',
         base={'uid': UID},
-        neutrals={
-            'account_generation': (1, 'generation fence; fixed seeded scope, same filter set for any value'),
+        domains={
+            'account_generation': [0, 1],
         },
         setup=_seed_canonical_product_state,
-        trials=2,
     )
 )
 _add(
@@ -2017,7 +2034,19 @@ _add(
 )
 
 _add(DriverEntry('database.tasks.get_task_by_action_request', base={'action': 'act-1', 'request_id': 'req-1'}))
-_add(DriverEntry('database.trends.get_trends_data'))
+
+
+def _seed_trends_categories(client, combo, trial):
+    """Queue one valid category so the nested ``topics`` streams execute.
+
+    The consume-once queues feed the top-level ``trends`` stream (one
+    ``ceo`` category) and the per-category ``trends/{id}/topics`` stream.
+    """
+    client.queue_results([client.snapshot('trends/trend-ceo-1', {'id': 'trend-ceo-1', 'category': 'ceo'})])
+    client.queue_results([])
+
+
+_add(DriverEntry('database.trends.get_trends_data', setup=_seed_trends_categories))
 
 _add(
     CoveredByEntry(
