@@ -558,3 +558,11 @@ def test_card_and_manual_labels_in_one_conversation_do_not_double_count(world):
     evidence = store.rows[('users', 'u', 'people', 'new')]['label_evidence']
     assert evidence.get('manual_labels') == 1
     assert evidence.get('card_picks', 0) == 0
+
+
+def test_correction_never_recreates_evidence_for_a_deleted_person(world):
+    store, _, _ = world
+    del store.rows[('users', 'u', 'people', 'old')]
+    db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
+    assert ('users', 'u', 'people', 'old') not in store.rows
+    assert store.rows[('users', 'u', 'people', 'new')]['label_evidence']['manual_labels'] == 1

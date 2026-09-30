@@ -192,3 +192,17 @@ def test_sync_candidates_exclude_a_person_already_manually_assigned(monkeypatch)
     sync_mod.identify_speakers_for_segments(segments, b'audio', cache, 'u', dependencies=deps)
     assert segments[0].person_id == 'p1'
     assert segments[1].person_id is None and segments[1].voice_candidates == []
+
+
+def test_live_owner_and_named_auto_accepts_are_identical_with_prior_on_or_off(monkeypatch):
+    for vector, expected in (([1.0, 0.0, 0.0], 'user'), ([0.0, 1.0, 0.0], 'p1')):
+        observed = []
+        for enabled in (False, True):
+            matcher, emitted = _live(monkeypatch, pinned=True, enabled=enabled)
+            monkeypatch.setattr(
+                speakers_mod, 'extract_embedding_from_bytes', lambda _audio, _name: np.array([vector], dtype=np.float32)
+            )
+            asyncio.run(matcher.match(3, _clip('s1')))
+            assert matcher.speaker_to_person[3][0] == expected
+            observed.append((dict(matcher.speaker_to_person), dict(matcher.voice_identity_status), emitted))
+        assert observed[0] == observed[1]

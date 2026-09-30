@@ -25,6 +25,13 @@ def test_pin_and_unpin_stamp_pinned_at():
     assert people_db.set_person_pinned('u', 'missing', True, firestore_client=store) is None
 
 
+def test_pin_cannot_access_another_users_person():
+    store = StrictFirestore()
+    store.rows[PATH] = {'id': 'p1', 'name': 'Maya Chen'}
+    assert people_db.set_person_pinned('other', 'p1', True, firestore_client=store) is None
+    assert 'pinned' not in store.rows[PATH]
+
+
 def _client():
     app = FastAPI()
     app.include_router(router_module.router)
