@@ -157,4 +157,3 @@ def test_action_item_update_rejects_empty_or_whitespace_description(authed_profi
     result = cli_runner.invoke(app, ["action-item", "update", "a1", "--description", "   "])
     assert result.exit_code == 1
     assert "Invalid description" in result.stderr
-
