@@ -4,8 +4,12 @@ import hashlib
 import hmac
 import logging
 import os
+import re
 from datetime import datetime
 from typing import Any, Dict, Optional
+
+CASE_REF_REGEX = re.compile(r"^FU-[0-9A-Fa-f]{12}$")
+
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -132,19 +136,32 @@ def get_flagged_users(
     limit: int = Query(default=50, le=200),
 ):
     """Get users with active fair-use enforcement."""
+    valid_stages = {'warning', 'throttle', 'restrict'}
+    if stage is not None and stage not in valid_stages:
+        raise HTTPException(status_code=400, detail=f'Invalid stage filter. Must be one of: {sorted(valid_stages)}')
+
     # Clamp in-function (not only via Query) so direct/non-HTTP callers can't pass a
     # negative or huge limit straight through to the Firestore query.
     limit = max(1, min(limit, 200))
-    users = fair_use_db.get_flagged_users(stage_filter=stage, limit=limit)
+    try:
+        users = fair_use_db.get_flagged_users(stage_filter=stage, limit=limit)
+    except Exception as e:
+        logger.error(f'Failed to get flagged users: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to retrieve flagged users')
+
     return {'users': users, 'fair_use_enabled': FAIR_USE_ENABLED}
 
 
 @router.get('/v1/admin/fair-use/user/{uid}', tags=['admin'], response_model=FairUseUserDetailResponse)
 def get_user_fair_use_detail(uid: str, admin_id: str = Depends(_verify_admin_key)):
     """Get detailed fair-use state and events for a specific user."""
-    state = fair_use_db.get_fair_use_state(uid)
-    events = fair_use_db.get_fair_use_events(uid, limit=50)
-    speech = get_rolling_speech_ms(uid)
+    try:
+        state = fair_use_db.get_fair_use_state(uid)
+        events = fair_use_db.get_fair_use_events(uid, limit=50)
+        speech = get_rolling_speech_ms(uid)
+    except Exception as e:
+        logger.error(f'Failed to get fair use detail for uid {uid}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to retrieve user fair use details')
 
     return {
         'uid': uid,
@@ -162,15 +179,23 @@ def get_user_fair_use_detail(uid: str, admin_id: str = Depends(_verify_admin_key
 @router.post('/v1/admin/fair-use/user/{uid}/resolve-event/{event_id}', tags=['admin'], response_model=StatusResponse)
 def resolve_event(uid: str, event_id: str, admin_id: str = Depends(_verify_admin_key), notes: str = Query(default='')):
     """Mark a fair-use event as resolved."""
-    fair_use_db.resolve_fair_use_event(uid, event_id, admin_uid=admin_id, notes=notes)
+    try:
+        fair_use_db.resolve_fair_use_event(uid, event_id, admin_uid=admin_id, notes=notes)
+    except Exception as e:
+        logger.error(f'Failed to resolve fair use event {event_id} for uid {uid}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to resolve fair use event')
     return {'status': 'resolved'}
 
 
 @router.post('/v1/admin/fair-use/user/{uid}/reset', tags=['admin'], response_model=StatusResponse)
 def reset_user_fair_use(uid: str, admin_id: str = Depends(_verify_admin_key)):
     """Reset a user's fair-use state to clean."""
-    fair_use_db.reset_fair_use_state(uid, admin_uid=admin_id)
-    invalidate_enforcement_cache(uid)
+    try:
+        fair_use_db.reset_fair_use_state(uid, admin_uid=admin_id)
+        invalidate_enforcement_cache(uid)
+    except Exception as e:
+        logger.error(f'Failed to reset fair use state for uid {uid}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to reset user fair use state')
     return {'status': 'reset'}
 
 
@@ -186,24 +211,39 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
         updates['throttle_until'] = None
         updates['restrict_until'] = None
 
-    fair_use_db.update_fair_use_state(uid, updates)
-    invalidate_enforcement_cache(uid)
+    try:
+        fair_use_db.update_fair_use_state(uid, updates)
+        invalidate_enforcement_cache(uid)
+    except Exception as e:
+        logger.error(f'Failed to update fair use stage to {stage} for uid {uid}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to update user enforcement stage')
     return {'status': 'updated', 'stage': stage}
 
 
 @router.get('/v1/admin/fair-use/case/{case_ref}', tags=['admin'], response_model=FairUseCaseLookupResponse)
 def lookup_case(case_ref: str, admin_id: str = Depends(_verify_admin_key)):
     """Look up a fair-use event by case reference (for support team)."""
+    case_ref_clean = (case_ref or '').strip().upper()
+    if not CASE_REF_REGEX.match(case_ref_clean):
+        raise HTTPException(status_code=400, detail='Invalid case reference format')
+
     # Search across all users' events for this case_ref
-    query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref).limit(1)
-    for doc in query.stream():
-        data = doc.to_dict()
-        path_parts = doc.reference.path.split('/')
-        if len(path_parts) >= 2:
-            data['uid'] = path_parts[1]
-        data['event_id'] = doc.id
-        return data
-    raise HTTPException(status_code=404, detail=f'Case {case_ref} not found')
+    try:
+        query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref_clean).limit(1)
+        for doc in query.stream():
+            data = doc.to_dict() or {}
+            path_parts = doc.reference.path.split('/')
+            if len(path_parts) >= 2:
+                data['uid'] = path_parts[1]
+            data['event_id'] = doc.id
+            return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f'Failed to lookup case {case_ref_clean}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to lookup case reference')
+
+    raise HTTPException(status_code=404, detail=f'Case {case_ref_clean} not found')
 
 
 SUPPORT_EMAIL = 'team@basedhardware.com'
@@ -226,29 +266,44 @@ def get_public_case_status(case_ref: str):
     Returns only non-sensitive info: stage, message, timestamps, support email.
     No usage data or user identity exposed.
     """
-    query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref).limit(1)
-    for doc in query.stream():
-        data = doc.to_dict()
-        # Extract uid to get current enforcement stage
-        path_parts = doc.reference.path.split('/')
-        uid = path_parts[1] if len(path_parts) >= 2 else None
+    case_ref_clean = (case_ref or '').strip().upper()
+    if not CASE_REF_REGEX.match(case_ref_clean):
+        raise HTTPException(status_code=400, detail='Invalid case reference format')
 
-        stage = 'none'
-        if uid:
-            state = fair_use_db.get_fair_use_state(uid)
-            stage = state.get('stage', 'none')
+    try:
+        query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref_clean).limit(1)
+        for doc in query.stream():
+            data = doc.to_dict() or {}
+            # Extract uid to get current enforcement stage
+            path_parts = doc.reference.path.split('/')
+            uid = path_parts[1] if len(path_parts) >= 2 else None
 
-        created_at = data.get('created_at')
-        updated_at = data.get('resolved_at') or created_at
+            stage = 'none'
+            if uid:
+                try:
+                    state = fair_use_db.get_fair_use_state(uid)
+                    stage = state.get('stage', 'none') if isinstance(state, dict) else 'none'
+                except Exception as e:
+                    logger.warning(f'Failed to fetch fair use state for uid {uid}: {e}')
+                    stage = 'none'
 
-        return {
-            'case_ref': case_ref,
-            'stage': stage,
-            'message': _user_facing_message(stage, case_ref),
-            'created_at': str(created_at) if created_at else None,
-            'updated_at': str(updated_at) if updated_at else None,
-            'support_email': SUPPORT_EMAIL,
-        }
+            created_at = data.get('created_at')
+            updated_at = data.get('resolved_at') or created_at
+
+            return {
+                'case_ref': case_ref_clean,
+                'stage': stage,
+                'message': _user_facing_message(stage, case_ref_clean),
+                'created_at': str(created_at) if created_at else None,
+                'updated_at': str(updated_at) if updated_at else None,
+                'support_email': SUPPORT_EMAIL,
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f'Failed to get public case status for {case_ref_clean}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to lookup case reference')
+
     raise HTTPException(status_code=404, detail='Case not found')
 
 
@@ -260,8 +315,13 @@ def get_public_case_status(case_ref: str):
 @router.get('/v1/fair-use/status', tags=['fair_use'], response_model=FairUseStatusResponse)
 def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
     """User-facing endpoint: see your own fair-use status and speech usage."""
-    state = normalize_expired_restriction_state(uid, fair_use_db.get_fair_use_state(uid))
-    speech = get_rolling_speech_ms(uid)
+    try:
+        raw_state = fair_use_db.get_fair_use_state(uid)
+        state = normalize_expired_restriction_state(uid, raw_state) if isinstance(raw_state, dict) else {}
+        speech = get_rolling_speech_ms(uid) or {}
+    except Exception as e:
+        logger.error(f'Failed to get fair use status for uid {uid}: {e}', exc_info=True)
+        raise HTTPException(status_code=500, detail='Failed to retrieve fair use status')
 
     stage = state.get('stage', 'none')
     case_ref = state.get('last_case_ref', '')
