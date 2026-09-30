@@ -24266,7 +24266,6 @@
               "$ref": "#/components/schemas/ScreenFrameCandidateIn"
             },
             "maxItems": 8,
-            "minItems": 1,
             "title": "Candidates",
             "type": "array"
           },

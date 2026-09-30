@@ -233,6 +233,9 @@ environments:
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'true'
             category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
@@ -444,6 +447,9 @@ environments:
             category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'true'
+            category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
@@ -827,6 +833,9 @@ environments:
             MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
               value: 'true'
               category: rollout
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+              value: '25'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'true'
@@ -1118,6 +1127,9 @@ environments:
               category: rollout
             MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
               value: 'true'
+              category: rollout
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+              value: '25'
               category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
@@ -2065,6 +2077,9 @@ environments:
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'true'
             category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'false'
@@ -2292,6 +2307,9 @@ environments:
             category: rollout
           MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
             value: 'true'
+            category: rollout
+          MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+            value: '25'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
@@ -2562,6 +2580,9 @@ environments:
               category: rollout
             MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
               value: 'true'
+              category: rollout
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+              value: '25'
               category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
@@ -2868,6 +2889,9 @@ environments:
               category: rollout
             MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED:
               value: 'true'
+              category: rollout
+            MEETING_NOTES_EVIDENCE_WAIT_SECONDS:
+              value: '25'
               category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout

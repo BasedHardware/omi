@@ -816,6 +816,16 @@ adds a SCREEN MOMENTS line to BACKGROUND CONTEXT; under
 `BUCKET_SCREEN_FRAMES` (legacy docs belong to `based-hardware-dev-screen-frames`),
 so a notes host without that env reads no frame evidence at all.
 
+The Mac closes the listen socket before that evidence pass lands, and teardown
+admits finalization at once. So the shared finalizer (pusher, Cloud Tasks, and
+therefore `POST /finalize`) waits, bounded by `MEETING_NOTES_EVIDENCE_WAIT_SECONDS`
+(code default 0; 25 on dev and prod finalizer hosts), before processing a desktop
+`conversation_role == 'meeting'` capture on `capture_end`/`client_finalize`. It
+proceeds as soon as this bucket's adjudication marker is set. It skips the wait
+when the host has no `BUCKET_SCREEN_FRAMES` or the account's screenshot setting
+is off. The wait is async (a poll is one `db_executor` read), fails open, and
+counts `meeting_notes_evidence_wait_total{outcome}`.
+
 ### 2.1 Durable finalization ownership
 
 `conversation_finalization_jobs/{job_id}` is the finalization ledger. It is
