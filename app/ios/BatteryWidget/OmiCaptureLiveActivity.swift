@@ -126,34 +126,33 @@ private func captureURL(_ id: String) -> URL? {
     return components.url
 }
 
-/// LockScreen.json (393 pt): 14 pt top/bottom, 16 pt sides, a 48 pt row
-/// (36 pt pendant, 12 pt gap, title/subtitle, 30 pt clock), 12 pt, a 26 pt
-/// waveform, 12 pt, 40 pt buttons.
+/// A stable 160 pt card, including padding, fits the Lock Screen height limit.
+/// Reserve two subtitle lines so an action update does not move the wave or controls.
 @available(iOS 16.1, *)
 struct CaptureLockScreenView: View {
     let snapshot: CaptureSnapshot
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             HStack(spacing: 12) {
                 CapturePendant(active: snapshot.isReceivingAudio, size: 36 * CaptureLayout.heroScale)
                 CaptureStatus(snapshot: snapshot, showSource: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 CaptureClock(snapshot: snapshot, size: 30)
             }
-            .frame(minHeight: 48)
-            CaptureWaveform(snapshot: snapshot, height: 26)
+            .frame(height: 58)
+            CaptureWaveform(snapshot: snapshot, height: 22)
             CaptureActions(snapshot: snapshot, height: 40, secondaryFill: 0.12)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 10)
         .foregroundStyle(CapturePalette.label)
         // glass-thick top highlight: rgba(255,255,255,.06) fading out by 50%.
         .background(LinearGradient(stops: [
             .init(color: .white.opacity(0.06), location: 0),
             .init(color: .clear, location: 0.5),
         ], startPoint: .top, endPoint: .bottom))
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
 }
 
@@ -228,11 +227,13 @@ private struct CaptureStatus: View {
         VStack(alignment: .leading, spacing: 0) {
             // subheadline 15/600 and footnote 13 from the type ramp.
             Text(title)
+                .contentTransition(.identity)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(CapturePalette.label)
                 .lineLimit(1)
             if !titleOnly {
                 subtitle
+                    .contentTransition(.identity)
                     .font(.footnote)
                     .foregroundStyle(CapturePalette.secondary)
                     .lineLimit(2)
@@ -297,6 +298,8 @@ private struct CaptureClockText: View {
             }
         }
         .monospacedDigit()
+        .contentTransition(.identity)
+        .transition(.identity)
         .multilineTextAlignment(.trailing)
         .foregroundStyle(CapturePalette.label)
         .lineLimit(1)
@@ -310,13 +313,20 @@ private struct CaptureClockText: View {
 struct CapturePendant: View {
     let active: Bool
     let size: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isLuminanceReduced) private var luminanceReduced
 
     var body: some View {
-        Image(active ? "device-omi" : "device-omi-off")
-            .resizable()
-            .scaledToFit()
+        // Keep the photo's identity and geometry stable; only its LED fades.
+        ZStack {
+            Image("device-omi-off").resizable().scaledToFit()
+            Image("device-omi").resizable().scaledToFit().opacity(active ? 1 : 0)
+        }
             .frame(width: size, height: size)
             .shadow(color: CapturePalette.led.opacity(active ? 0.45 : 0), radius: size * 0.18)
+            .contentTransition(.identity)
+            .animation(reduceMotion || luminanceReduced ? nil :
+                .timingCurve(0.42, 0, 0.58, 1, duration: 0.25), value: active)
             .accessibilityHidden(true)
     }
 }
@@ -326,11 +336,14 @@ struct CapturePendant: View {
 /// The OS cannot loop animations in a Live Activity, so the app's updates step the loop:
 /// while voice is heard the app updates about once a second, each update flips the breath,
 /// and every bar animates to it after a delay set by its place in the ripple. Without voice
-/// the strip rests, dimmed like the design's paused wave.
+/// the strip settles at its low height. Its color stays constant during Start/Stop.
+/// Custom timing curves keep motion local; reduced motion and Always On keep it still.
 @available(iOS 16.1, *)
 private struct CaptureWaveform: View {
     let snapshot: CaptureSnapshot
     let height: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isLuminanceReduced) private var luminanceReduced
     private static let barWidth: CGFloat = 2
     private static let gap: CGFloat = 2.2
     /// `@keyframes lvl{50%{transform:scaleY(.45)}}`.
@@ -353,14 +366,16 @@ private struct CaptureWaveform: View {
         breathing && (snapshot.state.levelsEnd + 4) / 8 % 2 == 1
     }
 
-    private var opacity: Double {
-        if breathing { return 1 }
-        // Unmetered sources cannot say when voice is heard; a live one keeps the strip lit.
-        return snapshot.isReceivingAudio && !snapshot.state.metered ? 1 : 0.4
+    private var scale: CGFloat {
+        guard snapshot.isReceivingAudio else { return Self.exhaled }
+        // Unmetered sources cannot report voice; retain their steady active indicator.
+        if !snapshot.state.metered { return 1 }
+        guard breathing else { return Self.exhaled }
+        return reduceMotion || luminanceReduced || !exhale ? 1 : Self.exhaled
     }
 
     var body: some View {
-        let exhale = self.exhale
+        let scale = self.scale
         GeometryReader { geometry in
             // Never derive layout from an unbounded proposal; it cannot be placed.
             let width = geometry.size.width.isFinite ? max(0, geometry.size.width) : 0
@@ -370,19 +385,19 @@ private struct CaptureWaveform: View {
                     Capsule()
                         .frame(width: Self.barWidth,
                                height: max(3, height * Self.levels[index % Self.levels.count]))
-                        .scaleEffect(x: 1, y: exhale ? Self.exhaled : 1)
-                        // v4's negative delays run the breath leftward. The longest delay plus
-                        // the tween (0.96 + 0.8 s) stays inside a Live Activity's 2 s budget.
-                        .animation(.easeInOut(duration: 0.8)
-                            .delay(Double(Self.ripple - 1 - index % Self.ripple) * 0.08), value: exhale)
+                        .scaleEffect(x: 1, y: scale)
+                        // Settle together on Stop; stagger only the active breathing wave.
+                        .animation(reduceMotion || luminanceReduced ? nil :
+                            .timingCurve(0.42, 0, 0.58, 1, duration: breathing ? 0.5 : 0.25)
+                                .delay(breathing ? Double(Self.ripple - 1 - index % Self.ripple) * 0.02 : 0),
+                            value: scale)
                 }
             }
             .frame(width: width, height: height)
             .clipped()
         }
         .frame(height: height)
-        .foregroundStyle(CapturePalette.label.opacity(opacity))
-        .animation(.easeInOut(duration: 0.4), value: opacity)
+        .foregroundStyle(CapturePalette.label.opacity(0.75))
         .accessibilityHidden(true)
     }
 }
@@ -416,21 +431,29 @@ private struct CaptureActions: View {
 
     @available(iOS 17.0, *)
     private func action(_ label: LocalizedStringKey, value: String, enabled: Bool, primary: Bool = false) -> some View {
-        // An unavailable primary action drops to the secondary pill so its label stays legible.
+        // Busy blocks duplicate intents without recoloring the whole action row.
         let available = enabled && !state.busy
-        let filled = primary && available
         return Button(intent: OmiCaptureIntent(recordingId: snapshot.recordingId,
                                                revision: state.conversationRevision, action: value)) {
             Text(label)
+                .contentTransition(.identity)
                 .font(.subheadline.weight(primary ? .bold : .semibold))
                 .lineLimit(1)
                 // Long translations shrink a little rather than cut off.
                 .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity, minHeight: height)
-                .foregroundStyle(filled ? CapturePalette.ink : CapturePalette.label.opacity(available ? 1 : 0.5))
-                .background(filled ? CapturePalette.label : Color.white.opacity(secondaryFill), in: Capsule())
+                .foregroundStyle(primary ? CapturePalette.ink : CapturePalette.label)
+                .background(primary ? CapturePalette.label : Color.white.opacity(secondaryFill), in: Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(CaptureActionStyle())
         .disabled(!available)
+    }
+}
+
+/// The system's plain style dims every busy button. Keep these fills stable while
+/// the intent is disabled; the status subtitle already explains that it is updating.
+private struct CaptureActionStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
     }
 }
