@@ -2539,6 +2539,18 @@ export interface HasSpeechProfileResponse {
   has_profile: boolean;
 }
 
+export interface IgnoredVoice {
+  conversation_id: string;
+  conversation_started_at?: string | null;
+  conversation_title?: string;
+  ignored_at: string;
+  speaker_id: number;
+}
+
+export interface IgnoredVoicesResponse {
+  voices?: Array<IgnoredVoice>;
+}
+
 export interface ImportJobResponse {
   conversations_created?: number | null;
   conversations_skipped?: number | null;
@@ -3493,17 +3505,31 @@ export interface PendingSyncResponse {
 }
 
 export interface Person {
+  auto_conversation_count?: number | null;
+  confidence?: PersonConfidence;
+  confidence_reasons?: Array<PersonConfidenceReason>;
   conversation_count?: number | null;
   created_at?: string | null;
   id: string;
+  labels_to_confirm?: number | null;
   last_heard_at?: string | null;
+  last_labeled_at?: string | null;
   name: string;
+  pinned?: boolean;
+  pinned_at?: string | null;
   speech_sample_transcripts?: Array<string> | null;
   speech_samples?: Array<string>;
   speech_samples_version?: number;
   talk_seconds?: number | null;
   updated_at?: string | null;
   voice_readiness?: VoiceReadiness;
+}
+
+export type PersonConfidence = "confirmed" | "likely" | "unverified";
+
+export interface PersonConfidenceReason {
+  code: string;
+  count?: number;
 }
 
 export interface PhoneCallQuota {
@@ -4277,7 +4303,15 @@ export interface SpeakerAnalytics {
   words_per_minute: number;
 }
 
+export interface SpeakerTagCandidate {
+  match_level?: number | null;
+  name: string;
+  person_id: string;
+  pinned?: boolean;
+}
+
 export interface SpeakerTagPrompt {
+  candidates?: Array<SpeakerTagCandidate>;
   clip_end: number;
   clip_start: number;
   conversation_id: string;
@@ -4294,7 +4328,7 @@ export interface SpeakerTagPrompt {
   suggested_person_name?: string | null;
 }
 
-export type SpeakerTagPromptAnswer = "me" | "not_me" | "person" | "new_person" | "someone_else" | "skip";
+export type SpeakerTagPromptAnswer = "me" | "not_me" | "person" | "new_person" | "someone_else" | "skip" | "not_a_person";
 
 export interface SpeakerTagPromptAnswerRequest {
   answer: SpeakerTagPromptAnswer;
@@ -5617,6 +5651,8 @@ export interface OmiApiSchemas {
   "GoogleCalendarEvent": GoogleCalendarEvent;
   "HTTPValidationError": HTTPValidationError;
   "HasSpeechProfileResponse": HasSpeechProfileResponse;
+  "IgnoredVoice": IgnoredVoice;
+  "IgnoredVoicesResponse": IgnoredVoicesResponse;
   "ImportJobResponse": ImportJobResponse;
   "ImportJobStatus": ImportJobStatus;
   "Insight": Insight;
@@ -5745,6 +5781,8 @@ export interface OmiApiSchemas {
   "PaywallStatusResponse": PaywallStatusResponse;
   "PendingSyncResponse": PendingSyncResponse;
   "Person": Person;
+  "PersonConfidence": PersonConfidence;
+  "PersonConfidenceReason": PersonConfidenceReason;
   "PhoneCallQuota": PhoneCallQuota;
   "PhoneMutationResponse": PhoneMutationResponse;
   "PhoneNumberResponse": PhoneNumberResponse;
@@ -5854,6 +5892,7 @@ export interface OmiApiSchemas {
   "SnapshotReceipt": SnapshotReceipt;
   "SourceState": SourceState;
   "SpeakerAnalytics": SpeakerAnalytics;
+  "SpeakerTagCandidate": SpeakerTagCandidate;
   "SpeakerTagPrompt": SpeakerTagPrompt;
   "SpeakerTagPromptAnswer": SpeakerTagPromptAnswer;
   "SpeakerTagPromptAnswerRequest": SpeakerTagPromptAnswerRequest;
@@ -8959,6 +8998,27 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/speaker-tag-prompts/ignored-voices": {
+    get: {
+      operationId: "get_ignored_voices_v1_speaker_tag_prompts_ignored_voices_get";
+      responses: {
+        "200": IgnoredVoicesResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/speaker-tag-prompts/ignored-voices/{conversation_id}/{speaker_id}": {
+    delete: {
+      operationId: "restore_ignored_voice_v1_speaker_tag_prompts_ignored_voices__conversation_id___speaker_id__delete";
+      responses: {
+        "204": void;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/speaker-tag-prompts/shown": {
     post: {
       operationId: "mark_speaker_tag_prompts_shown_v1_speaker_tag_prompts_shown_post";
@@ -9842,6 +9902,17 @@ export interface OmiApiPaths {
       operationId: "update_person_name_v1_users_people__person_id__name_patch";
       responses: {
         "200": UserStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/people/{person_id}/pinned": {
+    patch: {
+      operationId: "set_person_pinned_v1_users_people__person_id__pinned_patch";
+      responses: {
+        "200": Person;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -16392,6 +16463,44 @@ export async function dismiss_speaker_tag_prompts_v1_speaker_tag_prompts_dismiss
   return;
 }
 
+export async function get_ignored_voices_v1_speaker_tag_prompts_ignored_voices_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<IgnoredVoicesResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/speaker-tag-prompts/ignored-voices`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function restore_ignored_voice_v1_speaker_tag_prompts_ignored_voices__conversation_id___speaker_id__delete(path: { conversation_id: string, speaker_id: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<void> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/speaker-tag-prompts/ignored-voices/${path.conversation_id}/${path.speaker_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return;
+}
+
 export async function mark_speaker_tag_prompts_shown_v1_speaker_tag_prompts_shown_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SpeakerTagPromptsShownRequest, init?: OmiApiClientInit): Promise<SpeakerTagPromptsShownResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/speaker-tag-prompts/shown`;
@@ -18199,6 +18308,28 @@ export async function update_person_name_v1_users_people__person_id__name_patch(
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function set_person_pinned_v1_users_people__person_id__pinned_patch(path: { person_id: string }, query: { value: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Person> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/people/${path.person_id}/pinned`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function delete_person_speech_sample_endpoint_v1_users_people__person_id__speech_samples__sample_index__delete(path: { person_id: string, sample_index: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/people/${path.person_id}/speech-samples/${path.sample_index}`;
@@ -19855,4 +19986,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 463 client methods generated.
+// Total: 466 client methods generated.
