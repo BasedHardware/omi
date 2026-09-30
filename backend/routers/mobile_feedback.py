@@ -141,6 +141,8 @@ def submit_mobile_feedback(
         raise HTTPException(status_code=409, detail='feedback_id was already used for a different event') from exc
     except feedback_db.FeedbackPersistenceError as exc:
         raise HTTPException(status_code=503, detail='Feedback could not be durably stored; retry safely') from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if created:
         emit_product_event(

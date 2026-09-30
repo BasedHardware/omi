@@ -106,6 +106,13 @@ def _normalized_reason(reason: Optional[str]) -> Optional[str]:
             return None
 
 
+def _idempotent_event_id(uid: str, feedback_id: str) -> str:
+    normalized_uid = str(uid or '').strip()
+    normalized_feedback_id = str(feedback_id or '').strip()
+    digest = hashlib.sha256(f'{normalized_uid}:{normalized_feedback_id}'.encode('utf-8')).hexdigest()
+    return f'mobile-feedback-{digest}'
+
+
 def record_feedback_event(
     uid: str,
     surface: FeedbackSurface,
@@ -144,6 +151,20 @@ def record_feedback_event(
     already persists the rating to its own store first, so a dropped ledger row
     costs us a report line, not the user's feedback.
     """
+    normalized_uid = str(uid or '').strip()
+    if not normalized_uid:
+        logger.warning('Refusing feedback event with empty or non-string uid.')
+        if raise_on_error:
+            raise ValueError('uid must be a non-empty string')
+        return None
+
+    normalized_target_id = str(target_id or '').strip()
+    if not normalized_target_id:
+        logger.warning('Refusing feedback event with empty or non-string target_id.')
+        if raise_on_error:
+            raise ValueError('target_id must be a non-empty string')
+        return None
+
     try:
         value = int(value)
     except (TypeError, ValueError):
@@ -158,10 +179,10 @@ def record_feedback_event(
     event_id = event_id or str(uuid.uuid4())
     record: Dict[str, Any] = {
         'id': event_id,
-        'uid': uid,
+        'uid': normalized_uid,
         'surface': surface.value,
         'target_kind': target_kind.value,
-        'target_id': target_id,
+        'target_id': normalized_target_id,
         'value': value,
         'created_at': datetime.now(timezone.utc),
     }
@@ -224,11 +245,6 @@ class FeedbackIdempotencyConflict(ValueError):
     """A client reused a feedback id for a different immutable event."""
 
 
-def _idempotent_event_id(uid: str, feedback_id: str) -> str:
-    digest = hashlib.sha256(f'{uid}:{feedback_id}'.encode('utf-8')).hexdigest()
-    return f'mobile-feedback-{digest}'
-
-
 def record_feedback_event_idempotent(
     uid: str,
     surface: FeedbackSurface,
@@ -266,16 +282,22 @@ def record_feedback_event_idempotent(
     Unlike the legacy best-effort writers, this path raises on an unconfirmed
     write so the mobile client can retry instead of receiving a false success.
     """
+    normalized_uid = str(uid or '').strip()
+    if not normalized_uid:
+        raise ValueError('uid is required')
     normalized_feedback_id = str(feedback_id or '').strip()
     if not normalized_feedback_id:
         raise ValueError('feedback_id is required')
-    event_id = _idempotent_event_id(uid, normalized_feedback_id)
+    normalized_target_id = str(target_id or '').strip()
+    if not normalized_target_id:
+        raise ValueError('target_id is required')
+    event_id = _idempotent_event_id(normalized_uid, normalized_feedback_id)
     try:
         record_id = record_feedback_event(
-            uid,
+            normalized_uid,
             surface,
             target_kind,
-            target_id,
+            normalized_target_id,
             value,
             reason=reason,
             comment=comment,
@@ -327,10 +349,10 @@ def record_feedback_event_idempotent(
         raise FeedbackPersistenceError('feedback write disappeared before read-back')
     existing = document.to_dict() or {}
     immutable = {
-        'uid': uid,
+        'uid': normalized_uid,
         'surface': surface.value,
         'target_kind': target_kind.value,
-        'target_id': target_id,
+        'target_id': normalized_target_id,
         'value': int(value),
         'feedback_id': normalized_feedback_id,
         'reason': _normalized_reason(reason),
@@ -348,7 +370,9 @@ def record_feedback_event_idempotent(
 
 
 def get_feedback_event(event_id: str) -> Optional[FeedbackEvent]:
-    doc = get_firestore_client().collection(FEEDBACK_EVENTS_COLLECTION).document(event_id).get()
+    if not event_id or not isinstance(event_id, str) or not event_id.strip():
+        return None
+    doc = get_firestore_client().collection(FEEDBACK_EVENTS_COLLECTION).document(event_id.strip()).get()
     return parse_snapshot_or_none(FeedbackEvent, doc)
 
 
@@ -360,6 +384,13 @@ def list_negative_events(
     Fetches one more than the caller's cap so the caller can tell "exactly the
     cap" apart from "more than the cap" without a second query.
     """
+    if not isinstance(start_at, datetime) or not isinstance(end_at, datetime):
+        raise ValueError('start_at and end_at must be datetime instances')
+    if start_at > end_at:
+        raise ValueError('start_at cannot be after end_at')
+    if limit is not None and limit <= 0:
+        return []
+
     # Imported here, not at module scope: several router test suites stub
     # `google.cloud.firestore_v1` out of `sys.modules` entirely, and a
     # top-level import would make merely importing this module fail there.
@@ -378,18 +409,26 @@ def list_negative_events(
 
 
 def save_report(report: FeedbackReport) -> None:
+    if not isinstance(report, FeedbackReport):
+        raise ValueError('report must be an instance of FeedbackReport')
+    if not report.date or not str(report.date).strip():
+        raise ValueError('report.date must be a non-empty date string')
     payload = report.model_dump(mode='json')
-    get_firestore_client().collection(FEEDBACK_REPORTS_COLLECTION).document(report.date).set(payload)
+    get_firestore_client().collection(FEEDBACK_REPORTS_COLLECTION).document(str(report.date).strip()).set(payload)
 
 
 def get_report(date: str) -> Optional[FeedbackReport]:
-    doc = get_firestore_client().collection(FEEDBACK_REPORTS_COLLECTION).document(date).get()
+    if not date or not isinstance(date, str) or not date.strip():
+        return None
+    doc = get_firestore_client().collection(FEEDBACK_REPORTS_COLLECTION).document(date.strip()).get()
     return parse_snapshot_or_none(FeedbackReport, doc)
 
 
 def list_report_dates(limit: int = 30) -> List[str]:
     """Most recent report dates, newest first. Document ids are ISO dates, so
     ordering by document id is the same as ordering by date."""
+    if limit is not None and limit <= 0:
+        return []
     try:
         docs = (
             get_firestore_client()
@@ -398,7 +437,7 @@ def list_report_dates(limit: int = 30) -> List[str]:
             .limit(limit)
             .stream()
         )
-        return [doc.id for doc in docs]
+        return [doc.id for doc in docs if doc and getattr(doc, 'id', None)]
     except Exception as e:
         logger.error(f'Failed to list feedback report dates: {e}')
         return []
@@ -406,3 +445,4 @@ def list_report_dates(limit: int = 30) -> List[str]:
 
 def entry_from(event: FeedbackEvent, context: Any) -> FeedbackReportEntry:
     return FeedbackReportEntry(event=event, context=context)
+
