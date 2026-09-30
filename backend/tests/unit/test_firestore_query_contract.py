@@ -11,6 +11,7 @@ import database.firestore_index_registry as firestore_index_registry
 import database.action_items as action_items_db
 import database.chat as chat_db
 import database.conversations as conversations_db
+import database.folders as folders_db
 import database.memories as memories_db
 import database.task_recommendations as task_recommendations_db
 import routers.task_recommendations as task_recommendations_router
@@ -530,6 +531,29 @@ class _StreamRecordingQuery:
         return []
 
 
+class _CountRecordingQuery(_StreamRecordingQuery):
+    """Also records count aggregations, which never stream."""
+
+    def where(self, *, filter):
+        return _CountRecordingQuery(
+            self._recorder,
+            (*self._filters, (filter.field_path, filter.op_string)),
+            self._orders,
+        )
+
+    def count(self):
+        recorder, filters = self._recorder, self._filters
+        return SimpleNamespace(get=lambda: recorder.append(('count', filters)) or [[SimpleNamespace(value=0)]])
+
+
+def _count_recording_firestore(recorder):
+    return SimpleNamespace(
+        collection=lambda _name: SimpleNamespace(
+            document=lambda _uid: SimpleNamespace(collection=lambda _collection: _CountRecordingQuery(recorder))
+        )
+    )
+
+
 class _StreamRecordingUserRef:
     def __init__(self, recorder, collection_name='action_items'):
         self._recorder = recorder
@@ -703,6 +727,84 @@ def test_conversations_status_ordered_reads_have_a_declared_composite_index(monk
 def test_conversations_active_ordered_query_is_registered_for_the_conversations_collection():
     assert CONVERSATIONS_ACTIVE_ORDERED_QUERY.collection_group == 'conversations'
     assert CONVERSATIONS_ACTIVE_ORDERED_QUERY.index_requirement.to_manifest() in firebase_index_manifest()['indexes']
+
+
+@pytest.mark.parametrize(
+    ('kwargs', 'expected_filters', 'signature'),
+    [
+        (
+            {
+                'starred': True,
+                'statuses': ['completed', 'processing'],
+                'start_date': datetime(2026, 9, 1, tzinfo=timezone.utc),
+            },
+            (('discarded', '=='), ('status', 'in'), ('starred', '=='), ('created_at', '>=')),
+            (
+                'conversations',
+                'COLLECTION',
+                (
+                    ('discarded', 'ASCENDING'),
+                    ('starred', 'ASCENDING'),
+                    ('status', 'ASCENDING'),
+                    ('created_at', 'ASCENDING'),
+                    ('__name__', 'ASCENDING'),
+                ),
+            ),
+        ),
+        (
+            {
+                'sources': ['omi', 'friend'],
+                'statuses': ['completed', 'processing'],
+                'end_date': datetime(2026, 9, 29, tzinfo=timezone.utc),
+            },
+            (('discarded', '=='), ('source', 'in'), ('status', 'in'), ('created_at', '<=')),
+            (
+                'conversations',
+                'COLLECTION',
+                (
+                    ('source', 'ASCENDING'),
+                    ('status', 'ASCENDING'),
+                    ('created_at', 'ASCENDING'),
+                    ('__name__', 'ASCENDING'),
+                ),
+            ),
+        ),
+    ],
+)
+def test_conversations_count_filtered_date_ranges_have_declared_ascending_composites(
+    monkeypatch, kwargs, expected_filters, signature
+):
+    """Prod-observed starred/status and source/status count failures need ASC range composites."""
+    recorder = []
+    monkeypatch.setattr(conversations_db, 'db', _count_recording_firestore(recorder))
+    monkeypatch.setattr(conversations_db, '_count_matching_tombstones', lambda *args, **kw: 0)
+
+    conversations_db.get_conversations_count('index-contract-user', **kwargs)
+
+    counts = [filters for kind, filters in recorder if kind == 'count']
+    assert counts == [expected_filters]
+    assert signature in _declared_index_signatures()
+
+
+def test_conversations_in_folder_has_the_prod_observed_composite(monkeypatch):
+    """Prod FailedPrecondition on 2026-09-23 came from this folder list query."""
+    recorder = []
+    monkeypatch.setattr(folders_db, 'db', _StreamRecordingFirestore(recorder, collection_name='conversations'))
+
+    folders_db.get_conversations_in_folder('index-contract-user', 'folder-123')
+
+    assert recorder == [((('folder_id', '=='), ('discarded', '==')), (('created_at', 'DESCENDING'),))]
+    signature = (
+        'conversations',
+        'COLLECTION',
+        (
+            ('discarded', 'ASCENDING'),
+            ('folder_id', 'ASCENDING'),
+            ('created_at', 'DESCENDING'),
+            ('__name__', 'DESCENDING'),
+        ),
+    )
+    assert signature in _declared_index_signatures()
 
 
 def test_default_memories_list_read_has_a_declared_composite_index():

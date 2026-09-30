@@ -69,7 +69,7 @@ def test_selected_manifest_is_canonical_and_contains_every_registry_composite():
         (
             entry["collectionGroup"],
             entry["queryScope"],
-            tuple((field["fieldPath"], field.get("order")) for field in entry["fields"]),
+            tuple((field["fieldPath"], field.get("order") or field.get("arrayConfig")) for field in entry["fields"]),
         )
         for entry in manifest["indexes"]
     } == signatures
