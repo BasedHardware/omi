@@ -2928,9 +2928,21 @@ workflows:
       - name: Submit explicitly selected existing builds
         script: |
           set -euo pipefail
-          # The declared "0" placeholders mean "not supplied"; the API override omits absent builds.
+          # Inputs come from the API trigger's environment.variables when Codemagic injects them;
+          # when the declared placeholders are still in place, the committed request file
+          # scripts/store_promotion_request.json is the reviewed source of truth for this run.
+          REQ="scripts/store_promotion_request.json"
+          if [ "${CONFIRM:-not-confirmed}" = "not-confirmed" ] && [ -f "$REQ" ]; then
+            CONFIRM="$(jq -r '.confirm // ""' "$REQ")"
+            PROMOTE_PLATFORM="$(jq -r '.platform // ""' "$REQ")"
+            PROMOTE_VERSION="$(jq -r '.version // ""' "$REQ")"
+            PROMOTE_IOS_BUILD="$(jq -r '.ios_build // ""' "$REQ")"
+            PROMOTE_ANDROID_BUILD="$(jq -r '.android_build // ""' "$REQ")"
+          fi
+          # The declared "0" placeholders mean "not supplied".
           [ "${PROMOTE_IOS_BUILD:-}" = "0" ] && PROMOTE_IOS_BUILD=""
           [ "${PROMOTE_ANDROID_BUILD:-}" = "0" ] && PROMOTE_ANDROID_BUILD=""
+          echo "promotion inputs: platform=${PROMOTE_PLATFORM:-} version=${PROMOTE_VERSION:-} ios=${PROMOTE_IOS_BUILD:-} android=${PROMOTE_ANDROID_BUILD:-} confirm_set=$([ "${CONFIRM:-}" = "submit-for-review" ] && echo yes || echo no)"
           python3 scripts/mobile_store_promote.py \
             --confirm "${CONFIRM:-}" \
             --platform "${PROMOTE_PLATFORM:-}" \
