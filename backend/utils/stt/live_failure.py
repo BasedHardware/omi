@@ -162,6 +162,11 @@ class PendingLiveFailover:
     def settled(self) -> bool:
         return self._settled
 
+    def capture_capacity_details(self, source: object) -> None:
+        """Carry the immutable pre-cancellation snapshot onto the hop outcome."""
+        self.capacity_subtype = getattr(source, 'capacity_subtype', None)
+        self.replay_lag_diagnostics = getattr(source, 'replay_lag_diagnostics', None)
+
     def note_transcript(self, segments: object | None = None) -> None:
         if self._settled:
             return
