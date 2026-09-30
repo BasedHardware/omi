@@ -833,6 +833,9 @@ def persist_processing_result_with_lifecycle(
             write_data.pop('transcript_segments', None)
             write_data.pop('transcript_segments_compressed', None)
             write_data.pop('data_protection_level', None)
+            # Speaker resolution ran on the processing snapshot; its ids only
+            # describe a transcript this write no longer persists.
+            write_data.pop('speaker_resolution', None)
 
         # Restoring a legacy review row is an explicit user decision. A
         # processor that started before the restore may still carry the old

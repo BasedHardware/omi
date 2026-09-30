@@ -293,3 +293,31 @@ def test_decode_status_is_opt_in_and_not_written(pipeline):
     assert checked['_recovery_transcript_decoded'] is True
     assert checked['transcript_segments'] == []
     assert '_recovery_transcript_decoded' not in pipeline.store.rows[CONVERSATION_PATH]
+
+
+@pytest.mark.asyncio
+async def test_rule_discard_keeps_stored_speaker_metadata_with_its_transcript(pipeline, monkeypatch):
+    """Resolution runs before relevance; a discard that keeps the stored
+    transcript must also keep the speaker metadata describing it."""
+    from models.conversation import ConversationSpeakers
+
+    stored = {'status': 'capture', 'version': 1, 'participant_speaker_ids': [7]}
+    transcript = [{'text': 'hmm', 'start': 0, 'end': 1, 'speaker': 'SPEAKER_07', 'speaker_id': 7, 'is_user': False}]
+
+    def resolve(uid, conversation):
+        conversation.speaker_resolution = ConversationSpeakers(
+            status='resolved', participant_speaker_ids=[7, 100, 101, 102]
+        )
+        return False
+
+    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', resolve)
+    _seed(pipeline, transcript=transcript, speaker_resolution=stored)
+    response, counters = await _run_and_verify(pipeline)
+    row = pipeline.store.rows[CONVERSATION_PATH]
+    assert response == {'status': 'done'}
+    assert row['discarded'] is True
+    assert row['speaker_resolution'] == stored
+    assert counters['verified'] == 1
+    for path, data in pipeline.writes:
+        if path == CONVERSATION_PATH:
+            assert 'speaker_resolution' not in data
