@@ -6,6 +6,8 @@ from typing import Any
 from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import transactional
 
+from database._client import get_firestore_client
+
 
 def normalized_person_alias(value: Any) -> str | None:
     if not isinstance(value, str):
@@ -19,21 +21,24 @@ def normalized_person_alias(value: Any) -> str | None:
 @transactional
 def update_person_name_transaction(transaction: Any, person_ref: Any, name: str) -> bool:
     """Rename one stable person while retaining bounded exact aliases."""
-
-    snapshot = person_ref.get(transaction=transaction)
-    if not snapshot.exists:
+    if transaction is None or person_ref is None:
         return False
-    raw = snapshot.to_dict()
-    data = raw if isinstance(raw, dict) else {}
+
     normalized_name = normalized_person_alias(name)
     if normalized_name is None:
         return False
+
+    snapshot = person_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    raw = snapshot.to_dict()
+    data = raw if isinstance(raw, dict) else {}
 
     aliases: list[str] = []
     seen: set[str] = {normalized_name.casefold()}
     stored_aliases = data.get('aliases')
     if isinstance(stored_aliases, list):
-        for value in stored_aliases:
+        for value in stored_aliases[-48:]:
             alias = normalized_person_alias(value)
             if alias is None or alias.casefold() in seen:
                 continue
@@ -55,9 +60,20 @@ def update_person_name_transaction(transaction: Any, person_ref: Any, name: str)
 
 def rename_person_retaining_aliases(db_client: Any, uid: str, person_id: str, name: str) -> bool:
     """Rename an owner-scoped person and map concurrent deletion to missing."""
+    if not isinstance(uid, str) or not uid.strip():
+        return False
+    if not isinstance(person_id, str) or not person_id.strip():
+        return False
+    if normalized_person_alias(name) is None:
+        return False
 
-    person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
+    client = db_client if db_client is not None else get_firestore_client()
+    clean_uid = uid.strip()
+    clean_person_id = person_id.strip()
+
+    person_ref = client.collection('users').document(clean_uid).collection('people').document(clean_person_id)
     try:
-        return update_person_name_transaction(db_client.transaction(), person_ref, name)
+        return update_person_name_transaction(client.transaction(), person_ref, name)
     except NotFound:
         return False
+
