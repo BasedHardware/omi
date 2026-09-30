@@ -1005,3 +1005,300 @@ def test_dry_run_breakdown_source_rule_duration_shape(tmp_path, monkeypatch, kep
     serialized = (log.path / 'summary.json').read_text() + (log.path / 'audit.jsonl').read_text()
     assert TEXT not in serialized and UID not in serialized
     assert client.rows == original and not client.transactions
+
+
+class FakeStorage:
+    """Version-fenced GCS boundary; no credentials, sockets or cloud clients."""
+
+    def __init__(self):
+        self.objects = {}
+        self.uploads = []
+        self.serial = 0
+
+    def bucket(self, name):
+        return SimpleNamespace(name=name, blob=lambda key: FakeBlob(self, name, key))
+
+    def list_blobs(self, bucket, *, prefix, max_results):
+        return [
+            FakeBlob(self, name, key) for name, key in self.objects if name == bucket.name and key.startswith(prefix)
+        ][:max_results]
+
+
+class FakeBlob:
+    def __init__(self, storage, bucket, name):
+        self.storage = storage
+        self.bucket = bucket
+        self.name = name
+        self.generation = None
+
+    def reload(self):
+        self.generation = self.storage.objects[(self.bucket, self.name)][0]
+
+    def upload_from_string(self, data, *, if_generation_match, content_type=None):
+        from google.api_core.exceptions import PreconditionFailed
+
+        key = (self.bucket, self.name)
+        current = self.storage.objects.get(key, (0, None))[0]
+        if current != if_generation_match:
+            raise PreconditionFailed('generation mismatch')
+        self.storage.serial += 1
+        self.generation = self.storage.serial
+        self.storage.objects[key] = (self.generation, data.encode() if isinstance(data, str) else data)
+        self.storage.uploads.append((self.name, if_generation_match))
+
+    def download_as_bytes(self, *, if_generation_match):
+        from google.api_core.exceptions import PreconditionFailed
+
+        generation, data = self.storage.objects[(self.bucket, self.name)]
+        if generation != if_generation_match:
+            raise PreconditionFailed('generation mismatch')
+        return data
+
+
+def artifact(storage, uri='gs://test-bucket/repair/run'):
+    return repair.ArtifactMirror(uri, storage)
+
+
+def remote_file(storage, name, prefix='repair/run/'):
+    _, raw = storage.objects[('test-bucket', prefix + 'manifest.json')]
+    entry = json.loads(raw)['files'][name]
+    generation, data = storage.objects[('test-bucket', entry['object'])]
+    assert generation == entry['generation']
+    return data
+
+
+def test_artifact_new_run_refuses_any_existing_object_and_racing_reservation():
+    from google.api_core.exceptions import PreconditionFailed
+
+    storage = FakeStorage()
+    storage.bucket('test-bucket').blob('repair/run/orphan').upload_from_string(b'x', if_generation_match=0)
+    with pytest.raises(ValueError, match='not empty'):
+        artifact(storage).create()
+    # A prefix sibling is not in scope; the reservation still fences a race.
+    first = artifact(storage, 'gs://test-bucket/repair/run-other')
+    second = artifact(storage, 'gs://test-bucket/repair/run-other')
+    first.create()
+    with pytest.raises(PreconditionFailed):
+        second.publish({})
+
+
+def test_artifact_resume_downloads_key_journals_and_checkpoint(tmp_path, caplog):
+    _, runtime, source = setup(tmp_path)
+    storage = FakeStorage()
+    source.artifacts = artifact(storage)
+    source.artifacts.create()
+    evaluate(runtime, source)
+    source.checkpoint(JOB_ID)
+    restored = tmp_path / 'download'
+    restored.mkdir()
+    (restored / 'results.jsonl').write_text('unpublished local debris')
+    resumed_mirror = artifact(storage)
+    resumed_mirror.download(restored)
+    resumed = repair.RunLog(restored, source.config, resume=True)
+    assert resumed.cursor == JOB_ID and resumed.processed == {JOB_ID}
+    assert (restored / 'audit.key').read_bytes() == (source.path / 'audit.key').read_bytes()
+    assert (restored / 'audit.key').stat().st_mode & 0o777 == 0o600
+    assert (source.path / 'audit.key').read_text() not in caplog.text
+    assert list(tmp_path.glob('download.before-download-*'))
+    assert not (restored / 'run.lock').exists()
+
+
+def test_artifact_upload_after_reconcile_and_each_drained_page(tmp_path):
+    _, runtime, log = setup(tmp_path)
+    storage = FakeStorage()
+    log.artifacts = artifact(storage)
+    log.artifacts.create()
+    seen = []
+    original = log.artifacts.upload
+
+    def observe(path):
+        original(path)
+        seen.append((log.cursor, len(log.read('audit.jsonl'))))
+
+    log.artifacts.upload = observe
+    repair.run(runtime, log, workers=1, page_size=1, max_writes_per_second=100000)
+    assert seen == [(None, 0), (JOB_ID, 1)]
+    assert json.loads(remote_file(storage, 'checkpoint.json'))['cursor'] == JOB_ID
+    assert json.loads(remote_file(storage, 'results.jsonl'))['outcome'] == 'dry_run'
+    assert remote_file(storage, 'audit.jsonl') == (log.path / 'audit.jsonl').read_bytes()
+    # Unchanged files are not re-uploaded; immutable uploads always require 0.
+    key_uploads = [name for name, _ in storage.uploads if name.endswith('/audit.key')]
+    assert len(key_uploads) == 1
+    assert all(match == 0 for name, match in storage.uploads if '/_snapshots/' in name)
+
+
+def test_artifact_concurrent_writer_detected_preserves_complete_previous_snapshot(tmp_path):
+    from google.api_core.exceptions import PreconditionFailed
+
+    _, _, log = setup(tmp_path)
+    storage = FakeStorage()
+    first = artifact(storage)
+    first.create()
+    first.upload(log.path)
+    path = tmp_path / 'second'
+    path.mkdir()
+    second = artifact(storage)
+    second.download(path)
+    (log.path / 'summary.json').write_text('{"writer":1}')
+    first.upload(log.path)
+    (path / 'summary.json').write_text('{"writer":2}')
+    with pytest.raises(PreconditionFailed):
+        second.upload(path)
+    assert json.loads(remote_file(storage, 'summary.json')) == {'writer': 1}
+    with pytest.raises(RuntimeError, match='fresh resume'):
+        second.upload(path)
+
+
+def artifact_cli(monkeypatch, storage, client, args):
+    monkeypatch.setattr(repair.storage, 'Client', lambda: storage)
+    monkeypatch.setattr(repair.sys, 'argv', ['repair', *args])
+    monkeypatch.setattr(
+        repair.importlib, 'import_module', lambda name: SimpleNamespace(get_firestore_client=lambda: client)
+    )
+
+
+@pytest.mark.parametrize('mode', ['stop', 'error', 'interrupt', 'sigterm'])
+def test_artifact_cli_finally_uploads_on_stop_error_and_interrupt(tmp_path, monkeypatch, mode):
+    client, _, unused = setup(tmp_path)
+    storage = FakeStorage()
+    path = tmp_path / 'cli'
+    artifact_cli(
+        monkeypatch, storage, client, ['--run-dir', str(path), '--artifact-uri', 'gs://test-bucket/repair/run']
+    )
+
+    def run(runtime, log, **kwargs):
+        log.append('audit.jsonl', {'decision_id': 'intent'})
+        log.append('results.jsonl', {'outcome': 'error'})
+        if mode == 'error':
+            raise RuntimeError('stopped')
+        if mode == 'interrupt':
+            raise KeyboardInterrupt()
+        if mode == 'sigterm':
+            repair.signal.getsignal(repair.signal.SIGTERM)(repair.signal.SIGTERM, None)
+        log.save('summary.json', {'exit_code': 2, 'stopped_error_rate': True})
+        return {'exit_code': 2, 'stopped_error_rate': True}
+
+    monkeypatch.setattr(repair, 'run', run)
+    if mode == 'stop':
+        assert repair.main() == 2
+        assert json.loads(remote_file(storage, 'summary.json'))['stopped_error_rate']
+    else:
+        with pytest.raises({'error': RuntimeError, 'interrupt': KeyboardInterrupt, 'sigterm': InterruptedError}[mode]):
+            repair.main()
+    for name in ('audit.key', 'config.json', 'audit.jsonl', 'results.jsonl'):
+        assert remote_file(storage, name) == (path / name).read_bytes()
+
+
+def test_artifact_cli_resume_downloads_before_runlog(tmp_path, monkeypatch):
+    client, runtime, source = setup(tmp_path)
+    storage = FakeStorage()
+    mirror = artifact(storage)
+    mirror.create()
+    evaluate(runtime, source)
+    source.checkpoint(JOB_ID)
+    mirror.upload(source.path)
+    path = tmp_path / 'ephemeral'
+    artifact_cli(monkeypatch, storage, client, ['--resume', str(path), '--artifact-uri', 'gs://test-bucket/repair/run'])
+    assert repair.main() == 0
+    assert json.loads((path / 'summary.json').read_text())['processed'] == 0
+    assert (path / 'audit.key').read_bytes() == (source.path / 'audit.key').read_bytes()
+
+
+@pytest.mark.parametrize('suffix', ['/audit.jsonl', ''])
+def test_artifact_cli_gs_rollback_downloads_source_and_mirrors_target(tmp_path, monkeypatch, suffix):
+    client, runtime, source = setup(tmp_path, apply=True)
+    assert evaluate(runtime, source)['outcome'] == 'written'
+    storage = FakeStorage()
+    source.artifacts = artifact(storage)
+    source.artifacts.create()
+    source.mirror()
+    target = tmp_path / 'rollback'
+    artifact_cli(
+        monkeypatch,
+        storage,
+        client,
+        [
+            '--run-dir',
+            str(target),
+            '--rollback',
+            'gs://test-bucket/repair/run' + suffix,
+            '--artifact-uri',
+            'gs://test-bucket/repair/rollback',
+            '--apply',
+            '--max-writes-per-second',
+            '100000',
+        ],
+    )
+    monkeypatch.setattr(repair.Runtime, 'sync', lambda *args: True)
+    assert repair.main() == 0
+    assert client.rows[ROW_PATH]['discarded'] is False
+    assert json.loads(remote_file(storage, 'summary.json', prefix='repair/rollback/'))['outcomes'] == {'written': 1}
+    assert remote_file(storage, 'audit.key', prefix='repair/rollback/') == (target / 'audit.key').read_bytes()
+
+
+def test_artifact_failed_publication_keeps_previous_snapshot_and_can_resume(tmp_path, monkeypatch):
+    _, runtime, source = setup(tmp_path)
+    storage = FakeStorage()
+    mirror = artifact(storage)
+    mirror.create()
+    mirror.upload(source.path)
+    evaluate(runtime, source)
+    original = mirror.manifest.upload_from_string
+
+    def fail(*args, **kwargs):
+        raise repair.ServiceUnavailable('offline')
+
+    monkeypatch.setattr(mirror.manifest, 'upload_from_string', fail)
+    with pytest.raises(repair.ServiceUnavailable):
+        mirror.upload(source.path)
+    # The uploaded audit is an orphan, never a partial published snapshot.
+    _, data = storage.objects[('test-bucket', 'repair/run/manifest.json')]
+    assert 'audit.jsonl' not in json.loads(data)['files']
+    monkeypatch.setattr(mirror.manifest, 'upload_from_string', original)
+    path = tmp_path / 'recover'
+    path.mkdir()
+    resumed = artifact(storage)
+    resumed.download(path)
+    resumed.upload(source.path)
+    assert remote_file(storage, 'audit.jsonl') == (source.path / 'audit.jsonl').read_bytes()
+
+
+@pytest.mark.parametrize('corruption', ['checksum', 'path'])
+def test_artifact_corrupt_manifest_fails_before_overwriting_local_files(tmp_path, corruption):
+    _, _, log = setup(tmp_path)
+    storage = FakeStorage()
+    mirror = artifact(storage)
+    mirror.create()
+    mirror.upload(log.path)
+    name = ('test-bucket', 'repair/run/manifest.json')
+    generation, raw = storage.objects[name]
+    snapshot = json.loads(raw)
+    if corruption == 'checksum':
+        snapshot['files']['audit.key']['sha256'] = 'invalid'
+    else:
+        snapshot['files']['../audit.key'] = snapshot['files'].pop('audit.key')
+    storage.objects[name] = (generation, json.dumps(snapshot).encode())
+    path = tmp_path / 'download'
+    path.mkdir()
+    (path / 'audit.key').write_bytes(b'local original')
+    with pytest.raises(ValueError):
+        artifact(storage).download(path)
+    assert (path / 'audit.key').read_bytes() == b'local original'
+
+
+def test_artifact_nested_rollback_source_files_round_trip(tmp_path):
+    _, _, log = setup(tmp_path)
+    source = log.path / 'rollback-source'
+    source.mkdir()
+    (source / 'audit.key').write_bytes(b'source key')
+    (source / 'run.lock').touch()
+    storage = FakeStorage()
+    mirror = artifact(storage)
+    mirror.create()
+    mirror.upload(log.path)
+    assert remote_file(storage, 'rollback-source/audit.key') == b'source key'
+    restored = tmp_path / 'restored'
+    restored.mkdir()
+    artifact(storage).download(restored)
+    assert (restored / 'rollback-source' / 'audit.key').read_bytes() == b'source key'
+    assert not (restored / 'rollback-source' / 'run.lock').exists()

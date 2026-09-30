@@ -16,6 +16,20 @@ preserved separately and dropped with a counted warning; other corruption fails.
 Cursor checkpoints advance only after a page drains;
 processed IDs cover crashes mid-page. Errors remain retryable on resume.
 
+--artifact-uri gs://bucket/prefix publishes run files (including audit.key) as
+immutable objects behind a generation-checked manifest.json. New prefixes must
+be empty. Resume downloads the published snapshot while holding the local lock;
+local files remain authoritative until the next upload. Uploads run after each
+drained page checkpoint, after reconciliation, and in finally on exit. SIGTERM
+requests that exit path. --rollback accepts a logical gs://bucket/prefix/audit.jsonl
+URI or the prefix itself; use a separate target prefix for rollback artifacts.
+run.lock and incomplete atomic-save .tmp files are local only. Concurrent writers
+or failed publication abort with nonzero status; restart using --resume. Prior
+local artifacts are archived beside the run directory before downloading.
+Uncatchable termination or failed publication can leave the last page only
+in local storage; only the last published snapshot is guaranteed durable. Keep
+bucket access restricted: audit.key decrypts the audit's before/after states.
+
 Calendar safety protects nonempty rule discards: stored overlaps and connected
 Google Calendar accounts skip without provider calls/token-refresh writes. Empty
 transcript rule discards bypass calendars; photos and every other fence remain.
@@ -47,19 +61,21 @@ import math
 import os
 from pathlib import Path
 import random
+import signal
 import sys
 import threading
 import time
 from types import SimpleNamespace
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, IO
 import uuid
+from urllib.parse import urlsplit
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
 from cryptography.fernet import Fernet
 from google.api_core.exceptions import Aborted, Conflict, DeadlineExceeded, ServiceUnavailable
-from google.cloud import firestore
+from google.cloud import firestore, storage
 from google.cloud.firestore_v1 import FieldFilter
 
 from models.client_processing import PROJECTION_FAMILY_FIELDS
@@ -288,10 +304,133 @@ class RateLimiter:
             time.sleep(delay)
 
 
+class ArtifactMirror:
+    """Publish immutable files through one generation-fenced snapshot manifest.
+
+    A logical gs://bucket/prefix/audit.jsonl resolves via manifest.json. Failed
+    publications leave the previous snapshot readable; orphan snapshots are kept.
+    run.lock and incomplete atomic-save temporaries are local control files.
+    """
+
+    def __init__(self, uri: str, client: Any):
+        parsed = urlsplit(uri)
+        prefix = parsed.path.strip('/')
+        if (
+            parsed.scheme != 'gs'
+            or not parsed.netloc
+            or not prefix
+            or parsed.query
+            or parsed.fragment
+            or any(part in ('', '.', '..') for part in prefix.split('/'))
+        ):
+            raise ValueError('artifact URI requires gs://bucket/nonempty-prefix')
+        self.bucket = client.bucket(parsed.netloc)
+        self.client = client
+        self.prefix = prefix + '/'
+        self.manifest = self.bucket.blob(self.prefix + 'manifest.json')
+        self.generation = 0
+        self.files: dict[str, Any] = {}
+        self.failed = False
+
+    def publish(self, files: dict[str, Any]) -> None:
+        try:
+            self.manifest.upload_from_string(
+                json.dumps({'version': 1, 'files': files}, sort_keys=True),
+                content_type='application/json',
+                if_generation_match=self.generation,
+            )
+            self.generation = int(self.manifest.generation)
+            self.files = files
+        except Exception:
+            # An ambiguous manifest commit cannot be followed by another publish
+            # in this process. A fresh resume reads the authoritative manifest.
+            self.failed = True
+            raise
+
+    def create(self) -> None:
+        if next(iter(self.client.list_blobs(self.bucket, prefix=self.prefix, max_results=1)), None) is not None:
+            raise ValueError('artifact prefix is not empty')
+        self.publish({})  # generation=0 also fences racing new-run reservations
+
+    def download(self, path: Path, *, archive_parent: Path | None = None) -> None:
+        self.manifest.reload()
+        self.generation = int(self.manifest.generation)
+        snapshot = json.loads(self.manifest.download_as_bytes(if_generation_match=self.generation))
+        if snapshot.get('version') != 1 or not isinstance(snapshot.get('files'), dict):
+            raise ValueError('invalid artifact manifest')
+        self.files = snapshot['files']
+        # Validate and fetch everything before overwriting any authoritative file.
+        payloads = {}
+        for name, entry in self.files.items():
+            if (
+                not name
+                or Path(name).is_absolute()
+                or any(part in ('', '.', '..') for part in name.split('/'))
+                or Path(name).name == 'run.lock'
+                or '\\' in name
+                or not isinstance(entry, dict)
+                or not isinstance(entry.get('object'), str)
+                or not entry['object'].startswith(self.prefix + '_snapshots/')
+            ):
+                raise ValueError('invalid artifact file')
+            data = self.bucket.blob(entry['object']).download_as_bytes(if_generation_match=int(entry['generation']))
+            if hashlib.sha256(data).hexdigest() != entry['sha256']:
+                raise ValueError('artifact checksum mismatch')
+            payloads[name] = data
+        # A downloaded snapshot replaces local artifacts, including files not
+        # present in the snapshot. Preserve prior bytes outside the run directory
+        # rather than mixing an unpublished local tail into the remote journal.
+        previous = [file for file in path.iterdir() if file.name != 'run.lock']
+        if previous:
+            archive = (archive_parent or path.parent) / f'{path.name}.before-download-{uuid.uuid4().hex}'
+            archive.mkdir(mode=0o700)
+            for file in previous:
+                os.replace(file, archive / file.name)
+        for name, data in payloads.items():
+            destination = path / name
+            destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            temporary = destination.with_name(f'{destination.name}.{uuid.uuid4().hex}.tmp')
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, 'wb') as file:
+                file.write(data)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temporary, destination)
+
+    def upload(self, path: Path) -> None:
+        if self.failed:
+            raise RuntimeError('artifact publication requires fresh resume')
+        files = deepcopy(self.files)
+        for file in sorted(path.rglob('*')):
+            if file.name == 'run.lock' or file.name.endswith('.tmp'):
+                continue
+            if file.is_dir() and not file.is_symlink():
+                continue
+            if not file.is_file() or file.is_symlink():
+                raise ValueError('run artifacts must be regular files')
+            name = file.relative_to(path).as_posix()
+            data = file.read_bytes()
+            checksum = hashlib.sha256(data).hexdigest()
+            if files.get(name, {}).get('sha256') == checksum:
+                continue
+            blob = self.bucket.blob(self.prefix + f'_snapshots/{uuid.uuid4().hex}/{name}')
+            blob.upload_from_string(data, if_generation_match=0)
+            files[name] = {'object': blob.name, 'generation': int(blob.generation), 'sha256': checksum}
+        if files != self.files:
+            self.publish(files)
+        else:
+            # Even an unchanged writer must detect a concurrent publication.
+            self.manifest.reload()
+            if int(self.manifest.generation) != self.generation:
+                self.failed = True
+                raise RuntimeError('concurrent artifact writer')
+
+
 class RunLog:
     def __init__(self, path: Path, config: dict[str, Any], *, resume: bool = False):
         self.path = path
         self.lock = threading.RLock()
+        self.artifacts: ArtifactMirror | None = None
         self.journal_warnings: Counter[str] = Counter()
         if not path.is_absolute():
             raise ValueError('run directory must be absolute')
@@ -402,9 +541,15 @@ class RunLog:
             r for r in self.results.values() if r['outcome'] == 'written' and r.get('projection_status') != 'complete'
         ]
 
+    def mirror(self) -> None:
+        with self.lock:
+            if self.artifacts is not None:
+                self.artifacts.upload(self.path)
+
     def checkpoint(self, cursor: str) -> None:
         self.cursor = cursor
         self.save('checkpoint.json', {'cursor': cursor, 'processed_ids': sorted(self.processed)})
+        self.mirror()
 
 
 @dataclass
@@ -788,6 +933,7 @@ def reconcile_pending(runtime: Runtime, log: RunLog) -> None:
                 outcome = recovered['outcome']
                 record['commit_revision'] = recovered['commit_revision']
         log.finish(record, outcome)
+    log.mirror()
 
 
 def run(
@@ -1045,7 +1191,8 @@ def main() -> int:
     directories = parser.add_mutually_exclusive_group(required=True)
     directories.add_argument('--run-dir', type=Path)
     directories.add_argument('--resume', type=Path)
-    parser.add_argument('--rollback', type=Path, metavar='AUDIT_JSONL')
+    parser.add_argument('--rollback', metavar='AUDIT_JSONL_OR_GS_URI')
+    parser.add_argument('--artifact-uri', metavar='GS_PREFIX')
     parser.add_argument('--workers', type=int, default=8)
     parser.add_argument('--max-writes-per-second', type=float, default=20)
     parser.add_argument('--limit', type=int)
@@ -1079,48 +1226,111 @@ def main() -> int:
         parser.error('run directory must be absolute')
     install_private_log_filters()
     logging.basicConfig(level=logging.WARNING, format='%(levelname)s %(name)s %(message)s')
-    if args.resume:
-        # Journal reads can repair a torn tail: acquire ownership before them.
-        lock_file = (path / 'run.lock').open('a')
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        log = RunLog(path, config, resume=True)
-    else:
-        log = RunLog(path, config)
-        lock_file = (path / 'run.lock').open('a')
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    runtime = Runtime(importlib.import_module('database._client').get_firestore_client())
-    if args.rollback:
-        if args.rollback.name != 'audit.jsonl' or not args.rollback.is_absolute():
-            parser.error('rollback requires an absolute audit.jsonl path')
-        source_path = args.rollback.parent
-        source_lock = (source_path / 'run.lock').open('a')
-        fcntl.flock(source_lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        source_config = json.loads((source_path / 'config.json').read_text())
-        source = RunLog(source_path, source_config, resume=True)
-        summary = rollback(
-            runtime,
-            source,
-            log,
-            qps=args.max_writes_per_second,
-            workers=args.workers,
-            limit=args.limit,
-            error_threshold=args.error_threshold,
-            error_window=args.error_window,
-        )
-        source_lock.close()
-    else:
-        summary = run(
-            runtime,
-            log,
-            workers=args.workers,
-            max_writes_per_second=args.max_writes_per_second,
-            limit=args.limit,
-            page_size=args.page_size,
-            error_threshold=args.error_threshold,
-            error_window=args.error_window,
-        )
+    logs: list[RunLog] = []
+    locks: list[IO[Any]] = []
+    storage_client = storage.Client() if args.artifact_uri or (args.rollback or '').startswith('gs://') else None
+    mirror = ArtifactMirror(args.artifact_uri, storage_client) if args.artifact_uri else None
+    previous_sigterm = None
+    if mirror is not None and threading.current_thread() is threading.main_thread():
+
+        def stop_for_sigterm(signum: int, frame: Any) -> None:
+            raise InterruptedError('artifact run stopped')
+
+        previous_sigterm = signal.signal(signal.SIGTERM, stop_for_sigterm)
+    try:
+        if args.resume:
+            if mirror is not None:
+                path.mkdir(mode=0o700, parents=True, exist_ok=True)
+            # Take ownership before downloads or journal-tail recovery.
+            lock_file = (path / 'run.lock').open('a')
+            locks.append(lock_file)
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if mirror is not None:
+                mirror.download(path)
+            log = RunLog(path, config, resume=True)
+        else:
+            if path.exists():
+                raise ValueError('run directory already exists')
+            if mirror is not None:
+                mirror.create()
+            log = RunLog(path, config)
+            lock_file = (path / 'run.lock').open('a')
+            locks.append(lock_file)
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        logs.append(log)
+        log.artifacts = mirror
+        log.mirror()  # Publish config and audit.key before any Firestore work.
+        runtime = Runtime(importlib.import_module('database._client').get_firestore_client())
+        if args.rollback:
+            source_mirror = None
+            if args.rollback.startswith('gs://'):
+                uri = args.rollback.rstrip('/')
+                if uri.endswith('/audit.jsonl'):
+                    uri = uri[: -len('/audit.jsonl')]
+                source_mirror = ArtifactMirror(uri, storage_client)
+                if (
+                    mirror is not None
+                    and source_mirror.bucket.name == mirror.bucket.name
+                    and source_mirror.prefix == mirror.prefix
+                ):
+                    raise ValueError('rollback requires a separate target artifact prefix')
+                # Separate local source directory preserves target journals and
+                # lets rollback resume use its original gs:// source config.
+                source_path = path / 'rollback-source'
+                source_path.mkdir(mode=0o700, exist_ok=True)
+            else:
+                audit_path = Path(args.rollback)
+                if audit_path.name != 'audit.jsonl' or not audit_path.is_absolute():
+                    parser.error('rollback requires an absolute audit.jsonl path or gs:// artifact URI')
+                source_path = audit_path.parent
+            source_lock = (source_path / 'run.lock').open('a')
+            locks.append(source_lock)
+            fcntl.flock(source_lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if source_mirror is not None:
+                source_mirror.download(source_path, archive_parent=path.parent)
+            source_config = json.loads((source_path / 'config.json').read_text())
+            source = RunLog(source_path, source_config, resume=True)
+            source.artifacts = source_mirror
+            logs.append(source)
+            summary = rollback(
+                runtime,
+                source,
+                log,
+                qps=args.max_writes_per_second,
+                workers=args.workers,
+                limit=args.limit,
+                error_threshold=args.error_threshold,
+                error_window=args.error_window,
+            )
+        else:
+            summary = run(
+                runtime,
+                log,
+                workers=args.workers,
+                max_writes_per_second=args.max_writes_per_second,
+                limit=args.limit,
+                page_size=args.page_size,
+                error_threshold=args.error_threshold,
+                error_window=args.error_window,
+            )
+    finally:
+        try:
+            # Attempt every source/target even if an earlier upload fails. Any
+            # publication failure remains fatal; never report durable success.
+            failures: list[Exception] = []
+            for journal in logs:
+                try:
+                    journal.mirror()
+                except Exception as exc:
+                    failures.append(exc)
+            if failures:
+                raise failures[0]
+        finally:
+            for lock_file in reversed(locks):
+                lock_file.close()
+            if previous_sigterm is not None:
+                signal.signal(signal.SIGTERM, previous_sigterm)
     print(json.dumps(summary, sort_keys=True))
-    lock_file.close()
     return summary['exit_code']
 
 
