@@ -12,7 +12,9 @@ class PeopleProvider extends BaseProvider {
     Future<List<Person>?> Function()? loadPeople,
     Future<bool> Function(String, int)? deleteSample,
     Future<bool> Function(String)? deletePersonById,
+    Future<bool> Function(String, bool)? setPinned,
   })  : _deletePersonById = deletePersonById ?? deletePerson,
+        _setPinned = setPinned ?? setPersonPinned,
         _renamePerson = renamePerson ?? updatePersonName,
         _loadPeople = loadPeople ?? (() => getAllPeople(includeStats: true)),
         _deleteSample = deleteSample ?? deletePersonSpeechSample;
@@ -20,6 +22,7 @@ class PeopleProvider extends BaseProvider {
   final Future<bool> Function(String, String) _renamePerson;
   final Future<bool> Function(String, int) _deleteSample;
   final Future<bool> Function(String) _deletePersonById;
+  final Future<bool> Function(String, bool) _setPinned;
   List<Person> people = SharedPreferencesUtil().cachedPeople;
   Map<String, List<String>> samplesUrl = {};
 
@@ -186,6 +189,33 @@ class PeopleProvider extends BaseProvider {
     }
   }
 
+  // ---- Pinning and clean-up ----
+
+  /// Pins or unpins at once and rolls back when the server refuses. Returns true when stored.
+  Future<bool> setPinned(String personId, bool pinned) async {
+    final index = people.indexWhere((p) => p.id == personId);
+    if (index == -1) return false;
+    final before = people[index];
+    if (before.pinned == pinned) return true;
+    people[index] = before.copyWith(pinned: pinned, pinnedAt: () => pinned ? DateTime.now() : null);
+    selectedIds.remove(personId);
+    notifyListeners();
+    final ok = await _setPinned(personId, pinned);
+    final current = people.indexWhere((p) => p.id == personId);
+    if (!ok && current != -1) {
+      people[current] = before;
+      notifyListeners();
+    } else if (ok) {
+      SharedPreferencesUtil().cachedPeople =
+          people.where((person) => !person.id.startsWith('optimistic-person:')).toList();
+    }
+    return ok;
+  }
+
+  /// Unverified, unpinned people: what Clean Up offers to delete. Pinned people are never included.
+  List<Person> get cleanUpCandidates =>
+      people.where((p) => !p.pinned && p.confidence == 'unverified' && !p.id.startsWith('optimistic-person:')).toList();
+
   // ---- Multi-select ----
 
   final Set<String> selectedIds = {};
@@ -195,17 +225,23 @@ class PeopleProvider extends BaseProvider {
     selecting = true;
     selectedIds
       ..clear()
-      ..addAll(personId == null ? const [] : [personId]);
+      ..addAll(personId == null || people.any((p) => p.id == personId && p.pinned) ? const [] : [personId]);
+    notifyListeners();
+  }
+
+  /// Selects every listed person except pinned ones, which are deleted one at a time from their page.
+  void selectAll(Iterable<String> personIds) {
+    final pinned = {
+      for (final p in people)
+        if (p.pinned) p.id
+    };
+    selectedIds.addAll(personIds.where((id) => !pinned.contains(id)));
     notifyListeners();
   }
 
   void toggleSelected(String personId) {
+    if (people.any((p) => p.id == personId && p.pinned)) return;
     if (!selectedIds.remove(personId)) selectedIds.add(personId);
-    notifyListeners();
-  }
-
-  void selectAll(Iterable<String> personIds) {
-    selectedIds.addAll(personIds);
     notifyListeners();
   }
 

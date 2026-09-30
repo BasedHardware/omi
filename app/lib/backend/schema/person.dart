@@ -4,6 +4,9 @@
 // color_idx. None of that survives a plain typedef; this file needs manual care.
 
 import 'package:flutter/material.dart';
+
+import 'package:collection/collection.dart';
+
 import 'package:omi/backend/schema/gen/people_wire.g.dart' as wire;
 
 final List<Color> speakerColors = [
@@ -47,6 +50,21 @@ class Person {
   final DateTime? lastHeardAt;
   final double? talkSeconds;
 
+  /// Conversations where every label for this person was automatic (stats only).
+  final int? autoConversationCount;
+
+  /// Kept out of bulk clean-up and expected in conversations.
+  final bool pinned;
+  final DateTime? pinnedAt;
+
+  /// `confirmed`, `likely` or `unverified`, derived by the server from what the user did.
+  final String confidence;
+  final List<wire.GeneratedPersonConfidenceReason> confidenceReasons;
+
+  /// Hand labels still needed to reach Confirmed; null when Confirmed or only a voice sample is missing.
+  final int? labelsToConfirm;
+  final DateTime? lastLabeledAt;
+
   Person({
     required this.id,
     required this.name,
@@ -60,9 +78,22 @@ class Person {
     this.conversationCount,
     this.lastHeardAt,
     this.talkSeconds,
+    this.autoConversationCount,
+    this.pinned = false,
+    this.pinnedAt,
+    this.confidence = 'unverified',
+    this.confidenceReasons = const [],
+    this.labelsToConfirm,
+    this.lastLabeledAt,
   });
 
-  Person copyWith({String? name, DateTime? updatedAt, List<String>? speechSamples}) {
+  Person copyWith({
+    String? name,
+    DateTime? updatedAt,
+    List<String>? speechSamples,
+    bool? pinned,
+    DateTime? Function()? pinnedAt,
+  }) {
     return Person(
       id: id,
       name: name ?? this.name,
@@ -76,8 +107,18 @@ class Person {
       conversationCount: conversationCount,
       lastHeardAt: lastHeardAt,
       talkSeconds: talkSeconds,
+      autoConversationCount: autoConversationCount,
+      pinned: pinned ?? this.pinned,
+      pinnedAt: pinnedAt != null ? pinnedAt() : this.pinnedAt,
+      confidence: confidence,
+      confidenceReasons: confidenceReasons,
+      labelsToConfirm: labelsToConfirm,
+      lastLabeledAt: lastLabeledAt,
     );
   }
+
+  /// How many of a confidence reason, or 0 when absent.
+  int reasonCount(String code) => confidenceReasons.firstWhereOrNull((r) => r.code == code)?.count ?? 0;
 
   factory Person.fromJson(Map<String, dynamic> json) {
     final generated = wire.GeneratedPerson.fromJson(json);
@@ -105,6 +146,13 @@ class Person {
       conversationCount: generated.conversationCount,
       lastHeardAt: generated.lastHeardAt,
       talkSeconds: generated.talkSeconds,
+      autoConversationCount: generated.autoConversationCount,
+      pinned: generated.pinned,
+      pinnedAt: generated.pinnedAt,
+      confidence: generated.confidence,
+      confidenceReasons: generated.confidenceReasons,
+      labelsToConfirm: generated.labelsToConfirm,
+      lastLabeledAt: generated.lastLabeledAt,
       colorIdx: colorIdx ?? generated.id.hashCode % speakerColors.length,
     );
   }
@@ -122,6 +170,13 @@ class Person {
       conversationCount: conversationCount,
       lastHeardAt: lastHeardAt,
       talkSeconds: talkSeconds,
+      autoConversationCount: autoConversationCount,
+      pinned: pinned,
+      pinnedAt: pinnedAt,
+      confidence: confidence,
+      confidenceReasons: confidenceReasons,
+      labelsToConfirm: labelsToConfirm,
+      lastLabeledAt: lastLabeledAt,
     );
   }
 

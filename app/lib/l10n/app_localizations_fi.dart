@@ -11648,4 +11648,472 @@ class AppLocalizationsFi extends AppLocalizations {
   String diagnosticsCountSincePairing(int count) {
     return '$count parituksen jälkeen';
   }
+
+  @override
+  String get peopleFilterLowConfidence => 'Matala varmuus';
+
+  @override
+  String get peopleFilterPinned => 'Kiinnitetyt';
+
+  @override
+  String peoplePinnedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kiinnitettyä',
+      one: '1 kiinnitetty',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceConfirmed => 'Vahvistettu';
+
+  @override
+  String get confidenceLikely => 'Todennäköinen';
+
+  @override
+  String get confidenceUnverified => 'Vahvistamaton';
+
+  @override
+  String confidenceMeterLabel(String level) {
+    return 'Varmuus: $level';
+  }
+
+  @override
+  String confidenceReasonLabeled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nimesit $count kertaa',
+      one: 'Nimesit kerran',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonPicked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Valittu $count ehdotuksessa',
+      one: 'Valittu 1 ehdotuksessa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String confidenceReasonAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vahvistit $count vastaavuutta',
+      one: 'Vahvistit 1 vastaavuuden',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get confidenceReasonAutoOnly => 'Vain automaattinen tunnistus, ei koskaan vahvistettu';
+
+  @override
+  String get confidenceReasonNeverConfirmed => 'Ei koskaan vahvistettu';
+
+  @override
+  String get confidenceReasonCorrected => 'Korjasit sen vastaavuuden';
+
+  @override
+  String get confidenceReasonVoiceReady => 'ääni valmis';
+
+  @override
+  String get confidenceReasonNeedsVoice => 'tarvitsee äänen';
+
+  @override
+  String get confidenceReasonNotHeard => 'ei vielä kuultu';
+
+  @override
+  String get confidenceSheetTitle => 'Varmuus';
+
+  @override
+  String confidenceSummaryConfirmed(String name) {
+    return 'Omi tunnistaa henkilön $name äänen, ja olet vahvistanut sen.';
+  }
+
+  @override
+  String confidenceSummaryLikely(String name) {
+    return 'Omi tunnistaa yleensä henkilön $name äänen, mutta olet vahvistanut sen vasta muutaman kerran.';
+  }
+
+  @override
+  String confidenceSummaryUnverified(String name) {
+    return 'Mikään tekemäsi ei vielä tue henkilöä $name.';
+  }
+
+  @override
+  String get confidenceEvidenceHeader => 'Perusteet';
+
+  @override
+  String evidenceManualLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nimesit $count keskustelussa',
+      one: 'Nimesit 1 keskustelussa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardConfirms(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Kyllä $count ehdotuksessa',
+      one: 'Kyllä 1 ehdotuksessa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceCardPicks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Valittu $count ehdotuksessa',
+      one: 'Valittu 1 ehdotuksessa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoConfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vahvistettu $count automaattista vastaavuutta',
+      one: 'Vahvistettu 1 automaattinen vastaavuus',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoCorrected(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vastaavuutta siirretty toiselle',
+      one: '1 vastaavuus siirretty toiselle',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String evidenceAutoUnconfirmed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count automaattista vastaavuutta ei vahvistettu',
+      one: '1 automaattista vastaavuutta ei vahvistettu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get evidenceVoiceReady => 'Ääninäyte valmis';
+
+  @override
+  String get evidenceNoVoice => 'Ei vielä ääninäytettä';
+
+  @override
+  String get evidenceNotHeard => 'Ei vielä kuultu keskustelussa';
+
+  @override
+  String get evidenceNothing => 'Et ole vielä nimennyt tai vahvistanut häntä';
+
+  @override
+  String get effectCountsALot => 'Painaa paljon';
+
+  @override
+  String get effectCounts => 'Painaa';
+
+  @override
+  String get effectCountsALittle => 'Painaa vähän';
+
+  @override
+  String get effectBarelyCounts => 'Tuskin painaa';
+
+  @override
+  String get effectCountsAgainst => 'Painaa vastaan';
+
+  @override
+  String get effectNeeded => 'Tarvitaan tilaan Vahvistettu';
+
+  @override
+  String get confidenceToReachConfirmed => 'Vahvistetuksi pääsemiseksi';
+
+  @override
+  String confidenceNextVoice(String name) {
+    return 'Omi tarvitsee myös henkilön $name ääninäytteen. Nimeä hänet, kun Muista äänet on päällä.';
+  }
+
+  @override
+  String confidenceIsConfirmed(String name) {
+    return 'Henkilö $name on vahvistettu. Omi oppii jokaisesta nimeämisestä.';
+  }
+
+  @override
+  String get confidenceFootnote =>
+      'Vain sinun vastauksesi vaikuttavat varmuuteen merkittävästi. Automaattiset tunnistukset yksinään tuskin painavat mitään.';
+
+  @override
+  String get personWhyConfidence => 'Miksi?';
+
+  @override
+  String pinPersonTitle(String name) {
+    return 'Kiinnitä $name';
+  }
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Pidä $name listan kärjessä ja odota häntä keskusteluihisi';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi pyytää sinua vahvistamaan lähes osuvat tunnistukset arvaamisen sijaan.';
+
+  @override
+  String get pinAction => 'Kiinnitä';
+
+  @override
+  String get unpinAction => 'Irrota';
+
+  @override
+  String personPinnedToast(String name) {
+    return '$name kiinnitetty';
+  }
+
+  @override
+  String personUnpinnedToast(String name) {
+    return '$name irrotettu';
+  }
+
+  @override
+  String whyConfidenceMenu(String level) {
+    return 'Miksi $level?';
+  }
+
+  @override
+  String deletePersonNamedTitle(String name) {
+    return 'Poistetaanko $name?';
+  }
+
+  @override
+  String deletePinnedPersonMessage(String name) {
+    return '$name on kiinnitetty. Hänen ääninäytteensä poistetaan, Omi ei enää tunnista häntä ja aiemmissa litteroinneissa hän näkyy nimettömänä puhujana. Tätä ei voi perua.';
+  }
+
+  @override
+  String deleteNamedPerson(String name) {
+    return 'Poista $name';
+  }
+
+  @override
+  String get selectPeople => 'Valitse ihmisiä';
+
+  @override
+  String get cleanUpEllipsis => 'Siivoa…';
+
+  @override
+  String cleanUpUnsureCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count henkilöä, joista Omi ei ole varma',
+      one: '1 henkilö, josta Omi ei ole varma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpBannerBody =>
+      'Enimmäkseen väärin kuultuja nimiä. Käy ne läpi ja poista ne, jotka eivät ole oikeita.';
+
+  @override
+  String get reviewAction => 'Tarkista';
+
+  @override
+  String get cleanUpTitle => 'Siivous';
+
+  @override
+  String cleanUpLead(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Omi ei ole varma näistä $count henkilöstä. Useimmat ovat litteroinneista väärin kuultuja nimiä. Poista valinta niiltä, jotka haluat pitää.',
+      one: 'Omi ei ole varma tästä henkilöstä. Poista valinta, jos haluat pitää hänet.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpPinnedNote => 'Kiinnitettyjä ihmisiä ei koskaan oteta mukaan siivoukseen.';
+
+  @override
+  String deletePeopleCountAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Poista $count henkilöä',
+      one: 'Poista 1 henkilö',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String peopleDeletedToast(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count henkilöä poistettu',
+      one: '1 henkilö poistettu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cleanUpNothingTitle => 'Ei siivottavaa';
+
+  @override
+  String get cleanUpNothingMessage => 'Omi ei ole tällä hetkellä epävarma kenestäkään.';
+
+  @override
+  String get selectAllSkipsPinned =>
+      'Valitse kaikki ohittaa kiinnitetyt ihmiset. Poista heidät yksitellen heidän sivultaan.';
+
+  @override
+  String get pinnedNotSelectable => 'Kiinnitetty, ei valittavissa';
+
+  @override
+  String get ignoredVoicesTitle => 'Ohitetut äänet';
+
+  @override
+  String get ignoredVoicesSubtitle => 'TV, podcastit ja muut äänet, jotka merkitsit kohtaan Ei ihminen';
+
+  @override
+  String get ignoredVoicesEmpty => 'Ei ohitettuja ääniä';
+
+  @override
+  String get restoreAction => 'Palauta';
+
+  @override
+  String get voiceRestoredToast => 'Omi saattaa kysyä tästä äänestä uudelleen';
+
+  @override
+  String get speakerTagPromptSomeoneElse => 'Joku muu…';
+
+  @override
+  String get speakerTagPromptNotAPerson => 'Ei ihminen';
+
+  @override
+  String get speakerTagPromptNotSureAction => 'En ole varma';
+
+  @override
+  String get speakerTagPromptThatsMeAction => 'Se olen minä';
+
+  @override
+  String get speakerTagPromptClosestVoices => 'Lähimmät äänet';
+
+  @override
+  String get speakerTagPromptRecentPeople => 'Ihmiset, joiden kanssa puhuit äskettäin';
+
+  @override
+  String get voiceMatchClose => 'Läheinen osuma';
+
+  @override
+  String get voiceMatchPossible => 'Mahdollinen osuma';
+
+  @override
+  String get voiceMatchWeak => 'Heikko osuma';
+
+  @override
+  String voiceMatchMeterLabel(String level) {
+    return 'Äänen osuma: $level';
+  }
+
+  @override
+  String get speakerTagPromptHintIdentify => 'Jokainen vastaus opettaa Omille äänen ja nostaa henkilön varmuutta.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Kyllä nostaa henkilön $name varmuutta.';
+  }
+
+  @override
+  String get speakerTagPromptHintOwner =>
+      'Pitää oman ääniprofiilisi tarkkana, jotta Omi ei koskaan nimeä sinua joksikin toiseksi.';
+
+  @override
+  String speakerTagPromptSavedAs(String name) {
+    return 'Tallennettu nimellä $name';
+  }
+
+  @override
+  String get speakerTagPromptSavedAsYou => 'Tallennettu sinuksi';
+
+  @override
+  String get speakerTagPromptIgnoredNote => 'Omi ei kysy tästä äänestä enää';
+
+  @override
+  String speakerTagPromptLabeledToast(String name) {
+    return 'Nimetty: $name';
+  }
+
+  @override
+  String get speakerTagPromptLabeledYouToast => 'Nimetty sinuksi';
+
+  @override
+  String get speakerTagPromptNotAPersonToast => 'Merkitty: ei ihminen';
+
+  @override
+  String get speakerTagPromptRejectedToast => 'Nimi poistettu';
+
+  @override
+  String get whoIsItTitle => 'Kuka se on?';
+
+  @override
+  String get newPersonEllipsis => 'Uusi henkilö…';
+
+  @override
+  String addNamedPersonAction(String name) {
+    return 'Lisää “$name”';
+  }
+
+  @override
+  String get everyoneHeader => 'Kaikki';
+
+  @override
+  String speakerSuggestionChip(String name) {
+    return '$name?';
+  }
+
+  @override
+  String get speakerSuggestionAppliesToSpeaker => 'Koskee kaikkia tämän puhujan rivejä';
+
+  @override
+  String get collapseAction => 'Tiivistä';
+
+  @override
+  String get speakerTagPromptNotMeAction => 'En ole minä';
+
+  @override
+  String confidenceNextLabels(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nimeä heidät vielä $count keskustelussa.',
+      one: 'Nimeä heidät vielä 1 keskustelussa.',
+    );
+    return '$_temp0';
+  }
 }
