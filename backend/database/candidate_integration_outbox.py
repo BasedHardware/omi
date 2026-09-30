@@ -20,16 +20,39 @@ CANDIDATE_INTEGRATION_OUTBOX_COLLECTION = 'candidate_integration_outbox'
 CANDIDATE_INTEGRATION_POLICY = QueuePolicy(max_attempts=5, base_backoff_seconds=30, max_backoff_seconds=1800)
 
 
+def _clean_id(val: Any) -> str:
+    if not val or not isinstance(val, str):
+        raise ValueError("Identifier must be a non-empty string")
+    clean = val.strip()
+    if not clean:
+        raise ValueError("Identifier must be a non-empty string")
+    return clean
+
+
+def _ensure_utc(dt: Optional[datetime]) -> datetime:
+    if dt is None:
+        return datetime.now(timezone.utc)
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))
+        except ValueError:
+            return datetime.now(timezone.utc)
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 def _integration_outbox_ref(uid: str, candidate_id: str):
+    clean_uid = _clean_id(uid)
+    clean_candidate_id = _clean_id(candidate_id)
     return (
-        db.collection('users').document(uid).collection(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION).document(candidate_id)
+        db.collection('users').document(clean_uid).collection(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION).document(clean_candidate_id)
     )
 
 
 def _task_control_ref(uid: str):
+    clean_uid = _clean_id(uid)
     return (
         db.collection('users')
-        .document(uid)
+        .document(clean_uid)
         .collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
         .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
     )
@@ -49,9 +72,11 @@ def claim_candidate_integration_dispatch(
     lease_seconds: int = 300,
 ) -> Optional[str]:
     """Claim a durable accepted-task integration side effect for delivery."""
-
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
-    claim_time = now or datetime.now(timezone.utc)
+    clean_uid = _clean_id(uid)
+    clean_candidate_id = _clean_id(candidate_id)
+    lease_seconds = max(10, min(86400, int(lease_seconds) if lease_seconds is not None else 300))
+    outbox_ref = _integration_outbox_ref(clean_uid, clean_candidate_id)
+    claim_time = _ensure_utc(now)
     transaction = db.transaction()
 
     @firestore.transactional
@@ -106,8 +131,12 @@ def complete_candidate_integration_dispatch(
     now: Optional[datetime] = None,
     error_text: Optional[str] = None,
 ) -> bool:
-    completion_time = now or datetime.now(timezone.utc)
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
+    clean_uid = _clean_id(uid)
+    clean_candidate_id = _clean_id(candidate_id)
+    if not lease_token or not isinstance(lease_token, str):
+        return False
+    completion_time = _ensure_utc(now)
+    outbox_ref = _integration_outbox_ref(clean_uid, clean_candidate_id)
     transaction = db.transaction()
 
     @firestore.transactional
@@ -116,7 +145,7 @@ def complete_candidate_integration_dispatch(
         if not snapshot.exists:
             return False
         payload = _snapshot_dict(snapshot)
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        control_snapshot = _task_control_ref(clean_uid).get(transaction=write_transaction)
         control = TaskWorkflowControl()
         if control_snapshot.exists:
             control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
@@ -175,8 +204,10 @@ def redrive_candidate_integration_dead_letter(
     now: Optional[datetime] = None,
 ) -> bool:
     """Move a dead-lettered integration item back to ready by identity."""
-    completion_time = now or datetime.now(timezone.utc)
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
+    clean_uid = _clean_id(uid)
+    clean_candidate_id = _clean_id(candidate_id)
+    completion_time = _ensure_utc(now)
+    outbox_ref = _integration_outbox_ref(clean_uid, clean_candidate_id)
     transaction = db.transaction()
 
     @firestore.transactional
@@ -204,8 +235,10 @@ def dead_letter_malformed_candidate_integration(
     now: Optional[datetime] = None,
 ) -> bool:
     """Park a malformed outbox row to dead_letter instead of retrying it forever."""
-    completion_time = now or datetime.now(timezone.utc)
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
+    clean_uid = _clean_id(uid)
+    clean_candidate_id = _clean_id(candidate_id)
+    completion_time = _ensure_utc(now)
+    outbox_ref = _integration_outbox_ref(clean_uid, clean_candidate_id)
     transaction = db.transaction()
 
     @firestore.transactional
@@ -239,9 +272,11 @@ def list_candidate_integration_dispatches(
     account_generation: int,
     limit: int = 100,
 ) -> list[dict[str, Any]]:
+    clean_uid = _clean_id(uid)
+    limit = max(1, min(1000, int(limit) if limit is not None else 100))
     query = (
         db.collection('users')
-        .document(uid)
+        .document(clean_uid)
         .collection(CANDIDATE_INTEGRATION_OUTBOX_COLLECTION)
         .where(filter=FieldFilter('account_generation', '==', account_generation))
         .where(filter=FieldFilter('status', 'in', ['pending', 'failed', 'processing']))
@@ -252,8 +287,10 @@ def list_candidate_integration_dispatches(
     ready: list[dict[str, Any]] = []
     for row in rows:
         available_at = row.get('available_at')
-        if isinstance(available_at, datetime) and available_at > now:
-            continue
+        if available_at is not None:
+            available_at_utc = _ensure_utc(available_at)
+            if available_at_utc > now:
+                continue
         ready.append(row)
     return ready
 
