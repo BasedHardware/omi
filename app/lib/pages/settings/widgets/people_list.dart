@@ -50,7 +50,7 @@ Future<bool> confirmAndDeletePeople(BuildContext context, PeopleProvider provide
     destructive: true,
   );
   if (!confirmed) return false;
-  final deleted = await provider.deletePeople(targets.map((p) => p.id).toList());
+  final deleted = await provider.deletePeople(targets.map((p) => p.id).toList(), allowPinned: single?.pinned == true);
   final ok = deleted == targets.length;
   ok ? OmiHaptics.success() : OmiHaptics.error();
   if (!context.mounted) return ok;
@@ -278,6 +278,7 @@ class _PeopleListState extends State<PeopleList> {
 
   List<Widget> _groups(List<Person> people, PeopleProvider provider) {
     final l10n = context.l10n;
+    final selecting = widget.allowSelection && provider.selecting;
     final hasStats = people.any((p) => p.conversationCount != null);
     final pinned = people.where((p) => p.pinned).toList()..sort(_byRecency);
     final rest = people.where((p) => !p.pinned).toList()..sort(_byRecency);
@@ -295,7 +296,7 @@ class _PeopleListState extends State<PeopleList> {
           l10n.peopleFilterPinned,
           l10n.peoplePinnedCount(pinned.length),
           pinned,
-          provider.selecting ? l10n.selectAllSkipsPinned : null,
+          selecting ? l10n.selectAllSkipsPinned : null,
         ),
       if (recent.isNotEmpty) (hasStats ? l10n.peopleRecent : '', null, recent, null),
       if (notHeard.isNotEmpty) (l10n.peopleNotHeardYet, null, notHeard, null),
@@ -316,16 +317,15 @@ class _PeopleListState extends State<PeopleList> {
             PersonRow(
               key: ValueKey(person.id),
               person: person,
-              selecting: provider.selecting,
-              selected: provider.selectedIds.contains(person.id),
+              selecting: selecting,
+              selected: selecting && provider.selectedIds.contains(person.id),
               onTap: () {
-                if (!provider.selecting) return _openPerson(person);
+                if (!selecting) return _openPerson(person);
                 if (person.pinned) return;
                 OmiHaptics.selection();
                 provider.toggleSelected(person.id);
               },
-              onLongPress: () =>
-                  provider.selecting ? provider.toggleSelected(person.id) : _showRowMenu(person, provider),
+              onLongPress: () => selecting ? provider.toggleSelected(person.id) : _showRowMenu(person, provider),
               onSwipePin: () => togglePersonPinned(context, provider, person),
               onSwipeDelete: () => confirmAndDeletePeople(context, provider, [person]),
             ),

@@ -33,6 +33,7 @@ COUNTED_KEYS_LIMIT = 200
 
 
 class Band:
+    unknown = 'unknown'
     confirmed = 'confirmed'
     likely = 'likely'
     unverified = 'unverified'
@@ -67,7 +68,10 @@ def person_confidence(
     auto_conversation_count: Optional[int] = None,
 ) -> Confidence:
     """The one band + reasons mapping. Stats (conversation counts) only add reasons, never move the band."""
-    evidence = evidence if isinstance(evidence, Mapping) else {}
+    if not isinstance(evidence, Mapping) or any(
+        key in evidence and (type(evidence[key]) is not int or evidence[key] < 0) for key in COUNTERS
+    ):
+        return Confidence(band=Band.unknown, reasons=[], labels_to_confirm=None, needs_voice=not voice_ready)
     backed = sum(evidence_count(evidence, key) for key in (MANUAL_LABELS, CARD_CONFIRMS, CARD_PICKS, AUTO_CONFIRMED))
     points = confidence_points(evidence, voice_ready)
     if backed and points >= CONFIRMED_POINTS and voice_ready:

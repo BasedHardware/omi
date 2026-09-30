@@ -358,4 +358,40 @@ void main() {
 
     expect(find.text('Try Again'), findsOneWidget);
   });
+
+  testWidgets('legacy people are unknown and never offered by Clean Up', (tester) async {
+    final legacy = Person.fromJson({
+      'id': 'legacy',
+      'name': 'Legacy',
+      'created_at': '2026-01-01T00:00:00Z',
+      'updated_at': '2026-01-01T00:00:00Z',
+    });
+    final provider = await _pump(tester, people: [legacy, ..._people]);
+    expect(legacy.confidence, 'unknown');
+    expect(provider.cleanUpCandidates.map((p) => p.id), isNot(contains('legacy')));
+    expect(find.bySemanticsLabel(RegExp(r'^Legacy, Confidence: Unknown')), findsOneWidget);
+  });
+
+  testWidgets('bulk deletion protects current pins even with stale selected ids', (tester) async {
+    final deleted = <String>[];
+    final provider = await _pump(tester, deletePersonById: (id) async {
+      deleted.add(id);
+      return true;
+    });
+    expect(await provider.deletePeople(['p-maya', 'p-cs']), 1);
+    expect(deleted, ['p-cs']);
+    expect(provider.people.map((p) => p.id), contains('p-maya'));
+  });
+
+  testWidgets('failed optimistic single delete restores the person and cache', (tester) async {
+    final result = Completer<bool>();
+    final provider = await _pump(tester, deletePersonById: (_) => result.future);
+    final person = provider.people.first;
+    final deleting = provider.deletePersonProvider(person);
+    expect(provider.people.map((p) => p.id), isNot(contains(person.id)));
+    result.complete(false);
+    await deleting;
+    expect(provider.people.map((p) => p.id), contains(person.id));
+    expect(SharedPreferencesUtil().cachedPeople.map((p) => p.id), contains(person.id));
+  });
 }

@@ -46,7 +46,7 @@ def test_pin_route_returns_the_updated_person_and_404s(monkeypatch):
     monkeypatch.setattr(router_module.people_db, 'set_person_pinned', fake)
     client = _client()
     body = client.patch('/v1/users/people/p1/pinned', params={'value': 'true'}).json()
-    assert body['pinned'] is True and body['name'] == 'Maya Chen' and body['confidence'] == 'unverified'
+    assert body['pinned'] is True and body['name'] == 'Maya Chen' and body['confidence'] == 'unknown'
     assert client.patch('/v1/users/people/nobody/pinned', params={'value': 'false'}).status_code == 404
     assert client.patch('/v1/users/people/broken/pinned', params={'value': 'true'}).status_code == 404
     assert client.patch('/v1/users/people/p1/pinned').status_code == 422

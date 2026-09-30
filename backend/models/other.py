@@ -117,6 +117,7 @@ def confidence_fields(
 class PersonConfidence(str, Enum):
     """How sure Omi is about this person's voice, from the user's own answers."""
 
+    unknown = 'unknown'
     confirmed = 'confirmed'
     likely = 'likely'
     unverified = 'unverified'
@@ -141,7 +142,7 @@ class Person(BaseModel):
     # Pinned people are kept out of bulk clean-up and expected in conversations.
     pinned: bool = False
     pinned_at: Optional[datetime] = None
-    confidence: PersonConfidence = PersonConfidence.unverified
+    confidence: PersonConfidence = PersonConfidence.unknown
     confidence_reasons: List[PersonConfidenceReason] = []
     # Hand labels still needed to reach Confirmed; None when Confirmed or only a voice sample is missing.
     labels_to_confirm: Optional[int] = None

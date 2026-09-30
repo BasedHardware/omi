@@ -24,7 +24,7 @@ class GeneratedPerson {
 
   const GeneratedPerson({
     this.autoConversationCount,
-    this.confidence = "unverified",
+    this.confidence = "unknown",
     this.confidenceReasons = const [],
     this.conversationCount,
     this.createdAt,
@@ -46,7 +46,7 @@ class GeneratedPerson {
   factory GeneratedPerson.fromJson(Map<String, dynamic> json) {
     return GeneratedPerson(
       autoConversationCount: _readFieldValue<int>(_readField(json, const ["auto_conversation_count"]), "auto_conversation_count", _readInt, requiredField: false, nullable: true),
-      confidence: _required(_readFieldValue<String>(_readField(json, const ["confidence"]), "confidence", _readString, requiredField: false, nullable: false, defaultValue: "unverified"), "confidence"),
+      confidence: _required(_readFieldValue<String>(_readField(json, const ["confidence"]), "confidence", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "confidence"),
       confidenceReasons: _required(_readFieldValue<List<GeneratedPersonConfidenceReason>>(_readField(json, const ["confidence_reasons"]), "confidence_reasons", (value) => _readObjectList(value, GeneratedPersonConfidenceReason.fromJson), requiredField: false, nullable: false, defaultValue: const []), "confidence_reasons"),
       conversationCount: _readFieldValue<int>(_readField(json, const ["conversation_count"]), "conversation_count", _readInt, requiredField: false, nullable: true),
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),

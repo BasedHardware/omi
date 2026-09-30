@@ -180,7 +180,11 @@ class PeopleProvider extends BaseProvider {
     SharedPreferencesUtil().cachedPeople = people;
     notifyListeners();
 
-    if (await deletePerson(person.id)) return;
+    try {
+      if (await _deletePersonById(person.id)) return;
+    } catch (e) {
+      Logger.debug('Failed to delete person ${person.id}: $e');
+    }
     if (!people.any((p) => p.id == person.id)) {
       people.add(person);
       people.sort((a, b) => a.name.compareTo(b.name));
@@ -255,7 +259,8 @@ class PeopleProvider extends BaseProvider {
   /// request fails stay in the list and selected. Returns how many were deleted.
   Future<int> deleteSelected() => deletePeople(selectedIds.toList());
 
-  Future<int> deletePeople(List<String> personIds) async {
+  Future<int> deletePeople(List<String> personIds, {bool allowPinned = false}) async {
+    personIds = personIds.toSet().where((id) => people.any((p) => p.id == id && (!p.pinned || allowPinned))).toList();
     final results = await Future.wait(personIds.map((id) async {
       try {
         return await _deletePersonById(id);

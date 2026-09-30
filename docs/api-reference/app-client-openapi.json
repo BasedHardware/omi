@@ -21881,7 +21881,7 @@
           },
           "confidence": {
             "$ref": "#/components/schemas/PersonConfidence",
-            "default": "unverified"
+            "default": "unknown"
           },
           "confidence_reasons": {
             "default": [],
@@ -22039,6 +22039,7 @@
       "PersonConfidence": {
         "description": "How sure Omi is about this person's voice, from the user's own answers.",
         "enum": [
+          "unknown",
           "confirmed",
           "likely",
           "unverified"

@@ -3525,7 +3525,7 @@ export interface Person {
   voice_readiness?: VoiceReadiness;
 }
 
-export type PersonConfidence = "confirmed" | "likely" | "unverified";
+export type PersonConfidence = "unknown" | "confirmed" | "likely" | "unverified";
 
 export interface PersonConfidenceReason {
   code: string;

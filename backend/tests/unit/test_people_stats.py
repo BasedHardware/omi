@@ -67,7 +67,7 @@ def test_auto_conversation_count_needs_every_label_automatic():
 
 
 def test_apply_people_stats_adds_reasons_without_moving_the_band():
-    heard = Person(id="p1", name="Because")
+    heard = Person(id="p1", name="Because", label_evidence={})
     unheard = Person(id="p2", name="Ines", label_evidence={"manual_labels": 1})
     band_before = unheard.confidence
     apply_people_stats(

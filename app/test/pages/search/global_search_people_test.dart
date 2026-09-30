@@ -88,6 +88,11 @@ void main() {
     expect(find.byKey(const Key('people_clean_up_banner')), findsNothing);
     expect(find.byKey(const Key('people_select')), findsNothing);
 
+    // Settings can still have a selection while the search overlay is mounted.
+    people.beginSelection('p-cs');
+    await tester.pumpAndSettle();
+    expect(find.byType(Dismissible), findsWidgets);
+
     await tester.enterText(
         find.descendant(of: find.byKey(const ValueKey('global_search_field')), matching: find.byType(TextField)), 'cs');
     await tester.pumpAndSettle();
@@ -99,5 +104,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Pin'), findsOneWidget);
     expect(find.text('Select'), findsNothing);
+    expect(find.text('Open'), findsOneWidget);
   });
 }

@@ -54,8 +54,18 @@ def test_card_answers_are_medium_and_corrections_count_against():
 
 def test_malformed_counters_are_ignored():
     result = person_confidence({MANUAL_LABELS: 'lots', CARD_PICKS: True, AUTO_CORRECTED: -3}, voice_ready=False)
-    assert result.band == Band.unverified
-    assert person_confidence(None, voice_ready=False).band == Band.unverified
+    assert result.band == Band.unknown
+    assert person_confidence(None, voice_ready=False).band == Band.unknown
+
+
+def test_legacy_evidence_is_unknown_even_after_stats_refresh():
+    person = Person(id='legacy', name='Maya', **READY)
+    assert person.confidence.value == 'unknown'
+    person.conversation_count = 0
+    person.refresh_confidence()
+    assert person.confidence.value == 'unknown'
+    assert 'never_confirmed' not in [r.code for r in person.confidence_reasons]
+    assert person.labels_to_confirm is None
 
 
 def test_stats_only_add_reasons():

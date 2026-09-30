@@ -81,7 +81,7 @@ class Person {
     this.autoConversationCount,
     this.pinned = false,
     this.pinnedAt,
-    this.confidence = 'unverified',
+    this.confidence = 'unknown',
     this.confidenceReasons = const [],
     this.labelsToConfirm,
     this.lastLabeledAt,

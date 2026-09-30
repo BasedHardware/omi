@@ -8,13 +8,15 @@ import 'package:omi/utils/l10n_extensions.dart';
 int confidenceLevel(String band) => switch (band) {
       'confirmed' => 3,
       'likely' => 2,
-      _ => 1,
+      'unverified' => 1,
+      _ => 0,
     };
 
 String confidenceLabel(BuildContext context, String band) => switch (band) {
       'confirmed' => context.l10n.confidenceConfirmed,
       'likely' => context.l10n.confidenceLikely,
-      _ => context.l10n.confidenceUnverified,
+      'unverified' => context.l10n.confidenceUnverified,
+      _ => context.l10n.unknown,
     };
 
 /// Voice-match levels on suggestions: 3 close, 2 possible, 1 weak.
@@ -51,6 +53,7 @@ class VoiceMatchMeter extends StatelessWidget {
 /// One line under a person's name: why Omi believes it knows this voice, then what it knows of it.
 String personReasonLine(BuildContext context, Person person) {
   final l10n = context.l10n;
+  if (person.confidence == 'unknown') return l10n.unknown;
   final labeled = person.reasonCount('manual_labels');
   final picked = person.reasonCount('card_picks') + person.reasonCount('card_confirms');
   final confirmed = person.reasonCount('auto_confirmed');
@@ -127,13 +130,15 @@ class _ConfidenceSheet extends StatelessWidget {
     final summary = switch (person.confidence) {
       'confirmed' => l10n.confidenceSummaryConfirmed(name),
       'likely' => l10n.confidenceSummaryLikely(name),
-      _ => l10n.confidenceSummaryUnverified(name),
+      'unverified' => l10n.confidenceSummaryUnverified(name),
+      _ => l10n.unknown,
     };
     final next = <String>[
       if (person.confidence == 'confirmed') l10n.confidenceIsConfirmed(name),
       if (person.confidence != 'confirmed' && (person.labelsToConfirm ?? 0) > 0)
         l10n.confidenceNextLabels(person.labelsToConfirm!),
-      if (person.confidence != 'confirmed' && person.voiceReadiness != 'ready') l10n.confidenceNextVoice(name),
+      if (person.confidence != 'unknown' && person.confidence != 'confirmed' && person.voiceReadiness != 'ready')
+        l10n.confidenceNextVoice(name),
     ];
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: OmiSpacing.lg),
@@ -154,7 +159,9 @@ class _ConfidenceSheet extends StatelessWidget {
           OmiSettingsGroup(
             header: l10n.confidenceEvidenceHeader,
             children: [
-              for (final (icon, text, effect) in _evidence(context))
+              for (final (icon, text, effect) in person.confidence == 'unknown'
+                  ? [(Icons.help_outline, l10n.unknown, _Effect.none)]
+                  : _evidence(context))
                 OmiSettingsRow(
                   leading: Icon(icon),
                   title: text,
