@@ -3664,5 +3664,9 @@
     "meetingScreenshotFallbackCaption": "Snímek obrazovky z této schůzky",
     "deleteMeetingScreenshotTitle": "Smazat snímek obrazovky?",
     "deleteMeetingScreenshotMessage": "Snímek obrazovky bude odebrán z poznámky této schůzky. Tuto akci nelze vrátit.",
-    "conversationSummaryFailed": "Shrnutí se nepodařilo"
+    "conversationSummaryFailed": "Shrnutí se nepodařilo",
+    "reconnectionsRecent": "Opětovná připojení (posledních 7 dní)",
+    "failedConnections": "Neúspěšná připojení",
+    "failedConnectionsRecent": "Neúspěšná připojení (posledních 7 dní)",
+    "diagnosticsCountSincePairing": "{count} od spárování"
 }

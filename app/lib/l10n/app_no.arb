@@ -3664,5 +3664,9 @@
     "meetingScreenshotFallbackCaption": "Skjermbilde fra dette møtet",
     "deleteMeetingScreenshotTitle": "Slette skjermbildet?",
     "deleteMeetingScreenshotMessage": "Dette fjerner skjermbildet fra notatet for dette møtet. Det kan ikke angres.",
-    "conversationSummaryFailed": "Sammendraget mislyktes"
+    "conversationSummaryFailed": "Sammendraget mislyktes",
+    "reconnectionsRecent": "Gjenforbindelser (siste 7 dager)",
+    "failedConnections": "Mislykkede tilkoblinger",
+    "failedConnectionsRecent": "Mislykkede tilkoblinger (siste 7 dager)",
+    "diagnosticsCountSincePairing": "{count} siden kobling"
 }

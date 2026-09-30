@@ -3664,5 +3664,9 @@
     "meetingScreenshotFallbackCaption": "Bildschirmfoto aus diesem Meeting",
     "deleteMeetingScreenshotTitle": "Bildschirmfoto löschen?",
     "deleteMeetingScreenshotMessage": "Das Bildschirmfoto wird aus der Notiz dieses Meetings entfernt. Dies kann nicht rückgängig gemacht werden.",
-    "conversationSummaryFailed": "Zusammenfassung fehlgeschlagen"
+    "conversationSummaryFailed": "Zusammenfassung fehlgeschlagen",
+    "reconnectionsRecent": "Wiederverbindungen (letzte 7 Tage)",
+    "failedConnections": "Fehlgeschlagene Verbindungen",
+    "failedConnectionsRecent": "Fehlgeschlagene Verbindungen (letzte 7 Tage)",
+    "diagnosticsCountSincePairing": "{count} seit Kopplung"
 }

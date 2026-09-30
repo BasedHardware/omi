@@ -3664,5 +3664,9 @@
     "meetingScreenshotFallbackCaption": "Tangkapan skrin daripada mesyuarat ini",
     "deleteMeetingScreenshotTitle": "Padam tangkapan skrin?",
     "deleteMeetingScreenshotMessage": "Ini akan mengalih keluar tangkapan skrin daripada nota mesyuarat ini. Tindakan ini tidak boleh dibuat asal.",
-    "conversationSummaryFailed": "Ringkasan gagal"
+    "conversationSummaryFailed": "Ringkasan gagal",
+    "reconnectionsRecent": "Sambungan semula (7 hari lepas)",
+    "failedConnections": "Sambungan gagal",
+    "failedConnectionsRecent": "Sambungan gagal (7 hari lepas)",
+    "diagnosticsCountSincePairing": "{count} sejak pemasangan"
 }

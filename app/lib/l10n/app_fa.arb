@@ -11236,5 +11236,9 @@
     "meetingScreenshotFallbackCaption": "اسکرین‌شات از این جلسه",
     "deleteMeetingScreenshotTitle": "اسکرین‌شات حذف شود؟",
     "deleteMeetingScreenshotMessage": "این کار اسکرین‌شات را از یادداشت این جلسه حذف می‌کند. قابل بازگشت نیست.",
-    "conversationSummaryFailed": "خلاصه ایجاد نشد"
+    "conversationSummaryFailed": "خلاصه ایجاد نشد",
+    "reconnectionsRecent": "اتصال مجدد (7 روز گذشته)",
+    "failedConnections": "اتصالات ناموفق",
+    "failedConnectionsRecent": "اتصالات ناموفق (7 روز گذشته)",
+    "diagnosticsCountSincePairing": "{count} از زمان جفت‌سازی"
 }

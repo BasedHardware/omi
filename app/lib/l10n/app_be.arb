@@ -11236,5 +11236,9 @@
     "meetingScreenshotFallbackCaption": "Здымак экрана з гэтай сустрэчы",
     "deleteMeetingScreenshotTitle": "Выдаліць здымак экрана?",
     "deleteMeetingScreenshotMessage": "Здымак экрана будзе выдалены з нататкі гэтай сустрэчы. Гэта нельга адрабіць.",
-    "conversationSummaryFailed": "Не ўдалося стварыць зводку"
+    "conversationSummaryFailed": "Не ўдалося стварыць зводку",
+    "reconnectionsRecent": "Перазлучэнні (апошнія 7 дзён)",
+    "failedConnections": "Няўдалыя злучэнні",
+    "failedConnectionsRecent": "Няўдалыя злучэнні (апошнія 7 дзён)",
+    "diagnosticsCountSincePairing": "{count} з моманту спарвання"
 }

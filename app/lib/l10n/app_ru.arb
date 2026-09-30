@@ -3699,5 +3699,9 @@
     "meetingScreenshotFallbackCaption": "Снимок экрана с этой встречи",
     "deleteMeetingScreenshotTitle": "Удалить снимок экрана?",
     "deleteMeetingScreenshotMessage": "Снимок экрана будет удалён из заметки этой встречи. Это действие нельзя отменить.",
-    "conversationSummaryFailed": "Не удалось создать сводку"
+    "conversationSummaryFailed": "Не удалось создать сводку",
+    "reconnectionsRecent": "Повторные подключения (последние 7 дней)",
+    "failedConnections": "Неудачные подключения",
+    "failedConnectionsRecent": "Неудачные подключения (последние 7 дней)",
+    "diagnosticsCountSincePairing": "{count} с момента сопряжения"
 }

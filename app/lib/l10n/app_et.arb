@@ -3664,5 +3664,9 @@
     "meetingScreenshotFallbackCaption": "Ekraanipilt sellelt koosolekult",
     "deleteMeetingScreenshotTitle": "Kas kustutada ekraanipilt?",
     "deleteMeetingScreenshotMessage": "See eemaldab ekraanipildi selle koosoleku märkmest. Seda ei saa tagasi võtta.",
-    "conversationSummaryFailed": "Kokkuvõtte loomine ebaõnnestus"
+    "conversationSummaryFailed": "Kokkuvõtte loomine ebaõnnestus",
+    "reconnectionsRecent": "Taasühendused (viimased 7 päeva)",
+    "failedConnections": "Ebaõnnestunud ühendused",
+    "failedConnectionsRecent": "Ebaõnnestunud ühendused (viimased 7 päeva)",
+    "diagnosticsCountSincePairing": "{count} pärast sidumist"
 }

@@ -11674,4 +11674,18 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Sažetak nije uspio';
+
+  @override
+  String get reconnectionsRecent => 'Ponovna povezivanja (posljednjih 7 dana)';
+
+  @override
+  String get failedConnections => 'Neuspjele veze';
+
+  @override
+  String get failedConnectionsRecent => 'Neuspjele veze (posljednjih 7 dana)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count od uparivanja';
+  }
 }

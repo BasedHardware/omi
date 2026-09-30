@@ -11698,4 +11698,18 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Rezumatul a eșuat';
+
+  @override
+  String get reconnectionsRecent => 'Reconectări (ultimele 7 zile)';
+
+  @override
+  String get failedConnections => 'Conexiuni eșuate';
+
+  @override
+  String get failedConnectionsRecent => 'Conexiuni eșuate (ultimele 7 zile)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count de la asociere';
+  }
 }

@@ -3664,5 +3664,9 @@
     "meetingScreenshotFallbackCaption": "Schermafbeelding van deze vergadering",
     "deleteMeetingScreenshotTitle": "Schermafbeelding verwijderen?",
     "deleteMeetingScreenshotMessage": "Hiermee wordt de schermafbeelding uit de notitie van deze vergadering verwijderd. Dit kan niet ongedaan worden gemaakt.",
-    "conversationSummaryFailed": "Samenvatting mislukt"
+    "conversationSummaryFailed": "Samenvatting mislukt",
+    "reconnectionsRecent": "Herverbindingen (laatste 7 dagen)",
+    "failedConnections": "Mislukte verbindingen",
+    "failedConnectionsRecent": "Mislukte verbindingen (laatste 7 dagen)",
+    "diagnosticsCountSincePairing": "{count} sinds koppeling"
 }

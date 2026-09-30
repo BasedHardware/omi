@@ -11640,4 +11640,18 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'خلاصه ایجاد نشد';
+
+  @override
+  String get reconnectionsRecent => 'اتصال مجدد (7 روز گذشته)';
+
+  @override
+  String get failedConnections => 'اتصالات ناموفق';
+
+  @override
+  String get failedConnectionsRecent => 'اتصالات ناموفق (7 روز گذشته)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count از زمان جفت‌سازی';
+  }
 }

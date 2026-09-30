@@ -11662,4 +11662,18 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Santrauka nepavyko';
+
+  @override
+  String get reconnectionsRecent => 'Persijungimai iš naujo (paskutinės 7 dienos)';
+
+  @override
+  String get failedConnections => 'Nepavykę ryšiai';
+
+  @override
+  String get failedConnectionsRecent => 'Nepavykę ryšiai (paskutinės 7 dienos)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count nuo susiejimo';
+  }
 }

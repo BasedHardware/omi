@@ -3664,5 +3664,9 @@
     "meetingScreenshotFallbackCaption": "Captura de pantalla de esta reunión",
     "deleteMeetingScreenshotTitle": "¿Eliminar captura de pantalla?",
     "deleteMeetingScreenshotMessage": "Esto elimina la captura de pantalla de la nota de esta reunión. No se puede deshacer.",
-    "conversationSummaryFailed": "No se pudo crear el resumen"
+    "conversationSummaryFailed": "No se pudo crear el resumen",
+    "reconnectionsRecent": "Reconexiones (últimos 7 días)",
+    "failedConnections": "Conexiones fallidas",
+    "failedConnectionsRecent": "Conexiones fallidas (últimos 7 días)",
+    "diagnosticsCountSincePairing": "{count} desde el emparejamiento"
 }

@@ -3706,5 +3706,9 @@
     "meetingScreenshotFallbackCaption": "Skærmbillede fra dette møde",
     "deleteMeetingScreenshotTitle": "Slet skærmbillede?",
     "deleteMeetingScreenshotMessage": "Dette fjerner skærmbilledet fra mødets note. Det kan ikke fortrydes.",
-    "conversationSummaryFailed": "Resuméet mislykkedes"
+    "conversationSummaryFailed": "Resuméet mislykkedes",
+    "reconnectionsRecent": "Genforbindelser (seneste 7 dage)",
+    "failedConnections": "Mislykkede forbindelser",
+    "failedConnectionsRecent": "Mislykkede forbindelser (seneste 7 dage)",
+    "diagnosticsCountSincePairing": "{count} siden parring"
 }

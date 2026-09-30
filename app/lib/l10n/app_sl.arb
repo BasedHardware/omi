@@ -11236,5 +11236,9 @@
     "meetingScreenshotFallbackCaption": "Posnetek zaslona s tega sestanka",
     "deleteMeetingScreenshotTitle": "Izbrišem posnetek zaslona?",
     "deleteMeetingScreenshotMessage": "S tem boste posnetek zaslona odstranili iz zapiska tega sestanka. Tega ni mogoče razveljaviti.",
-    "conversationSummaryFailed": "Povzetek ni uspel"
+    "conversationSummaryFailed": "Povzetek ni uspel",
+    "reconnectionsRecent": "Ponovne povezave (zadnjih 7 dni)",
+    "failedConnections": "Neuspešne povezave",
+    "failedConnectionsRecent": "Neuspešne povezave (zadnjih 7 dni)",
+    "diagnosticsCountSincePairing": "{count} od seznanitve"
 }

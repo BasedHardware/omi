@@ -11236,5 +11236,9 @@
     "meetingScreenshotFallbackCaption": "এই মিটিংয়ের স্ক্রিনশট",
     "deleteMeetingScreenshotTitle": "স্ক্রিনশট মুছবেন?",
     "deleteMeetingScreenshotMessage": "এটি এই মিটিংয়ের নোট থেকে স্ক্রিনশটটি সরিয়ে দেবে। এটি পূর্বাবস্থায় ফেরানো যাবে না।",
-    "conversationSummaryFailed": "সারাংশ তৈরি করা যায়নি"
+    "conversationSummaryFailed": "সারাংশ তৈরি করা যায়নি",
+    "reconnectionsRecent": "পুনরায় সংযোগ (শেষ ৭ দিন)",
+    "failedConnections": "ব্যর্থ সংযোগ",
+    "failedConnectionsRecent": "ব্যর্থ সংযোগ (শেষ ৭ দিন)",
+    "diagnosticsCountSincePairing": "জোড়া হওয়ার পর থেকে {count}"
 }

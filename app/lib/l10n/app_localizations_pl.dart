@@ -11681,4 +11681,18 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Nie udało się utworzyć podsumowania';
+
+  @override
+  String get reconnectionsRecent => 'Ponowne połączenia (ostatnie 7 dni)';
+
+  @override
+  String get failedConnections => 'Nieudane połączenia';
+
+  @override
+  String get failedConnectionsRecent => 'Nieudane połączenia (ostatnie 7 dni)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count od sparowania';
+  }
 }

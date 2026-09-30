@@ -11236,5 +11236,9 @@
     "meetingScreenshotFallbackCaption": "Снимак екрана са овог састанка",
     "deleteMeetingScreenshotTitle": "Избрисати снимак екрана?",
     "deleteMeetingScreenshotMessage": "Ово уклања снимак екрана из белешке овог састанка. Не може се опозвати.",
-    "conversationSummaryFailed": "Резиме није успео"
+    "conversationSummaryFailed": "Резиме није успео",
+    "reconnectionsRecent": "Поновна повезивања (последњих 7 дана)",
+    "failedConnections": "Неуспеле везе",
+    "failedConnectionsRecent": "Неуспеле везе (последњих 7 дана)",
+    "diagnosticsCountSincePairing": "{count} од упаривања"
 }

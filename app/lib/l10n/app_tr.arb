@@ -3699,5 +3699,9 @@
     "meetingScreenshotFallbackCaption": "Bu toplantıdan ekran görüntüsü",
     "deleteMeetingScreenshotTitle": "Ekran görüntüsü silinsin mi?",
     "deleteMeetingScreenshotMessage": "Bu işlem ekran görüntüsünü bu toplantının notundan kaldırır. Geri alınamaz.",
-    "conversationSummaryFailed": "Özet oluşturulamadı"
+    "conversationSummaryFailed": "Özet oluşturulamadı",
+    "reconnectionsRecent": "Yeniden bağlantılar (son 7 gün)",
+    "failedConnections": "Başarısız bağlantılar",
+    "failedConnectionsRecent": "Başarısız bağlantılar (son 7 gün)",
+    "diagnosticsCountSincePairing": "{count} eşleştirmeden beri"
 }

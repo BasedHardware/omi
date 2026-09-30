@@ -11723,4 +11723,18 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Η σύνοψη απέτυχε';
+
+  @override
+  String get reconnectionsRecent => 'Επανασυνδέσεις (τελευταίες 7 ημέρες)';
+
+  @override
+  String get failedConnections => 'Αποτυχημένες συνδέσεις';
+
+  @override
+  String get failedConnectionsRecent => 'Αποτυχημένες συνδέσεις (τελευταίες 7 ημέρες)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count από τη σύζευξη';
+  }
 }

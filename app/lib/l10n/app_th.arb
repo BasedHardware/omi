@@ -3664,5 +3664,9 @@
     "meetingScreenshotFallbackCaption": "ภาพหน้าจอจากการประชุมนี้",
     "deleteMeetingScreenshotTitle": "ลบภาพหน้าจอหรือไม่",
     "deleteMeetingScreenshotMessage": "การดำเนินการนี้จะลบภาพหน้าจอออกจากบันทึกของการประชุมนี้ และไม่สามารถเลิกทำได้",
-    "conversationSummaryFailed": "สร้างสรุปไม่สำเร็จ"
+    "conversationSummaryFailed": "สร้างสรุปไม่สำเร็จ",
+    "reconnectionsRecent": "การเชื่อมต่อใหม่ (7 วันที่ผ่านมา)",
+    "failedConnections": "การเชื่อมต่อที่ล้มเหลว",
+    "failedConnectionsRecent": "การเชื่อมต่อที่ล้มเหลว (7 วันที่ผ่านมา)",
+    "diagnosticsCountSincePairing": "{count} ตั้งแต่จับคู่"
 }

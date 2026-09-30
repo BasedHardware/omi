@@ -3699,5 +3699,9 @@
     "meetingScreenshotFallbackCaption": "Tangkapan layar dari rapat ini",
     "deleteMeetingScreenshotTitle": "Hapus tangkapan layar?",
     "deleteMeetingScreenshotMessage": "Ini akan menghapus tangkapan layar dari catatan rapat ini. Tindakan ini tidak dapat dibatalkan.",
-    "conversationSummaryFailed": "Ringkasan gagal"
+    "conversationSummaryFailed": "Ringkasan gagal",
+    "reconnectionsRecent": "Sambungan ulang (7 hari terakhir)",
+    "failedConnections": "Koneksi gagal",
+    "failedConnectionsRecent": "Koneksi gagal (7 hari terakhir)",
+    "diagnosticsCountSincePairing": "{count} sejak penyambungan"
 }

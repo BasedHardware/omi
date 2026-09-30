@@ -3664,5 +3664,9 @@
     "meetingScreenshotFallbackCaption": "Ảnh chụp màn hình từ cuộc họp này",
     "deleteMeetingScreenshotTitle": "Xóa ảnh chụp màn hình?",
     "deleteMeetingScreenshotMessage": "Thao tác này sẽ xóa ảnh chụp màn hình khỏi ghi chú của cuộc họp này. Không thể hoàn tác.",
-    "conversationSummaryFailed": "Tạo tóm tắt thất bại"
+    "conversationSummaryFailed": "Tạo tóm tắt thất bại",
+    "reconnectionsRecent": "Kết nối lại (7 ngày qua)",
+    "failedConnections": "Kết nối thất bại",
+    "failedConnectionsRecent": "Kết nối thất bại (7 ngày qua)",
+    "diagnosticsCountSincePairing": "{count} kể từ khi ghép đôi"
 }

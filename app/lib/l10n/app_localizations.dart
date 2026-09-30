@@ -21176,6 +21176,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Summary failed'**
   String get conversationSummaryFailed;
+
+  /// Reconnect count within the retained 7-day diagnostics window; headline value on Device Diagnostics
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnections (last 7 days)'**
+  String get reconnectionsRecent;
+
+  /// Lifetime count of connect attempts that never established a connection
+  ///
+  /// In en, this message translates to:
+  /// **'Failed connections'**
+  String get failedConnections;
+
+  /// Connect attempts that never established a connection, within the retained 7-day diagnostics window
+  ///
+  /// In en, this message translates to:
+  /// **'Failed connections (last 7 days)'**
+  String get failedConnectionsRecent;
+
+  /// Lifetime counter shown as secondary context under a 7-day window value
+  ///
+  /// In en, this message translates to:
+  /// **'{count} since pairing'**
+  String diagnosticsCountSincePairing(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

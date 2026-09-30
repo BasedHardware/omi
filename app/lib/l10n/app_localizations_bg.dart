@@ -11688,4 +11688,18 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get conversationSummaryFailed => 'Резюмето не бе създадено';
+
+  @override
+  String get reconnectionsRecent => 'Повторни свързвания (последните 7 дни)';
+
+  @override
+  String get failedConnections => 'Неуспешни връзки';
+
+  @override
+  String get failedConnectionsRecent => 'Неуспешни връзки (последните 7 дни)';
+
+  @override
+  String diagnosticsCountSincePairing(int count) {
+    return '$count от сдвояването';
+  }
 }
