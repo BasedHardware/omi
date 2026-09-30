@@ -62,9 +62,9 @@ def create_mcp_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_use
         else:
             detail = _sanitize_api_key_error(exc, "Invalid API key parameters")
         raise HTTPException(status_code=422, detail=detail) from exc
-    except ValueError as exc:
-        detail = _sanitize_api_key_error(exc, "Invalid API key parameters")
-        raise HTTPException(status_code=422, detail=detail) from exc
+    except Exception as exc:
+        detail = _sanitize_api_key_error(exc, "Failed to create API key")
+        raise HTTPException(status_code=500, detail=detail) from exc
     return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
@@ -135,9 +135,9 @@ def create_developer_key(key_data: DevApiKeyCreate, uid: str = Depends(get_curre
         else:
             detail = _sanitize_api_key_error(exc, "Invalid API key parameters")
         raise HTTPException(status_code=422, detail=detail) from exc
-    except ValueError as exc:
-        detail = _sanitize_api_key_error(exc, "Invalid API key parameters")
-        raise HTTPException(status_code=422, detail=detail) from exc
+    except Exception as exc:
+        detail = _sanitize_api_key_error(exc, "Failed to create API key")
+        raise HTTPException(status_code=500, detail=detail) from exc
     # Developer status changes affect proactive-notification limits immediately.
     invalidate_developer_cache(uid)
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
