@@ -13748,5 +13748,86 @@
     "voiceRecognitionSettings": "Voice Recognition",
     "@voiceRecognitionSettings": {
         "description": "Section header above the voice-learning switches on the People page"
+    },
+    "greetingMorning": "Morning",
+    "@greetingMorning": {
+        "description": "Home greeting (large title) for 8 AM to 10 AM; keep it short so the first name fits after it on one line"
+    },
+    "greetingAfternoon": "Afternoon",
+    "@greetingAfternoon": {
+        "description": "Home greeting (large title) for 2 PM to 4 PM; keep it short so the first name fits after it on one line"
+    },
+    "greetingEvening": "Evening",
+    "@greetingEvening": {
+        "description": "Home greeting (large title) for 6 PM to 8 PM; keep it short so the first name fits after it on one line"
+    },
+    "greetingWithName": "{greeting}, {name}",
+    "@greetingWithName": {
+        "description": "Home's greeting with the reader's first name after it, when it fits one line",
+        "placeholders": {
+            "greeting": {
+                "type": "String"
+            },
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "whatDoYouWantToKnow": "What do you want to know?",
+    "@whatDoYouWantToKnow": {
+        "description": "Ask: under the greeting"
+    },
+    "askSuggestDecide": "What did I decide today?",
+    "@askSuggestDecide": {
+        "description": "Ask suggestion"
+    },
+    "askSuggestOwe": "What do I still owe people?",
+    "@askSuggestOwe": {
+        "description": "Ask suggestion"
+    },
+    "askSuggestNotice": "What did Omi notice?",
+    "@askSuggestNotice": {
+        "description": "Ask suggestion"
+    },
+    "pastChats": "Past chats",
+    "@pastChats": {
+        "description": "Ask: the history page title and button"
+    },
+    "newChat": "New chat",
+    "@newChat": {
+        "description": "Ask: the first row of Past chats"
+    },
+    "startFresh": "Start fresh",
+    "@startFresh": {
+        "description": "Ask: under New chat"
+    },
+    "noPastChats": "Your chats with Omi show up here.",
+    "@noPastChats": {
+        "description": "Ask: Past chats when there are none"
+    },
+    "deleteChatQuestion": "Delete this chat?",
+    "@deleteChatQuestion": {
+        "description": "Ask: confirm before deleting a past chat"
+    },
+    "deleteChatMessage": "It’s gone from Past chats for good.",
+    "@deleteChatMessage": {
+        "description": "Ask: what deleting a past chat means"
+    },
+    "deleteChat": "Delete chat",
+    "@deleteChat": {
+        "description": "Ask: the confirm button"
+    },
+    "appsAskWith": "Ask Omi with",
+    "@appsAskWith": {
+        "description": "Apps: group of chat apps"
+    },
+    "conversationsTodayCount": "{count, plural, =0{No conversations today.} =1{1 conversation today.} other{{count} conversations today.}}",
+    "@conversationsTodayCount": {
+        "description": "Chat greeting: number of non-discarded conversations created today.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

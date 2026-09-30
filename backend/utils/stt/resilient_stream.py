@@ -124,7 +124,7 @@ def window_replay_action(
             WINDOW_REPLAY_SAFE_TRIMS.inc()
         return 'trim'
     if raw is not None:
-        raw.fail('capacity_full')
+        raw.fail('capacity_full', capacity_subtype='replay_ring_cap')
     return 'failover'
 
 
