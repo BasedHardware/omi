@@ -112,11 +112,12 @@ class WindowRaw:
     def has_untranscribed_speech(self):
         return self.pending_speech
 
-    def fail(self, reason):
+    def fail(self, reason, *, capacity_subtype=None):
         self.failure = reason
         self.socket.is_connection_dead = True
         self.socket.typed_death_reason = reason
         self.socket.death_reason = reason
+        self.socket.capacity_subtype = capacity_subtype
 
 
 def window_receiver_at_ring_limit(monkeypatch, *, pending_speech):
